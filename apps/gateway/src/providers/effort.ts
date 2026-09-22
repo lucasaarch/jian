@@ -28,6 +28,24 @@ function budget(effort: ReasoningEffort, maxOutputTokens: number): number | null
 }
 
 /**
+ * From Claude 4.6 the model decides how long to think and a request carrying a token budget is
+ * refused outright. The version is read from the id because no listing reports it: a one or
+ * two digit part after the major is the minor, and a longer one is a release date.
+ */
+export function takesAdaptiveThinking(modelId: string): boolean {
+  const match = /claude-(?:opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(modelId);
+
+  if (!match) {
+    return false;
+  }
+
+  const major = Number(match[1]);
+  const minor = Number(match[2] ?? 0);
+
+  return major > 4 || (major === 4 && minor >= 6);
+}
+
+/**
  * Translates the stored effort into each provider's own dialect. Returns undefined when there
  * is nothing to say, so a model without reasoning is called exactly as before.
  */
@@ -44,6 +62,13 @@ export function reasoningProviderOptions(
     case 'openai-codex':
       return { openai: { reasoningEffort: effort } };
     case 'anthropic': {
+      if (takesAdaptiveThinking(config.modelId)) {
+        // The level no longer sets a depth on these models; only whether to think at all.
+        return {
+          anthropic: { thinking: effort === 'none' ? { type: 'disabled' } : { type: 'adaptive' } },
+        };
+      }
+
       const tokens = budget(effort, maxOutputTokens);
 
       if (tokens === null) return undefined;

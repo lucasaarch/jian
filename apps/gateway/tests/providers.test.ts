@@ -7,6 +7,7 @@ import {
   CLAUDE_CODE_IDENTITY,
   withClaudeCodeIdentity,
 } from '../src/providers/claude-subscription.js';
+import { reasoningProviderOptions, takesAdaptiveThinking } from '../src/providers/effort.js';
 import { resolveModel } from '../src/providers/models.js';
 
 describe('providers', () => {
@@ -198,4 +199,32 @@ it('marks the reusable part of an Anthropic prompt so it is read back instead of
   expect(body.messages?.[0]?.content.at(-1)?.cache_control).toEqual({ type: 'ephemeral' });
   expect(body.messages?.[1]?.content.at(-1)?.cache_control).toEqual({ type: 'ephemeral' });
   expect(body.messages?.[2]?.content.at(-1)?.cache_control).toBeUndefined();
+});
+
+describe('anthropic thinking', () => {
+  it('lets Claude 4.6 and newer choose their own depth', () => {
+    for (const id of ['claude-opus-5', 'claude-sonnet-5', 'claude-fable-5-1', 'claude-opus-4-8']) {
+      expect(
+        reasoningProviderOptions(
+          { provider: 'anthropic', modelId: id, reasoningEffort: 'high' },
+          6144,
+        ),
+      ).toEqual({ anthropic: { thinking: { type: 'adaptive' } } });
+    }
+  });
+
+  it('still sends a budget to the models that require one', () => {
+    const options = reasoningProviderOptions(
+      { provider: 'anthropic', modelId: 'claude-sonnet-4-20250514', reasoningEffort: 'high' },
+      6144,
+    );
+
+    expect(options?.anthropic?.thinking).toMatchObject({ type: 'enabled' });
+  });
+
+  it('reads a release date as a date and not as a minor version', () => {
+    expect(takesAdaptiveThinking('claude-opus-4-1-20250805')).toBe(false);
+    expect(takesAdaptiveThinking('claude-3-7-sonnet-20250219')).toBe(false);
+    expect(takesAdaptiveThinking('claude-sonnet-4-6')).toBe(true);
+  });
 });

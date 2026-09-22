@@ -92,6 +92,13 @@
       "when": 1790100447050,
       "tag": "0012_allow-shell",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790110900000,
+      "tag": "0013_provider-credential",
+      "breakpoints": true
     }
   ]
 }

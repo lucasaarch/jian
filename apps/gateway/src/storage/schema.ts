@@ -7,6 +7,7 @@ import type {
   ModelConfig,
   ModelSelection,
   Profile,
+  ProviderCredential,
   ReasoningEffort,
   RunProgress,
   Skill,
@@ -93,6 +94,9 @@ export const providers = pgTable(
     name: text('name').notNull(),
     kind: providerKind('kind').notNull(),
     authMode: text('auth_mode').$type<'api' | 'codex'>(),
+    // Which of Anthropic's two credentials this is. Null for every other vendor, and for a row
+    // written before the panel asked, where the credential's own prefix answers instead.
+    credential: text('credential').$type<ProviderCredential>(),
     apiKeyEnv: text('api_key_env'),
     createdAt,
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
