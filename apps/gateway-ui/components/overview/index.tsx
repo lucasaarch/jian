@@ -59,10 +59,10 @@ export function Overview({ profile, data }: { profile: Profile; data: ProfileDat
             detail: 'Nas últimas 100',
           },
           {
-            label: 'Tokens',
-            value: input + output,
-            href: '/models',
-            detail: 'Somados nessas execuções',
+            label: 'Canais',
+            value: data.channels.filter((channel) => !channel.revokedAt).length,
+            href: '/channels',
+            detail: 'Por onde ela é encontrada',
           },
         ].map((item) => (
           <Link href={item.href} className="overview-metric" key={item.label}>
