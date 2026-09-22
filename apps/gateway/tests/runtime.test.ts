@@ -196,7 +196,7 @@ it('resolves a provider key from the installation vault and keeps it out of dura
   );
 });
 
-it('stops a run after its cumulative token cap without making another model call', async () => {
+it('stops a run at its cumulative token cap and answers with what it has', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile({
     ...input,
@@ -210,8 +210,20 @@ it('stops a run after its cumulative token cap without making another model call
   let calls = 0;
 
   const model = mockModel({
-    doGenerate: async () => {
+    doGenerate: async (options) => {
       calls++;
+
+      if (!options.tools?.length) {
+        return {
+          content: [{ type: 'text', text: 'I ran out of budget mid-way.' }],
+          finishReason: { unified: 'stop', raw: 'stop' },
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+            outputTokens: { total: 5, text: 5, reasoning: 0 },
+          },
+          warnings: [],
+        };
+      }
 
       return {
         content: [
@@ -242,8 +254,13 @@ it('stops a run after its cumulative token cap without making another model call
     steps: 1,
   });
 
-  expect(calls).toBe(1);
-  expect((await services.runs.run(profile.id, run.id)).status).toBe('failed');
+  // One step of the loop, then the closing call: no further tool round is started.
+  expect(calls).toBe(2);
+
+  const finished = await services.runs.run(profile.id, run.id);
+
+  expect(finished.status).toBe('completed');
+  expect(finished.output).toBe('I ran out of budget mid-way.');
 });
 
 it('uses conservative estimates when a provider omits usage counters', async () => {

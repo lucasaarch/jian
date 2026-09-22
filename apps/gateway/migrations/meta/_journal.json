@@ -127,6 +127,13 @@
       "when": 1790115200000,
       "tag": "0017_raise-step-ceiling",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790117600000,
+      "tag": "0018_raise-run-budget",
+      "breakpoints": true
     }
   ]
 }

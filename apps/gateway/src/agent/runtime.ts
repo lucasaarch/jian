@@ -183,7 +183,7 @@ export class AgentRuntime {
           {
             role: 'user',
             content:
-              'You have used every tool call this turn allows. Answer now with what you ' +
+              'You have used everything this turn allows. Answer now with what you ' +
               'already have, and call nothing further. Say plainly what you found, what you ' +
               'did, and what is still unknown — never imply you finished work you did not.',
           },
@@ -224,6 +224,10 @@ export class AgentRuntime {
     const ownsOutbound = !this.options.outbound;
     const secrets = new Set<string>();
     let externalUncertain = false;
+    let spent = false;
+    // One compaction a turn. The prompt shrinks but the loop's own messages keep growing, so a
+    // second pass would fire two steps later, and every step after that, each a model call.
+    let compacted = false;
 
     const progress = new ProgressReporter((snapshot) =>
       this.services.lifecycle.progress(runId, owner, snapshot),
@@ -384,7 +388,7 @@ export class AgentRuntime {
         model,
         instructions: subscription ? withClaudeCodeIdentity(context.system) : context.system,
         tools: guarded,
-        stopWhen: stepCountIs(policy.maxSteps),
+        stopWhen: [stepCountIs(policy.maxSteps), () => spent],
         maxRetries: 0,
         maxOutputTokens: policy.outputTokens,
         ...(reasoning ? { providerOptions: reasoning } : {}),
@@ -406,7 +410,8 @@ export class AgentRuntime {
           // too large at the moment it is being built, and the turns that overflowed it are the
           // ones this step would otherwise have to drop in silence.
           if (
-            await this.compactIfNeeded(
+            !compacted &&
+            (await this.compactIfNeeded(
               run,
               owner,
               refreshed,
@@ -415,8 +420,9 @@ export class AgentRuntime {
               policy,
               secrets,
               signal,
-            )
+            ))
           ) {
+            compacted = true;
             refreshed = await this.services.contexts.context(run);
           }
 
@@ -515,8 +521,10 @@ export class AgentRuntime {
             throw new Error('External tool outcome is uncertain');
           }
 
+          // Spent, not failed: the loop stops here and the turn still answers with what it
+          // has. Throwing threw away work the owner had already paid for.
           if (usedTokens > policy.maxRunTokens) {
-            throw new Error('Run token budget exceeded');
+            spent = true;
           }
         },
       });
@@ -576,7 +584,7 @@ export class AgentRuntime {
       // A loop that runs out of steps has done the work and simply never wrote it down.
       // Failing there threw the whole turn away — the person paid for the tools and got a
       // sentence pointing at a log. One more call, with no tools, turns it into an answer.
-      if (finishReason === 'tool-calls' || (!answer.trim() && finishReason === 'length')) {
+      if (spent || finishReason === 'tool-calls' || (!answer.trim() && finishReason === 'length')) {
         answer = await this.closingWords(
           model,
           context.system,
