@@ -1,5 +1,5 @@
 import { AGENT_SESSION_CHANNEL, type Message, type Session } from '@jian/contracts';
-import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { messages, sessions } from '../storage/schema.js';
 
@@ -13,6 +13,8 @@ export function toSession(row: SessionRow): Session {
     title: row.title,
     channel: row.channel,
     ...(row.peerProfileId ? { peerProfileId: row.peerProfileId } : {}),
+    ...(row.summary ? { summary: row.summary } : {}),
+    ...(row.summarizedUpTo ? { summarizedUpTo: row.summarizedUpTo.toISOString() } : {}),
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -33,6 +35,8 @@ export async function insertSession(db: Queryable, session: Session): Promise<vo
   await db.insert(sessions).values({
     ...session,
     peerProfileId: session.peerProfileId ?? null,
+    summary: session.summary ?? null,
+    summarizedUpTo: session.summarizedUpTo ? new Date(session.summarizedUpTo) : null,
     createdAt: new Date(session.createdAt),
   });
 }
@@ -96,15 +100,33 @@ export async function listSessionMessages(
   db: Queryable,
   sessionId: string,
   limit: number,
+  after?: string,
 ): Promise<Message[]> {
   const rows = await db
     .select()
     .from(messages)
-    .where(eq(messages.sessionId, sessionId))
+    .where(
+      after
+        ? and(eq(messages.sessionId, sessionId), gt(messages.createdAt, new Date(after)))
+        : eq(messages.sessionId, sessionId),
+    )
     .orderBy(desc(messages.createdAt), desc(messages.id))
     .limit(limit);
 
   return rows.map(toMessage).reverse();
+}
+
+/** The conversation as the prompt will carry it from now on, and where that record stops. */
+export async function writeSessionSummary(
+  db: Queryable,
+  sessionId: string,
+  summary: string,
+  upTo: string,
+): Promise<void> {
+  await db
+    .update(sessions)
+    .set({ summary, summarizedUpTo: new Date(upTo) })
+    .where(eq(sessions.id, sessionId));
 }
 
 /**

@@ -1,8 +1,11 @@
+import type { Message } from '@jian/contracts';
 import { tool } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { fitPrompt, tokenCounter } from '../src/context/budget.js';
 import { buildContext } from '../src/context/build.js';
+import { compact, needsCompaction } from '../src/context/compaction.js';
+import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
 async function fixture() {
@@ -174,4 +177,74 @@ it('counts special-token literals as ordinary input', () => {
   const first = tokenCounter('openai', 'gpt-4o');
 
   expect(first('Explain <|endoftext|> literally.')).toBeGreaterThan(0);
+});
+
+describe('compaction', () => {
+  const message = (id: string, content: string, at: string): Message => ({
+    id,
+    profileId: '11111111-1111-4111-8111-111111111111',
+    sessionId: '33333333-3333-4333-8333-333333333333',
+    runId: '22222222-2222-4222-8222-222222222222',
+    role: 'user',
+    content,
+    createdAt: at,
+  });
+
+  it('replaces the older turns and keeps the recent ones as written', async () => {
+    const history = Array.from({ length: 12 }, (_, index) =>
+      message(`m${index}`, `turn ${index}`, new Date(1700000000000 + index * 1000).toISOString()),
+    );
+
+    let asked = '';
+
+    const compacted = await compact({
+      run: { profileId: 'p', sessionId: 's' } as never,
+      model: mockModel({
+        doGenerate: async (options) => {
+          asked = JSON.stringify(options.prompt);
+
+          return {
+            content: [{ type: 'text', text: '## Open request\nNone' }],
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+              outputTokens: { total: 5, text: 5, reasoning: 0 },
+            },
+            warnings: [],
+          };
+        },
+      }),
+      previous: undefined,
+      history,
+      maxOutputTokens: 512,
+      signal: AbortSignal.timeout(5000),
+    });
+
+    // The last six turns stay verbatim, so the summary stops before them.
+    expect(compacted?.upTo).toBe(history[5]?.createdAt);
+    expect(asked).toContain('turn 5');
+    expect(asked).not.toContain('turn 6');
+  });
+
+  it('leaves a short conversation alone', async () => {
+    const history = Array.from({ length: 6 }, (_, index) =>
+      message(`m${index}`, `turn ${index}`, new Date(1700000000000 + index * 1000).toISOString()),
+    );
+
+    await expect(
+      compact({
+        run: {} as never,
+        model: mockModel({ doGenerate: async () => ({}) as never }),
+        previous: undefined,
+        history,
+        maxOutputTokens: 512,
+        signal: AbortSignal.timeout(5000),
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('compacts only once the prompt is nearly full', () => {
+    expect(needsCompaction(8600, 10000)).toBe(true);
+    expect(needsCompaction(8000, 10000)).toBe(false);
+  });
 });

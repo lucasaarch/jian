@@ -4,10 +4,20 @@ import type { Queryable } from '../storage/database.js';
 export interface SessionReader {
   session(profileId: string, sessionId: string, reader?: Queryable): Promise<Session>;
   sessions(profileId: string): Promise<Session[]>;
-  messages(profileId: string, sessionId: string, limit?: number): Promise<Message[]>;
+  messages(
+    profileId: string,
+    sessionId: string,
+    limit?: number,
+    after?: string,
+  ): Promise<Message[]>;
 }
 
 /** Naming is the agent's one write to a session, and only while it has no name. */
+/** Replacing the turns a prompt carries with the record the agent wrote of them. */
+export interface SessionSummarizer {
+  summarize(profileId: string, sessionId: string, summary: string, upTo: string): Promise<void>;
+}
+
 export interface SessionNamer {
   nameIfUnnamed(profileId: string, sessionId: string, title: string): Promise<void>;
 }

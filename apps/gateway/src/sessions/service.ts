@@ -17,6 +17,7 @@ import {
   listSessionMessages,
   listSessions,
   renameSession,
+  writeSessionSummary,
 } from './repository.js';
 
 /** The lookup a session needs from profiles, reading through whatever transaction it is given. */
@@ -139,9 +140,19 @@ export class Sessions {
     return listSessions(this.store.db, profileId, 100);
   }
 
-  async messages(profileId: string, sessionId: string, limit = 100) {
+  async messages(profileId: string, sessionId: string, limit = 100, after?: string) {
     await this.session(profileId, sessionId);
 
-    return listSessionMessages(this.store.db, sessionId, limit);
+    return listSessionMessages(this.store.db, sessionId, limit, after);
+  }
+
+  /**
+   * Replaces the turns up to `upTo` with the record the agent wrote of them. The messages stay
+   * in the database and in the panel: what changes is only what a request carries.
+   */
+  async summarize(profileId: string, sessionId: string, summary: string, upTo: string) {
+    await this.session(profileId, sessionId);
+
+    await writeSessionSummary(this.store.db, sessionId, summary, upTo);
   }
 }

@@ -8314,6 +8314,9 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         peerProfileId?: string;
+                        summary?: string;
+                        /** Format: date-time */
+                        summarizedUpTo?: string;
                         /** Format: date-time */
                         createdAt: string;
                     }[];
@@ -8455,6 +8458,9 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         peerProfileId?: string;
+                        summary?: string;
+                        /** Format: date-time */
+                        summarizedUpTo?: string;
                         /** Format: date-time */
                         createdAt: string;
                     };
@@ -8595,6 +8601,9 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         peerProfileId?: string;
+                        summary?: string;
+                        /** Format: date-time */
+                        summarizedUpTo?: string;
                         /** Format: date-time */
                         createdAt: string;
                     };

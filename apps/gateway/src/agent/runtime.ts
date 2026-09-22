@@ -1,8 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type { MCPClient } from '@ai-sdk/mcp';
 import type { Run } from '@jian/contracts';
-import { generateText, type LanguageModel, stepCountIs, ToolLoopAgent, type ToolSet } from 'ai';
+import {
+  generateText,
+  type LanguageModel,
+  type ModelMessage,
+  stepCountIs,
+  ToolLoopAgent,
+  type ToolSet,
+} from 'ai';
 import { fitPrompt, tokenCounter } from '../context/budget.js';
+import { COMPACTING_NOTICE, compact, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
 import { anthropicCredential, withClaudeCodeIdentity } from '../providers/claude-subscription.js';
 import { reasoningProviderOptions } from '../providers/effort.js';
@@ -73,6 +81,81 @@ export class AgentRuntime {
       }
     } catch {
       // A conversation with no name is a cosmetic gap; it is not worth a failed run.
+    }
+  }
+
+  /**
+   * Replaces the older turns with a record of them when the prompt has grown past what the
+   * budget leaves for it, and says so on the channel first. Returns whether anything changed.
+   *
+   * A failure here is never the run's failure: the step then proceeds on the prompt it has,
+   * and `fitPrompt` drops what does not fit, which is the behaviour that existed before.
+   */
+  private async compactIfNeeded(
+    run: Run,
+    owner: string,
+    context: { system: string; messages: Array<{ role: 'user' | 'assistant'; content: string }> },
+    pending: readonly ModelMessage[],
+    model: LanguageModel,
+    policy: NonNullable<Run['contextPolicy']>,
+    secrets: Set<string>,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const count = tokenCounter(
+      (run.model ?? run.profile.model).provider,
+      (run.model ?? run.profile.model).modelId,
+    );
+
+    // What this step would send: the rebuilt context plus the tool calls and results the loop
+    // has accumulated since it started, which is the half that grows without anyone asking.
+    const carried =
+      count(context.system) +
+      context.messages.reduce((total, message) => total + count(message.content), 0) +
+      pending.reduce((total, message) => total + count(JSON.stringify(message)), 0);
+
+    if (!needsCompaction(carried, policy.inputTokens - policy.outputTokens)) {
+      return false;
+    }
+
+    try {
+      // Said before the call, not after: summarising takes a request of its own, and silence
+      // for that long reads as the agent having stopped.
+      await this.services.lifecycle
+        .say(run.profileId, run.id, owner, COMPACTING_NOTICE)
+        .catch(() => {});
+
+      const session = await this.services.sessions.session(run.profileId, run.sessionId);
+      const history = await this.services.sessions.messages(
+        run.profileId,
+        run.sessionId,
+        40,
+        session.summarizedUpTo,
+      );
+
+      const compacted = await compact({
+        run,
+        model,
+        previous: session.summary,
+        history,
+        maxOutputTokens: Math.min(2048, policy.outputTokens),
+        signal,
+      });
+
+      if (!compacted) {
+        return false;
+      }
+
+      await this.services.sessions.summarize(
+        run.profileId,
+        run.sessionId,
+        redactText(compacted.summary, secrets),
+        compacted.upTo,
+      );
+
+      return true;
+    } catch {
+      // Including an aborted run: the caller checks the signal on its own next line.
+      return false;
     }
   }
 
@@ -280,7 +363,25 @@ export class AgentRuntime {
             throw new Error('Run token budget exceeded');
           }
 
-          const refreshed = await this.services.contexts.context(run);
+          let refreshed = await this.services.contexts.context(run);
+
+          // Compaction happens here rather than at the end of a turn: the prompt is only ever
+          // too large at the moment it is being built, and the turns that overflowed it are the
+          // ones this step would otherwise have to drop in silence.
+          if (
+            await this.compactIfNeeded(
+              run,
+              owner,
+              refreshed,
+              messages,
+              model,
+              policy,
+              secrets,
+              signal,
+            )
+          ) {
+            refreshed = await this.services.contexts.context(run);
+          }
 
           // What the person said after this run began. It arrives as their own turn, at the
           // point the loop reached, so the agent answers what they are asking now rather than

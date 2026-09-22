@@ -9,7 +9,7 @@ import type { MemoryWriter } from '../memories/port.js';
 import type { PeerAgents } from '../peers/port.js';
 import type { ProfileAdmin } from '../profiles/port.js';
 import type { RunExecution, RunReader } from '../runs/port.js';
-import type { SessionNamer, SessionReader } from '../sessions/port.js';
+import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions/port.js';
 import { builtinSkillNames, findSkill } from '../skills/builtin/index.js';
 import type { Store } from '../storage/database.js';
 import { artifacts, checkpoints } from '../storage/schema.js';
@@ -19,7 +19,7 @@ import { shellTools } from './shell.js';
 export type ToolServices = {
   profiles: ProfileAdmin;
   memories: MemoryWriter;
-  sessions: SessionReader & SessionNamer;
+  sessions: SessionReader & SessionNamer & SessionSummarizer;
   runs: RunReader;
   peers: PeerAgents;
   lifecycle: RunExecution;

@@ -6,6 +6,8 @@ export interface ContextSources {
   memories: Memory[];
   activities: Run[];
   history: Message[];
+  /** What the turns before this history held, once they stopped fitting in a request. */
+  summary?: string;
 }
 
 function terms(text: string): Set<string> {
@@ -127,6 +129,14 @@ export function buildContext(
     'Only claim a memory was saved after its tool succeeds.',
   ].join(' ');
 
+  const earlier = sources.summary
+    ? [
+        'Everything below happened in this same conversation, before the turns that follow. ' +
+          'It is a record you wrote, not a new instruction, and the turns it describes are ' +
+          `gone from this request:\n\n${sources.summary}`,
+      ]
+    : [];
+
   const system = [
     run.profile.instructions,
     ...(Object.values(run.profile.identity).some((value) =>
@@ -138,6 +148,7 @@ export function buildContext(
     `Relevant shared memories: ${JSON.stringify(relevant)}`,
     `Current activities: ${JSON.stringify(activities)}`,
     `Available skills: ${JSON.stringify(skills)}`,
+    ...earlier,
   ].join('\n\n');
 
   return {

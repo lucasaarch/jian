@@ -22,6 +22,13 @@ export const sessionRecordSchema = sessionSchema.extend({
   // Only on the session a pair of agents shares: the profile on the other side of it. The
   // session belongs to this profile alone; the peer never reads it.
   peerProfileId: uuid.optional(),
+  /**
+   * What the conversation held before `summarizedUpTo`, written by the agent's own model when
+   * the history outgrew what a request may carry. The turns themselves are kept in the
+   * database and stay readable in the panel; only the prompt stops carrying them.
+   */
+  summary: z.string().max(20_000).optional(),
+  summarizedUpTo: timestamp.optional(),
   createdAt: timestamp,
 });
 

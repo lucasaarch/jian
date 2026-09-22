@@ -146,6 +146,8 @@ export const sessions = pgTable(
     channel: text('channel').notNull(),
     // Set on the session a pair of agents shares; the peer never reads it.
     peerProfileId: uuid('peer_profile_id').references(() => profiles.id, { onDelete: 'set null' }),
+    summary: text('summary'),
+    summarizedUpTo: timestamp('summarized_up_to', { withTimezone: true }),
     createdAt,
   },
   (table) => [

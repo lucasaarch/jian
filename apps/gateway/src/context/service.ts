@@ -18,14 +18,22 @@ export class Contexts {
       12,
     );
 
-    // Three independent reads: whatever the request mentions, what the profile is busy with,
-    // and this session's tail. `buildContext` is what decides how much of each survives.
+    const session = await this.sessions.session(run.profileId, run.sessionId);
+
+    // Four independent reads: whatever the request mentions, what the profile is busy with,
+    // the record of what was compacted away, and the turns since. `buildContext` is what
+    // decides how much of each survives.
     const [memories, activities, history] = await Promise.all([
       searchMemories(this.store.db, run.profileId, words, 100),
       this.runs.activities(run.profileId),
-      this.sessions.messages(run.profileId, run.sessionId, 40),
+      this.sessions.messages(run.profileId, run.sessionId, 40, session.summarizedUpTo),
     ]);
 
-    return buildContext(run, { memories, activities, history });
+    return buildContext(run, {
+      memories,
+      activities,
+      history,
+      ...(session.summary ? { summary: session.summary } : {}),
+    });
   }
 }
