@@ -109,6 +109,8 @@ export const runRecordSchema = z.strictObject({
    * happens instead of arriving all at once at the end. The final answer is not in here.
    */
   commentary: z.array(z.string().max(4000)).max(20).optional(),
+  /** Set when the agent that asked stopped waiting: where its late answer is to be carried. */
+  relayTo: uuid.optional(),
 });
 
 /**

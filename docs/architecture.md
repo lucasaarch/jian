@@ -33,6 +33,10 @@ Memories are explicit, versioned and shared across the profile; there is no weig
 
 ## Conversation between profiles
 
+A turn that runs out of tool calls is not thrown away: one more request, carrying every result the turn produced and no tools at all, turns the work into an answer that says what was found and what is still unknown.
+
+An agent waiting on a colleague waits for less than a minute. Past that the call is not lost and nobody is held: the answer is addressed to the conversation that asked and arrives there as an ordinary turn once it lands, so the agent that asked passes it on itself. A failure travels the same way.
+
 The isolation between profiles has one declared door, and it carries data only: a profile discovers the others of the installation and speaks to one of them, but what crosses is text. Discovery returns an identifier, a name and the summary the owner wrote — never instructions, identity, skills, memories, credentials or history. Every other read stays bound to the calling profile; no tool and no route reads another profile's records.
 
 A call becomes an ordinary run in the profile being called: its request key, its context, its lease, its checkpoints. It happens in the session that pair of agents shares — one per pair, on the callee's side, marked with `peerProfileId` and invisible to the caller — so colleagues keep continuity instead of starting over on every request. The caller waits for the run to finish and receives its output as text; a colleague that fails or stalls becomes an explicit error, never silence. Both profiles record the event (`agent.call.sent` and `agent.call.received`), which is how the owner audits who spoke to whom.

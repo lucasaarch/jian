@@ -27,6 +27,7 @@ import {
   insertRun,
   listActiveRuns,
   listRecentRuns,
+  setRelayTo,
   updateRun,
 } from './repository.js';
 
@@ -78,6 +79,11 @@ export class Runs {
     }
 
     return run;
+  }
+
+  /** Where a late answer goes when the agent that asked has already stopped waiting. */
+  async relayTo(profileId: string, runId: string, sessionId: string | null) {
+    await this.store.transaction(profileId, (tx) => setRelayTo(tx, runId, sessionId));
   }
 
   async submit(profileId: string, sessionId: string, input: unknown, options: SubmitOptions = {}) {

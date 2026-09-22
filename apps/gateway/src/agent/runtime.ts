@@ -159,6 +159,42 @@ export class AgentRuntime {
     }
   }
 
+  /**
+   * The answer a loop never got round to writing, asked for without tools so it cannot start
+   * another round. What it says is bounded by what already happened: every tool result of the
+   * run is in the messages it is handed.
+   */
+  private async closingWords(
+    model: LanguageModel,
+    instructions: string,
+    response: { messages: ModelMessage[] },
+    policy: NonNullable<Run['contextPolicy']>,
+    signal: AbortSignal,
+  ): Promise<string> {
+    try {
+      const { text } = await generateText({
+        model,
+        system: instructions,
+        maxOutputTokens: policy.outputTokens,
+        abortSignal: signal,
+        messages: [
+          ...response.messages,
+          {
+            role: 'user',
+            content:
+              'You have used every tool call this turn allows. Answer now with what you ' +
+              'already have, and call nothing further. Say plainly what you found, what you ' +
+              'did, and what is still unknown — never imply you finished work you did not.',
+          },
+        ],
+      });
+
+      return text.trim();
+    } catch {
+      return '';
+    }
+  }
+
   cancel(runId: string) {
     this.controllers.get(runId)?.abort();
   }
@@ -532,10 +568,23 @@ export class AgentRuntime {
         throw new Error('External tool outcome is uncertain');
       }
 
-      const answer = await result.text;
+      let answer = await result.text;
       const finishReason = await result.finishReason;
 
-      if (!answer.trim() || finishReason === 'tool-calls' || finishReason === 'length') {
+      // A loop that runs out of steps has done the work and simply never wrote it down.
+      // Failing there threw the whole turn away — the person paid for the tools and got a
+      // sentence pointing at a log. One more call, with no tools, turns it into an answer.
+      if (finishReason === 'tool-calls' || (!answer.trim() && finishReason === 'length')) {
+        answer = await this.closingWords(
+          model,
+          context.system,
+          await result.response,
+          policy,
+          signal,
+        );
+      }
+
+      if (!answer.trim()) {
         throw new Error('Agent stopped without a complete final response');
       }
 
@@ -546,6 +595,9 @@ export class AgentRuntime {
         'completed',
         redactText(answer, secrets),
       );
+
+      // Addressed only when the agent that asked gave up waiting; otherwise it already has it.
+      await this.services.peers.deliverLate(profileId, runId).catch(() => {});
 
       await this.nameConversation(run, model, secrets);
     } catch (error) {
@@ -565,6 +617,9 @@ export class AgentRuntime {
             executionFailureMessage(error, externalUncertain, signal.aborted, secrets),
           )
           .catch(() => {});
+
+        // A colleague waiting on this one is owed the bad news as much as the good.
+        await this.services.peers.deliverLate(profileId, runId).catch(() => {});
       }
     } finally {
       clearInterval(pulse);

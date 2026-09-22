@@ -21,6 +21,7 @@ export interface RunWriter extends RunReader {
     input: unknown,
     options?: SubmitOptions,
   ): Promise<Run>;
+  relayTo(profileId: string, runId: string, sessionId: string | null): Promise<void>;
 }
 
 /** The lease side of a run: every write here needs the owner that holds it. */

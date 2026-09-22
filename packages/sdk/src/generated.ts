@@ -2438,6 +2438,8 @@ export interface operations {
                             fromName: string;
                             /** Format: uuid */
                             fromRunId: string;
+                            /** Format: uuid */
+                            fromSessionId?: string;
                             depth: number;
                             chain: string[];
                         };
@@ -2462,6 +2464,8 @@ export interface operations {
                             updatedAt: string;
                         };
                         commentary?: string[];
+                        /** Format: uuid */
+                        relayTo?: string;
                     };
                 };
             };
@@ -8949,6 +8953,8 @@ export interface operations {
                             fromName: string;
                             /** Format: uuid */
                             fromRunId: string;
+                            /** Format: uuid */
+                            fromSessionId?: string;
                             depth: number;
                             chain: string[];
                         };
@@ -8973,6 +8979,8 @@ export interface operations {
                             updatedAt: string;
                         };
                         commentary?: string[];
+                        /** Format: uuid */
+                        relayTo?: string;
                     };
                 };
             };
@@ -9430,6 +9438,8 @@ export interface operations {
                             fromName: string;
                             /** Format: uuid */
                             fromRunId: string;
+                            /** Format: uuid */
+                            fromSessionId?: string;
                             depth: number;
                             chain: string[];
                         };
@@ -9454,6 +9464,8 @@ export interface operations {
                             updatedAt: string;
                         };
                         commentary?: string[];
+                        /** Format: uuid */
+                        relayTo?: string;
                     }[];
                 };
             };
@@ -9647,6 +9659,8 @@ export interface operations {
                             fromName: string;
                             /** Format: uuid */
                             fromRunId: string;
+                            /** Format: uuid */
+                            fromSessionId?: string;
                             depth: number;
                             chain: string[];
                         };
@@ -9671,6 +9685,8 @@ export interface operations {
                             updatedAt: string;
                         };
                         commentary?: string[];
+                        /** Format: uuid */
+                        relayTo?: string;
                     };
                 };
             };
@@ -9864,6 +9880,8 @@ export interface operations {
                             fromName: string;
                             /** Format: uuid */
                             fromRunId: string;
+                            /** Format: uuid */
+                            fromSessionId?: string;
                             depth: number;
                             chain: string[];
                         };
@@ -9888,6 +9906,8 @@ export interface operations {
                             updatedAt: string;
                         };
                         commentary?: string[];
+                        /** Format: uuid */
+                        relayTo?: string;
                     };
                 };
             };

@@ -567,35 +567,53 @@ it('creates a child profile without inheriting provider access', async () => {
   expect(child?.allowSelfManagement).toBe(false);
 });
 
-it('does not report completion when the agent exhausts its tool budget', async () => {
+it('answers with what it has when the agent exhausts its tool budget', async () => {
   const { services, profile, run } = await fixture();
   let calls = 0;
+  let closingTools: unknown;
 
   const model = mockModel({
-    doGenerate: async () => ({
-      content: [
-        { type: 'text', text: 'Still working.' },
-        {
-          type: 'tool-call',
-          toolCallId: `call-${++calls}`,
-          toolName: 'list_activities',
-          input: '{}',
-        },
-      ],
-      finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
-      usage,
-      warnings: [],
-    }),
+    doGenerate: async (options) => {
+      calls += 1;
+
+      // The closing call carries no tools, so it cannot start another round.
+      if (!options.tools?.length) {
+        closingTools = options.tools;
+
+        return {
+          content: [{ type: 'text', text: 'I read three activities and ran out of steps.' }],
+          finishReason: { unified: 'stop', raw: 'stop' },
+          usage,
+          warnings: [],
+        };
+      }
+
+      return {
+        content: [
+          { type: 'text', text: 'Still working.' },
+          {
+            type: 'tool-call',
+            toolCallId: `call-${calls}`,
+            toolName: 'list_activities',
+            input: '{}',
+          },
+        ],
+        finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+        usage,
+        warnings: [],
+      };
+    },
   });
 
   await new AgentRuntime(services, () => model).execute(profile.id, run.id);
-  expect((await services.runs.run(profile.id, run.id)).status).toBe('failed');
 
-  expect(
-    (await services.sessions.messages(profile.id, run.sessionId)).filter(
-      (m) => m.role === 'assistant',
-    ),
-  ).toHaveLength(0);
+  const finished = await services.runs.run(profile.id, run.id);
+
+  // The tools were paid for; throwing the turn away would have wasted them and told the
+  // person nothing.
+  expect(finished.status).toBe('completed');
+  expect(finished.output).toBe('I read three activities and ran out of steps.');
+  expect(closingTools ?? []).toHaveLength(0);
 });
 
 it('versions self-managed skills without accepting new capability grants', async () => {

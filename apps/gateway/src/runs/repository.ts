@@ -48,6 +48,7 @@ function toRun(row: RunRow, document: Profile): Run {
     ...(row.group ? { group: row.group } : {}),
     ...(row.progress ? { progress: row.progress } : {}),
     ...(row.commentary?.length ? { commentary: row.commentary } : {}),
+    ...(row.relayTo ? { relayTo: row.relayTo } : {}),
     ...(row.leaseOwner === null ? {} : { leaseOwner: row.leaseOwner }),
     ...(row.leaseUntil === null ? {} : { leaseUntil: row.leaseUntil }),
     createdAt: row.createdAt.toISOString(),
@@ -76,6 +77,7 @@ function toRow(run: Run): typeof runs.$inferInsert {
     group: run.group ?? null,
     progress: run.progress ?? null,
     commentary: run.commentary ?? null,
+    relayTo: run.relayTo ?? null,
     leaseOwner: run.leaseOwner ?? null,
     leaseUntil: run.leaseUntil ?? null,
     createdAt: new Date(run.createdAt),
@@ -339,6 +341,15 @@ export async function countRunsByDay(
     .orderBy(sql`1`);
 
   return rows.map((row) => ({ day: row.day, runs: row.total, tokens: Number(row.tokens) }));
+}
+
+/** Addresses a late answer to the conversation that asked, or clears that address. */
+export async function setRelayTo(
+  db: Queryable,
+  runId: string,
+  sessionId: string | null,
+): Promise<void> {
+  await db.update(runs).set({ relayTo: sessionId }).where(eq(runs.id, runId));
 }
 
 /** Dispatch and recovery need the address of a run, not the run: no revision is joined. */

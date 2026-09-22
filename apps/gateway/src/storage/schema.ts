@@ -192,6 +192,9 @@ export const runs = pgTable(
     // Overwritten many times while a run is live and cleared when it ends; never history.
     progress: jsonb('progress').$type<RunProgress>(),
     commentary: jsonb('commentary').$type<string[]>(),
+    // Set when the agent that asked stopped waiting: the answer is carried into that session
+    // as a turn of its own instead of being lost with the caller's run.
+    relayTo: uuid('relay_to').references(() => sessions.id, { onDelete: 'set null' }),
     // What the person said while this run was already going. Read and cleared between steps.
     steer: text('steer'),
     leaseOwner: text('lease_owner'),

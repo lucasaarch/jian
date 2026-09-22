@@ -7,4 +7,5 @@ import type { AgentAnswer, AgentCard, Run } from '@jian/contracts';
 export interface PeerAgents {
   agents(profileId: string): Promise<AgentCard[]>;
   ask(run: Run, input: unknown, signal?: AbortSignal): Promise<AgentAnswer>;
+  deliverLate(profileId: string, runId: string): Promise<void>;
 }

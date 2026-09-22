@@ -158,6 +158,7 @@ describe('conversation between profiles', () => {
     expect(answer).toEqual({
       fromProfileId: callee.id,
       fromName: 'Operário',
+      status: 'answered',
       text: 'Entregue ontem.',
     });
 
@@ -261,8 +262,8 @@ describe('conversation between profiles', () => {
     await answerOnce(services, callee.id, 'Pronto.');
 
     expect(await both).toEqual([
-      { fromProfileId: callee.id, fromName: 'Operário', text: 'Pronto.' },
-      { fromProfileId: callee.id, fromName: 'Operário', text: 'Pronto.' },
+      { fromProfileId: callee.id, fromName: 'Operário', status: 'answered', text: 'Pronto.' },
+      { fromProfileId: callee.id, fromName: 'Operário', status: 'answered', text: 'Pronto.' },
     ]);
 
     expect(await runRows(services.store, callee.id)).toHaveLength(1);
@@ -404,4 +405,46 @@ describe('conversation between profiles', () => {
       sessionId: answered.sessionId,
     });
   });
+});
+
+it('stops waiting on a slow colleague and carries the answer back when it lands', async () => {
+  const { services, caller, callee } = await pair();
+  const session = await services.sessions.createSession(caller.id, { title: 'Pedido' });
+
+  const asking = await services.runs.submit(caller.id, session.id, {
+    text: 'Pergunta ao Operário',
+    requestKey: 'ask',
+  });
+
+  // No wait at all: the point under test is what happens once the caller gives up.
+  const impatient = new Peers(services, Date.now, { answerWithin: 0, pollEvery: 1 });
+
+  const answer = await impatient.ask(await services.runs.run(caller.id, asking.id), {
+    toProfileId: callee.id,
+    text: 'Como está a entrega?',
+    requestKey: 'slow',
+  });
+
+  expect(answer.status).toBe('waiting');
+
+  const pending = (await services.runs.activities(callee.id))[0];
+  if (!pending) throw new Error('The colleague never got the question');
+
+  // The asking turn is over by the time a late answer lands; while it is still going the
+  // answer joins it as a redirect instead, which is the same door the owner writes through.
+  await services.lifecycle.claim(asking.id, caller.id, 'caller');
+  await services.lifecycle.finish(caller.id, asking.id, 'caller', 'completed', 'Perguntei.');
+
+  await services.lifecycle.claim(pending.id, callee.id, 'worker');
+  await services.lifecycle.finish(callee.id, pending.id, 'worker', 'completed', 'Entregue ontem.');
+  await impatient.deliverLate(callee.id, pending.id);
+
+  const carried = (await services.runs.activities(caller.id)).find((item) => item.id !== asking.id);
+
+  expect(carried?.sessionId).toBe(session.id);
+  expect(carried?.input).toContain('Entregue ontem.');
+
+  // Addressed once: a second pass must not start the conversation again.
+  await impatient.deliverLate(callee.id, pending.id);
+  expect(await services.runs.activities(caller.id)).toHaveLength(1);
 });

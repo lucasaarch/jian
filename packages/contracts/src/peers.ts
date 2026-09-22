@@ -36,6 +36,8 @@ export const agentCallOriginSchema = z.strictObject({
   fromProfileId: z.uuid(),
   fromName: z.string().max(100),
   fromRunId: z.uuid(),
+  /** The conversation that asked. A late answer is carried back into it as an ordinary turn. */
+  fromSessionId: z.uuid().optional(),
   depth: z.number().int().min(1).max(AGENT_CALL_DEPTH_LIMIT),
   chain: z
     .array(z.uuid())
@@ -43,10 +45,15 @@ export const agentCallOriginSchema = z.strictObject({
     .max(AGENT_CALL_DEPTH_LIMIT + 1),
 });
 
-/** What crosses back: text, and the name of who wrote it. */
+/**
+ * What crosses back: text, and the name of who wrote it. `waiting` means the colleague is
+ * still working — nobody blocks on a long errand, and their answer arrives in this
+ * conversation later, as a turn of its own.
+ */
 export const agentAnswerSchema = z.strictObject({
   fromProfileId: z.uuid(),
   fromName: z.string(),
+  status: z.enum(['answered', 'waiting']).default('answered'),
   text: z.string(),
 });
 

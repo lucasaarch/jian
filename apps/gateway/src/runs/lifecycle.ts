@@ -114,7 +114,23 @@ export class RunLifecycle {
    * whether a person sees the working or only the answer.
    */
   async say(profileId: string, runId: string, owner: string, text: string): Promise<void> {
-    await this.store.transaction(profileId, (tx) => appendCommentary(tx, runId, owner, text));
+    await this.store.transaction(profileId, async (tx) => {
+      await appendCommentary(tx, runId, owner, text);
+
+      const run = await this.runs.run(profileId, runId, tx);
+
+      // Also a turn of the conversation: what the chat received and what the panel shows are
+      // the same sequence, and the next turn sees what this one already said.
+      await insertMessage(tx, {
+        id: randomUUID(),
+        profileId,
+        sessionId: run.sessionId,
+        runId,
+        role: 'assistant',
+        content: text,
+        createdAt: nowIso(this.clock),
+      });
+    });
   }
 
   async checkpoints(profileId: string, runId: string) {

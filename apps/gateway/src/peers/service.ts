@@ -27,7 +27,12 @@ type PeerServices = {
 /** How long a caller waits for a colleague and how often it looks, in milliseconds. */
 export type PeerTiming = { answerWithin: number; pollEvery: number };
 
-const defaultTiming: PeerTiming = { answerWithin: 300_000, pollEvery: 250 };
+/**
+ * Long enough for a colleague to answer a question, short enough that nobody is left staring
+ * at a chat. Past it the call is not lost: the answer is carried back into the asking
+ * conversation when it lands, as a turn of its own.
+ */
+const defaultTiming: PeerTiming = { answerWithin: 45_000, pollEvery: 250 };
 
 /**
  * Conversation between the profiles of one installation. The wall between them is made of
@@ -89,11 +94,9 @@ export class Peers implements PeerAgents {
       depth: origin.depth,
     });
 
-    return {
-      fromProfileId: callee.id,
-      fromName: callee.name,
-      text: await this.answer(callee.id, answering.id, callee.name, signal),
-    };
+    const answer = await this.answer(callee.id, answering.id, callee.name, run.sessionId, signal);
+
+    return { fromProfileId: callee.id, fromName: callee.name, ...answer };
   }
 
   /**
@@ -128,6 +131,7 @@ export class Peers implements PeerAgents {
       fromProfileId: run.profileId,
       fromName: run.profile.name,
       fromRunId: run.id,
+      fromSessionId: run.sessionId,
       depth,
       chain: [...chain, toProfileId],
     };
@@ -143,15 +147,16 @@ export class Peers implements PeerAgents {
     profileId: string,
     runId: string,
     name: string,
+    fromSessionId: string,
     signal?: AbortSignal,
-  ): Promise<string> {
+  ): Promise<{ status: 'answered' | 'waiting'; text: string }> {
     const deadline = this.clock() + this.timing.answerWithin;
 
     for (;;) {
       const current = await this.services.runs.run(profileId, runId);
 
       if (current.status === 'completed') {
-        return current.output ?? '';
+        return { status: 'answered', text: current.output ?? '' };
       }
 
       if (current.status !== 'queued' && current.status !== 'running') {
@@ -160,12 +165,52 @@ export class Peers implements PeerAgents {
 
       signal?.throwIfAborted();
 
+      // Waiting longer than this holds a run, a lease and a chat open for work that belongs to
+      // someone else. The answer is addressed to the asking conversation and released here.
       if (this.clock() >= deadline) {
-        throw new GatewayError(504, `${name} did not answer in time; its run is still going.`);
+        await this.services.runs.relayTo(profileId, runId, fromSessionId);
+
+        return {
+          status: 'waiting',
+          text: `${name} is still working on it. Their answer will arrive in this conversation on its own, as a message from them — say so, and do not ask them again.`,
+        };
       }
 
       await new Promise((resolve) => setTimeout(resolve, this.timing.pollEvery));
     }
+  }
+
+  /**
+   * Carries a late answer into the conversation that asked. It arrives there as an ordinary
+   * turn, so the agent that asked is the one who decides how to pass it on.
+   */
+  async deliverLate(profileId: string, runId: string): Promise<void> {
+    const run = await this.services.runs.run(profileId, runId);
+
+    if (!run.relayTo || !run.call) {
+      return;
+    }
+
+    const said =
+      run.status === 'completed'
+        ? (run.output ?? '')
+        : `could not finish: ${run.error ?? run.status}`;
+
+    await this.services.runs.relayTo(profileId, runId, null);
+
+    await this.services.runs.submit(
+      run.call.fromProfileId,
+      run.relayTo,
+      {
+        text: [
+          `${(await this.services.profiles.profile(profileId)).name} answered the question you left with them.`,
+          `You asked: ${run.input}`,
+          `They replied: ${said}`,
+        ].join('\n\n'),
+        requestKey: `peer-answer:${runId}`,
+      },
+      { activity: 'channel' },
+    );
   }
 
   private async record(profileId: string, runId: string, type: string, data: unknown) {
