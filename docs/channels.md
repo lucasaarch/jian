@@ -111,7 +111,11 @@ An answer reaches a chat as the messages it was written in, split where the agen
 
 `Groups`, in `apps/gateway/src/channels/groups.ts`, decides whether the profile speaks in a room already approved: it recognises the author, measures who was addressed and writes the room's budget. It runs inside the same transaction, for the same reason — the profile lock is what keeps a burst from spending the budget twice.
 
+An answer is released a paragraph at a time, while it is still being written: the agent is told a blank line ends a message, and each completed paragraph becomes one, sent as soon as it exists. The last paragraph is the run's answer, so a run always ends with something to show and nothing is sent twice.
+
 A delivery does not wait for the whole run. A step that says something on its way to a tool has that line sent straight away, as its own message, and the delivery counts how much of the run's commentary the chat has already received; the answer follows when the run ends. The count is raised inside the profile lock before the send, so two workers or two ticks never repeat a line — at the price of losing one to a failing adapter, which is the right way round for commentary. Between lines the chat shows only the composing indicator.
+
+A run the gateway starts by itself — a colleague's late answer, a contact's reply to a question the agent sent — has no incoming message to hang a delivery on, so it is given one against the conversation its session belongs to. Without that its answer reaches the transcript and stops there, which is indistinguishable from the agent having said nothing.
 
 A delivery can exist with no run behind it: the approval notice carries its own text in `notice`. The worker sends that text directly, waiting on no run.
 

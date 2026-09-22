@@ -25,6 +25,7 @@ import { plainText } from './plain.js';
 import { ChannelRegistry } from './registry.js';
 import {
   findChannel,
+  findContactBySession,
   findDelivery,
   findLiveChannel,
   insertChannel,
@@ -472,6 +473,8 @@ export class Channels {
         { activity: 'channel' },
       );
 
+      await this.deliverRun(channel.profileId, errand.fromSessionId, run.id);
+
       return { accepted: true, runId: run.id, contact: 'approved' as const };
     } catch {
       return null;
@@ -593,6 +596,39 @@ export class Channels {
       ...room,
       profiles: room.profiles.sort((a, b) => a.name.localeCompare(b.name)),
     }));
+  }
+
+  /**
+   * Gives a run its way out to the person. A run created from an incoming message gets this
+   * when the message arrives; one created by the gateway itself — a colleague's late answer, a
+   * contact's reply — has no incoming message to hang it on, and without this its answer
+   * reaches the transcript and nothing else.
+   */
+  async deliverRun(profileId: string, sessionId: string, runId: string): Promise<void> {
+    const contact = await findContactBySession(this.services.store.db, profileId, sessionId);
+
+    if (contact?.status !== 'approved') {
+      return;
+    }
+
+    const connection = await findConnection(this.services.store.db, contact.channelId);
+    const now = new Date().toISOString();
+
+    await this.services.store.transaction(profileId, (tx) =>
+      insertDelivery(tx, {
+        id: randomUUID(),
+        profileId,
+        channelId: contact.channelId,
+        runId,
+        chatId: contact.chatId,
+        status: 'pending',
+        createdAt: now,
+        updatedAt: now,
+        remoteMessageIds: [],
+        saidCount: 0,
+        ...(connection ? { connectionGeneration: connection.generation } : {}),
+      }),
+    );
   }
 
   async deliveries(profileId: string) {

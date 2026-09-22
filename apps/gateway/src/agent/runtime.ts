@@ -19,6 +19,7 @@ import { providerSecret } from '../providers/service.js';
 import { createSafeFetch } from '../security/outbound.js';
 import { cacheable } from './cache.js';
 import { connectMcpTools, unavailableNote } from './mcp.js';
+import { Narrator } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
 import { deferTools, profileTools, type ToolServices } from './tools.js';
@@ -468,14 +469,7 @@ export class AgentRuntime {
           };
         },
         onStepEnd: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
-          // Text alongside tool calls is the agent talking while it works, and the last step's
-          // text is the answer. Saying this now is what makes a chat move in step with the
-          // work instead of arriving whole at the end.
-          if (toolCalls.length > 0 && text.trim()) {
-            await this.services.lifecycle
-              .say(profileId, runId, owner, redactText(text, secrets).trim())
-              .catch(() => {});
-          }
+          await narrator.endStep(toolCalls.length > 0).catch(() => {});
 
           const estimate = tokenCounter(config.provider, config.modelId);
 
@@ -529,6 +523,10 @@ export class AgentRuntime {
 
       // Streamed rather than generated so the run can say what it is doing while it does it.
       // Nothing read here is kept: the answer is `result.text`, written once, below.
+      const narrator = new Narrator(async (paragraph) => {
+        await this.services.lifecycle.say(profileId, runId, owner, redactText(paragraph, secrets));
+      });
+
       const stream = await agent.stream({ messages: context.messages, abortSignal: signal });
       // A step that throws is reported on the stream, not as a rejection: without this the
       // run would fail with "no output generated" and lose the reason entirely.
@@ -541,6 +539,8 @@ export class AgentRuntime {
             break;
           case 'text-delta':
             progress.delta(part.text);
+            // Released as it is written, not once the run is over.
+            await narrator.delta(part.text).catch(() => {});
             break;
           case 'reasoning-start':
             progress.thinking();
@@ -568,7 +568,9 @@ export class AgentRuntime {
         throw new Error('External tool outcome is uncertain');
       }
 
-      let answer = await result.text;
+      // Whatever the narrator has not already sent. The paragraphs before it are messages of
+      // this conversation already, so repeating them here would show them twice.
+      let answer = narrator.rest || (await result.text);
       const finishReason = await result.finishReason;
 
       // A loop that runs out of steps has done the work and simply never wrote it down.

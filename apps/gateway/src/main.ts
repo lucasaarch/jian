@@ -115,6 +115,9 @@ const channelRegistry = new ChannelRegistry([
 ]);
 const channels = new Channels(services, outbound.fetch, channelRegistry);
 
+// A colleague's late answer has no incoming message to hang a delivery on; channels give it one.
+services.peers.useDeliveries(channels);
+
 const runtime = new AgentRuntime(services, undefined, {
   vault,
   gatewayVault,

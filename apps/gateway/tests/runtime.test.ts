@@ -749,3 +749,26 @@ it('repeats what the provider said when the refusal carries a reason', async () 
     'The provider refused with 400: Third-party apps draw from your extra usage.',
   );
 });
+
+it('sends each paragraph as it is written and keeps the last as the answer', async () => {
+  const { services, profile, run } = await fixture();
+
+  const model = mockModel({
+    doGenerate: async () => ({
+      content: [{ type: 'text', text: 'Opening the board.\n\nFound it.\n\nTwelve open.' }],
+      finishReason: { unified: 'stop', raw: 'stop' },
+      usage,
+      warnings: [],
+    }),
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const said = (await services.sessions.messages(profile.id, run.sessionId))
+    .filter((message) => message.role === 'assistant')
+    .map((message) => message.content);
+
+  // Three messages in the conversation, not one block cut up on the way out.
+  expect(said).toEqual(['Opening the board.', 'Found it.', 'Twelve open.']);
+  expect((await services.runs.run(profile.id, run.id)).output).toBe('Twelve open.');
+});

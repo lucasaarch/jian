@@ -152,6 +152,28 @@ function contactQuery(db: Queryable) {
     .innerJoin(channels, eq(contacts.channelId, channels.id));
 }
 
+/** The conversation on a channel that a session belongs to, if it belongs to one at all. */
+export async function findContactBySession(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+): Promise<ContactRecord | null> {
+  const [row] = await db
+    .select({ contact: contacts, type: channels.type })
+    .from(contacts)
+    .innerJoin(channels, eq(channels.id, contacts.channelId))
+    .where(
+      and(
+        eq(contacts.profileId, profileId),
+        eq(contacts.sessionId, sessionId),
+        isNull(channels.revokedAt),
+      ),
+    )
+    .limit(1);
+
+  return row ? toContact(row.contact, row.type) : null;
+}
+
 export async function findContact(db: Queryable, id: string): Promise<ContactRecord | null> {
   const [row] = await contactQuery(db).where(eq(contacts.id, id)).limit(1);
 

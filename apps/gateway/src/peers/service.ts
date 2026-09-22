@@ -15,7 +15,7 @@ import type { RunWriter } from '../runs/port.js';
 import type { PeerSessions } from '../sessions/port.js';
 import type { Store } from '../storage/database.js';
 import { profiles } from '../storage/schema.js';
-import type { PeerAgents } from './port.js';
+import type { PeerAgents, RunDelivery } from './port.js';
 
 type PeerServices = {
   profiles: ProfileReader;
@@ -41,6 +41,16 @@ const defaultTiming: PeerTiming = { answerWithin: 45_000, pollEvery: 250 };
  * an ordinary run on the called profile, with its own key, its own context and its own lease.
  */
 export class Peers implements PeerAgents {
+  /**
+   * Set after construction: channels are assembled around the services this one belongs to.
+   * Absent in a gateway with no channels, where a late answer stays in the transcript.
+   */
+  private deliveries?: RunDelivery;
+
+  useDeliveries(deliveries: RunDelivery): void {
+    this.deliveries = deliveries;
+  }
+
   constructor(
     private readonly services: PeerServices,
     private readonly clock: Clock = Date.now,
@@ -198,7 +208,7 @@ export class Peers implements PeerAgents {
 
     await this.services.runs.relayTo(profileId, runId, null);
 
-    await this.services.runs.submit(
+    const carried = await this.services.runs.submit(
       run.call.fromProfileId,
       run.relayTo,
       {
@@ -211,6 +221,10 @@ export class Peers implements PeerAgents {
       },
       { activity: 'channel' },
     );
+
+    // Without this the answer reaches the transcript and stops there: nothing on the chat is
+    // waiting for a run the person never sent a message to start.
+    await this.deliveries?.deliverRun(run.call.fromProfileId, run.relayTo, carried.id);
   }
 
   private async record(profileId: string, runId: string, type: string, data: unknown) {
