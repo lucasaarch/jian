@@ -161,7 +161,10 @@ export const contextPolicySchema = z
     memoryTokens: z.number().int().min(0).max(8000).default(1500),
     historyTokens: z.number().int().min(0).max(32000).default(6000),
     toolResultTokens: z.number().int().min(128).max(8000).default(1500),
-    maxSteps: z.number().int().min(1).max(30).default(12),
+    // A backstop, not the thing that should fire. What really ends a turn is the token budget
+    // and the ten-minute clock; a step ceiling low enough to be reached is a turn thrown away
+    // with the work already paid for.
+    maxSteps: z.number().int().min(1).max(500).default(200),
     // One model call already costs the tool definitions; a cap under two calls' worth ends
     // the run before it starts.
     maxRunTokens: z.number().int().min(32000).max(1000000).default(100000),

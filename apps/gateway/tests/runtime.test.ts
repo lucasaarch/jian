@@ -22,9 +22,11 @@ const answer = (text: string) => ({
   warnings: [],
 });
 
-async function fixture() {
+async function fixture(contextPolicy?: Record<string, number>) {
   const services = await testServices();
-  const profile = await services.profiles.createProfile(input);
+  const profile = await services.profiles.createProfile(
+    contextPolicy ? { ...input, contextPolicy } : input,
+  );
   const session = await services.sessions.createSession(profile.id, { title: 'Mac' });
 
   const run = await services.runs.submit(profile.id, session.id, {
@@ -568,7 +570,7 @@ it('creates a child profile without inheriting provider access', async () => {
 });
 
 it('answers with what it has when the agent exhausts its tool budget', async () => {
-  const { services, profile, run } = await fixture();
+  const { services, profile, run } = await fixture({ maxSteps: 3 });
   let calls = 0;
   let closingTools: unknown;
 

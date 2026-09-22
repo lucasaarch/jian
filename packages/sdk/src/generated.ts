@@ -2427,7 +2427,7 @@ export interface operations {
                             historyTokens: number;
                             /** @default 1500 */
                             toolResultTokens: number;
-                            /** @default 12 */
+                            /** @default 200 */
                             maxSteps: number;
                             /** @default 100000 */
                             maxRunTokens: number;
@@ -6620,7 +6620,7 @@ export interface operations {
                          *       "memoryTokens": 1500,
                          *       "historyTokens": 6000,
                          *       "toolResultTokens": 1500,
-                         *       "maxSteps": 12,
+                         *       "maxSteps": 200,
                          *       "maxRunTokens": 100000
                          *     }
                          */
@@ -6635,7 +6635,7 @@ export interface operations {
                             historyTokens: number;
                             /** @default 1500 */
                             toolResultTokens: number;
-                            /** @default 12 */
+                            /** @default 200 */
                             maxSteps: number;
                             /** @default 100000 */
                             maxRunTokens: number;
@@ -6870,7 +6870,7 @@ export interface operations {
                          *       "memoryTokens": 1500,
                          *       "historyTokens": 6000,
                          *       "toolResultTokens": 1500,
-                         *       "maxSteps": 12,
+                         *       "maxSteps": 200,
                          *       "maxRunTokens": 100000
                          *     }
                          */
@@ -6885,7 +6885,7 @@ export interface operations {
                             historyTokens: number;
                             /** @default 1500 */
                             toolResultTokens: number;
-                            /** @default 12 */
+                            /** @default 200 */
                             maxSteps: number;
                             /** @default 100000 */
                             maxRunTokens: number;
@@ -7114,7 +7114,7 @@ export interface operations {
                      *       "memoryTokens": 1500,
                      *       "historyTokens": 6000,
                      *       "toolResultTokens": 1500,
-                     *       "maxSteps": 12,
+                     *       "maxSteps": 200,
                      *       "maxRunTokens": 100000
                      *     }
                      */
@@ -7129,7 +7129,7 @@ export interface operations {
                         historyTokens?: number;
                         /** @default 1500 */
                         toolResultTokens?: number;
-                        /** @default 12 */
+                        /** @default 200 */
                         maxSteps?: number;
                         /** @default 100000 */
                         maxRunTokens?: number;
@@ -7248,7 +7248,7 @@ export interface operations {
                          *       "memoryTokens": 1500,
                          *       "historyTokens": 6000,
                          *       "toolResultTokens": 1500,
-                         *       "maxSteps": 12,
+                         *       "maxSteps": 200,
                          *       "maxRunTokens": 100000
                          *     }
                          */
@@ -7263,7 +7263,7 @@ export interface operations {
                             historyTokens: number;
                             /** @default 1500 */
                             toolResultTokens: number;
-                            /** @default 12 */
+                            /** @default 200 */
                             maxSteps: number;
                             /** @default 100000 */
                             maxRunTokens: number;
@@ -7500,7 +7500,7 @@ export interface operations {
                          *       "memoryTokens": 1500,
                          *       "historyTokens": 6000,
                          *       "toolResultTokens": 1500,
-                         *       "maxSteps": 12,
+                         *       "maxSteps": 200,
                          *       "maxRunTokens": 100000
                          *     }
                          */
@@ -7515,7 +7515,7 @@ export interface operations {
                             historyTokens: number;
                             /** @default 1500 */
                             toolResultTokens: number;
-                            /** @default 12 */
+                            /** @default 200 */
                             maxSteps: number;
                             /** @default 100000 */
                             maxRunTokens: number;
@@ -7734,7 +7734,7 @@ export interface operations {
                         historyTokens?: number;
                         /** @default 1500 */
                         toolResultTokens?: number;
-                        /** @default 12 */
+                        /** @default 200 */
                         maxSteps?: number;
                         /** @default 100000 */
                         maxRunTokens?: number;
@@ -7849,7 +7849,7 @@ export interface operations {
                          *       "memoryTokens": 1500,
                          *       "historyTokens": 6000,
                          *       "toolResultTokens": 1500,
-                         *       "maxSteps": 12,
+                         *       "maxSteps": 200,
                          *       "maxRunTokens": 100000
                          *     }
                          */
@@ -7864,7 +7864,7 @@ export interface operations {
                             historyTokens: number;
                             /** @default 1500 */
                             toolResultTokens: number;
-                            /** @default 12 */
+                            /** @default 200 */
                             maxSteps: number;
                             /** @default 100000 */
                             maxRunTokens: number;
@@ -8105,7 +8105,7 @@ export interface operations {
                              *       "memoryTokens": 1500,
                              *       "historyTokens": 6000,
                              *       "toolResultTokens": 1500,
-                             *       "maxSteps": 12,
+                             *       "maxSteps": 200,
                              *       "maxRunTokens": 100000
                              *     }
                              */
@@ -8120,7 +8120,7 @@ export interface operations {
                                 historyTokens: number;
                                 /** @default 1500 */
                                 toolResultTokens: number;
-                                /** @default 12 */
+                                /** @default 200 */
                                 maxSteps: number;
                                 /** @default 100000 */
                                 maxRunTokens: number;
@@ -8942,7 +8942,7 @@ export interface operations {
                             historyTokens: number;
                             /** @default 1500 */
                             toolResultTokens: number;
-                            /** @default 12 */
+                            /** @default 200 */
                             maxSteps: number;
                             /** @default 100000 */
                             maxRunTokens: number;
@@ -9427,7 +9427,7 @@ export interface operations {
                             historyTokens: number;
                             /** @default 1500 */
                             toolResultTokens: number;
-                            /** @default 12 */
+                            /** @default 200 */
                             maxSteps: number;
                             /** @default 100000 */
                             maxRunTokens: number;
@@ -9648,7 +9648,7 @@ export interface operations {
                             historyTokens: number;
                             /** @default 1500 */
                             toolResultTokens: number;
-                            /** @default 12 */
+                            /** @default 200 */
                             maxSteps: number;
                             /** @default 100000 */
                             maxRunTokens: number;
@@ -9869,7 +9869,7 @@ export interface operations {
                             historyTokens: number;
                             /** @default 1500 */
                             toolResultTokens: number;
-                            /** @default 12 */
+                            /** @default 200 */
                             maxSteps: number;
                             /** @default 100000 */
                             maxRunTokens: number;

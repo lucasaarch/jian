@@ -55,21 +55,24 @@ export function buildContext(
     (message) => message.runId === run.id && message.role === 'user',
   );
 
-  if (currentIndex < 0) {
-    throw new Error('Current user turn is unavailable');
-  }
-
-  const current = sources.history[currentIndex];
-
-  if (!current) {
-    throw new Error('Current user turn is unavailable');
-  }
+  // A long turn writes messages of its own, so the request that started it can fall out of the
+  // window it was read with. The run carries it either way; losing it would mean answering a
+  // question nobody in the prompt asked.
+  const current = sources.history[currentIndex] ?? {
+    id: run.id,
+    profileId: run.profileId,
+    sessionId: run.sessionId,
+    runId: run.id,
+    role: 'user' as const,
+    content: run.input,
+    createdAt: run.createdAt,
+  };
 
   // The current request is mandatory. historyTokens only limits earlier conversation turns.
   const selected: Message[] = [current];
   let historyTokens = 0;
 
-  for (const message of sources.history.slice(0, currentIndex).reverse()) {
+  for (const message of sources.history.slice(0, Math.max(currentIndex, 0)).reverse()) {
     const cost = count(message.content) + 8;
 
     if (historyTokens + cost > policy.historyTokens) {

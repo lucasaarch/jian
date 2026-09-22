@@ -222,7 +222,7 @@ export class Providers {
         memoryTokens: Math.min(1500, Math.floor(model.contextWindow * 0.04)),
         historyTokens: Math.min(6000, Math.floor(model.contextWindow * 0.12)),
         toolResultTokens: Math.min(1500, Math.max(128, Math.floor(model.contextWindow * 0.04))),
-        maxSteps: 12,
+        maxSteps: 200,
         maxRunTokens: 100_000,
       },
     };
