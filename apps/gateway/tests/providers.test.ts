@@ -93,7 +93,8 @@ it('presents a Claude subscription token as Claude Code, and a key as a key', as
   expect(headers.has('x-api-key')).toBe(false);
   expect(headers.get('anthropic-beta')).toContain('oauth-2025-04-20');
   expect(headers.get('anthropic-beta')).toContain('claude-code-20250219');
-  expect(headers.get('user-agent')).toMatch(/^claude-cli\/\d/);
+  expect(headers.get('user-agent')).toMatch(/^claude-code\/\d/);
+  expect(headers.get('x-app')).toBe('cli');
 
   // The same variable holding a real key is still a key: the shape decides, not the name.
   const key = await resolveModel(

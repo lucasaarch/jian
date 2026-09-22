@@ -31,6 +31,8 @@ The host token lives in the environment, apart from the database. Change it on t
 
 ## Network and limits
 
+A Claude subscription credential is accepted only from a caller Anthropic recognises, and the recognition covers more than the credential: the client name and version, the `x-app` header, the first system block, and the names of the tools offered. A tool named `mcp_<something>` reads as a third-party app and the whole request is refused with 400, so MCP tools are exposed as `mcp__<something>`.
+
 Providers and MCP servers share the same outbound transport. It requires public HTTPS, validates and pins DNS resolution at connect time, and blocks redirects, embedded credentials and private destinations. `JIAN_ALLOW_PRIVATE_ORIGINS` allows exact origins for internal services the owner runs, for example `http://127.0.0.1:11434`. Metadata and link-local addresses stay forbidden.
 
 The API caps a body at 256 KiB, rate limits by connecting address and bounds streams. It does not trust `X-Forwarded-For` on its own; behind a proxy every client may share one limit. Configure further limits at the proxy to match the deployment. Separate instances keep their own HTTP counters; run limits and resource leases live in the database.

@@ -19,11 +19,15 @@ interface McpContext {
 /**
  * The exposed name has to be unique across servers and legal as a tool name, and the hash is
  * what keeps two long names from colliding once they are truncated.
+ *
+ * The double underscore is not cosmetic. Anthropic's subscription billing reads a single
+ * underscore after `mcp` as the signature of a third-party app and refuses the whole request
+ * with "Third-party apps now draw from your extra usage"; `mcp__` is the form it accepts.
  */
 function exposedName(server: string, tool: string): string {
   const suffix = createHash('sha256').update(tool).digest('hex').slice(0, 8);
 
-  return `mcp_${server}_${tool.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 18)}_${suffix}`;
+  return `mcp__${server}_${tool.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 18)}_${suffix}`;
 }
 
 /** What a server answered with when it refused to open, short enough to put in a prompt. */

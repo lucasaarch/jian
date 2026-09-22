@@ -137,15 +137,15 @@ it.each([false, true])(
             throw new Error('Forbidden tool exposed');
           }
 
-          expect(tools.some((t) => t.name.startsWith('mcp_docs_search_'))).toBe(false);
+          expect(tools.some((t) => t.name.startsWith('mcp__docs_search_'))).toBe(false);
 
           const selector = tools.find((t) => t.name === 'load_mcp_tools');
 
           assert.ok(selector, 'The selector must be available before MCP schemas');
 
           const searchName = largeCatalog
-            ? JSON.stringify(options.prompt).match(/mcp_docs_archive_19_[a-f0-9]{8}/)?.[0]
-            : selector.description?.match(/mcp_docs_search_[a-f0-9]{8}/)?.[0];
+            ? JSON.stringify(options.prompt).match(/mcp__docs_archive_19_[a-f0-9]{8}/)?.[0]
+            : selector.description?.match(/mcp__docs_search_[a-f0-9]{8}/)?.[0];
 
           assert.ok(searchName, 'The allowlisted tool must be in the catalog');
 
@@ -172,7 +172,7 @@ it.each([false, true])(
           }
 
           const search = tools.find((t) =>
-            t.name.startsWith(largeCatalog ? 'mcp_docs_archive_19_' : 'mcp_docs_search_'),
+            t.name.startsWith(largeCatalog ? 'mcp__docs_archive_19_' : 'mcp__docs_search_'),
           );
 
           assert.ok(search, 'The selected search tool must now be available');
@@ -340,7 +340,7 @@ it.each(['disconnect', 'isError'])(
               .find((item) => item.name === 'load_mcp_tools');
 
             assert.ok(selector);
-            remoteName = selector.description?.match(/mcp_effects_mutate_[a-f0-9]{8}/)?.[0] ?? '';
+            remoteName = selector.description?.match(/mcp__effects_mutate_[a-f0-9]{8}/)?.[0] ?? '';
             assert.ok(remoteName);
 
             return {

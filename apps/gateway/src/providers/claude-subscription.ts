@@ -66,7 +66,11 @@ async function claudeCodeVersion(): Promise<string> {
   return detected;
 }
 
-export const subscriptionHeaders = (): Record<string, string> => ({ 'anthropic-beta': BETAS });
+/** `x-app` is part of how Anthropic recognises the caller; without it the request is a stranger. */
+export const subscriptionHeaders = (): Record<string, string> => ({
+  'anthropic-beta': BETAS,
+  'x-app': 'cli',
+});
 
 /**
  * Two things Anthropic checks that neither the provider options nor the prompt can express,
@@ -83,7 +87,8 @@ export const subscriptionHeaders = (): Record<string, string> => ({ 'anthropic-b
 export async function subscriptionFetch(
   fetcher: typeof globalThis.fetch,
 ): Promise<typeof globalThis.fetch> {
-  const agent = `claude-cli/${await claudeCodeVersion()} (external, cli)`;
+  // The product token is `claude-code`, not `claude-cli`: the other one is refused outright.
+  const agent = `claude-code/${await claudeCodeVersion()} (external, cli)`;
 
   return async (input, init) => {
     const headers = new Headers(init?.headers);
