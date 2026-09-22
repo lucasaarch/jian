@@ -110,6 +110,12 @@
 
 .stacked-fields > input + input {
   border-top: 1px solid var(--control);
+  transition: border-color 0.15s ease;
+}
+
+/* The divider belongs to the group, so it takes the group's colour with it. */
+.stacked-fields:focus-within > input + input {
+  border-top-color: var(--accent);
 }
 
 /* The group already carries the accent border; the bar alone says which row has focus. */
