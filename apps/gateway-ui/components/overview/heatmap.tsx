@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ActivityDay, GatewayApi, Profile } from '../../lib/api';
 
 /** A year, laid out as the calendar lays it out: one column per week, Sunday at the top. */
@@ -45,6 +45,7 @@ function calendar(counts: Map<string, number>) {
 export function ActivityHeatmap({ profile, api }: { profile: Profile; api: GatewayApi }) {
   const [days, setDays] = useState<ActivityDay[]>();
   const [error, setError] = useState('');
+  const scroller = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -62,21 +63,33 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
     };
   }, [api, profile.id]);
 
+  // The newest week sits at the right edge, so a panel narrower than the year would open
+  // showing last autumn and hide today.
+  useEffect(() => {
+    if (scroller.current) {
+      scroller.current.scrollLeft = scroller.current.scrollWidth;
+    }
+  }, []);
+
   const counts = new Map((days ?? []).map((day) => [day.day, day.runs]));
   const cells = calendar(counts);
   const busiest = Math.max(0, ...counts.values());
   const total = [...counts.values()].reduce((sum, runs) => sum + runs, 0);
 
-  // One label per month, placed on the week where that month first appears.
-  const months = cells.reduce<Array<{ week: number; label: string }>>((labels, cell, index) => {
-    const week = Math.floor(index / 7);
+  // One label per month, on the week its first day falls in. Keyed by the month and not by the
+  // week: a month whose first days straddle two columns would otherwise be labelled twice.
+  const months = cells.reduce<Array<{ month: number; week: number; label: string }>>(
+    (labels, cell, index) => {
+      const month = cell.date.getUTCMonth();
 
-    if (cell.date.getUTCDate() <= 7 && !labels.some((label) => label.week === week)) {
-      labels.push({ week, label: MONTHS[cell.date.getUTCMonth()] as string });
-    }
+      if (cell.date.getUTCDate() <= 7 && labels.at(-1)?.month !== month) {
+        labels.push({ month, week: Math.floor(index / 7), label: MONTHS[month] as string });
+      }
 
-    return labels;
-  }, []);
+      return labels;
+    },
+    [],
+  );
 
   return (
     <section className="heatmap-panel" aria-label="Activity over the last year">
@@ -94,14 +107,14 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
         </p>
       ) : (
         <>
-          <div className="heatmap-scroll">
+          <div className="heatmap-scroll" ref={scroller}>
             <div className="heatmap">
               <div
                 className="heatmap-months"
                 style={{ gridTemplateColumns: `repeat(${WEEKS}, 1fr)` }}
               >
                 {months.map((month) => (
-                  <span key={month.week} style={{ gridColumnStart: month.week + 1 }}>
+                  <span key={month.month} style={{ gridColumnStart: month.week + 1 }}>
                     {month.label}
                   </span>
                 ))}
