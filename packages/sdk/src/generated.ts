@@ -2429,7 +2429,7 @@ export interface operations {
                             toolResultTokens: number;
                             /** @default 200 */
                             maxSteps: number;
-                            /** @default 100000 */
+                            /** @default 500000 */
                             maxRunTokens: number;
                         };
                         call?: {
@@ -6621,7 +6621,7 @@ export interface operations {
                          *       "historyTokens": 6000,
                          *       "toolResultTokens": 1500,
                          *       "maxSteps": 200,
-                         *       "maxRunTokens": 100000
+                         *       "maxRunTokens": 500000
                          *     }
                          */
                         contextPolicy: {
@@ -6637,7 +6637,7 @@ export interface operations {
                             toolResultTokens: number;
                             /** @default 200 */
                             maxSteps: number;
-                            /** @default 100000 */
+                            /** @default 500000 */
                             maxRunTokens: number;
                         };
                         /** @default [] */
@@ -6871,7 +6871,7 @@ export interface operations {
                          *       "historyTokens": 6000,
                          *       "toolResultTokens": 1500,
                          *       "maxSteps": 200,
-                         *       "maxRunTokens": 100000
+                         *       "maxRunTokens": 500000
                          *     }
                          */
                         contextPolicy: {
@@ -6887,7 +6887,7 @@ export interface operations {
                             toolResultTokens: number;
                             /** @default 200 */
                             maxSteps: number;
-                            /** @default 100000 */
+                            /** @default 500000 */
                             maxRunTokens: number;
                         };
                         /** @default [] */
@@ -7115,7 +7115,7 @@ export interface operations {
                      *       "historyTokens": 6000,
                      *       "toolResultTokens": 1500,
                      *       "maxSteps": 200,
-                     *       "maxRunTokens": 100000
+                     *       "maxRunTokens": 500000
                      *     }
                      */
                     contextPolicy?: {
@@ -7131,7 +7131,7 @@ export interface operations {
                         toolResultTokens?: number;
                         /** @default 200 */
                         maxSteps?: number;
-                        /** @default 100000 */
+                        /** @default 500000 */
                         maxRunTokens?: number;
                     };
                     /** @default [] */
@@ -7249,7 +7249,7 @@ export interface operations {
                          *       "historyTokens": 6000,
                          *       "toolResultTokens": 1500,
                          *       "maxSteps": 200,
-                         *       "maxRunTokens": 100000
+                         *       "maxRunTokens": 500000
                          *     }
                          */
                         contextPolicy: {
@@ -7265,7 +7265,7 @@ export interface operations {
                             toolResultTokens: number;
                             /** @default 200 */
                             maxSteps: number;
-                            /** @default 100000 */
+                            /** @default 500000 */
                             maxRunTokens: number;
                         };
                         /** @default [] */
@@ -7501,7 +7501,7 @@ export interface operations {
                          *       "historyTokens": 6000,
                          *       "toolResultTokens": 1500,
                          *       "maxSteps": 200,
-                         *       "maxRunTokens": 100000
+                         *       "maxRunTokens": 500000
                          *     }
                          */
                         contextPolicy: {
@@ -7517,7 +7517,7 @@ export interface operations {
                             toolResultTokens: number;
                             /** @default 200 */
                             maxSteps: number;
-                            /** @default 100000 */
+                            /** @default 500000 */
                             maxRunTokens: number;
                         };
                         /** @default [] */
@@ -7736,7 +7736,7 @@ export interface operations {
                         toolResultTokens?: number;
                         /** @default 200 */
                         maxSteps?: number;
-                        /** @default 100000 */
+                        /** @default 500000 */
                         maxRunTokens?: number;
                     };
                     skills?: {
@@ -7850,7 +7850,7 @@ export interface operations {
                          *       "historyTokens": 6000,
                          *       "toolResultTokens": 1500,
                          *       "maxSteps": 200,
-                         *       "maxRunTokens": 100000
+                         *       "maxRunTokens": 500000
                          *     }
                          */
                         contextPolicy: {
@@ -7866,7 +7866,7 @@ export interface operations {
                             toolResultTokens: number;
                             /** @default 200 */
                             maxSteps: number;
-                            /** @default 100000 */
+                            /** @default 500000 */
                             maxRunTokens: number;
                         };
                         /** @default [] */
@@ -8106,7 +8106,7 @@ export interface operations {
                              *       "historyTokens": 6000,
                              *       "toolResultTokens": 1500,
                              *       "maxSteps": 200,
-                             *       "maxRunTokens": 100000
+                             *       "maxRunTokens": 500000
                              *     }
                              */
                             contextPolicy: {
@@ -8122,7 +8122,7 @@ export interface operations {
                                 toolResultTokens: number;
                                 /** @default 200 */
                                 maxSteps: number;
-                                /** @default 100000 */
+                                /** @default 500000 */
                                 maxRunTokens: number;
                             };
                             /** @default [] */
@@ -8944,7 +8944,7 @@ export interface operations {
                             toolResultTokens: number;
                             /** @default 200 */
                             maxSteps: number;
-                            /** @default 100000 */
+                            /** @default 500000 */
                             maxRunTokens: number;
                         };
                         call?: {
@@ -9429,7 +9429,7 @@ export interface operations {
                             toolResultTokens: number;
                             /** @default 200 */
                             maxSteps: number;
-                            /** @default 100000 */
+                            /** @default 500000 */
                             maxRunTokens: number;
                         };
                         call?: {
@@ -9650,7 +9650,7 @@ export interface operations {
                             toolResultTokens: number;
                             /** @default 200 */
                             maxSteps: number;
-                            /** @default 100000 */
+                            /** @default 500000 */
                             maxRunTokens: number;
                         };
                         call?: {
@@ -9871,7 +9871,7 @@ export interface operations {
                             toolResultTokens: number;
                             /** @default 200 */
                             maxSteps: number;
-                            /** @default 100000 */
+                            /** @default 500000 */
                             maxRunTokens: number;
                         };
                         call?: {

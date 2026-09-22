@@ -216,12 +216,19 @@ export class Providers {
         ...(selection.reasoningEffort ? { reasoningEffort: selection.reasoningEffort } : {}),
         ...(provider.apiKeyEnv ? { apiKeyEnv: provider.apiKeyEnv } : { providerId: provider.id }),
       },
+      // Ceilings, not targets, and every one of them a share of the window this model really
+      // has: a fixed number written for a small model turns a large one into a small one, and
+      // that is what made an ordinary conversation compact itself every few turns.
       policy: {
-        inputTokens: Math.min(32_000, Math.max(4096, Math.floor(model.contextWindow * 0.45))),
-        outputTokens: Math.min(4096, model.maxOutputTokens, Math.floor(model.contextWindow * 0.12)),
-        memoryTokens: Math.min(1500, Math.floor(model.contextWindow * 0.04)),
-        historyTokens: Math.min(6000, Math.floor(model.contextWindow * 0.12)),
-        toolResultTokens: Math.min(1500, Math.max(128, Math.floor(model.contextWindow * 0.04))),
+        inputTokens: Math.min(900_000, Math.max(16_000, Math.floor(model.contextWindow * 0.6))),
+        outputTokens: Math.min(
+          64_000,
+          model.maxOutputTokens,
+          Math.max(4096, Math.floor(model.contextWindow * 0.06)),
+        ),
+        memoryTokens: Math.min(32_000, Math.max(1500, Math.floor(model.contextWindow * 0.02))),
+        historyTokens: Math.min(200_000, Math.max(6000, Math.floor(model.contextWindow * 0.15))),
+        toolResultTokens: Math.min(32_000, Math.max(1500, Math.floor(model.contextWindow * 0.02))),
         maxSteps: 200,
         maxRunTokens: 500_000,
       },

@@ -196,10 +196,42 @@ it('marks the reusable part of an Anthropic prompt so it is read back instead of
     }),
   ).rejects.toThrow();
 
-  // The mark sits after the tools and the instructions, which is what it makes reusable.
+  // The first mark puts the tools and the instructions behind it; the last two put the turns
+  // already spent behind them, which is the half that grows.
   expect(body.messages?.[0]?.content.at(-1)?.cache_control).toEqual({ type: 'ephemeral' });
   expect(body.messages?.[1]?.content.at(-1)?.cache_control).toEqual({ type: 'ephemeral' });
-  expect(body.messages?.[2]?.content.at(-1)?.cache_control).toBeUndefined();
+  expect(body.messages?.[2]?.content.at(-1)?.cache_control).toEqual({ type: 'ephemeral' });
+});
+
+it('keeps a prefix for an hour when a person is the one answering', async () => {
+  let body: { messages?: Array<{ content: Array<{ cache_control?: unknown }> }> } = {};
+
+  const fetcher: typeof fetch = async (_input, options) => {
+    body = JSON.parse(String(options?.body));
+    return Response.json(
+      { type: 'error', error: { type: 'invalid_request_error', message: 'synthetic' } },
+      { status: 400 },
+    );
+  };
+
+  const model = await resolveModel(
+    { provider: 'anthropic', modelId: 'test', apiKeyEnv: 'ANTHROPIC_API_KEY' },
+    { ANTHROPIC_API_KEY: 'sk-ant-api03-synthetic' },
+    fetcher,
+  );
+
+  await expect(
+    generateText({
+      model,
+      messages: cacheable([{ role: 'user', content: 'Oi' }], '1h'),
+      maxRetries: 0,
+    }),
+  ).rejects.toThrow();
+
+  expect(body.messages?.[0]?.content.at(-1)?.cache_control).toEqual({
+    type: 'ephemeral',
+    ttl: '1h',
+  });
 });
 
 describe('anthropic thinking', () => {
@@ -230,7 +262,7 @@ describe('anthropic thinking', () => {
   });
 });
 
-it('keeps two cache marks however many steps the loop takes', () => {
+it('never lets the marks outgrow what Anthropic accepts', () => {
   const marked = cacheable([
     { role: 'user', content: 'First' },
     { role: 'assistant', content: 'Answered' },
@@ -244,5 +276,13 @@ it('keeps two cache marks however many steps the loop takes', () => {
       (message.providerOptions?.anthropic as { cacheControl?: unknown } | undefined)?.cacheControl,
   );
 
-  expect(breakpoints).toHaveLength(2);
+  // Four is the ceiling, and a step must never add one: the loop hands its own messages back.
+  expect(breakpoints.length).toBeLessThanOrEqual(4);
+  expect(breakpoints).toHaveLength(
+    cacheable([...marked, { role: 'assistant', content: 'More' }]).filter(
+      (message) =>
+        (message.providerOptions?.anthropic as { cacheControl?: unknown } | undefined)
+          ?.cacheControl,
+    ).length,
+  );
 });

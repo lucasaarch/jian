@@ -154,20 +154,21 @@ export const identitySchema = z.strictObject({
 
 export const contextPolicySchema = z
   .strictObject({
-    // The tool definitions the runtime sends cost roughly 9000 tokens before anything the
-    // owner wrote. A budget below that refuses every run, which is why the floor is generous.
-    inputTokens: z.number().int().min(16000).max(128000).default(32000),
-    outputTokens: z.number().int().min(256).max(16000).default(4096),
-    memoryTokens: z.number().int().min(0).max(8000).default(1500),
-    historyTokens: z.number().int().min(0).max(32000).default(6000),
-    toolResultTokens: z.number().int().min(128).max(8000).default(1500),
+    // The ceilings follow the model's own window, so a million-token model is not run inside a
+    // budget written for a small one. The defaults here are the floor a profile starts from
+    // before a model is chosen; the run's own policy is derived from what that model holds.
+    inputTokens: z.number().int().min(16000).max(900000).default(32000),
+    outputTokens: z.number().int().min(256).max(64000).default(4096),
+    memoryTokens: z.number().int().min(0).max(32000).default(1500),
+    historyTokens: z.number().int().min(0).max(200000).default(6000),
+    toolResultTokens: z.number().int().min(128).max(32000).default(1500),
     // A backstop, not the thing that should fire. What really ends a turn is the token budget
     // and the ten-minute clock; a step ceiling low enough to be reached is a turn thrown away
     // with the work already paid for.
     maxSteps: z.number().int().min(1).max(500).default(200),
-    // One model call already costs the tool definitions; a cap under two calls' worth ends
-    // the run before it starts.
-    maxRunTokens: z.number().int().min(32000).max(1000000).default(100000),
+    // A stop for a turn that has gone wrong, not a bound on a turn doing its job: reaching it
+    // ends the loop with an answer rather than a failure.
+    maxRunTokens: z.number().int().min(32000).max(20_000_000).default(500000),
   })
   .refine((policy) => policy.outputTokens < policy.inputTokens, {
     message: 'Output reservation must be smaller than the input budget',

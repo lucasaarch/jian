@@ -38,8 +38,9 @@ async function fixture(contextPolicy?: Record<string, number>) {
 }
 
 describe('agent runtime', () => {
-  it('refreshes shared context between real SDK tool-loop steps', async () => {
+  it('holds one prompt for the whole turn so the provider can read it back', async () => {
     const { services, profile, session, run } = await fixture();
+    const systems: string[] = [];
     let step = 0;
 
     const model = mockModel({
@@ -47,6 +48,8 @@ describe('agent runtime', () => {
         step++;
 
         if (step === 1) {
+          systems.push(JSON.stringify(options.prompt.filter((m) => m.role === 'system')));
+
           return {
             content: [
               {
@@ -66,13 +69,9 @@ describe('agent runtime', () => {
           };
         }
 
-        const current = JSON.stringify(options.prompt.filter((m) => m.role === 'system'));
+        systems.push(JSON.stringify(options.prompt.filter((m) => m.role === 'system')));
 
-        return answer(
-          current.includes('Deploy at 21:00')
-            ? 'Saved: deploy at 21:00.'
-            : 'I lost the shared context.',
-        );
+        return answer('Saved: deploy at 21:00.');
       },
     });
 
@@ -82,6 +81,11 @@ describe('agent runtime', () => {
 
     expect(completed.status).toBe('completed');
     expect(completed.output).toBe('Saved: deploy at 21:00.');
+
+    // Byte for byte the same instructions on both steps: rebuilding them per step changed the
+    // one part of the request the provider caches, and every step paid for it again.
+    expect(systems).toHaveLength(2);
+    expect(systems[0]).toBe(systems[1]);
     expect((await services.memories.memories(profile.id))[0]?.sourceSessionId).toBe(session.id);
 
     const other = await services.sessions.createSession(profile.id, { title: 'Telegram' });

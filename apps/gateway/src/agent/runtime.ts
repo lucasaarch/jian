@@ -17,7 +17,7 @@ import { reasoningProviderOptions } from '../providers/effort.js';
 import { resolveModel } from '../providers/models.js';
 import { providerSecret } from '../providers/service.js';
 import { createSafeFetch } from '../security/outbound.js';
-import { cacheable } from './cache.js';
+import { type CacheTtl, cacheable } from './cache.js';
 import { connectMcpTools, unavailableNote } from './mcp.js';
 import { Narrator } from './narrator.js';
 import { ProgressReporter } from './progress.js';
@@ -384,9 +384,25 @@ export class AgentRuntime {
       let usedTokens = 0;
       let preparedInputTokens = 0;
 
+      // Built once for the turn and held. Rebuilding it every step — the same memories, the
+      // same skills, a different list of what the profile happens to be doing — changed the
+      // one part of the request the provider caches, so every step paid for the whole prompt
+      // again. Anything that has to reach the agent mid-turn arrives as a message instead.
+      // Agents answer each other in seconds; a person takes minutes, and the short tier has
+      // expired by the time they do.
+      const cacheTtl: CacheTtl = run.call ? '5m' : '1h';
+
+      const dress = (system: string) => {
+        const noted = mcpNote ? `${system}\n\n${mcpNote}` : system;
+
+        return subscription ? withClaudeCodeIdentity(noted) : noted;
+      };
+
+      let instructions = dress(context.system);
+
       const agent = new ToolLoopAgent({
         model,
-        instructions: subscription ? withClaudeCodeIdentity(context.system) : context.system,
+        instructions,
         tools: guarded,
         stopWhen: [stepCountIs(policy.maxSteps), () => spent],
         maxRetries: 0,
@@ -404,8 +420,6 @@ export class AgentRuntime {
             throw new Error('Run token budget exceeded');
           }
 
-          let refreshed = await this.services.contexts.context(run);
-
           // Compaction happens here rather than at the end of a turn: the prompt is only ever
           // too large at the moment it is being built, and the turns that overflowed it are the
           // ones this step would otherwise have to drop in silence.
@@ -414,7 +428,7 @@ export class AgentRuntime {
             (await this.compactIfNeeded(
               run,
               owner,
-              refreshed,
+              { system: instructions, messages: [] },
               messages,
               model,
               policy,
@@ -423,7 +437,7 @@ export class AgentRuntime {
             ))
           ) {
             compacted = true;
-            refreshed = await this.services.contexts.context(run);
+            instructions = dress((await this.services.contexts.context(run)).system);
           }
 
           // What the person said after this run began. It arrives as their own turn, at the
@@ -446,13 +460,11 @@ export class AgentRuntime {
             activeNames.map((name) => [name, guarded[name]]),
           ) as ToolSet;
 
-          const system = mcpNote ? `${refreshed.system}\n\n${mcpNote}` : refreshed.system;
-
           const fitted = fitPrompt({
             provider: config.provider,
             modelId: config.modelId,
             policy,
-            instructions: subscription ? withClaudeCodeIdentity(system) : system,
+            instructions,
             messages,
             tools: activeTools,
           });
@@ -469,7 +481,9 @@ export class AgentRuntime {
             instructions: fitted.instructions,
             // Only Anthropic needs telling: OpenAI matches a long prefix on its own.
             messages:
-              config.provider === 'anthropic' ? cacheable(fitted.messages) : fitted.messages,
+              config.provider === 'anthropic'
+                ? cacheable(fitted.messages, cacheTtl)
+                : fitted.messages,
             activeTools: activeNames,
             maxOutputTokens: Math.min(policy.outputTokens, availableOutput),
           };
