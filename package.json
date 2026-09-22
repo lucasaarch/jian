@@ -1,7 +1,7 @@
 {
   "name": "jian",
   "description": "Gateway de agentes com identidade e contexto compartilhados entre sessões",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "engines": {

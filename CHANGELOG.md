@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2](https://github.com/lucasaarch/jian/compare/v1.0.1...v1.0.2) (2026-09-22)
+
+
+### Bug Fixes
+
+* **channels:** say whether the webhook was registered when a channel connects ([b8d52a5](https://github.com/lucasaarch/jian/commit/b8d52a5f12b46ec05de866484dccaaa568fae552))
+* **panel:** stop showing the same token total twice ([e3892bd](https://github.com/lucasaarch/jian/commit/e3892bdb36a366653bbd1f07896ceaf283d95b63))
+
 ## [1.0.1](https://github.com/lucasaarch/jian/compare/v1.0.0...v1.0.1) (2026-09-22)
 
 
