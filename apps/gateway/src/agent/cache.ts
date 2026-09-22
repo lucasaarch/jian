@@ -1,4 +1,4 @@
-import type { ModelMessage } from 'ai';
+import type { JSONValue, ModelMessage } from 'ai';
 
 /**
  * Anthropic reuses a prompt only up to a point the request marks, and re-reading that prefix
@@ -13,18 +13,24 @@ import type { ModelMessage } from 'ai';
 export function cacheable(messages: ModelMessage[]): ModelMessage[] {
   const marks = new Set([0, messages.length - 2].filter((index) => index >= 0));
 
-  return messages.map((message, index) =>
-    marks.has(index)
-      ? {
-          ...message,
-          providerOptions: {
-            ...message.providerOptions,
-            anthropic: {
-              ...message.providerOptions?.anthropic,
-              cacheControl: { type: 'ephemeral' },
-            },
-          },
-        }
-      : message,
-  );
+  return messages.map((message, index) => {
+    const anthropic = { ...message.providerOptions?.anthropic } as Record<string, JSONValue>;
+
+    // The loop hands the same list back on every step, so a mark left in place accumulates:
+    // one more breakpoint per step, until Anthropic starts refusing them.
+    delete anthropic.cacheControl;
+
+    if (marks.has(index)) {
+      anthropic.cacheControl = { type: 'ephemeral' };
+    }
+
+    if (!message.providerOptions && !marks.has(index)) {
+      return message;
+    }
+
+    return {
+      ...message,
+      providerOptions: { ...message.providerOptions, anthropic },
+    } as ModelMessage;
+  });
 }

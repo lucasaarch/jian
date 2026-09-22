@@ -229,3 +229,20 @@ describe('anthropic thinking', () => {
     expect(takesAdaptiveThinking('claude-sonnet-4-6')).toBe(true);
   });
 });
+
+it('keeps two cache marks however many steps the loop takes', () => {
+  const marked = cacheable([
+    { role: 'user', content: 'First' },
+    { role: 'assistant', content: 'Answered' },
+    { role: 'user', content: 'Second' },
+  ]);
+
+  // The loop hands its own messages back; marking again must not add a breakpoint per step.
+  const again = cacheable([...marked, { role: 'assistant', content: 'More' }]);
+  const breakpoints = again.filter(
+    (message) =>
+      (message.providerOptions?.anthropic as { cacheControl?: unknown } | undefined)?.cacheControl,
+  );
+
+  expect(breakpoints).toHaveLength(2);
+});

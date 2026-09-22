@@ -350,14 +350,19 @@ export class AgentRuntime {
               ? usage.outputTokens
               : Math.max(1, estimate(JSON.stringify({ text, toolCalls })));
 
-          usedTokens += inputTokens + outputTokens;
+          // The run's budget measures work done, not bytes re-sent. Every step carries the
+          // whole prompt again, and the part the provider reads back from its cache is neither
+          // new context nor charged as one — counting it killed ordinary tool loops at step 9.
+          const cachedInputTokens = usage.inputTokenDetails?.cacheReadTokens ?? 0;
+
+          usedTokens += Math.max(0, inputTokens - cachedInputTokens) + outputTokens;
 
           await this.services.lifecycle.recordUsage(profileId, runId, owner, {
             inputTokens,
             outputTokens,
             // The part of the input the provider served from its own cache. Reported by
             // Anthropic and OpenAI, absent elsewhere, and never inferred when it is missing.
-            cachedInputTokens: usage.inputTokenDetails?.cacheReadTokens ?? 0,
+            cachedInputTokens,
             estimated: !reported,
             steps: 1,
           });
