@@ -27,13 +27,13 @@ export function SignIn({ connected }: { connected: () => void }) {
             <Mark />
           </div>
           <h1>
-            Seu espaço.
+            Your space.
             <br />
-            Seus agentes.
+            Your agents.
           </h1>
-          <p>Conversas, memória e ferramentas sob seu controle.</p>
+          <p>Conversations, memory and tools, under your control.</p>
         </div>
-        <small>Aberto por natureza. Seu por completo.</small>
+        <small>Open by nature. Yours entirely.</small>
       </section>
       <section className="login-form-wrap">
         <form
@@ -53,9 +53,7 @@ export function SignIn({ connected }: { connected: () => void }) {
               await api.profiles();
               connected();
             } catch (error) {
-              setError(
-                error instanceof Error ? error.message : 'Não foi possível conectar ao Gateway.',
-              );
+              setError(error instanceof Error ? error.message : 'Could not reach the gateway.');
             } finally {
               setBusy(false);
             }
@@ -64,13 +62,13 @@ export function SignIn({ connected }: { connected: () => void }) {
           <div className="login-lock">
             <LockKeyhole size={24} />
           </div>
-          <h2>Conecte-se ao Jian.</h2>
-          <p>Entre com o token de administrador desta instância.</p>
-          <Field label="Token de administrador">
+          <h2>Connect to Jian.</h2>
+          <p>Sign in with this installation's host token.</p>
+          <Field label="Host token">
             <input
               name="token"
               type="password"
-              placeholder="Cole seu token de acesso"
+              placeholder="Paste your access token"
               autoComplete="off"
               required
               minLength={32}
@@ -83,21 +81,21 @@ export function SignIn({ connected }: { connected: () => void }) {
             </p>
           )}
           <Button type="submit" busy={busy} disabled={!ready}>
-            Entrar no Gateway
+            Enter the gateway
             <ArrowRight size={17} />
           </Button>
           <p className="secure-note">
             <ShieldCheck size={16} />
-            Seu token não é armazenado no navegador. A sessão expira em 30 dias.
+            Your token is not stored in the browser. The session expires in 30 days.
           </p>
           <details className="login-help">
             <summary>
               <CircleHelp size={15} />
-              Onde encontro meu token?
+              Where do I find my token?
             </summary>
             <p>
-              Use o valor de <code>JIAN_API_TOKEN</code> definido na configuração do servidor. É o
-              único token que o Gateway aceita.
+              Use the value of <code>JIAN_API_TOKEN</code> from the server configuration. It is the
+              only token the gateway accepts.
             </p>
           </details>
         </form>

@@ -93,7 +93,7 @@ async function profileData(api: GatewayApi, id: string): Promise<ProfileData> {
             models: [],
             fetchedAt: new Date().toISOString(),
             stale: true,
-            reason: error instanceof Error ? error.message : 'Lista indisponível.',
+            reason: error instanceof Error ? error.message : 'The list is unavailable.',
           }),
         ),
       ),
@@ -155,7 +155,7 @@ export function WorkspaceProvider({
     } catch (error) {
       if (current === generation.current) {
         setNotice({
-          text: error instanceof Error ? error.message : 'Não foi possível atualizar os dados.',
+          text: error instanceof Error ? error.message : 'The data could not be refreshed.',
           error: true,
         });
       }
@@ -216,7 +216,7 @@ export function WorkspaceProvider({
     };
   }, [api, selected, refresh]);
 
-  const mutate: Mutation = async (action, message = 'Alterações salvas.') => {
+  const mutate: Mutation = async (action, message = 'Changes saved.') => {
     setBusy(true);
     setNotice(undefined);
 
@@ -228,7 +228,7 @@ export function WorkspaceProvider({
       return true;
     } catch (error) {
       setNotice({
-        text: error instanceof Error ? error.message : 'Não foi possível concluir a ação.',
+        text: error instanceof Error ? error.message : 'The action could not be completed.',
         error: true,
       });
 

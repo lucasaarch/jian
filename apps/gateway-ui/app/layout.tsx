@@ -10,7 +10,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Jian · Gateway',
-  description: 'Configure seus agentes, canais e conexões em um só lugar.',
+  description: 'Configure your agents, their channels and their connections in one place.',
   icons: { icon: '/ui/brand/jian.svg', apple: '/ui/brand/apple-touch-icon.png' },
   robots: { index: false, follow: false },
 };

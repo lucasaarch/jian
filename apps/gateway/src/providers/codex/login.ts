@@ -125,7 +125,7 @@ export class CodexLogin {
       if (this.stopped) return;
       this.pending.set(GATEWAY_SCOPE, {
         status: 'failed',
-        error: 'Login não concluído. Tente novamente.',
+        error: 'The login was not completed. Try again.',
       });
     }
   }

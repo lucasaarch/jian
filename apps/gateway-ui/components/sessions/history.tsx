@@ -43,9 +43,7 @@ export function History({
         timer = setTimeout(poll, isRunning ? 3000 : 10000);
       } catch (failure) {
         if (!stopped)
-          setError(
-            failure instanceof Error ? failure.message : 'Não foi possível carregar o histórico.',
-          );
+          setError(failure instanceof Error ? failure.message : 'The history could not be loaded.');
       } finally {
         if (!stopped) setLoading(false);
       }
@@ -64,11 +62,11 @@ export function History({
         <span>Somente leitura</span>
         <span>{messages.length} mensagens</span>
       </div>
-      <section className="message-history" aria-label="Histórico da sessão" aria-busy={loading}>
+      <section className="message-history" aria-label="Session history" aria-busy={loading}>
         {loading ? (
           <div className="history-loading" role="status">
             <LoaderCircle size={20} className="spin" />
-            Carregando histórico…
+            Loading the history…
           </div>
         ) : messages.length ? (
           messages.map((message) => (
@@ -76,12 +74,12 @@ export function History({
               <header>
                 <strong>
                   {message.role === 'user'
-                    ? 'Usuário'
+                    ? 'User'
                     : message.role === 'assistant'
-                      ? 'Agente'
+                      ? 'Agent'
                       : message.role === 'system'
-                        ? 'Sistema'
-                        : 'Ferramenta'}
+                        ? 'System'
+                        : 'Tool'}
                 </strong>
                 <time dateTime={message.createdAt}>{date(message.createdAt)}</time>
               </header>
@@ -90,8 +88,8 @@ export function History({
           ))
         ) : (
           !error && (
-            <Empty title="Nenhuma mensagem nesta sessão">
-              As mensagens recebidas pelo canal aparecerão aqui.
+            <Empty title="No messages in this session">
+              Messages arriving through the channel show up here.
             </Empty>
           )
         )}
@@ -107,7 +105,7 @@ export function History({
               setRetry((value) => value + 1);
             }}
           >
-            Tentar novamente
+            Try again
           </Button>
         </div>
       )}

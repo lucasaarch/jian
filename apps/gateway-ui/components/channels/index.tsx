@@ -45,7 +45,7 @@ export function Channels(props: SectionProps) {
           // Connecting WhatsApp is reading the QR: the device starts pairing right away.
           await api.connect(profile.id, channel.id);
           setPairing(channel);
-        } else {
+        } else if (!channel.webhookRegistered) {
           setSecret(
             `Webhook: ${webhook(channel)}\n${
               type === 'telegram' ? 'X-Telegram-Bot-Api-Secret-Token' : 'X-Jian-Channel-Token'
@@ -59,7 +59,10 @@ export function Channels(props: SectionProps) {
 
   return (
     <>
-      <SectionHeading title="Canais" description="Leve as conversas para onde você já está." />
+      <SectionHeading
+        title="Channels"
+        description="Take the conversation to where you already are."
+      />
       <Requests {...props} />
       <div className="connections-grid channels-grid">
         {kinds.map((kind) => {
@@ -72,16 +75,16 @@ export function Channels(props: SectionProps) {
                   <kind.icon size={24} strokeWidth={1.5} />
                 </span>
                 <Badge tone={channel ? 'good' : 'neutral'}>
-                  {channel ? 'Conectado' : 'Não conectado'}
+                  {channel ? 'Connected' : 'Not connected'}
                 </Badge>
               </header>
               <h2>{kind.name}</h2>
               <p className="connection-description">
                 {
                   {
-                    whatsapp: 'Converse pelo seu WhatsApp.',
-                    telegram: 'Receba mensagens pelo seu bot.',
-                    api: 'Integre seus próprios sistemas.',
+                    whatsapp: 'Talk through your own WhatsApp.',
+                    telegram: 'Receive messages through your bot.',
+                    api: 'Plug in your own systems.',
                   }[kind.type]
                 }
               </p>
@@ -102,11 +105,7 @@ export function Channels(props: SectionProps) {
                 aria-controls={`channel-${kind.type}`}
                 onClick={() => setEditing(editing === kind.type ? undefined : kind.type)}
               >
-                {editing === kind.type
-                  ? 'Fechar configuração'
-                  : channel
-                    ? 'Gerenciar conexão'
-                    : 'Configurar'}
+                {editing === kind.type ? 'Close' : channel ? 'Manage connection' : 'Set up'}
                 {editing === kind.type ? <ChevronDown size={16} /> : <ArrowUpRight size={16} />}
               </button>
               <div
@@ -123,16 +122,16 @@ export function Channels(props: SectionProps) {
                     )}
                     {kind.type === 'telegram' && (
                       <p className="note">
-                        Registre essa URL no Telegram com <code>setWebhook</code>, usando o segredo
-                        mostrado na conexão. Para trocar o token do bot, desconecte e conecte de
-                        novo.
+                        Jian registers this URL with Telegram when it connects. If that fails, the
+                        secret is shown so you can call <code>setWebhook</code> yourself. To change
+                        the bot token, disconnect and connect again.
                       </p>
                     )}
                     <div className="flex flex-wrap items-center gap-3">
                       {kind.type === 'whatsapp' && (
                         <Button variant="secondary" onClick={() => setPairing(channel)}>
                           <QrCode size={16} />
-                          Ver conexão
+                          Show connection
                         </Button>
                       )}
                       <Button
@@ -141,7 +140,7 @@ export function Channels(props: SectionProps) {
                         onClick={() => setDisconnecting(channel)}
                       >
                         <Unplug size={16} />
-                        Desconectar
+                        Disconnect
                       </Button>
                     </div>
                   </>
@@ -164,7 +163,7 @@ export function Channels(props: SectionProps) {
                     {kind.type === 'telegram' && (
                       <Field
                         label="Token do bot"
-                        hint="O token fica criptografado e não aparece novamente."
+                        hint="The token is encrypted here and never shown again."
                       >
                         <input
                           name="botToken"
@@ -180,14 +179,14 @@ export function Channels(props: SectionProps) {
                     <div className="flex flex-wrap items-center gap-3">
                       <Button type="submit" busy={busy}>
                         <kind.icon size={16} />
-                        Conectar {kind.name}
+                        Connect {kind.name}
                       </Button>
                       <span className="text-xs text-muted">
                         {kind.type === 'whatsapp'
-                          ? 'Abre o QR Code para ler no celular.'
+                          ? 'Opens the QR code to scan on your phone.'
                           : kind.type === 'api'
-                            ? 'Gera a URL e o token do webhook, mostrados uma única vez.'
-                            : 'Use o token criado pelo BotFather.'}
+                            ? 'Creates the webhook URL and token, shown once.'
+                            : 'Use the token BotFather gave you.'}
                       </span>
                     </div>
                   </form>
@@ -216,11 +215,11 @@ export function Channels(props: SectionProps) {
                       (kind) =>
                         kind.type ===
                         data.channels.find((channel) => channel.id === item.channelId)?.type,
-                    )?.name ?? 'Canal'}
+                    )?.name ?? 'Channel'}
                   </strong>
                   <p>
                     {item.chatId} · {date(item.updatedAt)}
-                    {item.notice ? ' · aviso de aprovação' : ''}
+                    {item.notice ? ' · approval notice' : ''}
                   </p>
                 </div>
                 <Badge
@@ -234,11 +233,11 @@ export function Channels(props: SectionProps) {
                 >
                   {
                     {
-                      pending: 'Pendente',
-                      sending: 'Enviando',
-                      sent: 'Enviada',
-                      failed: 'Falhou',
-                      unknown: 'Resultado incerto',
+                      pending: 'Pending',
+                      sending: 'Sending',
+                      sent: 'Sent',
+                      failed: 'Failed',
+                      unknown: 'Outcome unknown',
                     }[item.status]
                   }
                 </Badge>
@@ -246,8 +245,8 @@ export function Channels(props: SectionProps) {
             ))}
           </div>
           <p className="note">
-            Uma entrega com resultado incerto não é reenviada automaticamente para evitar
-            duplicação.
+            A delivery whose outcome is unknown is never resent on its own, so nothing arrives
+            twice.
           </p>
         </section>
       )}
@@ -260,19 +259,19 @@ export function Channels(props: SectionProps) {
         />
       )}
       {secret && (
-        <Secret title="Configuração do webhook" value={secret} close={() => setSecret(undefined)} />
+        <Secret title="Webhook configuration" value={secret} close={() => setSecret(undefined)} />
       )}
       {disconnecting && (
         <Confirm
-          title="Desconectar canal?"
-          description="O canal deixa de receber mensagens. Os contatos aprovados e suas conversas continuam salvos."
+          title="Disconnect this channel?"
+          description="The channel stops receiving messages. Approved contacts and their conversations are kept."
           busy={busy}
           close={() => setDisconnecting(undefined)}
           confirm={async () => {
             if (
               await mutate(
                 () => api.revokeChannel(profile.id, disconnecting.id),
-                'Canal desconectado.',
+                'Channel disconnected.',
               )
             ) {
               setDisconnecting(undefined);

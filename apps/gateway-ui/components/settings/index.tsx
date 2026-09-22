@@ -48,9 +48,11 @@ function PreferenceField({
           setValue(next);
           try {
             localStorage.setItem(`jian.${preference}`, next);
-            toast.success('Preferência salva.', { id: 'preference' });
+            toast.success('Preference saved.', { id: 'preference' });
           } catch {
-            toast.error('Aplicado nesta sessão. O navegador não permitiu salvar a preferência.');
+            toast.error(
+              'Applied for this session. The browser would not let the preference be saved.',
+            );
           }
         }}
       />
@@ -62,13 +64,13 @@ export function Settings({ tab }: { tab: 'appearance' | 'accessibility' }) {
   return (
     <>
       <SectionHeading
-        title="Configurações"
-        description="Preferências deste navegador, para todos os seus perfis."
+        title="Settings"
+        description="Preferences of this browser, shared by all your profiles."
       />
-      <nav className="settings-tabs" aria-label="Configurações">
+      <nav className="settings-tabs" aria-label="Settings">
         <Link href="/settings/appearance" aria-current={tab === 'appearance' ? 'page' : undefined}>
           <Palette size={16} />
-          Aparência
+          Appearance
         </Link>
         <Link
           href="/settings/accessibility"
@@ -83,7 +85,7 @@ export function Settings({ tab }: { tab: 'appearance' | 'accessibility' }) {
           <div className="section-row">
             <div>
               <h2>Cor de acento</h2>
-              <p className="mt-1 text-sm">Cinco variações. O mesmo espaço de trabalho.</p>
+              <p className="mt-1 text-sm">Five variations. The same workspace.</p>
             </div>
             <span className="preference-autosave">
               <Check size={14} />
@@ -94,8 +96,8 @@ export function Settings({ tab }: { tab: 'appearance' | 'accessibility' }) {
           <div className="appearance-note">
             <SlidersHorizontal size={18} />
             <p>
-              O tema acompanha você ao trocar de perfil. As cores de alerta mantêm o mesmo
-              significado.
+              The theme follows you when you switch profiles. Alert colours keep the same meaning
+              throughout.
             </p>
           </div>
         </section>
@@ -103,15 +105,15 @@ export function Settings({ tab }: { tab: 'appearance' | 'accessibility' }) {
         <section className="accessibility-panel">
           <PreferenceField
             preference="motion"
-            label="Movimento"
-            hint="A preferência de reduzir movimento do sistema é sempre respeitada."
-            labels={['Acompanhar o sistema', 'Reduzir animações']}
+            label="Motion"
+            hint="The system's own reduce-motion setting is always respected."
+            labels={['Follow the system', 'Reduce animation']}
           />
           <PreferenceField
             preference="text"
-            label="Tamanho do texto"
-            hint="Amplia textos e controles em todo o painel."
-            labels={['Padrão', 'Ampliado']}
+            label="Text size"
+            hint="Enlarges text and controls across the panel."
+            labels={['Default', 'Larger']}
           />
         </section>
       )}

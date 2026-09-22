@@ -27,7 +27,11 @@ export function registerChannelRoutes(app: FastifyInstance, deps: ChannelRouteSe
   }
 
   app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/channels', async (request, reply) =>
-    reply.code(201).send(await channels().connect(request.params.profileId, request.body)),
+    reply.code(201).send(
+      // HTTPS regardless of how the request arrived: Telegram accepts no other webhook, and
+      // a TLS-terminating proxy keeps the host while dropping the scheme.
+      await channels().connect(request.params.profileId, request.body, `https://${request.host}`),
+    ),
   );
 
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/channels', async (request) =>

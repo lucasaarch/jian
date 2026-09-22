@@ -19,7 +19,7 @@ export async function readEvents(
   );
 
   if (!response.ok || !response.body) {
-    throw new Error('O canal de eventos não está disponível.');
+    throw new Error('The event stream is not available.');
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();

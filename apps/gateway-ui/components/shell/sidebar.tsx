@@ -26,7 +26,7 @@ export function Sidebar({
       <button
         type="button"
         className="icon-button mobile-menu absolute right-3 top-3"
-        aria-label="Fechar navegação"
+        aria-label="Close navigation"
         onClick={onNavigate}
       >
         <X size={18} />
@@ -38,7 +38,7 @@ export function Sidebar({
         </span>
       </Link>
       <ProfileSwitcher onCreate={onCreateProfile} />
-      <nav aria-label="Navegação principal">
+      <nav aria-label="Main navigation">
         {(['workspace', 'capabilities'] as const).map((group) => (
           <div className="nav-group" key={group}>
             <span className="nav-label">{groupLabels[group]}</span>
@@ -67,11 +67,11 @@ export function Sidebar({
           onClick={onNavigate}
         >
           <Settings2 size={17} />
-          Configurações
+          Settings
         </Link>
         <button type="button" onClick={() => void signOut()}>
           <LogOut size={16} />
-          Sair do painel
+          Sign out
         </button>
       </div>
     </aside>

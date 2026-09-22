@@ -5,25 +5,31 @@ import type { Run } from '../../lib/api';
 
 /** What the panel calls each tool, so the owner reads an action instead of a function name. */
 const toolLabels: Record<string, string> = {
-  read_memories: 'lendo memórias',
-  remember: 'salvando uma memória',
-  list_sessions: 'procurando conversas',
-  read_session: 'lendo outra conversa',
-  load_skill: 'carregando uma skill',
-  search_history: 'buscando no histórico',
-  read_artifact: 'lendo um resultado grande',
-  list_activities: 'vendo o que está em andamento',
-  read_run_checkpoints: 'revendo os passos de uma execução',
-  send_session_message: 'escrevendo para outra conversa',
-  list_agents: 'vendo os outros agentes',
-  ask_agent: 'perguntando a outro agente',
-  read_inbox: 'lendo a caixa de entrada',
-  acquire_resource: 'reservando um recurso',
-  release_resource: 'liberando um recurso',
-  update_skills: 'reescrevendo as próprias skills',
-  update_identity: 'ajustando a própria identidade',
-  read_identity: 'relendo a própria identidade',
-  create_profile: 'criando um perfil',
+  read_memories: 'reading its memories',
+  remember: 'saving a memory',
+  list_sessions: 'looking through its conversations',
+  read_session: 'reading another conversation',
+  load_skill: 'loading a skill',
+  search_history: 'searching the history',
+  read_artifact: 'reading a large result',
+  list_activities: 'checking what is under way',
+  read_run_checkpoints: 'reviewing the steps of a run',
+  send_session_message: 'writing to another conversation',
+  list_agents: 'looking up the other agents',
+  ask_agent: 'asking another agent',
+  read_inbox: 'reading its inbox',
+  acquire_resource: 'reserving a resource',
+  release_resource: 'releasing a resource',
+  message_contact: 'writing to a contact',
+  list_contacts: 'looking up its contacts',
+  run_command: 'running a command',
+  read_file: 'reading a file',
+  write_file: 'writing a file',
+  list_directory: 'listing a directory',
+  update_skills: 'rewriting its own skills',
+  update_identity: 'adjusting its own identity',
+  read_identity: 'rereading its own identity',
+  create_profile: 'creating a profile',
 };
 
 /**
@@ -34,12 +40,12 @@ export function RunProgress({ run }: { run: Run }) {
   const progress = run.progress;
   const phase =
     run.status === 'queued'
-      ? 'Na fila'
+      ? 'Queued'
       : progress?.phase === 'tool'
-        ? `Usando ferramentas — ${toolLabels[progress.tool ?? ''] ?? progress.tool}`
+        ? `Using tools — ${toolLabels[progress.tool ?? ''] ?? progress.tool}`
         : progress?.phase === 'writing'
-          ? 'Escrevendo a resposta'
-          : 'Pensando';
+          ? 'Writing the answer'
+          : 'Thinking';
 
   const icon =
     progress?.phase === 'tool' ? (
@@ -53,7 +59,7 @@ export function RunProgress({ run }: { run: Run }) {
   return (
     <article className="message assistant pending" aria-live="polite">
       <header>
-        <strong>Agente</strong>
+        <strong>Agent</strong>
         <span className="run-phase">
           {icon}
           {phase}
@@ -67,7 +73,7 @@ export function RunProgress({ run }: { run: Run }) {
         </p>
       ) : (
         <p className="muted">
-          {progress?.steps ? `${progress.steps} etapas até agora.` : 'Preparando a resposta.'}
+          {progress?.steps ? `${progress.steps} steps so far.` : 'Getting ready to answer.'}
         </p>
       )}
     </article>

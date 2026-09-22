@@ -662,5 +662,5 @@ it('tells the owner what the provider answered instead of a generic failure', as
   const failed = await services.runs.run(profile.id, run.id);
 
   expect(failed.status).toBe('failed');
-  expect(failed.error).toContain('limite de uso');
+  expect(failed.error).toContain('rate limiting');
 });

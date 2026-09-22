@@ -53,9 +53,7 @@ export function SkillCatalog({
       })
       .catch((failure) => {
         if (alive)
-          setError(
-            failure instanceof Error ? failure.message : 'Não foi possível carregar o catálogo.',
-          );
+          setError(failure instanceof Error ? failure.message : 'The catalog could not be loaded.');
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -65,26 +63,24 @@ export function SkillCatalog({
     };
   }, [api, profile.id, source, entries, retry]);
   const importEntry = async (entry: Entry) => {
-    if (
-      await mutate(() => api.importSkill(profile.id, entry.url), `Skill ${entry.name} importada.`)
-    )
+    if (await mutate(() => api.importSkill(profile.id, entry.url), `Skill ${entry.name} imported.`))
       setReplacing(undefined);
   };
   const filtered = (entries ?? []).filter((entry) =>
     `${entry.name} ${entry.description}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
   );
   return (
-    <section className="skill-marketplace" aria-label="Catálogos de skills">
+    <section className="skill-marketplace" aria-label="Skill catalogs">
       <header className="section-row">
         <div>
-          <h2>Explorar skills</h2>
-          <p className="mt-1 text-sm">Catálogos oficiais, prontos para adicionar ao perfil.</p>
+          <h2>Browse skills</h2>
+          <p className="mt-1 text-sm">Official catalogs, ready to add to this profile.</p>
         </div>
-        <span className="text-xs text-muted">{profile.skills.length}/20 instaladas</span>
+        <span className="text-xs text-muted">{profile.skills.length}/20 installed</span>
       </header>
       <div className="catalog-toolbar">
         <fieldset className="catalog-sources">
-          <legend className="sr-only">Origem das skills</legend>
+          <legend className="sr-only">Where the skills come from</legend>
           {sources.map((item) => (
             <button
               type="button"
@@ -103,26 +99,26 @@ export function SkillCatalog({
         <div className="search-field">
           <Search size={16} />
           <input
-            aria-label="Buscar skills no catálogo"
-            placeholder="Buscar skills…"
+            aria-label="Search the catalog"
+            placeholder="Search skills…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
       </div>
       <p className="catalog-note">
-        Importa as instruções do SKILL.md. Scripts e arquivos auxiliares não são instalados.
+        Imports the instructions in SKILL.md. Scripts and supporting files are not installed.
       </p>
       {loading ? (
         <div className="catalog-loading" role="status">
           <LoaderCircle size={20} className="spin" />
-          Carregando {source.name}…
+          Loading {source.name}…
         </div>
       ) : error ? (
         <div className="history-error" role="alert">
           <p>{error}</p>
           <Button variant="secondary" onClick={() => setRetry((value) => value + 1)}>
-            Tentar novamente
+            Try again
           </Button>
         </div>
       ) : filtered.length ? (
@@ -140,7 +136,7 @@ export function SkillCatalog({
                     href={entry.url}
                     target="_blank"
                     rel="noreferrer"
-                    aria-label={`Ver origem de ${entry.name}`}
+                    aria-label={`See where ${entry.name} comes from`}
                   >
                     <ArrowUpRight size={16} />
                   </a>
@@ -154,7 +150,7 @@ export function SkillCatalog({
                     onClick={() => (existing ? setReplacing(entry) : void importEntry(entry))}
                   >
                     {installed ? <Check size={14} /> : <Download size={14} />}
-                    {installed ? 'Instalada' : existing ? 'Substituir' : 'Adicionar'}
+                    {installed ? 'Installed' : existing ? 'Replace' : 'Add'}
                   </Button>
                 </footer>
               </article>
@@ -162,12 +158,12 @@ export function SkillCatalog({
           })}
         </div>
       ) : (
-        <div className="catalog-loading">Nenhuma skill encontrada.</div>
+        <div className="catalog-loading">No skill found.</div>
       )}
       {replacing && (
         <Confirm
-          title={`Substituir ${replacing.name}?`}
-          description="Já existe uma skill com esse nome no perfil. As instruções atuais serão substituídas pelas do catálogo."
+          title={`Replace ${replacing.name}?`}
+          description="This profile already has a skill with that name. Its instructions will be replaced by the catalog's."
           busy={busy}
           close={() => setReplacing(undefined)}
           confirm={() => void importEntry(replacing)}

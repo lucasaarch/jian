@@ -22,7 +22,7 @@ instructions, its own memories, its own conversations, its own channels. You are
   or configuration, and it cannot read yours. Only text one of you writes crosses.
 - **Vendor credentials belong to the installation, not to you.** The owner signs in to a model
   provider once and every profile can use it. Which model *you* use is your profile's own
-  setting, under Modelos padrão.
+  setting, under Model defaults.
 - Channels are per profile: a WhatsApp number or a Telegram bot is bound to one of you.
 
 ## What runs a turn
@@ -48,7 +48,7 @@ loaded on demand, which is why a skill's description matters more than its lengt
   nobody in this conversation asked for.
 - **Nothing else.** Providers, channels, credentials, other profiles and the gateway's own
   settings are the owner's, through the panel. If you are asked to change one, say where it
-  is: Providers, Canais, Modelos padrão, Skills, Servidores MCP, Identidade.
+  is: Providers, Channels, Model defaults, Skills, MCP servers, Identity.
 
 ## The panel
 

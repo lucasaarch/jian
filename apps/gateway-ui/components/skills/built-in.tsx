@@ -29,8 +29,7 @@ export function BuiltinSkills({
       .then((list) => alive && setSkills(list))
       .catch(
         (failure) =>
-          alive &&
-          setError(failure instanceof Error ? failure.message : 'Não foi possível carregar.'),
+          alive && setError(failure instanceof Error ? failure.message : 'Could not load.'),
       );
 
     return () => {
@@ -59,12 +58,13 @@ export function BuiltinSkills({
   }
 
   return (
-    <section className="built-in-skills" aria-label="Skills nativas">
+    <section className="built-in-skills" aria-label="Built-in skills">
       <header className="section-row">
         <div>
-          <h2>Nativas</h2>
+          <h2>Built in</h2>
           <p className="mt-1 text-sm">
-            Vêm com o Gateway e já estão ativas. Ensinam o agente a usar o que o Jian dá a ele.
+            They ship with the gateway and are already on. They teach the agent to use what Jian
+            gives it.
           </p>
         </div>
       </header>
@@ -92,12 +92,12 @@ export function BuiltinSkills({
                 onClick={() => setOpen(open === skill.name ? undefined : skill.name)}
               >
                 <ChevronDown size={14} />
-                {open === skill.name ? 'Ocultar instruções' : 'Ler instruções'}
+                {open === skill.name ? 'Hide the instructions' : 'Read the instructions'}
               </button>
               {open === skill.name && <pre className="skill-body">{skill.instructions}</pre>}
             </div>
             <Button variant="quiet" busy={busy} onClick={() => void toggle(skill)}>
-              {skill.enabled ? 'Desativar' : 'Ativar'}
+              {skill.enabled ? 'Turn off' : 'Turn on'}
             </Button>
           </article>
         ))}

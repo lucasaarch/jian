@@ -37,12 +37,9 @@ export function Known({ profile, data, api, mutate, busy }: SectionProps) {
                 <Button
                   variant="quiet"
                   disabled={busy}
-                  aria-label={`Bloquear ${contact.actorId}`}
+                  aria-label={`Block ${contact.actorId}`}
                   onClick={() =>
-                    void mutate(
-                      () => api.blockContact(profile.id, contact.id),
-                      'Contato bloqueado.',
-                    )
+                    void mutate(() => api.blockContact(profile.id, contact.id), 'Contact blocked.')
                   }
                 >
                   <UserX size={17} />
@@ -51,11 +48,11 @@ export function Known({ profile, data, api, mutate, busy }: SectionProps) {
                 <Button
                   variant="quiet"
                   disabled={busy}
-                  aria-label={`Aprovar ${contact.actorId}`}
+                  aria-label={`Approve ${contact.actorId}`}
                   onClick={() =>
                     void mutate(
                       () => api.approveContact(profile.id, contact.id),
-                      'Contato aprovado.',
+                      'Contact approved.',
                     )
                   }
                 >

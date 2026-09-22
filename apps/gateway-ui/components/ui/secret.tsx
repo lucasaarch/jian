@@ -19,11 +19,7 @@ export function Secret({
   const [error, setError] = useState('');
 
   return (
-    <Modal
-      title={title}
-      description="Guarde este valor agora. Ele não poderá ser consultado novamente."
-      close={close}
-    >
+    <Modal title={title} description="Save this value now. It cannot be read again." close={close}>
       <textarea
         className="secret-value"
         aria-label="Valor gerado"
@@ -45,14 +41,14 @@ export function Secret({
               await navigator.clipboard.writeText(value);
               setCopied(true);
             } catch {
-              setError('Selecione o valor acima e copie manualmente.');
+              setError('Select the value above and copy it by hand.');
             }
           }}
         >
           {copied ? <Check size={16} /> : <Copy size={16} />}
-          {copied ? 'Copiado' : 'Copiar'}
+          {copied ? 'Copied' : 'Copy'}
         </Button>
-        <Button onClick={close}>Já guardei</Button>
+        <Button onClick={close}>I saved it</Button>
       </footer>
     </Modal>
   );

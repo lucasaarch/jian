@@ -1,143 +1,147 @@
-# Canais
+# Channels
 
-Um perfil tem três canais possíveis — WhatsApp, Telegram e API Server — e no máximo um de cada. Conectar é toda a configuração: não existe nome, sessão escolhida nem lista de remetentes. Quem pode falar com o agente é decidido depois: contato por contato nas conversas privadas, e uma vez por sala nos grupos.
+A profile has three possible channels — WhatsApp, Telegram and the API server — and at most one of each. Connecting is the whole configuration: there is no name, no chosen session and no list of senders. Who may talk to the agent is decided afterwards: contact by contact in private conversations, and once per room in groups.
 
-`POST /v1/profiles/{profileId}/channels` conecta um tipo e retorna o `webhookToken` uma única vez; o banco guarda apenas o hash. Um segundo canal do mesmo tipo responde `409`. `DELETE /v1/profiles/{profileId}/channels/{channelId}` desconecta, apaga o segredo do canal no cofre e libera o tipo para uma nova conexão. Contatos aprovados e suas conversas continuam salvos.
+`POST /v1/profiles/{profileId}/channels` connects a type and returns the `webhookToken` once; the database keeps only its hash. A second channel of the same type answers `409`. `DELETE /v1/profiles/{profileId}/channels/{channelId}` disconnects, deletes the channel's secret from the vault and frees the type for a new connection. Approved contacts and their conversations are kept.
 
-## Contatos e aprovação
+## Contacts and approval
 
-A primeira mensagem de um remetente desconhecido não entra no perfil. O Gateway registra uma solicitação de contato com quem escreveu e o que mandou, avisa a pessoa uma única vez que o dono precisa aprovar, e guarda a mensagem.
+The first message from an unknown sender does not enter the profile. The gateway records a contact request with who wrote and what they said, tells the person once that the owner has to approve, and holds the message.
 
-| Método e caminho | Comportamento |
+| Method and path | Behaviour |
 | --- | --- |
-| `GET /v1/profiles/{profileId}/contacts` | Solicitações pendentes primeiro, depois aprovados e bloqueados |
-| `POST /v1/profiles/{profileId}/contacts/{contactId}/approve` | Cria a sessão da conversa e libera a mensagem em espera |
-| `POST /v1/profiles/{profileId}/contacts/{contactId}/block` | Descarta a mensagem e ignora o remetente em silêncio |
+| `GET /v1/profiles/{profileId}/contacts` | Pending requests first, then approved and blocked |
+| `POST /v1/profiles/{profileId}/contacts/{contactId}/approve` | Opens the conversation's session and releases the held message |
+| `POST /v1/profiles/{profileId}/contacts/{contactId}/block` | Discards the message and ignores the sender silently |
 
-Todas exigem o token de administrador: aprovar é dar acesso ao agente.
+All of them need the host token: approving is granting access to the agent.
 
-Regras que a implementação garante:
+Rules the implementation guarantees:
 
-- Uma solicitação por remetente, não por mensagem. Se o desconhecido insistir, o texto novo é anexado à mesma solicitação, até 8.000 caracteres.
-- Um aviso automático por solicitação. Mensagens seguintes de quem está esperando não geram resposta, o que impede qualquer laço entre dois sistemas automáticos.
-- Um bloqueado não recebe nada e não gera execução.
-- Enquanto está pendente, o remetente não tem sessão, execução nem histórico no perfil.
-- Aprovar cria a sessão daquela conversa e envia a mensagem retida. A chave de idempotência dela é derivada do canal, do chat e do ID da mensagem original, então reenvios do protocolo e uma segunda aprovação recuperam o mesmo run em vez de criar outro.
+- One request per sender, not per message. If the stranger insists, the new text is appended to the same request, up to 8,000 characters.
+- One automatic notice per request. Later messages from someone who is waiting produce no answer, which is what keeps two automated systems from looping.
+- A blocked sender receives nothing and starts no run.
+- While pending, a sender has no session, no run and no history in the profile.
+- Approving opens that conversation's session and sends the held message. Its idempotency key comes from the channel, the chat and the original message id, so a protocol redelivery and a second approval recover the same run instead of creating another.
 
-O aviso automático só existe em canais que sabem responder. O API Server apenas recebe: a resposta HTTP traz `contact: "pending"`, e cabe ao chamador avisar seu usuário.
+The automatic notice only exists on channels that can answer. The API server only receives: the HTTP response carries `contact: "pending"`, and it is up to the caller to tell their user.
 
-## Sessões por conversa
+## A session per conversation
 
-Cada conversa é uma sessão do perfil, criada na aprovação e intitulada com o canal e o remetente — `WhatsApp · 5511999999999@c.us`, `WhatsApp · Grupo Equipe`. Nada é configurado para isso. As sessões aparecem em **Conversas** no painel, compartilham identidade, ferramentas e memórias do perfil, e mantêm o histórico separado por conversa. A sessão de um grupo é separada das conversas privadas das mesmas pessoas.
+Each conversation is a session of the profile, created on approval and titled with the channel and the sender — `WhatsApp · 5511999999999@c.us`, `WhatsApp · Team room`. Nothing is configured for that. The sessions appear under **Sessions** in the panel, share the profile's identity, tools and memories, and keep their history apart. A room's session is separate from the private conversations of the same people.
 
-## Grupos
+## Rooms
 
-Um grupo é uma conversa onde várias pessoas e vários agentes escrevem. Cada agente entra com a própria conexão — o próprio número no WhatsApp, o próprio bot no Telegram —, então o isolamento por perfil continua inteiro: cada perfil enxerga o grupo pela sua conexão, e o que os outros agentes escrevem chega a ele como mensagem de outro participante, pelo próprio protocolo. Não existe sala compartilhada nem transcrição comum dentro do Gateway.
+A room is a conversation where several people and several agents write. Each agent joins through its own connection — its own number on WhatsApp, its own bot on Telegram — so the isolation between profiles stays whole: each profile sees the room through its connection, and what the other agents write reaches it as a message from another participant, over the protocol itself. There is no shared room and no common transcript inside the gateway.
 
-O canal marca a conversa: `scope: "group"`. No WhatsApp é o JID `@g.us`, com o participante como remetente e o grupo como conversa; no Telegram são os chats `group` e `supergroup`. Uma mensagem de grupo vira uma sessão do perfil identificada pelo grupo, e a execução recebe o autor junto do texto — `Lucas: Ada, você consegue olhar o relatório?` —, porque num grupo o agente precisa saber quem falou para responder a quem.
+The channel marks the conversation: `scope: "group"`. On WhatsApp that is a `@g.us` JID, with the participant as the sender and the room as the conversation; on Telegram it is the `group` and `supergroup` chats. A room message becomes a session of the profile identified by the room, and the run receives the author along with the text — `Lucas: Ada, can you look at the report?` — because in a room the agent has to know who spoke to answer them.
 
-### Aprovação por grupo
+### Approval is per room
 
-O dono aprova o grupo uma vez, não cada participante. A solicitação registra a conversa, e quem escrever ali depois entra pela mesma decisão.
+The owner approves the room once, not each participant. The request records the conversation, and whoever writes there later comes in under the same decision.
 
-- Grupo pendente não gera execução, não gera entrega e não recebe aviso automático: o Gateway não escreve dentro de uma sala que o dono não aprovou, nem para explicar que está esperando aprovação.
-- Nada fica retido. Numa conversa privada a primeira mensagem espera a aprovação e é liberada depois; num grupo ela não é guardada, porque liberá-la faria o agente responder uma mensagem que não chamou ninguém.
-- Cada perfil vê o grupo pela própria conexão, então cada um tem a própria solicitação e a própria sessão. Aprovar para um perfil não aprova para os outros.
-- Renomear o grupo não reabre a solicitação; o nome novo atualiza o título.
+- A pending room starts no run, produces no delivery and receives no automatic notice: the gateway does not write inside a room the owner has not approved, not even to explain that it is waiting.
+- Nothing is held. In a private conversation the first message waits for approval and is released afterwards; in a room it is not kept, because releasing it would make the agent answer a message that named nobody.
+- Each profile sees the room through its own connection, so each has its own request and its own session. Approving for one profile approves for none of the others.
+- Renaming the room does not reopen the request; the new name updates the title.
 
-### Só responde quem foi chamado
+### Only the agent addressed answers
 
-Num grupo em que mais de um agente da instalação está aprovado, o agente fica calado por padrão e só responde quando é endereçado. Sem isso, três agentes respondem a mesma mensagem e o grupo vira ruído. O agente reconhece que foi chamado de duas formas:
+In a room where more than one agent of the installation is approved, an agent stays quiet by default and answers only when it is addressed. Without that, three agents answer the same message and the room becomes noise. An agent knows it was called in two ways:
 
-- Menção do protocolo ao endereço da própria conexão, quando o protocolo carrega isso — `mentionedJid` no WhatsApp, `text_mention` no Telegram.
-- O nome do perfil escrito na mensagem, comparado sem diferenciar maiúsculas nem acentos e respeitando limites de palavra. Um nome composto também responde ao primeiro nome, com três letras ou mais.
+- A protocol mention of its own connection's address, where the protocol carries one — `mentionedJid` on WhatsApp, `text_mention` on Telegram.
+- The profile's name written in the message, compared without case or accents and respecting word boundaries. A compound name also answers to its first name, at three letters or more.
 
-Mensagem de outro agente sempre exige ser endereçada. Mensagem de pessoa exige o nome quando há mais de um agente aprovado no grupo; com um agente só não há ninguém para atropelar, e ele responde como numa conversa privada.
+A message from another agent always has to address the agent. A message from a person needs the name when more than one agent is approved in the room; with a single agent there is nobody to talk over, and it answers as it would in private.
 
-### O laço entre agentes termina
+### The loop between agents ends
 
-Um agente pode chamar outro dentro do grupo, e isso precisa parar: cada agente gasta dinheiro de verdade a cada turno. O limite é `GROUP_AGENT_TURN_LIMIT`, hoje 3, e vale para a sala, não para cada agente — a mesma ideia de orçamento da conversa entre perfis, contada pelo que todos escreveram em vez de reiniciar em cada um.
+An agent can call another inside a room, and that has to stop: every agent spends real money on every turn. The limit is `GROUP_AGENT_TURN_LIMIT`, today 3, and it belongs to the room rather than to each agent — the same budget idea as the conversation between profiles, counted across what everyone wrote instead of restarting at each one.
 
-Cada perfil conta, no contato do grupo, os turnos de agente desde a última mensagem de gente: soma as mensagens que vê dos outros agentes e as respostas que ele mesmo envia. Ao estourar o limite, o agente silencia; como todos contam o mesmo tráfego, todos silenciam. Uma mensagem de pessoa zera a contagem e devolve o orçamento à sala. Um turno nunca é cobrado duas vezes: o contato guarda os identificadores das últimas mensagens vistas, então uma reentrega do protocolo é o mesmo turno, recupera a mesma execução e não produz uma segunda resposta.
+Each profile counts, on the room's contact, the agent turns since the last message from a person: the messages it sees from the other agents plus the replies it sends itself. Past the limit the agent goes quiet; since everyone counts the same traffic, everyone goes quiet. A message from a person resets the count and gives the budget back to the room. A turn is never charged twice: the contact keeps the identifiers of the messages it has seen, so a protocol redelivery is the same turn, recovers the same run and produces no second answer.
 
-### Quem é agente
+### Who counts as an agent
 
-O Gateway reconhece um participante como outro perfil da instalação pelo endereço da conexão dele: o canal guarda em `address` o que aquela conexão fala — a conta pareada no WhatsApp, gravada quando o dispositivo conecta, e o ID do bot no Telegram, perguntado uma vez ao `getMe` ao conectar o canal. O endereço não aparece em nenhuma resposta da API.
+The gateway recognises a participant as another profile of the installation by the address of its connection: the channel keeps in `address` what that connection speaks as — the paired account on WhatsApp, recorded when the device connects, and the bot id on Telegram, asked once through `getMe` when the channel connects. The address appears in no API response.
 
-Uma conexão que o protocolo não sabe identificar fica sem endereço, e as mensagens dela contam como as de qualquer pessoa: o agente continua respondendo só quando chamado, mas aquele tráfego não gasta o orçamento da sala. Mensagem do próprio endereço é eco e é descartada antes de virar execução.
+A connection the protocol cannot identify has no address, and its messages count like anyone's: the agent still answers only when called, but that traffic does not spend the room's budget. A message from the connection's own address is an echo and is discarded before it becomes a run.
 
-### O que o dono vê
+### What the owner sees
 
-`GET /v1/groups` lista os grupos conhecidos pela instalação, cada um com os perfis que participam dele, o estado de cada solicitação e o nome do grupo. É a única rota que cruza perfis, porque o grupo é de todos eles; exige o token de administrador, como todo o resto do painel.
+`GET /v1/groups` lists the rooms the installation knows, each with the profiles in it, the state of each request and the room's name. It is the one route that crosses profiles, because the room belongs to all of them; it needs the host token, like the rest of the panel.
 
-### Limites
+### Limits
 
-- No Telegram, um bot não recebe mensagens de outro bot, e o modo de privacidade padrão esconde dele as mensagens que não o mencionam. Ou seja: pessoas falam com os agentes num grupo do Telegram, mas conversa entre agentes só acontece de fato no WhatsApp. A regra do Gateway é a mesma nos dois.
-- O assunto do grupo no WhatsApp é consultado uma vez por sala e mantido em memória pelo worker; um grupo renomeado só muda de nome no painel depois que o worker reinicia.
-- A resposta vai para o grupo inteiro: não existe resposta privada a um participante dentro da sala.
+- On Telegram a bot does not receive messages from another bot, and the default privacy mode hides from it the messages that do not mention it. So: people talk to agents in a Telegram room, but a conversation between agents only really happens on WhatsApp. The gateway's rule is the same on both.
+- A WhatsApp room's subject is read once per room and kept in the worker's memory; a renamed room only changes name in the panel after the worker restarts.
+- The answer goes to the whole room: there is no private reply to one participant inside it.
 
-## API Server
+## API server
 
-Envie `actorId`, `chatId`, `text`, `requestKey` e, se tiver, `displayName` a `POST /v1/ingress/{channelId}`, usando `X-Jian-Channel-Token`. Para uma conversa em grupo, mande `scope: "group"` com o `chatId` do grupo, o `actorId` de quem escreveu e, se tiver, `groupName` e `mentions`. O adapter que chama essa rota deve autenticar a identidade externa antes de preencher os IDs; quem possui o token pode representar qualquer remetente, e cada remetente novo vira uma solicitação de contato. O retorno traz `accepted`, o ID do run quando houver, e o estado do contato. Consulte resultados pela API administrativa.
+Send `actorId`, `chatId`, `text`, `requestKey` and, if you have it, `displayName` to `POST /v1/ingress/{channelId}`, using `X-Jian-Channel-Token`. For a room, send `scope: "group"` with the room's `chatId`, the `actorId` of whoever wrote and, if you have them, `groupName` and `mentions`. The adapter that calls this route must authenticate the external identity before filling the ids in; whoever holds the token can represent any sender, and each new sender becomes a contact request. The answer carries `accepted`, the run id when there is one, and the contact's state. Read results through the admin API.
 
-Este canal não envia respostas a um serviço externo. A ideia de transformá-lo em um endpoint compatível com OpenAI é uma tarefa própria; o comportamento de entrada aqui descrito é o atual.
+This channel sends no answer back to an external service. Turning it into an OpenAI-compatible endpoint is a task of its own; what is described here is the intake as it stands.
 
 ## Telegram
 
-1. Conecte o canal com `type: "telegram"` e o token do BotFather em `botToken`. O Gateway cifra o token no cofre sob `channel:<id>`; ele não volta em nenhuma resposta. Para trocá-lo, desconecte e conecte de novo.
-2. Configure no Telegram o webhook HTTPS `/v1/telegram/{channelId}`, passando o `webhookToken` como `secret_token` e limitando `allowed_updates` a `message`.
+1. Connect the channel with `type: "telegram"` and the BotFather token in `botToken`. The gateway encrypts the token in the vault under `channel:<id>`; it comes back in no response. To change it, disconnect and connect again.
+2. The gateway calls `setWebhook` immediately with `https://<host of the request>/v1/telegram/{channelId}`, the `webhookToken` as `secret_token`, and `allowed_updates` limited to `message`. The response carries `webhookRegistered`. If it comes back `false` — a gateway on `localhost`, a port Telegram refuses, or Telegram being down — the channel stays connected and the registration can be done by hand with the same values.
 
-O Gateway valida `X-Telegram-Bot-Api-Secret-Token` e o contato antes de aceitar mensagens. Reentregas de um mesmo update recuperam o mesmo run. A resposta final é enviada em partes de até 4.000 caracteres, sem modo de interpretação HTML/Markdown. As configurações seguem a [API oficial do Telegram](https://core.telegram.org/bots/api#setwebhook).
+The gateway validates `X-Telegram-Bot-Api-Secret-Token` and the contact before accepting a message. A redelivery of the same update recovers the same run. The finished answer is sent as separate messages, split where the agent left a blank line, in plain text with no parse mode. The settings follow the [official Telegram API](https://core.telegram.org/bots/api#setwebhook).
 
-Esta implementação atende mensagens de texto de usuários com `from`, `chat` e `text`, em conversas privadas e em grupos; mídias, edições, callbacks e tópicos separados não estão implementados. `first_name` ou `username` viram o nome exibido na solicitação de contato. Em grupo, `chat.title` vira o nome da sala e as entidades `text_mention` viram menções. Para um bot enxergar as mensagens do grupo que não o mencionam, desligue o modo de privacidade no BotFather.
+This implementation handles text messages from users with `from`, `chat` and `text`, in private conversations and in rooms; media, edits, callbacks and forum topics are not implemented. `first_name` or `username` becomes the display name on the contact request. In a room, `chat.title` becomes the room name and `text_mention` entities become mentions. For a bot to see the room messages that do not mention it, turn privacy mode off in BotFather.
 
-O worker processa entregas após a conclusão do run. `GET /v1/profiles/{profileId}/deliveries` mostra `pending`, `sending`, `sent`, `failed` ou `unknown`. Falhas incertas não são repetidas automaticamente; consulte os IDs de mensagens confirmadas antes de uma ação manual.
+Under flood control Telegram answers 429 with a wait; the gateway honours it, keeps the delivery queued and stops trying until that moment passes. A delivery that confirmed nothing is repeated; one that partly landed never is.
 
-A configuração do webhook no serviço externo é responsabilidade do operador. Os testes locais simulam Telegram e não configuram um bot real.
+The worker processes deliveries once the run has finished. `GET /v1/profiles/{profileId}/deliveries` shows `pending`, `sending`, `sent`, `failed` or `unknown`. An uncertain failure is not repeated on its own; read the confirmed message ids before acting by hand.
 
-## Adaptadores
+The host comes from the `Host` header of the connect request, so connect through the public domain, not an internal address. The local tests simulate Telegram and configure no real bot.
 
-Cada protocolo implementa `Channel`, em `apps/gateway/src/channels/channel.ts`. `ApiChannel` normaliza a entrada HTTP; `TelegramChannel` interpreta updates e envia respostas. `WhatsAppChannel` usa a conexão de dispositivo vinculado mantida pelo worker. `ChannelRegistry` seleciona o adaptador pelo tipo, sem ramificações de protocolo no serviço `Channels`.
+## Adapters
 
-A interface define o cabeçalho opcional de autenticação do webhook, a normalização de entrada e o envio opcional. A ausência de `send` significa que o canal só recebe: o API Server não produz uma entrega fictícia, nem um aviso de aprovação. Credenciais e o cliente HTTP protegido são fornecidos ao adaptador somente durante o envio.
+Each protocol implements `Channel`, in `apps/gateway/src/channels/channel.ts`. `ApiChannel` normalises HTTP intake; `TelegramChannel` reads updates and sends answers. `WhatsAppChannel` uses the linked-device connection the worker keeps. `ChannelRegistry` picks the adapter by type, so the `Channels` service branches on no protocol.
 
-O serviço comum mantém as garantias compartilhadas: autenticação do token, decisão de contato, vínculo com perfil/sessão, deduplicação, registro da entrega e recuperação de estados incertos. Os adaptadores não escolhem permissões nem acessam o banco. Antes de enviar, o serviço grava `sending` em uma transação; se perder a confirmação, marca `unknown` em vez de repetir um possível efeito externo.
+The interface defines the optional webhook authentication header, the intake normalisation, the optional send and the optional typing indicator. The absence of `send` means the channel only receives: the API server produces no fictitious delivery and no approval notice. Credentials and the guarded HTTP client are handed to an adapter only while it sends.
 
-`Contacts`, em `apps/gateway/src/channels/contacts.ts`, decide quem é atendido. O registro do contato é escrito dentro da mesma transação que recebe a mensagem, com trava por perfil: é isso que garante uma solicitação — e um aviso — mesmo quando várias mensagens chegam juntas.
+The shared service keeps the shared guarantees: token authentication, the contact decision, binding to a profile and a session, deduplication, recording the delivery and recovering uncertain states. Adapters choose no permissions and touch no database. Before sending, the service writes `sending` in a transaction; if it loses the confirmation it records `unknown` rather than repeating a possible outside effect.
 
-`Groups`, em `apps/gateway/src/channels/groups.ts`, decide se o perfil fala numa sala já aprovada: reconhece o autor, mede quem foi endereçado e escreve o orçamento da sala. Roda dentro da mesma transação, pela mesma razão — a trava por perfil é o que impede que uma rajada gaste o orçamento duas vezes.
+An answer reaches a chat as the messages it was written in, split where the agent left a blank line, with the composing bubble and a short pause between them. Markdown is converted to plain text first, because neither bubble draws it.
 
-Uma entrega pode existir sem run: o aviso de aprovação carrega o próprio texto em `notice`. O worker envia esse texto direto, sem esperar execução alguma.
+`Contacts`, in `apps/gateway/src/channels/contacts.ts`, decides who is served. The contact record is written inside the same transaction that receives the message, under the profile lock: that is what guarantees one request — and one notice — even when several messages arrive together.
 
-Para adicionar um protocolo, implemente o adaptador, registre-o e declare seu tipo e entrada em `packages/contracts`, incluindo a rota HTTP quando necessária. Gere novamente o OpenAPI/SDK. A interface é interna; o contrato público continua sendo explícito e versionável. Protocolos com assinatura de payload, em vez de token em cabeçalho, precisarão de uma estratégia de autenticação correspondente. Dispositivos vinculados não aceitam webhook: suas mensagens vêm somente da conexão autenticada do worker. IDs de entrega aceitam números e strings conforme o protocolo.
+`Groups`, in `apps/gateway/src/channels/groups.ts`, decides whether the profile speaks in a room already approved: it recognises the author, measures who was addressed and writes the room's budget. It runs inside the same transaction, for the same reason — the profile lock is what keeps a burst from spending the budget twice.
 
-## WhatsApp por dispositivo vinculado
+A delivery can exist with no run behind it: the approval notice carries its own text in `notice`. The worker sends that text directly, waiting on no run.
 
-`WhatsAppChannel` usa [`baileys`](https://github.com/WhiskeySockets/Baileys), com licença MIT. A conexão funciona como um dispositivo vinculado por QR Code; não usa a Cloud API da Meta. A biblioteca é não oficial: mudanças no WhatsApp podem interromper a conexão e há risco de restrição da conta.
+To add a protocol, implement the adapter, register it, and declare its type and intake in `packages/contracts`, including the HTTP route where one is needed. Regenerate the OpenAPI document and the SDK. The interface is internal; the public contract stays explicit and versionable. A protocol that signs its payload, instead of carrying a token in a header, will need an authentication strategy to match. Linked devices accept no webhook: their messages come only from the worker's authenticated connection. Delivery ids are numbers or strings, depending on the protocol.
 
-O worker fala o protocolo multi-dispositivo direto por WebSocket, sem navegador. Cada ligação abre um socket próprio; não há executável externo a instalar nem variável de ambiente a configurar. Processos que executam somente a API não abrem socket algum.
+## WhatsApp through a linked device
 
-Conectar é `POST /v1/profiles/{profileId}/channels` com `{"type":"whatsapp"}` e ler o QR Code. Não há credencial a informar: ela nasce do pareamento. O `webhookToken` do contrato comum não é usado pelo WhatsApp; o canal não aceita entrada HTTP pública.
+`WhatsAppChannel` uses [`baileys`](https://github.com/WhiskeySockets/Baileys), under the MIT licence. The connection behaves as a device linked by QR code; it does not use Meta's Cloud API. The library is unofficial: a change on WhatsApp's side can break the connection, and there is a risk of the account being restricted.
 
-Todas as operações abaixo exigem o token de administrador, inclusive a consulta do QR. A base é `/v1/profiles/{profileId}/channels/{channelId}`:
+The worker speaks the multi-device protocol straight over a WebSocket, with no browser. Each binding opens its own socket; there is no external executable to install and no environment variable to set. A process running the API alone opens no socket.
 
-| Método e caminho | Comportamento |
+Connecting is `POST /v1/profiles/{profileId}/channels` with `{"type":"whatsapp"}` and scanning the QR code. There is no credential to type: it comes from the pairing. The `webhookToken` of the shared contract is unused here; the channel accepts no public HTTP intake.
+
+Every operation below needs the host token, the QR included. The base is `/v1/profiles/{profileId}/channels/{channelId}`:
+
+| Method and path | Behaviour |
 | --- | --- |
-| `POST /connect` | Solicita ao worker a abertura/restauração do dispositivo; responde `202` |
-| `GET /connection` | Estado: `connecting`, `qr`, `connected`, `disconnected` ou `error` |
-| `GET /qr` | Payload para renderizar um QR e seu prazo de validade; resposta `no-store` |
-| `POST /disconnect` | Invalida a conexão e apaga o arquivo de sessão criptografado; responde `202` |
+| `POST /connect` | Asks the worker to open or restore the device; answers `202` |
+| `GET /connection` | State: `connecting`, `qr`, `connected`, `disconnected` or `error` |
+| `GET /qr` | The payload to render a QR and how long it is valid; answered `no-store` |
+| `POST /disconnect` | Invalidates the connection and deletes the encrypted session; answers `202` |
 
-No telefone, use **Aparelhos conectados → Conectar um aparelho** e leia o QR renderizado pelo cliente. Ele expira e pode ser substituído durante o pareamento: consulte `/qr` novamente se receber `409`. Nunca envie o QR para geradores externos. O Gateway não imprime o QR, cookies, chaves ou arquivos de sessão nos logs.
+On the phone, use **Linked devices → Link a device** and scan the QR the client renders. It expires and can be replaced during pairing: read `/qr` again if you get a `409`. Never send the QR to an external generator. The gateway prints no QR, no cookie, no key and no session file in its logs.
 
-O estado `connected` indica que é possível enviar mensagens; `sessionSavedAt` indica que um backup recuperável já foi persistido. As credenciais do pareamento são gravadas antes de o estado virar `connected`, e gravações seguintes são agrupadas em cerca de um segundo. A parada normal descarrega o que estiver pendente; um encerramento abrupto pode perder a última rotação de chaves e exigir novo QR.
+The `connected` state means messages can be sent; `sessionSavedAt` means a recoverable backup has been persisted. The pairing credentials are written before the state becomes `connected`, and later writes are grouped over about a second. A normal shutdown flushes what is pending; an abrupt one can lose the last key rotation and require a new QR.
 
-As sessões e o QR são criptografados com o mesmo keyring AES-256-GCM do Gateway e vinculados ao perfil/canal por dados autenticados. A sessão é serializada em JSON, limitada a 64 MiB e dividida em partes autenticadas. Ela existe em texto claro apenas na memória do worker: nenhum arquivo de sessão é escrito em disco. O socket do WhatsApp faz sua própria comunicação, fora do cliente HTTP usado pelos providers/MCPs.
+Sessions and the QR are encrypted with the gateway's own AES-256-GCM keyring and bound to the profile and channel through associated data. The session is serialised as JSON, capped at 64 MiB and split into authenticated parts. It exists in the clear only in the worker's memory: no session file is written to disk. The WhatsApp socket does its own communication, outside the HTTP client used for providers and MCP servers.
 
-Uma lease no banco atribui a conexão a um worker. A geração e o contador de posse impedem que callbacks ou backups antigos restabeleçam uma sessão desconectada. Desconectar o canal também apaga suas credenciais recuperáveis. O logout remoto é tentado pelo worker; se ele estiver indisponível, remova o dispositivo no próprio telefone para revogar também no WhatsApp.
+A lease in the database assigns the connection to one worker. The generation and the ownership counter keep an old callback or backup from restoring a session that was disconnected. Disconnecting the channel also deletes its recoverable credentials. The worker attempts the remote logout; if it is unavailable, remove the device on the phone to revoke it on WhatsApp too.
 
-Mensagens de texto diretas e de grupo são persistidas em uma caixa de entrada, deduplicadas e submetidas quando a sessão deixa de estar ocupada. A caixa de entrada aceita mensagens de qualquer remetente, porque a decisão de atender vem depois, na aprovação do contato ou do grupo; há limite de 1.000 mensagens pendentes por canal e atingir esse limite interrompe a conexão com erro. Numa sala, o remetente é o participante e a conversa é o JID `@g.us`; a menção do protocolo chega junto. Mensagens próprias, status, mídia e chamadas são ignorados pelo driver. O WhatsApp não fornece um nome de exibição barato nessa rota, então a solicitação de contato mostra o número.
+Direct and room text messages are persisted in an inbox, deduplicated and submitted once the session is free. The inbox accepts messages from any sender, because the decision to serve comes later, at the approval of the contact or the room; there is a cap of 1,000 pending messages per channel, and reaching it stops the connection with an error. In a room the sender is the participant and the conversation is the `@g.us` JID; the protocol's mention arrives with it. The driver ignores its own messages, status updates, media and calls. WhatsApp offers no cheap display name on this path, so the contact request shows the number.
 
-Respostas usam a fila de entregas comum. `sent` significa que a biblioteca confirmou o envio, não que o destinatário leu a mensagem. Confirmações perdidas viram `unknown` e não provocam reenvio automático. Os IDs remotos são strings no WhatsApp e continuam numéricos no Telegram.
+Answers use the shared delivery queue. `sent` means the library confirmed the send, not that the recipient read it. A lost confirmation becomes `unknown` and triggers no automatic resend. Remote ids are strings on WhatsApp and stay numeric on Telegram.
 
-A validação automatizada usa um dispositivo simulado. O pareamento, a restauração da sessão e a entrega real exigem um worker com saída para o WhatsApp e um telefone. Os testes locais não conectam uma conta real.
+Automated validation uses a simulated device. Pairing, restoring a session and real delivery need a worker with outbound access to WhatsApp and a phone. The local tests connect no real account.

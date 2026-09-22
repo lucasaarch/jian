@@ -1,53 +1,52 @@
-# Painel do Gateway
+# Gateway panel
 
-`apps/gateway-ui` é um app Next.js com `output: 'export'`, React e TypeScript. O painel usa o SDK gerado a partir do OpenAPI; validação, autorização e regras de domínio continuam no Gateway.
+`apps/gateway-ui` is a Next.js app with `output: 'export'`, React and TypeScript. The panel uses the SDK generated from the OpenAPI document; validation, authorization and domain rules stay in the gateway.
 
-## Build e hospedagem
+## Build and hosting
 
-`pnpm build` e `pnpm --filter @jian/gateway build` compilam contratos, SDK, painel e servidor. O export é copiado para `apps/gateway/dist/ui` e incluído no pacote de produção e na imagem Docker. O runtime serve `/ui/` com Fastify; não precisa de Next.js instalado no servidor.
+`pnpm build` and `pnpm --filter @jian/gateway build` compile the contracts, the SDK, the panel and the server. The export is copied into `apps/gateway/dist/ui` and shipped in the production package and in the Docker image. The runtime serves `/ui/` with Fastify; no Next.js is needed on the server.
 
-`pnpm --filter @jian/gateway build:server` compila apenas o servidor para desenvolvimento. Uma execução a partir do código-fonte serve o último export disponível em `dist/ui`. Reinicie o processo após substituir esse export, pois a CSP é calculada na inicialização; use o servidor de desenvolvimento do Next.js para atualização automática.
+`pnpm --filter @jian/gateway build:server` compiles only the server, for development. A run from source serves whatever export is in `dist/ui`. The script policy is derived from the file being served, so replacing the export under a running gateway is safe; use the Next.js dev server for hot reload.
 
-A aplicação exporta rotas estáticas (`/ui/channels/`, por exemplo). Não há Server Actions, SSR ou código de provider no navegador. Fontes, ícones e QR Code são locais, sem serviços externos de renderização.
+The application exports static routes (`/ui/channels/`, for example). There are no server actions, no SSR and no provider code in the browser. Fonts, icons and the QR code are local, with no external rendering service.
 
-## Configurar um perfil
+## Setting up a profile
 
-1. Entre com o token administrativo `JIAN_API_TOKEN`.
-2. Crie um perfil com nome e instruções. Papel, tom e objetivos pertencem às instruções.
-3. Em **Providers**, configure a chave de Anthropic, Gemini ou OpenAI. `ANTHROPIC_API_KEY`, `ANTHROPIC_API_TOKEN`, `GEMINI_API_TOKEN` e `OPENAI_API_KEY` no ambiente são detectadas automaticamente. A OpenAI também aceita login ChatGPT por código de dispositivo.
-4. Em **Modelos padrão**, escolha o modelo de cada papel. A lista vem da conta do provider, não de uma lista escrita no código, e o painel marca os modelos cujas capacidades o gateway não cataloga. O nível de esforço aparece onde o modelo aceita. **Conversas** é obrigatório para conversar; os demais podem ficar vazios.
+1. Sign in with the host token, `JIAN_API_TOKEN`.
+2. Create a profile with a name and instructions. Role, tone and goals belong in the instructions.
+3. Under **Providers**, configure a key for Anthropic, Gemini or OpenAI. `ANTHROPIC_API_KEY`, `ANTHROPIC_API_TOKEN`, `GEMINI_API_TOKEN` and `OPENAI_API_KEY` in the environment are detected on their own. OpenAI also accepts a ChatGPT login by device code. A credential belongs to the installation: configure it once and every profile can use it.
+4. Under **Model defaults**, choose the model for each activity. The list comes from the provider account, never from a list written in this repository, and the panel marks the models whose capabilities the gateway cannot catalog. Reasoning effort appears where the model accepts one. With nothing chosen, the first run picks a model and saves it as the default.
 
-   Os papéis são: conversas, canais, compactação de contexto, geração de imagem, geração de áudio, fala a partir de texto e texto a partir de fala. Só conversas e canais têm runtime hoje — os outros cinco são salvos, validados e **não executados**, e o painel diz isso em cada um. Quando o provider não responde, o painel mostra a última lista lida com aviso; a configuração salva não muda. O login ChatGPT não publica lista de modelos: use **Informar ID…** para digitar o ID.
-5. Adicione Skills, escritas na tela ou importadas de um repositório do GitHub no formato aberto `SKILL.md` — o mesmo que Claude Code, Codex e Copilot leem. A importação copia as instruções uma vez e guarda de onde vieram; o repositório mudar depois não reescreve o que o agente já segue, e só o dono importa. Adicione também servidores MCP, com ferramentas explicitamente permitidas. Os catálogos oficiais de Claude e Codex ficam disponíveis na própria tela de Skills. A importação copia apenas as instruções: scripts e arquivos auxiliares não são instalados.
-6. Em **Canais**, conecte WhatsApp, Telegram ou API Server. Cada tipo existe uma vez e aparece como conectado ou não, como em Providers. Para um grupo com vários agentes, conecte um canal por perfil — um número ou um bot para cada um — e aprove a sala em cada perfil que deve falar nela.
+   The activities are: conversations, channels, context compaction, image generation, audio generation, text to speech and speech to text. Only conversations and channels have a runtime today — the other five are saved, validated and **not executed**, and the panel says so on each. When a provider does not answer, the panel shows the last list it read with a warning; the saved choice does not change.
+5. Add skills, written on the screen or imported from a GitHub repository in the open `SKILL.md` format — the same one Claude Code, Codex and Copilot read. An import copies the instructions once and records where they came from; the repository changing later never rewrites what the agent already follows, and only the owner imports. Add MCP servers too: the tools come from the server, and the agent loads one before it can call it. The official Claude and Codex catalogs are on the Skills screen itself. An import copies the instructions only: scripts and supporting files are not installed.
+6. Under **Channels**, connect WhatsApp, Telegram or the API server. Each type exists once and reads as connected or not, as under Providers. For a room with several agents, connect one channel per profile — a number or a bot for each — and approve the room in every profile that should speak in it.
+7. Under **Sessions**, read the history by channel and search by title or identifier. The panel is read-only: messages are sent through the channels. The worker must be running for incoming messages to be processed.
 
-7. Em **Sessões**, consulte o histórico por canal e busque sessões por título ou identificador. O painel é somente leitura: mensagens são enviadas pelos canais. Sessões antigas do painel continuam disponíveis como **Painel (legado)**. O worker precisa estar em execução para processar mensagens recebidas.
+The ChatGPT login talks to the Codex backend with the same context cycle, tools and usage recording as the rest of Jian, and its own model catalog is read from that account. OAuth tokens are encrypted in the vault and refreshed by the gateway. Do not paste a login token into the API key field. Older profiles carrying `model` and `contextPolicy` stay readable and usable.
 
-O login ChatGPT usa o backend Codex com o mesmo ciclo de contexto, ferramentas e registro de uso do Jian. Tokens OAuth ficam criptografados no cofre e são renovados pelo gateway. Não cole tokens de login no campo de chave de API. Perfis antigos com `model` e `contextPolicy` continuam legíveis e funcionais.
+Connecting WhatsApp means scanning the QR code: the panel opens the pairing immediately and follows the connection and the first encrypted copy of the session. The QR expires and is never written to the browser. Connecting Telegram means giving the BotFather token, which the gateway keeps encrypted; the panel shows the webhook URL and secret once, and `setWebhook` remains a step you take outside. Connecting the API server produces the same URL and token. Nothing else is asked — no name, no session, no list of senders.
 
-Conectar o WhatsApp é ler o QR Code: o painel abre o pareamento na hora e acompanha a conexão e a primeira cópia criptografada da sessão. O QR expira sem ser gravado no navegador. Conectar o Telegram é informar o token do BotFather, que o Gateway guarda criptografado; o painel mostra a URL e o segredo do webhook uma única vez, e o `setWebhook` continua sendo uma etapa externa. Conectar o API Server gera essa mesma URL e token. Nada além disso é pedido — nem nome, nem sessão, nem lista de remetentes.
+Whoever writes for the first time appears under **Contact requests**, with their name, their identifier and the message that was held. Approving opens the conversation and releases that message; refusing blocks the sender silently. The request arrives on its own: the panel follows the profile's event stream and refreshes when a contact or a channel changes, with no page reload. See [channels](channels.md) for the guarantees on the gateway side.
 
-Quem escreve pela primeira vez aparece em **Solicitações de contato**, com o nome, o identificador e a mensagem que ficou esperando. Aprovar cria a conversa e libera essa mensagem; recusar bloqueia o remetente em silêncio. A solicitação chega sozinha: o painel acompanha o fluxo de eventos do perfil e se atualiza quando um contato ou um canal muda, sem recarregar a página. Consulte [canais](channels.md) para as garantias do lado do Gateway.
+A room appears in the same list, marked as one, and approval covers the whole room: there is no request per participant, and nothing is held waiting for a decision. Once approved it appears under **Rooms**, with its name, its channel and which of your profiles are in it — each profile joins through its own connection, so each is approved separately, and the panel shows the ones still pending as not participating. Inside a room with more than one agent, each answers only when a message carries its name, and the conversation between agents stops at the turn limit until a person writes again.
 
-Um grupo aparece na mesma lista, marcado como **Grupo**, e a aprovação vale para a sala inteira: não existe uma solicitação por participante, e nada fica retido esperando a decisão. Depois de aprovado, ele aparece em **Grupos**, com o nome da sala, o canal e quais dos seus perfis participam dela — cada perfil entra com a própria conexão, então cada um é aprovado separadamente e o painel mostra os que ainda estão pendentes como não participantes. Dentro de um grupo com mais de um agente, cada um só responde quando a mensagem traz o nome dele, e a conversa entre agentes para no limite de turnos até que uma pessoa escreva de novo.
+Secrets have no screen of their own: a provider key is typed under **Providers**, an MCP server token next to its server, and a bot token next to its channel. The vault keeps encrypting them without showing anything in the panel, and no value is ever displayed again — to change one, send another; to remove one, remove the thing that uses it.
 
-Segredo não tem tela própria: a chave do provider é digitada em **Providers**, o token de um servidor MCP junto do servidor e o token do bot junto do canal. O cofre continua cifrando por perfil, sem aparecer no painel, e nenhum valor é exibido de novo — para trocar, envie outro; para remover, remova a coisa que o usa.
+**Memories** is read-only: the screen lists what the agent kept, searches by key and by content, and deletes an entry. The agent is the one who writes, through its own tools.
 
-**Memórias** é leitura: a tela lista o que o agente guardou, busca por identificador e conteúdo e apaga uma entrada. Quem escreve é o agente, pelas próprias ferramentas.
+## Security and limits
 
-## Segurança e limites
+- The sign-in page and the assets are public. Every API route needs the host token, or the panel cookie signed with it; there is no reduced-permission client key.
+- The sign-in form only enables submission after hydration and falls back to POST, so the token never travels in a URL. The host token is exchanged once for a session cookie and is kept in neither localStorage nor sessionStorage. Visual preferences, such as theme and motion, live in localStorage.
+- The panel cookie is `HttpOnly`, `SameSite=Strict`, valid for 30 days, and `Secure` when the request arrives over HTTPS. It carries only its own expiry and an HMAC signature derived from `JIAN_API_TOKEN`: nothing is stored in the database, and changing the host token ends every open session. Reloading keeps the session; signing out deletes the cookie.
+- The gateway accepts the cookie only on requests that also send `x-jian-panel: 1`. A custom header needs a CORS preflight, which the gateway does not answer, so another site cannot use the cookie. Sign-in has its own limit of 10 attempts a minute.
+- Requests go to the same origin, with no cache and with a timeout. The panel carries no credentials in its build.
+- The content security policy allows scripts from the gateway itself and the exact hashes of the export's hydration scripts, read from the page being served. Framing, plugins and changing the base URL are blocked.
+- Input is rendered as text; history and instructions never execute HTML.
+- A profile change carries `expectedVersion`. The panel does not create sessions and does not send messages.
+- Listings follow the API's current limits: up to 100 sessions, recent messages, memories and deliveries, up to 200 contacts, and up to 500 room contacts across the whole installation. The panel does not replace the paginated history API.
+- The event stream uses the same session cookie and the same header as every other call, read through `fetch` because `EventSource` cannot send headers. The gateway rechecks the session on every cycle and ends the stream when it expires; the panel reopens from the last event it saw.
 
-- A página de entrada e os assets são públicos. Toda rota da API exige o token do host ou o cookie do painel assinado com ele; não existe chave de cliente com permissão reduzida.
-- O formulário de entrada só habilita o envio após a hidratação e usa POST como fallback, impedindo envio do token na URL. O token administrativo é trocado uma vez por um cookie de sessão e não é salvo em localStorage nem sessionStorage. Preferências visuais, como tema e movimento, ficam em localStorage.
-- O cookie do painel é `HttpOnly`, `SameSite=Strict`, válido por 30 dias e `Secure` quando a requisição chega por HTTPS. Ele carrega apenas a própria validade e uma assinatura HMAC derivada de `JIAN_API_TOKEN`: nada é guardado no banco, e trocar o token do host encerra todas as sessões abertas. Recarregar mantém a sessão; sair apaga o cookie.
-- O gateway só aceita o cookie em requisições que também enviam `x-jian-panel: 1`. Cabeçalho personalizado exige preflight CORS, que o gateway não responde, então outro site não consegue usar o cookie. O login tem limite próprio de 10 tentativas por minuto.
-- Requisições usam a mesma origem, sem cache, com tempo limite. O painel não contém credenciais no build.
-- A política CSP aceita scripts do próprio Gateway e hashes exatos dos scripts de hidratação do export. Enquadramento em iframe, plugins e alteração da URL-base são bloqueados.
-- Inputs são renderizados como texto; o histórico e as instruções não executam HTML.
-- Mudanças de perfil usam `expectedVersion`. O painel não cria sessões nem envia mensagens.
-- Listagens seguem os limites atuais da API: até 100 sessões, mensagens recentes, memórias e entregas, até 200 contatos e até 500 contatos de grupo somados em toda a instalação. O painel não substitui a API de histórico paginado.
-- O fluxo de eventos usa o mesmo cookie de sessão e o mesmo cabeçalho das demais chamadas, lido por `fetch` porque `EventSource` não envia cabeçalhos. O Gateway reconfere a sessão a cada ciclo e encerra o fluxo quando ela expira; o painel reabre a partir do último evento recebido.
+Infrastructure stays in the server configuration: PostgreSQL, the encryption keyring, the host token, the API/worker role, HTTPS and the network rules. The panel does not turn this single-owner installation into a multi-tenant SaaS.
 
-Infraestrutura permanece na configuração do servidor: PostgreSQL, keyring de criptografia, token administrativo, papel API/worker, HTTPS e regras de rede. A UI não transforma esta instalação de dono único em um SaaS multiusuário.
-
-Validação visual e testes HTTP locais não comprovam persistência PostgreSQL, entrega por serviços externos ou pareamento real do WhatsApp.
+Looking at the screen, and local HTTP tests, prove neither PostgreSQL persistence nor delivery through an external service nor a real WhatsApp pairing.

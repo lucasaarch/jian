@@ -18,15 +18,15 @@ export function Overview({ profile, data }: { profile: Profile; data: ProfileDat
   return (
     <>
       <SectionHeading
-        title="Visão geral"
+        title="Overview"
         action={
           <span className="overview-live">
             <span className="live-dot" />
-            {active ? `${active} em execução` : 'Nenhuma execução ativa'}
+            {active ? `${active} running` : 'Nothing running'}
           </span>
         }
       />
-      <section className="overview-profile" aria-label="Perfil em uso">
+      <section className="overview-profile" aria-label="Profile in use">
         <div className="flex min-w-0 items-center gap-5">
           <Avatar name={profile.name} avatar={profile.avatar} className="profile-avatar" />
           <h2>{profile.name}</h2>
@@ -34,35 +34,35 @@ export function Overview({ profile, data }: { profile: Profile; data: ProfileDat
         <div className="flex flex-wrap items-center gap-3">
           <Link href="/identity" className="button quiet">
             <Settings2 size={16} />
-            Editar perfil
+            Edit profile
           </Link>
         </div>
       </section>
       <section className="overview-metrics" aria-label="Atividade do perfil">
         {[
           {
-            label: 'Sessões',
+            label: 'Sessions',
             value: data.sessions.length,
             href: '/sessions',
-            detail: 'Sessões do perfil',
+            detail: 'Belonging to this profile',
           },
           {
-            label: 'Memórias',
+            label: 'Memories',
             value: data.memories.length,
             href: '/memories',
-            detail: 'Conhecimento preservado',
+            detail: 'Knowledge it kept',
           },
           {
-            label: 'Execuções',
+            label: 'Runs',
             value: data.activities.length,
             href: '/sessions',
-            detail: 'Nas últimas 100',
+            detail: 'Of the last hundred',
           },
           {
-            label: 'Canais',
+            label: 'Channels',
             value: data.channels.filter((channel) => !channel.revokedAt).length,
             href: '/channels',
-            detail: 'Por onde ela é encontrada',
+            detail: 'Where it can be reached',
           },
         ].map((item) => (
           <Link href={item.href} className="overview-metric" key={item.label}>
@@ -78,9 +78,9 @@ export function Overview({ profile, data }: { profile: Profile; data: ProfileDat
       <div className="overview-columns">
         <section className="overview-activity">
           <header className="section-row">
-            <h2>Atividade recente</h2>
+            <h2>Recent activity</h2>
             <Link href="/sessions" className="text-button">
-              Ver sessões
+              See sessions
               <ArrowRight size={14} />
             </Link>
           </header>
@@ -92,7 +92,7 @@ export function Overview({ profile, data }: { profile: Profile; data: ProfileDat
                   <div className="grow">
                     <h3>
                       {data.sessions.find((session) => session.id === run.sessionId)?.title ||
-                        'Conversa sem título'}
+                        'Untitled conversation'}
                     </h3>
                     <p className="truncate">{run.input}</p>
                     <small>{date(run.updatedAt)}</small>
@@ -109,8 +109,8 @@ export function Overview({ profile, data }: { profile: Profile; data: ProfileDat
                     {
                       {
                         queued: 'Na fila',
-                        running: 'Em execução',
-                        completed: 'Concluída',
+                        running: 'Running',
+                        completed: 'Completed',
                         failed: 'Falhou',
                         interrupted: 'Interrompida',
                         cancelled: 'Cancelada',
@@ -123,8 +123,8 @@ export function Overview({ profile, data }: { profile: Profile; data: ProfileDat
           ) : (
             <div className="activity-empty">
               <Activity size={25} />
-              <h3>Sem execuções recentes</h3>
-              <p>As próximas atividades e seus resultados aparecerão aqui.</p>
+              <h3>No recent runs</h3>
+              <p>What it does next, and how it went, shows up here.</p>
             </div>
           )}
         </section>
@@ -134,7 +134,7 @@ export function Overview({ profile, data }: { profile: Profile; data: ProfileDat
             {number(input + output)}
             <small>tokens</small>
           </h2>
-          <p>Nas últimas 100 execuções</p>
+          <p>Across the last hundred runs</p>
           <div className="usage-bar" aria-hidden="true">
             <span style={{ width: `${input + output ? (input / (input + output)) * 100 : 0}%` }} />
             <span style={{ width: `${input + output ? (output / (input + output)) * 100 : 0}%` }} />
@@ -143,22 +143,22 @@ export function Overview({ profile, data }: { profile: Profile; data: ProfileDat
             <div>
               <dt>
                 <span className="usage-dot" />
-                Entrada
+                Input
               </dt>
               <dd>{number(input)}</dd>
             </div>
             <div>
               <dt>
                 <span className="usage-dot output" />
-                Saída
+                Output
               </dt>
               <dd>{number(output)}</dd>
             </div>
           </dl>
           <p className="usage-footnote">
             {input + output
-              ? 'Inclui o contexto enviado e as respostas geradas.'
-              : 'O consumo é registrado quando um modelo informa uso.'}
+              ? 'Counts the context sent and the answers generated.'
+              : 'Usage is recorded when a model reports it.'}
           </p>
         </section>
       </div>

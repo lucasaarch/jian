@@ -94,6 +94,62 @@ describe('Telegram transport', () => {
     }
   });
 
+  it('registers its own webhook with Telegram at the host the owner connected through', async () => {
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    let accept = true;
+
+    const f = await setup(async (url, options) => {
+      calls.push({ url: String(url), body: JSON.parse(String(options?.body)) });
+
+      return Response.json(accept ? { ok: true, result: true } : { ok: false, error_code: 400 });
+    });
+
+    try {
+      await f.channels.revoke(f.profile.id, f.channel.id);
+
+      const connected = await f.app.inject({
+        method: 'POST',
+        url: `/v1/profiles/${f.profile.id}/channels`,
+        headers: { ...admin, host: 'jian.example.com' },
+        payload: { type: 'telegram', botToken: '123:synthetic-test-token' },
+      });
+
+      expect(connected.statusCode).toBe(201);
+      const channel = connected.json();
+
+      expect(channel.webhookRegistered).toBe(true);
+      expect(calls).toEqual([
+        {
+          url: 'https://api.telegram.org/bot123:synthetic-test-token/setWebhook',
+          body: {
+            url: `https://jian.example.com/v1/telegram/${channel.id}`,
+            secret_token: channel.webhookToken,
+            allowed_updates: ['message'],
+          },
+        },
+      ]);
+
+      // A refusal leaves the channel connected; the owner can still register it by hand.
+      accept = false;
+      await f.channels.revoke(f.profile.id, channel.id);
+
+      const refused = await f.app.inject({
+        method: 'POST',
+        url: `/v1/profiles/${f.profile.id}/channels`,
+        headers: { ...admin, host: 'localhost:4310' },
+        payload: { type: 'telegram', botToken: '123:synthetic-test-token' },
+      });
+
+      expect(refused.statusCode).toBe(201);
+      expect(refused.json().webhookRegistered).toBe(false);
+      expect((await f.channels.list(f.profile.id)).filter((item) => !item.revokedAt)).toHaveLength(
+        1,
+      );
+    } finally {
+      await f.app.close();
+    }
+  });
+
   it('holds an unknown sender out of the profile and warns them only once', async () => {
     const sent: string[] = [];
 

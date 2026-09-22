@@ -151,7 +151,7 @@ export class Runs {
       if (!chosen && !profile.model.apiKeyEnv && !profile.model.providerId) {
         throw new GatewayError(
           409,
-          'No model is available. Configure a provider, or choose a model in Modelos padrão.',
+          'No model is available. Configure a provider, or choose one under Model defaults.',
         );
       }
 

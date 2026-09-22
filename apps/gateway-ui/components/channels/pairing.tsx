@@ -55,9 +55,7 @@ export function Pairing({
         if (!stopped) {
           setQr(undefined);
 
-          setError(
-            error instanceof Error ? error.message : 'Não foi possível consultar a conexão.',
-          );
+          setError(error instanceof Error ? error.message : 'The connection could not be read.');
         }
       } finally {
         if (!stopped) {
@@ -81,8 +79,8 @@ export function Pairing({
 
   return (
     <Modal
-      title="Conectar WhatsApp"
-      description="No WhatsApp do celular, abra Dispositivos conectados → Conectar dispositivo."
+      title="Connect WhatsApp"
+      description="On your phone, open WhatsApp → Linked devices → Link a device."
       close={close}
     >
       <div className="pairing-stage">
@@ -95,8 +93,8 @@ export function Pairing({
             <p>{connection.accountId}</p>
             <small>
               {connection.sessionSavedAt
-                ? 'Sessão criptografada salva no Gateway.'
-                : 'Preparando a primeira cópia da sessão. Pode levar cerca de um minuto.'}
+                ? 'The encrypted session is saved on the gateway.'
+                : 'Saving the first copy of the session. This takes about a minute.'}
             </small>
           </>
         ) : validQr ? (
@@ -110,16 +108,16 @@ export function Pairing({
                 title="QR Code para vincular o WhatsApp"
               />
             </div>
-            <small>O código se renova automaticamente.</small>
+            <small>The code refreshes on its own.</small>
           </>
         ) : (
           <>
             <Smartphone size={40} strokeWidth={1.5} />
-            <h3>{connection ? states[connection.status] : 'Consultando conexão'}</h3>
+            <h3>{connection ? states[connection.status] : 'Reading the connection'}</h3>
             <p>
               {connection?.status === 'connecting' || connection?.status === 'qr'
                 ? 'Aguarde o Gateway preparar um novo QR Code.'
-                : 'Inicie a conexão para gerar um QR Code.'}
+                : 'Start the connection to get a QR code.'}
             </p>
           </>
         )}
@@ -130,13 +128,12 @@ export function Pairing({
         </p>
       )}
       <p className="note">
-        Esta conexão usa um dispositivo vinculado ao seu WhatsApp; mantenha o QR privado. Quem
-        escrever para você entra como solicitação de contato: nada é respondido antes da sua
-        aprovação.
+        This pairs a device to your own WhatsApp, so keep the QR code private. Anyone who writes
+        arrives as a contact request: nothing is answered before you approve it.
       </p>
       <footer>
         <Button variant="secondary" onClick={close}>
-          Fechar
+          Close
         </Button>
         {connection?.status !== 'connected' && (
           <Button
@@ -148,7 +145,7 @@ export function Pairing({
               try {
                 setConnection(await api.connect(profileId, channel.id));
               } catch (error) {
-                setError(error instanceof Error ? error.message : 'Não foi possível conectar.');
+                setError(error instanceof Error ? error.message : 'The connection failed.');
               } finally {
                 setBusy(false);
               }

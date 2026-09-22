@@ -59,6 +59,18 @@ export interface Channel {
     signal: AbortSignal,
   ): Promise<string | undefined>;
 
+  /**
+   * Points the protocol at this channel's webhook under `origin`, signed with `secret`. False
+   * means the protocol refused or never answered; the channel stays connected either way, and
+   * the owner can still register the address by hand.
+   */
+  register?(
+    credential: string,
+    webhook: { channelId: string; origin: string; secret: string },
+    fetch: typeof globalThis.fetch,
+    signal: AbortSignal,
+  ): Promise<boolean>;
+
   canSend?(channelId: string): Promise<boolean>;
   // An absent sender describes an ingress-only channel; it is not a fake successful delivery.
   send?(message: OutgoingMessage, context: DeliveryContext): Promise<DeliveryOutcome>;

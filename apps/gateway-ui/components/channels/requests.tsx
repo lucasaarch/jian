@@ -21,8 +21,8 @@ export function Requests({ profile, data, api, mutate, busy }: SectionProps) {
           ? api.approveContact(profile.id, contact.id)
           : api.blockContact(profile.id, contact.id),
       approve
-        ? 'Contato aprovado. A mensagem em espera seguiu para o agente.'
-        : 'Contato bloqueado.',
+        ? 'Contact approved. The message that was waiting went to the agent.'
+        : 'Contact blocked.',
     );
 
   return (
@@ -30,8 +30,8 @@ export function Requests({ profile, data, api, mutate, busy }: SectionProps) {
       <header>
         <ShieldQuestion size={20} />
         <div className="grow">
-          <h2>Solicitações de contato</h2>
-          <p>Alguém novo escreveu. O agente só responde depois que você aprovar.</p>
+          <h2>Contact requests</h2>
+          <p>Someone new wrote. The agent answers only after you approve them.</p>
         </div>
         <Badge tone="warn">{pending.length} aguardando</Badge>
       </header>
@@ -39,7 +39,7 @@ export function Requests({ profile, data, api, mutate, busy }: SectionProps) {
         <article className="request-row" key={contact.id}>
           <div className="grow">
             <h3>
-              {contact.scope === 'group' ? 'Grupo: ' : ''}
+              {contact.scope === 'group' ? 'Room: ' : ''}
               {contact.displayName ?? contact.actorId}
             </h3>
             <small>
@@ -48,19 +48,19 @@ export function Requests({ profile, data, api, mutate, busy }: SectionProps) {
             </small>
             <p className="request-message">
               {contact.scope === 'group'
-                ? 'Aprovar vale para o grupo inteiro. Dentro dele o agente só responde quando alguém escreve o nome dele.'
-                : (contact.message ?? 'Sem mensagem em espera.')}
+                ? 'Approving covers the whole room. Inside it the agent answers only when someone writes its name.'
+                : (contact.message ?? 'No message waiting.')}
             </p>
           </div>
           <div className="row-actions">
             <Button variant="secondary" disabled={busy} onClick={() => void decide(contact, true)}>
               <UserCheck size={16} />
-              Aprovar
+              Approve
             </Button>
             <Button
               variant="quiet"
               disabled={busy}
-              aria-label={`Recusar ${contact.actorId}`}
+              aria-label={`Block ${contact.actorId}`}
               onClick={() => void decide(contact, false)}
             >
               <UserX size={17} />

@@ -34,7 +34,7 @@ export async function listCodexModels(
   // Without the account header the backend answers 200 with an empty catalog, which would read
   // as "this account has no models" instead of as a request that was never properly addressed.
   if (!headers['ChatGPT-Account-ID']) {
-    throw new Error('O token do ChatGPT não identifica a conta; entre novamente.');
+    throw new Error('The ChatGPT token does not identify the account; sign in again.');
   }
 
   const response = await fetcher(CATALOG, {
@@ -44,7 +44,7 @@ export async function listCodexModels(
 
   if (!response.ok) {
     // The body can echo the token back; only the status is safe to surface.
-    throw new Error(`O ChatGPT respondeu ${response.status} ao listar modelos.`);
+    throw new Error(`ChatGPT answered ${response.status} when listing models.`);
   }
 
   const parsed = catalog.parse(await response.json());

@@ -8,7 +8,7 @@ export function Notifications() {
   return (
     <Toaster
       position="top-right"
-      containerAriaLabel="Notificações"
+      containerAriaLabel="Notifications"
       gap={10}
       closeButton
       icons={{
@@ -19,7 +19,7 @@ export function Notifications() {
       toastOptions={{
         className: 'jian-toast',
         duration: 5000,
-        closeButtonAriaLabel: 'Fechar notificação',
+        closeButtonAriaLabel: 'Dismiss notification',
       }}
     />
   );

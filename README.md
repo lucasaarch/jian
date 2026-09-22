@@ -1,4 +1,4 @@
-![Jian — Só voa quando se conecta.](apps/gateway-ui/public/brand/readme-banner.png)
+![Jian — it only flies joined to another.](apps/gateway-ui/public/brand/readme-banner.png)
 
 # Jian
 

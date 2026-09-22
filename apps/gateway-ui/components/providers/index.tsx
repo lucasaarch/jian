@@ -35,9 +35,7 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
           setCodexLogin(state);
           if (state.status === 'connected') void mutate(async () => {}, 'ChatGPT conectado.');
         })
-        .catch(() =>
-          setCodexLogin({ status: 'failed', error: 'Não foi possível verificar o login.' }),
-        );
+        .catch(() => setCodexLogin({ status: 'failed', error: 'The login could not be checked.' }));
     }, 5000);
     return () => clearInterval(timer);
   }, [api, codexLogin?.status, mutate]);
@@ -46,7 +44,7 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
     <>
       <SectionHeading
         title="Providers"
-        description="Conecte uma vez, use em todos os perfis. Cada perfil escolhe o próprio modelo em Modelos padrão."
+        description="Connect once, use from every profile. Each profile picks its own model under Model defaults."
       />
       <div className="connections-grid providers-grid">
         {providers.map((entry) => {
@@ -64,19 +62,19 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
                 <Badge tone={configured ? 'good' : 'neutral'}>
                   {configured
                     ? configured.authMode === 'codex'
-                      ? 'ChatGPT conectado'
-                      : 'Conectado'
-                    : 'Não configurado'}
+                      ? 'ChatGPT connected'
+                      : 'Connected'
+                    : 'Not configured'}
                 </Badge>
               </header>
               <h2>{entry.name}</h2>
               <p className="connection-description">
                 {
                   {
-                    openrouter: 'Uma conta, múltiplos modelos.',
-                    anthropic: 'Modelos Claude para seus agentes.',
-                    google: 'Modelos Gemini do Google.',
-                    openai: 'API da OpenAI ou sua conta ChatGPT.',
+                    openrouter: 'One account, many models.',
+                    anthropic: 'Claude models for your agents.',
+                    google: "Google's Gemini models.",
+                    openai: 'The OpenAI API, or your ChatGPT account.',
                   }[entry.kind]
                 }
               </p>
@@ -93,19 +91,19 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
                     </span>
                   </>
                 ) : (
-                  <span>Credenciais criptografadas</span>
+                  <span>Credentials encrypted</span>
                 )}
                 {list && !list.stale && (
                   <span>
-                    {list.models.length} modelos disponíveis
-                    {uncatalogued > 0 && ` · ${uncatalogued} sem capacidades catalogadas`}
+                    {list.models.length} models available
+                    {uncatalogued > 0 && ` · ${uncatalogued} with unknown capabilities`}
                   </span>
                 )}
               </div>
               {list?.stale && (
                 <p className="note" role="status">
-                  {list.models.length ? `Lista de ${date(list.fetchedAt)}. ` : ''}
-                  {list.reason ?? 'Não foi possível atualizar os modelos.'}
+                  {list.models.length ? `List from ${date(list.fetchedAt)}. ` : ''}
+                  {list.reason ?? 'The model list could not be refreshed.'}
                 </p>
               )}
               <button
@@ -119,11 +117,7 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
                   setFormError('');
                 }}
               >
-                {editing === entry.kind
-                  ? 'Fechar configuração'
-                  : configured
-                    ? 'Gerenciar conexão'
-                    : 'Conectar'}
+                {editing === entry.kind ? 'Close' : configured ? 'Manage connection' : 'Connect'}
                 {editing === entry.kind ? <ChevronDown size={16} /> : <ArrowUpRight size={16} />}
               </button>
               <div
@@ -158,11 +152,11 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
                   }}
                 >
                   <Field
-                    label={`Chave de ${entry.name}`}
+                    label={`${entry.name} key`}
                     hint={
                       configured?.apiKeyEnv
-                        ? `Chave atual: ${configured.apiKeyEnv}. A nova chave substitui a do ambiente.`
-                        : 'O valor salvo não aparece novamente.'
+                        ? `Current key: ${configured.apiKeyEnv}. A new key replaces the one from the environment.`
+                        : 'What you save here is never shown again.'
                     }
                   >
                     <input name="secret" type="password" autoComplete="off" required />
@@ -170,7 +164,7 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
                   <div className="flex flex-wrap items-center gap-3">
                     <Button type="submit" busy={busy}>
                       <Save size={16} />
-                      {configured ? 'Trocar chave' : 'Salvar chave'}
+                      {configured ? 'Replace the key' : 'Save the key'}
                     </Button>
                     {configured && !configured.apiKeyEnv && (
                       <Button
@@ -185,7 +179,7 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
                         }
                       >
                         <Trash2 size={16} />
-                        {configured.authMode === 'codex' ? 'Desconectar ChatGPT' : 'Remover chave'}
+                        {configured.authMode === 'codex' ? 'Disconnect ChatGPT' : 'Remove the key'}
                       </Button>
                     )}
                   </div>
@@ -201,20 +195,22 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
                             .then(setCodexLogin)
                             .catch((error) =>
                               setFormError(
-                                error instanceof Error ? error.message : 'Login indisponível.',
+                                error instanceof Error
+                                  ? error.message
+                                  : 'The login is unavailable.',
                               ),
                             )
                         }
                       >
-                        Entrar com ChatGPT
+                        Sign in with ChatGPT
                       </Button>
                       {codexLogin?.status === 'pending' && (
                         <p className="note">
-                          Abra{' '}
+                          Open{' '}
                           <a href={codexLogin.verificationUrl} target="_blank" rel="noreferrer">
-                            o login da OpenAI
+                            the OpenAI login
                           </a>{' '}
-                          e informe o código <strong>{codexLogin.userCode}</strong>.
+                          and enter the code <strong>{codexLogin.userCode}</strong>.
                         </p>
                       )}
                       {codexLogin?.status === 'failed' && codexLogin.error && (

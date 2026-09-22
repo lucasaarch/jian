@@ -40,7 +40,7 @@ export function Modal({
           <h2 id={heading}>{title}</h2>
           {description && <p>{description}</p>}
         </div>
-        <button className="icon-button" type="button" aria-label="Fechar" onClick={close}>
+        <button className="icon-button" type="button" aria-label="Close" onClick={close}>
           <X size={20} />
         </button>
       </header>
@@ -66,10 +66,10 @@ export function Confirm({
     <Modal title={title} description={description} close={close}>
       <footer>
         <Button variant="secondary" onClick={close}>
-          Cancelar
+          Cancel
         </Button>
         <Button variant="danger" busy={busy} onClick={confirm}>
-          Confirmar
+          Confirm
         </Button>
       </footer>
     </Modal>

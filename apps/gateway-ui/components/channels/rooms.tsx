@@ -46,8 +46,8 @@ export function Rooms({ profile, data }: SectionProps) {
         ))}
       </div>
       <p className="note">
-        Num grupo com mais de um agente, cada um só responde quando a mensagem traz o nome dele. A
-        conversa entre agentes tem limite de turnos e recomeça quando uma pessoa escreve.
+        In a room with more than one agent, each answers only when a message carries its name. A
+        conversation between agents is capped in turns, and starts over when a person writes.
       </p>
     </section>
   );

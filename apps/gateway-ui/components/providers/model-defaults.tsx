@@ -64,11 +64,11 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
     return (
       <>
         <SectionHeading
-          title="Modelos padrão"
-          description="Um modelo por atividade. Cada um pode ficar vazio."
+          title="Model defaults"
+          description="One model per activity. Any of them may stay empty."
         />
-        <Empty title="Cadastre um provider primeiro">
-          Os modelos aparecem aqui quando uma conexão estiver pronta.
+        <Empty title="Configure a provider first">
+          Models show up here once a connection is ready.
         </Empty>
       </>
     );
@@ -77,8 +77,8 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
   return (
     <>
       <SectionHeading
-        title="Modelos padrão"
-        description="Escolha o modelo e o esforço de raciocínio para cada atividade."
+        title="Model defaults"
+        description="Choose the model and the reasoning effort for each activity."
       />
       <form
         method="post"
@@ -93,7 +93,7 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
                   roles.map((role) => [role.key, toSelection(values[role.key])]),
                 ) as ModelDefaultsInput,
               ),
-            'Modelos padrão salvos.',
+            'Model defaults saved.',
           );
         }}
       >
@@ -114,14 +114,14 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
                 <h2>{role.label}</h2>
                 <p>{role.hint}</p>
                 {!role.runtime && (
-                  <Badge tone="warn">Escolha salva, atividade ainda não disponível</Badge>
+                  <Badge tone="warn">Saved, but nothing runs this activity yet</Badge>
                 )}
                 {selected && !selected.known && (
-                  <Badge tone="warn">Capacidades desconhecidas: limites conservadores</Badge>
+                  <Badge tone="warn">Capabilities unknown: conservative limits</Badge>
                 )}
                 {list?.stale && (
                   <p className="note" role="status">
-                    Lista desatualizada: o provider não respondeu na última leitura.
+                    The list is stale: the provider did not answer the last read.
                   </p>
                 )}
               </div>
@@ -139,14 +139,14 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
                       })
                     }
                     options={[
-                      { value: '', label: 'Nenhum' },
+                      { value: '', label: 'None' },
                       ...configured.map((provider) => ({
                         value: provider.id,
                         label: provider.name,
                       })),
                       ...(value.providerId &&
                       !configured.some((provider) => provider.id === value.providerId)
-                        ? [{ value: value.providerId, label: 'Provider salvo (indisponível)' }]
+                        ? [{ value: value.providerId, label: 'Saved provider (unavailable)' }]
                         : []),
                     ]}
                   />
@@ -155,7 +155,7 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
                   label={`Modelo · ${role.label}`}
                   hint={
                     value.manual
-                      ? 'ID informado à mão. Use quando o provider não publica a lista, como o login ChatGPT.'
+                      ? 'An id typed by hand. Use it when the provider publishes no list.'
                       : undefined
                   }
                 >
@@ -165,7 +165,7 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
                       value={value.modelId}
                       disabled={busy || !value.providerId}
                       maxLength={160}
-                      placeholder="ID do modelo"
+                      placeholder="Model id"
                       onChange={(event) => change(role.key, { modelId: event.target.value })}
                     />
                   ) : (
@@ -178,26 +178,26 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
                           : change(role.key, { modelId, reasoningEffort: '' })
                       }
                       options={[
-                        { value: '', label: 'Nenhum' },
+                        { value: '', label: 'None' },
                         ...models.map((model) => ({ value: model.id, label: modelLabel(model) })),
-                        { value: '__manual__', label: 'Informar ID…' },
+                        { value: '__manual__', label: 'Type an id…' },
                       ]}
                     />
                   )}
                 </Field>
                 <Field
-                  label={`Esforço · ${role.label}`}
+                  label={`Effort · ${role.label}`}
                   hint={
                     allowed.length
                       ? undefined
-                      : 'Este modelo não tem níveis de esforço catalogados.'
+                      : 'No reasoning levels are catalogued for this model.'
                   }
                 >
                   <Select
                     value={value.reasoningEffort}
                     disabled={busy || !allowed.length}
                     onValueChange={(reasoningEffort) => change(role.key, { reasoningEffort })}
-                    options={[{ value: '', label: 'Padrão do provider' }, ...allowed]}
+                    options={[{ value: '', label: "The provider's own default" }, ...allowed]}
                   />
                 </Field>
               </div>
@@ -205,10 +205,10 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
           );
         })}
         <div className="save-bar">
-          <span>Alterações valem para novas execuções.</span>
+          <span>Changes apply to new runs.</span>
           <Button type="submit" busy={busy}>
             <Save size={16} />
-            Salvar modelos
+            Save the defaults
           </Button>
         </div>
       </form>

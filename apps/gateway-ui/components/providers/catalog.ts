@@ -23,44 +23,44 @@ export const providers = [
 export const roles = [
   {
     key: 'conversation',
-    label: 'Conversas',
-    hint: 'Usado pela API quando nenhum modelo é indicado.',
+    label: 'Conversations',
+    hint: 'Used by the API when a request names no model.',
     runtime: true,
   },
   {
     key: 'channel',
-    label: 'Canais',
-    hint: 'WhatsApp, Telegram e webhooks. Sem escolha, usa o padrão de conversas.',
+    label: 'Channels',
+    hint: 'WhatsApp, Telegram and webhooks. Unset, it follows the conversation default.',
     runtime: true,
   },
   {
     key: 'compaction',
-    label: 'Compactação de contexto',
-    hint: 'Resumirá o histórico quando a conversa passar do orçamento.',
+    label: 'Context compaction',
+    hint: 'Will summarise the history when a conversation outgrows its budget.',
     runtime: false,
   },
   {
     key: 'image',
-    label: 'Geração de imagem',
-    hint: 'Modelo que produzirá imagens a pedido do agente.',
+    label: 'Image generation',
+    hint: 'The model that will produce images when the agent asks for one.',
     runtime: false,
   },
   {
     key: 'audio',
-    label: 'Geração de áudio',
-    hint: 'Modelo que produzirá som que não é fala.',
+    label: 'Audio generation',
+    hint: 'The model that will produce sound that is not speech.',
     runtime: false,
   },
   {
     key: 'speech',
-    label: 'Fala a partir de texto',
-    hint: 'Modelo que lerá em voz alta uma resposta escrita.',
+    label: 'Text to speech',
+    hint: 'The model that will read a written answer aloud.',
     runtime: false,
   },
   {
     key: 'transcription',
-    label: 'Texto a partir de fala',
-    hint: 'Modelo que transcreverá áudio recebido nos canais.',
+    label: 'Speech to text',
+    hint: 'The model that will transcribe audio arriving on a channel.',
     runtime: false,
   },
 ] as const;
@@ -68,11 +68,11 @@ export const roles = [
 export type Role = (typeof roles)[number]['key'];
 
 export const efforts: Array<{ value: ReasoningEffort; label: string }> = [
-  { value: 'none', label: 'Sem raciocínio' },
-  { value: 'minimal', label: 'Mínimo' },
-  { value: 'low', label: 'Baixo' },
-  { value: 'medium', label: 'Médio' },
-  { value: 'high', label: 'Alto' },
+  { value: 'none', label: 'No reasoning' },
+  { value: 'minimal', label: 'Minimal' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
 ];
 
 /** A live provider carries its own key: revoking it takes the key with it. */
@@ -80,4 +80,4 @@ export const usableProviders = (data: ProfileData) =>
   data.providers.filter((provider) => !provider.revokedAt);
 
 export const modelLabel = (model: ProviderModel) =>
-  `${model.displayName ?? model.id}${model.known ? '' : ' · capacidades desconhecidas'}`;
+  `${model.displayName ?? model.id}${model.known ? '' : ' · capabilities unknown'}`;

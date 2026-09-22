@@ -48,8 +48,8 @@ export class AgentRuntime {
         model,
         maxOutputTokens: 64,
         prompt:
-          'Escreva um título curto para esta conversa, de três a seis palavras, no idioma da mensagem. ' +
-          'Responda apenas com o título, sem aspas e sem pontuação final.\n\n' +
+          'Write a short title for this conversation, three to six words, in the language of the ' +
+          'message. Answer with the title alone: no quotes and no trailing punctuation.\n\n' +
           `Mensagem: ${run.input.slice(0, 2000)}`,
       });
 
@@ -401,7 +401,7 @@ export class AgentRuntime {
     } catch (error) {
       // The stored message stays generic because a provider error can echo a key back. The
       // operator still needs the cause, so it goes to the log with the known secrets removed.
-      console.error(`jian: execução ${runId} falhou — ${redactText(describe(error), secrets)}`);
+      console.error(`jian: run ${runId} failed — ${redactText(describe(error), secrets)}`);
 
       const current = await this.services.runs.run(profileId, runId);
 
@@ -484,14 +484,14 @@ function executionFailureMessage(error: unknown, uncertain: boolean, aborted: bo
   switch (providerStatus(error)) {
     case 401:
     case 403:
-      return 'O provider recusou a credencial. Verifique a chave ou o token configurado.';
+      return 'The provider refused the credential. Check the key or token configured for it.';
     case 429:
-      return 'O provider recusou por limite de uso. Uma assinatura volta a aceitar quando a janela reabre; uma chave por token precisa de cota.';
+      return 'The provider refused for rate limiting. A subscription accepts again when its window reopens; a metered key needs quota.';
     case 404:
-      return 'O provider não reconhece este modelo nesta conta. Escolha outro modelo.';
+      return 'The provider does not know this model on this account. Choose another model.';
     case 400:
-      return 'O provider recusou a requisição. Verifique modelo, esforço e ferramentas selecionadas.';
+      return 'The provider refused the request. Check the model, the reasoning effort and the selected tools.';
     default:
-      return 'A execução falhou. O motivo está no log do gateway.';
+      return 'The run failed. The reason is in the gateway log.';
   }
 }

@@ -44,13 +44,13 @@ describe('the models a ChatGPT login may call', () => {
   it('refuses a token with no account instead of reporting an empty catalog', async () => {
     await expect(
       listCodexModels(token(), (async () => Response.json({ models: [] })) as typeof fetch),
-    ).rejects.toThrow('não identifica a conta');
+    ).rejects.toThrow('does not identify the account');
   });
 
   it('surfaces the status and never the body, which can echo the token', async () => {
     await expect(
       listCodexModels(token('acct-1'), (async () =>
         Response.json({ error: token('acct-1') }, { status: 403 })) as typeof fetch),
-    ).rejects.toThrow('respondeu 403');
+    ).rejects.toThrow('answered 403');
   });
 });

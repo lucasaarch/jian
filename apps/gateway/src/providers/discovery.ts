@@ -270,7 +270,7 @@ export class ProviderModels {
 
     if (!response.ok) {
       // The body can echo the key back; only the status is safe to surface.
-      throw new Error(`O provider respondeu ${response.status} ao listar modelos.`);
+      throw new Error(`The provider answered ${response.status} when listing models.`);
     }
 
     await this.catalog?.prime();
@@ -285,7 +285,7 @@ export class ProviderModels {
    */
   private async fetchCodexModels(provider: ProviderRecord): Promise<ProviderModel[]> {
     if (!this.codexLogin) {
-      throw new Error('O login ChatGPT não está disponível neste gateway.');
+      throw new Error('The ChatGPT login is not available on this gateway.');
     }
 
     const token = await this.codexLogin.accessToken(provider.id);
@@ -305,7 +305,7 @@ export class ProviderModels {
       const value = this.env[provider.apiKeyEnv]?.trim();
 
       if (!value) {
-        throw new Error('A variável de ambiente do provider não está definida.');
+        throw new Error('The environment variable for this provider is not set.');
       }
 
       return value;

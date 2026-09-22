@@ -12,7 +12,7 @@ export function Topbar({
       <button
         type="button"
         className="icon-button"
-        aria-label="Abrir navegação"
+        aria-label="Open navigation"
         aria-expanded={navigationOpen}
         aria-controls="main-navigation"
         onClick={onOpenNavigation}

@@ -112,7 +112,7 @@ export class ModelCatalog {
     private readonly clock: Clock = Date.now,
     private readonly url = CATALOG_URL,
     private readonly report: (reason: string) => void = (reason) =>
-      console.error(`jian: não foi possível ler o catálogo de modelos (${reason})`),
+      console.error(`jian: could not read the model catalog (${reason})`),
   ) {}
 
   /** Never throws: a missing catalog is a gap to fall through, not a failure to report. */
@@ -161,7 +161,7 @@ export class ModelCatalog {
       });
 
       if (!response.ok) {
-        this.report(`o catálogo de modelos respondeu ${response.status}`);
+        this.report(`the model catalog answered ${response.status}`);
 
         return undefined;
       }

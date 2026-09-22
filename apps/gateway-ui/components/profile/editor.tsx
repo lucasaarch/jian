@@ -49,23 +49,26 @@ export function NewProfileDialog({
               }),
             );
           } catch (error) {
-            setError(error instanceof Error ? error.message : 'Não foi possível criar o perfil.');
+            setError(error instanceof Error ? error.message : 'The profile could not be created.');
           } finally {
             setBusy(false);
           }
         }}
       >
         <AvatarField name="avatar" />
-        <Field label="Nome">
-          <input name="name" required maxLength={100} placeholder="Ex.: Assistente pessoal" />
+        <Field label="Name">
+          <input name="name" required maxLength={100} placeholder="e.g. Personal assistant" />
         </Field>
-        <Field label="Instruções" hint="Descreva propósito, papel, tom e objetivos.">
+        <Field
+          label="Instructions"
+          hint="Say what it is for, how it should sound and what it aims at."
+        >
           <textarea
             name="instructions"
             rows={5}
             required
             maxLength={8000}
-            placeholder="Ajude a organizar minhas tarefas e acompanhar decisões."
+            placeholder="Help me organise my tasks and keep track of decisions."
           />
         </Field>
         {error && (
@@ -75,11 +78,11 @@ export function NewProfileDialog({
         )}
         <footer>
           <Button variant="secondary" onClick={close}>
-            Cancelar
+            Cancel
           </Button>
           <Button type="submit" busy={busy}>
             <Plus size={16} />
-            Criar perfil
+            Create profile
           </Button>
         </footer>
       </form>
@@ -108,8 +111,8 @@ export function ProfileEditor({
   return (
     <>
       <SectionHeading
-        title="Identidade"
-        description="Instruções compartilhadas entre todas as sessões."
+        title="Identity"
+        description="Instructions shared by every session of this profile."
       />
       <form
         className="profile-form"
@@ -136,17 +139,17 @@ export function ProfileEditor({
                 allowSelfManagement: form.get('selfManagement') === 'on',
                 allowShell: form.get('shell') === 'on',
               }),
-            'Perfil atualizado.',
+            'Profile updated.',
           );
         }}
       >
         <div className="identity-form">
           <div className="settings-fields">
             <AvatarField name="avatar" profileName={profile.name} current={profile.avatar} />
-            <Field label="Nome">
+            <Field label="Name">
               <input name="name" defaultValue={profile.name} required maxLength={100} />
             </Field>
-            <Field label="Instruções">
+            <Field label="Instructions">
               <textarea
                 name="instructions"
                 defaultValue={instructions}
@@ -156,17 +159,17 @@ export function ProfileEditor({
               />
             </Field>
             <Field
-              label="Resumo para a equipe"
-              hint="Uma linha sobre o que este agente faz. É tudo o que os outros perfis veem dele."
+              label="Summary for the team"
+              hint="One line on what this agent does. It is all the other profiles ever see of it."
             >
               <input
                 name="summary"
                 defaultValue={profile.summary}
                 maxLength={280}
-                placeholder="Ex.: Cuida das entregas e sabe o estado de cada uma."
+                placeholder="e.g. Looks after deliveries and knows where each one stands."
               />
             </Field>
-            <Field label="Limites" hint="Regras que o perfil deve respeitar, uma por linha.">
+            <Field label="Boundaries" hint="Rules this profile must respect, one per line.">
               <textarea
                 name="boundaries"
                 defaultValue={profile.identity.boundaries.join('\n')}
@@ -180,31 +183,31 @@ export function ProfileEditor({
                 defaultChecked={profile.allowSelfManagement}
               />
               <span>
-                <strong>Permitir autogerenciamento</strong>
+                <strong>Allow self-management</strong>
                 <small>
-                  O agente pode atualizar sua identidade e skills. Providers e permissões continuam
-                  sob seu controle.
+                  The agent may rewrite its own identity and skills. Providers and permissions stay
+                  yours.
                 </small>
               </span>
             </label>
             <label className="check-row">
               <input name="shell" type="checkbox" defaultChecked={profile.allowShell} />
               <span>
-                <strong>Permitir terminal e arquivos</strong>
+                <strong>Allow the terminal and files</strong>
                 <small>
-                  O agente pode ler e escrever arquivos e rodar comandos nesta máquina, com as
-                  permissões de quem subiu o gateway. Vale também pelo WhatsApp e pelo Telegram:
-                  qualquer contato aprovado passa a ter esse caminho.
+                  The agent may read files, write files and run commands on this machine, with the
+                  privileges of whoever started the gateway. This holds over WhatsApp and Telegram
+                  too: any approved contact gains that path.
                 </small>
               </span>
             </label>
           </div>
         </div>
         <div className="save-bar">
-          <span>Alterações valem para novas execuções</span>
+          <span>Changes apply to new runs</span>
           <Button type="submit" busy={busy}>
             <Save size={16} />
-            Salvar perfil
+            Save profile
           </Button>
         </div>
       </form>

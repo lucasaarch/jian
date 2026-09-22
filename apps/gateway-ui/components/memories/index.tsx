@@ -19,21 +19,21 @@ export function Memories({ profile, data, api, mutate, busy }: SectionProps) {
   return (
     <>
       <SectionHeading
-        title="Memórias"
+        title="Memories"
         description="O que o agente guardou entre as conversas deste perfil."
       />
       <div className="notice">
         <BookOpen size={18} />
         <p>
-          Só o agente escreve aqui, pelas próprias ferramentas. Você lê o que ele guardou e apaga o
-          que estiver errado — uma memória errada se repete em toda sessão nova.
+          Only the agent writes here, through its own tools. You read what it kept and delete what
+          is wrong — a wrong memory repeats itself in every new session.
         </p>
       </div>
-      <Field label="Buscar">
+      <Field label="Search">
         <input
           type="search"
           value={query}
-          placeholder="Identificador ou conteúdo"
+          placeholder="Key or content"
           onChange={(event) => setQuery(event.target.value)}
         />
       </Field>
@@ -45,7 +45,7 @@ export function Memories({ profile, data, api, mutate, busy }: SectionProps) {
                 <code>{item.key}</code>
                 <Button
                   variant="quiet"
-                  aria-label={`Apagar ${item.key}`}
+                  aria-label={`Delete ${item.key}`}
                   onClick={() => setRemoving(item)}
                 >
                   <Trash2 size={16} />
@@ -53,26 +53,26 @@ export function Memories({ profile, data, api, mutate, busy }: SectionProps) {
               </header>
               <p>{item.content}</p>
               <small>
-                Versão {item.version} · {date(item.updatedAt)}
+                Version {item.version} · {date(item.updatedAt)}
               </small>
             </article>
           ))}
         </div>
       ) : data.memories.length ? (
-        <Empty title="Nada encontrado">Nenhuma memória combina com essa busca.</Empty>
+        <Empty title="Nothing found">No memory matches that search.</Empty>
       ) : (
         <Empty title="Um lugar para o que importa">
-          O agente ainda não guardou nada. O que ele registrar nas conversas aparece aqui.
+          The agent has kept nothing yet. What it records during conversations shows up here.
         </Empty>
       )}
       {removing && (
         <Confirm
-          title="Apagar memória?"
-          description="O agente deixa de ler este registro nas próximas execuções. Não é possível desfazer."
+          title="Delete this memory?"
+          description="The agent stops reading this entry on its next runs. This cannot be undone."
           busy={busy}
           close={() => setRemoving(undefined)}
           confirm={async () => {
-            if (await mutate(() => api.forget(profile.id, removing.key), 'Memória apagada.')) {
+            if (await mutate(() => api.forget(profile.id, removing.key), 'Memory deleted.')) {
               setRemoving(undefined);
             }
           }}

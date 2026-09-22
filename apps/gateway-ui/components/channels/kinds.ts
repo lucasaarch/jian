@@ -6,26 +6,26 @@ export const kinds = [
     type: 'whatsapp' as const,
     name: 'WhatsApp',
     icon: Smartphone,
-    description: 'Um aparelho conectado ao seu WhatsApp. Conectar é ler o QR Code.',
+    description: 'A device paired to your WhatsApp. Connecting means scanning the QR code.',
   },
   {
     type: 'telegram' as const,
     name: 'Telegram',
     icon: Send,
-    description: 'Um bot do BotFather. Conectar é informar o token dele.',
+    description: 'A bot from BotFather. Connecting means giving it its token.',
   },
   {
     type: 'api' as const,
     name: 'API Server',
     icon: Terminal,
-    description: 'Um endpoint HTTP para os seus próprios sistemas enviarem mensagens.',
+    description: 'An HTTP endpoint for your own systems to send messages through.',
   },
 ];
 
 export const states = {
-  disconnected: 'Aparelho desconectado',
-  connecting: 'Conectando',
-  qr: 'Aguardando leitura do QR',
-  connected: 'Aparelho conectado',
-  error: 'Falha na conexão',
+  disconnected: 'Device disconnected',
+  connecting: 'Connecting',
+  qr: 'Waiting for the QR code to be scanned',
+  connected: 'Device connected',
+  error: 'Connection failed',
 };

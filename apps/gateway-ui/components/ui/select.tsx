@@ -40,7 +40,7 @@ export function Select({
   options,
   disabled,
   id,
-  placeholder = 'Selecionar',
+  placeholder = 'Select',
   searchThreshold = 8,
   className = '',
   footer,
@@ -96,12 +96,12 @@ export function Select({
         <Combobox.Trigger {...triggerProps}>{content}</Combobox.Trigger>
         <Combobox.Portal container={container ?? undefined}>
           <Combobox.Positioner className="select-positioner" sideOffset={6} align="start">
-            <Combobox.Popup className="select-popup" aria-label={aria['aria-label'] ?? 'Opções'}>
+            <Combobox.Popup className="select-popup" aria-label={aria['aria-label'] ?? 'Options'}>
               <div className="select-search">
                 <Search size={15} />
-                <Combobox.Input aria-label="Buscar opções" placeholder="Buscar…" />
+                <Combobox.Input aria-label="Search options" placeholder="Search…" />
               </div>
-              <Combobox.Empty className="select-empty">Nenhum resultado.</Combobox.Empty>
+              <Combobox.Empty className="select-empty">No result.</Combobox.Empty>
               <Combobox.List className="select-list">
                 {(option: SelectOption) => (
                   <Combobox.Item className="select-option" key={option.value} value={option}>

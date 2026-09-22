@@ -129,6 +129,31 @@ export class TelegramChannel implements Channel {
     return body?.ok ? String(body.result.id) : undefined;
   }
 
+  /** Replaces whatever webhook the bot had, so the last connection is the one Telegram calls. */
+  async register(
+    credential: string,
+    webhook: { channelId: string; origin: string; secret: string },
+    fetch: typeof globalThis.fetch,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    if (!BOT_TOKEN.test(credential)) {
+      return false;
+    }
+
+    const body = await this.request(
+      'setWebhook',
+      credential,
+      {
+        url: `${webhook.origin}/v1/telegram/${webhook.channelId}`,
+        secret_token: webhook.secret,
+        allowed_updates: ['message'],
+      },
+      { fetch, signal },
+    );
+
+    return body?.ok === true;
+  }
+
   /** Telegram clears this when a message lands, so it is re-armed on every dispatch tick. */
   async typing(chatId: string, context: DeliveryContext): Promise<void> {
     const token = context.credential;

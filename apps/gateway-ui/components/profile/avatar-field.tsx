@@ -28,7 +28,7 @@ async function encode(file: File) {
 
   if (!context) {
     bitmap.close();
-    throw new Error('Este navegador não conseguiu processar a imagem.');
+    throw new Error('This browser could not process the image.');
   }
 
   context.drawImage(
@@ -52,7 +52,7 @@ async function encode(file: File) {
     }
   }
 
-  throw new Error('Não foi possível reduzir esta imagem o suficiente. Tente outra.');
+  throw new Error('This image could not be made small enough. Try another one.');
 }
 
 export function Avatar({
@@ -123,9 +123,7 @@ export function AvatarField({
             try {
               setValue(await encode(chosen));
             } catch (failure) {
-              setError(
-                failure instanceof Error ? failure.message : 'Não foi possível ler a imagem.',
-              );
+              setError(failure instanceof Error ? failure.message : 'The image could not be read.');
             }
           }}
         />
@@ -136,7 +134,7 @@ export function AvatarField({
         {value && (
           <Button variant="quiet" onClick={() => setValue('')}>
             <Trash2 size={16} />
-            Remover
+            Remove
           </Button>
         )}
         <small>PNG, JPEG ou WebP. Recortada em quadrado e reduzida a 256 px.</small>

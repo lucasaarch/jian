@@ -38,7 +38,7 @@ export function McpRow({
         <button
           type="button"
           className="icon-button"
-          aria-label={`Editar ${server.name}`}
+          aria-label={`Edit ${server.name}`}
           onClick={onEdit}
         >
           <Pencil size={16} />
@@ -46,7 +46,7 @@ export function McpRow({
         <button
           type="button"
           className="icon-button"
-          aria-label={`Remover ${server.name}`}
+          aria-label={`Remove ${server.name}`}
           onClick={onRemove}
         >
           <Trash2 size={16} />

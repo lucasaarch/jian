@@ -28,11 +28,11 @@ export function Capabilities({
   return (
     <>
       <SectionHeading
-        title={isSkill ? 'Skills' : 'Servidores MCP'}
+        title={isSkill ? 'Skills' : 'MCP servers'}
         description={
           isSkill
-            ? 'Instruções especializadas, carregadas pelo agente quando necessárias.'
-            : 'Servidores MCP. O agente descobre as ferramentas e carrega o que precisa.'
+            ? 'Specialised instructions, loaded by the agent when it needs them.'
+            : 'The agent discovers the tools each server offers and loads what it needs.'
         }
         action={
           <Button
@@ -43,7 +43,7 @@ export function Capabilities({
             disabled={items.length >= (isSkill ? 20 : 10)}
           >
             <Plus size={16} />
-            {isSkill ? 'Nova skill' : 'Conectar servidor'}
+            {isSkill ? 'New skill' : 'Connect a server'}
           </Button>
         }
       />
@@ -73,7 +73,7 @@ export function Capabilities({
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label={`Editar ${item.name}`}
+                    aria-label={`Edit ${item.name}`}
                     onClick={() => {
                       setFailed(false);
                       setEditing(index);
@@ -84,7 +84,7 @@ export function Capabilities({
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label={`Remover ${item.name}`}
+                    aria-label={`Remove ${item.name}`}
                     onClick={() => setRemoving(index)}
                   >
                     <Trash2 size={16} />
@@ -108,12 +108,12 @@ export function Capabilities({
         </div>
       ) : isSkill ? (
         <p className="rounded-md bg-surface px-5 py-4 text-sm">
-          Nenhuma skill instalada. Escolha no catálogo abaixo ou importe do seu repositório.
+          No skill installed. Pick one from the catalog below, or import from your repository.
         </p>
       ) : (
-        <Empty title="Conecte uma ferramenta">
-          Informe o endereço do servidor MCP. As ferramentas vêm dele, e o agente carrega uma antes
-          de poder usá-la.
+        <Empty title="Connect a tool">
+          Give the address of an MCP server. The tools come from it, and the agent loads one before
+          it can call it.
         </Empty>
       )}
       {isSkill && <SkillCatalog profile={profile} api={api} mutate={mutate} busy={busy} />}
@@ -155,7 +155,7 @@ export function Capabilities({
                     expectedVersion: profile.version,
                     [kind]: updated,
                   }),
-                'Configuração salva.',
+                'Saved.',
               );
 
               setFailed(!ok);
@@ -166,11 +166,11 @@ export function Capabilities({
             }}
           >
             <Field
-              label="Nome"
+              label="Name"
               hint={
                 isSkill
-                  ? 'Letras minúsculas, números, hífen e sublinhado.'
-                  : 'Letras minúsculas, números e sublinhado.'
+                  ? 'Lowercase letters, digits, hyphen and underscore.'
+                  : 'Lowercase letters, digits and underscore.'
               }
             >
               <input
@@ -182,7 +182,10 @@ export function Capabilities({
             </Field>
             {isSkill ? (
               <>
-                <Field label="Descrição" hint="Ajuda o agente a decidir quando usar esta skill.">
+                <Field
+                  label="Description"
+                  hint="This is how the agent decides when to use the skill."
+                >
                   <input
                     name="description"
                     required
@@ -190,7 +193,7 @@ export function Capabilities({
                     defaultValue={skill?.description ?? ''}
                   />
                 </Field>
-                <Field label="Instruções">
+                <Field label="Instructions">
                   <textarea
                     name="instructions"
                     required
@@ -202,49 +205,49 @@ export function Capabilities({
               </>
             ) : (
               <>
-                <Field label="Endpoint HTTP">
+                <Field label="HTTP endpoint">
                   <input
                     name="url"
                     type="url"
                     required
                     defaultValue={mcp?.url ?? ''}
-                    placeholder="https://mcp.exemplo.com/mcp"
+                    placeholder="https://mcp.example.com/mcp"
                   />
                 </Field>
                 <Field
-                  label="Token do servidor"
+                  label="Server token"
                   hint={
                     editing === 'new'
-                      ? 'Fica criptografado no Gateway e não aparece novamente.'
-                      : 'Deixe em branco para manter o token atual.'
+                      ? 'Encrypted on the gateway and never shown again.'
+                      : 'Leave it blank to keep the current token.'
                   }
                 >
                   <input name="token" type="password" autoComplete="off" maxLength={16000} />
                 </Field>
                 <Field
-                  label="Variável de ambiente (alternativa)"
-                  hint="Usada somente quando nenhum token é informado."
+                  label="Environment variable (alternative)"
+                  hint="Used only when no token is given above."
                 >
                   <input
                     name="env"
                     pattern="JIAN_MCP_[A-Z0-9_]+"
                     defaultValue={mcp?.bearerTokenEnv ?? ''}
-                    placeholder="JIAN_MCP_SERVICO"
+                    placeholder="JIAN_MCP_SERVICE"
                   />
                 </Field>
               </>
             )}
             {failed && (
               <p role="alert" className="form-error">
-                Não foi possível salvar. Confira os campos ou atualize o perfil.
+                Could not save. Check the fields, or refresh the profile.
               </p>
             )}
             <footer>
               <Button variant="secondary" onClick={() => setEditing(undefined)}>
-                Cancelar
+                Cancel
               </Button>
               <Button type="submit" busy={busy}>
-                Salvar {isSkill ? 'skill' : 'servidor'}
+                Save {isSkill ? 'skill' : 'server'}
               </Button>
             </footer>
           </form>
@@ -252,8 +255,8 @@ export function Capabilities({
       )}
       {removing !== undefined && (
         <Confirm
-          title={isSkill ? 'Remover skill?' : 'Desconectar servidor?'}
-          description="Esta capacidade deixará de estar disponível nas próximas execuções."
+          title={isSkill ? 'Remove this skill?' : 'Disconnect this server?'}
+          description="This capability stops being available on the next runs."
           busy={busy}
           close={() => setRemoving(undefined)}
           confirm={async () => {
@@ -264,7 +267,7 @@ export function Capabilities({
                     expectedVersion: profile.version,
                     [kind]: items.filter((_, index) => index !== removing),
                   }),
-                'Configuração removida.',
+                'Removed.',
               )
             ) {
               setRemoving(undefined);

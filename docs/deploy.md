@@ -1,16 +1,16 @@
-# Implantação
+# Deployment
 
-O Gateway roda de três formas. A primeira usa o clone do repositório; as outras duas usam a mesma imagem publicada, `ghcr.io/lucasaarch/jian-gateway`, com o banco por sua conta. A migração do banco roda sozinha na subida do processo: não existe passo separado de migração, e uma versão nova aplica o que falta ao iniciar.
+The gateway runs three ways. The first uses a clone of the repository; the other two use the same published image, `ghcr.io/lucasaarch/jian-gateway`, with the database in your hands. Migrations run by themselves when the process starts: there is no separate migration step, and a new version applies what is missing as it comes up.
 
-A imagem é um índice multiarquitetura com `linux/amd64` e `linux/arm64`, construído em executores nativos e com comprovante de origem anexado. Para conferir antes de subir:
+The image is a multi-architecture index with `linux/amd64` and `linux/arm64`, built on native runners with a provenance attestation attached. To check it before running:
 
 ```bash
 gh attestation verify oci://ghcr.io/lucasaarch/jian-gateway:latest --repo lucasaarch/jian
 ```
 
-## Modo 1 — clone e Compose
+## Way 1 — clone and Compose
 
-Sobe o Gateway e o PostgreSQL juntos. É o caminho para quem hospeda em uma máquina só.
+Brings the gateway and PostgreSQL up together. This is the path for a single machine.
 
 ```bash
 git clone https://github.com/lucasaarch/jian.git && cd jian
@@ -18,33 +18,33 @@ make setup
 make up
 ```
 
-`make setup` escreve `.env` com modo `0600`, contendo token administrativo, senha do banco e keyring de criptografia; ele nunca imprime um segredo. `make up` baixa a imagem, espera o banco ficar são e só então sobe o Gateway. `make logs` acompanha o registro, `make ps` mostra o estado e `make down` derruba a pilha sem apagar o volume.
+`make setup` writes `.env` with mode `0600`, holding the host token, the database password and the encryption keyring; it never prints a secret. `make up` pulls the image, waits for the database to be healthy, and only then starts the gateway. `make logs` follows the log, `make ps` shows the state, and `make down` stops the stack without deleting the volume.
 
-O `compose.yaml` publica o Gateway em `127.0.0.1:4310`. Para expor além do localhost, coloque um proxy HTTPS na frente e mude o endereço pelas variáveis `JIAN_BIND_ADDRESS` e `JIAN_BIND_PORT`. A porta do PostgreSQL não é publicada: ele só é alcançado pelo Gateway, pela rede do Compose.
+`compose.yaml` publishes the gateway on `127.0.0.1:4310`. To reach it beyond localhost, put an HTTPS proxy in front and change the address with `JIAN_BIND_ADDRESS` and `JIAN_BIND_PORT`. The PostgreSQL port is not published: only the gateway reaches it, over the Compose network.
 
-`JIAN_VERSION` fixa a versão da imagem; sem ela, o Compose usa `latest`. Para rodar a sua própria construção em vez da imagem publicada, descomente o bloco `build:` em `compose.yaml` e use `docker compose up -d --build`.
+`JIAN_VERSION` pins the image version; without it, Compose uses `latest`. To run your own build instead of the published image, uncomment the `build:` block in `compose.yaml` and use `docker compose up -d --build`.
 
-O `compose.dev.yaml` é outra coisa: sobe só o PostgreSQL, em `127.0.0.1:5432`, para o `pnpm dev` rodar na máquina. Ele tem nome de projeto e volume próprios, então o banco de desenvolvimento e o de produção não compartilham dado algum, mesmo na mesma máquina.
+`compose.dev.yaml` is a different thing: it brings up PostgreSQL alone, on `127.0.0.1:5432`, so `pnpm dev` can run on the machine. It has its own project name and volume, so the development database and the production one share nothing, even on the same host.
 
-## Modo 2 — imagem avulsa
+## Way 2 — the image on its own
 
-Com um PostgreSQL que já é seu:
+With a PostgreSQL you already run:
 
 ```bash
 docker run -d --name jian --restart unless-stopped \
   -p 127.0.0.1:4310:4310 \
-  -e DATABASE_URL='postgres://usuario:senha@banco.interno:5432/jian' \
+  -e DATABASE_URL='postgres://user:password@db.internal:5432/jian' \
   -e JIAN_API_TOKEN="$JIAN_API_TOKEN" \
   -e JIAN_ACTIVE_KEY_ID=v1 \
   -e JIAN_MASTER_KEYS="$JIAN_MASTER_KEYS" \
   ghcr.io/lucasaarch/jian-gateway:latest
 ```
 
-A imagem já traz uma verificação de saúde batendo em `/health`; `docker ps` mostra o resultado. O processo roda como o usuário `node`, sem privilégio, e não escreve nada fora do banco.
+The image carries a health check against `/health`; `docker ps` shows its result. The process runs as the unprivileged `node` user and writes nothing outside the database.
 
-## Modo 3 — Kubernetes
+## Way 3 — Kubernetes
 
-A mesma imagem, com os segredos em um `Secret` e o serviço interno ao cluster. Mantenha `replicas: 1` enquanto houver migração pendente: a migração roda na subida e réplicas simultâneas competem por ela. Depois de aplicada, mais réplicas são seguras.
+The same image, with the secrets in a `Secret` and the service internal to the cluster. Keep `replicas: 1` while a migration is pending: it runs at startup, and simultaneous replicas race for it. Once applied, more replicas are safe.
 
 ```yaml
 apiVersion: v1
@@ -103,48 +103,46 @@ spec:
       targetPort: 4310
 ```
 
-Fixe uma versão exata na imagem; `latest` faz um reinício qualquer trocar de código sem aviso. Exponha por Ingress com TLS, nunca pelo `Service` direto.
+Pin an exact version on the image; with `latest`, any restart changes the code without warning. Expose it through an Ingress with TLS, never the `Service` directly.
 
-`JIAN_ROLE=all` roda API e worker no mesmo processo. Para separá-los, use dois Deployments, `api` e `worker`, compartilhando o mesmo banco e o mesmo keyring; só o `api` recebe o `Service`.
+`JIAN_ROLE=all` runs the API and the worker in one process. To split them, use two Deployments, `api` and `worker`, sharing the same database and the same keyring; only `api` gets the `Service`.
 
-## Variáveis de ambiente
+## Environment variables
 
-| Variável | Obrigatória | Padrão | O que faz |
+| Variable | Required | Default | What it does |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | sim | — | Conexão PostgreSQL. O processo migra o esquema ao subir. |
-| `JIAN_API_TOKEN` | sim | — | Token administrativo, mínimo de 32 caracteres. Também assina os cookies do painel. |
-| `JIAN_ACTIVE_KEY_ID` | sim | — | Identificador da chave do keyring usada em gravações novas. |
-| `JIAN_MASTER_KEYS` | sim | — | JSON de identificador para chave de 32 bytes em Base64. Mantenha fora do backup do banco. |
-| `HOST` | não | `0.0.0.0` na imagem | Endereço de escuta dentro do contêiner. |
-| `PORT` | não | `4310` | Porta de escuta; a verificação de saúde a respeita. |
-| `JIAN_ROLE` | não | `all` | `all`, `api` ou `worker`. |
-| `JIAN_ALLOW_PRIVATE_ORIGINS` | não | vazio | Origens privadas exatas liberadas para saída, por exemplo `http://127.0.0.1:11434`. |
-| `POSTGRES_PASSWORD` | só no Compose | — | Senha do PostgreSQL do `compose.yaml`; também compõe o `DATABASE_URL` do serviço. |
-| `JIAN_VERSION` | só no Compose | `latest` | Etiqueta da imagem usada pelo `compose.yaml`. |
-| `JIAN_BIND_ADDRESS` | só no Compose | `127.0.0.1` | Endereço do host onde a porta do Gateway é publicada. |
-| `JIAN_BIND_PORT` | só no Compose | `4310` | Porta do host onde o Gateway é publicado. |
+| `DATABASE_URL` | yes | — | The PostgreSQL connection. The process migrates the schema at startup. |
+| `JIAN_API_TOKEN` | yes | — | The host token, at least 32 characters. It also signs the panel cookies. |
+| `JIAN_ACTIVE_KEY_ID` | yes | — | The id of the keyring key used for new writes. |
+| `JIAN_MASTER_KEYS` | yes | — | JSON mapping an id to a 32-byte key in Base64. Keep it out of the database backup. |
+| `HOST` | no | `0.0.0.0` in the image | The listening address inside the container. |
+| `PORT` | no | `4310` | The listening port; the health check follows it. |
+| `JIAN_ROLE` | no | `all` | `all`, `api` or `worker`. |
+| `JIAN_ALLOW_PRIVATE_ORIGINS` | no | empty | Exact private origins allowed for outbound calls, for example `http://127.0.0.1:11434`. |
+| `POSTGRES_PASSWORD` | Compose only | — | The PostgreSQL password in `compose.yaml`; it also builds the service's `DATABASE_URL`. |
+| `JIAN_VERSION` | Compose only | `latest` | The image tag `compose.yaml` uses. |
+| `JIAN_BIND_ADDRESS` | Compose only | `127.0.0.1` | The host address the gateway port is published on. |
+| `JIAN_BIND_PORT` | Compose only | `4310` | The host port the gateway is published on. |
 
-As chaves de provider, MCP e canal não ficam no ambiente: são digitadas no painel e guardadas cifradas com o keyring. Veja [segurança](security.md).
+Provider, MCP and channel keys do not live in the environment: they are typed in the panel and stored encrypted with the keyring. See [security](security.md).
 
-## Etiquetas publicadas
+## Published tags
 
-| Etiqueta | Quando é escrita |
+| Tag | When it is written |
 | --- | --- |
-| `edge` | Todo push na `main`. É o estado da branch, não uma versão. |
-| `a1b2c3d` | Todo push na `main`, com o commit curto. Serve para prender uma build específica. |
-| `1.2.3` | Tag `v1.2.3`. É a única imutável. |
-| `1.2` | Tag `v1.2.3`; anda para a correção mais recente da série. |
-| `latest` | Tag `v1.2.3`; anda para a versão publicada mais recente. |
+| `1.2.3` | The tag `v1.2.3`. The only immutable one. |
+| `1.2` | The tag `v1.2.3`; moves to the latest fix in that series. |
+| `latest` | The tag `v1.2.3`; moves to the most recent published version. |
 
-## Atualizar e voltar atrás
+## Updating and rolling back
 
-Atualizar é trocar a etiqueta e subir de novo. A migração roda na subida.
+Updating means changing the tag and starting again. The migration runs at startup.
 
 ```bash
-# Compose: fixe a versão em .env e reconstrua o contêiner
+# Compose: pin the version in .env and recreate the container
 echo 'JIAN_VERSION=1.3.0' >> .env && make up
 
-# Contêiner avulso
+# Standalone container
 docker pull ghcr.io/lucasaarch/jian-gateway:1.3.0
 docker rm -f jian && docker run -d --name jian ... ghcr.io/lucasaarch/jian-gateway:1.3.0
 
@@ -152,32 +150,32 @@ docker rm -f jian && docker run -d --name jian ... ghcr.io/lucasaarch/jian-gatew
 kubectl set image deployment/jian gateway=ghcr.io/lucasaarch/jian-gateway:1.3.0
 ```
 
-Antes de atualizar, faça um dump: a migração altera o esquema e não tem volta automática.
+Take a dump before updating: a migration changes the schema and does not undo itself.
 
 ```bash
 docker compose exec postgres pg_dump -U jian -Fc jian > jian-$(date +%F).dump
 ```
 
-Voltar atrás é apontar para a versão anterior — `make up` com outro `JIAN_VERSION`, ou `kubectl rollout undo deployment/jian`. Isso reverte o código, **não** o esquema: uma migração já aplicada continua no banco. Se a versão anterior não aceitar o esquema novo, restaure o dump:
+Rolling back means pointing at the previous version — `make up` with another `JIAN_VERSION`, or `kubectl rollout undo deployment/jian`. That reverts the code, **not** the schema: a migration already applied stays in the database. If the older version refuses the newer schema, restore the dump:
 
 ```bash
 docker compose exec -T postgres pg_restore -U jian -d jian --clean --if-exists < jian-2026-09-22.dump
 ```
 
-Migrações publicadas são imutáveis; uma correção vem como versão seguinte, nunca como alteração da anterior.
+Published migrations are immutable; a fix arrives as the next version, never as a change to the previous one.
 
-## Onde ficam os dados
+## Where the data lives
 
-Tudo que persiste está no PostgreSQL: perfis, sessões, histórico, memórias, runs, a fila do pg-boss e o cofre de credenciais. O contêiner do Gateway não guarda estado — derrubá-lo e recriá-lo não perde nada.
+Everything persistent is in PostgreSQL: profiles, sessions, history, memories, runs, the pg-boss queue and the credential vault. The gateway container holds no state — destroying and recreating it loses nothing.
 
-No Compose, o banco fica no volume nomeado `jian_postgres_data`; o banco de desenvolvimento fica em `jian-dev_postgres_data`. `make down` preserva o volume, `docker compose down -v` o apaga. `make db-reset` apaga o de desenvolvimento de propósito.
+Under Compose the database lives in the named volume `jian_postgres_data`; the development one lives in `jian-dev_postgres_data`. `make down` keeps the volume, `docker compose down -v` deletes it. `make db-reset` deletes the development one on purpose.
 
-O keyring `JIAN_MASTER_KEYS` fica fora do banco, no `.env` ou no gerenciador de segredos. Sem ele, um backup do banco é inútil: os segredos do cofre não abrem. Guarde-o separado, e preserve as entradas antigas até todo segredo ter sido reenviado com a chave nova.
+The `JIAN_MASTER_KEYS` keyring lives outside the database, in `.env` or in a secret manager. Without it a database backup is useless: the vault will not open. Keep it apart, and keep the older entries until every secret has been re-entered under the new key.
 
-## Publicação
+## Publishing
 
-O workflow `Image` constrói a imagem em dois executores nativos, `ubuntu-24.04` e `ubuntu-24.04-arm`, cada um publicando por digest, e um trabalho final une os dois em um índice multiarquitetura. Não há emulação.
+The `Image` workflow builds on two native runners, `ubuntu-24.04` and `ubuntu-24.04-arm`, each pushing by digest, and a final job joins them into a multi-architecture index. Nothing is emulated. It runs on a `v*.*.*` tag and nowhere else.
 
-O Release Please mantém um pull request de versão aberto, acumulando os commits convencionais desde a última publicação. Fazer o merge dele escreve a versão no `package.json`, o `CHANGELOG.md` e a tag `v1.2.3`; a tag é o que dispara a publicação da imagem.
+Release Please keeps a release pull request open, gathering the conventional commits since the last publication. Merging it writes the version into `package.json`, the `CHANGELOG.md` and the tag `v1.2.3`; that tag is what publishes the image.
 
-Para isso funcionar, o dono precisa ligar uma permissão que vem desligada: em **Settings → Actions → General → Workflow permissions**, marque **Allow GitHub Actions to create and approve pull requests**. Sem ela, o workflow falha ao abrir o pull request de versão.
+For that to work the owner has to turn on a permission that ships off: under **Settings → Actions → General → Workflow permissions**, tick **Allow GitHub Actions to create and approve pull requests**. Without it the workflow fails when opening the release pull request.

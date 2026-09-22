@@ -35,7 +35,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   if (!profiles) {
     return (
       <main className="boot" aria-busy="true">
-        <LoaderCircle size={22} className="spin" aria-label="Verificando a sessão" />
+        <LoaderCircle size={22} className="spin" aria-label="Checking the session" />
       </main>
     );
   }
@@ -105,13 +105,13 @@ function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="app-shell">
       <a href="#main-content" className="skip-link">
-        Pular para o conteúdo
+        Skip to content
       </a>
       {mobile && (
         <button
           className="sidebar-backdrop"
           type="button"
-          aria-label="Fechar navegação"
+          aria-label="Close navigation"
           onClick={() => setMobile(false)}
         />
       )}
@@ -131,15 +131,15 @@ function Shell({ children }: { children: ReactNode }) {
             children
           ) : !profiles.length ? (
             <Empty
-              title="Dê vida ao seu primeiro agente"
+              title="Bring your first agent to life"
               action={
                 <Button onClick={() => setCreating(true)}>
                   <Plus size={16} />
-                  Criar perfil
+                  Create a profile
                 </Button>
               }
             >
-              Comece com um nome e instruções. Depois conecte seus providers.
+              Start with a name and instructions. Connect your providers next.
             </Empty>
           ) : profile && data ? (
             <div key={profile.id} className="page-enter">
@@ -150,7 +150,7 @@ function Shell({ children }: { children: ReactNode }) {
               {loading ? (
                 <>
                   <LoaderCircle className="spin" size={24} />
-                  Carregando seu espaço…
+                  Loading your workspace…
                 </>
               ) : (
                 <Button variant="secondary" onClick={() => void refresh()}>

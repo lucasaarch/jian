@@ -37,8 +37,8 @@ export function Sessions({
   return (
     <>
       <SectionHeading
-        title="Sessões"
-        description="Histórico das conversas, organizado por canal."
+        title="Sessions"
+        description="The history of its conversations, grouped by channel."
       />
       {data.sessions.length ? (
         <>
@@ -46,8 +46,8 @@ export function Sessions({
             <div className="search-field">
               <Search size={16} />
               <input
-                aria-label="Buscar sessões"
-                placeholder="Buscar por título ou ID…"
+                aria-label="Search sessions"
+                placeholder="Search by title or id…"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -57,14 +57,14 @@ export function Sessions({
               value={channel}
               onValueChange={setChannel}
               options={[
-                { value: '', label: 'Todos os canais' },
+                { value: '', label: 'Every channel' },
                 ...channels.map((value) => ({ value, label: channelNames[value] ?? value })),
               ]}
             />
           </div>
           {filtered.length ? (
             <div className="sessions-layout">
-              <aside className="session-list" aria-label="Sessões por canal">
+              <aside className="session-list" aria-label="Sessions by channel">
                 {channels.map((kind) => {
                   const group = filtered.filter((session) => session.channel === kind);
                   return (
@@ -86,7 +86,7 @@ export function Sessions({
                             >
                               <MessageSquare size={16} />
                               <span>
-                                <strong>{session.title || 'Sem título'}</strong>
+                                <strong>{session.title || 'Untitled'}</strong>
                                 <small>{date(session.createdAt)}</small>
                                 <code>{session.id.slice(0, 8)}</code>
                               </span>
@@ -112,12 +112,12 @@ export function Sessions({
               )}
             </div>
           ) : (
-            <Empty title="Nenhuma sessão encontrada">Tente outro título, ID ou canal.</Empty>
+            <Empty title="No session found">Try another title, id or channel.</Empty>
           )}
         </>
       ) : (
-        <Empty title="Nenhuma sessão ainda">
-          As conversas iniciadas pelos canais ficam registradas aqui.
+        <Empty title="No sessions yet">
+          Conversations started through a channel are recorded here.
         </Empty>
       )}
     </>

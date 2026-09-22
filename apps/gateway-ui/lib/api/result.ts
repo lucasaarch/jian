@@ -9,38 +9,38 @@ type Detail = { error?: string; issues?: Array<{ path: string; message: string }
 /** Conflicts the owner can act on. Anything else falls back to the generic 409 sentence. */
 const conflicts: Record<string, string> = {
   'Choose a default model before starting a run':
-    'Escolha um modelo padrão em Modelos padrão antes de conversar.',
+    'Choose a model under Model defaults before starting a conversation.',
   'This model does not accept the selected reasoning effort':
-    'Este modelo não aceita o nível de esforço escolhido.',
+    'This model does not accept the selected reasoning effort.',
   'Reasoning effort is not catalogued for this model':
-    'O nível de esforço deste modelo não está catalogado no gateway.',
+    'The reasoning levels of this model are not catalogued on this gateway.',
 };
 
 function message(status: number, detail: Detail | undefined): string {
   if (status === 401) {
-    return 'Token inválido ou expirado. Entre novamente.';
+    return 'The token is invalid or expired. Sign in again.';
   }
 
   if (status === 403) {
-    return 'Esta ação exige o token de administrador.';
+    return 'This action needs the host token.';
   }
 
   if (status === 409) {
     return (
       conflicts[detail?.error ?? ''] ??
-      'O estado mudou ou a sessão está ocupada. Atualize e tente novamente.'
+      'Something changed, or the session is busy. Refresh and try again.'
     );
   }
 
   if (status === 429) {
-    return 'Limite de solicitações atingido. Aguarde um minuto antes de tentar novamente.';
+    return 'Rate limit reached. Wait a minute before trying again.';
   }
 
   if (detail?.issues?.length) {
     return `Confira os campos: ${detail.issues.map((issue) => issue.path).join(', ')}.`;
   }
 
-  return detail?.error ?? `Não foi possível concluir a solicitação (${status}).`;
+  return detail?.error ?? `The request could not be completed (${status}).`;
 }
 
 export async function result<T>(

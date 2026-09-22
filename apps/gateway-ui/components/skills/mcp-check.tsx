@@ -23,7 +23,7 @@ export function useMcpCheck(profile: Profile, name: string, api: GatewayApi) {
       try {
         setStatus(await api.checkMcpServer(profile.id, name));
       } catch (failure) {
-        setError(failure instanceof Error ? failure.message : 'Não foi possível testar.');
+        setError(failure instanceof Error ? failure.message : 'The check could not run.');
       } finally {
         setBusy(false);
       }
@@ -51,7 +51,7 @@ export function McpResult({ status, error }: { status?: McpStatus; error: string
     return (
       <p className="mcp-state bad" role="alert">
         <TriangleAlert size={14} />
-        <span>Não conectou — {status.error}</span>
+        <span>Did not connect — {status.error}</span>
       </p>
     );
   }
@@ -64,8 +64,7 @@ export function McpResult({ status, error }: { status?: McpStatus; error: string
       <p className="mcp-state good">
         <CheckCircle2 size={14} />
         <span>
-          Conectado — {status.tools.length}{' '}
-          {status.tools.length === 1 ? 'ferramenta' : 'ferramentas'}
+          Connected — {status.tools.length} {status.tools.length === 1 ? 'tool' : 'tools'}
         </span>
       </p>
       {status.tools.length > 0 && (
@@ -85,7 +84,7 @@ export function McpResult({ status, error }: { status?: McpStatus; error: string
               onClick={() => setOpen(!open)}
             >
               <ChevronDown size={14} className={open ? 'rotate-180' : ''} />
-              {open ? 'Ver menos' : `Ver as ${rest} restantes`}
+              {open ? 'Show fewer' : `See the other ${rest}`}
             </button>
           )}
         </>
@@ -108,8 +107,8 @@ export function McpCheckButton({
     <button
       type="button"
       className="icon-button"
-      aria-label={`Testar conexão com ${name}`}
-      title="Testar conexão"
+      aria-label={`Test the connection to ${name}`}
+      title="Test the connection"
       disabled={busy}
       onClick={onCheck}
     >

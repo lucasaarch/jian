@@ -22,7 +22,7 @@ export function ThemePicker() {
 
   return (
     <fieldset className="theme-picker">
-      <legend className="sr-only">Tema do Esquadrão 13</legend>
+      <legend className="sr-only">Squad 13 theme</legend>
       <div className="theme-grid">
         {themes.map((theme) => (
           <label
@@ -44,7 +44,9 @@ export function ThemePicker() {
                   localStorage.setItem(themeKey, theme.id);
                   toast.success(`Tema ${theme.name} aplicado.`, { id: 'theme' });
                 } catch {
-                  toast.error('Tema aplicado nesta sessão. O navegador não permitiu salvar.');
+                  toast.error(
+                    'Theme applied for this session. The browser would not let it be saved.',
+                  );
                 }
               }}
             />

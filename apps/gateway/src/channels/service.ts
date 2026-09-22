@@ -149,8 +149,37 @@ export class Channels {
     }
   }
 
-  /** One channel of each type per profile: connecting is the whole configuration. */
-  async connect(profileId: string, input: unknown) {
+  /** Runs after the channel is stored, so the first update Telegram pushes finds it. */
+  private async register(
+    record: ChannelRecord,
+    credential: string,
+    origin: string,
+    secret: string,
+  ) {
+    const adapter = this.registry.get(record.type);
+
+    if (!adapter.register) {
+      return undefined;
+    }
+
+    try {
+      return await adapter.register(
+        credential,
+        { channelId: record.id, origin, secret },
+        this.fetcher,
+        this.abort.signal,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * One channel of each type per profile: connecting is the whole configuration. `origin` is
+   * the public address the owner reached the gateway through; without it the protocol is not
+   * told where to deliver, and the owner registers the webhook by hand.
+   */
+  async connect(profileId: string, input: unknown, origin?: string) {
     const { botToken, ...data } = channelInputSchema.parse(input);
 
     await this.services.profiles.profile(profileId);
@@ -197,7 +226,14 @@ export class Channels {
       });
     });
 
-    return { ...this.metadata(record), webhookToken: issued.token };
+    const webhookRegistered =
+      botToken && origin ? await this.register(record, botToken, origin, issued.token) : undefined;
+
+    return {
+      ...this.metadata(record),
+      webhookToken: issued.token,
+      ...(webhookRegistered === undefined ? {} : { webhookRegistered }),
+    };
   }
 
   async list(profileId: string) {

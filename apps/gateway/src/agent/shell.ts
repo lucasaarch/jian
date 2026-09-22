@@ -78,7 +78,7 @@ export function shellTools(): ToolSet {
         const info = await stat(file);
 
         if (!info.isFile()) {
-          throw new Error('Esse caminho não é um arquivo');
+          throw new Error('That path is not a file');
         }
 
         const content = await readFile(file, 'utf8');

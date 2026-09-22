@@ -1,56 +1,60 @@
-# Segurança e operação
+# Security and operation
 
-## Fronteira de confiança
+## Trust boundary
 
-Uma instalação pertence a um dono confiável. `JIAN_API_TOKEN` é a única credencial da API e abre a instalação inteira: mantenha-o no host e só o entregue a aparelhos em que você confia. Não há chaves de cliente com permissão reduzida — quem tem o token pode tudo. Todas as sessões de um perfil compartilham o mesmo acesso aos dados e ferramentas daquele perfil. Não conecte públicos com permissões diferentes ao mesmo perfil.
+An installation belongs to one trusted owner. `JIAN_API_TOKEN` is the only API credential and it opens the whole installation: keep it on the host and hand it only to devices you trust. There are no reduced-permission client keys — whoever holds the token can do everything. Every session of a profile shares the same access to that profile's data and tools. Do not connect audiences with different permissions to the same profile.
 
-Cada operação do contrato é `admin`, `public` ou `webhook`. Só `/health` e a troca do token por um cookie de painel respondem sem autenticação; um webhook autentica o token da própria ligação de canal, que é aleatório, tem 256 bits de entropia e é persistido como hash SHA-256. Todo o resto exige o token do host ou o cookie do painel assinado com ele.
+Each operation in the contract is `admin`, `public` or `webhook`. Only `/health` and the exchange of the token for a panel cookie answer without authentication; a webhook authenticates the token of its own channel binding, which is random, carries 256 bits of entropy and is stored as a SHA-256 hash. Everything else needs the host token, or the panel cookie signed with it.
 
-Chaves de provider, tokens de MCP e de canal são digitados onde a coisa é configurada, cifrados por perfil e nunca devolvidos em leitura alguma.
+Provider keys, MCP tokens and channel tokens are typed where the thing itself is configured, encrypted, and never returned by any read.
 
-Perfis conversam entre si trocando texto, e só texto: a descoberta mostra nome e o resumo escrito pelo dono, a resposta é a saída do run de quem foi chamado, e nenhuma ferramenta lê memória, credencial, sessão ou histórico de outro perfil. O texto que chega de outro agente é dado não confiável como qualquer entrada — o nome de quem chama é endereçamento, não autoridade. A cadeia de chamadas é limitada por um orçamento de profundidade que viaja com ela e por não chamar duas vezes o mesmo perfil na mesma conversa; sem isso, agentes se respondem em laço e cada volta gasta chave de provider.
+Profiles speak to each other by exchanging text, and only text: discovery shows a name and the summary the owner wrote, the answer is the output of the callee's run, and no tool reads another profile's memory, credential, session or history. Text arriving from another agent is untrusted data like any other input — the caller's name is addressing, not authority. A chain of calls is bounded by a depth budget that travels with it and by never calling the same profile twice in one conversation; without that, agents answer each other in a loop and every round spends a provider key.
 
-## Criptografia e rotação
+Vendor credentials belong to the installation rather than to a profile, and live in a vault of their own. Deleting a profile takes its own secrets with it and leaves the shared credentials alone.
 
-`JIAN_MASTER_KEYS` é um objeto JSON de identificadores para chaves de 32 bytes em Base64. `JIAN_ACTIVE_KEY_ID` escolhe a chave usada para novas gravações. O setup cria um keyring em `.env` com permissão `0600`; na hospedagem, injete-o por um gerenciador de segredos. Não coloque esse keyring no banco, no Git ou no mesmo backup do banco.
+## Encryption and rotation
 
-AES-256-GCM usa nonce aleatório por gravação. Os dados autenticados vinculam cada ciphertext ao perfil e ao dono do segredo — `provider:<id>`, `mcp:<nome>`, `channel:<id>` —, impedindo a troca de envelopes entre registros ou entre perfis. Essa proteção cobre vazamento isolado do banco; um processo worker comprometido também pode acessar as chaves em memória.
+`JIAN_MASTER_KEYS` is a JSON object mapping identifiers to 32-byte keys in Base64. `JIAN_ACTIVE_KEY_ID` chooses the key used for new writes. Setup creates a keyring in `.env` with mode `0600`; when hosting, inject it through a secret manager. Do not put that keyring in the database, in Git, or in the same backup as the database.
 
-Para rotacionar:
+AES-256-GCM uses a random nonce per write. The associated data binds each ciphertext to its owner — `provider:<id>`, `mcp:<name>`, `channel:<id>` — so an envelope moved between records or between profiles fails to decrypt. That protects against a leak of the database alone; a compromised worker process can also reach the keys in memory.
 
-1. Gere outra chave aleatória de 32 bytes e adicione-a ao keyring com outro ID.
-2. Distribua o keyring completo a todas as APIs/workers e altere o ID ativo.
-3. Reenvie cada segredo pela tela que o configura: um provider cifra a chave nova com o ID ativo, e o mesmo vale para o token de um servidor MCP ou de um canal.
-4. Só remova a chave antiga do keyring depois disso. Backups antigos continuam dependendo dela.
+To rotate:
 
-Reenviar a chave no cofre não troca a chave no provider. Para trocar a chave externa, digite a nova na tela de Providers: o gateway revoga o provider anterior e descarta o segredo dele. Runs enfileirados guardam a configuração antiga; cancele-os se a troca for urgente.
+1. Generate another random 32-byte key and add it to the keyring under a new id.
+2. Distribute the whole keyring to every API and worker, then change the active id.
+3. Re-enter each secret on the screen that configures it: a provider encrypts the new key under the active id, and the same holds for an MCP server token or a channel token.
+4. Only then remove the old key from the keyring. Older backups still depend on it.
 
-O token administrativo fica no ambiente, separado do banco. Troque-o no host e reinicie API/workers; a troca também invalida os cookies de sessão do painel, que são assinados com ele. Nunca envie segredos em parâmetros de URL; use HTTPS e armazene tokens do cliente no cofre do sistema operacional.
+Re-entering a key in the vault does not change the key at the provider. To change the external key, type the new one on the Providers screen: the gateway revokes the previous provider and discards its secret. Queued runs carry the older configuration; cancel them if the change is urgent.
 
-## Rede e limites
+The host token lives in the environment, apart from the database. Change it on the host and restart the API and the workers; changing it also invalidates the panel session cookies, which are signed with it. Never send secrets in URL parameters; use HTTPS and keep client tokens in the operating system's own vault.
 
-Providers e MCPs usam o mesmo transporte de saída. Ele exige HTTPS público, valida e fixa a resolução DNS na conexão, bloqueia redirecionamentos, credenciais embutidas e destinos privados. `JIAN_ALLOW_PRIVATE_ORIGINS` permite origens exatas para serviços internos administrados pelo dono, por exemplo `http://127.0.0.1:11434`. Endereços de metadata e link-local continuam proibidos.
+## Network and limits
 
-A API limita o corpo a 256 KiB, aplica rate limit por endereço de conexão e limita streams. Ela não confia automaticamente em `X-Forwarded-For`; atrás de um proxy todos os clientes podem compartilhar o limite. Configure limites adicionais no proxy conforme a implantação. Instâncias distintas têm contadores HTTP próprios; os limites de runs e as reservas de recursos ficam no banco.
+Providers and MCP servers share the same outbound transport. It requires public HTTPS, validates and pins DNS resolution at connect time, and blocks redirects, embedded credentials and private destinations. `JIAN_ALLOW_PRIVATE_ORIGINS` allows exact origins for internal services the owner runs, for example `http://127.0.0.1:11434`. Metadata and link-local addresses stay forbidden.
 
-Inputs desconhecidos são rejeitados nos contratos administrativos. Logs não incluem corpos, cabeçalhos de autenticação ou exceções de providers. Memórias, mensagens e artefatos são dados do usuário e permanecem em texto no banco: criptografia de credenciais não significa criptografia integral das conversas. Restrinja acesso ao banco e aos backups.
+The API caps a body at 256 KiB, rate limits by connecting address and bounds streams. It does not trust `X-Forwarded-For` on its own; behind a proxy every client may share one limit. Configure further limits at the proxy to match the deployment. Separate instances keep their own HTTP counters; run limits and resource leases live in the database.
 
-Skills e resultados de ferramentas são instruções/dados não confiáveis. As listas de ferramentas permitidas reduzem capacidades; elas não eliminam prompt injection. Habilite apenas as ferramentas que o perfil pode realmente exercer e use credenciais externas de menor privilégio.
+Unknown inputs are refused by the admin contracts. Logs carry no bodies, no authentication headers and no provider exceptions. Memories, messages and artifacts are user data and stay as text in the database: encrypting credentials is not encrypting the conversations. Restrict access to the database and to its backups.
 
-## Falhas e efeitos externos
+Skills and tool results are untrusted instructions and data. Choosing which MCP tools an agent may load reduces capability; it does not remove prompt injection. Give a profile only the tools it can really exercise, and use external credentials with the least privilege that works.
 
-Uma lease expirada interrompe o run; não reinicia automaticamente ferramentas. A continuação exige reconciliação explícita, cria outro run e preserva os checkpoints anteriores. Ela não oferece exatamente uma execução de efeitos externos.
+A profile can also be given the machine: reading files, writing files and running commands, with the privileges of whoever started the gateway. There is no sandbox around it, it is off by default, and it reaches as far as an approved contact on a chat channel can ask the agent to go. Turn it on only for a profile whose channels you control.
 
-Reservas de recursos coordenam sessões do mesmo perfil e emitem um número de fence crescente. Um recurso externo só está protegido contra um titular antigo se também validar esse número; a reserva não intercepta automaticamente todos os MCPs.
+## Failures and outside effects
 
-Uma entrega Telegram sem confirmação recebe estado `unknown` e não é reenviada automaticamente. Envios abandonados são marcados incertos após dez minutos. Verifique o destino antes de reenviar manualmente. Cancelar um run não desfaz ações já executadas.
+An expired lease interrupts a run; it does not restart tools on its own. Continuing needs explicit reconciliation, creates another run and preserves the earlier checkpoints. It does not offer exactly-once execution of outside effects.
 
-## Reportar vulnerabilidades
+Resource leases coordinate sessions of the same profile and hand out an increasing fence number. An external resource is protected from a stale holder only if it validates that number too; a lease does not intercept every MCP call on its own.
 
-Não publique credenciais ou provas com dados privados em issues. Antes de disponibilizar o projeto publicamente, configure um canal privado de contato e o recurso de reporte privado do repositório. Use dados sintéticos para reproduções.
+A delivery with no confirmation is recorded as `unknown` and is never resent on its own. An abandoned send is marked uncertain after ten minutes. Check the destination before resending by hand. Cancelling a run does not undo what already happened.
 
-## Dispositivos WhatsApp
+## Reporting a vulnerability
 
-Parear por QR concede acesso à conta. Conexão, estado e QR exigem o token do host; o QR é criptografado no banco, expira e usa `Cache-Control: no-store`. Backups da sessão são criptografados e isolados por perfil/canal. Callbacks de gerações ou posses antigas não podem regravar credenciais após desconexão/revogação.
+Do not publish credentials, or proofs carrying private data, in an issue. Before making the project public, set up a private contact channel and the repository's private reporting feature. Use synthetic data in a reproduction.
 
-A sessão em texto claro existe somente na memória do worker; nada é escrito em disco. O worker abre um WebSocket direto para o WhatsApp: aplique controles de saída também a ele. A integração não é uma API oficial da Meta.
+## WhatsApp devices
+
+Pairing by QR grants access to the account. Connecting, reading the state and reading the QR all need the host token; the QR is encrypted in the database, expires, and is served with `Cache-Control: no-store`. Session backups are encrypted and isolated per profile and channel. A callback from an older generation or ownership cannot rewrite credentials after a disconnect or a revocation.
+
+The session in the clear exists only in the worker's memory; nothing is written to disk. The worker opens a WebSocket straight to WhatsApp: apply your outbound controls to it as well. The integration is not an official Meta API.
