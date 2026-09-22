@@ -66,7 +66,9 @@ export function Select({
     </>
   );
   const changeOpen = (next: boolean) => {
-    // Keep popups inside a native dialog or the mobile sidebar's focus boundary.
+    // Inside a native dialog or the mobile sidebar, so focus and Escape stay in their
+    // boundary — and positioned `fixed`, because an absolute popup in a box that scrolls
+    // grows that box and reflows the form underneath it.
     if (next) setContainer(trigger.current?.closest<HTMLElement>('dialog, aside') ?? null);
     setOpen(next);
   };
@@ -95,7 +97,12 @@ export function Select({
       >
         <Combobox.Trigger {...triggerProps}>{content}</Combobox.Trigger>
         <Combobox.Portal container={container ?? undefined}>
-          <Combobox.Positioner className="select-positioner" sideOffset={6} align="start">
+          <Combobox.Positioner
+            className="select-positioner"
+            sideOffset={6}
+            align="start"
+            positionMethod="fixed"
+          >
             <Combobox.Popup className="select-popup" aria-label={aria['aria-label'] ?? 'Options'}>
               <div className="select-search">
                 <Search size={15} />
@@ -137,6 +144,7 @@ export function Select({
           sideOffset={6}
           align="start"
           alignItemWithTrigger={false}
+          positionMethod="fixed"
         >
           <BaseSelect.Popup className="select-popup">
             <BaseSelect.List className="select-list">
