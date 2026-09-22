@@ -519,6 +519,7 @@ export class Channels {
           createdAt: now,
           updatedAt: now,
           remoteMessageIds: [],
+          saidCount: 0,
           connectionGeneration,
         });
       });
@@ -549,6 +550,7 @@ export class Channels {
       createdAt: now,
       updatedAt: now,
       remoteMessageIds: [],
+      saidCount: 0,
       connectionGeneration,
     });
   }
@@ -610,12 +612,20 @@ export class Channels {
       }
 
       let text = delivery.notice ?? '';
+      let commentary: string[] = [];
 
       if (delivery.runId) {
         const run = await this.services.runs.run(delivery.profileId, delivery.runId);
 
+        commentary = run.commentary ?? [];
+
         if (run.status === 'queued' || run.status === 'running') {
-          await this.showProgress(delivery);
+          // Anything the agent has said on its way to a tool goes out now. The answer follows
+          // when the run ends, so the chat moves with the work instead of after it.
+          if (!(await this.saySoFar(delivery, commentary))) {
+            await this.showProgress(delivery);
+          }
+
           continue;
         }
 
@@ -642,6 +652,10 @@ export class Channels {
         continue;
       }
 
+      // A run that finished between two ticks leaves its last lines unsent; they belong in
+      // front of the answer, not lost.
+      await this.saySoFar(delivery, commentary);
+
       if (!(await this.claimDelivery(delivery))) {
         continue;
       }
@@ -665,9 +679,44 @@ export class Channels {
   }
 
   /**
-   * While a run is live the chat shows only that the agent is answering. The answer itself is
-   * never shown half-written: it arrives when it is finished, as the messages it was written
-   * in. Nothing here is history, so a tick that fails is simply skipped.
+   * Sends what the run has said since the last tick, and reports whether anything went. The
+   * count is raised before the send and under the profile lock: two workers, or two ticks,
+   * would otherwise both read the same backlog and the person would see it twice. The cost of
+   * that order is a message lost to a failing adapter, which is the right way round — a
+   * duplicate is confusing and this is commentary, not the answer.
+   */
+  private async saySoFar(delivery: DeliveryRecord, commentary: string[]): Promise<boolean> {
+    if (commentary.length <= delivery.saidCount) {
+      return false;
+    }
+
+    const claimed = await this.services.store.transaction(delivery.profileId, async (tx) => {
+      const current = await findDelivery(tx, delivery.id);
+
+      if (current?.status !== 'pending' || current.saidCount >= commentary.length) {
+        return [];
+      }
+
+      await updateDelivery(tx, {
+        ...current,
+        saidCount: commentary.length,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return commentary.slice(current.saidCount);
+    });
+
+    for (const text of claimed) {
+      await this.deliver(delivery, text);
+    }
+
+    return claimed.length > 0;
+  }
+
+  /**
+   * While a run is live and silent the chat shows only that the agent is answering. The answer
+   * itself is never shown half-written: it arrives when it is finished, as the messages it was
+   * written in. Nothing here is history, so a tick that fails is simply skipped.
    */
   private async showProgress(delivery: DeliveryRecord): Promise<void> {
     const channel = await findChannel(this.services.store.db, delivery.channelId);

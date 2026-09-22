@@ -96,6 +96,12 @@ export const runRecordSchema = z.strictObject({
   // Present when a group message started this run; it carries the room's spent budget.
   group: groupTurnSchema.optional(),
   progress: runProgressSchema.optional(),
+  /**
+   * What the agent said before the answer, one entry per step that spoke on its way to using a
+   * tool. A chat channel sends each as it appears, so the conversation moves while the work
+   * happens instead of arriving all at once at the end. The final answer is not in here.
+   */
+  commentary: z.array(z.string().max(4000)).max(20).optional(),
 });
 
 /**

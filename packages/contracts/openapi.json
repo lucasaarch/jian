@@ -3624,6 +3624,14 @@
                         "updatedAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "commentary": {
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 4000
+                      }
                     }
                   },
                   "required": [
@@ -5837,6 +5845,12 @@
                           ]
                         }
                       },
+                      "saidCount": {
+                        "default": 0,
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
                       "notice": {
                         "description": "Gateway-authored text sent without a run, such as the approval notice.",
                         "type": "string",
@@ -5851,7 +5865,8 @@
                       "status",
                       "createdAt",
                       "updatedAt",
-                      "remoteMessageIds"
+                      "remoteMessageIds",
+                      "saidCount"
                     ],
                     "additionalProperties": false
                   }
@@ -17673,6 +17688,14 @@
                         "updatedAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "commentary": {
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 4000
+                      }
                     }
                   },
                   "required": [
@@ -18754,6 +18777,14 @@
                           "updatedAt"
                         ],
                         "additionalProperties": false
+                      },
+                      "commentary": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 4000
+                        }
                       }
                     },
                     "required": [
@@ -19340,6 +19371,14 @@
                         "updatedAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "commentary": {
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 4000
+                      }
                     }
                   },
                   "required": [
@@ -19925,6 +19964,14 @@
                         "updatedAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "commentary": {
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 4000
+                      }
                     }
                   },
                   "required": [

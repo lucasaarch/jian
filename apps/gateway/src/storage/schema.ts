@@ -189,6 +189,7 @@ export const runs = pgTable(
     group: jsonb('group_turn').$type<GroupTurn>(),
     // Overwritten many times while a run is live and cleared when it ends; never history.
     progress: jsonb('progress').$type<RunProgress>(),
+    commentary: jsonb('commentary').$type<string[]>(),
     // What the person said while this run was already going. Read and cleared between steps.
     steer: text('steer'),
     leaseOwner: text('lease_owner'),
@@ -478,6 +479,9 @@ export const deliveries = pgTable(
       .$type<Array<string | number>>()
       .notNull()
       .default([]),
+    // How much of the run's commentary this chat already received, so a second worker or a
+    // second tick never repeats a message that is on the screen.
+    saidCount: integer('said_count').notNull().default(0),
     // Which device generation sent it: a receipt from an older pairing is not this one's.
     connectionGeneration: integer('connection_generation'),
     createdAt,

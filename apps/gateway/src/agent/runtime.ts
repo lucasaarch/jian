@@ -331,6 +331,15 @@ export class AgentRuntime {
           };
         },
         onStepEnd: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
+          // Text alongside tool calls is the agent talking while it works, and the last step's
+          // text is the answer. Saying this now is what makes a chat move in step with the
+          // work instead of arriving whole at the end.
+          if (toolCalls.length > 0 && text.trim()) {
+            await this.services.lifecycle
+              .say(profileId, runId, owner, redactText(text, secrets).trim())
+              .catch(() => {});
+          }
+
           const estimate = tokenCounter(config.provider, config.modelId);
 
           const reported = Boolean(usage.inputTokens && usage.inputTokens > 0);

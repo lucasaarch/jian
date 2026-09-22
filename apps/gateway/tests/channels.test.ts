@@ -580,3 +580,45 @@ describe('markdown in a bubble that cannot draw it', () => {
     }
   });
 });
+
+it('sends what the agent says on its way to a tool, once, while the run is still going', async () => {
+  const sent: string[] = [];
+
+  const f = await setup(async (url, options) => {
+    if (String(url).includes('sendMessage')) {
+      sent.push(JSON.parse(String(options?.body)).text);
+    }
+
+    return Response.json({ ok: true, result: { message_id: 5 } });
+  });
+
+  try {
+    await f.channels.receive(f.channel.id, webhook(f.channel.webhookToken));
+
+    const [pending] = await f.channels.contacts(f.profile.id);
+    if (!pending) throw new Error('Contact request missing');
+
+    await f.channels.approveContact(f.profile.id, pending.id);
+
+    const runId = (await f.services.runs.activities(f.profile.id))[0]?.id as string;
+
+    await f.services.lifecycle.claim(runId, f.profile.id, 'worker');
+    await f.services.lifecycle.say(f.profile.id, runId, 'worker', 'Opening the board now.');
+
+    // Two ticks and two workers: the line is on the screen once, and the answer has not
+    // arrived because the run has not finished.
+    await Promise.all([f.channels.dispatch(), f.channels.dispatch()]);
+    await f.channels.dispatch();
+
+    expect(sent.filter((text) => text === 'Opening the board now.')).toHaveLength(1);
+
+    await f.services.lifecycle.say(f.profile.id, runId, 'worker', 'Found it.');
+    await f.services.lifecycle.finish(f.profile.id, runId, 'worker', 'completed', 'Twelve open.');
+    await f.channels.dispatch();
+    await f.channels.dispatch();
+
+    expect(sent.slice(-3)).toEqual(['Opening the board now.', 'Found it.', 'Twelve open.']);
+  } finally {
+    await f.app.close();
+  }
+});

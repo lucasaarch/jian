@@ -47,6 +47,7 @@ function toRun(row: RunRow, document: Profile): Run {
     ...(row.call ? { call: row.call } : {}),
     ...(row.group ? { group: row.group } : {}),
     ...(row.progress ? { progress: row.progress } : {}),
+    ...(row.commentary?.length ? { commentary: row.commentary } : {}),
     ...(row.leaseOwner === null ? {} : { leaseOwner: row.leaseOwner }),
     ...(row.leaseUntil === null ? {} : { leaseUntil: row.leaseUntil }),
     createdAt: row.createdAt.toISOString(),
@@ -74,6 +75,7 @@ function toRow(run: Run): typeof runs.$inferInsert {
     call: run.call ?? null,
     group: run.group ?? null,
     progress: run.progress ?? null,
+    commentary: run.commentary ?? null,
     leaseOwner: run.leaseOwner ?? null,
     leaseUntil: run.leaseUntil ?? null,
     createdAt: new Date(run.createdAt),
@@ -200,6 +202,33 @@ export async function takeSteer(
     .where(and(eq(runs.id, runId), eq(runs.steer, current.steer)));
 
   return current.steer;
+}
+
+/**
+ * Appends one thing the agent said on its way to a tool. Read and write under the caller's
+ * profile lock, with the lease as the ownership check, so a worker that lost the run cannot
+ * put words in the mouth of the one that took it over.
+ */
+export async function appendCommentary(
+  db: Queryable,
+  runId: string,
+  owner: string,
+  text: string,
+): Promise<void> {
+  const [current] = await db
+    .select({ commentary: runs.commentary })
+    .from(runs)
+    .where(and(eq(runs.id, runId), eq(runs.leaseOwner, owner), eq(runs.status, 'running')))
+    .limit(1);
+
+  if (!current) {
+    return;
+  }
+
+  await db
+    .update(runs)
+    .set({ commentary: [...(current.commentary ?? []), text].slice(-20) })
+    .where(eq(runs.id, runId));
 }
 
 /**

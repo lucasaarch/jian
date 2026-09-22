@@ -59,6 +59,7 @@ export class Errands {
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
         remoteMessageIds: [],
+        saidCount: 0,
         ...(connection ? { connectionGeneration: connection.generation } : {}),
       });
 

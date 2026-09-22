@@ -245,6 +245,7 @@ export function toDelivery(row: DeliveryRow): DeliveryRecord {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       remoteMessageIds: row.remoteMessageIds,
+      saidCount: row.saidCount,
     }),
     ...(row.connectionGeneration === null
       ? {}
@@ -262,6 +263,7 @@ function toDeliveryRow(delivery: DeliveryRecord): typeof deliveries.$inferInsert
     notice: delivery.notice ?? null,
     status: delivery.status,
     remoteMessageIds: delivery.remoteMessageIds,
+    saidCount: delivery.saidCount,
     connectionGeneration: delivery.connectionGeneration ?? null,
     createdAt: new Date(delivery.createdAt),
     updatedAt: new Date(delivery.updatedAt),

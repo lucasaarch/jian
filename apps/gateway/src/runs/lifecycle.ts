@@ -7,6 +7,7 @@ import { insertMessage } from '../sessions/repository.js';
 import type { Store } from '../storage/database.js';
 import type { RunReader } from './port.js';
 import {
+  appendCommentary,
   insertCheckpoint,
   listCheckpoints,
   listExpiredRuns,
@@ -105,6 +106,15 @@ export class RunLifecycle {
 
       await recordEvent(tx, this.clock, profileId, 'run.step', data, runId);
     });
+  }
+
+  /**
+   * One thing the agent said before reaching for a tool. Kept on the run rather than written
+   * to history: history is what the conversation holds, and a channel decides for itself
+   * whether a person sees the working or only the answer.
+   */
+  async say(profileId: string, runId: string, owner: string, text: string): Promise<void> {
+    await this.store.transaction(profileId, (tx) => appendCommentary(tx, runId, owner, text));
   }
 
   async checkpoints(profileId: string, runId: string) {

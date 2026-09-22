@@ -2461,6 +2461,7 @@ export interface operations {
                             /** Format: date-time */
                             updatedAt: string;
                         };
+                        commentary?: string[];
                     };
                 };
             };
@@ -3586,6 +3587,8 @@ export interface operations {
                         updatedAt: string;
                         /** @default [] */
                         remoteMessageIds: (number | string)[];
+                        /** @default 0 */
+                        saidCount: number;
                         /** @description Gateway-authored text sent without a run, such as the approval notice. */
                         notice?: string;
                     }[];
@@ -8960,6 +8963,7 @@ export interface operations {
                             /** Format: date-time */
                             updatedAt: string;
                         };
+                        commentary?: string[];
                     };
                 };
             };
@@ -9440,6 +9444,7 @@ export interface operations {
                             /** Format: date-time */
                             updatedAt: string;
                         };
+                        commentary?: string[];
                     }[];
                 };
             };
@@ -9656,6 +9661,7 @@ export interface operations {
                             /** Format: date-time */
                             updatedAt: string;
                         };
+                        commentary?: string[];
                     };
                 };
             };
@@ -9872,6 +9878,7 @@ export interface operations {
                             /** Format: date-time */
                             updatedAt: string;
                         };
+                        commentary?: string[];
                     };
                 };
             };

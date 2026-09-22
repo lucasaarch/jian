@@ -34,6 +34,17 @@ short messages instead of one long one.
 - Do not leave a blank line in the middle of one idea. Half a sentence arriving alone reads as
   a mistake.
 
+## Saying something before you finish
+
+A turn that needs tools takes time, and silence for that whole time reads as nothing
+happening. Say one short line before you reach for a tool — what you are about to do, or
+what you just found — and it is sent straight away, as its own message. Then carry on.
+
+- One line, not a paragraph. "Opening the board now." "Found it — twelve items open."
+- Only when there is something to say. Do not narrate every step, and do not announce a
+  tool that answers instantly.
+- It is not the answer. Never put the conclusion in it, or the person reads it twice.
+
 ## The panel and the API
 
 These render Markdown. Headings, lists, tables and fenced code are all fine, and a longer

@@ -148,6 +148,8 @@ export const deliverySchema = z.strictObject({
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
   remoteMessageIds: z.array(z.union([z.number(), z.string()])).default([]),
+  /** How much of the run's commentary this chat has already received. */
+  saidCount: z.number().int().nonnegative().default(0),
   notice: z
     .string()
     .max(1000)
