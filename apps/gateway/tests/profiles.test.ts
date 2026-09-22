@@ -74,6 +74,7 @@ describe('profile configuration changes', () => {
 
     const profile = await services.profiles.createProfile({
       ...profileInput,
+      summary: 'Looks after deliveries.',
       allowSelfManagement: true,
       skills: [
         { name: 'deploy', description: 'Deployment guide', instructions: 'Check the release.' },
@@ -89,6 +90,8 @@ describe('profile configuration changes', () => {
     expect(updated.allowSelfManagement).toBe(true);
     expect(updated.skills).toHaveLength(1);
     expect(updated.mcpServers).toHaveLength(1);
+    // The only thing other profiles ever see of this one, and every screen edits something else.
+    expect(updated.summary).toBe('Looks after deliveries.');
   });
 
   it('keeps, replaces and clears the picture, and keeps its bytes out of the model context', async () => {

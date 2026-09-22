@@ -190,7 +190,9 @@ export const avatarSchema = z
  * name and this text, and nothing else ever crosses: instructions, identity, memories and
  * history stay inside the profile. Empty until the owner writes it.
  */
-export const summarySchema = z.string().trim().max(280).default('');
+const summaryText = z.string().trim().max(280);
+
+export const summarySchema = summaryText.default('');
 
 export const profileSchema = z.strictObject({
   name: z.string().trim().min(1).max(100),
@@ -217,7 +219,9 @@ export const profileSchema = z.strictObject({
 
 export const profilePatchSchema = profileSchema.partial().extend({
   expectedVersion: z.number().int().positive(),
-  summary: summarySchema.optional(),
+  // Without the default: a patch that does not mention the summary was filling one in, and
+  // every edit made elsewhere — a skill switched off, an MCP server added — erased it.
+  summary: summaryText.optional(),
   // Absent keeps the current picture; an explicit null removes it.
   avatar: avatarSchema.nullable().optional(),
   model: modelSchema.optional(),

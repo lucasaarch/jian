@@ -7690,7 +7690,6 @@ export interface operations {
                 "application/json": {
                     name?: string;
                     instructions?: string;
-                    /** @default  */
                     summary?: string;
                     avatar?: string | null;
                     model?: {

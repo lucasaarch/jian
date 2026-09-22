@@ -14534,7 +14534,6 @@
                     "maxLength": 8000
                   },
                   "summary": {
-                    "default": "",
                     "type": "string",
                     "maxLength": 280
                   },
