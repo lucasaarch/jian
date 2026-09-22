@@ -5,6 +5,7 @@ import { insertDelivery } from '../channels/repository.js';
 import { findConnection } from '../channels/whatsapp/repository.js';
 import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
+import { insertMessage } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { channels, contacts, errands } from '../storage/schema.js';
 
@@ -31,6 +32,7 @@ export class Errands {
     profileId: string,
     contactId: string,
     fromSessionId: string,
+    runId: string,
     text: string,
     expectReply: boolean,
   ): Promise<{ to: string; errandId?: string }> {
@@ -62,6 +64,21 @@ export class Errands {
         saidCount: 0,
         ...(connection ? { connectionGeneration: connection.generation } : {}),
       });
+
+      // The conversation with this contact is where this message belongs, even though another
+      // conversation is what produced it. Without this the agent writes to someone and their
+      // own history shows nothing, which reads as the message never having been sent.
+      if (contact.sessionId) {
+        await insertMessage(tx, {
+          id: randomUUID(),
+          profileId,
+          sessionId: contact.sessionId,
+          runId,
+          role: 'assistant',
+          content: text,
+          createdAt: now.toISOString(),
+        });
+      }
 
       const errand = expectReply
         ? await this.open(tx, profileId, contact, fromSessionId, text)

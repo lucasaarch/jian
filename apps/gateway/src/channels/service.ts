@@ -16,6 +16,7 @@ import type { RunWriter } from '../runs/port.js';
 import { issueToken, verifyToken } from '../security/tokens.js';
 import type { Vault } from '../security/vault.js';
 import type { SessionWriter } from '../sessions/port.js';
+import { insertMessage } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
 import type { ChannelRequest, ChannelType, DeliveryOutcome, IncomingMessage } from './channel.js';
 import { type ContactRecord, Contacts, type Intake } from './contacts.js';
@@ -472,6 +473,22 @@ export class Channels {
         },
         { activity: 'channel' },
       );
+
+      // The answer arrived in their conversation; it is recorded there as well as carried
+      // into the one that asked, or their own history shows a question and no reply.
+      if (contact.sessionId) {
+        await this.services.store.transaction(channel.profileId, (tx) =>
+          insertMessage(tx, {
+            id: randomUUID(),
+            profileId: channel.profileId,
+            sessionId: contact.sessionId as string,
+            runId: run.id,
+            role: 'user',
+            content: data.text,
+            createdAt: new Date().toISOString(),
+          }),
+        );
+      }
 
       await this.deliverRun(channel.profileId, errand.fromSessionId, run.id);
 

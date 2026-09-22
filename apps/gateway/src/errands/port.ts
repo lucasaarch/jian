@@ -7,6 +7,7 @@ export interface Outreach {
     profileId: string,
     contactId: string,
     fromSessionId: string,
+    runId: string,
     text: string,
     expectReply: boolean,
   ): Promise<{ to: string; errandId?: string }>;

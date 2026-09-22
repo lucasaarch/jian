@@ -224,7 +224,7 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
         expectReply: z.boolean().default(false),
       }),
       execute: async ({ contactId, text, expectReply }) =>
-        services.errands.ask(run.profileId, contactId, run.sessionId, text, expectReply),
+        services.errands.ask(run.profileId, contactId, run.sessionId, run.id, text, expectReply),
     }),
 
     read_inbox: tool({

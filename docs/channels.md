@@ -115,6 +115,8 @@ An answer is released a paragraph at a time, while it is still being written: th
 
 A delivery does not wait for the whole run. A step that says something on its way to a tool has that line sent straight away, as its own message, and the delivery counts how much of the run's commentary the chat has already received; the answer follows when the run ends. The count is raised inside the profile lock before the send, so two workers or two ticks never repeat a line — at the price of losing one to a failing adapter, which is the right way round for commentary. Between lines the chat shows only the composing indicator.
 
+A message the agent sends to a contact is written into that contact's conversation, and their reply into it as well, even though another conversation is what asked for it. Without that the agent writes to someone and their own history shows nothing, which is indistinguishable from the message never having been sent.
+
 A run the gateway starts by itself — a colleague's late answer, a contact's reply to a question the agent sent — has no incoming message to hang a delivery on, so it is given one against the conversation its session belongs to. Without that its answer reaches the transcript and stops there, which is indistinguishable from the agent having said nothing.
 
 A delivery can exist with no run behind it: the approval notice carries its own text in `notice`. The worker sends that text directly, waiting on no run.

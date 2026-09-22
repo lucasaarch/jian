@@ -63,21 +63,32 @@ async function setup() {
     await services.lifecycle.finish(profile.id, run.id, 'worker', 'completed', 'Oi, Moabe.');
   }
 
-  // The owner's own conversation, which is what the question is asked on behalf of.
+  // The owner's own conversation, which is what the question is asked on behalf of, and the
+  // turn that asks: every message belongs to the run that produced it.
   const owner = await services.sessions.createSession(profile.id, { title: 'Dono' });
+  const asking = await services.runs.submit(profile.id, owner.id, {
+    text: 'Pergunta ao Moabe',
+    requestKey: 'asking',
+  });
 
-  return { services, channels, profile, moabe, owner, webhook, channel };
+  // That turn is over by the time an answer comes back; while it runs, a reply joins it as a
+  // redirect instead, which is a different path.
+  await services.lifecycle.claim(asking.id, profile.id, 'worker');
+  await services.lifecycle.finish(profile.id, asking.id, 'worker', 'completed', 'Perguntei.');
+
+  return { services, channels, profile, moabe, owner, asking, webhook, channel };
 }
 
 describe('asking a contact and bringing the answer back', () => {
   it('delivers the question, then turns the reply into a turn in the asking conversation', async () => {
-    const { services, channels, profile, moabe, owner, webhook, channel } = await setup();
+    const { services, channels, profile, moabe, owner, asking, webhook, channel } = await setup();
     const errands = new Errands(services.store);
 
     const asked = await errands.ask(
       profile.id,
       moabe.id,
       owner.id,
+      asking.id,
       'O deploy de sexta pode sair?',
       true,
     );
@@ -86,8 +97,6 @@ describe('asking a contact and bringing the answer back', () => {
 
     await channels.dispatch();
     expect(sent.at(-1)).toMatchObject({ chatId: '77', text: 'O deploy de sexta pode sair?' });
-
-    const before = await services.sessions.messages(profile.id, owner.id, 10);
 
     await channels.receive(channel.id, webhook(update(77, 77, 'Pode sim, liberado.', 2)));
 
@@ -99,25 +108,40 @@ describe('asking a contact and bringing the answer back', () => {
     expect(relayed?.input).toContain('O deploy de sexta pode sair?');
     // His reply is consumed as the answer, so it starts nothing in his own conversation.
     expect(runs.filter((run) => run.sessionId === moabe.sessionId)).toHaveLength(0);
-    expect(before).toHaveLength(0);
+
+    // Both sides are recorded where they were spoken: his history shows the question he was
+    // sent and the answer he gave, not a gap where the agent wrote to him from elsewhere.
+    const his = (await services.sessions.messages(profile.id, moabe.sessionId as string, 10)).map(
+      (message) => message.content,
+    );
+
+    expect(his).toContain('O deploy de sexta pode sair?');
+    expect(his).toContain('Pode sim, liberado.');
   });
 
   it('refuses a second open question to the same contact', async () => {
-    const { services, profile, moabe, owner } = await setup();
+    const { services, profile, moabe, owner, asking } = await setup();
     const errands = new Errands(services.store);
 
-    await errands.ask(profile.id, moabe.id, owner.id, 'Primeira?', true);
+    await errands.ask(profile.id, moabe.id, owner.id, asking.id, 'Primeira?', true);
 
-    await expect(errands.ask(profile.id, moabe.id, owner.id, 'Segunda?', true)).rejects.toThrow(
-      'unanswered',
-    );
+    await expect(
+      errands.ask(profile.id, moabe.id, owner.id, asking.id, 'Segunda?', true),
+    ).rejects.toThrow('unanswered');
   });
 
   it('sends without waiting when no reply is expected', async () => {
-    const { services, channels, profile, moabe, owner, webhook, channel } = await setup();
+    const { services, channels, profile, moabe, owner, asking, webhook, channel } = await setup();
     const errands = new Errands(services.store);
 
-    const asked = await errands.ask(profile.id, moabe.id, owner.id, 'Só avisando.', false);
+    const asked = await errands.ask(
+      profile.id,
+      moabe.id,
+      owner.id,
+      asking.id,
+      'Só avisando.',
+      false,
+    );
 
     expect(asked.errandId).toBeUndefined();
     await channels.dispatch();
@@ -133,14 +157,14 @@ describe('asking a contact and bringing the answer back', () => {
   });
 
   it('only lists approved contacts, and says who it is waiting on', async () => {
-    const { services, profile, moabe, owner } = await setup();
+    const { services, profile, moabe, owner, asking } = await setup();
     const errands = new Errands(services.store);
 
     expect(await errands.reachable(profile.id)).toEqual([
       { id: moabe.id, name: expect.any(String), channel: 'telegram', waitingOnThem: false },
     ]);
 
-    await errands.ask(profile.id, moabe.id, owner.id, 'E aí?', true);
+    await errands.ask(profile.id, moabe.id, owner.id, asking.id, 'E aí?', true);
 
     expect((await errands.reachable(profile.id))[0]?.waitingOnThem).toBe(true);
   });
