@@ -132,6 +132,8 @@
    below the size of a thumb. */
 .heatmap-panel {
   display: grid;
+  /* The tooltip is placed against this box, so it stays put while the calendar scrolls. */
+  position: relative;
   gap: 1rem;
   padding: 1.25rem;
   border-radius: 0.75rem;
@@ -157,14 +159,22 @@
   color: var(--muted);
 }
 
+/* A row per weekday and a column per week. The negative margin cancels the spacing the table
+   also draws around its outer edge, so the first column lines up with its month label. */
 .heatmap-grid {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(7, 1fr);
-  gap: 3px;
+  width: calc(100% + 6px);
+  margin: -3px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 3px;
+}
+
+.heatmap-grid td {
+  padding: 0;
 }
 
 .heatmap-day {
+  display: block;
   aspect-ratio: 1;
   border-radius: 2px;
   background: var(--level);
@@ -207,4 +217,30 @@
 .heatmap-legend .heatmap-day {
   width: 0.625rem;
   height: 0.625rem;
+}
+
+/* Sits above the square it describes and never under the pointer, so moving across the
+   calendar cannot chase the tooltip out from under the mouse. */
+.heatmap-tip {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 0.125rem;
+  transform: translate(-50%, calc(-100% - 0.5rem));
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.heatmap-tip strong {
+  font-weight: 600;
+}
+
+.heatmap-tip span {
+  opacity: 0.75;
 }

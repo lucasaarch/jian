@@ -292,6 +292,12 @@ export async function countRunsByDay(
     .select({
       day: sql<string>`to_char(${runs.createdAt} at time zone 'UTC', 'YYYY-MM-DD')`.as('day'),
       total: count(),
+      // A run that never reached the model carries no usage at all, so the sum is coalesced
+      // rather than left null, and comes back as text from the driver.
+      tokens: sql<string>`coalesce(sum(
+        coalesce((${runs.usage} ->> 'inputTokens')::bigint, 0)
+        + coalesce((${runs.usage} ->> 'outputTokens')::bigint, 0)
+      ), 0)`.as('tokens'),
     })
     .from(runs)
     .where(
@@ -303,7 +309,7 @@ export async function countRunsByDay(
     .groupBy(sql`1`)
     .orderBy(sql`1`);
 
-  return rows.map((row) => ({ day: row.day, runs: row.total }));
+  return rows.map((row) => ({ day: row.day, runs: row.total, tokens: Number(row.tokens) }));
 }
 
 /** Dispatch and recovery need the address of a run, not the run: no revision is joined. */

@@ -26,31 +26,46 @@ function exposedName(server: string, tool: string): string {
   return `mcp_${server}_${tool.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 18)}_${suffix}`;
 }
 
+/** What a server answered with when it refused to open, short enough to put in a prompt. */
+function connectionFailure(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+
+  return text.replace(/\s+/g, ' ').trim().slice(0, 200);
+}
+
 /** Discover what each server offers now; expose a full schema only when the agent selects it. */
 export async function connectMcpTools(run: Run, tools: ToolSet, context: McpContext) {
   const mcpToolNames: string[] = [];
   const selectedMcpTools = new Set<string>();
+  const unavailable: Array<{ name: string; reason: string }> = [];
 
   for (const config of run.profile.mcpServers) {
-    const client = await connectMcp({
-      profileId: run.profileId,
-      server: config,
-      vault: context.vault as SecretReader,
-      fetcher: context.fetcher,
-      signal: context.signal,
-      ...(config.auth === 'oauth'
-        ? { authProvider: context.oauth?.(run.profileId, config.name) }
-        : {}),
-    });
+    // A server whose token expired must not take the run with it: the agent keeps its other
+    // tools, and is told which server it cannot reach so it can say so instead of failing.
+    try {
+      const client = await connectMcp({
+        profileId: run.profileId,
+        server: config,
+        vault: context.vault as SecretReader,
+        fetcher: context.fetcher,
+        signal: context.signal,
+        ...(config.auth === 'oauth'
+          ? { authProvider: context.oauth?.(run.profileId, config.name) }
+          : {}),
+      });
 
-    context.clients.push(client);
+      context.clients.push(client);
 
-    // Everything the server offers. A long catalog costs nothing per turn: only the tools the
-    // agent has loaded are sent with a request, so a server with a hundred of them is no
-    // heavier than one with three until they are used.
-    for (const [name, remote] of Object.entries(await client.tools())) {
-      tools[exposedName(config.name, name)] = remote;
-      mcpToolNames.push(exposedName(config.name, name));
+      // Everything the server offers. A long catalog costs nothing per turn: only the tools the
+      // agent has loaded are sent with a request, so a server with a hundred of them is no
+      // heavier than one with three until they are used.
+      for (const [name, remote] of Object.entries(await client.tools())) {
+        tools[exposedName(config.name, name)] = remote;
+        mcpToolNames.push(exposedName(config.name, name));
+      }
+    } catch (error) {
+      context.signal.throwIfAborted();
+      unavailable.push({ name: config.name, reason: connectionFailure(error) });
     }
   }
 
@@ -96,5 +111,24 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
     });
   }
 
-  return { mcpToolNames, selectedMcpTools };
+  return { mcpToolNames, selectedMcpTools, unavailable };
+}
+
+/**
+ * Told to the agent rather than logged alone: without it the agent would report the work as
+ * done, having silently lost the tools that were supposed to do it.
+ */
+export function unavailableNote(unavailable: Array<{ name: string; reason: string }>): string {
+  if (unavailable.length === 0) {
+    return '';
+  }
+
+  const list = unavailable.map((item) => `- ${item.name}: ${item.reason}`).join('\n');
+
+  return (
+    'These MCP servers could not be reached for this run, and none of their tools are ' +
+    `available:\n${list}\n` +
+    'Do not pretend to have used them. If the request needs one, say which server is ' +
+    'unavailable and that the owner has to check its credentials.'
+  );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { type MouseEvent, useEffect, useRef, useState } from 'react';
 import type { ActivityDay, GatewayApi, Profile } from '../../lib/api';
 
 /** A year, laid out as the calendar lays it out: one column per week, Sunday at the top. */
@@ -9,7 +9,30 @@ const DAYS = WEEKS * 7;
 
 const iso = (date: Date) => date.toISOString().slice(0, 10);
 
+/** Seven rows, Sunday first: the row a day lands in is its weekday. */
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Half the tooltip's width: how close to an edge it may sit before it would be cut off. */
+const TIP_REACH = 84;
+
+type Cell = { day: Date; runs: number; tokens: number; future: boolean };
+
+/** The same sentence the tooltip shows, for a reader who is not using a pointer. */
+const describe = (cell: Cell) =>
+  cell.runs === 0
+    ? 'No runs'
+    : `${cell.runs.toLocaleString('en')} ${cell.runs === 1 ? 'run' : 'runs'} · ${cell.tokens.toLocaleString('en')} tokens`;
+
+const longDate = (date: Date) =>
+  date.toLocaleDateString('en', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 
 /**
  * Five steps, cut from what this profile actually does rather than from fixed numbers: a
@@ -24,7 +47,7 @@ function levelOf(runs: number, busiest: number): number {
 }
 
 /** Every day of the window, ending today, so the grid is complete even where nothing happened. */
-function calendar(counts: Map<string, number>) {
+function calendar(days: Map<string, ActivityDay>): Cell[] {
   const today = new Date();
   const last = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
 
@@ -32,19 +55,26 @@ function calendar(counts: Map<string, number>) {
   last.setUTCDate(last.getUTCDate() + (6 - last.getUTCDay()));
 
   return Array.from({ length: DAYS }, (_, index) => {
-    const date = new Date(last);
+    const day = new Date(last);
 
-    date.setUTCDate(date.getUTCDate() - (DAYS - 1 - index));
+    day.setUTCDate(day.getUTCDate() - (DAYS - 1 - index));
 
-    const day = iso(date);
+    const counted = days.get(iso(day));
 
-    return { day, date, runs: counts.get(day) ?? 0, future: date > today };
+    return {
+      day,
+      runs: counted?.runs ?? 0,
+      tokens: counted?.tokens ?? 0,
+      future: day > today,
+    };
   });
 }
 
 export function ActivityHeatmap({ profile, api }: { profile: Profile; api: GatewayApi }) {
   const [days, setDays] = useState<ActivityDay[]>();
   const [error, setError] = useState('');
+  const [hover, setHover] = useState<{ cell: Cell; x: number; y: number }>();
+  const panel = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -71,18 +101,18 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
     }
   }, []);
 
-  const counts = new Map((days ?? []).map((day) => [day.day, day.runs]));
-  const cells = calendar(counts);
-  const busiest = Math.max(0, ...counts.values());
-  const total = [...counts.values()].reduce((sum, runs) => sum + runs, 0);
+  const counted = new Map((days ?? []).map((day) => [day.day, day]));
+  const cells = calendar(counted);
+  const busiest = Math.max(0, ...[...counted.values()].map((day) => day.runs));
+  const total = [...counted.values()].reduce((sum, day) => sum + day.runs, 0);
 
   // One label per month, on the week its first day falls in. Keyed by the month and not by the
   // week: a month whose first days straddle two columns would otherwise be labelled twice.
   const months = cells.reduce<Array<{ month: number; week: number; label: string }>>(
     (labels, cell, index) => {
-      const month = cell.date.getUTCMonth();
+      const month = cell.day.getUTCMonth();
 
-      if (cell.date.getUTCDate() <= 7 && labels.at(-1)?.month !== month) {
+      if (cell.day.getUTCDate() <= 7 && labels.at(-1)?.month !== month) {
         labels.push({ month, week: Math.floor(index / 7), label: MONTHS[month] as string });
       }
 
@@ -91,8 +121,29 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
     [],
   );
 
+  /**
+   * Both rectangles are in viewport coordinates, so the difference stays correct however far
+   * the calendar is scrolled sideways, and the tooltip never leaves the panel it belongs to.
+   */
+  function follow(cell: Cell, event: MouseEvent<HTMLElement>) {
+    const box = panel.current?.getBoundingClientRect();
+
+    if (!box || cell.future) {
+      return;
+    }
+
+    const square = event.currentTarget.getBoundingClientRect();
+    const centre = square.left - box.left + square.width / 2;
+
+    setHover({
+      cell,
+      x: Math.min(Math.max(centre, TIP_REACH), box.width - TIP_REACH),
+      y: square.top - box.top,
+    });
+  }
+
   return (
-    <section className="heatmap-panel" aria-label="Activity over the last year">
+    <section className="heatmap-panel" aria-label="Activity over the last year" ref={panel}>
       <header className="section-row">
         <div>
           <h2>Activity</h2>
@@ -119,24 +170,43 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
                   </span>
                 ))}
               </div>
-              <div
+              <table
                 className="heatmap-grid"
-                style={{ gridTemplateColumns: `repeat(${WEEKS}, 1fr)` }}
+                onMouseLeave={() => setHover(undefined)}
+                aria-label="Runs per day"
               >
-                {cells.map((cell) => (
-                  <span
-                    key={cell.day}
-                    className={`heatmap-day level-${cell.future ? 'none' : levelOf(cell.runs, busiest)}`}
-                    title={
-                      cell.future
-                        ? cell.day
-                        : `${cell.day} · ${cell.runs} ${cell.runs === 1 ? 'run' : 'runs'}`
-                    }
-                  />
-                ))}
-              </div>
+                <tbody>
+                  {WEEKDAYS.map((weekday, row) => (
+                    <tr key={weekday}>
+                      {Array.from({ length: WEEKS }, (_, week) => {
+                        const cell = cells[week * 7 + row] as Cell;
+
+                        return (
+                          <td
+                            key={iso(cell.day)}
+                            onMouseEnter={(event) => follow(cell, event)}
+                            {...(cell.future
+                              ? {}
+                              : { 'aria-label': `${longDate(cell.day)}: ${describe(cell)}` })}
+                          >
+                            <span
+                              className={`heatmap-day level-${cell.future ? 'none' : levelOf(cell.runs, busiest)}`}
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
+          {hover ? (
+            <div className="heatmap-tip" role="tooltip" style={{ left: hover.x, top: hover.y }}>
+              <strong>{longDate(hover.cell.day)}</strong>
+              <span>{describe(hover.cell)}</span>
+            </div>
+          ) : null}
           <footer className="heatmap-legend">
             <span>Less</span>
             {[0, 1, 2, 3, 4].map((level) => (

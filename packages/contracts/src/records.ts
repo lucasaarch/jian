@@ -96,6 +96,7 @@ export const runRecordSchema = z.strictObject({
 export const activityDaySchema = z.strictObject({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   runs: z.number().int().nonnegative(),
+  tokens: z.number().int().nonnegative(),
 });
 
 export const revisionRecordSchema = z.strictObject({

@@ -6151,6 +6151,7 @@ export interface operations {
                     "application/json": {
                         day: string;
                         runs: number;
+                        tokens: number;
                     }[];
                 };
             };

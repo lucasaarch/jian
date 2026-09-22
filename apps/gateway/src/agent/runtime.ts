@@ -9,7 +9,7 @@ import { reasoningProviderOptions } from '../providers/effort.js';
 import { resolveModel } from '../providers/models.js';
 import { providerSecret } from '../providers/service.js';
 import { createSafeFetch } from '../security/outbound.js';
-import { connectMcpTools } from './mcp.js';
+import { connectMcpTools, unavailableNote } from './mcp.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
 import { profileTools, type ToolServices } from './tools.js';
@@ -141,7 +141,7 @@ export class AgentRuntime {
 
       const model = await this.model(config, process.env, outbound.fetch, providerKey);
       const tools = profileTools(this.services, run);
-      const { mcpToolNames, selectedMcpTools } = await connectMcpTools(run, tools, {
+      const { mcpToolNames, selectedMcpTools, unavailable } = await connectMcpTools(run, tools, {
         vault: this.options.vault,
         secrets,
         clients,
@@ -149,6 +149,12 @@ export class AgentRuntime {
         signal,
         ...(this.options.mcpOAuth ? { oauth: this.options.mcpOAuth } : {}),
       });
+
+      const mcpNote = unavailableNote(unavailable);
+
+      for (const server of unavailable) {
+        console.warn(`jian: MCP server ${server.name} is unavailable — ${server.reason}`);
+      }
 
       const guarded: ToolSet = {};
       // Serializing tool execution prevents another effect from starting after one remote outcome is uncertain.
@@ -274,13 +280,13 @@ export class AgentRuntime {
             activeNames.map((name) => [name, guarded[name]]),
           ) as ToolSet;
 
+          const system = mcpNote ? `${refreshed.system}\n\n${mcpNote}` : refreshed.system;
+
           const fitted = fitPrompt({
             provider: config.provider,
             modelId: config.modelId,
             policy,
-            instructions: subscription
-              ? withClaudeCodeIdentity(refreshed.system)
-              : refreshed.system,
+            instructions: subscription ? withClaudeCodeIdentity(system) : system,
             messages,
             tools: activeTools,
           });
