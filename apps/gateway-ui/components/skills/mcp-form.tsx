@@ -3,7 +3,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { McpServer, McpValue } from '../../lib/api';
-import { Button, Field, Modal } from '../ui';
+import { Button, Field, Modal, StackedFields } from '../ui';
 import { Select } from '../ui/select';
 
 type Draft = {
@@ -227,17 +227,32 @@ function ValueRows({
     <Field label={label} hint={hint}>
       <div className="value-rows">
         {list.map((value, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: a row is identified by its position.
-          <div className="value-row" key={index}>
+          <StackedFields
+            // biome-ignore lint/suspicious/noArrayIndexKey: a row is identified by its position.
+            key={index}
+            action={
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={`Remove ${value.name || label}`}
+                disabled={busy}
+                onClick={() => set(list.filter((_, at) => at !== index))}
+              >
+                <Trash2 size={15} />
+              </button>
+            }
+          >
             <input
               value={value.name}
               placeholder={placeholder}
+              aria-label={`${label} name`}
               onChange={(event) => update(index, { name: event.target.value })}
             />
             <input
               type="password"
               autoComplete="off"
               value={value.value ?? ''}
+              aria-label={`${label} value`}
               placeholder={
                 stored.some((item) => item.name === value.name && !item.fromEnv)
                   ? 'Saved — leave blank to keep'
@@ -245,16 +260,7 @@ function ValueRows({
               }
               onChange={(event) => update(index, { value: event.target.value })}
             />
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={`Remove ${value.name || label}`}
-              disabled={busy}
-              onClick={() => set(list.filter((_, at) => at !== index))}
-            >
-              <Trash2 size={15} />
-            </button>
-          </div>
+          </StackedFields>
         ))}
         <button
           type="button"

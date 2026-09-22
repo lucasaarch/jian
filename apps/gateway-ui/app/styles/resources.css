@@ -80,25 +80,44 @@
   transition: transform 0.15s ease;
 }
 
-/* A header or variable is a name, its value, and a way to drop the row. */
+/* A header or a variable: its name and its value read as one control, plus a way to drop it. */
+.stacked-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stacked-fields {
+  display: grid;
+  border: 1px solid var(--control);
+  border-radius: 3px 10px 3px 3px;
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+  /* The children draw no corners of their own, so the group's are the only ones. */
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.stacked-fields:focus-within {
+  border-color: var(--accent);
+}
+
+.stacked-fields > input {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.stacked-fields > input + input {
+  border-top: 1px solid var(--control);
+}
+
+/* The group already carries the accent border; the bar alone says which row has focus. */
+.stacked-fields > input:focus {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
 .value-rows {
   display: grid;
-  gap: 0.5rem;
-}
-
-.value-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-@media (max-width: 640px) {
-  .value-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .value-row > :nth-child(2) {
-    grid-column: 1 / -1;
-  }
+  gap: 0.625rem;
 }

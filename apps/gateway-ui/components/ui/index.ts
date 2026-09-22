@@ -4,3 +4,4 @@ export { Badge, Empty, SectionHeading } from './layout';
 export { Mark } from './mark';
 export { Confirm, Modal } from './modal';
 export { Secret } from './secret';
+export { StackedFields } from './stacked-fields';
