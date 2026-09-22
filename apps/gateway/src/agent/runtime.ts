@@ -9,6 +9,7 @@ import { reasoningProviderOptions } from '../providers/effort.js';
 import { resolveModel } from '../providers/models.js';
 import { providerSecret } from '../providers/service.js';
 import { createSafeFetch } from '../security/outbound.js';
+import { cacheable } from './cache.js';
 import { connectMcpTools, unavailableNote } from './mcp.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
@@ -320,7 +321,9 @@ export class AgentRuntime {
 
           return {
             instructions: fitted.instructions,
-            messages: fitted.messages,
+            // Only Anthropic needs telling: OpenAI matches a long prefix on its own.
+            messages:
+              config.provider === 'anthropic' ? cacheable(fitted.messages) : fitted.messages,
             activeTools: activeNames,
             maxOutputTokens: Math.min(policy.outputTokens, availableOutput),
           };

@@ -1,6 +1,7 @@
 import { modelSchema } from '@jian/contracts';
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
+import { cacheable } from '../src/agent/cache.js';
 import {
   anthropicCredential,
   CLAUDE_CODE_IDENTITY,
@@ -158,4 +159,43 @@ describe('anthropic credentials', () => {
     expect(anthropicCredential(undefined, 'ANTHROPIC_API_KEY', 'opaque')).toBe('key');
     expect(anthropicCredential(undefined, undefined, undefined)).toBe('key');
   });
+});
+
+it('marks the reusable part of an Anthropic prompt so it is read back instead of re-sent', async () => {
+  let body: {
+    system?: Array<{ cache_control?: unknown }>;
+    messages?: Array<{ content: Array<{ cache_control?: unknown }> }>;
+  } = {};
+
+  const fetcher: typeof fetch = async (_input, init) => {
+    body = JSON.parse(String(init?.body));
+    return Response.json(
+      { type: 'error', error: { type: 'invalid_request_error', message: 'synthetic' } },
+      { status: 400 },
+    );
+  };
+
+  const model = await resolveModel(
+    { provider: 'anthropic', modelId: 'test', apiKeyEnv: 'ANTHROPIC_API_KEY' },
+    { ANTHROPIC_API_KEY: 'sk-ant-api03-synthetic' },
+    fetcher,
+  );
+
+  await expect(
+    generateText({
+      model,
+      system: 'Answer briefly.',
+      messages: cacheable([
+        { role: 'user', content: 'First' },
+        { role: 'assistant', content: 'Answered' },
+        { role: 'user', content: 'Second' },
+      ]),
+      maxRetries: 0,
+    }),
+  ).rejects.toThrow();
+
+  // The mark sits after the tools and the instructions, which is what it makes reusable.
+  expect(body.messages?.[0]?.content.at(-1)?.cache_control).toEqual({ type: 'ephemeral' });
+  expect(body.messages?.[1]?.content.at(-1)?.cache_control).toEqual({ type: 'ephemeral' });
+  expect(body.messages?.[2]?.content.at(-1)?.cache_control).toBeUndefined();
 });
