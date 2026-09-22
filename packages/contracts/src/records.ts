@@ -89,6 +89,15 @@ export const runRecordSchema = z.strictObject({
   progress: runProgressSchema.optional(),
 });
 
+/**
+ * How much a profile ran on one day. Days with nothing are left out, because a year of zeroes
+ * is the shape of the calendar rather than anything the profile did.
+ */
+export const activityDaySchema = z.strictObject({
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  runs: z.number().int().nonnegative(),
+});
+
 export const revisionRecordSchema = z.strictObject({
   id: z.string(),
   profileId: uuid,
@@ -124,6 +133,8 @@ export type Run = z.infer<typeof runRecordSchema> & {
   leaseOwner?: string;
   leaseUntil?: number;
 };
+
+export type ActivityDay = z.infer<typeof activityDaySchema>;
 
 export type ProfileRevision = z.infer<typeof revisionRecordSchema>;
 

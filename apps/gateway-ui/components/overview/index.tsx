@@ -1,18 +1,26 @@
 'use client';
 
-import { Activity, ArrowRight, ArrowUpRight, Settings2 } from 'lucide-react';
+import { ArrowUpRight, Settings2 } from 'lucide-react';
 import Link from 'next/link';
-import type { Profile, ProfileData } from '../../lib/api';
-import { date } from '../../lib/format';
+import type { GatewayApi, Profile, ProfileData } from '../../lib/api';
 import { Avatar } from '../profile/avatar-field';
-import { Badge, SectionHeading } from '../ui';
+import { SectionHeading } from '../ui';
+import { ActivityHeatmap } from './heatmap';
 
 const number = (value: number) => value.toLocaleString('pt-BR');
-export function Overview({ profile, data }: { profile: Profile; data: ProfileData }) {
+export function Overview({
+  profile,
+  data,
+  api,
+}: {
+  profile: Profile;
+  data: ProfileData;
+  api: GatewayApi;
+}) {
   const active = data.activities.filter((run) => ['running', 'queued'].includes(run.status)).length;
   const input = data.activities.reduce((sum, run) => sum + (run.usage?.inputTokens ?? 0), 0);
   const output = data.activities.reduce((sum, run) => sum + (run.usage?.outputTokens ?? 0), 0);
-  const recent = [...data.activities]
+  const _recent = [...data.activities]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, 5);
   return (
@@ -76,60 +84,9 @@ export function Overview({ profile, data }: { profile: Profile; data: ProfileDat
         ))}
       </section>
       <div className="overview-columns">
-        <section className="overview-activity">
-          <header className="section-row">
-            <h2>Recent activity</h2>
-            <Link href="/sessions" className="text-button">
-              See sessions
-              <ArrowRight size={14} />
-            </Link>
-          </header>
-          {recent.length ? (
-            <div className="activity-list">
-              {recent.map((run) => (
-                <div className="activity-row" key={run.id}>
-                  <Activity size={17} />
-                  <div className="grow">
-                    <h3>
-                      {data.sessions.find((session) => session.id === run.sessionId)?.title ||
-                        'Untitled conversation'}
-                    </h3>
-                    <p className="truncate">{run.input}</p>
-                    <small>{date(run.updatedAt)}</small>
-                  </div>
-                  <Badge
-                    tone={
-                      run.status === 'completed'
-                        ? 'good'
-                        : ['failed', 'interrupted'].includes(run.status)
-                          ? 'bad'
-                          : 'neutral'
-                    }
-                  >
-                    {
-                      {
-                        queued: 'Na fila',
-                        running: 'Running',
-                        completed: 'Completed',
-                        failed: 'Falhou',
-                        interrupted: 'Interrompida',
-                        cancelled: 'Cancelada',
-                      }[run.status]
-                    }
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="activity-empty">
-              <Activity size={25} />
-              <h3>No recent runs</h3>
-              <p>What it does next, and how it went, shows up here.</p>
-            </div>
-          )}
-        </section>
-        <section className="usage-panel" aria-label="Uso de tokens">
-          <span className="eyebrow">Consumo</span>
+        <ActivityHeatmap profile={profile} api={api} />
+        <section className="usage-panel" aria-label="Token usage">
+          <span className="eyebrow">Usage</span>
           <h2>
             {number(input + output)}
             <small>tokens</small>

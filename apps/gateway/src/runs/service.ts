@@ -20,6 +20,7 @@ import type { SubmitOptions } from './port.js';
 import {
   appendSteer,
   countActiveRuns,
+  countRunsByDay,
   findActiveSessionRun,
   findRun,
   findRunByRequestKey,
@@ -230,6 +231,13 @@ export class Runs {
     await this.profiles.profile(profileId);
 
     return listActiveRuns(this.store.db, profileId, 200);
+  }
+
+  /** A year of days and how much this profile ran on each. Days with nothing are absent. */
+  async activity(profileId: string) {
+    await this.profiles.profile(profileId);
+
+    return countRunsByDay(this.store.db, profileId, 371);
   }
 
   /** What the profile has been doing, finished runs included, newest first. */

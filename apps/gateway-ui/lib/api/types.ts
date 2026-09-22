@@ -25,6 +25,7 @@ export type Memory = JsonResponse<'listMemories', 200>[number];
 export type BuiltinSkill = JsonResponse<'listBuiltinSkills', 200>[number];
 export type McpStatus = JsonResponse<'checkMcpServer', 200>;
 export type Run = JsonResponse<'getRun', 200>;
+export type ActivityDay = JsonResponse<'getActivityCalendar', 200>[number];
 export type Delivery = JsonResponse<'listDeliveries', 200>[number];
 export type Connection = JsonResponse<'getChannelConnection', 200>;
 

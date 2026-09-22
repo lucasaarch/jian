@@ -39,6 +39,7 @@ import {
   providerRecordSchema,
 } from './providers.js';
 import {
+  activityDaySchema,
   checkpointSchema,
   continuationSchema,
   eventSchema,
@@ -379,6 +380,13 @@ export const operations: Operation[] = [
     params: z.strictObject({ profileId: z.uuid(), name: z.string().regex(/^[a-z0-9_]{1,30}$/) }),
     query: z.looseObject({ code: z.string().optional(), state: z.string().optional() }),
     response: z.string(),
+  },
+  {
+    method: 'GET',
+    path: `${profile}/activity`,
+    operationId: 'getActivityCalendar',
+    access: 'admin',
+    response: z.array(activityDaySchema).max(400),
   },
   {
     method: 'GET',

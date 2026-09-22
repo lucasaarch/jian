@@ -1,6 +1,19 @@
-import type { Checkpoint, Profile, Run, RunProgress } from '@jian/contracts';
+import type { ActivityDay, Checkpoint, Profile, Run, RunProgress } from '@jian/contracts';
 import { profileRecordSchema } from '@jian/contracts';
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { checkpoints, profileRevisions, runs } from '../storage/schema.js';
 
@@ -264,6 +277,33 @@ export async function listRecentRuns(
     .limit(limit);
 
   return rows.map((row) => toRun(row.run, row.document));
+}
+
+/**
+ * One row per day this profile ran anything, for the last `days` days. Counted in SQL because
+ * a year of runs is far more than any page the panel would otherwise have to read.
+ */
+export async function countRunsByDay(
+  db: Queryable,
+  profileId: string,
+  days: number,
+): Promise<ActivityDay[]> {
+  const rows = await db
+    .select({
+      day: sql<string>`to_char(${runs.createdAt} at time zone 'UTC', 'YYYY-MM-DD')`.as('day'),
+      total: count(),
+    })
+    .from(runs)
+    .where(
+      and(
+        eq(runs.profileId, profileId),
+        gte(runs.createdAt, sql`now() - make_interval(days => ${days})`),
+      ),
+    )
+    .groupBy(sql`1`)
+    .orderBy(sql`1`);
+
+  return rows.map((row) => ({ day: row.day, runs: row.total }));
 }
 
 /** Dispatch and recovery need the address of a run, not the run: no revision is joined. */

@@ -17,6 +17,8 @@ export const sessionCalls = (client: Client) => ({
         params: { path: { profileId, runId } },
       }),
     ),
+  activityCalendar: (profileId: string) =>
+    result(client.GET('/v1/profiles/{profileId}/activity', { params: profile(profileId) })),
   activities: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/activities', { params: profile(profileId) })),
 });
