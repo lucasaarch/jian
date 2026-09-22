@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/lucasaarch/jian/compare/v1.0.0...v1.0.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* **image:** ship the migrations the gateway runs on start ([e9eacbf](https://github.com/lucasaarch/jian/commit/e9eacbf90919944c6570280a6e139f7c781579db))
+
 ## [1.0.0](https://github.com/lucasaarch/jian/compare/v0.1.0...v1.0.0) (2026-09-22)
 
 
