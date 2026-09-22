@@ -698,3 +698,34 @@ it('tells the owner what the provider answered instead of a generic failure', as
   expect(failed.status).toBe('failed');
   expect(failed.error).toContain('rate limiting');
 });
+
+it('repeats what the provider said when the refusal carries a reason', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile({
+    name: 'Atlas',
+    instructions: 'Help.',
+    model: { provider: 'anthropic' as const, modelId: 'test', apiKeyEnv: 'ANTHROPIC_API_KEY' },
+  });
+  const session = await services.sessions.createSession(profile.id, { title: 'Refused' });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Oi',
+    requestKey: 'refused',
+  });
+
+  // A refusal the owner can act on: the status alone would have sent them to the model
+  // settings, and the account setting is what actually needs changing.
+  const refused = Object.assign(new Error('Error'), {
+    statusCode: 400,
+    data: { error: { message: 'Third-party apps draw from your extra usage.' } },
+  });
+
+  await new AgentRuntime(services, async () => {
+    throw new Error('stream failed', { cause: refused });
+  }).execute(profile.id, run.id);
+
+  const failed = await services.runs.run(profile.id, run.id);
+
+  expect(failed.error).toBe(
+    'The provider refused with 400: Third-party apps draw from your extra usage.',
+  );
+});

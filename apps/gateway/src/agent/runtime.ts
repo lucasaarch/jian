@@ -235,7 +235,7 @@ export class AgentRuntime {
                 }
 
                 return await boundToolResult(output, name, run, secrets, this.options);
-              } catch {
+              } catch (error) {
                 if (mcpToolNames.includes(name)) {
                   externalUncertain = true;
                   controller.abort();
@@ -243,7 +243,9 @@ export class AgentRuntime {
                   throw new Error('External tool outcome is uncertain');
                 }
 
-                throw new Error(`Tool ${name} failed. Inspect saved steps before retrying.`);
+                // The agent has to be able to say what went wrong: a bare "it failed" leaves it
+                // guessing, and the person then has to read the gateway log to learn anything.
+                throw new Error(`Tool ${name} failed: ${toolFailure(error, secrets)}`);
               }
             } finally {
               release();
@@ -445,7 +447,7 @@ export class AgentRuntime {
             runId,
             owner,
             externalUncertain || signal.aborted ? 'interrupted' : 'failed',
-            executionFailureMessage(error, externalUncertain, signal.aborted),
+            executionFailureMessage(error, externalUncertain, signal.aborted, secrets),
           )
           .catch(() => {});
       }
@@ -486,14 +488,44 @@ function causes(error: unknown): Error[] {
   return chain;
 }
 
-/** A provider's own status, where it is specific enough to tell the owner what to do. */
-function providerStatus(error: unknown): number | undefined {
-  const status = (error as { statusCode?: unknown }).statusCode;
+/** One line, redacted against this run's credentials, short enough for a chat bubble. */
+function reason(error: unknown, secrets: Set<string>): string {
+  const text = error instanceof Error ? error.message : String(error);
 
-  return typeof status === 'number' ? status : undefined;
+  return redactText(text, secrets).replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
-function executionFailureMessage(error: unknown, uncertain: boolean, aborted: boolean): string {
+function toolFailure(error: unknown, secrets: Set<string>): string {
+  return reason(error, secrets) || 'no reason given. Inspect saved steps before retrying.';
+}
+
+/**
+ * The refusal itself, wherever in the chain it sits: streaming wraps what a step threw, so the
+ * top error carries neither. The status says which kind of problem it is; the sentence behind
+ * it names the account setting or the field to change, which is the difference between the
+ * owner acting and the owner reading logs.
+ */
+function providerRefusal(error: unknown): { status?: number; said?: string } {
+  for (const cause of causes(error)) {
+    const carrier = cause as { statusCode?: unknown; data?: { error?: { message?: unknown } } };
+    const status = typeof carrier.statusCode === 'number' ? carrier.statusCode : undefined;
+    const said =
+      typeof carrier.data?.error?.message === 'string' ? carrier.data.error.message : undefined;
+
+    if (status || said) {
+      return { status, said };
+    }
+  }
+
+  return {};
+}
+
+function executionFailureMessage(
+  error: unknown,
+  uncertain: boolean,
+  aborted: boolean,
+  secrets: Set<string>,
+): string {
   if (uncertain) {
     return 'External tool outcome is uncertain. Inspect checkpoints and reconcile effects before continuing.';
   }
@@ -513,8 +545,14 @@ function executionFailureMessage(error: unknown, uncertain: boolean, aborted: bo
     return budget.message;
   }
 
-  // The provider's own status says more than any guess here, and none of these leak a key.
-  switch (providerStatus(error)) {
+  // Redacted, because a refusal can quote back what was sent.
+  const { status, said } = providerRefusal(error);
+
+  if (status && said) {
+    return `The provider refused with ${status}: ${reason(new Error(said), secrets)}`;
+  }
+
+  switch (status) {
     case 401:
     case 403:
       return 'The provider refused the credential. Check the key or token configured for it.';
