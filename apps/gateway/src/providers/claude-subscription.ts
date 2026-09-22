@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import type { ProviderCredential } from '@jian/contracts';
 
 /**
  * A Claude subscription credential, issued by `claude setup-token`. It is not an API key: sent
@@ -10,6 +11,34 @@ const OAUTH_PREFIX = 'sk-ant-oat';
 
 export const isSubscriptionToken = (secret: string | undefined): boolean =>
   typeof secret === 'string' && secret.startsWith(OAUTH_PREFIX);
+
+const KEY_PREFIX = 'sk-ant-api';
+
+/**
+ * Which of the two Anthropic credentials this is, in the order the answers can be trusted:
+ * what the owner declared when saving it, then the prefix the credential itself carries, then
+ * the name of the variable it came from — `ANTHROPIC_API_TOKEN` exists to hold the bearer one.
+ * Guessing wrong costs a 401 on every run, so nothing further is inferred.
+ */
+export function anthropicCredential(
+  declared: ProviderCredential | undefined,
+  apiKeyEnv: string | undefined,
+  secret: string | undefined,
+): ProviderCredential {
+  if (declared) {
+    return declared;
+  }
+
+  if (isSubscriptionToken(secret)) {
+    return 'subscription';
+  }
+
+  if (secret?.startsWith(KEY_PREFIX)) {
+    return 'key';
+  }
+
+  return apiKeyEnv === 'ANTHROPIC_API_TOKEN' ? 'subscription' : 'key';
+}
 
 /** Claude Code's own betas. Without them the request is refused however valid the token is. */
 const BETAS = 'claude-code-20250219,oauth-2025-04-20';

@@ -18,6 +18,7 @@ import type { Queryable, Store } from '../storage/database.js';
 import { modelCapabilities } from './capabilities.js';
 import { environmentProvider, providerKinds } from './catalog.js';
 import type { ModelCatalog } from './catalog-source.js';
+import { anthropicCredential } from './claude-subscription.js';
 import {
   findProvider,
   insertProvider,
@@ -57,9 +58,20 @@ export class Providers {
   }
 
   async createProvider(input: unknown) {
-    const { secret, ...data } = providerInputSchema.parse(input);
+    const { secret, credential, ...data } = providerInputSchema.parse(input);
 
-    return this.register({ ...data, id: randomUUID(), createdAt: nowIso(this.clock) }, secret);
+    return this.register(
+      {
+        ...data,
+        // Only Anthropic has two kinds of credential; for the others the question has one answer.
+        ...(data.kind === 'anthropic'
+          ? { credential: anthropicCredential(credential, undefined, secret) }
+          : {}),
+        id: randomUUID(),
+        createdAt: nowIso(this.clock),
+      },
+      secret,
+    );
   }
 
   configureCodexProvider(secret: string) {
@@ -198,6 +210,9 @@ export class Providers {
       config: {
         provider: provider.authMode === 'codex' ? ('openai-codex' as const) : provider.kind,
         modelId: selection.modelId,
+        ...(provider.kind === 'anthropic'
+          ? { credential: anthropicCredential(provider.credential, provider.apiKeyEnv, undefined) }
+          : {}),
         ...(selection.reasoningEffort ? { reasoningEffort: selection.reasoningEffort } : {}),
         ...(provider.apiKeyEnv ? { apiKeyEnv: provider.apiKeyEnv } : { providerId: provider.id }),
       },

@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { modelSelectionSchema, reasoningEffortSchema } from './providers.js';
+import {
+  modelSelectionSchema,
+  providerCredentialSchema,
+  reasoningEffortSchema,
+} from './providers.js';
 import { secretSchema } from './security.js';
 import { skillOriginSchema } from './skills.js';
 
@@ -32,6 +36,9 @@ export const modelSchema = z
       )
       .optional(),
     providerId: z.uuid().optional(),
+    // Frozen with the run so the request is built the same way the owner configured it, long
+    // after the provider record may have been replaced.
+    credential: providerCredentialSchema.optional(),
     baseURL: endpointSchema.optional(),
     // Frozen with the run: the effort chosen next to the model is what the request carries.
     reasoningEffort: reasoningEffortSchema.optional(),

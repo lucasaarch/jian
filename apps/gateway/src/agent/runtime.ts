@@ -4,7 +4,7 @@ import type { Run } from '@jian/contracts';
 import { generateText, type LanguageModel, stepCountIs, ToolLoopAgent, type ToolSet } from 'ai';
 import { fitPrompt, tokenCounter } from '../context/budget.js';
 import type { ContextSource } from '../context/port.js';
-import { isSubscriptionToken, withClaudeCodeIdentity } from '../providers/claude-subscription.js';
+import { anthropicCredential, withClaudeCodeIdentity } from '../providers/claude-subscription.js';
 import { reasoningProviderOptions } from '../providers/effort.js';
 import { resolveModel } from '../providers/models.js';
 import { providerSecret } from '../providers/service.js';
@@ -135,9 +135,13 @@ export class AgentRuntime {
 
       // Anthropic checks that a subscription request comes from Claude Code, and the system
       // prompt is part of that check. The profile's own instructions follow it untouched.
-      const subscription = isSubscriptionToken(
-        providerKey ?? (config.apiKeyEnv ? process.env[config.apiKeyEnv] : undefined),
-      );
+      const subscription =
+        config.provider === 'anthropic' &&
+        anthropicCredential(
+          config.credential,
+          config.apiKeyEnv,
+          providerKey ?? (config.apiKeyEnv ? process.env[config.apiKeyEnv] : undefined),
+        ) === 'subscription';
 
       const model = await this.model(config, process.env, outbound.fetch, providerKey);
       const tools = profileTools(this.services, run);

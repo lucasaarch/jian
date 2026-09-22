@@ -157,6 +157,19 @@
   .provider-symbol {
     @apply font-display text-3xl font-medium;
   }
+  /* One vendor per row: the name carries its state, and the form opens under the whole row. */
+  .provider-row h3 {
+    @apply flex flex-wrap items-center gap-2;
+  }
+  .provider-row .connection-meta {
+    @apply mt-2;
+  }
+  .provider-row .connection-form {
+    @apply max-w-xl border-t border-line pt-5;
+  }
+  .provider-row .select-trigger {
+    @apply bg-canvas;
+  }
   .connection-card h2 {
     @apply text-3xl;
   }

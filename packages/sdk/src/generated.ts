@@ -1125,6 +1125,8 @@ export interface operations {
                         name: string;
                         /** @enum {string} */
                         kind: "openai" | "anthropic" | "google" | "openrouter";
+                        /** @enum {string} */
+                        credential?: "key" | "subscription";
                         apiKeyEnv?: string;
                         /** @enum {string} */
                         authMode?: "api" | "codex";
@@ -1252,6 +1254,8 @@ export interface operations {
                     /** @enum {string} */
                     kind: "openai" | "anthropic" | "google" | "openrouter";
                     secret: string;
+                    /** @enum {string} */
+                    credential?: "key" | "subscription";
                 };
             };
         };
@@ -1266,6 +1270,8 @@ export interface operations {
                         name: string;
                         /** @enum {string} */
                         kind: "openai" | "anthropic" | "google" | "openrouter";
+                        /** @enum {string} */
+                        credential?: "key" | "subscription";
                         apiKeyEnv?: string;
                         /** @enum {string} */
                         authMode?: "api" | "codex";
@@ -1537,6 +1543,8 @@ export interface operations {
                         name: string;
                         /** @enum {string} */
                         kind: "openai" | "anthropic" | "google" | "openrouter";
+                        /** @enum {string} */
+                        credential?: "key" | "subscription";
                         apiKeyEnv?: string;
                         /** @enum {string} */
                         authMode?: "api" | "codex";
@@ -2390,6 +2398,8 @@ export interface operations {
                             apiKeyEnv?: string;
                             /** Format: uuid */
                             providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
                             /** Format: uri */
                             baseURL?: string;
                             /** @enum {string} */
@@ -6567,6 +6577,8 @@ export interface operations {
                             apiKeyEnv?: string;
                             /** Format: uuid */
                             providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
                             /** Format: uri */
                             baseURL?: string;
                             /** @enum {string} */
@@ -6815,6 +6827,8 @@ export interface operations {
                             apiKeyEnv?: string;
                             /** Format: uuid */
                             providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
                             /** Format: uri */
                             baseURL?: string;
                             /** @enum {string} */
@@ -7057,6 +7071,8 @@ export interface operations {
                         apiKeyEnv?: string;
                         /** Format: uuid */
                         providerId?: string;
+                        /** @enum {string} */
+                        credential?: "key" | "subscription";
                         /** Format: uri */
                         baseURL?: string;
                         /** @enum {string} */
@@ -7189,6 +7205,8 @@ export interface operations {
                             apiKeyEnv?: string;
                             /** Format: uuid */
                             providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
                             /** Format: uri */
                             baseURL?: string;
                             /** @enum {string} */
@@ -7439,6 +7457,8 @@ export interface operations {
                             apiKeyEnv?: string;
                             /** Format: uuid */
                             providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
                             /** Format: uri */
                             baseURL?: string;
                             /** @enum {string} */
@@ -7676,6 +7696,8 @@ export interface operations {
                         apiKeyEnv?: string;
                         /** Format: uuid */
                         providerId?: string;
+                        /** @enum {string} */
+                        credential?: "key" | "subscription";
                         /** Format: uri */
                         baseURL?: string;
                         /** @enum {string} */
@@ -7785,6 +7807,8 @@ export interface operations {
                             apiKeyEnv?: string;
                             /** Format: uuid */
                             providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
                             /** Format: uri */
                             baseURL?: string;
                             /** @enum {string} */
@@ -8039,6 +8063,8 @@ export interface operations {
                                 apiKeyEnv?: string;
                                 /** Format: uuid */
                                 providerId?: string;
+                                /** @enum {string} */
+                                credential?: "key" | "subscription";
                                 /** Format: uri */
                                 baseURL?: string;
                                 /** @enum {string} */
@@ -8868,6 +8894,8 @@ export interface operations {
                             apiKeyEnv?: string;
                             /** Format: uuid */
                             providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
                             /** Format: uri */
                             baseURL?: string;
                             /** @enum {string} */
@@ -9342,6 +9370,8 @@ export interface operations {
                             apiKeyEnv?: string;
                             /** Format: uuid */
                             providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
                             /** Format: uri */
                             baseURL?: string;
                             /** @enum {string} */
@@ -9552,6 +9582,8 @@ export interface operations {
                             apiKeyEnv?: string;
                             /** Format: uuid */
                             providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
                             /** Format: uri */
                             baseURL?: string;
                             /** @enum {string} */
@@ -9762,6 +9794,8 @@ export interface operations {
                             apiKeyEnv?: string;
                             /** Format: uuid */
                             providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
                             /** Format: uri */
                             baseURL?: string;
                             /** @enum {string} */

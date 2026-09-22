@@ -46,11 +46,20 @@ export const providerModelListSchema = z.strictObject({
   reason: z.string().max(300).optional(),
 });
 
+/**
+ * Anthropic issues two credentials that are not interchangeable. An API key is sent as one;
+ * a subscription token, from `claude setup-token`, is only accepted as a bearer from a caller
+ * presenting itself as Claude Code. Sending either as the other answers 401, and the owner is
+ * the one who knows which they pasted.
+ */
+export const providerCredentialSchema = z.enum(['key', 'subscription']);
+
 /** The key travels once, on the way in. `createdAt` is the only thing said about it afterwards. */
 export const providerInputSchema = z.strictObject({
   name: z.string().trim().min(1).max(100),
   kind: z.enum(['openai', 'anthropic', 'google', 'openrouter']),
   secret: secretSchema,
+  credential: providerCredentialSchema.optional(),
 });
 
 /**
@@ -60,6 +69,7 @@ export const providerInputSchema = z.strictObject({
 export const providerRecordSchema = providerInputSchema.omit({ secret: true }).extend({
   apiKeyEnv: z.string().optional(),
   authMode: z.enum(['api', 'codex']).optional(),
+  credential: providerCredentialSchema.optional(),
   id: z.uuid(),
   createdAt: z.iso.datetime(),
   revokedAt: z.iso.datetime().optional(),
@@ -116,6 +126,7 @@ export const modelDefaultsRecordSchema = modelDefaultsInputSchema.extend({
   updatedAt: z.iso.datetime(),
 });
 
+export type ProviderCredential = z.infer<typeof providerCredentialSchema>;
 export type ProviderRecord = z.infer<typeof providerRecordSchema>;
 export type ProviderModel = z.infer<typeof providerModelSchema>;
 export type ProviderModelList = z.infer<typeof providerModelListSchema>;

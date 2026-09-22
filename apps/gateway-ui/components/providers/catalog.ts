@@ -1,19 +1,48 @@
 import type { ProfileData, ProviderModel, ReasoningEffort } from '../../lib/api';
 
-/** The vendors the panel offers, and the host variable each one reads when no key is saved. */
+/** The vendors the panel offers, each with what it is and the host variable it falls back to. */
 export const providers = [
   {
     kind: 'openrouter',
     name: 'OpenRouter',
+    description: 'One account, many models.',
+    symbol: '⇄',
     variables: 'OPENROUTER_API_KEY',
   },
   {
     kind: 'anthropic',
     name: 'Anthropic',
-    variables: 'ANTHROPIC_API_KEY ou ANTHROPIC_API_TOKEN',
+    description: 'Claude models for your agents.',
+    symbol: 'A',
+    variables: 'ANTHROPIC_API_KEY or ANTHROPIC_API_TOKEN',
   },
-  { kind: 'google', name: 'Gemini', variables: 'GEMINI_API_TOKEN' },
-  { kind: 'openai', name: 'OpenAI', variables: 'OPENAI_API_KEY' },
+  {
+    kind: 'google',
+    name: 'Gemini',
+    description: "Google's Gemini models.",
+    symbol: '✦',
+    variables: 'GEMINI_API_TOKEN',
+  },
+  {
+    kind: 'openai',
+    name: 'OpenAI',
+    description: 'The OpenAI API, or your ChatGPT account.',
+    symbol: '◎',
+    variables: 'OPENAI_API_KEY',
+  },
+] as const;
+
+/**
+ * Anthropic issues two credentials and they are not interchangeable, so the owner says which
+ * one they pasted rather than the gateway guessing and answering 401 on every run.
+ */
+export const anthropicCredentials = [
+  { value: 'key', label: 'API key', detail: 'Starts with sk-ant-api. Billed per token.' },
+  {
+    value: 'subscription',
+    label: 'Subscription token',
+    detail: 'From claude setup-token. Uses your Claude plan.',
+  },
 ] as const;
 
 /**

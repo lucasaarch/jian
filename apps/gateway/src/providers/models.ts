@@ -7,7 +7,7 @@ import type { LanguageModel } from 'ai';
 import { createSafeFetch } from '../security/outbound.js';
 import { providerEnvironment } from './catalog.js';
 import {
-  isSubscriptionToken,
+  anthropicCredential,
   subscriptionFetch,
   subscriptionHeaders,
 } from './claude-subscription.js';
@@ -48,16 +48,18 @@ export async function resolveModel(
         baseURL: config.baseURL ?? 'https://openrouter.ai/api/v1',
         fetch: fetcher,
       }).chatModel(config.modelId);
-    case 'anthropic':
+    case 'anthropic': {
       // A subscription token is not a key: it goes as a bearer, with Claude Code's own betas
       // and client identity, or Anthropic refuses it however valid it is.
+      const subscription =
+        anthropicCredential(config.credential, config.apiKeyEnv, apiKey) === 'subscription';
+
       return createAnthropic({
-        ...(isSubscriptionToken(apiKey)
-          ? { authToken: apiKey, headers: subscriptionHeaders() }
-          : { apiKey }),
+        ...(subscription ? { authToken: apiKey, headers: subscriptionHeaders() } : { apiKey }),
         baseURL: config.baseURL,
-        fetch: isSubscriptionToken(apiKey) ? await subscriptionFetch(fetcher) : fetcher,
+        fetch: subscription ? await subscriptionFetch(fetcher) : fetcher,
       })(config.modelId);
+    }
     case 'google':
       return createGoogleGenerativeAI({ apiKey, baseURL: config.baseURL, fetch: fetcher })(
         config.modelId,

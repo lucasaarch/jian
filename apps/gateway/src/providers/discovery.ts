@@ -11,6 +11,11 @@ import type { GatewayVault } from '../security/gateway-vault.js';
 import { bareModelId, modelCapabilities } from './capabilities.js';
 import type { ProviderKind } from './catalog.js';
 import type { ModelCatalog } from './catalog-source.js';
+import {
+  anthropicCredential,
+  subscriptionFetch,
+  subscriptionHeaders,
+} from './claude-subscription.js';
 import { listCodexModels } from './codex/models.js';
 import type { ProviderAdmin } from './port.js';
 import { providerSecret } from './service.js';
@@ -254,15 +259,22 @@ export class ProviderModels {
     const bearer =
       provider.kind === 'openai' ||
       provider.kind === 'openrouter' ||
-      provider.apiKeyEnv === 'ANTHROPIC_API_TOKEN';
+      (provider.kind === 'anthropic' &&
+        anthropicCredential(provider.credential, provider.apiKeyEnv, key) === 'subscription');
 
-    const response = await this.fetcher(endpoints[kind], {
+    // A subscription token is only accepted from something presenting itself as Claude Code,
+    // here as much as on a run: listed through the plain client it answers 401.
+    const subscription = provider.kind === 'anthropic' && bearer;
+    const fetcher = subscription ? await subscriptionFetch(this.fetcher) : this.fetcher;
+
+    const response = await fetcher(endpoints[kind], {
       headers: {
         accept: 'application/json',
         ...(provider.kind === 'google' ? { 'x-goog-api-key': key } : {}),
         ...(provider.kind === 'anthropic'
           ? { 'anthropic-version': '2023-06-01', ...(bearer ? {} : { 'x-api-key': key }) }
           : {}),
+        ...(subscription ? subscriptionHeaders() : {}),
         ...(bearer && provider.kind !== 'google' ? { authorization: `Bearer ${key}` } : {}),
       },
       signal: AbortSignal.timeout(15_000),

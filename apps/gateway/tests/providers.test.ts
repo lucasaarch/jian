@@ -2,6 +2,7 @@ import { modelSchema } from '@jian/contracts';
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
+  anthropicCredential,
   CLAUDE_CODE_IDENTITY,
   withClaudeCodeIdentity,
 } from '../src/providers/claude-subscription.js';
@@ -137,4 +138,24 @@ it('sends the Claude Code identity as a system block of its own', async () => {
     { type: 'text', text: CLAUDE_CODE_IDENTITY },
     { type: 'text', text: 'Você é Zero Two.' },
   ]);
+});
+
+describe('anthropic credentials', () => {
+  it('sends what the owner declared, whatever the credential looks like', () => {
+    expect(anthropicCredential('subscription', undefined, 'sk-ant-api03-xyz')).toBe('subscription');
+    expect(anthropicCredential('key', 'ANTHROPIC_API_TOKEN', 'whatever')).toBe('key');
+  });
+
+  it('reads the prefix before the variable it arrived in', () => {
+    expect(anthropicCredential(undefined, 'ANTHROPIC_API_TOKEN', 'sk-ant-api03-xyz')).toBe('key');
+    expect(anthropicCredential(undefined, 'ANTHROPIC_API_KEY', 'sk-ant-oat01-xyz')).toBe(
+      'subscription',
+    );
+  });
+
+  it('treats the token variable as the bearer one and anything else as a key', () => {
+    expect(anthropicCredential(undefined, 'ANTHROPIC_API_TOKEN', 'opaque')).toBe('subscription');
+    expect(anthropicCredential(undefined, 'ANTHROPIC_API_KEY', 'opaque')).toBe('key');
+    expect(anthropicCredential(undefined, undefined, undefined)).toBe('key');
+  });
 });
