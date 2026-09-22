@@ -7,7 +7,7 @@ import { Avatar } from '../profile/avatar-field';
 import { SectionHeading } from '../ui';
 import { ActivityHeatmap } from './heatmap';
 
-const number = (value: number) => value.toLocaleString('pt-BR');
+const number = (value: number) => value.toLocaleString('en');
 export function Overview({
   profile,
   data,
@@ -18,11 +18,16 @@ export function Overview({
   api: GatewayApi;
 }) {
   const active = data.activities.filter((run) => ['running', 'queued'].includes(run.status)).length;
-  const input = data.activities.reduce((sum, run) => sum + (run.usage?.inputTokens ?? 0), 0);
-  const output = data.activities.reduce((sum, run) => sum + (run.usage?.outputTokens ?? 0), 0);
-  const _recent = [...data.activities]
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 5);
+  const total = (
+    read: (usage: NonNullable<ProfileData['activities'][number]['usage']>) => number,
+  ) => data.activities.reduce((sum, run) => sum + (run.usage ? read(run.usage) : 0), 0);
+
+  const input = total((usage) => usage.inputTokens);
+  const output = total((usage) => usage.outputTokens);
+  // Served from the provider's cache: part of the input, and billed differently by every
+  // provider that reports it, so it is shown apart instead of inside one number.
+  const cached = total((usage) => usage.cachedInputTokens ?? 0);
+  const estimated = data.activities.some((run) => run.usage?.estimated);
   return (
     <>
       <SectionHeading
@@ -46,7 +51,7 @@ export function Overview({
           </Link>
         </div>
       </section>
-      <section className="overview-metrics" aria-label="Atividade do perfil">
+      <section className="overview-metrics" aria-label="Profile activity">
         {[
           {
             label: 'Sessions',
@@ -91,7 +96,7 @@ export function Overview({
             {number(input + output)}
             <small>tokens</small>
           </h2>
-          <p>Across the last hundred runs</p>
+          <p>Counted across the last hundred runs</p>
           <div className="usage-bar" aria-hidden="true">
             <span style={{ width: `${input + output ? (input / (input + output)) * 100 : 0}%` }} />
             <span style={{ width: `${input + output ? (output / (input + output)) * 100 : 0}%` }} />
@@ -111,11 +116,21 @@ export function Overview({
               </dt>
               <dd>{number(output)}</dd>
             </div>
+            {cached > 0 && (
+              <div>
+                <dt>
+                  <span className="usage-dot cached" />
+                  Read from cache
+                </dt>
+                <dd>{number(cached)}</dd>
+              </div>
+            )}
           </dl>
           <p className="usage-footnote">
             {input + output
-              ? 'Counts the context sent and the answers generated.'
+              ? 'The context sent and the answers generated. Providers price these differently, and cached input differently again, so this is a count and not a bill.'
               : 'Usage is recorded when a model reports it.'}
+            {estimated && ' Some runs reported nothing and were counted here instead.'}
           </p>
         </section>
       </div>

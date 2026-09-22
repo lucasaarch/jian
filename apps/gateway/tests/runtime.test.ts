@@ -235,6 +235,8 @@ it('stops a run after its cumulative token cap without making another model call
   expect((await services.runs.run(profile.id, run.id)).usage).toEqual({
     inputTokens: 32000,
     outputTokens: 300,
+    cachedInputTokens: 0,
+    estimated: false,
     steps: 1,
   });
 
@@ -523,6 +525,22 @@ it('creates a child profile without inheriting provider access', async () => {
           content: [
             {
               type: 'tool-call',
+              toolCallId: 'load',
+              toolName: 'load_tools',
+              input: JSON.stringify({ groups: ['self'] }),
+            },
+          ],
+          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+          usage,
+          warnings: [],
+        };
+      }
+
+      if (step === 2) {
+        return {
+          content: [
+            {
+              type: 'tool-call',
               toolCallId: 'child',
               toolName: 'create_profile',
               input: JSON.stringify({ name: 'Child', instructions: 'Help.' }),
@@ -597,6 +615,22 @@ it('versions self-managed skills without accepting new capability grants', async
       calls += 1;
 
       if (calls === 1) {
+        return {
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'load',
+              toolName: 'load_tools',
+              input: JSON.stringify({ groups: ['self'] }),
+            },
+          ],
+          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+          usage,
+          warnings: [],
+        };
+      }
+
+      if (calls === 2) {
         return {
           content: [
             {

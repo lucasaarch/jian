@@ -244,3 +244,8 @@
 .heatmap-tip span {
   opacity: 0.75;
 }
+
+/* Input, output and the cached part of the input: three readings of one number. */
+.usage-dot.cached {
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+}

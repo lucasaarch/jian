@@ -35,7 +35,13 @@ export interface RunExecution {
     profileId: string,
     runId: string,
     owner: string,
-    usage: { inputTokens: number; outputTokens: number; steps: number },
+    usage: {
+      inputTokens: number;
+      outputTokens: number;
+      cachedInputTokens?: number;
+      estimated?: boolean;
+      steps: number;
+    },
   ): Promise<void>;
   finish(
     profileId: string,

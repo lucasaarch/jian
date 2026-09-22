@@ -3328,6 +3328,15 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cachedInputTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "estimated": {
+                          "default": false,
+                          "type": "boolean"
+                        },
                         "steps": {
                           "type": "integer",
                           "minimum": 0,
@@ -3337,6 +3346,8 @@
                       "required": [
                         "inputTokens",
                         "outputTokens",
+                        "cachedInputTokens",
+                        "estimated",
                         "steps"
                       ],
                       "additionalProperties": false
@@ -17367,6 +17378,15 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cachedInputTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "estimated": {
+                          "default": false,
+                          "type": "boolean"
+                        },
                         "steps": {
                           "type": "integer",
                           "minimum": 0,
@@ -17376,6 +17396,8 @@
                       "required": [
                         "inputTokens",
                         "outputTokens",
+                        "cachedInputTokens",
+                        "estimated",
                         "steps"
                       ],
                       "additionalProperties": false
@@ -18437,6 +18459,15 @@
                             "type": "number",
                             "minimum": 0
                           },
+                          "cachedInputTokens": {
+                            "default": 0,
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "estimated": {
+                            "default": false,
+                            "type": "boolean"
+                          },
                           "steps": {
                             "type": "integer",
                             "minimum": 0,
@@ -18446,6 +18477,8 @@
                         "required": [
                           "inputTokens",
                           "outputTokens",
+                          "cachedInputTokens",
+                          "estimated",
                           "steps"
                         ],
                         "additionalProperties": false
@@ -19012,6 +19045,15 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cachedInputTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "estimated": {
+                          "default": false,
+                          "type": "boolean"
+                        },
                         "steps": {
                           "type": "integer",
                           "minimum": 0,
@@ -19021,6 +19063,8 @@
                       "required": [
                         "inputTokens",
                         "outputTokens",
+                        "cachedInputTokens",
+                        "estimated",
                         "steps"
                       ],
                       "additionalProperties": false
@@ -19586,6 +19630,15 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cachedInputTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "estimated": {
+                          "default": false,
+                          "type": "boolean"
+                        },
                         "steps": {
                           "type": "integer",
                           "minimum": 0,
@@ -19595,6 +19648,8 @@
                       "required": [
                         "inputTokens",
                         "outputTokens",
+                        "cachedInputTokens",
+                        "estimated",
                         "steps"
                       ],
                       "additionalProperties": false

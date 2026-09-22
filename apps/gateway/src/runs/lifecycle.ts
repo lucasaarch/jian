@@ -117,20 +117,35 @@ export class RunLifecycle {
     profileId: string,
     runId: string,
     owner: string,
-    usage: { inputTokens: number; outputTokens: number; steps: number },
+    usage: {
+      inputTokens: number;
+      outputTokens: number;
+      cachedInputTokens?: number;
+      estimated?: boolean;
+      steps: number;
+    },
   ) {
     await this.store.transaction(profileId, async (tx) => {
       const run = await this.runs.run(profileId, runId, tx);
 
       assertOwned(run, owner, this.clock);
 
-      const previous = run.usage ?? { inputTokens: 0, outputTokens: 0, steps: 0 };
+      const previous = run.usage ?? {
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        estimated: false,
+        steps: 0,
+      };
 
       await updateRun(tx, {
         ...run,
         usage: {
           inputTokens: previous.inputTokens + usage.inputTokens,
           outputTokens: previous.outputTokens + usage.outputTokens,
+          cachedInputTokens: previous.cachedInputTokens + (usage.cachedInputTokens ?? 0),
+          // One counted step makes the whole run's number a count, not a report.
+          estimated: previous.estimated || Boolean(usage.estimated),
           steps: previous.steps + usage.steps,
         },
       });

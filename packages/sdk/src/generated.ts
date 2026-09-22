@@ -2387,6 +2387,10 @@ export interface operations {
                         usage?: {
                             inputTokens: number;
                             outputTokens: number;
+                            /** @default 0 */
+                            cachedInputTokens: number;
+                            /** @default false */
+                            estimated: boolean;
                             steps: number;
                         };
                         /** Format: uuid */
@@ -8883,6 +8887,10 @@ export interface operations {
                         usage?: {
                             inputTokens: number;
                             outputTokens: number;
+                            /** @default 0 */
+                            cachedInputTokens: number;
+                            /** @default false */
+                            estimated: boolean;
                             steps: number;
                         };
                         /** Format: uuid */
@@ -9359,6 +9367,10 @@ export interface operations {
                         usage?: {
                             inputTokens: number;
                             outputTokens: number;
+                            /** @default 0 */
+                            cachedInputTokens: number;
+                            /** @default false */
+                            estimated: boolean;
                             steps: number;
                         };
                         /** Format: uuid */
@@ -9571,6 +9583,10 @@ export interface operations {
                         usage?: {
                             inputTokens: number;
                             outputTokens: number;
+                            /** @default 0 */
+                            cachedInputTokens: number;
+                            /** @default false */
+                            estimated: boolean;
                             steps: number;
                         };
                         /** Format: uuid */
@@ -9783,6 +9799,10 @@ export interface operations {
                         usage?: {
                             inputTokens: number;
                             outputTokens: number;
+                            /** @default 0 */
+                            cachedInputTokens: number;
+                            /** @default false */
+                            estimated: boolean;
                             steps: number;
                         };
                         /** Format: uuid */

@@ -366,3 +366,96 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
 
   return tools;
 }
+
+/**
+ * Tools the agent asks for when it needs them. Every definition costs its description and its
+ * schema on *every* model call of the run, so a set that is always complete is paid for by
+ * turns that use none of it — measured at 8.5 KB of prompt for a greeting. What is left in
+ * `core` is what a turn is likely to need before it has had a chance to ask for anything:
+ * memory, skills, what the profile is doing, and the other agents, so a conversation between
+ * profiles still costs one call rather than two.
+ */
+export const TOOL_GROUPS = {
+  files: {
+    summary: 'read, write and list files on the machine this gateway runs on',
+    tools: ['read_file', 'write_file', 'list_directory'],
+  },
+  shell: {
+    summary: 'run commands on the machine this gateway runs on',
+    tools: ['run_command'],
+  },
+  conversations: {
+    summary: 'read and write this profile’s other sessions, and search their history',
+    tools: [
+      'list_sessions',
+      'read_session',
+      'search_history',
+      'send_session_message',
+      'read_inbox',
+    ],
+  },
+  tasks: {
+    summary: 'checkpoints, stored tool output and resource leases of long-running work',
+    tools: ['read_run_checkpoints', 'read_artifact', 'acquire_resource', 'release_resource'],
+  },
+  contacts: {
+    summary: 'write to the people the owner approved on this profile’s channels',
+    tools: ['list_contacts', 'message_contact'],
+  },
+  self: {
+    summary: 'read and version your own identity and skills',
+    tools: ['read_identity', 'update_identity', 'update_skills', 'create_profile'],
+  },
+} as const;
+
+export type ToolGroup = keyof typeof TOOL_GROUPS;
+
+const deferred = new Map<string, ToolGroup>(
+  Object.entries(TOOL_GROUPS).flatMap(([group, entry]) =>
+    entry.tools.map((name) => [name, group as ToolGroup] as const),
+  ),
+);
+
+/** The groups this run can actually offer: a group whose tools are all absent is not one. */
+export function offeredGroups(tools: ToolSet): ToolGroup[] {
+  return (Object.keys(TOOL_GROUPS) as ToolGroup[]).filter((group) =>
+    TOOL_GROUPS[group].tools.some((name) => name in tools),
+  );
+}
+
+/**
+ * Adds the loader and reports which tools it gates. The returned set is live: loading a group
+ * adds its names to it, and the runtime sends only the tools it holds.
+ */
+export function deferTools(tools: ToolSet, loaded: Set<string>): { gated: Set<string> } {
+  const groups = offeredGroups(tools);
+  const gated = new Set(
+    Object.keys(tools).filter((name) => groups.includes(deferred.get(name) as ToolGroup)),
+  );
+
+  if (gated.size === 0) {
+    return { gated };
+  }
+
+  tools.load_tools = tool({
+    description: `Load a group of tools before using it. ${groups
+      .map((group) => `${group}: ${TOOL_GROUPS[group].summary}`)
+      .join('. ')}.`,
+    inputSchema: z.object({
+      groups: z.array(z.enum(groups as [ToolGroup, ...ToolGroup[]])).min(1),
+    }),
+    execute: async ({ groups: chosen }) => {
+      for (const group of chosen) {
+        for (const name of TOOL_GROUPS[group].tools) {
+          if (name in tools) {
+            loaded.add(name);
+          }
+        }
+      }
+
+      return { loaded: [...loaded] };
+    },
+  });
+
+  return { gated };
+}

@@ -12,7 +12,7 @@ import { createSafeFetch } from '../security/outbound.js';
 import { connectMcpTools, unavailableNote } from './mcp.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
-import { profileTools, type ToolServices } from './tools.js';
+import { deferTools, profileTools, type ToolServices } from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
 
 export type { RuntimeOptions } from './types.js';
@@ -41,6 +41,16 @@ export class AgentRuntime {
       const session = await this.services.sessions.session(run.profileId, run.sessionId);
 
       if (session.title) {
+        return;
+      }
+
+      // A first message short enough to read as a title already is one. Spending a whole
+      // request to restate six words was the second model call of every new conversation.
+      const opening = run.input.trim().replace(/\s+/g, ' ');
+
+      if (opening.length <= 60) {
+        await this.services.sessions.nameIfUnnamed(run.profileId, run.sessionId, opening);
+
         return;
       }
 
@@ -145,6 +155,9 @@ export class AgentRuntime {
 
       const model = await this.model(config, process.env, outbound.fetch, providerKey);
       const tools = profileTools(this.services, run);
+      // Loaded within the run and never across runs: a turn states what it needs.
+      const loadedTools = new Set<string>();
+      const { gated } = deferTools(tools, loadedTools);
       const { mcpToolNames, selectedMcpTools, unavailable } = await connectMcpTools(run, tools, {
         vault: this.options.vault,
         secrets,
@@ -276,8 +289,10 @@ export class AgentRuntime {
             progress.redirected();
           }
 
-          const activeNames = Object.keys(guarded).filter(
-            (name) => !mcpToolNames.includes(name) || selectedMcpTools.has(name),
+          const activeNames = Object.keys(guarded).filter((name) =>
+            mcpToolNames.includes(name)
+              ? selectedMcpTools.has(name)
+              : !gated.has(name) || loadedTools.has(name),
           );
 
           const activeTools = Object.fromEntries(
@@ -313,8 +328,8 @@ export class AgentRuntime {
         onStepEnd: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
           const estimate = tokenCounter(config.provider, config.modelId);
 
-          const inputTokens =
-            usage.inputTokens && usage.inputTokens > 0 ? usage.inputTokens : preparedInputTokens;
+          const reported = Boolean(usage.inputTokens && usage.inputTokens > 0);
+          const inputTokens = reported ? (usage.inputTokens as number) : preparedInputTokens;
 
           const outputTokens =
             usage.outputTokens && usage.outputTokens > 0
@@ -326,6 +341,10 @@ export class AgentRuntime {
           await this.services.lifecycle.recordUsage(profileId, runId, owner, {
             inputTokens,
             outputTokens,
+            // The part of the input the provider served from its own cache. Reported by
+            // Anthropic and OpenAI, absent elsewhere, and never inferred when it is missing.
+            cachedInputTokens: usage.inputTokenDetails?.cacheReadTokens ?? 0,
+            estimated: !reported,
             steps: 1,
           });
 

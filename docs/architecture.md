@@ -19,6 +19,8 @@ Versioned migrations run in a transaction under a global lock. The first version
 
 The dispatcher hands persisted runs to pg-boss; a transactional claim keeps two workers from executing the same run. A lease and a heartbeat detect a worker that is gone. Checkpoints record when a tool starts and how a step ended. Large results are referenced as artifacts; small ones are persisted with a cap and with known secrets redacted.
 
+Tools are loaded within a run rather than offered all at once. Every definition is re-sent on every model call, so a complete set is paid for by turns that use none of it — measured at 8.5 KB of prompt for a greeting. What stays always available is what a turn is likely to need before it can ask: memory, skills, the profile's own activity, and the other agents, so a conversation between profiles still costs one call. The rest — files, commands, other sessions, long-running work, contacts, self-management — is named in one loader and arrives when the agent asks for it. MCP tools follow the same rule, by server. A group loaded stays loaded for that run and for no other.
+
 The context is assembled on every step. Instructions, identity and the small catalogs are the stable part. Relevant memories, activity from other sessions and recent history are the moving part. The budget also counts the active tool schemas and the tool results. When history has to shrink, a tool call and its result are kept together. Each block is tokenized once per preparation, and a cut subtracts a cost already counted. If the mandatory turn does not fit, the run fails before the model is called.
 
 Memories are explicit, versioned and shared across the profile; there is no weight training and no literal awareness. Sessions talk to each other through an inbox that can be read back. The agent chooses to look at history, checkpoints, artifacts and other activity through tools.
@@ -38,6 +40,6 @@ A conversation between agents ends, because every round costs money. The depth b
 - No public protocol between installations.
 - No exactly-once replay guarantee for effects outside the gateway.
 - No sandbox around the commands an agent runs, and no arbitrary MCP installer. Skill import is the owner's, from GitHub repositories only, and copies the text instead of following the source.
-- No financial accounting in currency; token usage and limits are recorded.
+- No financial accounting in currency; token counts and limits are recorded. Input, output and the part of the input a provider served from its own cache are counted apart, because every provider prices them differently. A step that reports no usage is counted by the gateway itself and marks the whole run as estimated. None of these numbers is a bill.
 
 Extensions must use the public contracts and preserve the authorization boundaries that exist today.
