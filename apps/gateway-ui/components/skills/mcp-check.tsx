@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, ChevronDown, Plug, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, ChevronDown, LogIn, Plug, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import type { GatewayApi, McpStatus, Profile } from '../../lib/api';
 
@@ -49,10 +49,23 @@ export function McpResult({ status, error }: { status?: McpStatus; error: string
 
   if (!status.reachable) {
     return (
-      <p className="mcp-state bad" role="alert">
-        <TriangleAlert size={14} />
-        <span>Did not connect — {status.error}</span>
-      </p>
+      <div className="mt-2" role="alert">
+        <p className="mcp-state bad">
+          <TriangleAlert size={14} />
+          <span>Did not connect — {status.error}</span>
+        </p>
+        {status.authorizationUrl && (
+          <a
+            className="text-button mt-1"
+            href={status.authorizationUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <LogIn size={14} />
+            Sign in to this server
+          </a>
+        )}
+      </div>
     );
   }
 

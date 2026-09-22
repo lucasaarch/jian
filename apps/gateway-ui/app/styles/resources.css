@@ -79,3 +79,26 @@
 .text-button svg {
   transition: transform 0.15s ease;
 }
+
+/* A header or variable is a name, its value, and a way to drop the row. */
+.value-rows {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.value-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .value-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .value-row > :nth-child(2) {
+    grid-column: 1 / -1;
+  }
+}

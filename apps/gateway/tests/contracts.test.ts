@@ -82,12 +82,13 @@ describe('public API contracts', () => {
         ]);
       }
 
-      // Only liveness and the sign-in that verifies the token itself answer without one.
+      // Liveness, the sign-in that verifies the token itself, and the OAuth redirect — which
+      // a browser cannot give a header and which proves itself with a state this gateway wrote.
       expect(
         operations
           .filter((operation) => operation.access === 'public')
           .map((operation) => operation.operationId),
-      ).toEqual(['health', 'startPanelSession']);
+      ).toEqual(['health', 'startPanelSession', 'completeMcpLogin']);
     } finally {
       await app.close();
     }

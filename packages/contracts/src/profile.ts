@@ -69,16 +69,59 @@ export const builtinSkillSchema = skillSchema.extend({
   enabled: z.boolean(),
 });
 
-export const mcpSchema = z.strictObject({
-  name: z.string().regex(/^[a-z0-9_]{1,30}$/),
-  url: endpointSchema,
-  // Sent to replace the stored token; absent keeps whatever the vault already holds.
-  bearerToken: secretSchema.optional(),
-  bearerTokenEnv: z
+/**
+ * A value the gateway sends but never shows back: typed once and kept encrypted, or read from
+ * the host environment. Sending `value` replaces what is stored; leaving it out keeps it.
+ */
+export const mcpValueSchema = z.strictObject({
+  name: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  value: secretSchema.optional(),
+  fromEnv: z
     .string()
     .regex(/^JIAN_MCP_[A-Z0-9_]+$/)
     .optional(),
 });
+
+/**
+ * How a server proves who is calling it.
+ *
+ * `headers` covers every scheme a server can want, because the owner writes the header itself:
+ * `Authorization: Bearer …`, `Authorization: Basic …`, or something proprietary. `oauth` hands
+ * the whole exchange to the server's own authorization server, and the owner signs in once.
+ */
+export const mcpAuthSchema = z.enum(['none', 'headers', 'oauth']);
+
+export const mcpSchema = z
+  .strictObject({
+    name: z.string().regex(/^[a-z0-9_]{1,30}$/),
+    /** `http` talks to a URL; `stdio` runs a command on this machine and speaks over its pipes. */
+    transport: z.enum(['http', 'stdio']).default('http'),
+    url: endpointSchema.optional(),
+    auth: mcpAuthSchema.default('none'),
+    headers: z.array(mcpValueSchema).max(10).default([]),
+    command: z.string().trim().min(1).max(400).optional(),
+    args: z.array(z.string().max(400)).max(30).default([]),
+    env: z.array(mcpValueSchema).max(20).default([]),
+  })
+  .superRefine((value, ctx) => {
+    if (value.transport === 'http' && !value.url) {
+      ctx.addIssue({ code: 'custom', message: 'An HTTP server needs a URL', path: ['url'] });
+    }
+
+    if (value.transport === 'stdio' && !value.command) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A command server needs a command',
+        path: ['command'],
+      });
+    }
+
+    // OAuth is the server's own exchange over HTTP; a command server has no browser to send
+    // the owner to, and nothing to redirect back to.
+    if (value.auth === 'oauth' && value.transport !== 'http') {
+      ctx.addIssue({ code: 'custom', message: 'OAuth needs an HTTP server', path: ['auth'] });
+    }
+  });
 
 /** What a server answered when the owner asked whether it works. */
 export const mcpStatusSchema = z.strictObject({
@@ -90,6 +133,8 @@ export const mcpStatusSchema = z.strictObject({
     .max(500)
     .default([]),
   error: z.string().max(300).optional(),
+  /** Where the owner has to sign in, when the server asked for it and nobody has yet. */
+  authorizationUrl: z.url().max(2000).optional(),
   checkedAt: z.iso.datetime(),
 });
 
@@ -210,5 +255,6 @@ export const memorySchema = z.strictObject({
 export type McpStatus = z.infer<typeof mcpStatusSchema>;
 export type Skill = z.infer<typeof skillSchema>;
 export type McpServer = z.infer<typeof mcpSchema>;
+export type McpValue = z.infer<typeof mcpValueSchema>;
 export type Identity = z.infer<typeof identitySchema>;
 export type ContextPolicy = z.infer<typeof contextPolicySchema>;

@@ -4,11 +4,13 @@ import { BookOpen, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { McpServer } from '../../lib/api';
 import type { SectionProps } from '../props';
-import { Button, Confirm, Empty, Field, Modal, SectionHeading } from '../ui';
+import { Button, Confirm, Empty, SectionHeading } from '../ui';
 import { BuiltinSkills } from './built-in';
 import { SkillCatalog } from './catalog';
 import { SkillImport } from './import';
+import { McpForm } from './mcp-form';
 import { McpRow } from './mcp-row';
+import { SkillForm } from './skill-form';
 
 export function Capabilities({
   kind,
@@ -24,6 +26,24 @@ export function Capabilities({
   const items = profile[kind];
   const skill = typeof editing === 'number' && isSkill ? profile.skills[editing] : undefined;
   const mcp = typeof editing === 'number' && !isSkill ? profile.mcpServers[editing] : undefined;
+
+  const save = async (next: unknown) => {
+    const updated =
+      editing === 'new'
+        ? [...items, next]
+        : items.map((item, index) => (index === editing ? next : item));
+
+    const ok = await mutate(
+      () => api.updateProfile(profile.id, { expectedVersion: profile.version, [kind]: updated }),
+      'Saved.',
+    );
+
+    setFailed(!ok);
+
+    if (ok) {
+      setEditing(undefined);
+    }
+  };
 
   return (
     <>
@@ -117,142 +137,24 @@ export function Capabilities({
         </Empty>
       )}
       {isSkill && <SkillCatalog profile={profile} api={api} mutate={mutate} busy={busy} />}
-      {editing !== undefined && (
-        <Modal
-          title={isSkill ? 'Configurar skill' : 'Configurar servidor MCP'}
-          close={() => setEditing(undefined)}
-        >
-          <form
-            method="post"
-            action="/ui/"
-            onSubmit={async (event) => {
-              event.preventDefault();
-
-              const form = new FormData(event.currentTarget);
-              const name = String(form.get('name'));
-
-              const next = isSkill
-                ? {
-                    name,
-                    description: String(form.get('description')),
-                    instructions: String(form.get('instructions')),
-                  }
-                : {
-                    name,
-                    url: String(form.get('url')),
-                    ...(form.get('token') ? { bearerToken: String(form.get('token')) } : {}),
-                    ...(form.get('env') ? { bearerTokenEnv: String(form.get('env')) } : {}),
-                  };
-
-              const updated =
-                editing === 'new'
-                  ? [...items, next]
-                  : items.map((item, index) => (index === editing ? next : item));
-
-              const ok = await mutate(
-                () =>
-                  api.updateProfile(profile.id, {
-                    expectedVersion: profile.version,
-                    [kind]: updated,
-                  }),
-                'Saved.',
-              );
-
-              setFailed(!ok);
-
-              if (ok) {
-                setEditing(undefined);
-              }
-            }}
-          >
-            <Field
-              label="Name"
-              hint={
-                isSkill
-                  ? 'Lowercase letters, digits, hyphen and underscore.'
-                  : 'Lowercase letters, digits and underscore.'
-              }
-            >
-              <input
-                name="name"
-                required
-                pattern={isSkill ? '[a-z0-9_-]{1,64}' : '[a-z0-9_]{1,30}'}
-                defaultValue={skill?.name ?? mcp?.name ?? ''}
-              />
-            </Field>
-            {isSkill ? (
-              <>
-                <Field
-                  label="Description"
-                  hint="This is how the agent decides when to use the skill."
-                >
-                  <input
-                    name="description"
-                    required
-                    maxLength={300}
-                    defaultValue={skill?.description ?? ''}
-                  />
-                </Field>
-                <Field label="Instructions">
-                  <textarea
-                    name="instructions"
-                    required
-                    rows={9}
-                    maxLength={12000}
-                    defaultValue={skill?.instructions ?? ''}
-                  />
-                </Field>
-              </>
-            ) : (
-              <>
-                <Field label="HTTP endpoint">
-                  <input
-                    name="url"
-                    type="url"
-                    required
-                    defaultValue={mcp?.url ?? ''}
-                    placeholder="https://mcp.example.com/mcp"
-                  />
-                </Field>
-                <Field
-                  label="Server token"
-                  hint={
-                    editing === 'new'
-                      ? 'Encrypted on the gateway and never shown again.'
-                      : 'Leave it blank to keep the current token.'
-                  }
-                >
-                  <input name="token" type="password" autoComplete="off" maxLength={16000} />
-                </Field>
-                <Field
-                  label="Environment variable (alternative)"
-                  hint="Used only when no token is given above."
-                >
-                  <input
-                    name="env"
-                    pattern="JIAN_MCP_[A-Z0-9_]+"
-                    defaultValue={mcp?.bearerTokenEnv ?? ''}
-                    placeholder="JIAN_MCP_SERVICE"
-                  />
-                </Field>
-              </>
-            )}
-            {failed && (
-              <p role="alert" className="form-error">
-                Could not save. Check the fields, or refresh the profile.
-              </p>
-            )}
-            <footer>
-              <Button variant="secondary" onClick={() => setEditing(undefined)}>
-                Cancel
-              </Button>
-              <Button type="submit" busy={busy}>
-                Save {isSkill ? 'skill' : 'server'}
-              </Button>
-            </footer>
-          </form>
-        </Modal>
-      )}
+      {editing !== undefined &&
+        (isSkill ? (
+          <SkillForm
+            skill={skill}
+            busy={busy}
+            failed={failed}
+            onSave={(next) => void save(next)}
+            onClose={() => setEditing(undefined)}
+          />
+        ) : (
+          <McpForm
+            server={mcp}
+            busy={busy}
+            error={failed ? 'Could not save. Check the fields, or refresh the profile.' : ''}
+            onSave={(next) => void save(next)}
+            onClose={() => setEditing(undefined)}
+          />
+        ))}
       {removing !== undefined && (
         <Confirm
           title={isSkill ? 'Remove this skill?' : 'Disconnect this server?'}

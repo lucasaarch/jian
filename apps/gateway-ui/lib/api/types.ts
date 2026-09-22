@@ -14,6 +14,8 @@ type RequestBody<K extends keyof operations> = operations[K] extends {
 
 export type Profile = JsonResponse<'getProfile', 200>;
 export type McpServer = Profile['mcpServers'][number];
+export type McpValue = McpServer['headers'][number];
+export type Skill = Profile['skills'][number];
 export type Session = JsonResponse<'listSessions', 200>[number];
 export type Channel = JsonResponse<'listChannels', 200>[number];
 export type ChannelType = Channel['type'];

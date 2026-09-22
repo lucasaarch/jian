@@ -108,7 +108,12 @@ describe('checking an MCP server from the panel', () => {
       instructions: 'Help.',
       model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
       mcpServers: [
-        { name: 'docs', url: 'https://example.com/mcp', bearerTokenEnv: 'JIAN_MCP_ABSENT' },
+        {
+          name: 'docs',
+          url: 'https://example.com/mcp',
+          auth: 'headers',
+          headers: [{ name: 'Authorization', fromEnv: 'JIAN_MCP_ABSENT' }],
+        },
       ],
     });
 

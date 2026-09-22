@@ -370,6 +370,17 @@ export const operations: Operation[] = [
     response: mcpStatusSchema,
   },
   {
+    // The authorization server sends the owner's browser here, so it answers HTML and carries
+    // its proof in the query rather than in a header the redirect could not add.
+    method: 'GET',
+    path: `${profile}/mcp-servers/:name/oauth/callback`,
+    operationId: 'completeMcpLogin',
+    access: 'public',
+    params: z.strictObject({ profileId: z.uuid(), name: z.string().regex(/^[a-z0-9_]{1,30}$/) }),
+    query: z.looseObject({ code: z.string().optional(), state: z.string().optional() }),
+    response: z.string(),
+  },
+  {
     method: 'GET',
     path: `${profile}/built-in-skills`,
     operationId: 'listBuiltinSkills',

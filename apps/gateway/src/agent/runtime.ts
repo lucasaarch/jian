@@ -147,6 +147,7 @@ export class AgentRuntime {
         clients,
         fetcher: outbound.fetch,
         signal,
+        ...(this.options.mcpOAuth ? { oauth: this.options.mcpOAuth } : {}),
       });
 
       const guarded: ToolSet = {};

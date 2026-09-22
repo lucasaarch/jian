@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mcpSecret } from '../src/profiles/service.js';
+import { mcpValueSecret } from '../src/agent/mcp-connect.js';
 import { providerSecret } from '../src/providers/service.js';
 import { secrets } from '../src/storage/schema.js';
 import { secretRow } from './helpers/rows.js';
@@ -81,29 +81,41 @@ describe('profile vault', () => {
     const server = {
       name: 'tracker',
       url: 'https://mcp.example.com/mcp',
+      auth: 'headers' as const,
     };
+
+    const header = mcpValueSecret('tracker', 'header', 'Authorization');
 
     const updated = await services.profiles.updateProfile(profile.id, {
       expectedVersion: profile.version,
-      mcpServers: [{ ...server, bearerToken: 'synthetic-mcp-token' }],
+      mcpServers: [
+        { ...server, headers: [{ name: 'Authorization', value: 'Basic synthetic-mcp-token' }] },
+      ],
     });
 
     expect(JSON.stringify(updated)).not.toContain('synthetic-mcp-token');
-    expect(await services.vault.read(profile.id, mcpSecret('tracker'))).toBe('synthetic-mcp-token');
+    expect(await services.vault.read(profile.id, header)).toBe('Basic synthetic-mcp-token');
 
-    // A patch that omits the token keeps the stored one.
+    // A patch that omits the value keeps the stored one, which is how an owner edits a server
+    // without retyping a credential the panel can no longer show them.
     const kept = await services.profiles.updateProfile(profile.id, {
       expectedVersion: updated.version,
-      mcpServers: [{ ...server }],
+      mcpServers: [{ ...server, headers: [{ name: 'Authorization' }] }],
     });
 
-    expect(await services.vault.read(profile.id, mcpSecret('tracker'))).toBe('synthetic-mcp-token');
+    expect(await services.vault.read(profile.id, header)).toBe('Basic synthetic-mcp-token');
+
+    // Removing the header removes its secret, even with the server still configured.
+    const bare = await services.profiles.updateProfile(profile.id, {
+      expectedVersion: kept.version,
+      mcpServers: [{ ...server, auth: 'none' as const, headers: [] }],
+    });
+
+    expect(await services.vault.read(profile.id, header)).toBeUndefined();
 
     await services.profiles.updateProfile(profile.id, {
-      expectedVersion: kept.version,
+      expectedVersion: bare.version,
       mcpServers: [],
     });
-
-    expect(await services.vault.read(profile.id, mcpSecret('tracker'))).toBeUndefined();
   });
 });

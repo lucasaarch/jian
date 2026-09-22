@@ -532,6 +532,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/profiles/{profileId}/mcp-servers/{name}/oauth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: public. */
+        get: operations["completeMcpLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/built-in-skills": {
         parameters: {
             query?: never;
@@ -5864,9 +5881,136 @@ export interface operations {
                             description?: string;
                         }[];
                         error?: string;
+                        /** Format: uri */
+                        authorizationUrl?: string;
                         /** Format: date-time */
                         checkedAt: string;
                     };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    completeMcpLogin: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+            };
+            header?: never;
+            path: {
+                profileId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
                 };
             };
             /** @description Error */
@@ -6351,10 +6495,33 @@ export interface operations {
                         /** @default [] */
                         mcpServers: {
                             name: string;
+                            /**
+                             * @default http
+                             * @enum {string}
+                             */
+                            transport: "http" | "stdio";
                             /** Format: uri */
-                            url: string;
-                            bearerToken?: string;
-                            bearerTokenEnv?: string;
+                            url?: string;
+                            /**
+                             * @default none
+                             * @enum {string}
+                             */
+                            auth: "none" | "headers" | "oauth";
+                            /** @default [] */
+                            headers: {
+                                name: string;
+                                value?: string;
+                                fromEnv?: string;
+                            }[];
+                            command?: string;
+                            /** @default [] */
+                            args: string[];
+                            /** @default [] */
+                            env: {
+                                name: string;
+                                value?: string;
+                                fromEnv?: string;
+                            }[];
                         }[];
                         /** @default false */
                         allowSelfManagement: boolean;
@@ -6576,10 +6743,33 @@ export interface operations {
                         /** @default [] */
                         mcpServers: {
                             name: string;
+                            /**
+                             * @default http
+                             * @enum {string}
+                             */
+                            transport: "http" | "stdio";
                             /** Format: uri */
-                            url: string;
-                            bearerToken?: string;
-                            bearerTokenEnv?: string;
+                            url?: string;
+                            /**
+                             * @default none
+                             * @enum {string}
+                             */
+                            auth: "none" | "headers" | "oauth";
+                            /** @default [] */
+                            headers: {
+                                name: string;
+                                value?: string;
+                                fromEnv?: string;
+                            }[];
+                            command?: string;
+                            /** @default [] */
+                            args: string[];
+                            /** @default [] */
+                            env: {
+                                name: string;
+                                value?: string;
+                                fromEnv?: string;
+                            }[];
                         }[];
                         /** @default false */
                         allowSelfManagement: boolean;
@@ -6795,10 +6985,33 @@ export interface operations {
                     /** @default [] */
                     mcpServers?: {
                         name: string;
+                        /**
+                         * @default http
+                         * @enum {string}
+                         */
+                        transport?: "http" | "stdio";
                         /** Format: uri */
-                        url: string;
-                        bearerToken?: string;
-                        bearerTokenEnv?: string;
+                        url?: string;
+                        /**
+                         * @default none
+                         * @enum {string}
+                         */
+                        auth?: "none" | "headers" | "oauth";
+                        /** @default [] */
+                        headers?: {
+                            name: string;
+                            value?: string;
+                            fromEnv?: string;
+                        }[];
+                        command?: string;
+                        /** @default [] */
+                        args?: string[];
+                        /** @default [] */
+                        env?: {
+                            name: string;
+                            value?: string;
+                            fromEnv?: string;
+                        }[];
                     }[];
                     /** @default false */
                     allowSelfManagement?: boolean;
@@ -6904,10 +7117,33 @@ export interface operations {
                         /** @default [] */
                         mcpServers: {
                             name: string;
+                            /**
+                             * @default http
+                             * @enum {string}
+                             */
+                            transport: "http" | "stdio";
                             /** Format: uri */
-                            url: string;
-                            bearerToken?: string;
-                            bearerTokenEnv?: string;
+                            url?: string;
+                            /**
+                             * @default none
+                             * @enum {string}
+                             */
+                            auth: "none" | "headers" | "oauth";
+                            /** @default [] */
+                            headers: {
+                                name: string;
+                                value?: string;
+                                fromEnv?: string;
+                            }[];
+                            command?: string;
+                            /** @default [] */
+                            args: string[];
+                            /** @default [] */
+                            env: {
+                                name: string;
+                                value?: string;
+                                fromEnv?: string;
+                            }[];
                         }[];
                         /** @default false */
                         allowSelfManagement: boolean;
@@ -7131,10 +7367,33 @@ export interface operations {
                         /** @default [] */
                         mcpServers: {
                             name: string;
+                            /**
+                             * @default http
+                             * @enum {string}
+                             */
+                            transport: "http" | "stdio";
                             /** Format: uri */
-                            url: string;
-                            bearerToken?: string;
-                            bearerTokenEnv?: string;
+                            url?: string;
+                            /**
+                             * @default none
+                             * @enum {string}
+                             */
+                            auth: "none" | "headers" | "oauth";
+                            /** @default [] */
+                            headers: {
+                                name: string;
+                                value?: string;
+                                fromEnv?: string;
+                            }[];
+                            command?: string;
+                            /** @default [] */
+                            args: string[];
+                            /** @default [] */
+                            env: {
+                                name: string;
+                                value?: string;
+                                fromEnv?: string;
+                            }[];
                         }[];
                         /** @default false */
                         allowSelfManagement: boolean;
@@ -7323,10 +7582,33 @@ export interface operations {
                     disabledSkills?: string[];
                     mcpServers?: {
                         name: string;
+                        /**
+                         * @default http
+                         * @enum {string}
+                         */
+                        transport?: "http" | "stdio";
                         /** Format: uri */
-                        url: string;
-                        bearerToken?: string;
-                        bearerTokenEnv?: string;
+                        url?: string;
+                        /**
+                         * @default none
+                         * @enum {string}
+                         */
+                        auth?: "none" | "headers" | "oauth";
+                        /** @default [] */
+                        headers?: {
+                            name: string;
+                            value?: string;
+                            fromEnv?: string;
+                        }[];
+                        command?: string;
+                        /** @default [] */
+                        args?: string[];
+                        /** @default [] */
+                        env?: {
+                            name: string;
+                            value?: string;
+                            fromEnv?: string;
+                        }[];
                     }[];
                     allowSelfManagement?: boolean;
                     allowShell?: boolean;
@@ -7431,10 +7713,33 @@ export interface operations {
                         /** @default [] */
                         mcpServers: {
                             name: string;
+                            /**
+                             * @default http
+                             * @enum {string}
+                             */
+                            transport: "http" | "stdio";
                             /** Format: uri */
-                            url: string;
-                            bearerToken?: string;
-                            bearerTokenEnv?: string;
+                            url?: string;
+                            /**
+                             * @default none
+                             * @enum {string}
+                             */
+                            auth: "none" | "headers" | "oauth";
+                            /** @default [] */
+                            headers: {
+                                name: string;
+                                value?: string;
+                                fromEnv?: string;
+                            }[];
+                            command?: string;
+                            /** @default [] */
+                            args: string[];
+                            /** @default [] */
+                            env: {
+                                name: string;
+                                value?: string;
+                                fromEnv?: string;
+                            }[];
                         }[];
                         /** @default false */
                         allowSelfManagement: boolean;
@@ -7662,10 +7967,33 @@ export interface operations {
                             /** @default [] */
                             mcpServers: {
                                 name: string;
+                                /**
+                                 * @default http
+                                 * @enum {string}
+                                 */
+                                transport: "http" | "stdio";
                                 /** Format: uri */
-                                url: string;
-                                bearerToken?: string;
-                                bearerTokenEnv?: string;
+                                url?: string;
+                                /**
+                                 * @default none
+                                 * @enum {string}
+                                 */
+                                auth: "none" | "headers" | "oauth";
+                                /** @default [] */
+                                headers: {
+                                    name: string;
+                                    value?: string;
+                                    fromEnv?: string;
+                                }[];
+                                command?: string;
+                                /** @default [] */
+                                args: string[];
+                                /** @default [] */
+                                env: {
+                                    name: string;
+                                    value?: string;
+                                    fromEnv?: string;
+                                }[];
                             }[];
                             /** @default false */
                             allowSelfManagement: boolean;

@@ -1,5 +1,6 @@
 import { PgBoss } from 'pg-boss';
 import { z } from 'zod';
+import { McpLogins } from './agent/mcp-login.js';
 import { AgentRuntime } from './agent/runtime.js';
 import { createApp } from './app.js';
 import { ApiChannel } from './channels/api.js';
@@ -34,6 +35,9 @@ const config = z
     HOST: z.string().default('127.0.0.1'),
     PORT: z.coerce.number().int().min(1).max(65535).default(4310),
     JIAN_ROLE: z.enum(['all', 'api', 'worker']).default('all'),
+    // Where a browser reaches this gateway. An MCP authorization server redirects the owner
+    // back to it, so it has to be the public address rather than the listening one.
+    JIAN_PUBLIC_URL: z.url().optional(),
   })
   .safeParse(process.env);
 
@@ -96,6 +100,12 @@ services.runs.useFallback(new ModelFallback(services.providers, providerModels, 
 // Skill import reaches GitHub through the same guarded client, and only for the owner.
 const skills = new Skills(services.profiles, outbound.fetch);
 
+// An MCP server that wants OAuth sends the owner's browser back here, so a gateway with no
+// public address configured cannot offer that sign-in at all.
+const mcpLogins = config.data.JIAN_PUBLIC_URL
+  ? new McpLogins(vault, config.data.JIAN_PUBLIC_URL, outbound.fetch)
+  : undefined;
+
 const coordination = new Coordination(services);
 const whatsapp = new WhatsAppConnections(store, box, createWhatsAppDeviceFactory());
 const channelRegistry = new ChannelRegistry([
@@ -108,6 +118,7 @@ const channels = new Channels(services, outbound.fetch, channelRegistry);
 const runtime = new AgentRuntime(services, undefined, {
   vault,
   gatewayVault,
+  ...(mcpLogins ? { mcpOAuth: mcpLogins.provider } : {}),
   codexLogin,
   outbound,
   storeArtifact: (run, toolName, output) => coordination.storeArtifact(run, toolName, output),
@@ -127,6 +138,7 @@ const app =
         skills,
         channels,
         whatsapp,
+        ...(mcpLogins ? { mcpLogins } : {}),
         token: config.data.JIAN_API_TOKEN,
         onCancel: (id) => runtime.cancel(id),
       })

@@ -1,17 +1,19 @@
 import { createHash } from 'node:crypto';
-import { createMCPClient, type MCPClient } from '@ai-sdk/mcp';
+import type { MCPClient } from '@ai-sdk/mcp';
 import type { Run } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
-import { mcpSecret } from '../profiles/service.js';
-import type { RuntimeOptions } from './types.js';
+import { connectMcp, type SecretReader } from './mcp-connect.js';
+import type { McpOAuthProviders } from './types.js';
 
 interface McpContext {
-  vault: RuntimeOptions['vault'];
+  vault: SecretReader | undefined;
   secrets: Set<string>;
   clients: MCPClient[];
   fetcher: typeof globalThis.fetch;
   signal: AbortSignal;
+  /** Absent in a gateway without the OAuth store; a server needing it then fails to connect. */
+  oauth?: McpOAuthProviders;
 }
 
 /**
@@ -30,33 +32,15 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
   const selectedMcpTools = new Set<string>();
 
   for (const config of run.profile.mcpServers) {
-    let token: string | undefined;
-
-    if (config.bearerTokenEnv) {
-      token = process.env[config.bearerTokenEnv];
-
-      if (!token) {
-        throw new Error('MCP token missing');
-      }
-    } else {
-      // The token was typed with the server and lives in the vault under its name.
-      token = await context.vault?.read(run.profileId, mcpSecret(config.name));
-    }
-
-    if (token) {
-      context.secrets.add(token);
-    }
-
-    const client = await createMCPClient({
-      transport: {
-        type: 'http',
-        url: config.url,
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        fetch: context.fetcher,
-        redirect: 'error',
-      },
-      initializationOptions: { signal: context.signal, timeout: 15_000 },
-      maxRetries: 0,
+    const client = await connectMcp({
+      profileId: run.profileId,
+      server: config,
+      vault: context.vault as SecretReader,
+      fetcher: context.fetcher,
+      signal: context.signal,
+      ...(config.auth === 'oauth'
+        ? { authProvider: context.oauth?.(run.profileId, config.name) }
+        : {}),
     });
 
     context.clients.push(client);

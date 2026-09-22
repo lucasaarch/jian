@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { type Profile, profilePatchSchema, profileSchema } from '@jian/contracts';
+import { type McpServer, type Profile, profilePatchSchema, profileSchema } from '@jian/contracts';
 import { and, eq, isNull } from 'drizzle-orm';
+import { mcpValueSecret } from '../agent/mcp-connect.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -16,6 +17,33 @@ import {
   listRevisions,
   updateProfileRow,
 } from './repository.js';
+
+/** One value on its way to the vault, still carrying which server and which slot it came from. */
+type TypedMcpValue = { server: string; kind: 'header' | 'env'; name: string; value: string };
+
+/** The profile as it will be stored, and the values that have to leave it. */
+function stripMcpValues(profile: Profile): { stored: Profile; values: TypedMcpValue[] } {
+  const values: TypedMcpValue[] = [];
+
+  const mcpServers: McpServer[] = profile.mcpServers.map((server) => {
+    const strip = (kind: 'header' | 'env', list: McpServer['headers']) =>
+      list.map((value) => {
+        if (value.value) {
+          values.push({ server: server.name, kind, name: value.name, value: value.value });
+        }
+
+        return { name: value.name, ...(value.fromEnv ? { fromEnv: value.fromEnv } : {}) };
+      });
+
+    return {
+      ...server,
+      headers: strip('header', server.headers),
+      env: strip('env', server.env),
+    };
+  });
+
+  return { stored: { ...profile, mcpServers }, values };
+}
 
 /** Where an MCP server's bearer token lives in the vault, addressed by the server's name. */
 export const mcpSecret = (name: string) => `mcp:${name}`;
@@ -48,9 +76,13 @@ export class Profiles {
 
     return this.store.transaction(profile.id, async (tx) => {
       await this.validateReferences(profile, tx);
-      const stored = await this.storeMcpTokens(profile, undefined, tx);
+
+      // Stripped before the row exists and written after it: a secret references its profile,
+      // so there has to be one to reference.
+      const { stored, values } = stripMcpValues(profile);
 
       await insertProfile(tx, stored);
+      await this.writeMcpValues(profile.id, values, tx);
       await insertRevision(tx, stored);
 
       await recordEvent(tx, this.clock, stored.id, 'profile.created', {
@@ -63,34 +95,80 @@ export class Profiles {
   }
 
   /**
-   * An MCP token is typed with its server and kept out of the profile document, which is
-   * readable by every client and versioned into revisions. A patch that omits the token keeps
-   * the stored one; dropping the server drops its token.
+   * A value typed for an MCP server is kept out of the profile document, which every client
+   * reads and every revision preserves. A patch that omits a value keeps the stored one, which
+   * is how an owner edits a server without retyping a credential the panel cannot show them.
    */
   private async storeMcpTokens(
     profile: Profile,
     previous: Profile | undefined,
     tx: Queryable,
   ): Promise<Profile> {
-    const mcpServers = [];
+    const { stored, values } = stripMcpValues(profile);
 
-    for (const server of profile.mcpServers) {
-      const { bearerToken, ...rest } = server;
+    await this.writeMcpValues(profile.id, values, tx);
 
-      if (bearerToken) {
-        await this.vault.put(profile.id, mcpSecret(rest.name), bearerToken, tx);
-      }
-
-      mcpServers.push(rest);
+    for (const server of stored.mcpServers) {
+      await this.discardStaleMcpValues(profile.id, server, previous, tx);
     }
 
     for (const stale of previous?.mcpServers ?? []) {
-      if (!mcpServers.some((server) => server.name === stale.name)) {
-        await this.vault.discard(profile.id, mcpSecret(stale.name), tx);
+      if (!stored.mcpServers.some((server) => server.name === stale.name)) {
+        await this.discardMcpValues(profile.id, stale, tx);
       }
     }
 
-    return { ...profile, mcpServers };
+    return stored;
+  }
+
+  private async writeMcpValues(
+    profileId: string,
+    values: TypedMcpValue[],
+    tx: Queryable,
+  ): Promise<void> {
+    for (const { server, kind, name, value } of values) {
+      await this.vault.put(profileId, mcpValueSecret(server, kind, name), value, tx);
+    }
+  }
+
+  /** A header or variable the owner removed takes its secret with it. */
+  private async discardStaleMcpValues(
+    profileId: string,
+    server: McpServer,
+    previous: Profile | undefined,
+    tx: Queryable,
+  ): Promise<void> {
+    const before = previous?.mcpServers.find((item) => item.name === server.name);
+
+    if (!before) {
+      return;
+    }
+
+    for (const kind of ['header', 'env'] as const) {
+      const kept = new Set((kind === 'header' ? server.headers : server.env).map((v) => v.name));
+
+      for (const value of kind === 'header' ? before.headers : before.env) {
+        if (!kept.has(value.name)) {
+          await this.vault.discard(profileId, mcpValueSecret(server.name, kind, value.name), tx);
+        }
+      }
+    }
+  }
+
+  private async discardMcpValues(
+    profileId: string,
+    server: McpServer,
+    tx: Queryable,
+  ): Promise<void> {
+    // The legacy single-token entry and the sign-in share the server's own address.
+    await this.vault.discard(profileId, mcpSecret(server.name), tx);
+    await this.vault.discard(profileId, `${mcpSecret(server.name)}:oauth`, tx);
+
+    for (const kind of ['header', 'env'] as const) {
+      for (const value of kind === 'header' ? server.headers : server.env) {
+        await this.vault.discard(profileId, mcpValueSecret(server.name, kind, value.name), tx);
+      }
+    }
   }
 
   /** A profile may only name its own live provider, and one capability per name. */
