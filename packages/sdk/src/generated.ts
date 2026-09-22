@@ -2686,6 +2686,7 @@ export interface operations {
                         /** Format: date-time */
                         revokedAt?: string;
                         webhookToken: string;
+                        webhookRegistered?: boolean;
                     };
                 };
             };

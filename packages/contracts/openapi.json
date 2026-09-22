@@ -3858,6 +3858,9 @@
                     },
                     "webhookToken": {
                       "type": "string"
+                    },
+                    "webhookRegistered": {
+                      "type": "boolean"
                     }
                   },
                   "required": [

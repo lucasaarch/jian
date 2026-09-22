@@ -167,7 +167,11 @@ export const operations: Operation[] = [
     operationId: 'createChannel',
     access: 'admin',
     body: channelInputSchema,
-    response: channelSchema.extend({ webhookToken: z.string() }),
+    response: channelSchema.extend({
+      webhookToken: z.string(),
+      // Present when the gateway tried to register its webhook with the protocol itself.
+      webhookRegistered: z.boolean().optional(),
+    }),
     status: 201,
   },
   {
