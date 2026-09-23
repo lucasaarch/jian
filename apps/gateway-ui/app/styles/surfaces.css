@@ -209,6 +209,31 @@
   .modal footer {
     @apply mt-4 flex justify-end gap-3 border-t border-line pt-5;
   }
+  .release-notes section + section {
+    @apply mt-6 border-t border-line pt-6;
+  }
+  .release-notes h2 {
+    @apply text-xl;
+  }
+  .release-notes h2 small {
+    @apply ml-2 text-xs text-muted;
+  }
+  .release-notes h3 {
+    @apply mt-5 mb-2 text-base font-semibold;
+  }
+  .release-notes p,
+  .release-notes ul {
+    @apply mb-3 text-sm;
+  }
+  .release-notes ul {
+    @apply list-disc pl-5;
+  }
+  .release-notes li + li {
+    @apply mt-1;
+  }
+  .release-notes code {
+    @apply rounded-sm bg-surface px-1 font-mono text-xs;
+  }
   .secret-value {
     @apply font-mono text-xs;
   }

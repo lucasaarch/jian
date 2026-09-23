@@ -184,8 +184,10 @@ The `Image` workflow builds on two native runners, `ubuntu-24.04` and `ubuntu-24
 
 A release is a note and a tag, both by hand:
 
-1. Write `docs/releases/1.2.3.md`: a front matter with `date: YYYY-MM-DD`, then what the release changes, for the person who runs it. It becomes the `CHANGELOG.md` entry and the GitHub release. The version is chosen by whoever writes the note, not computed from commits.
+1. Write `docs/releases/1.2.3.md`: a front matter with `date: YYYY-MM-DD` and a one-sentence `summary:`, then what the release changes, for the person who runs it. It becomes the `CHANGELOG.md` entry, the GitHub release and the dialog the panel opens once after the update. The version is chosen by whoever writes the note, not computed from commits.
 2. Run `make release VERSION=1.2.3`. The first time it writes the version into `package.json` and regenerates `CHANGELOG.md`, and asks for them to be committed and pushed. Run it again and it tags `v1.2.3` and pushes the tag.
 3. The tag runs the `Image` workflow: it checks the note and the changelog agree, builds both architectures, and publishes the GitHub release with the note.
 
 `make release` refuses a version with no note, a working tree with changes, a `main` that is not on `origin`, and a tag that already exists; a published version is never moved. A candidate such as `1.2.3-rc.1` publishes its own image tag and a pre-release, and leaves `latest` alone. `make check` fails when `CHANGELOG.md` is not what the notes say, so the generated file cannot drift from its source.
+
+The notes are copied into the image, and the image carries its version in `JIAN_VERSION`. After an update the panel shows the notes of every version newer than the one the owner last read, once; closing the dialog records the version in the database, so another browser does not show it again. A first visit shows only the running release. A build with no version, such as `make dev`, announces nothing.

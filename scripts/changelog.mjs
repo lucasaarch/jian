@@ -24,9 +24,16 @@ function parse(file) {
   }
 
   const text = readFileSync(join(notesDir, file), 'utf8');
-  const front = /^---\ndate: (\d{4}-\d{2}-\d{2})\n---\n/.exec(text);
+  const front = /^---\n([\s\S]*?)\n---\n/.exec(text);
+  const fields = Object.fromEntries(
+    (front?.[1] ?? '').split('\n').flatMap((line) => {
+      const split = line.indexOf(':');
 
-  if (!front) {
+      return split > 0 ? [[line.slice(0, split).trim(), line.slice(split + 1).trim()]] : [];
+    }),
+  );
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fields.date ?? '')) {
     throw new Error(`docs/releases/${file}: start with a front matter holding date: YYYY-MM-DD`);
   }
 
@@ -36,7 +43,8 @@ function parse(file) {
     throw new Error(`docs/releases/${file}: the note is empty`);
   }
 
-  return { version, date: front[1], body, key: match.slice(1) };
+  // The summary is the one sentence the panel's dialog leads with; notes before 2.2.0 have none.
+  return { version, date: fields.date, summary: fields.summary, body, key: match.slice(1) };
 }
 
 /** Newest first; a release candidate sorts below the release it leads to. */
@@ -67,7 +75,7 @@ if (mode === '--notes') {
     process.exit(1);
   }
 
-  process.stdout.write(`${note.body}\n`);
+  process.stdout.write(`${note.summary ? `${note.summary}\n\n` : ''}${note.body}\n`);
   process.exit(0);
 }
 
@@ -79,7 +87,13 @@ const changelog = [
   '<!-- Generated from docs/releases by scripts/changelog.mjs. Edit a note there and run',
   '     `make changelog`; editing this file is editing the copy rather than the thing. -->',
   '',
-  ...notes.flatMap((note) => [`## ${note.version} — ${note.date}`, '', note.body, '']),
+  ...notes.flatMap((note) => [
+    `## ${note.version} — ${note.date}`,
+    '',
+    ...(note.summary ? [note.summary, ''] : []),
+    note.body,
+    '',
+  ]),
 ].join('\n');
 
 if (mode === '--check') {

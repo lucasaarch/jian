@@ -3,6 +3,7 @@ import { channelCalls } from './channels';
 import { readEvents } from './events';
 import { profileCalls } from './profiles';
 import { providerCalls } from './providers';
+import { releaseCalls } from './releases';
 import { resourceCalls } from './resources';
 import { sessionCalls } from './sessions';
 
@@ -28,6 +29,7 @@ export function gatewayApi() {
   return {
     ...profileCalls(client),
     ...providerCalls(client),
+    ...releaseCalls(client),
     ...sessionCalls(client),
     ...channelCalls(client),
     ...resourceCalls(client),
