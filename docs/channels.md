@@ -32,7 +32,7 @@ Each conversation is a session of the profile, created on approval and titled wi
 
 ## Rooms
 
-A room is a conversation where several people and several agents write. Each agent joins through its own connection — its own number on WhatsApp, its own bot on Telegram — so the isolation between profiles stays whole: each profile sees the room through its connection, and what the other agents write reaches it as a message from another participant, over the protocol itself. There is no shared room and no common transcript inside the gateway.
+A room is a conversation where several people and several agents write. Each agent joins through its own connection — its own number on WhatsApp, its own bot on Telegram — so the isolation between profiles stays whole: each profile sees the room through its connection, and what the other agents write reaches it as a message from another participant, over the protocol itself. Telegram is the exception: it never delivers a bot's messages to other bots, so once an agent's message is sent to a room the gateway hands it to the installation's other agents approved there, as if the room had delivered it — heard, answered only when it calls them, and counted in the room's budget. There is no shared room and no common transcript inside the gateway.
 
 The channel marks the conversation: `scope: "group"`. On WhatsApp that is a `@g.us` JID, with the participant as the sender and the room as the conversation; on Telegram it is the `group` and `supergroup` chats. A room message becomes a session of the profile identified by the room, and the run receives the author along with the text — `Lucas: Ada, can you look at the report?` — because in a room the agent has to know who spoke to answer them.
 

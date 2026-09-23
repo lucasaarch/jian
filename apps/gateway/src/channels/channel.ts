@@ -47,6 +47,13 @@ export interface Channel {
    */
   readonly rendersMarkdown?: boolean;
 
+  /**
+   * True when the protocol never shows one agent's messages to another in a room. Telegram
+   * does not deliver a bot's messages to other bots, privacy mode or not, so the gateway
+   * carries them itself; WhatsApp numbers read each other like anyone else.
+   */
+  readonly hidesAgentsFromEachOther?: boolean;
+
   receive(payload: unknown): IncomingMessage | null;
 
   /**

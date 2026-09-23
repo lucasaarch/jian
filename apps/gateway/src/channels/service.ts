@@ -834,6 +834,65 @@ export class Channels {
         runId: delivery.runId ?? undefined,
         status: outcome.status,
       });
+
+      if (outcome.status === 'sent' && channel && text) {
+        // The room already has the message; what the other agents missed is logged, not retried.
+        await this.showToOtherAgents(channel, delivery, text).catch(() =>
+          channelLog('delivery.peer_failed', {
+            channelId: delivery.channelId,
+            deliveryId: delivery.id,
+          }),
+        );
+      }
+    }
+  }
+
+  /**
+   * What an agent said in a room, handed to the installation's other agents in it when the
+   * protocol will not. It enters each of them exactly as a message from the room would: kept in
+   * their session as something heard, answered only when it calls them, and counted against
+   * the room's budget of turns between agents. The delivery id keeps a retried tick from
+   * handing it over twice.
+   */
+  private async showToOtherAgents(channel: ChannelRecord, delivery: DeliveryRecord, text: string) {
+    if (!this.registry.get(channel.type).hidesAgentsFromEachOther || !channel.address) {
+      return;
+    }
+
+    const room = await listGroupContacts(this.services.store.db, {
+      type: channel.type,
+      chatId: delivery.chatId,
+      status: 'approved',
+    });
+
+    if (!room.some((contact) => contact.channelId === channel.id)) {
+      return;
+    }
+
+    const author = await this.services.profiles.profile(channel.profileId);
+
+    for (const contact of room) {
+      if (contact.channelId === channel.id) {
+        continue;
+      }
+
+      const peer = await findChannel(this.services.store.db, contact.channelId);
+
+      if (!peer || peer.revokedAt) {
+        continue;
+      }
+
+      await this.accept(peer, {
+        actorId: channel.address,
+        chatId: delivery.chatId,
+        text: text.slice(0, 8000),
+        requestKey: `agent:${delivery.id}`,
+        displayName: author.name,
+        scope: 'group',
+        ...(contact.displayName ? { groupName: contact.displayName } : {}),
+        // An agent cannot mention through the protocol; the handles it writes are its mentions.
+        mentions: [...new Set(text.toLowerCase().match(/@[a-z0-9_]{3,64}/g) ?? [])],
+      });
     }
   }
 

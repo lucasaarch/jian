@@ -717,3 +717,95 @@ it('sends what the agent says on its way to a tool, once, while the run is still
     await f.app.close();
   }
 });
+
+describe('agents in the same Telegram group', () => {
+  it('hears what another agent answered, though Telegram never shows a bot to a bot', async () => {
+    const services = await testServices();
+    // Two bots, told apart by their token; every send succeeds.
+    const telegram: typeof fetch = async (url) => {
+      const path = String(url);
+      const bot = path.includes('/bot111:')
+        ? { id: 111, username: 'miku_bot' }
+        : { id: 222, username: 'zerotwo_bot' };
+
+      return path.endsWith('/getMe')
+        ? Response.json({ ok: true, result: bot })
+        : Response.json({ ok: true, result: { message_id: 1 } });
+    };
+    const channels = new Channels(
+      services,
+      telegram,
+      new ChannelRegistry([new ApiChannel(), new TelegramChannel()]),
+    );
+    const join = async (name: string, botToken: string) => {
+      const profile = await services.profiles.createProfile({
+        name,
+        instructions: 'Help.',
+        model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+      });
+      const channel = await channels.connect(profile.id, { type: 'telegram', botToken });
+
+      return { profile, channel };
+    };
+    const miku = await join('Miku', '111:synthetic-miku');
+    const zero = await join('Zero Two', '222:synthetic-zero');
+    let update = 0;
+    // A person writes; Telegram hands it to every bot in the group.
+    const person = async (text: string, entities: unknown[] = []) => {
+      update += 1;
+
+      for (const agent of [miku, zero]) {
+        await channels.receive(agent.channel.id, {
+          type: 'telegram',
+          headers: { 'x-telegram-bot-api-secret-token': agent.channel.webhookToken },
+          payload: {
+            update_id: update,
+            message: {
+              from: { id: 42, first_name: 'Lucas' },
+              chat: { id: -500, type: 'supergroup', title: 'Equipe' },
+              text,
+              entities,
+            },
+          },
+        });
+      }
+    };
+    const answer = async (profileId: string, output: string) => {
+      const [run] = await services.runs.activities(profileId);
+
+      if (!run) throw new Error('Run missing');
+      await services.lifecycle.claim(run.id, profileId, 'worker');
+      await services.lifecycle.finish(profileId, run.id, 'worker', 'completed', output);
+      await channels.dispatch();
+    };
+
+    await person('oi');
+    for (const agent of [miku, zero]) {
+      const [room] = await channels.contacts(agent.profile.id);
+
+      if (!room) throw new Error('Group request missing');
+      await channels.approveContact(agent.profile.id, room.id);
+    }
+
+    await person('@miku_bot os links dos épicos', [{ type: 'mention', offset: 0, length: 9 }]);
+    await answer(miku.profile.id, 'Os épicos são #299 e #300.');
+
+    const [zeroRoom] = await channels.contacts(zero.profile.id);
+
+    if (!zeroRoom?.sessionId) throw new Error('Room session missing');
+
+    const heard = await services.sessions.messages(zero.profile.id, zeroRoom.sessionId, 20);
+
+    expect(heard.map((message) => message.content)).toContain('Miku: Os épicos são #299 e #300.');
+    // Heard, not called: Zero Two stays quiet.
+    expect(await services.runs.activities(zero.profile.id)).toEqual([]);
+
+    // An agent calls another by name, which only reaches it through the gateway here.
+    await person('@miku_bot pede pra Zero Two enviar', [{ type: 'mention', offset: 0, length: 9 }]);
+    await answer(miku.profile.id, 'Zero Two, manda os épicos pro Moabe.');
+
+    const [called] = await services.runs.activities(zero.profile.id);
+
+    expect(called?.group).toMatchObject({ fromAgent: true, fromName: 'Miku' });
+  });
+});

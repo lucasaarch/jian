@@ -34,6 +34,7 @@ type Result<M extends Method> = ReturnType<Methods[M]>;
 export class TelegramChannel implements Channel {
   readonly type = 'telegram';
   readonly webhookHeader = 'x-telegram-bot-api-secret-token';
+  readonly hidesAgentsFromEachOther = true;
 
   /** Per channel, when Telegram said it would accept requests again. Transport state only. */
   private readonly coolUntil = new Map<string, number>();
