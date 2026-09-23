@@ -23,6 +23,12 @@ import type {
 const at = (minutesAgo: number) =>
   new Date(Date.UTC(2026, 8, 24, 12) - minutesAgo * 60_000).toISOString();
 
+/** A stand-in for a channel photo: a flat portrait, inline, so stories need no network. */
+const portrait = (background: string, skin: string) =>
+  `data:image/svg+xml;base64,${btoa(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="${background}"/><circle cx="32" cy="26" r="12" fill="${skin}"/><rect x="12" y="42" width="40" height="30" rx="20" fill="${skin}"/></svg>`,
+  )}`;
+
 export const ids = {
   zero: '5c52c291-4620-4829-aa8b-6adf08d8c833',
   miku: '8f41c4e7-cb7e-49ae-a0f0-e75956d4975e',
@@ -34,6 +40,8 @@ export const ids = {
   ownerChat: '8b9e13a2-fe34-49fe-9409-4c16e4fe1055',
   groupChat: 'a07e6f2a-b9ff-483e-ab3a-f7d05b1af092',
   panelChat: '04a28114-545a-41b7-ba17-8673134b85d1',
+  moabeChat: '1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e',
+  peerChat: '2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f',
   moabeContact: '0f7c5a41-2a4e-4d59-9a3b-6f0f6f1d2c11',
   ownerContact: '1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d',
   roomContact: '2b3c4d5e-6f7a-4b2c-9d3e-4f5a6b7c8d9e',
@@ -136,6 +144,21 @@ export const sessions: Session[] = [
     title: 'Telegram · Equipe',
     channel: 'telegram',
     createdAt: at(60 * 24),
+  },
+  {
+    id: ids.moabeChat,
+    profileId: ids.zero,
+    title: 'WhatsApp · Moabe',
+    channel: 'whatsapp',
+    createdAt: at(60 * 20),
+  },
+  {
+    id: ids.peerChat,
+    profileId: ids.zero,
+    title: 'Agent · Miku',
+    channel: 'agent',
+    peerProfileId: ids.miku,
+    createdAt: at(60 * 30),
   },
   {
     id: ids.panelChat,
@@ -248,6 +271,7 @@ export const contacts: Contact[] = [
     displayName: 'Lucas',
     status: 'approved',
     sessionId: ids.ownerChat,
+    avatar: portrait('#dbe7ff', '#3b5b9a'),
     createdAt: at(60 * 24 * 9),
     updatedAt: at(60 * 24 * 9),
   },
@@ -261,6 +285,8 @@ export const contacts: Contact[] = [
     chatId: '5571911111111@c.us',
     displayName: 'Moabe',
     status: 'approved',
+    sessionId: ids.moabeChat,
+    avatar: portrait('#e6f4ea', '#2f7a52'),
     createdAt: at(60 * 24 * 5),
     updatedAt: at(60 * 24 * 5),
   },
@@ -274,6 +300,7 @@ export const contacts: Contact[] = [
     chatId: '-1002000000000',
     displayName: 'Equipe',
     status: 'approved',
+    avatar: portrait('#fde2e8', '#b51e49'),
     sessionId: ids.groupChat,
     createdAt: at(60 * 24),
     updatedAt: at(60 * 24),
@@ -314,6 +341,7 @@ export const contacts: Contact[] = [
     chatId: '5571922222222@c.us',
     status: 'pending',
     message: 'Oi, quem fala? Peguei esse número com o Diego.',
+    avatar: portrait('#fff4d6', '#9a6b1d'),
     createdAt: at(30),
     updatedAt: at(30),
   },

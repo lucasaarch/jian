@@ -49,7 +49,10 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
 }
 
 function Shell({ children }: { children: ReactNode }) {
-  const settings = usePathname().startsWith('/settings');
+  const pathname = usePathname();
+  const settings = pathname.startsWith('/settings');
+  // The one screen that is an app of its own: it takes the whole area and scrolls inside.
+  const fill = pathname.startsWith('/sessions');
   const { profiles, profile, data, loading, refresh, adopt } = useWorkspace();
   const [mobile, setMobile] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -127,7 +130,7 @@ function Shell({ children }: { children: ReactNode }) {
       />
       <div className="workspace" inert={mobile}>
         <Topbar navigationOpen={mobile} onOpenNavigation={() => setMobile(true)} />
-        <main id="main-content" tabIndex={-1} className="main-content">
+        <main id="main-content" tabIndex={-1} className={`main-content ${fill ? 'fill' : ''}`}>
           <NoticeBar />
           {settings ? (
             children

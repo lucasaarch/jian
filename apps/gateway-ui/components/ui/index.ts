@@ -1,4 +1,5 @@
 export { Button } from './button';
+export { Face } from './face';
 export { Field } from './field';
 export { Badge, Empty, SectionHeading } from './layout';
 export { Mark } from './mark';
