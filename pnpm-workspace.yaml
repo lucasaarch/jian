@@ -5,6 +5,7 @@ allowBuilds:
   baileys: false
   esbuild: true
   fsevents: false
+  msw: false
   protobufjs: false
 minimumReleaseAgeExclude:
   - '@ai-sdk/gateway@4.0.88'

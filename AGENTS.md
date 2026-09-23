@@ -26,6 +26,7 @@ make install     # pnpm install --frozen-lockfile
 make setup       # writes .env (0600) with local credentials; never prints secrets
 make db-up       # development PostgreSQL on 127.0.0.1:5432
 make dev         # gateway on :4310 and the panel with hot reload on :3000
+make storybook   # components and whole pages on :6006, no gateway needed
 make check       # lint, typecheck, unit tests, build, contract drift
 make up          # production stack: published image plus its own PostgreSQL
 make apple-test  # JianKit unit tests

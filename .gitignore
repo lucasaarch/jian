@@ -22,6 +22,8 @@ buildServer.json
 # Gateway UI static export
 **/.next/
 apps/gateway-ui/out/
+apps/gateway-ui/storybook-static/
+*storybook.log
 **/*.tsbuildinfo
 
 # Cópias de trabalho criadas por agentes; existem só enquanto a tarefa roda.
