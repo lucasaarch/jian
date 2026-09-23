@@ -8,12 +8,8 @@ on:
   pull_request:
 permissions:
   contents: read
-# The release pull request carries a changelog and a version bump, generated from commits this
-# workflow already ran on main. `pull_request` filters by the branch a change targets, never by
-# the one it comes from, so the head branch is read here instead.
 jobs:
   check:
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +21,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
   postgres:
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     services:
       postgres:

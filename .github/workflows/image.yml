@@ -1,6 +1,8 @@
 name: Image
 # A release publishes the image, and nothing else does: a tag is the only commit anyone
-# has said is worth running. `workflow_dispatch` stays for building one by hand.
+# has said is worth running. `make release` pushes it, after its note in docs/releases is
+# written; this workflow builds both architectures and publishes the GitHub release with that
+# note. `workflow_dispatch` stays for building an image by hand, and publishes no release.
 on:
   push:
     tags: ['v*.*.*']
@@ -9,10 +11,35 @@ env:
   IMAGE: ghcr.io/lucasaarch/jian-gateway
 permissions: {}
 jobs:
+  # Before anything is built: a tag without its note, or with a CHANGELOG that says something
+  # else, stops here rather than publishing an image nobody can read the notes of.
+  notes:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: The changelog matches the notes
+        run: node scripts/changelog.mjs --check
+      - name: Read the note of this version
+        run: node scripts/changelog.mjs --notes "${GITHUB_REF_NAME#v}" > notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notes
+          path: notes.md
+          retention-days: 1
+
   # One native runner per architecture. The repository is public, so the arm64 runner is
   # free and emulation — which would make the Next.js export crawl — is never needed.
   # Each runner pushes the layers under a digest only; the index job names them.
   build:
+    needs: notes
+    # A dispatch has no tag and no note to check, so a skipped check is not a failed one.
+    if: ${{ !cancelled() && needs.notes.result != 'failure' }}
     strategy:
       fail-fast: false
       matrix:
@@ -96,7 +123,9 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            # A candidate such as v2.2.0-rc.1 publishes its own tag and nothing else, so an
+            # installation that never named a version is never moved onto one.
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
       - name: Create the index
         working-directory: /tmp/digests
         run: |
@@ -114,3 +143,22 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.inspect.outputs.digest }}
           push-to-registry: true
+
+  release:
+    needs: [notes, index]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: notes
+      - name: Publish the release with its note
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          flags=()
+          if [[ "$TAG" == *-* ]]; then flags+=(--prerelease --latest=false); fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "Jian ${TAG#v}" --notes-file notes.md "${flags[@]}"
