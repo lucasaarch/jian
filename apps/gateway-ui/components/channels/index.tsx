@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, QrCode, Unplug } from 'lucide-react';
+import { ChevronDown, Unplug } from 'lucide-react';
 import { useState } from 'react';
 import type { Channel, ChannelType } from '../../lib/api';
 import { date } from '../../lib/format';
@@ -153,12 +153,6 @@ export function Channels(props: SectionProps) {
                       </p>
                     )}
                     <div className="flex flex-wrap items-center gap-3">
-                      {kind.type === 'whatsapp' && (
-                        <Button variant="secondary" onClick={() => setPairing(channel)}>
-                          <QrCode size={16} />
-                          Show connection
-                        </Button>
-                      )}
                       <Button
                         variant="quiet"
                         disabled={busy}
