@@ -81,20 +81,14 @@ export const roles = [
   },
   {
     key: 'audio',
-    label: 'Audio analysis',
-    hint: 'Understands speech and sounds in audio files. Unset, it uses Gemini.',
+    label: 'Incoming audio',
+    hint: 'Voice notes and audio files share this model. Preserves speech and, when supported, describes relevant sounds. Unset, it uses Gemini.',
     runtime: true,
   },
   {
     key: 'speech',
     label: 'Text to speech',
     hint: 'Generates voice replies with OpenAI or Gemini. Unset, it uses Gemini with the Kore voice.',
-    runtime: true,
-  },
-  {
-    key: 'transcription',
-    label: 'Speech to text',
-    hint: 'Transcribes incoming voice notes. Unset, it uses Gemini.',
     runtime: true,
   },
 ] as const;

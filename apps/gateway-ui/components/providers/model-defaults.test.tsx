@@ -71,3 +71,18 @@ it('offers the configured OpenAI API key for image generation', async () => {
     await view.close();
   }
 });
+
+it('shows one incoming audio setting for voice notes and audio files', async () => {
+  const view = await imageProviders(false);
+  try {
+    const headings = Array.from(view.element.querySelectorAll('h2')).map(
+      (item) => item.textContent,
+    );
+    expect(headings).toContain('Incoming audio');
+    expect(headings).not.toContain('Speech to text');
+    expect(headings).not.toContain('Audio analysis');
+    expect(headings).toContain('Text to speech');
+  } finally {
+    await view.close();
+  }
+});

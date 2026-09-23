@@ -114,7 +114,9 @@ export const modelDefaultsInputSchema = z.strictObject({
   vision: roleSelection,
   audio: roleSelection,
   speech: roleSelection,
-  transcription: roleSelection,
+  transcription: roleSelection.describe(
+    'Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.',
+  ),
 });
 
 export const modelDefaultsRecordSchema = modelDefaultsInputSchema.extend({
@@ -138,8 +140,7 @@ export function supportsProviderRole(
   provider: Pick<ProviderRecord, 'kind' | 'authMode'>,
   role: ModelRole,
 ): boolean {
-  if (role === 'audio') return provider.kind === 'google';
-  if (['image', 'speech', 'transcription'].includes(role))
+  if (['image', 'speech', 'transcription', 'audio'].includes(role))
     return provider.authMode !== 'codex' && ['openai', 'google'].includes(provider.kind);
   return true;
 }
@@ -166,7 +167,7 @@ export function supportsModelRole(
       ((provider.kind === 'google' && id.includes('tts')) ||
         (provider.kind === 'openai' && /(^tts-|tts)/.test(id)))
     );
-  if (role === 'transcription' && provider.kind === 'openai')
+  if ((role === 'transcription' || role === 'audio') && provider.kind === 'openai')
     return provider.authMode !== 'codex' && /whisper|transcribe/.test(id);
   if (role === 'audio' || role === 'transcription')
     return (

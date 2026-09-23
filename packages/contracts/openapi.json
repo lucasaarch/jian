@@ -1833,6 +1833,7 @@
                     },
                     "transcription": {
                       "default": null,
+                      "description": "Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.",
                       "type": [
                         "object",
                         "null"
@@ -2339,6 +2340,7 @@
                   },
                   "transcription": {
                     "default": null,
+                    "description": "Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.",
                     "type": [
                       "object",
                       "null"
@@ -2625,6 +2627,7 @@
                     },
                     "transcription": {
                       "default": null,
+                      "description": "Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.",
                       "type": [
                         "object",
                         "null"

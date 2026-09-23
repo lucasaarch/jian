@@ -334,3 +334,64 @@ it('accounts for audio input and reasoning reported by Gemini', async () => {
   );
   expect(usage).toEqual([{ inputTokens: 88, outputTokens: 205, cachedInputTokens: 12 }]);
 });
+
+it('uses the incoming audio model for both voice notes and attached audio files', async () => {
+  const f = await mediaFixture();
+  const provider = await f.services.providers.createProvider({
+    name: 'Gemini',
+    kind: 'google',
+    secret: 'synthetic-google-key-1234567890',
+  });
+  await f.services.providers.setModelDefaults(f.profile.id, {
+    conversation: { providerId: provider.id, modelId: 'gemini-flash-latest' },
+    audio: { providerId: provider.id, modelId: 'gemini-incoming-test' },
+    transcription: { providerId: provider.id, modelId: 'gemini-legacy-test' },
+  });
+  await f.incoming(
+    'Ouça os dois',
+    'two-audios',
+    [true, false].map((voice) => ({
+      mimeType: 'audio/ogg' as const,
+      data: Buffer.from('OggS-test').toString('base64'),
+      voice,
+    })),
+  );
+  const [contact] = await f.channels.contacts(f.profile.id);
+  if (!contact) throw new Error('Missing contact');
+  await f.channels.approveContact(f.profile.id, contact.id);
+  const [run] = await f.services.runs.recent(f.profile.id);
+  if (!run) throw new Error('Missing run');
+  const media = new Media(
+    f.services.store,
+    f.services.providers,
+    f.services.gatewayVault,
+    async (url, options) => {
+      expect(String(url)).toContain('/gemini-incoming-test:generateContent');
+      const prompt = JSON.parse(String(options?.body)).contents[0].parts[0].text;
+      expect(prompt).toContain('verbatim');
+      expect(prompt).toContain('Do not summarize');
+      expect(prompt).toContain('sounds');
+      return Response.json({
+        candidates: [{ content: { parts: [{ text: 'Que horas são? [Campainha ao fundo.]' }] } }],
+      });
+    },
+  );
+  const messages: ModelMessage[] = [{ role: 'user', content: run.input }];
+  await media.prepare(messages, run, AbortSignal.timeout(1000));
+  expect(JSON.stringify(messages).match(/Que horas são/g)).toHaveLength(2);
+});
+
+it('preserves a legacy transcription selection as the incoming audio default', async () => {
+  const f = await mediaFixture();
+  const provider = await f.services.providers.createProvider({
+    name: 'OpenAI',
+    kind: 'openai',
+    secret: 'synthetic-openai-key-1234567890',
+  });
+  const selection = { providerId: provider.id, modelId: 'gpt-4o-mini-transcribe' };
+  await f.services.providers.setModelDefaults(f.profile.id, { transcription: selection });
+  const defaults = await f.services.providers.modelDefaults(f.profile.id);
+  expect(defaults.audio).toEqual(selection);
+  await f.services.providers.setModelDefaults(f.profile.id, { audio: null });
+  expect((await f.services.providers.modelDefaults(f.profile.id)).audio).toBeNull();
+});

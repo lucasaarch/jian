@@ -134,6 +134,9 @@ export async function readModelDefaults(
         : null;
   }
 
+  selections.audio = selections.audio ?? selections.transcription ?? null;
+  selections.transcription = selections.audio ?? null;
+
   // The record carries one timestamp for what is now several rows: the newest write stands for
   // the set, so a client that polls it still sees a change to any single role.
   const latest = rows.reduce<Date | null>(

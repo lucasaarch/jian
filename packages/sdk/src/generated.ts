@@ -1750,7 +1750,10 @@ export interface operations {
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
                         } | null;
-                        /** @default null */
+                        /**
+                         * @description Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.
+                         * @default null
+                         */
                         transcription: {
                             /** Format: uuid */
                             providerId: string;
@@ -1936,7 +1939,10 @@ export interface operations {
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
                     } | null;
-                    /** @default null */
+                    /**
+                     * @description Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.
+                     * @default null
+                     */
                     transcription?: {
                         /** Format: uuid */
                         providerId: string;
@@ -2011,7 +2017,10 @@ export interface operations {
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
                         } | null;
-                        /** @default null */
+                        /**
+                         * @description Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.
+                         * @default null
+                         */
                         transcription: {
                             /** Format: uuid */
                             providerId: string;

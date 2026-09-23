@@ -162,6 +162,9 @@ export class Providers {
 
   async setModelDefaults(profileId: string, input: unknown) {
     const data = modelDefaultsInputSchema.parse(input);
+    // Older clients may still send transcription. Both names now address one audio selection.
+    data.audio ??= data.transcription;
+    data.transcription = data.audio;
     const available = await this.providers();
 
     return this.store.transaction(profileId, async (tx) => {
