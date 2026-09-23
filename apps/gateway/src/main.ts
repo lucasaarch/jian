@@ -77,7 +77,7 @@ const outbound = createSafeFetch({
 
 // What each model can do is read from a catalog maintained outside this repository, so a model
 // released today works today. It goes out through the same guarded client as every other
-// provider call, and a run never waits on it: an unread catalog falls through to the floor.
+// provider call. Media routing loads it before deciding whether native vision is available.
 const catalog = new ModelCatalog(outbound.fetch);
 
 const vault = new Vault(store, box);

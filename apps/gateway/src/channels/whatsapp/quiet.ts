@@ -1,14 +1,20 @@
-/**
- * libsignal, which Baileys uses for the encrypted session, writes straight to the console and
- * takes no logger. Two of its lines pass the whole session object, and that object holds the
- * ratchet's private keys — so this is a leak into the log before it is noise in it.
- *
- * The lines are dropped at the console. Everything else libsignal says, including the errors
- * that explain a message that would not decrypt, passes through untouched.
- */
-const LEAKS = ['Closing session:', 'Session already closed', 'Session already open'];
+import { channelLog } from '../logging.js';
 
-const LEVELS = ['info', 'warn', 'log'] as const;
+/** libsignal bypasses the socket logger; its session and queue dumps include private keys. */
+const LEAKS = [
+  'Closing session:',
+  'Opening session:',
+  'Removing old closed session:',
+  'Session already closed',
+  'Session already open',
+  'V1 session storage migration error:',
+  'Unhandled bucket type (for naming):',
+  'Migrating session to:',
+  'Closing open session in favor of incoming prekey bundle',
+  'Session error:',
+];
+
+const LEVELS = ['info', 'warn', 'log', 'error'] as const;
 
 type Writer = (...args: unknown[]) => void;
 
@@ -30,6 +36,19 @@ export function quietLibsignal(target: Record<(typeof LEVELS)[number], Writer> =
         return;
       }
 
+      if (typeof first === 'string') {
+        const event = first.startsWith('Failed to decrypt message with any known session')
+          ? 'whatsapp.decrypt.failed'
+          : first.startsWith('Decrypted message with closed session.')
+            ? 'whatsapp.decrypt.recovered'
+            : first.startsWith('WARNING: Expected pubkey of length')
+              ? 'whatsapp.key.invalid'
+              : undefined;
+        if (event) {
+          channelLog(event, {}, undefined, (line) => write.call(target, line));
+          return;
+        }
+      }
       write.apply(target, args);
     };
 

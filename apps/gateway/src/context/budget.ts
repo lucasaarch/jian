@@ -49,7 +49,12 @@ export function promptText(value: unknown): string {
 
 function messageCost(message: ModelMessage, count: Counter): number {
   const images = Array.isArray(message.content)
-    ? message.content.filter((part) => part.type === 'image').length
+    ? message.content.filter(
+        (part) =>
+          part.type === 'image' ||
+          (part.type === 'file' &&
+            (part.mediaType === 'image' || part.mediaType.startsWith('image/'))),
+      ).length
     : 0;
   return count(promptText(message)) + images * 8192 + 16;
 }

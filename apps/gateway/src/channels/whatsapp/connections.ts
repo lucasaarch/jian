@@ -3,6 +3,7 @@ import { assertFound, GatewayError } from '../../core/errors.js';
 import type { SecretBox } from '../../security/crypto.js';
 import type { Queryable, Store } from '../../storage/database.js';
 import type { DeliveryOutcome, IncomingMessage, OutgoingMessage } from '../channel.js';
+import { channelLog } from '../logging.js';
 import { findChannel, setChannelAddress } from '../repository.js';
 import {
   claimConnection,
@@ -495,7 +496,9 @@ export class WhatsAppConnections {
   start(receive: Receiver) {
     const poll = async () => {
       if (this.stopped) return;
-      this.pending = this.tick(receive).catch(() => console.error('jian: WhatsApp worker failed'));
+      this.pending = this.tick(receive).catch((error) =>
+        channelLog('whatsapp.worker.failed', {}, error),
+      );
       await this.pending;
 
       if (!this.stopped) {

@@ -11,7 +11,7 @@ function console_() {
     printed.push(args);
   };
 
-  return { printed, target: { info: write, warn: write, log: write } };
+  return { printed, target: { info: write, warn: write, log: write, error: write } };
 }
 
 describe('what libsignal is allowed to print', () => {
@@ -21,18 +21,39 @@ describe('what libsignal is allowed to print', () => {
     quietLibsignal(target);
     target.info('Closing session:', session);
     target.warn('Session already closed', session);
+    target.info('Opening session:', session);
+    target.info('Removing old closed session:', session);
+    target.warn('Unhandled bucket type (for naming):', 'object', session);
+    target.error('V1 session storage migration error: registrationId', session);
 
     expect(printed).toEqual([]);
   });
 
-  it('leaves every other line alone, so a failure still explains itself', () => {
+  it('keeps unrelated logs while reducing protocol diagnostics to safe events', () => {
     const { printed, target } = console_();
 
     quietLibsignal(target);
     target.warn('Decrypted message with closed session.');
     target.log('Anything else');
 
-    expect(printed).toEqual([['Decrypted message with closed session.'], ['Anything else']]);
+    expect(JSON.parse(String(printed[0]?.[0]))).toMatchObject({
+      component: 'channels',
+      event: 'whatsapp.decrypt.recovered',
+    });
+    expect(printed[1]).toEqual(['Anything else']);
+  });
+
+  it('discards decryption exception details instead of dumping their payload', () => {
+    const { printed, target } = console_();
+    quietLibsignal(target);
+    target.error('Failed to decrypt message with any known session...', session);
+    target.error('Session error: synthetic private error', session);
+    expect(printed).toHaveLength(1);
+    expect(JSON.parse(String(printed[0]?.[0]))).toMatchObject({
+      event: 'whatsapp.decrypt.failed',
+      level: 50,
+    });
+    expect(JSON.stringify(printed)).not.toContain('privKey');
   });
 
   it('does not stack a second filter when a device reconnects', () => {

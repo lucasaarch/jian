@@ -199,6 +199,11 @@ export class Providers {
     });
   }
 
+  async loadCapabilities(config: ModelConfig) {
+    await this.catalog?.prime();
+    return this.capabilities(config);
+  }
+
   capabilities(config: ModelConfig) {
     const kind =
       config.provider === 'openai-codex'

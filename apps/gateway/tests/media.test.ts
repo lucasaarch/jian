@@ -241,7 +241,7 @@ it('holds an incoming image until approval and keeps it isolated to its profile'
   await expect(f.services.media.read(randomUUID(), id)).rejects.toThrow('Media not found');
 });
 
-it('delivers image pixels directly to a vision conversation model', async () => {
+it('delivers image pixels to the conversation model after a cold catalog start', async () => {
   const catalog = new ModelCatalog(async () =>
     Response.json({
       openai: {
@@ -254,7 +254,6 @@ it('delivers image pixels directly to a vision conversation model', async () => 
       },
     }),
   );
-  await catalog.prime();
   const f = await mediaFixture(catalog);
   await f.incoming('What color?', 'native', [{ mimeType: 'image/png', data: png }]);
   const [contact] = await f.channels.contacts(f.profile.id);
@@ -265,8 +264,8 @@ it('delivers image pixels directly to a vision conversation model', async () => 
   const messages: ModelMessage[] = [{ role: 'user', content: run.input }];
   await f.services.media.prepare(messages, run, AbortSignal.timeout(1000));
   expect(messages[0]?.content).toContainEqual({
-    type: 'image',
-    image: png,
+    type: 'file',
+    data: png,
     mediaType: 'image/png',
   });
 });
@@ -499,4 +498,51 @@ it('discovers voices for the profile speech provider instead of its conversation
     voices: expect.arrayContaining([{ name: 'Leda', character: 'Youthful' }]),
   });
   expect(JSON.stringify(result)).not.toContain('shimmer');
+});
+
+it('recovers an auxiliary image analysis after temporary provider overload', async () => {
+  const f = await mediaFixture();
+  const provider = await f.services.providers.createProvider({
+    name: 'Gemini',
+    kind: 'google',
+    secret: 'synthetic-google-key-1234567890',
+  });
+  await f.services.providers.setModelDefaults(f.profile.id, {
+    vision: { providerId: provider.id, modelId: 'gemini-flash-latest' },
+  });
+  await f.incoming('What color?', 'overload', [{ mimeType: 'image/png', data: png }]);
+  const [contact] = await f.channels.contacts(f.profile.id);
+  if (!contact) throw new Error('Missing contact');
+  await f.channels.approveContact(f.profile.id, contact.id);
+  const [run] = await f.services.runs.recent(f.profile.id);
+  if (!run) throw new Error('Missing run');
+  let overloaded = true;
+  const media = new Media(
+    f.services.store,
+    f.services.providers,
+    f.services.gatewayVault,
+    async (_url, options) => {
+      const body = JSON.parse(String(options?.body));
+      expect(body.contents[0].parts).toContainEqual({
+        inlineData: { mimeType: 'image/png', data: png },
+      });
+      if (overloaded) {
+        overloaded = false;
+        return Response.json(
+          { error: { code: 503, message: 'High demand', status: 'UNAVAILABLE' } },
+          { status: 503 },
+        );
+      }
+      return Response.json({
+        candidates: [
+          { content: { role: 'model', parts: [{ text: 'A blue square.' }] }, finishReason: 'STOP' },
+        ],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 4, totalTokenCount: 14 },
+      });
+    },
+  );
+  const messages: ModelMessage[] = [{ role: 'user', content: run.input }];
+  await media.prepare(messages, run, AbortSignal.timeout(10000));
+  expect(JSON.stringify(messages)).toContain('A blue square.');
+  expect(JSON.stringify(messages)).not.toContain('could not be read');
 });

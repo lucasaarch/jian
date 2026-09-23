@@ -2,7 +2,7 @@ import type { Message } from '@jian/contracts';
 import { tool } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { fitPrompt, tokenCounter } from '../src/context/budget.js';
+import { fitPrompt, promptTokens, tokenCounter } from '../src/context/budget.js';
 import { buildContext } from '../src/context/build.js';
 import { compactPrompt, needsCompaction } from '../src/context/compaction.js';
 import { mockModel } from './helpers/model.js';
@@ -296,4 +296,17 @@ describe('compaction', () => {
     expect(needsCompaction(8600, 10000)).toBe(true);
     expect(needsCompaction(8000, 10000)).toBe(false);
   });
+});
+
+it('reserves pixel tokens for image files without counting their base64 transport', () => {
+  const cost = (data: string) =>
+    promptTokens({
+      provider: 'anthropic',
+      modelId: 'test',
+      instructions: '',
+      tools: {},
+      messages: [{ role: 'user', content: [{ type: 'file', mediaType: 'image/png', data }] }],
+    });
+  expect(cost('AA==')).toBeGreaterThan(8192);
+  expect(cost('AA==')).toBe(cost('AA=='.repeat(10000)));
 });

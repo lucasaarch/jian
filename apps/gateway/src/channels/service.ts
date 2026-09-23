@@ -24,6 +24,7 @@ import type { ChannelRequest, ChannelType, DeliveryOutcome, IncomingMessage } fr
 import { type ContactRecord, Contacts, type Intake } from './contacts.js';
 import { conversational } from './conversation.js';
 import { type GroupDecision, Groups } from './groups.js';
+import { channelLog } from './logging.js';
 import { plainText } from './plain.js';
 import { ChannelRegistry } from './registry.js';
 import {
@@ -122,7 +123,7 @@ export class Channels {
         return;
       }
 
-      this.pending = this.dispatch().catch(() => console.error('jian: channel dispatch failed'));
+      this.pending = this.dispatch().catch((error) => channelLog('dispatch.failed', {}, error));
       await this.pending;
 
       if (!this.stopped) {
@@ -803,6 +804,12 @@ export class Channels {
             : current.remoteMessageIds,
           updatedAt: new Date().toISOString(),
         });
+      });
+      channelLog('delivery.result', {
+        channelId: delivery.channelId,
+        deliveryId: delivery.id,
+        runId: delivery.runId ?? undefined,
+        status: outcome.status,
       });
     }
   }
