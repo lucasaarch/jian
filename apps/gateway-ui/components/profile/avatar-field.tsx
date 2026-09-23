@@ -1,7 +1,7 @@
 'use client';
 
 import { ImageUp, Trash2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui';
 
 /** Square side in pixels. Large enough for the overview card on a retina screen. */
@@ -84,14 +84,26 @@ export function AvatarField({
   name,
   profileName,
   current,
+  onChange,
 }: {
   name: string;
   profileName?: string;
   current?: string | null;
+  /** The value lives in a hidden input, which fires no change of its own. */
+  onChange?: () => void;
 }) {
   const file = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(current ?? '');
   const [error, setError] = useState('');
+  const initial = useRef(value);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the caller's handler is read, not tracked.
+  useEffect(() => {
+    if (value !== initial.current) {
+      initial.current = value;
+      onChange?.();
+    }
+  }, [value]);
 
   return (
     <div className="avatar-field">

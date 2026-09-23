@@ -1,8 +1,11 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import type { SectionProps } from '../props';
 import { ModelDefaults } from './model-defaults';
+
+// A saved choice reloads the workspace; here there is none to reload.
+vi.mock('../../lib/workspace', () => ({ useWorkspace: () => ({ refresh: async () => {} }) }));
 
 async function imageProviders(apiKey: boolean) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
