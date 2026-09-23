@@ -1,4 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
+import { defaultSettingsMiddleware, wrapLanguageModel } from 'ai';
 
 const endpoint = 'https://chatgpt.com/backend-api/codex';
 
@@ -150,5 +151,13 @@ export function createCodexModel(token: string, modelId: string, fetcher: typeof
     return original.stream === true ? response : completedResponse(response);
   };
 
-  return createOpenAI({ apiKey: token, baseURL: endpoint, fetch: codexFetch }).responses(modelId);
+  // Codex stores nothing, so the SDK must not either: told otherwise, it replaces the previous
+  // step's reasoning with a reference to it, and Codex answers 404 for an item it never kept.
+  // Stored off, the reasoning travels whole, encrypted, as Codex's own CLI sends it.
+  return wrapLanguageModel({
+    model: createOpenAI({ apiKey: token, baseURL: endpoint, fetch: codexFetch }).responses(modelId),
+    middleware: defaultSettingsMiddleware({
+      settings: { providerOptions: { openai: { store: false } } },
+    }),
+  });
 }

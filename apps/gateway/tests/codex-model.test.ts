@@ -210,4 +210,105 @@ describe('ChatGPT Codex model adapter', () => {
     expect(looked).toEqual(['x']);
     expect((await result.steps)[0]?.finishReason).toBe('tool-calls');
   });
+
+  // Codex keeps nothing between requests. Reasoning from one step has to travel whole into the
+  // next — encrypted — because a reference to it points at an item that was never stored.
+  it('carries reasoning into the next step instead of referring to it', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const response = (id: string) => ({
+      id,
+      object: 'response',
+      created_at: 1,
+      model: 'gpt-5.6-sol',
+      status: 'completed',
+      output: [],
+      usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+    });
+    const reasoning = {
+      type: 'reasoning',
+      id: 'rs_1',
+      encrypted_content: 'sealed-thoughts',
+      summary: [{ type: 'summary_text', text: 'Look it up.' }],
+    };
+    const call = {
+      type: 'function_call',
+      id: 'fc_1',
+      call_id: 'call_1',
+      name: 'lookup',
+      arguments: '{"query":"x"}',
+      status: 'completed',
+    };
+    const message = {
+      id: 'msg_2',
+      type: 'message',
+      role: 'assistant',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Found x.', annotations: [] }],
+    };
+    const fetcher: typeof fetch = async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      const first = bodies.length === 1;
+      const events = [
+        { type: 'response.created', response: { ...response('r'), status: 'in_progress' } },
+        ...(first
+          ? [
+              {
+                type: 'response.output_item.added',
+                output_index: 0,
+                item: { ...reasoning, summary: [] },
+              },
+              { type: 'response.output_item.done', output_index: 0, item: reasoning },
+              {
+                type: 'response.output_item.added',
+                output_index: 1,
+                item: { ...call, arguments: '', status: 'in_progress' },
+              },
+              { type: 'response.output_item.done', output_index: 1, item: call },
+            ]
+          : [
+              {
+                type: 'response.output_item.added',
+                output_index: 0,
+                item: { ...message, content: [], status: 'in_progress' },
+              },
+              {
+                type: 'response.output_text.delta',
+                item_id: 'msg_2',
+                output_index: 0,
+                content_index: 0,
+                delta: 'Found x.',
+              },
+              { type: 'response.output_item.done', output_index: 0, item: message },
+            ]),
+        { type: 'response.completed', response: response('r') },
+      ];
+
+      return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''), {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    };
+
+    const result = streamText({
+      model: createCodexModel('synthetic-token', 'gpt-5.6-sol', fetcher),
+      prompt: 'Look up x.',
+      providerOptions: { openai: { reasoningEffort: 'high' } },
+      tools: {
+        lookup: {
+          inputSchema: z.object({ query: z.string() }),
+          execute: async ({ query }) => query,
+        },
+      },
+      stopWhen: ({ steps }) => steps.length >= 2,
+    });
+
+    expect(await result.text).toBe('Found x.');
+
+    const second = JSON.stringify(bodies[1]?.input);
+
+    expect(second).not.toContain('item_reference');
+    expect(second).toContain('sealed-thoughts');
+    expect(bodies[0]?.include).toContain('reasoning.encrypted_content');
+    expect(bodies[0]?.reasoning).toMatchObject({ effort: 'high' });
+  });
 });
