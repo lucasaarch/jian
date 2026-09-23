@@ -19,6 +19,16 @@ export class WhatsAppChannel implements Channel {
     return this.connections.typing(context.channelId, chatId, context.connectionGeneration);
   }
 
+  avatar(
+    target: { chatId: string; actorId: string; scope: 'direct' | 'group' },
+    context: DeliveryContext,
+  ) {
+    return this.connections.avatar(
+      context.channelId,
+      target.scope === 'group' ? target.chatId : target.actorId,
+    );
+  }
+
   send(message: OutgoingMessage, context: DeliveryContext) {
     return this.connections.send(
       context.channelId,

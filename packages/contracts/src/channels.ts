@@ -53,6 +53,11 @@ export const contactSchema = z.strictObject({
   status: z.enum(['pending', 'approved', 'blocked']),
   sessionId: z.uuid().optional(),
   message: z.string().max(8000).optional().describe('The message held until the owner decides.'),
+  avatar: z
+    .string()
+    .max(200_000)
+    .optional()
+    .describe('The picture the contact or group uses on its channel, as a data URL.'),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });

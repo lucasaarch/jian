@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import { ApiChannel } from '../src/channels/api.js';
 import type { ChannelRequest } from '../src/channels/channel.js';
@@ -22,10 +22,14 @@ async function setup(fetcher: typeof fetch, clock: () => number = Date.now) {
 
   // Connecting asks Telegram which account the bot is; everything else reaches the fetcher
   // each test inspects.
+  // Contact pictures are fetched in the background; they answer "no picture" here so each
+  // test's fetcher sees only the calls it is about.
   const telegram: typeof fetch = async (url, options) =>
     String(url).endsWith('/getMe')
       ? Response.json({ ok: true, result: { id: 700, username: 'ZeroTwoBot' } })
-      : fetcher(url, options);
+      : /\/(getUserProfilePhotos|getChat|getFile)$/.test(String(url))
+        ? Response.json({ ok: true, result: { total_count: 0, photos: [] } })
+        : fetcher(url, options);
 
   const registry = new ChannelRegistry([new ApiChannel(), new TelegramChannel(clock)]);
   const channels = new Channels(services, telegram, registry);
@@ -825,5 +829,64 @@ describe('agents in the same Telegram group', () => {
     const [called] = await services.runs.activities(zero.profile.id);
 
     expect(called?.group).toMatchObject({ fromAgent: true, fromName: 'Miku' });
+  });
+});
+
+describe('contact pictures', () => {
+  it('keeps the picture a Telegram contact uses, asking once a day at most', async () => {
+    const services = await testServices();
+    const asked: string[] = [];
+    const jpeg = Buffer.from('synthetic-jpeg-bytes');
+    const telegram: typeof fetch = async (url) => {
+      const path = String(url);
+      const method = path.split('/').pop() ?? '';
+
+      asked.push(path.includes('/file/') ? 'download' : method);
+
+      if (method === 'getMe') return Response.json({ ok: true, result: { id: 700 } });
+      if (method === 'getUserProfilePhotos')
+        return Response.json({
+          ok: true,
+          result: { total_count: 1, photos: [[{ file_id: 'small', width: 160, height: 160 }]] },
+        });
+      if (method === 'getFile')
+        return Response.json({ ok: true, result: { file_id: 'small', file_path: 'photos/a.jpg' } });
+      if (path.includes('/file/')) return new Response(jpeg);
+
+      return Response.json({ ok: true, result: { message_id: 1 } });
+    };
+    const channels = new Channels(
+      services,
+      telegram,
+      new ChannelRegistry([new ApiChannel(), new TelegramChannel()]),
+    );
+    const profile = await services.profiles.createProfile({
+      name: 'P',
+      instructions: 'Help',
+      model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    });
+    const channel = await channels.connect(profile.id, {
+      type: 'telegram',
+      botToken: '123:synthetic-test-token',
+    });
+    const write = (id: number) =>
+      channels.receive(channel.id, {
+        type: 'telegram',
+        headers: { 'x-telegram-bot-api-secret-token': channel.webhookToken },
+        payload: { update_id: id, message: { from: { id: 42 }, chat: { id: 42 }, text: 'Oi' } },
+      });
+
+    await write(1);
+
+    await vi.waitFor(async () => {
+      const [contact] = await channels.contacts(profile.id);
+
+      expect(contact?.avatar).toBe(`data:image/jpeg;base64,${jpeg.toString('base64')}`);
+    });
+
+    await write(2);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(asked.filter((item) => item === 'download')).toHaveLength(1);
   });
 });

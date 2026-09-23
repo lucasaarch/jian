@@ -162,6 +162,13 @@
       "when": 1790127200000,
       "tag": "0022_release-reads",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790129600000,
+      "tag": "0023_contact-avatars",
+      "breakpoints": true
     }
   ]
 }

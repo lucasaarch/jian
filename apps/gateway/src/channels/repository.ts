@@ -118,13 +118,28 @@ export function toContact(row: ContactRow, type: ChannelType): ContactRecord {
       status: row.status,
       ...(row.sessionId ? { sessionId: row.sessionId } : {}),
       ...(typeof row.heldMessage === 'string' ? { message: row.heldMessage } : {}),
+      ...(row.avatar ? { avatar: row.avatar } : {}),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     }),
     ...(row.heldMessageId ? { requestKey: row.heldMessageId } : {}),
     agentTurns: row.agentTurns,
     seen: row.seen,
+    ...(row.avatarCheckedAt ? { avatarCheckedAt: row.avatarCheckedAt.toISOString() } : {}),
   };
+}
+
+/** Written apart from the rest of the contact, so saving a contact never erases its picture. */
+export async function setContactAvatar(
+  db: Queryable,
+  id: string,
+  avatar: string | undefined,
+  checkedAt: Date,
+): Promise<void> {
+  await db
+    .update(contacts)
+    .set({ ...(avatar ? { avatar } : {}), avatarCheckedAt: checkedAt })
+    .where(eq(contacts.id, id));
 }
 
 function toContactRow(contact: ContactRecord): typeof contacts.$inferInsert {
