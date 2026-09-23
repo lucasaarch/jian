@@ -705,6 +705,23 @@ export interface paths {
         patch: operations["renameSession"];
         trace?: never;
     };
+    "/v1/profiles/{profileId}/media/{mediaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["readMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/sessions/{sessionId}/messages": {
         parameters: {
             query?: never;
@@ -1410,6 +1427,7 @@ export interface operations {
                             maxOutputTokens: number;
                             reasoningEfforts: ("none" | "minimal" | "low" | "medium" | "high")[];
                             inputModalities: ("text" | "image" | "audio" | "video" | "pdf")[];
+                            outputModalities?: ("text" | "image" | "audio" | "video" | "pdf")[];
                             known: boolean;
                             id: string;
                             displayName?: string;
@@ -1709,6 +1727,14 @@ export interface operations {
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
                         } | null;
                         /** @default null */
+                        vision: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
+                        } | null;
+                        /** @default null */
                         audio: {
                             /** Format: uuid */
                             providerId: string;
@@ -1887,6 +1913,14 @@ export interface operations {
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
                     } | null;
                     /** @default null */
+                    vision?: {
+                        /** Format: uuid */
+                        providerId: string;
+                        modelId: string;
+                        /** @enum {string} */
+                        reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
+                    } | null;
+                    /** @default null */
                     audio?: {
                         /** Format: uuid */
                         providerId: string;
@@ -1947,6 +1981,14 @@ export interface operations {
                         } | null;
                         /** @default null */
                         image: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
+                        } | null;
+                        /** @default null */
+                        vision: {
                             /** Format: uuid */
                             providerId: string;
                             modelId: string;
@@ -3593,6 +3635,8 @@ export interface operations {
                         remoteMessageIds: (number | string)[];
                         /** @default 0 */
                         saidCount: number;
+                        /** Format: uuid */
+                        mediaId?: string;
                         /** @description Text sent without a delivery run, such as an approval notice or a contact message. */
                         notice?: string;
                     }[];
@@ -4241,6 +4285,12 @@ export interface operations {
                     chatId: string;
                     text: string;
                     requestKey: string;
+                    media?: {
+                        /** @enum {string} */
+                        mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac";
+                        data: string;
+                        voice?: boolean;
+                    }[];
                     displayName?: string;
                     /**
                      * @default direct
@@ -8716,6 +8766,139 @@ export interface operations {
             };
         };
     };
+    readMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                mediaId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        /** @enum {string} */
+                        mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac";
+                        bytes: number;
+                        /** Format: date-time */
+                        createdAt: string;
+                        data: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
     listMessages: {
         parameters: {
             query?: never;
@@ -8865,6 +9048,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    mediaIds?: string[];
                     text: string;
                     requestKey: string;
                     model?: {

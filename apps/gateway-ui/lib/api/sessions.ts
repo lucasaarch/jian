@@ -3,6 +3,12 @@ import { result } from './result';
 
 /** Read-only access to sessions, messages and execution history. */
 export const sessionCalls = (client: Client) => ({
+  media: (profileId: string, mediaId: string) =>
+    result(
+      client.GET('/v1/profiles/{profileId}/media/{mediaId}', {
+        params: { path: { profileId, mediaId } },
+      }),
+    ),
   sessions: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/sessions', { params: profile(profileId) })),
   messages: (profileId: string, sessionId: string) =>

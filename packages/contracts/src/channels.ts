@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { inlineMediaSchema } from './media.js';
 import { secretSchema } from './security.js';
 
 /** One channel of each type per profile: the panel connects a type, it does not name a binding. */
@@ -61,6 +62,7 @@ export const ingressSchema = z.strictObject({
   chatId: z.string().min(1).max(100),
   text: z.string().trim().min(1).max(8000),
   requestKey: z.string().min(1).max(120),
+  media: z.array(inlineMediaSchema).max(4).optional(),
   displayName: z.string().trim().min(1).max(100).optional(),
   scope: conversationScopeSchema.default('direct'),
   groupName: z.string().trim().min(1).max(100).optional(),
@@ -150,6 +152,7 @@ export const deliverySchema = z.strictObject({
   remoteMessageIds: z.array(z.union([z.number(), z.string()])).default([]),
   /** How much of the run's commentary this chat has already received. */
   saidCount: z.number().int().nonnegative().default(0),
+  mediaId: z.uuid().optional(),
   notice: z
     .string()
     .optional()

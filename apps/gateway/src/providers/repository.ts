@@ -7,7 +7,7 @@ import {
   type ProviderRecord,
   providerRecordSchema,
 } from '@jian/contracts';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { modelDefaults, providers } from '../storage/schema.js';
 
@@ -85,11 +85,18 @@ export async function revokeLiveProviders(
   db: Queryable,
   kind: ProviderRecord['kind'],
   at: Date,
+  authMode: 'api' | 'codex' = 'api',
 ): Promise<string[]> {
   const rows = await db
     .update(providers)
     .set({ revokedAt: at })
-    .where(and(eq(providers.kind, kind), isNull(providers.revokedAt)))
+    .where(
+      and(
+        eq(providers.kind, kind),
+        isNull(providers.revokedAt),
+        sql`coalesce(${providers.authMode}, 'api') = ${authMode}`,
+      ),
+    )
     .returning({ id: providers.id });
 
   return rows.map((row) => row.id);

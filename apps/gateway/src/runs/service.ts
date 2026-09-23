@@ -10,6 +10,7 @@ import {
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { bindMedia, mediaMarker } from '../media/repository.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { ModelFallback } from '../providers/fallback.js';
 import type { ProviderSelection } from '../providers/port.js';
@@ -89,7 +90,11 @@ export class Runs {
 
   async submit(profileId: string, sessionId: string, input: unknown, options: SubmitOptions = {}) {
     const { continuationOf, activity = 'conversation', call, group } = options;
-    const data = submitSchema.parse(input);
+    const parsed = submitSchema.parse(input);
+    const data = {
+      ...parsed,
+      text: [parsed.text, ...(parsed.mediaIds ?? []).map(mediaMarker)].join('\n'),
+    };
 
     // Choosing a model for an owner who has not can reach the provider, and the profile lock
     // must not be held across a network call — so it is resolved before the transaction and
@@ -115,6 +120,8 @@ export class Runs {
 
       await this.sessions.session(profileId, sessionId, tx);
 
+      await bindMedia(tx, profileId, sessionId, data.mediaIds ?? []);
+
       const duplicate = await findRunByRequestKey(tx, profileId, sessionId, data.requestKey);
 
       if (duplicate) {
@@ -127,6 +134,7 @@ export class Runs {
       // they are changing what this one should be about. The message joins the run in flight
       // and is read between its steps, so nothing waits for a turn that already began.
       if (inFlight) {
+        await bindMedia(tx, profileId, sessionId, data.mediaIds ?? [], inFlight.id);
         await insertMessage(tx, {
           id: randomUUID(),
           profileId,
@@ -202,6 +210,8 @@ export class Runs {
       if (collided) {
         return this.sameRequest(collided, data.text, data.model);
       }
+
+      await bindMedia(tx, profileId, sessionId, data.mediaIds ?? [], run.id);
 
       // The message references the run, so it can only be written once the run exists.
       const message: Message = {

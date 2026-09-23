@@ -11,6 +11,7 @@ import { registerEventRoutes } from './http/events.js';
 import { registerMetaRoutes } from './http/meta.js';
 import { configureSecurity } from './http/security.js';
 import { registerGatewayUi } from './http/ui.js';
+import { registerMediaRoutes } from './media/routes.js';
 import { registerMemoryRoutes } from './memories/routes.js';
 import { registerProfileRoutes } from './profiles/routes.js';
 import type { CodexLogin } from './providers/codex/login.js';
@@ -64,7 +65,9 @@ export function createApp(
     logController: new LogController({ disableRequestLogging: true }),
   });
 
-  void app.register(helmet);
+  void app.register(helmet, {
+    contentSecurityPolicy: { directives: { mediaSrc: ["'self'", 'data:'] } },
+  });
   void app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
 
   // Installed before any registrar runs, so every route below gets the contract's schema.
@@ -87,6 +90,7 @@ export function createApp(
   registerProfileRoutes(app, options);
   registerSessionRoutes(app, { ...options, coordination });
   registerMemoryRoutes(app, options);
+  registerMediaRoutes(app, options);
   registerRunRoutes(app, options);
   registerCoordinationRoutes(app, { coordination });
   registerChannelRoutes(app, options);

@@ -137,7 +137,7 @@ Memories carry a key, content, origin and version, and only the agent writes the
 API lists them and removes one, it does not create or edit. Context retrieval picks
 candidates from a text index and injects only relevant matches within the budget, while
 the full history stays in the database and is read page by page. This is lexical search:
-embeddings and model-written summaries are not implemented.
+embeddings are not implemented. Conversation summaries use the selected compaction model automatically or when the agent calls `compact_context`.
 
 For new provider connections, the selected model determines bounded input, output,
 memory, history and tool-result limits. Legacy profiles retain `contextPolicy` until

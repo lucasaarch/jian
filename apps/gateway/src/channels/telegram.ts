@@ -1,5 +1,7 @@
 import type { ApiMethods, ApiResponse } from '@grammyjs/types';
 import { telegramUpdateSchema } from '@jian/contracts';
+import { z } from 'zod';
+import { readMediaBody } from '../media/providers.js';
 import type {
   Channel,
   DeliveryContext,
@@ -183,6 +185,48 @@ export class TelegramChannel implements Channel {
 
     if (!token || !BOT_TOKEN.test(token)) {
       return { status: 'failed', remoteMessageIds };
+    }
+
+    if (message.media) {
+      const image = message.media.mimeType.startsWith('image/');
+      const form = new FormData();
+      form.set('chat_id', message.chatId);
+      if (message.text) form.set('caption', message.text.slice(0, 1024));
+      form.set(
+        image ? 'photo' : 'voice',
+        new Blob([new Uint8Array(Buffer.from(message.media.data, 'base64'))], {
+          type: message.media.mimeType,
+        }),
+        image ? 'image.png' : 'voice.ogg',
+      );
+      if ((this.coolUntil.get(context.channelId) ?? 0) > this.clock())
+        return { status: 'pending', remoteMessageIds };
+      try {
+        const response = await context.fetch(
+          `https://api.telegram.org/bot${token}/${image ? 'sendPhoto' : 'sendVoice'}`,
+          {
+            method: 'POST',
+            body: form,
+            signal: AbortSignal.any([context.signal, AbortSignal.timeout(30_000)]),
+          },
+        );
+        const body = z
+          .object({
+            ok: z.boolean(),
+            result: z.object({ message_id: z.number() }).optional(),
+            error_code: z.number().optional(),
+          })
+          .parse(JSON.parse((await readMediaBody(response, 100_000)).toString()));
+        if (body.ok && body.result)
+          return { status: 'sent', remoteMessageIds: [body.result.message_id] };
+        if (body.error_code === 429) {
+          this.coolUntil.set(context.channelId, this.clock() + DEFAULT_COOLDOWN_MS);
+          return { status: 'pending', remoteMessageIds };
+        }
+        return { status: 'failed', remoteMessageIds };
+      } catch {
+        return { status: 'unknown', remoteMessageIds };
+      }
     }
 
     for (let offset = 0; offset < message.text.length; offset += MESSAGE_CHUNK_SIZE) {

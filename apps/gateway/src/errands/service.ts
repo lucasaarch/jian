@@ -128,7 +128,26 @@ export class Errands {
    * Closes the open question this message answers, if there is one. Returns it so the caller
    * can route the reply to the conversation that asked instead of to the contact's own.
    */
-  async answer(tx: Queryable, contactId: string, text: string): Promise<Errand | null> {
+  async answer(
+    tx: Queryable,
+    contactId: string,
+    text: string,
+    requestKey?: string,
+  ): Promise<Errand | null> {
+    if (requestKey) {
+      const [previous] = await tx
+        .select()
+        .from(errands)
+        .where(
+          and(
+            eq(errands.contactId, contactId),
+            eq(errands.answerRequestKey, requestKey),
+            eq(errands.status, 'answered'),
+          ),
+        )
+        .limit(1);
+      if (previous) return previous;
+    }
     const [open] = await tx
       .select()
       .from(errands)
@@ -149,7 +168,12 @@ export class Errands {
 
     const [closed] = await tx
       .update(errands)
-      .set({ status: 'answered', answer: text, updatedAt: new Date(this.clock()) })
+      .set({
+        status: 'answered',
+        answer: text,
+        answerRequestKey: requestKey,
+        updatedAt: new Date(this.clock()),
+      })
       .where(and(eq(errands.id, open.id), eq(errands.status, 'waiting')))
       .returning();
 

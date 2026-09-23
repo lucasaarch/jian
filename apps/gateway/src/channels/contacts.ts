@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { contactSchema } from '@jian/contracts';
+import { and, eq } from 'drizzle-orm';
 import type { z } from 'zod';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound } from '../core/errors.js';
@@ -7,6 +8,7 @@ import { recordEvent } from '../core/events.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { SessionWriter } from '../sessions/port.js';
 import type { Queryable, Store } from '../storage/database.js';
+import { mediaAssets } from '../storage/schema.js';
 import type { ChannelType, IncomingMessage } from './channel.js';
 import {
   findContact,
@@ -248,6 +250,16 @@ export class Contacts {
       };
 
       await updateContact(tx, contact);
+      await tx
+        .update(mediaAssets)
+        .set({ held: false })
+        .where(
+          and(
+            eq(mediaAssets.profileId, profileId),
+            eq(mediaAssets.contactId, id),
+            eq(mediaAssets.held, true),
+          ),
+        );
 
       return this.view(contact);
     });

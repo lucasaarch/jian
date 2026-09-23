@@ -545,6 +545,93 @@ it.each([false, true])(
   },
 );
 
+it.each([false])('uses the separately selected compaction model', async (subscription) => {
+  const { services, profile, session, run } = await fixture(
+    {
+      inputTokens: 32000,
+      historyTokens: 1000,
+      toolResultTokens: 8000,
+      maxSteps: 10,
+    },
+    subscription,
+  );
+  await services.memories.remember(
+    profile.id,
+    {
+      key: 'unrelated',
+      content: `receipt-123 ${'large result '.repeat(280)}`,
+      expectedVersion: 0,
+    },
+    session.id,
+  );
+  const provider = await services.providers.createProvider({
+    name: 'Summary',
+    kind: 'google',
+    secret: 'synthetic-summary-key-1234567890',
+  });
+  await services.providers.setModelDefaults(profile.id, {
+    compaction: { providerId: provider.id, modelId: 'summary-model' },
+  });
+  let summaryCalls = 0;
+  let step = 0;
+  let afterCheckpoint = false;
+  const model = mockModel({
+    doGenerate: async (options) => {
+      const prompt = JSON.stringify(options.prompt);
+      if (!options.tools?.length) {
+        if (
+          subscription &&
+          !prompt.includes("You are Claude Code, Anthropic's official CLI for Claude.")
+        ) {
+          throw new Error('Missing subscription system identity');
+        }
+        expect(prompt).toContain('receipt-123');
+        return answer('Checkpoint: receipt-123 was inspected; finish the deployment report.');
+      }
+      if (prompt.includes('Checkpoint: receipt-123')) {
+        afterCheckpoint = true;
+        expect(prompt).toContain('Remember the deployment time');
+        return answer('Report complete using receipt-123.');
+      }
+      return {
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: `read-${step++}`,
+            toolName: 'read_memories',
+            input: '{}',
+          },
+        ],
+        finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+        usage,
+        warnings: [],
+      };
+    },
+  });
+  await new AgentRuntime(
+    services,
+    (config, _env, _fetch, key) => {
+      if (config.modelId === 'summary-model') {
+        expect(key).toBe('synthetic-summary-key-1234567890');
+        summaryCalls++;
+      }
+      return model;
+    },
+    { gatewayVault: services.gatewayVault },
+  ).execute(profile.id, run.id);
+  expect(summaryCalls).toBeGreaterThan(0);
+  const finished = await services.runs.run(profile.id, run.id);
+  expect(afterCheckpoint).toBe(true);
+  expect(finished.status).toBe('completed');
+  expect(finished.commentary ?? []).not.toContain(
+    'Summarising what we said earlier so I can carry on.',
+  );
+  expect((await services.sessions.session(profile.id, session.id)).summary).toContain(
+    'receipt-123',
+  );
+  expect(finished.usage?.inputTokens).toBe((step + 2) * 10);
+});
+
 it('reports a safe context-budget error when required prompt content cannot fit', async () => {
   const services = await testServices();
 
@@ -1015,4 +1102,37 @@ it('sends each paragraph as it is written and keeps the last as the answer', asy
   // Three messages in the conversation, not one block cut up on the way out.
   expect(said).toEqual(['Opening the board.', 'Found it.', 'Twelve open.']);
   expect((await services.runs.run(profile.id, run.id)).output).toBe('Twelve open.');
+});
+
+it('lets the agent request compaction before reaching the automatic threshold', async () => {
+  const { services, profile, run } = await fixture({ inputTokens: 200000, maxSteps: 8 });
+  let step = 0;
+  let summaries = 0;
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (!options.tools?.length) {
+        summaries++;
+        return answer('Checkpoint: deployment time requested. Finish the answer.');
+      }
+      if (step >= 3) return answer('Ready.');
+      const toolName =
+        ['load_tools', 'read_memories', 'compact_context'][step++] ?? 'compact_context';
+      return {
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: `call-${step}`,
+            toolName,
+            input: toolName === 'load_tools' ? JSON.stringify({ groups: ['tasks'] }) : '{}',
+          },
+        ],
+        finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+        usage,
+        warnings: [],
+      };
+    },
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+  expect(summaries).toBe(1);
+  expect((await services.runs.run(profile.id, run.id)).status).toBe('completed');
 });

@@ -254,6 +254,7 @@ export const sessionRenameSchema = z.strictObject({
 });
 
 export const submitSchema = z.strictObject({
+  mediaIds: z.array(z.uuid()).max(4).optional(),
   text: z.string().trim().min(1).max(8_000),
   requestKey: z.string().min(1).max(120),
   model: modelSelectionSchema.optional(),

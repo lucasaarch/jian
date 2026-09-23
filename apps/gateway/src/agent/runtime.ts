@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { MCPClient } from '@ai-sdk/mcp';
-import type { Run } from '@jian/contracts';
+import type { ModelConfig, Run } from '@jian/contracts';
 import {
   generateText,
   type LanguageModel,
@@ -9,13 +9,18 @@ import {
   stepCountIs,
   ToolLoopAgent,
   type ToolSet,
+  tool,
 } from 'ai';
+import { z } from 'zod';
 import { fitPrompt, promptTokens, tokenCounter } from '../context/budget.js';
 import { compactPrompt, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
+import type { Media } from '../media/service.js';
 import { anthropicCredential, withClaudeCodeIdentity } from '../providers/claude-subscription.js';
 import { reasoningProviderOptions } from '../providers/effort.js';
 import { resolveModel } from '../providers/models.js';
+import { readModelDefaults } from '../providers/repository.js';
+import type { Providers } from '../providers/service.js';
 import { providerSecret } from '../providers/service.js';
 import { createSafeFetch } from '../security/outbound.js';
 import { type CacheTtl, cacheable, cacheableInstructions } from './cache.js';
@@ -29,7 +34,11 @@ import type { ModelResolver, RuntimeOptions } from './types.js';
 export type { RuntimeOptions } from './types.js';
 
 /** The run services the runtime drives, plus what it hands to the tool set it builds. */
-export type RuntimeServices = ToolServices & { contexts: ContextSource };
+export type RuntimeServices = ToolServices & {
+  contexts: ContextSource;
+  providers?: Pick<Providers, 'selectedModel'>;
+  media?: Pick<Media, 'prepare' | 'tools'>;
+};
 
 export class AgentRuntime {
   private controllers = new Map<string, AbortController>();
@@ -120,6 +129,7 @@ export class AgentRuntime {
     let externalUncertain = false;
     let spent = false;
     let lastCompactionAttempt = -4;
+    let compactionRequested = false;
 
     const progress = new ProgressReporter((snapshot) =>
       this.services.lifecycle.progress(runId, owner, snapshot),
@@ -171,7 +181,35 @@ export class AgentRuntime {
         ) === 'subscription';
 
       const model = await this.model(config, process.env, outbound.fetch, providerKey);
-      const tools = profileTools(this.services, run);
+      const tools: ToolSet = {
+        ...profileTools(this.services, run),
+        ...this.services.media?.tools(run, async (usage) => {
+          await account(
+            {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.inputTokens + usage.outputTokens,
+              inputTokenDetails: { cacheReadTokens: usage.cachedInputTokens },
+              outputTokenDetails: {},
+            } as LanguageModelUsage,
+            usage.inputTokens,
+            '',
+            0,
+          );
+        }),
+        compact_context: tool({
+          description:
+            'Request a context checkpoint before continuing a long task. The gateway summarizes older turns with the configured compaction model after this tool returns, preserving recent work and the latest request. Automatic compaction remains active.',
+          inputSchema: z.object({}),
+          execute: async () => {
+            compactionRequested = true;
+            return {
+              status: 'requested',
+              detail: 'Compaction will be attempted before the next model step.',
+            };
+          },
+        }),
+      };
       // Loaded within the run and never across runs: a turn states what it needs.
       const loadedTools = new Set<string>();
       const { gated } = deferTools(tools, loadedTools);
@@ -358,6 +396,21 @@ export class AgentRuntime {
             progress.redirected();
           }
 
+          await this.services.media?.prepare(messages, run, signal, async (usage) => {
+            await account(
+              {
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                totalTokens: usage.inputTokens + usage.outputTokens,
+                inputTokenDetails: { cacheReadTokens: usage.cachedInputTokens },
+                outputTokenDetails: {},
+              } as LanguageModelUsage,
+              usage.inputTokens,
+              '',
+              0,
+            );
+          });
+
           const activeNames = Object.keys(guarded).filter((name) =>
             mcpToolNames.includes(name)
               ? selectedMcpTools.has(name)
@@ -370,20 +423,57 @@ export class AgentRuntime {
 
           const before = promptTokens({ ...config, instructions, messages, tools: activeTools });
           if (
-            stepNumber - lastCompactionAttempt >= 4 &&
-            needsCompaction(before, policy.inputTokens - policy.outputTokens)
+            compactionRequested ||
+            (stepNumber - lastCompactionAttempt >= 4 &&
+              needsCompaction(before, policy.inputTokens - policy.outputTokens))
           ) {
+            compactionRequested = false;
             lastCompactionAttempt = stepNumber;
             try {
               const session = await this.services.sessions.session(profileId, run.sessionId);
+              const selection = (
+                await readModelDefaults(this.services.store.db, profileId, run.createdAt)
+              ).compaction;
+              const chosen =
+                selection && this.services.providers
+                  ? await this.services.providers.selectedModel(selection, this.services.store.db)
+                  : undefined;
+              const summaryConfig: ModelConfig = chosen?.config ?? config;
+              let summaryKey = providerKey;
+              if (chosen) {
+                summaryKey =
+                  summaryConfig.provider === 'openai-codex' && summaryConfig.providerId
+                    ? await this.options.codexLogin?.accessToken(summaryConfig.providerId)
+                    : summaryConfig.providerId
+                      ? await this.options.gatewayVault?.read(
+                          providerSecret(summaryConfig.providerId),
+                        )
+                      : summaryConfig.apiKeyEnv
+                        ? process.env[summaryConfig.apiKeyEnv]
+                        : undefined;
+                if (summaryKey) secrets.add(summaryKey);
+              }
+              const summarySubscription =
+                summaryConfig.provider === 'anthropic' &&
+                anthropicCredential(
+                  summaryConfig.credential,
+                  summaryConfig.apiKeyEnv,
+                  summaryKey,
+                ) === 'subscription';
               const compacted = await compactPrompt({
-                model,
-                ...config,
+                model: chosen
+                  ? await this.model(summaryConfig, process.env, outbound.fetch, summaryKey)
+                  : model,
+                ...summaryConfig,
                 messages,
                 previous: session.summary,
-                policy,
+                providerOptions: reasoningProviderOptions(
+                  summaryConfig,
+                  Math.min(2048, (chosen?.policy ?? policy).outputTokens),
+                ),
+                policy: chosen?.policy ?? policy,
                 signal,
-                dress,
+                dress: summarySubscription ? withClaudeCodeIdentity : undefined,
                 onUsage: async (usage, tokens, text) => {
                   await account(usage, tokens, text, 0);
                 },

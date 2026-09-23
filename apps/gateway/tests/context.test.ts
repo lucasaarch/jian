@@ -231,6 +231,44 @@ describe('compaction', () => {
     expect(asked).not.toContain('turn 10');
   });
 
+  it('summarizes all history through a compactor with a smaller context', async () => {
+    const messages = Array.from({ length: 14 }, (_, index) => ({
+      role: 'user' as const,
+      content: `turn-${index}: ${'details '.repeat(200)}`,
+    }));
+    let consumed = '';
+    const result = await compactPrompt({
+      provider: 'test',
+      modelId: 'small',
+      policy: { inputTokens: 5000, outputTokens: 512 },
+      messages,
+      signal: AbortSignal.timeout(5000),
+      onUsage: async () => {},
+      model: mockModel({
+        doGenerate: async (options) => {
+          const user = options.prompt.filter((message) => message.role === 'user');
+          consumed += user
+            .map((message) =>
+              message.content.map((part) => (part.type === 'text' ? part.text : '')).join(''),
+            )
+            .join('');
+          return {
+            content: [{ type: 'text', text: 'Checkpoint with decisions.' }],
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+              outputTokens: { total: 5, text: 5, reasoning: 0 },
+            },
+            warnings: [],
+          };
+        },
+      }),
+    });
+    expect(consumed).toBe(JSON.stringify(messages.slice(0, -2)));
+    expect(result?.messages.at(-1)).toEqual(messages.at(-1));
+    expect(result?.summary).toBe('Checkpoint with decisions.');
+  });
+
   it('leaves a short conversation alone', async () => {
     const history = Array.from({ length: 3 }, (_, index) =>
       message(

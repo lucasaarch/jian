@@ -19,6 +19,7 @@ export const modelCapabilitiesSchema = z.strictObject({
   maxOutputTokens: z.number().int().min(256).max(1_000_000),
   reasoningEfforts: z.array(reasoningEffortSchema).max(5),
   inputModalities: z.array(modelModalitySchema).min(1).max(5),
+  outputModalities: z.array(modelModalitySchema).max(5).optional(),
   /**
    * False when the capability table has no entry for this model: every number above is the
    * gateway's conservative floor, not something the provider stated. The model stays
@@ -93,18 +94,13 @@ export const modelRoleSchema = z.enum([
   'channel',
   'compaction',
   'image',
+  'vision',
   'audio',
   'speech',
   'transcription',
 ]);
 
-/**
- * The roles a run actually executes today. Every other role is stored, validated and inert on
- * purpose: the configuration and the contract land first, the runtimes for context
- * compaction, image, audio, speech and transcription land later. Anything reading a default
- * for a role outside this list is reading a setting nothing has wired up yet.
- */
-export const executedModelRoles = ['conversation', 'channel'] as const;
+export const executedModelRoles = modelRoleSchema.options;
 
 // Absent stays absent: a PUT that omits a role clears it, and records written before a role
 // existed read back as empty instead of failing.
@@ -115,6 +111,7 @@ export const modelDefaultsInputSchema = z.strictObject({
   channel: roleSelection,
   compaction: roleSelection,
   image: roleSelection,
+  vision: roleSelection,
   audio: roleSelection,
   speech: roleSelection,
   transcription: roleSelection,
@@ -135,3 +132,44 @@ export type ModelDefaultsRecord = z.infer<typeof modelDefaultsRecordSchema>;
 export type ModelRole = z.infer<typeof modelRoleSchema>;
 export type ModelSelection = z.infer<typeof modelSelectionSchema>;
 export type ReasoningEffort = z.infer<typeof reasoningEffortSchema>;
+
+/** Endpoint compatibility matters as well as input/output modalities. */
+export function supportsModelRole(
+  provider: Pick<ProviderRecord, 'kind' | 'authMode'>,
+  model: Pick<ProviderModel, 'id' | 'inputModalities' | 'outputModalities' | 'known'>,
+  role: ModelRole,
+): boolean {
+  const id = model.id.toLowerCase();
+  if (role === 'image')
+    return (
+      provider.authMode !== 'codex' &&
+      ((provider.kind === 'openai' && /^(gpt-image|dall-e)/.test(id)) ||
+        (provider.kind === 'google' &&
+          id.startsWith('gemini-') &&
+          (model.outputModalities?.includes('image') || id.includes('-image'))))
+    );
+  if (role === 'speech')
+    return (
+      provider.authMode !== 'codex' &&
+      ((provider.kind === 'google' && id.includes('tts')) ||
+        (provider.kind === 'openai' && /(^tts-|tts)/.test(id)))
+    );
+  if (role === 'transcription' && provider.kind === 'openai')
+    return provider.authMode !== 'codex' && /whisper|transcribe/.test(id);
+  if (role === 'audio' || role === 'transcription')
+    return (
+      provider.kind === 'google' &&
+      !/live|native-audio|tts/.test(id) &&
+      (!model.known || model.inputModalities.includes('audio'))
+    );
+  if (role === 'vision')
+    return (
+      !/image|tts|live|native-audio/.test(id) &&
+      (!model.known || model.inputModalities.includes('image'))
+    );
+  return (
+    !/^(gpt-image|dall-e|tts-|whisper)/.test(id) &&
+    !/transcribe|embedding|tts|live|native-audio/.test(id) &&
+    (!model.outputModalities?.length || model.outputModalities.includes('text'))
+  );
+}

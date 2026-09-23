@@ -264,6 +264,7 @@ export function toDelivery(row: DeliveryRow): DeliveryRecord {
       chatId: row.chatId,
       status: row.status,
       ...(row.notice ? { notice: row.notice } : {}),
+      ...(row.mediaId ? { mediaId: row.mediaId } : {}),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       remoteMessageIds: row.remoteMessageIds,
@@ -283,6 +284,7 @@ function toDeliveryRow(delivery: DeliveryRecord): typeof deliveries.$inferInsert
     runId: delivery.runId ?? null,
     chatId: delivery.chatId,
     notice: delivery.notice ?? null,
+    mediaId: delivery.mediaId ?? null,
     status: delivery.status,
     remoteMessageIds: delivery.remoteMessageIds,
     saidCount: delivery.saidCount,
@@ -321,7 +323,7 @@ export async function listDeliveriesByPhase(
   const rows = await db
     .select()
     .from(deliveries)
-    .where(eq(deliveries.status, 'pending'))
+    .where(eq(deliveries.status, phase))
     .orderBy(asc(deliveries.createdAt))
     .limit(limit);
 

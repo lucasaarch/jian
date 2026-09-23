@@ -71,7 +71,12 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
       <div className="resource-list">
         {providers.map((entry) => {
           const configured = data.providers.find(
-            (provider) => provider.kind === entry.kind && !provider.revokedAt,
+            (provider) =>
+              provider.kind === entry.kind && !provider.revokedAt && provider.authMode !== 'codex',
+          );
+          const codex = data.providers.find(
+            (provider) =>
+              provider.kind === entry.kind && provider.authMode === 'codex' && !provider.revokedAt,
           );
           const list = configured ? data.providerModels[configured.id] : undefined;
           const uncatalogued = list?.models.filter((model) => !model.known).length ?? 0;
@@ -84,15 +89,17 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
               <div className="grow">
                 <h3>
                   {entry.name}
-                  <Badge tone={configured ? 'good' : 'neutral'}>
-                    {configured
-                      ? configured.authMode === 'codex'
-                        ? 'ChatGPT connected'
-                        : 'Connected'
-                      : 'Not configured'}
+                  <Badge tone={configured || codex ? 'good' : 'neutral'}>
+                    {configured ? 'Connected' : codex ? 'ChatGPT connected' : 'Not configured'}
                   </Badge>
                 </h3>
                 <p>{entry.description}</p>
+                {entry.kind === 'openai' && codexLogin?.status === 'connected' && (
+                  <p>
+                    ChatGPT is connected. An API key can be configured alongside it for image and
+                    voice generation.
+                  </p>
+                )}
                 <div className="connection-meta">
                   <KeyRound size={13} />
                   <span>{configured ? credentialLine(configured) : entry.variables}</span>
@@ -227,6 +234,18 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
                       >
                         Sign in with ChatGPT
                       </Button>
+                      {codex && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={busy}
+                          onClick={() =>
+                            void mutate(() => api.revokeProvider(codex.id), 'ChatGPT disconnected.')
+                          }
+                        >
+                          Disconnect ChatGPT
+                        </Button>
+                      )}
                       {codexLogin?.status === 'pending' && (
                         <p className="note">
                           Open{' '}

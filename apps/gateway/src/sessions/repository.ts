@@ -92,8 +92,14 @@ export async function findPeerSession(
   return row ? toSession(row) : null;
 }
 
-export async function insertMessage(db: Queryable, message: Message): Promise<void> {
-  await db.insert(messages).values({ ...message, createdAt: new Date(message.createdAt) });
+export async function insertMessage(
+  db: Queryable,
+  message: Message,
+  repeatable = false,
+): Promise<void> {
+  const insert = db.insert(messages).values({ ...message, createdAt: new Date(message.createdAt) });
+  if (repeatable) await insert.onConflictDoNothing({ target: messages.id });
+  else await insert;
 }
 
 export async function listSessionMessages(

@@ -1,4 +1,4 @@
-import type { channelTypeSchema, ingressSchema } from '@jian/contracts';
+import type { channelTypeSchema, InlineMedia, ingressSchema } from '@jian/contracts';
 import type { z } from 'zod';
 
 export type ChannelType = z.infer<typeof channelTypeSchema>;
@@ -14,6 +14,7 @@ export interface ChannelRequest {
 export interface OutgoingMessage {
   chatId: string;
   text: string;
+  media?: InlineMedia;
 }
 
 export interface DeliveryContext {

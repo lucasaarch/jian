@@ -46,8 +46,7 @@ export const anthropicCredentials = [
 ] as const;
 
 /**
- * The activities that can pin a model. `runtime: false` is deliberate and visible: the gateway
- * stores and validates the choice, and nothing executes it yet.
+ * Each activity selects a model independently; empty selections use the stated fallback.
  */
 export const roles = [
   {
@@ -65,32 +64,38 @@ export const roles = [
   {
     key: 'compaction',
     label: 'Context compaction',
-    hint: 'Will summarise the history when a conversation outgrows its budget.',
-    runtime: false,
+    hint: 'Summarises older context automatically or when the agent requests it. Unset, it uses the conversation model.',
+    runtime: true,
   },
   {
     key: 'image',
     label: 'Image generation',
-    hint: 'The model that will produce images when the agent asks for one.',
-    runtime: false,
+    hint: 'Generates images with an OpenAI API key or Gemini. Unset, it uses Gemini when configured.',
+    runtime: true,
+  },
+  {
+    key: 'vision',
+    label: 'Image analysis',
+    hint: 'When selected, analyzes incoming images. Otherwise the conversation model sees them directly when supported; Gemini is the fallback.',
+    runtime: true,
   },
   {
     key: 'audio',
-    label: 'Audio generation',
-    hint: 'The model that will produce sound that is not speech.',
-    runtime: false,
+    label: 'Audio analysis',
+    hint: 'Understands speech and sounds in audio files. Unset, it uses Gemini.',
+    runtime: true,
   },
   {
     key: 'speech',
     label: 'Text to speech',
-    hint: 'The model that will read a written answer aloud.',
-    runtime: false,
+    hint: 'Generates voice replies with OpenAI or Gemini. Unset, it uses Gemini with the Kore voice.',
+    runtime: true,
   },
   {
     key: 'transcription',
     label: 'Speech to text',
-    hint: 'The model that will transcribe audio arriving on a channel.',
-    runtime: false,
+    hint: 'Transcribes incoming voice notes. Unset, it uses Gemini.',
+    runtime: true,
   },
 ] as const;
 

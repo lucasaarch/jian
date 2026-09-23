@@ -6,12 +6,14 @@ import {
   initAuthCreds,
   jidDecode,
   makeWASocket,
+  normalizeMessageContent,
   proto,
   type SignalDataTypeMap,
   type WAMessage,
   type WASocket,
 } from 'baileys';
 import { MAX_DEVICE_SESSION_BYTES } from './connections.js';
+import { readWhatsAppContent } from './media.js';
 import { quietLibsignal } from './quiet.js';
 import type { DeviceFactory } from './types.js';
 import { DEVICE_SEND_TIMEOUT_MS } from './types.js';
@@ -74,12 +76,15 @@ const toDeviceJid = (chatId: string) => {
   return CONTACT_JID.test(chatId) ? chatId.replace(/@c\.us$/, '@s.whatsapp.net') : undefined;
 };
 
-const textOf = (message: WAMessage) =>
-  message.message?.conversation ?? message.message?.extendedTextMessage?.text ?? undefined;
-
 /** Who the message itself marks as addressed, which is how a room mention reaches the gateway. */
 const mentionsOf = (message: WAMessage) =>
-  (message.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []).flatMap((jid) => {
+  (
+    (
+      normalizeMessageContent(message.message)?.extendedTextMessage ??
+      normalizeMessageContent(message.message)?.imageMessage ??
+      normalizeMessageContent(message.message)?.audioMessage
+    )?.contextInfo?.mentionedJid ?? []
+  ).flatMap((jid) => {
     const contact = toContactJid(jid);
 
     return contact ? [contact] : [];
@@ -265,7 +270,10 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
     };
 
     const deliver = async (message: WAMessage) => {
-      const text = textOf(message);
+      if (message.key.fromMe || !message.key.id) return;
+      const address = message.key.remoteJid ?? '';
+      if (!GROUP_JID.test(address) && !toContactJid(address)) return;
+      const { text, media } = await readWhatsAppContent(message);
       const requestKey = message.key.id;
 
       if (message.key.fromMe || !requestKey || !text?.trim() || text.length > 8000) {
@@ -292,6 +300,7 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           actorId: from,
           chatId: remote,
           text,
+          ...(media ? { media } : {}),
           requestKey,
           scope: 'group',
           ...(subject ? { groupName: subject } : {}),
@@ -317,6 +326,7 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
         actorId: sender,
         chatId: sender,
         text,
+        ...(media ? { media } : {}),
         requestKey,
         scope: 'direct',
         mentions: [],
@@ -376,7 +386,7 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           // A bubble nobody saw is not worth failing anything over.
         }
       },
-      send: async (chatId, text, signal) => {
+      send: async (chatId, text, signal, media) => {
         const jid = toDeviceJid(chatId);
 
         if (closed || !socket || !jid) {
@@ -392,7 +402,26 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
         });
 
         try {
-          const result = await Promise.race([socket.sendMessage(jid, { text }), interrupted]);
+          const result = await Promise.race([
+            socket.sendMessage(
+              jid,
+              media
+                ? media.mimeType.startsWith('image/')
+                  ? {
+                      image: Buffer.from(media.data, 'base64'),
+                      mimetype: media.mimeType,
+                      ...(text ? { caption: text } : {}),
+                    }
+                  : {
+                      audio: Buffer.from(media.data, 'base64'),
+                      mimetype:
+                        media.mimeType === 'audio/ogg' ? 'audio/ogg; codecs=opus' : media.mimeType,
+                      ptt: media.mimeType === 'audio/ogg',
+                    }
+                : { text },
+            ),
+            interrupted,
+          ]);
 
           if (!result?.key.id) {
             throw new Error('WhatsApp send was not confirmed');

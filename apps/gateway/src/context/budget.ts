@@ -36,6 +36,24 @@ export function tokenCounter(provider: string, modelId: string): Counter {
   return byteCounter;
 }
 
+/** Pixels have a model cost, not the token count of their base64 transport. */
+export function promptText(value: unknown): string {
+  return JSON.stringify(value, (_key, item) => {
+    if (item && typeof item === 'object' && item.type === 'image')
+      return { type: 'text', text: '[Image attachment]' };
+    if (item && typeof item === 'object' && item.type === 'file')
+      return { type: 'text', text: '[File attachment]' };
+    return item;
+  });
+}
+
+function messageCost(message: ModelMessage, count: Counter): number {
+  const images = Array.isArray(message.content)
+    ? message.content.filter((part) => part.type === 'image').length
+    : 0;
+  return count(promptText(message)) + images * 8192 + 16;
+}
+
 function schemaText(tools: ToolSet): string {
   const definitions = Object.entries(tools).map(([name, definition]) => {
     let inputSchema: unknown;
@@ -84,7 +102,7 @@ export function promptTokens(input: {
     count(schemaText(input.tools)) +
     32 * Object.keys(input.tools).length +
     32 +
-    input.messages.reduce((sum, message) => sum + count(JSON.stringify(message)) + 16, 0)
+    input.messages.reduce((sum, message) => sum + messageCost(message, count), 0)
   );
 }
 
@@ -121,7 +139,7 @@ export function fitPrompt(input: {
 
   // Tokenize each block once; trimming subtracts its cost instead of recounting the whole prompt.
   const blockCosts = blocks.map((block) =>
-    block.reduce((sum, message) => sum + count(JSON.stringify(message)) + 16, 0),
+    block.reduce((sum, message) => sum + messageCost(message, count), 0),
   );
   let tokens = fixedTokens + blockCosts.reduce((total, cost) => total + cost, 0);
 

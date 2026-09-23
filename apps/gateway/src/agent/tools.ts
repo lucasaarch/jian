@@ -367,6 +367,10 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
  * profiles still costs one call rather than two.
  */
 export const TOOL_GROUPS = {
+  media: {
+    summary: 'inspect images and audio, generate images, and reply with voice recordings',
+    tools: ['analyze_media', 'generate_image', 'generate_speech'],
+  },
   files: {
     summary: 'read, write and list files on the machine this gateway runs on',
     tools: ['read_file', 'write_file', 'list_directory'],
@@ -387,7 +391,13 @@ export const TOOL_GROUPS = {
   },
   tasks: {
     summary: 'checkpoints, stored tool output and resource leases of long-running work',
-    tools: ['read_run_checkpoints', 'read_artifact', 'acquire_resource', 'release_resource'],
+    tools: [
+      'read_run_checkpoints',
+      'read_artifact',
+      'acquire_resource',
+      'release_resource',
+      'compact_context',
+    ],
   },
   contacts: {
     summary: 'write to the people the owner approved on this profile’s channels',

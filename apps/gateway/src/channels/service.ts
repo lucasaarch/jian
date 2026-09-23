@@ -10,6 +10,8 @@ import type { z } from 'zod';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { Errands } from '../errands/service.js';
+import { bindMedia, releaseHeldMedia } from '../media/repository.js';
+import type { Media } from '../media/service.js';
 import type { ProfileReader } from '../profiles/port.js';
 import { isUniqueViolation } from '../providers/repository.js';
 import type { RunWriter } from '../runs/port.js';
@@ -26,6 +28,7 @@ import { plainText } from './plain.js';
 import { ChannelRegistry } from './registry.js';
 import {
   findChannel,
+  findContactByIdentity,
   findContactBySession,
   findDelivery,
   findLiveChannel,
@@ -95,6 +98,7 @@ type ChannelServices = {
   runs: RunWriter;
   store: Store;
   vault: Vault;
+  media?: Media;
 };
 
 export class Channels {
@@ -303,7 +307,23 @@ export class Channels {
       throw new GatewayError(409, 'The channel of this contact is disconnected');
     }
 
-    await this.submit(channel, contact, contact.message, contact.requestKey ?? contact.id);
+    const mediaIds = await this.services.store.transaction(profileId, (tx) =>
+      releaseHeldMedia(
+        tx,
+        profileId,
+        contact.id,
+        assertFound(contact.sessionId ?? null, 'Session'),
+      ),
+    );
+    await this.submit(
+      channel,
+      contact,
+      contact.message,
+      contact.requestKey ?? contact.id,
+      undefined,
+      undefined,
+      mediaIds,
+    );
 
     return this.people.release(profileId, contactId);
   }
@@ -379,30 +399,52 @@ export class Channels {
       return { accepted: false };
     }
 
+    const mediaIds: string[] = [];
     const intake = await this.services.store.transaction(
       channel.profileId,
       async (tx): Promise<Intake & { decision?: GroupDecision }> => {
         const outcome = await this.people.intake(tx, channel, data);
-
-        if (outcome.status === 'pending' && outcome.announce) {
+        if (outcome.status === 'pending' && outcome.announce)
           await this.notify(tx, channel, data.chatId, connectionGeneration);
+        let decision: GroupDecision | undefined;
+        if (outcome.status === 'approved' && data.scope === 'group') {
+          const profile = await this.services.profiles.profile(channel.profileId, tx);
+          decision = await this.rooms.observe(tx, channel, outcome.contact, data, profile.name);
         }
-
-        if (outcome.status !== 'approved' || data.scope !== 'group') {
-          return outcome;
+        // Intake and attachment persistence share the approval lock: approval cannot miss pixels.
+        if (
+          outcome.status !== 'blocked' &&
+          (data.scope === 'direct' || outcome.status === 'approved') &&
+          (!decision || decision.speak) &&
+          this.services.media
+        ) {
+          const contact =
+            outcome.status === 'approved'
+              ? outcome.contact
+              : await findContactByIdentity(tx, channel.id, data.chatId, data.actorId);
+          if (contact)
+            for (const [index, media] of (data.media ?? []).entries()) {
+              try {
+                mediaIds.push(
+                  await this.services.media.stage(
+                    tx,
+                    channel.profileId,
+                    contact.id,
+                    contact.sessionId,
+                    `${channel.id}:${data.requestKey}:${index}`,
+                    media,
+                  ),
+                );
+              } catch (error) {
+                if (!(error instanceof GatewayError) || ![413, 429].includes(error.statusCode))
+                  throw error;
+                data.text = `${data.text.slice(0, 7600)}\n[Attachment rejected: ${error.message}]`;
+              }
+            }
         }
-
-        // Deciding under the profile lock is what keeps the room's budget honest when several
-        // messages of the same burst are read at once.
-        const profile = await this.services.profiles.profile(channel.profileId, tx);
-
-        return {
-          ...outcome,
-          decision: await this.rooms.observe(tx, channel, outcome.contact, data, profile.name),
-        };
+        return { ...outcome, ...(decision ? { decision } : {}) };
       },
     );
-
     if (intake.status !== 'approved') {
       return { accepted: false, contact: intake.status };
     }
@@ -415,11 +457,11 @@ export class Channels {
     // asked, not to this one: nobody here is waiting for it.
     if (data.scope === 'direct') {
       const errand = await this.services.store.transaction(channel.profileId, (tx) =>
-        this.errands.answer(tx, intake.contact.id, data.text),
+        this.errands.answer(tx, intake.contact.id, data.text, data.requestKey),
       );
 
       if (errand) {
-        const relayed = await this.relay(channel, intake.contact, errand, data);
+        const relayed = await this.relay(channel, intake.contact, errand, data, mediaIds);
 
         // The asking conversation was busy. The answer is on the errand either way, and it
         // still reaches the owner as an ordinary turn rather than disappearing.
@@ -441,6 +483,7 @@ export class Channels {
       data.requestKey,
       connectionGeneration,
       intake.decision?.turn,
+      mediaIds,
     );
 
     return { accepted: true, runId: run.id, contact: 'approved' as const };
@@ -455,14 +498,25 @@ export class Channels {
     contact: ContactRecord,
     errand: { id: string; fromSessionId: string; question: string },
     data: IncomingMessage,
+    mediaIds: string[] = [],
   ): Promise<{ accepted: true; runId: string; contact: 'approved' } | null> {
     const who = contact.displayName ?? data.displayName ?? contact.actorId;
 
     try {
+      const forwarded =
+        mediaIds.length && contact.sessionId && this.services.media
+          ? await this.services.media.forward(
+              channel.profileId,
+              contact.sessionId,
+              errand.fromSessionId,
+              mediaIds,
+            )
+          : [];
       const run = await this.services.runs.submit(
         channel.profileId,
         errand.fromSessionId,
         {
+          mediaIds: forwarded,
           text: [
             `${who} answered the question you sent them.`,
             `You asked: ${errand.question}`,
@@ -479,18 +533,30 @@ export class Channels {
       // into the one that asked, or their own history shows a question and no reply.
       if (contact.sessionId) {
         await this.services.store.transaction(channel.profileId, (tx) =>
-          insertMessage(tx, {
-            id: randomUUID(),
-            profileId: channel.profileId,
-            sessionId: contact.sessionId as string,
-            runId: run.id,
-            role: 'user',
-            content: data.text,
-            createdAt: new Date().toISOString(),
-          }),
+          insertMessage(
+            tx,
+            {
+              id: createHash('sha256')
+                .update(`relay:${run.id}:${data.requestKey}`)
+                .digest('hex')
+                .slice(0, 32)
+                .replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5'),
+              profileId: channel.profileId,
+              sessionId: contact.sessionId as string,
+              runId: run.id,
+              role: 'user',
+              content: data.text,
+              createdAt: new Date().toISOString(),
+            },
+            true,
+          ),
         );
       }
 
+      if (contact.sessionId && mediaIds.length)
+        await this.services.store.transaction(channel.profileId, (tx) =>
+          bindMedia(tx, channel.profileId, contact.sessionId as string, mediaIds, run.id),
+        );
       await this.deliverRun(channel.profileId, errand.fromSessionId, run.id);
 
       return { accepted: true, runId: run.id, contact: 'approved' as const };
@@ -507,6 +573,7 @@ export class Channels {
     requestKey: string,
     connectionGeneration?: number,
     group?: GroupTurn,
+    mediaIds: string[] = [],
   ) {
     const sessionId = assertFound(contact.sessionId ?? null, 'Session');
 
@@ -515,6 +582,7 @@ export class Channels {
       sessionId,
       {
         text,
+        mediaIds,
         requestKey: createHash('sha256')
           .update(JSON.stringify([channel.id, contact.chatId, contact.actorId, requestKey]))
           .digest('hex'),
@@ -847,7 +915,7 @@ export class Channels {
         channelSecret(channel.id),
       );
 
-      if (!adapter.send || !text) {
+      if (!adapter.send || (!text && !delivery.mediaId)) {
         throw new Error('Channel does not support delivery');
       }
 
@@ -860,6 +928,22 @@ export class Channels {
         fetch: this.fetcher,
         signal: this.abort.signal,
       };
+
+      if (delivery.mediaId) {
+        if (!this.services.media) throw new Error('Media delivery is unavailable');
+        const media = await this.services.media.read(delivery.profileId, delivery.mediaId);
+        return adapter.send(
+          {
+            chatId: delivery.chatId,
+            text,
+            media: {
+              mimeType: media.mimeType as import('@jian/contracts').InlineMedia['mimeType'],
+              data: media.data,
+            },
+          },
+          context,
+        );
+      }
 
       const parts = adapter.rendersMarkdown
         ? [text.trim()]

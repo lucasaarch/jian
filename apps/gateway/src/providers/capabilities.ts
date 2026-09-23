@@ -61,6 +61,7 @@ export function modelCapabilities(
       : floor.maxOutputTokens,
     reasoningEfforts,
     inputModalities: inputModalities ?? floor.inputModalities,
+    outputModalities: catalogued?.outputModalities ?? [],
     // Known means a source spoke for this model, not that every field came from one.
     known: Boolean(contextWindow && inputModalities),
   };

@@ -84,8 +84,12 @@ const vault = new Vault(store, box);
 // Vendor credentials belong to the installation; everything else a profile types is its own.
 const gatewayVault = new GatewayVault(store, box);
 // The store rides along: several consumers read records no single area owns.
-const services = { ...buildServices({ store, vault, gatewayVault, catalog }), store };
+const services = {
+  ...buildServices({ store, vault, gatewayVault, catalog, fetcher: outbound.fetch }),
+  store,
+};
 const codexLogin = new CodexLogin(services, gatewayVault);
+services.media.useCodexLogin(codexLogin);
 
 const providerModels = new ProviderModels(
   { providers: services.providers, vault: gatewayVault },

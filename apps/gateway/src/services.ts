@@ -1,6 +1,7 @@
 import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
 import { Errands } from './errands/service.js';
+import { Media } from './media/service.js';
 import { Memories } from './memories/service.js';
 import { Peers } from './peers/service.js';
 import { Profiles } from './profiles/service.js';
@@ -9,6 +10,7 @@ import { Providers } from './providers/service.js';
 import { RunLifecycle } from './runs/lifecycle.js';
 import { Runs } from './runs/service.js';
 import type { GatewayVault } from './security/gateway-vault.js';
+import { createSafeFetch } from './security/outbound.js';
 import type { Vault } from './security/vault.js';
 import { Sessions } from './sessions/service.js';
 import type { Store } from './storage/database.js';
@@ -18,6 +20,7 @@ export type Services = {
   providers: Providers;
   sessions: Sessions;
   memories: Memories;
+  media: Media;
   runs: Runs;
   peers: Peers;
   lifecycle: RunLifecycle;
@@ -34,12 +37,14 @@ export function buildServices({
   gatewayVault,
   clock = Date.now,
   catalog,
+  fetcher,
 }: {
   store: Store;
   vault: Vault;
   gatewayVault: GatewayVault;
   clock?: Clock;
   catalog?: ModelCatalog;
+  fetcher?: typeof fetch;
 }): Services {
   const profiles = new Profiles(store, vault, clock);
   const providers = new Providers(store, profiles, gatewayVault, clock, catalog);
@@ -52,6 +57,7 @@ export function buildServices({
     providers,
     sessions,
     memories,
+    media: new Media(store, providers, gatewayVault, fetcher ?? createSafeFetch().fetch),
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),
     lifecycle: new RunLifecycle(store, runs, clock),

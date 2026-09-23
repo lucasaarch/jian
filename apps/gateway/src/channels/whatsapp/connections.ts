@@ -444,6 +444,16 @@ export class WhatsAppConnections {
     let attempted = false;
 
     try {
+      if (message.media) {
+        signal.throwIfAborted();
+        if (!(await this.canSend(id, generation))) return { status: 'failed', remoteMessageIds };
+        const local = assertFound(this.devices.get(id), 'Device');
+        attempted = true;
+        remoteMessageIds.push(
+          await local.device.send(message.chatId, message.text, signal, message.media),
+        );
+        return { status: 'sent', remoteMessageIds };
+      }
       const characters = Array.from(message.text);
 
       for (let offset = 0; offset < characters.length; offset += 4000) {

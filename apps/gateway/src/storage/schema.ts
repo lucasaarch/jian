@@ -103,7 +103,9 @@ export const providers = pgTable(
   },
   (table) => [
     // One live provider per vendor: the rule the service enforced by scanning.
-    uniqueIndex('providers_live_per_kind').on(table.kind).where(sql`${table.revokedAt} is null`),
+    uniqueIndex('providers_live_per_kind_auth')
+      .on(table.kind, sql`coalesce(${table.authMode}, 'api')`)
+      .where(sql`${table.revokedAt} is null`),
   ],
 );
 
@@ -448,6 +450,7 @@ export const errands = pgTable(
     question: text('question').notNull(),
     status: errandStatus('status').notNull(),
     answer: text('answer'),
+    answerRequestKey: text('answer_request_key'),
     // After this, a message from that contact is a new conversation, not a late reply.
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt,
@@ -477,6 +480,7 @@ export const deliveries = pgTable(
     chatId: text('chat_id').notNull(),
     // Gateway-authored text sent without a run, such as the approval notice.
     notice: text('notice'),
+    mediaId: uuid('media_id'),
     status: deliveryStatus('status').notNull(),
     error: text('error'),
     // What the protocol called the message it accepted, for a later receipt to match.
@@ -576,4 +580,29 @@ export const events = pgTable(
     createdAt,
   },
   (table) => [index('events_cursor').on(table.profileId, table.id)],
+);
+
+export const mediaAssets = pgTable(
+  'media_assets',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'cascade' }),
+    contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id').references(() => runs.id, { onDelete: 'cascade' }),
+    sourceKey: text('source_key').notNull(),
+    mimeType: text('mime_type').notNull(),
+    data: text('data').notNull(),
+    bytes: integer('bytes').notNull(),
+    voice: boolean('voice').notNull().default(false),
+    analysis: text('analysis'),
+    held: boolean('held').notNull().default(false),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex('media_source').on(table.profileId, table.sourceKey),
+    index('media_session').on(table.profileId, table.sessionId),
+  ],
 );

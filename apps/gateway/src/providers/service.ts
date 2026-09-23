@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   type ModelConfig,
+  type ModelRole,
   type ModelSelection,
   modelDefaultsInputSchema,
   modelDefaultsRecordSchema,
@@ -8,6 +9,7 @@ import {
   providerInputSchema,
   providerRecordSchema,
   type Run,
+  supportsModelRole,
 } from '@jian/contracts';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
@@ -52,7 +54,12 @@ export class Providers {
     const environment = providerKinds
       .map((kind) => environmentProvider(kind))
       .filter((provider) => provider !== null)
-      .filter((provider) => !stored.some((item) => !item.revokedAt && item.kind === provider.kind));
+      .filter(
+        (provider) =>
+          !stored.some(
+            (item) => !item.revokedAt && item.kind === provider.kind && item.authMode !== 'codex',
+          ),
+      );
 
     return [...stored, ...environment];
   }
@@ -88,7 +95,8 @@ export class Providers {
   }
 
   /**
-   * One live provider per vendor: configuring another revokes the old one and its key.
+   * One live credential per vendor and authentication mode. An OpenAI API key and a
+   * ChatGPT login coexist; replacing either revokes only its own previous credential.
    * Nothing is announced — an installation credential belongs to no profile's event stream,
    * and the row's own timestamps are what says when it arrived and when it went.
    */
@@ -96,7 +104,12 @@ export class Providers {
     return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
       const now = new Date(this.clock());
 
-      for (const revoked of await revokeLiveProviders(tx, provider.kind, now)) {
+      for (const revoked of await revokeLiveProviders(
+        tx,
+        provider.kind,
+        now,
+        provider.authMode ?? 'api',
+      )) {
         await this.vault.discard(providerSecret(revoked), tx);
       }
 
@@ -105,7 +118,7 @@ export class Providers {
       try {
         await insertProvider(tx, provider);
       } catch (error) {
-        // The partial unique index has the last word on one live provider per vendor. Reaching
+        // The partial unique index has the last word on one live credential per vendor and mode. Reaching
         // it means another request configured this vendor first, which the owner has to see as
         // a conflict rather than as a gateway fault.
         if (isUniqueViolation(error)) {
@@ -149,15 +162,28 @@ export class Providers {
 
   async setModelDefaults(profileId: string, input: unknown) {
     const data = modelDefaultsInputSchema.parse(input);
+    const available = await this.providers();
 
     return this.store.transaction(profileId, async (tx) => {
       await this.profiles.profile(profileId, tx);
 
-      // Every role is validated, including the ones no runtime executes yet: a selection that
-      // cannot resolve today would fail silently the day its runtime lands.
-      for (const selection of Object.values(data)) {
+      // Validate endpoint compatibility before persisting a model selection.
+      for (const [role, selection] of Object.entries(data)) {
         if (selection) {
-          await this.selectedModel(selection, tx);
+          const chosen = await this.selectedModel(selection, tx);
+          const provider = available.find((item) => item.id === selection.providerId);
+          if (
+            provider &&
+            !supportsModelRole(
+              provider,
+              { id: selection.modelId, ...this.capabilities(chosen.config) },
+              role as ModelRole,
+            )
+          )
+            throw new GatewayError(
+              409,
+              `This model cannot run ${role}; choose a compatible model and credential`,
+            );
         }
       }
 
@@ -168,6 +194,21 @@ export class Providers {
 
       return modelDefaultsRecordSchema.parse({ ...data, id: profileId, profileId, updatedAt });
     });
+  }
+
+  capabilities(config: ModelConfig) {
+    const kind =
+      config.provider === 'openai-codex'
+        ? 'openai'
+        : config.provider === 'openai-compatible'
+          ? 'openrouter'
+          : config.provider;
+    return modelCapabilities(
+      kind,
+      config.modelId,
+      undefined,
+      this.catalog?.lookup(kind, config.modelId),
+    );
   }
 
   async selectedModel(

@@ -1,5 +1,6 @@
+import type { JSONValue } from 'ai';
 import { generateText, type LanguageModel, type LanguageModelUsage, type ModelMessage } from 'ai';
-import { blocksOf, fitPrompt, tokenCounter } from './budget.js';
+import { blocksOf, fitPrompt, promptText, tokenCounter } from './budget.js';
 
 /**
  * How full a request may get before the older turns are replaced by a record of them. Below
@@ -17,6 +18,7 @@ export async function compactPrompt(input: {
   modelId: string;
   messages: ModelMessage[];
   previous?: string;
+  providerOptions?: Record<string, Record<string, JSONValue>>;
   policy: { inputTokens: number; outputTokens: number };
   signal: AbortSignal;
   dress?: (instructions: string) => string;
@@ -28,29 +30,52 @@ export async function compactPrompt(input: {
 
   const recent = blocks.slice(-2).flat();
   const lastUser = input.messages.findLast((message) => message.role === 'user');
-  const prompt = summaryPrompt(input.previous, 'Read the conversation messages below.');
-  const instructions = input.dress?.(prompt) ?? prompt;
   const count = tokenCounter(input.provider, input.modelId);
   const policy = { ...input.policy, outputTokens: Math.min(2048, input.policy.outputTokens) };
-  // A single serialized message keeps fitPrompt from silently deleting part of the record.
-  const fitted = fitPrompt({
-    ...input,
-    policy,
-    instructions,
-    tools: {},
-    messages: [{ role: 'user', content: JSON.stringify(older) }],
-  });
-  const result = await generateText({
-    model: input.model,
-    system: fitted.instructions,
-    messages: fitted.messages,
-    maxOutputTokens: policy.outputTokens,
-    abortSignal: input.signal,
-    maxRetries: 0,
-  });
-  await input.onUsage(result.usage, fitted.tokens, result.text);
-  const summary = result.text.trim();
-  if (!summary || result.finishReason === 'length') return undefined;
+  const transcript = promptText(older);
+  let summary = input.previous ?? '';
+  let offset = 0;
+  // Fold consecutive chunks into the checkpoint when the selected compactor has less context.
+  while (offset < transcript.length) {
+    const prompt = summaryPrompt(summary || undefined, 'Read the next conversation segment below.');
+    const instructions = input.dress?.(prompt) ?? prompt;
+    const fitSegment = (length: number) =>
+      fitPrompt({
+        ...input,
+        policy,
+        instructions,
+        tools: {},
+        messages: [{ role: 'user', content: transcript.slice(offset, offset + length) }],
+      });
+    let low = 0;
+    let high = transcript.length - offset;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      try {
+        fitSegment(middle);
+        low = middle;
+      } catch {
+        high = middle - 1;
+      }
+    }
+    if (!low) throw new Error('Compaction model context cannot hold the checkpoint');
+    if (/[\uD800-\uDBFF]/.test(transcript[offset + low - 1] ?? '')) low--;
+    if (!low) throw new Error('Compaction model context is too small');
+    const fitted = fitSegment(low);
+    const result = await generateText({
+      model: input.model,
+      system: fitted.instructions,
+      messages: fitted.messages,
+      maxOutputTokens: policy.outputTokens,
+      abortSignal: input.signal,
+      maxRetries: 0,
+      providerOptions: input.providerOptions,
+    });
+    await input.onUsage(result.usage, fitted.tokens, result.text);
+    summary = result.text.trim();
+    if (!summary || result.finishReason === 'length') return undefined;
+    offset += low;
+  }
 
   const messages: ModelMessage[] = [
     {
@@ -61,8 +86,7 @@ export async function compactPrompt(input: {
     ...recent,
   ];
   // A summary that does not shrink the request only pays for another pass next step.
-  if (count(JSON.stringify(messages)) >= count(JSON.stringify(input.messages)) * 0.8)
-    return undefined;
+  if (count(promptText(messages)) >= count(promptText(input.messages)) * 0.8) return undefined;
   return { messages, summary };
 }
 

@@ -20,6 +20,7 @@ import {
   mailSchema,
   pageQuerySchema,
 } from './coordination.js';
+import { mediaContentSchema } from './media.js';
 import {
   builtinSkillSchema,
   mcpStatusSchema,
@@ -474,6 +475,13 @@ export const operations: Operation[] = [
     access: 'admin',
     body: sessionRenameSchema,
     response: sessionRecordSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/profiles/:profileId/media/:mediaId',
+    operationId: 'readMedia',
+    access: 'admin',
+    response: mediaContentSchema,
   },
   {
     method: 'GET',

@@ -1,5 +1,6 @@
 'use client';
 
+import { supportsModelRole } from '@jian/contracts';
 import { Save } from 'lucide-react';
 import { useState } from 'react';
 import type {
@@ -99,7 +100,10 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
       >
         {roles.map((role) => {
           const value = values[role.key];
-          const models = data.providerModels[value.providerId]?.models ?? [];
+          const provider = configured.find((item) => item.id === value.providerId);
+          const models = (data.providerModels[value.providerId]?.models ?? []).filter(
+            (model) => !provider || supportsModelRole(provider, model, role.key),
+          );
           const list = value.providerId ? data.providerModels[value.providerId] : undefined;
           const selected = models.find((model) => model.id === value.modelId);
           // A typed id has no capability row here, so every level is offered and the gateway
@@ -139,11 +143,19 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
                       })
                     }
                     options={[
-                      { value: '', label: 'None' },
-                      ...configured.map((provider) => ({
-                        value: provider.id,
-                        label: provider.name,
-                      })),
+                      { value: '', label: 'Automatic' },
+                      ...configured
+                        .filter(
+                          (provider) =>
+                            !(
+                              ['image', 'speech', 'transcription', 'audio'].includes(role.key) &&
+                              provider.authMode === 'codex'
+                            ),
+                        )
+                        .map((provider) => ({
+                          value: provider.id,
+                          label: `${provider.name}${provider.kind === 'openai' ? (provider.authMode === 'codex' ? ' · ChatGPT' : ' · API key') : ''}`,
+                        })),
                       ...(value.providerId &&
                       !configured.some((provider) => provider.id === value.providerId)
                         ? [{ value: value.providerId, label: 'Saved provider (unavailable)' }]
@@ -178,7 +190,7 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
                           : change(role.key, { modelId, reasoningEffort: '' })
                       }
                       options={[
-                        { value: '', label: 'None' },
+                        { value: '', label: 'Automatic' },
                         ...models.map((model) => ({ value: model.id, label: modelLabel(model) })),
                         { value: '__manual__', label: 'Type an id…' },
                       ]}
@@ -205,7 +217,7 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
           );
         })}
         <div className="save-bar">
-          <span>Changes apply to new runs.</span>
+          <span>Each activity uses its own selection.</span>
           <Button type="submit" busy={busy}>
             <Save size={16} />
             Save the defaults

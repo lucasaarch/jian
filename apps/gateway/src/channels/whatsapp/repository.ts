@@ -317,6 +317,6 @@ export async function settleInboxItem(
   await db
     .update(channelInbox)
     // The text is dropped once the message left the inbox: it lives in the run from here on.
-    .set({ status, message: { ...record.message, text: '' } })
+    .set({ status, message: { ...record.message, text: '', media: undefined } })
     .where(eq(channelInbox.id, record.id));
 }

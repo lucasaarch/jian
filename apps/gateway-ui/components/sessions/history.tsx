@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import type { GatewayApi, Run } from '../../lib/api';
 import { date } from '../../lib/format';
 import { Badge, Button, Empty } from '../ui';
+import { MessageMedia } from './media';
 import { RunProgress } from './progress';
 import { running, statusLabels } from './status';
 
@@ -14,7 +15,7 @@ export function History({
   sessionId,
   initialRun,
 }: {
-  api: Pick<GatewayApi, 'messages' | 'activities'>;
+  api: Pick<GatewayApi, 'messages' | 'activities'> & Partial<Pick<GatewayApi, 'media'>>;
   profileId: string;
   sessionId: string;
   initialRun?: Run;
@@ -87,7 +88,14 @@ export function History({
                 </strong>
                 <time dateTime={message.createdAt}>{date(message.createdAt)}</time>
               </header>
-              <p>{message.content}</p>
+              <p>{message.content.replace(/\[Attached media: [0-9a-f-]{36}\]/g, '').trim()}</p>
+              {api.media && (
+                <MessageMedia
+                  api={{ media: api.media }}
+                  profileId={profileId}
+                  content={message.content}
+                />
+              )}
             </article>
           ))
         ) : (
