@@ -37,10 +37,13 @@ docker run -d --name jian --restart unless-stopped \
   -e JIAN_API_TOKEN="$JIAN_API_TOKEN" \
   -e JIAN_ACTIVE_KEY_ID=v1 \
   -e JIAN_MASTER_KEYS="$JIAN_MASTER_KEYS" \
+  -v jian_home:/home/node \
   ghcr.io/lucasaarch/jian-gateway:latest
 ```
 
-The image carries a health check against `/health`; `docker ps` shows its result. The process runs as the unprivileged `node` user and writes nothing outside the database.
+The image carries a health check against `/health`; `docker ps` shows its result. The process runs as the unprivileged `node` user, and the gateway itself writes nothing outside the database.
+
+The image is also a workbench for that agent: Node, Python with `uv`, Go, `git`, `gh`, `ssh`, `curl`, `wget`, the text tools (`sed`, `awk`, `rg`, `jq`) and a C toolchain. The built-in `machine-tools` skill tells the agent what is there and how to add more. It installs per user and never as root — no `sudo`, no `apt` — so it works the same on a host that starts containers with `no-new-privileges`. `/home/node` holds what it installs, its SSH keys and its Git and `gh` logins; mount a volume there to keep them across updates. A system package it needs belongs in the image.
 
 ## Way 3 — Kubernetes
 
@@ -105,6 +108,8 @@ spec:
 
 Pin an exact version on the image; with `latest`, any restart changes the code without warning. Expose it through an Ingress with TLS, never the `Service` directly.
 
+An agent with the shell switch on installs under `/home/node`. Mount a `PersistentVolumeClaim` there to keep what it installs across restarts.
+
 `JIAN_ROLE=all` runs the API and the worker in one process. To split them, use two Deployments, `api` and `worker`, sharing the same database and the same keyring; only `api` gets the `Service`.
 
 ## Environment variables
@@ -167,7 +172,7 @@ Published migrations are immutable; a fix arrives as the next version, never as 
 
 ## Where the data lives
 
-Everything persistent is in PostgreSQL: profiles, sessions, history, memories, runs, the pg-boss queue and the credential vault. The gateway container holds no state — destroying and recreating it loses nothing.
+Everything the gateway keeps is in PostgreSQL: profiles, sessions, history, memories, runs, the pg-boss queue and the credential vault. The one exception is the agent's workbench under `/home/node` — the tools it installed, SSH keys, Git and `gh` logins — which Compose keeps in the named volume `jian_gateway_home`. Recreating the container loses nothing.
 
 Under Compose the database lives in the named volume `jian_postgres_data`; the development one lives in `jian-dev_postgres_data`. `make down` keeps the volume, `docker compose down -v` deletes it. `make db-reset` deletes the development one on purpose.
 

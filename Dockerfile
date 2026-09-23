@@ -21,7 +21,46 @@ COPY packages packages
 RUN pnpm build && pnpm --filter @jian/gateway --prod deploy --legacy /runtime
 
 FROM node:24-bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+# The workbench an agent with the shell switch on reaches for: version control, the network,
+# text, builds and the common runtimes. ffmpeg is the gateway's own, for converting speech.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ffmpeg ca-certificates gnupg \
+      git openssh-client curl wget rsync \
+      jq ripgrep fd-find gawk sed grep diffutils patch file tree less nano vim-tiny \
+      zip unzip xz-utils bzip2 zstd \
+      procps psmisc lsof iproute2 iputils-ping dnsutils netcat-openbsd \
+      build-essential pkg-config \
+      python3 python3-pip python3-venv python3-dev \
+      sqlite3 postgresql-client \
+ && ln -s /usr/bin/fdfind /usr/local/bin/fd \
+ && install -d -m 0755 /etc/apt/keyrings \
+ && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
+ && apt-get update && apt-get install -y --no-install-recommends gh \
+ && rm -rf /var/lib/apt/lists/*
+# Go from its own tarball, checked against the digest go.dev publishes for each architecture.
+ARG GO_VERSION=1.27.1
+ARG TARGETARCH
+RUN case "${TARGETARCH}" in \
+      amd64) sum=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445 ;; \
+      arm64) sum=3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec ;; \
+      *) echo "No Go digest for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+ && curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" -o /tmp/go.tgz \
+ && echo "${sum}  /tmp/go.tgz" | sha256sum -c - \
+ && tar -C /usr/local -xzf /tmp/go.tgz && rm /tmp/go.tgz
+COPY --from=ghcr.io/astral-sh/uv:0.12.18 /uv /uvx /usr/local/bin/
+RUN corepack enable
+# The agent installs as the `node` user and never as root: hosts such as Cubeship start the
+# container with no-new-privileges, so a sudo that works here would fail there. Everything it
+# installs lands under /home/node, which compose keeps on a volume, so it survives a new image.
+# JIAN_TOOLBOX tells the agent's skill which machine it is on.
+ENV GOPATH=/home/node/go \
+    NPM_CONFIG_PREFIX=/home/node/.local \
+    PATH=/home/node/.local/bin:/home/node/go/bin:/usr/local/go/bin:$PATH \
+    JIAN_TOOLBOX=1
 ARG JIAN_VERSION=0.0.0-dev
 ARG JIAN_REVISION=unknown
 # Standard annotations: GHCR links the package to the repository through `source`, and the

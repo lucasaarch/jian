@@ -2,6 +2,7 @@ import type { Profile, Skill } from '@jian/contracts';
 import { aboutJian } from './about-jian.js';
 import { channelReplies } from './channel-replies.js';
 import { longRunningWork } from './long-running-work.js';
+import { machineTools } from './machine-tools.js';
 import { memoryKeeping } from './memory-keeping.js';
 import { ownerAndContacts } from './owner-and-contacts.js';
 import { discernmentNudge } from './vendored/discernment-nudge.js';
@@ -27,12 +28,21 @@ const ALWAYS: readonly Skill[] = [
 /** Described in terms of a tool that only exists when the owner allows self-management. */
 const SELF_MANAGED: readonly Skill[] = [writingYourSkills];
 
+/** Described in terms of the command tools, which only exist when the owner allows the shell. */
+const SHELL: readonly Skill[] = [machineTools];
+
 export const builtinSkillNames: ReadonlySet<string> = new Set(
-  [...ALWAYS, ...SELF_MANAGED].map((skill) => skill.name),
+  [...ALWAYS, ...SELF_MANAGED, ...SHELL].map((skill) => skill.name),
 );
 
-export function builtinSkills(profile: Pick<Profile, 'allowSelfManagement'>): readonly Skill[] {
-  return profile.allowSelfManagement ? [...ALWAYS, ...SELF_MANAGED] : ALWAYS;
+export function builtinSkills(
+  profile: Pick<Profile, 'allowSelfManagement' | 'allowShell'>,
+): readonly Skill[] {
+  return [
+    ...ALWAYS,
+    ...(profile.allowSelfManagement ? SELF_MANAGED : []),
+    ...(profile.allowShell ? SHELL : []),
+  ];
 }
 
 /**

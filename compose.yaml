@@ -28,6 +28,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # What the agent installs as the `node` user, its SSH keys and its Git and gh logins live
+    # here and survive an image update.
+    volumes:
+      - gateway_home:/home/node
     # The health check comes from the image's own HEALTHCHECK, which hits /health.
     restart: unless-stopped
   postgres:
@@ -47,3 +51,4 @@ services:
     restart: unless-stopped
 volumes:
   postgres_data:
+  gateway_home:

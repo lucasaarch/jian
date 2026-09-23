@@ -41,7 +41,7 @@ Unknown inputs are refused by the admin contracts. Logs carry no bodies, no auth
 
 Skills and tool results are untrusted instructions and data. Choosing which MCP tools an agent may load reduces capability; it does not remove prompt injection. Give a profile only the tools it can really exercise, and use external credentials with the least privilege that works.
 
-A profile can also be given the machine: reading files, writing files and running commands, with the privileges of whoever started the gateway. There is no sandbox around it, it is off by default, and it reaches as far as an approved contact on a chat channel can ask the agent to go. Turn it on only for a profile whose channels you control.
+A profile can also be given the machine: reading files, writing files and running commands, with the privileges of whoever started the gateway. There is no sandbox around it, it is off by default, and it reaches as far as an approved contact on a chat channel can ask the agent to go. Turn it on only for a profile whose channels you control. In the published image that is the unprivileged `node` user, with no `sudo`; what bounds it is the container, which mounts no Docker socket and no host path. Mounting either hands the agent the host.
 
 ## Failures and outside effects
 

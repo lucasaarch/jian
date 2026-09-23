@@ -258,6 +258,24 @@ describe('the skills every profile carries', () => {
     expect(availableSkills(managing).map((skill) => skill.name)).toContain('writing-your-skills');
   });
 
+  it('explains the machine only to a profile that can run commands on it', async () => {
+    const services = await testServices();
+    const plain = await services.profiles.createProfile({
+      name: 'Atlas',
+      instructions: 'Help.',
+      model,
+    });
+    const shell = await services.profiles.createProfile({
+      name: 'Zero',
+      instructions: 'Help.',
+      model,
+      allowShell: true,
+    });
+
+    expect(availableSkills(plain).map((skill) => skill.name)).not.toContain('machine-tools');
+    expect(availableSkills(shell).map((skill) => skill.name)).toContain('machine-tools');
+  });
+
   it('loads a built-in body through the same tool as an imported one', async () => {
     const services = await testServices();
     const profile = await services.profiles.createProfile({
