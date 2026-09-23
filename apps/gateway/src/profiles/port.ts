@@ -11,4 +11,5 @@ export interface ProfileAdmin extends ProfileReader {
   createProfile(input: unknown): Promise<Profile>;
   updateProfile(id: string, input: unknown): Promise<Profile>;
   deleteProfile(id: string): Promise<{ id: string }>;
+  resetProfile(id: string): Promise<{ id: string; sessions: number; memories: number }>;
 }

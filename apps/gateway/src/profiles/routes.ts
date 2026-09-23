@@ -38,6 +38,10 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteSe
     deps.profiles.deleteProfile(request.params.profileId),
   );
 
+  app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/reset', async (request) =>
+    deps.profiles.resetProfile(request.params.profileId),
+  );
+
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/revisions', async (request) =>
     deps.profiles.revisions(request.params.profileId),
   );

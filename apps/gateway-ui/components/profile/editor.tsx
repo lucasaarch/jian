@@ -1,8 +1,10 @@
 'use client';
 
-import { Plus, Save, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import type { GatewayApi, Mutation, Profile } from '../../lib/api';
+import { Check, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import type { GatewayApi, Profile } from '../../lib/api';
+import { useAutosave } from '../../lib/autosave';
 import { useWorkspace } from '../../lib/workspace';
 import { Button, Confirm, Field, Modal, SectionHeading } from '../ui';
 import { AvatarField } from './avatar-field';
@@ -90,16 +92,93 @@ export function NewProfileDialog({
 export function ProfileEditor({
   profile,
   api,
-  mutate,
   busy,
 }: {
   profile: Profile;
   api: GatewayApi;
-  mutate: Mutation;
   busy: boolean;
 }) {
-  const { deleteProfile } = useWorkspace();
+  const { deleteProfile, refresh } = useWorkspace();
   const [deleting, setDeleting] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [working, setWorking] = useState(false);
+
+  const reset = async () => {
+    setWorking(true);
+
+    try {
+      const { sessions, memories } = await api.resetProfile(profile.id);
+
+      toast.success(
+        `${profile.name} forgot ${sessions === 1 ? '1 conversation' : `${sessions} conversations`} and ${
+          memories === 1 ? '1 memory' : `${memories} memories`
+        }.`,
+      );
+      setResetting(false);
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'The profile could not be reset.');
+    } finally {
+      setWorking(false);
+    }
+  };
+  const form = useRef<HTMLFormElement>(null);
+  // Each save sends the version it read; the server's answer is the one the next save must send.
+  const version = useRef(profile.version);
+  const saved = useRef('');
+
+  // Someone else saved meanwhile — the agent itself, with self-management — so the next save
+  // starts from their version rather than failing on a stale one.
+  useEffect(() => {
+    if (profile.version > version.current) version.current = profile.version;
+  }, [profile.version]);
+
+  const { schedule, flush } = useAutosave(async () => {
+    const element = form.current;
+
+    // An empty name or instructions is a field being rewritten, not a profile to save.
+    if (!element?.checkValidity()) {
+      return;
+    }
+
+    const data = new FormData(element);
+    const patch = {
+      name: String(data.get('name')),
+      instructions: String(data.get('instructions')),
+      summary: String(data.get('summary')),
+      avatar: String(data.get('avatar')) || null,
+      identity: {
+        role: '',
+        tone: '',
+        goals: [] as string[],
+        boundaries: lines(String(data.get('boundaries'))),
+      },
+      allowSelfManagement: data.get('selfManagement') === 'on',
+      allowShell: data.get('shell') === 'on',
+      allowWebSearch: data.get('webSearch') === 'on',
+    };
+    const snapshot = JSON.stringify(patch);
+
+    if (snapshot === saved.current) {
+      return;
+    }
+
+    try {
+      const updated = await api.updateProfile(profile.id, {
+        ...patch,
+        expectedVersion: version.current,
+      });
+
+      version.current = updated.version;
+      saved.current = snapshot;
+      toast.success('Profile saved.', { id: 'profile-autosave' });
+      void refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'The profile could not be saved.', {
+        id: 'profile-autosave',
+      });
+    }
+  });
 
   const legacyIdentity = [
     profile.identity.role && `Role: ${profile.identity.role}`,
@@ -115,38 +194,29 @@ export function ProfileEditor({
         description="Instructions shared by every session of this profile."
       />
       <form
+        ref={form}
         className="profile-form"
         method="post"
         action="/ui/"
         onSubmit={(event) => {
           event.preventDefault();
-          const form = new FormData(event.currentTarget);
+          void flush();
+        }}
+        onChange={(event) => {
+          // A switch is a decision made; text is still being typed.
+          const { type } = event.target as { type?: string };
 
-          void mutate(
-            () =>
-              api.updateProfile(profile.id, {
-                expectedVersion: profile.version,
-                name: String(form.get('name')),
-                instructions: String(form.get('instructions')),
-                summary: String(form.get('summary')),
-                avatar: String(form.get('avatar')) || null,
-                identity: {
-                  role: '',
-                  tone: '',
-                  goals: [],
-                  boundaries: lines(String(form.get('boundaries'))),
-                },
-                allowSelfManagement: form.get('selfManagement') === 'on',
-                allowShell: form.get('shell') === 'on',
-                allowWebSearch: form.get('webSearch') === 'on',
-              }),
-            'Profile updated.',
-          );
+          schedule(type === 'checkbox' ? 0 : undefined);
         }}
       >
         <div className="identity-form">
           <div className="settings-fields">
-            <AvatarField name="avatar" profileName={profile.name} current={profile.avatar} />
+            <AvatarField
+              name="avatar"
+              profileName={profile.name}
+              current={profile.avatar}
+              onChange={() => schedule(0)}
+            />
             <Field label="Name">
               <input name="name" defaultValue={profile.name} required maxLength={100} />
             </Field>
@@ -214,16 +284,24 @@ export function ProfileEditor({
             </label>
           </div>
         </div>
-        <div className="save-bar">
-          <span>Changes apply to new runs</span>
-          <Button type="submit" busy={busy}>
-            <Save size={16} />
-            Save profile
-          </Button>
-        </div>
+        <p className="autosave-note">
+          <Check size={14} /> Saved as you type. Changes apply to new runs.
+        </p>
       </form>
 
-      {/* Not a save bar: that one floats over the form, and two of them stack on each other. */}
+      <section className="danger-zone reset" aria-labelledby="reset-zone">
+        <div className="grow">
+          <h2 id="reset-zone">Reset this profile</h2>
+          <p>
+            It forgets every conversation, memory and past activity. Its instructions, skills, MCP
+            servers, model defaults, channels and contacts stay.
+          </p>
+        </div>
+        <Button variant="secondary" disabled={busy || working} onClick={() => setResetting(true)}>
+          <RotateCcw size={16} />
+          Reset profile
+        </Button>
+      </section>
       <section className="danger-zone" aria-labelledby="danger-zone">
         <div className="grow">
           <h2 id="danger-zone">Delete this profile</h2>
@@ -238,6 +316,15 @@ export function ProfileEditor({
         </Button>
       </section>
 
+      {resetting && (
+        <Confirm
+          title={`Reset ${profile.name}?`}
+          description="Every conversation, memory and past activity of this profile is erased. Its configuration, channels and contacts are kept. This cannot be undone."
+          busy={working}
+          close={() => setResetting(false)}
+          confirm={() => void reset()}
+        />
+      )}
       {deleting && (
         <Confirm
           title={`Delete ${profile.name}?`}

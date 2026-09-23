@@ -517,6 +517,19 @@ export const operations: Operation[] = [
     response: z.strictObject({ id: z.uuid() }),
   },
   {
+    // Forgetting, not deleting: sessions, memories and activity go; configuration, channels
+    // and contacts stay.
+    method: 'POST',
+    path: `${profile}/reset`,
+    operationId: 'resetProfile',
+    access: 'admin',
+    response: z.strictObject({
+      id: z.uuid(),
+      sessions: z.number().int().nonnegative(),
+      memories: z.number().int().nonnegative(),
+    }),
+  },
+  {
     method: 'GET',
     path: `${profile}/revisions`,
     operationId: 'listRevisions',
