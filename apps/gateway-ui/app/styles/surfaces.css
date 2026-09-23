@@ -354,6 +354,32 @@
   .conversation-text small {
     @apply block truncate text-xs text-muted;
   }
+  .conversation-text .conversation-preview {
+    @apply flex min-w-0 items-center gap-1 text-xs text-muted;
+  }
+  .conversation-text .conversation-preview > span {
+    @apply truncate;
+  }
+  .conversation-text .conversation-preview > svg {
+    @apply shrink-0 text-accent;
+  }
+  .conversation-text .conversation-preview.working {
+    @apply font-medium text-accent;
+  }
+  /* The "typing" of a messaging app: three dots rising in turn while a run is live. */
+  .typing-dots {
+    @apply ml-0.5 inline-flex items-end gap-0.5;
+  }
+  .typing-dots i {
+    @apply h-1 w-1 rounded-full bg-current;
+    animation: typing 1.2s infinite ease-in-out;
+  }
+  .typing-dots i:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .typing-dots i:nth-child(3) {
+    animation-delay: 0.3s;
+  }
   .conversation-item time {
     @apply shrink-0 self-start pt-0.5 text-[11px] text-muted;
   }

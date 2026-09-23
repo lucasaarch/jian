@@ -115,3 +115,32 @@ describe('naming a conversation', () => {
     ).rejects.toMatchObject({ statusCode: 404 });
   });
 });
+
+describe('the conversation list', () => {
+  it('shows each session with its last message on one line, most recent first', async () => {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({
+      name: 'Zero Two',
+      instructions: 'Help.',
+      model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    });
+    const older = await services.sessions.createSession(profile.id, { title: 'Older' });
+    const newer = await services.sessions.createSession(profile.id, { title: 'Newer' });
+    const quiet = await services.sessions.createSession(profile.id, { title: 'Quiet' });
+    const say = async (sessionId: string, text: string, key: string) => {
+      const run = await services.runs.submit(profile.id, sessionId, { text, requestKey: key });
+
+      await services.lifecycle.claim(run.id, profile.id, 'worker');
+      await services.lifecycle.finish(profile.id, run.id, 'worker', 'completed', 'Ok.');
+    };
+
+    await say(newer.id, 'first', 'a');
+    await say(older.id, 'Line one\nline two', 'b');
+
+    const list = await services.sessions.overview(profile.id);
+
+    expect(list.map((session) => session.title)).toEqual(['Older', 'Newer', 'Quiet']);
+    expect(list[0]).toMatchObject({ lastMessage: { role: 'assistant', text: 'Ok.' } });
+    expect(list.find((session) => session.id === quiet.id)).not.toHaveProperty('lastMessage');
+  });
+});

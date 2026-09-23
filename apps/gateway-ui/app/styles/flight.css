@@ -107,6 +107,18 @@
 .page-enter {
   animation: arrive 160ms ease-out;
 }
+@keyframes typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
 @keyframes spin {
   to {
     transform: rotate(360deg);

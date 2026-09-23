@@ -52,6 +52,7 @@ import {
   revisionRecordSchema,
   runRecordSchema,
   sessionRecordSchema,
+  sessionSummarySchema,
 } from './records.js';
 import { releasesSchema } from './releases.js';
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
@@ -541,7 +542,7 @@ export const operations: Operation[] = [
     path: `${profile}/sessions`,
     operationId: 'listSessions',
     access: 'admin',
-    response: z.array(sessionRecordSchema),
+    response: z.array(sessionSummarySchema),
   },
   {
     method: 'POST',

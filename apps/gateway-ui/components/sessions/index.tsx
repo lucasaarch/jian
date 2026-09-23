@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, Bot, Search, Terminal } from 'lucide-react';
+import { ArrowLeft, Bot, CheckCheck, Search, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import type { Contact, Session } from '../../lib/api';
 import { date } from '../../lib/format';
@@ -59,6 +59,38 @@ function ConversationAvatar({ session, contact }: { session: Session; contact?: 
   );
 }
 
+/**
+ * Under a conversation's name: what the agent is doing, when it is doing something, or the last
+ * thing said, on one line. What the agent itself said carries the double tick of a sent message.
+ */
+function Preview({ session, working }: { session: Session; working: boolean }) {
+  if (working) {
+    return (
+      <small className="conversation-preview working">
+        Processing
+        <span className="typing-dots" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+      </small>
+    );
+  }
+
+  const last = session.lastMessage;
+
+  if (!last) {
+    return <small className="conversation-preview">No messages yet</small>;
+  }
+
+  return (
+    <small className="conversation-preview">
+      {last.role === 'assistant' && <CheckCheck size={14} aria-label="Sent by the agent" />}
+      <span>{last.text || '📎'}</span>
+    </small>
+  );
+}
+
 export function Sessions({
   profile,
   data,
@@ -75,13 +107,22 @@ export function Sessions({
   const nameOf = (session: Session) =>
     contactOf(session)?.displayName ?? session.title ?? 'Untitled conversation';
 
+  const lastAt = (session: Session) => session.lastMessage?.at ?? session.createdAt;
+  const working = new Set(
+    data.activities
+      .filter((run) => run.status === 'queued' || run.status === 'running')
+      .map((run) => run.sessionId),
+  );
+  // Most recent conversation first, as a messaging app orders them.
   const filtered = [...data.sessions]
     .filter((session) =>
-      `${nameOf(session)} ${session.title ?? ''} ${channelNames[session.channel] ?? session.channel}`
+      `${nameOf(session)} ${session.title ?? ''} ${session.lastMessage?.text ?? ''} ${
+        channelNames[session.channel] ?? session.channel
+      }`
         .toLocaleLowerCase()
         .includes(query.toLocaleLowerCase()),
     )
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a, b) => lastAt(b).localeCompare(lastAt(a)));
   const channels = [...new Set(filtered.map((session) => session.channel))].sort(
     (a, b) =>
       ((channelOrder.indexOf(a) + 100) % 100) - ((channelOrder.indexOf(b) + 100) % 100) ||
@@ -146,16 +187,10 @@ export function Sessions({
                       <ConversationAvatar session={session} {...(contact ? { contact } : {})} />
                       <span className="conversation-text">
                         <strong>{nameOf(session)}</strong>
-                        <small>
-                          {contact?.scope === 'group'
-                            ? 'Group'
-                            : contact && contact.displayName !== contact.actorId
-                              ? contact.actorId
-                              : (session.summary?.slice(0, 80) ?? 'Conversation')}
-                        </small>
+                        <Preview session={session} working={working.has(session.id)} />
                       </span>
-                      <time dateTime={session.createdAt} title={date(session.createdAt)}>
-                        {when(session.createdAt)}
+                      <time dateTime={lastAt(session)} title={date(lastAt(session))}>
+                        {when(lastAt(session))}
                       </time>
                     </button>
                   );

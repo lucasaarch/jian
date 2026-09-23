@@ -136,6 +136,7 @@ export const sessions: Session[] = [
     profileId: ids.zero,
     title: 'Telegram · Lucas',
     channel: 'telegram',
+    lastMessage: { role: 'user', text: 'Pesquisa o que é JEV pra mim', at: at(2) },
     createdAt: at(60 * 24 * 2),
   },
   {
@@ -143,6 +144,7 @@ export const sessions: Session[] = [
     profileId: ids.zero,
     title: 'Telegram · Equipe',
     channel: 'telegram',
+    lastMessage: { role: 'user', text: 'Diêgo: suhaushau sinistro', at: at(18) },
     createdAt: at(60 * 24),
   },
   {
@@ -150,6 +152,11 @@ export const sessions: Session[] = [
     profileId: ids.zero,
     title: 'WhatsApp · Moabe',
     channel: 'whatsapp',
+    lastMessage: {
+      role: 'assistant',
+      text: 'Os épicos #299 e #300 estão prontos para testar. Os links estão no VX Work.',
+      at: at(40),
+    },
     createdAt: at(60 * 20),
   },
   {
@@ -157,6 +164,7 @@ export const sessions: Session[] = [
     profileId: ids.zero,
     title: 'Agent · Miku',
     channel: 'agent',
+    lastMessage: { role: 'user', text: 'Pode revisar a PR #325 quando der?', at: at(60 * 30) },
     peerProfileId: ids.miku,
     createdAt: at(60 * 30),
   },
@@ -165,6 +173,7 @@ export const sessions: Session[] = [
     profileId: ids.zero,
     title: 'Planning the week',
     channel: 'panel',
+    lastMessage: { role: 'assistant', text: 'Fechado: release na quinta.', at: at(60 * 5) },
     summary: 'Lucas and Zero Two planned the release and the review of two epics.',
     createdAt: at(60 * 5),
   },
