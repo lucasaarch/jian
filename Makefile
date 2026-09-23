@@ -4,7 +4,7 @@
 # list cannot drift from the targets it describes.
 
 IMAGE ?= ghcr.io/lucasaarch/jian-gateway
-# Same source of truth Release Please bumps, so a local image and a published one agree.
+# The version `make release` writes, so a local image and a published one agree.
 VERSION ?= $(shell node -p "require('./package.json').version")
 REVISION ?= $(shell git rev-parse HEAD)
 
@@ -15,6 +15,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .PHONY: help install setup up down logs ps dev db-up db-stop db-reset \
         check test test-integration lint format build image image-push \
+        changelog release \
         apple-test apple-lint apple-lint-fix apple-build apple-index
 
 ##@ General
@@ -96,6 +97,18 @@ image: ## Build the gateway image for this machine's architecture
 
 image-push: ## Push the locally built image; the multi-architecture index comes from CI
 	docker push $(IMAGE):$(VERSION)
+
+##@ Release
+
+changelog: ## Write CHANGELOG.md from the notes in docs/releases
+	node scripts/changelog.mjs
+
+# Releasing is a note and a tag; .github/workflows/image.yml builds both architectures and
+# publishes the GitHub release with the note in it. The script refuses to tag a version with
+# no note, a dirty tree, a main that is not on origin, or a tag that already exists.
+release: ## Cut a release: write docs/releases/<v>.md, then `make release VERSION=1.2.3`
+	@test "$(origin VERSION)" = "command line" || { echo "usage: make release VERSION=1.2.3"; exit 1; }
+	node scripts/release.mjs $(VERSION)
 
 ##@ Apple
 

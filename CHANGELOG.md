@@ -1,14 +1,17 @@
 # Changelog
 
-## [2.1.0](https://github.com/lucasaarch/jian/compare/v2.0.0...v2.1.0) (2026-09-23)
+Every release of Jian, newest first.
 
+<!-- Generated from docs/releases by scripts/changelog.mjs. Edit a note there and run
+     `make changelog`; editing this file is editing the copy rather than the thing. -->
+
+## 2.1.0 — 2026-09-23
 
 ### Features
 
 * **agent:** edit code precisely and reach every channel conversation ([cbdf85f](https://github.com/lucasaarch/jian/commit/cbdf85fd8bad9149bf185f9e432e5f0ad5d87041))
 * **decisions:** ask Jev whether a group message calls an agent and whether an action goes too far ([8704289](https://github.com/lucasaarch/jian/commit/87042890ed033b3f5a267760a071757fa213c352))
 * **web:** let an agent search the web and read public pages ([23ca3d7](https://github.com/lucasaarch/jian/commit/23ca3d75d1ba7cc17bf715a950495ca45e0ca65a))
-
 
 ### Bug Fixes
 
@@ -17,8 +20,7 @@
 * **mcp:** tell agents which tools their servers offer and find them by words ([414f601](https://github.com/lucasaarch/jian/commit/414f601f05b396501a1222d4d349479ec2edcc54))
 * **providers:** carry ChatGPT reasoning between steps instead of referring to it ([09a3714](https://github.com/lucasaarch/jian/commit/09a3714dfcd6a7cfd1f8c8a4cb506170a6888a1c))
 
-## [2.0.0](https://github.com/lucasaarch/jian/compare/v1.0.2...v2.0.0) (2026-09-23)
-
+## 2.0.0 — 2026-09-23
 
 ### ⚠ BREAKING CHANGES
 
@@ -38,7 +40,6 @@
 * **panel:** describe a day of the calendar on hover ([90c9911](https://github.com/lucasaarch/jian/commit/90c9911910a75d9a4b427fedfb7147e286645c70))
 * **panel:** say which Anthropic credential was pasted ([37f3e20](https://github.com/lucasaarch/jian/commit/37f3e20ed618ff341790da4f39853c98b6370837))
 * **panel:** show a year of activity as a calendar ([8a3486c](https://github.com/lucasaarch/jian/commit/8a3486c172d56f35eabe2db205307438afbc2c51))
-
 
 ### Bug Fixes
 
@@ -67,30 +68,26 @@
 * **providers:** require Claude subscription protocol 2.1.280 ([5e6015d](https://github.com/lucasaarch/jian/commit/5e6015db41f28b3f14c18c0d3599a363afdac0eb))
 * **providers:** store the Anthropic credential type the owner chose ([3bd04b9](https://github.com/lucasaarch/jian/commit/3bd04b973ce976dc2fd836a3c03d45f06ff4b757))
 
-
 ### Performance Improvements
 
 * **agent:** let Anthropic read back the stable part of a prompt ([b69e340](https://github.com/lucasaarch/jian/commit/b69e3401f451dfc18fa012aae91a80d0ef49332b))
 * **agent:** load tools when the turn asks for them ([8b5ac08](https://github.com/lucasaarch/jian/commit/8b5ac08849715404327b6341fce710e562149e6b))
 * **agent:** make the prompt cacheable and size it to the model ([86f91e3](https://github.com/lucasaarch/jian/commit/86f91e378e1cfb4eefce0bf7410a53252ab17d3d))
 
-## [1.0.2](https://github.com/lucasaarch/jian/compare/v1.0.1...v1.0.2) (2026-09-22)
-
+## 1.0.2 — 2026-09-22
 
 ### Bug Fixes
 
 * **channels:** say whether the webhook was registered when a channel connects ([b8d52a5](https://github.com/lucasaarch/jian/commit/b8d52a5f12b46ec05de866484dccaaa568fae552))
 * **panel:** stop showing the same token total twice ([e3892bd](https://github.com/lucasaarch/jian/commit/e3892bdb36a366653bbd1f07896ceaf283d95b63))
 
-## [1.0.1](https://github.com/lucasaarch/jian/compare/v1.0.0...v1.0.1) (2026-09-22)
-
+## 1.0.1 — 2026-09-22
 
 ### Bug Fixes
 
 * **image:** ship the migrations the gateway runs on start ([e9eacbf](https://github.com/lucasaarch/jian/commit/e9eacbf90919944c6570280a6e139f7c781579db))
 
-## [1.0.0](https://github.com/lucasaarch/jian/compare/v0.1.0...v1.0.0) (2026-09-22)
-
+## 1.0.0 — 2026-09-22
 
 ### ⚠ BREAKING CHANGES
 
@@ -125,7 +122,6 @@
 * **skills:** import skills from a repository in the open SKILL.md format ([0f7a4da](https://github.com/lucasaarch/jian/commit/0f7a4daa13ac01a66dd9fbf031af5502ed1fb413))
 * **skills:** ship the skills every profile starts with ([2a7b79f](https://github.com/lucasaarch/jian/commit/2a7b79f2fe7ba771fc36549b9b0b840a3ecfca77))
 
-
 ### Bug Fixes
 
 * **channels:** send plain text where the bubble cannot draw markdown ([5b7b191](https://github.com/lucasaarch/jian/commit/5b7b1911c463be2c327129aad680976eb3378c73))
@@ -142,7 +138,6 @@
 * **security:** say why an outbound request failed ([f7d0096](https://github.com/lucasaarch/jian/commit/f7d00962b50acca079a1a204fe56589fec2d08f2))
 * **telegram:** honour the wait Telegram asks for under flood control ([412c0f3](https://github.com/lucasaarch/jian/commit/412c0f34de3247626d800f793b93ed89ef157603))
 * **whatsapp:** stop libsignal printing session keys to the log ([e7f2587](https://github.com/lucasaarch/jian/commit/e7f2587790668ccfc8ce128296ef2c9c683038cb))
-
 
 ### Code Refactoring
 

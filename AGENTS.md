@@ -30,6 +30,7 @@ make check       # lint, typecheck, unit tests, build, contract drift
 make up          # production stack: published image plus its own PostgreSQL
 make apple-test  # JianKit unit tests
 make apple-lint  # SwiftLint, strict
+make release VERSION=1.2.3  # after writing docs/releases/1.2.3.md; tags and publishes
 ```
 
 `package.json` keeps only the Node scripts. Anything that shells out to Docker or Xcode

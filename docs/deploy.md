@@ -182,6 +182,10 @@ The `JIAN_MASTER_KEYS` keyring lives outside the database, in `.env` or in a sec
 
 The `Image` workflow builds on two native runners, `ubuntu-24.04` and `ubuntu-24.04-arm`, each pushing by digest, and a final job joins them into a multi-architecture index. Nothing is emulated. It runs on a `v*.*.*` tag and nowhere else.
 
-Release Please keeps a release pull request open, gathering the conventional commits since the last publication. Merging it writes the version into `package.json`, the `CHANGELOG.md` and the tag `v1.2.3`; that tag is what publishes the image.
+A release is a note and a tag, both by hand:
 
-For that to work the owner has to turn on a permission that ships off: under **Settings → Actions → General → Workflow permissions**, tick **Allow GitHub Actions to create and approve pull requests**. Without it the workflow fails when opening the release pull request.
+1. Write `docs/releases/1.2.3.md`: a front matter with `date: YYYY-MM-DD`, then what the release changes, for the person who runs it. It becomes the `CHANGELOG.md` entry and the GitHub release. The version is chosen by whoever writes the note, not computed from commits.
+2. Run `make release VERSION=1.2.3`. The first time it writes the version into `package.json` and regenerates `CHANGELOG.md`, and asks for them to be committed and pushed. Run it again and it tags `v1.2.3` and pushes the tag.
+3. The tag runs the `Image` workflow: it checks the note and the changelog agree, builds both architectures, and publishes the GitHub release with the note.
+
+`make release` refuses a version with no note, a working tree with changes, a `main` that is not on `origin`, and a tag that already exists; a published version is never moved. A candidate such as `1.2.3-rc.1` publishes its own image tag and a pre-release, and leaves `latest` alone. `make check` fails when `CHANGELOG.md` is not what the notes say, so the generated file cannot drift from its source.
