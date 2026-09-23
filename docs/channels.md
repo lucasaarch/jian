@@ -82,7 +82,7 @@ A connection the protocol cannot identify has no address, and its messages count
 
 ## API server
 
-Send `actorId`, `chatId`, `text`, `requestKey` and, if you have it, `displayName` to `POST /v1/ingress/{channelId}`, using `X-Jian-Channel-Token`. For a room, send `scope: "group"` with the room's `chatId`, the `actorId` of whoever wrote and, if you have them, `groupName`, `mentions` and `replyTo` — the address of whoever wrote the message being answered. The adapter that calls this route must authenticate the external identity before filling the ids in; whoever holds the token can represent any sender, and each new sender becomes a contact request. The answer carries `accepted`, the run id when there is one, and the contact's state. Read results through the admin API.
+Send `actorId`, `chatId`, `text`, `requestKey` and, if you have it, `displayName` to `POST /v1/ingress/{channelId}`, using `X-Jian-Channel-Token`. For a room, send `scope: "group"` with the room's `chatId`, the `actorId` of whoever wrote and, if you have them, `groupName`, `mentions` and `replyTo` — the address of whoever wrote the message being answered. This channel has no identity of its own on a protocol, so the agent is called by its channel id, in `mentions` or `replyTo`. The adapter that calls this route must authenticate the external identity before filling the ids in; whoever holds the token can represent any sender, and each new sender becomes a contact request. The answer carries `accepted`, the run id when there is one, and the contact's state. Read results through the admin API.
 
 This channel sends no answer back to an external service. Turning it into an OpenAI-compatible endpoint is a task of its own; what is described here is the intake as it stands.
 

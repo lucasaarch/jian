@@ -131,9 +131,11 @@ export class Groups {
 
     const participants = await this.participants(tx, contact);
     const others = participants.filter((item) => item.profileId !== channel.profileId);
+    // The API server has no protocol identity; the adapter calling it mentions the channel id.
+    const address = channel.address ?? (channel.type === 'api' ? channel.id : undefined);
     const self = {
       name: profileName,
-      ...(channel.address ? { address: channel.address } : {}),
+      ...(address ? { address } : {}),
       ...(channel.handle ? { handle: channel.handle } : {}),
     };
 

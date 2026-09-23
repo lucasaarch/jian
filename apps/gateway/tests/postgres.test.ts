@@ -224,6 +224,7 @@ describe('PostgreSQL durability', () => {
           displayName: 'Lucas',
           scope: 'group',
           groupName: 'Equipe',
+          mentions: [channelId],
         },
       });
 
