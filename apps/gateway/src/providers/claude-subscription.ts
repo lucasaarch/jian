@@ -44,11 +44,10 @@ export function anthropicCredential(
 const BETAS = 'claude-code-20250219,oauth-2025-04-20';
 
 /**
- * Anthropic refuses a subscription request whose client version is far behind the release, so
- * the installed CLI is asked once and this is only the answer for a host without it — a
- * container, most of the time. Raise it when refusals start mentioning the version.
+ * The subscription adapter must announce at least this protocol version: Opus 5.5 refuses
+ * anything before 2.1.280. A missing or older host CLI must not downgrade the container.
  */
-const FALLBACK_VERSION = '2.1.278';
+const MINIMUM_VERSION = '2.1.280';
 
 const run = promisify(execFile);
 
@@ -59,9 +58,13 @@ async function claudeCodeVersion(): Promise<string> {
     .then(({ stdout }) => {
       const version = stdout.trim().split(/\s+/)[0];
 
-      return version && /^\d/.test(version) ? version : FALLBACK_VERSION;
+      return version &&
+        /^\d+\.\d+\.\d+$/.test(version) &&
+        version.localeCompare(MINIMUM_VERSION, 'en', { numeric: true }) >= 0
+        ? version
+        : MINIMUM_VERSION;
     })
-    .catch(() => FALLBACK_VERSION);
+    .catch(() => MINIMUM_VERSION);
 
   return detected;
 }
