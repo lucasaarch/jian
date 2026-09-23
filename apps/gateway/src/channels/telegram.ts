@@ -43,31 +43,34 @@ export class TelegramChannel implements Channel {
   receive(payload: unknown): IncomingMessage | null {
     const update = telegramUpdateSchema.parse(payload);
 
-    if (!update.message) {
+    const message = update.message;
+    const text = message?.text ?? message?.caption;
+
+    // A join notice, a sticker or a photo without caption: nothing to answer, and not an error.
+    if (!message?.from || !text?.trim()) {
       return null;
     }
 
-    const message = update.message;
     const name = message.from.first_name ?? message.from.username;
     const group = GROUP_CHATS.has(message.chat.type ?? '');
 
     return {
       actorId: String(message.from.id),
       chatId: String(message.chat.id),
-      text: message.text,
+      text,
       requestKey: String(update.update_id),
       ...(name ? { displayName: name } : {}),
       scope: group ? 'group' : 'direct',
       ...(group && message.chat.title ? { groupName: message.chat.title } : {}),
       // A mention of an account without a username carries its id; an `@username` carries only
       // the text, which is compared with the handle the bot was identified by.
-      mentions: (message.entities ?? []).flatMap((entity) => {
+      mentions: (message.entities ?? message.caption_entities ?? []).flatMap((entity) => {
         if (entity.user) {
           return [String(entity.user.id)];
         }
 
         if (entity.type === 'mention' && entity.offset !== undefined && entity.length) {
-          return [message.text.slice(entity.offset, entity.offset + entity.length).toLowerCase()];
+          return [text.slice(entity.offset, entity.offset + entity.length).toLowerCase()];
         }
 
         return [];

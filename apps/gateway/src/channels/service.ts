@@ -9,6 +9,7 @@ import {
 import type { z } from 'zod';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { stableUuid } from '../core/ids.js';
 import { Errands } from '../errands/service.js';
 import { bindMedia, releaseHeldMedia } from '../media/repository.js';
 import type { Media } from '../media/service.js';
@@ -55,14 +56,6 @@ export type ChannelRecord = z.infer<typeof channelSchema> & {
   address?: string;
   handle?: string;
 };
-
-/** A message id derived from what it records, so a protocol redelivery writes it once. */
-const stableId = (source: string) =>
-  createHash('sha256')
-    .update(source)
-    .digest('hex')
-    .slice(0, 32)
-    .replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
 
 /** Where a channel's bot token lives in the vault. Revoking the channel takes it with it. */
 export const channelSecret = (channelId: string) => `channel:${channelId}`;
@@ -433,7 +426,7 @@ export class Channels {
             await insertMessage(
               tx,
               {
-                id: stableId(`heard:${channel.id}:${data.chatId}:${data.requestKey}`),
+                id: stableUuid(`heard:${channel.id}:${data.chatId}:${data.requestKey}`),
                 profileId: channel.profileId,
                 sessionId: outcome.contact.sessionId,
                 role: 'user',
@@ -571,7 +564,7 @@ export class Channels {
           insertMessage(
             tx,
             {
-              id: stableId(`relay:${run.id}:${data.requestKey}`),
+              id: stableUuid(`relay:${run.id}:${data.requestKey}`),
               profileId: channel.profileId,
               sessionId: contact.sessionId as string,
               runId: run.id,

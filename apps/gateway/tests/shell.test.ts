@@ -62,10 +62,11 @@ describe('running commands on the machine the gateway runs on', () => {
     const directory = mkdtempSync(join(tmpdir(), 'jian-shell-'));
     const file = join(directory, 'nota.txt');
 
-    writeFileSync(file, 'primeira linha');
+    writeFileSync(file, 'primeira linha\n');
 
-    expect(await call(tools.read_file, { path: file, offset: 0, limit: 400_000 })).toMatchObject({
-      content: 'primeira linha',
+    expect(await call(tools.read_file, { path: file, offset: 1, limit: 2000 })).toMatchObject({
+      totalLines: 1,
+      content: '1\tprimeira linha',
     });
 
     await call(tools.write_file, { path: file, content: 'segunda' });
@@ -84,5 +85,125 @@ describe('running commands on the machine the gateway runs on', () => {
 
     expect(schema.safeParse({ path: 'package.json' }).success).toBe(false);
     expect(schema.safeParse({ path: '/etc/hosts' }).success).toBe(true);
+  });
+});
+
+describe('working on code', () => {
+  const workspace = () => {
+    const directory = mkdtempSync(join(tmpdir(), 'jian-code-'));
+    const file = join(directory, 'app.ts');
+
+    writeFileSync(file, 'const a = 1;\nconst b = 2;\nconst c = 1;\n');
+
+    return { directory, file };
+  };
+
+  const read = (tools: Record<string, unknown>, path: string) =>
+    call(tools.read_file, { path, offset: 1, limit: 2000 });
+
+  const edit = (tools: Record<string, unknown>, path: string, edits: unknown[]) =>
+    call(tools.edit_file, { path, edits });
+
+  it('changes only the passage named, and refuses one that is missing or ambiguous', async () => {
+    const tools = await toolsFor(true);
+    const { file } = workspace();
+
+    await read(tools, file);
+    await edit(tools, file, [{ oldString: 'const b = 2;', newString: 'const b = 3;' }]);
+
+    expect(readFileSync(file, 'utf8')).toBe('const a = 1;\nconst b = 3;\nconst c = 1;\n');
+
+    await expect(edit(tools, file, [{ oldString: '= 1;', newString: '= 9;' }])).rejects.toThrow(
+      'appears 2 times',
+    );
+    await expect(
+      edit(tools, file, [{ oldString: 'const z', newString: 'const y' }]),
+    ).rejects.toThrow('not in the file');
+
+    await edit(tools, file, [{ oldString: '= 1;', newString: '= 9;', replaceAll: true }]);
+
+    expect(readFileSync(file, 'utf8')).toBe('const a = 9;\nconst b = 3;\nconst c = 9;\n');
+  });
+
+  it('applies a batch of edits all or nothing', async () => {
+    const tools = await toolsFor(true);
+    const { file } = workspace();
+
+    await read(tools, file);
+    await expect(
+      edit(tools, file, [
+        { oldString: 'const a', newString: 'let a' },
+        { oldString: 'missing', newString: 'x' },
+      ]),
+    ).rejects.toThrow('Edit 2');
+
+    expect(readFileSync(file, 'utf8')).toBe('const a = 1;\nconst b = 2;\nconst c = 1;\n');
+  });
+
+  it('changes a file only as this run read it', async () => {
+    const tools = await toolsFor(true);
+    const { file } = workspace();
+
+    await expect(edit(tools, file, [{ oldString: 'const a', newString: 'let a' }])).rejects.toThrow(
+      'Read the file',
+    );
+    await expect(call(tools.write_file, { path: file, content: 'x' })).rejects.toThrow(
+      'Read the file',
+    );
+
+    await read(tools, file);
+    // Someone else writes it in the meantime: the edit would be computed against old text.
+    writeFileSync(file, 'const a = 5;\n');
+    const later = new Date(Date.now() + 5000);
+    const { utimesSync } = await import('node:fs');
+    utimesSync(file, later, later);
+
+    await expect(edit(tools, file, [{ oldString: 'const a', newString: 'let a' }])).rejects.toThrow(
+      'changed since you read it',
+    );
+  });
+
+  it('keeps the line endings a file already uses', async () => {
+    const tools = await toolsFor(true);
+    const { directory } = workspace();
+    const file = join(directory, 'windows.txt');
+
+    writeFileSync(file, 'one\r\ntwo\r\n');
+    await read(tools, file);
+    await edit(tools, file, [{ oldString: 'one\ntwo', newString: 'one\nTWO' }]);
+
+    expect(readFileSync(file, 'utf8')).toBe('one\r\nTWO\r\n');
+  });
+
+  it('finds files by name and text across a tree, skipping dependencies', async () => {
+    const tools = await toolsFor(true);
+    const { directory, file } = workspace();
+    const { mkdirSync } = await import('node:fs');
+
+    mkdirSync(join(directory, 'node_modules', 'dep'), { recursive: true });
+    writeFileSync(join(directory, 'node_modules', 'dep', 'index.ts'), 'const b = 2;\n');
+    await call(tools.write_file, {
+      path: join(directory, 'src', 'deep.ts'),
+      content: 'export {};\n',
+    });
+
+    const found = (await call(tools.find_files, {
+      pattern: '**/*.ts',
+      path: directory,
+      limit: 50,
+    })) as { files: string[] };
+
+    expect(found.files.sort()).toEqual([file, join(directory, 'src', 'deep.ts')].sort());
+
+    expect(
+      await call(tools.search_files, {
+        pattern: 'const b',
+        path: directory,
+        ignoreCase: false,
+        contextLines: 0,
+        output: 'content',
+        limit: 50,
+      }),
+    ).toEqual({ matches: `${file}:2:const b = 2;` });
   });
 });

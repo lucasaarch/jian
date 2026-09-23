@@ -46,6 +46,13 @@ in the command's environment. SSH keys go in \`~/.ssh\` with mode \`600\`, and G
 \`git config --global user.name\` and \`user.email\` before a commit. All three persist in the
 home volume. Never print a token or a private key back into the conversation.
 
+## Working on code
+
+Use the file tools, not the shell, to read and change files: \`read_file\` returns numbered
+lines, \`edit_file\` replaces exact passages without rewriting the rest, \`search_files\` and
+\`find_files\` sweep a codebase. A file must be read in this run before it is changed, and is
+refused if it changed since. Keep \`run_command\` for builds, tests, Git and everything else.
+
 ## Limits
 
 A command stops after two minutes at most, and output past about 60,000 characters is cut.

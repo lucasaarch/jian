@@ -37,7 +37,7 @@ The run budget is a soft stop based on reported input excluding cache reads, plu
 
 Large JSON MCP results are decoded before truncation and artifact storage. Artifact pages are sized against their serialized token estimate, including JSON escaping and the next-page cursor. Nothing is removed from the persisted full result.
 
-Memories are explicit, versioned and shared across the profile; there is no weight training and no literal awareness. Sessions talk to each other through an inbox that can be read back. The agent chooses to look at history, checkpoints, artifacts and other activity through tools.
+Memories are explicit, versioned and shared across the profile; there is no weight training and no literal awareness. Sessions talk to each other through an inbox that can be read back; a message to a channel conversation — a person or an approved group on WhatsApp or Telegram — is delivered on that channel and recorded in that conversation instead, and the prompt lists those conversations so an agent reached on one channel knows the others. The agent chooses to look at history, checkpoints, artifacts and other activity through tools.
 
 ## Conversation between profiles
 

@@ -7607,10 +7607,52 @@
                       },
                       "text": {
                         "type": "string",
-                        "minLength": 1,
+                        "maxLength": 8000
+                      },
+                      "caption": {
+                        "type": "string",
                         "maxLength": 8000
                       },
                       "entities": {
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "maxLength": 40
+                            },
+                            "offset": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "length": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "user": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "id"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        }
+                      },
+                      "caption_entities": {
                         "maxItems": 64,
                         "type": "array",
                         "items": {
@@ -7669,9 +7711,7 @@
                       }
                     },
                     "required": [
-                      "from",
-                      "chat",
-                      "text"
+                      "chat"
                     ]
                   }
                 },

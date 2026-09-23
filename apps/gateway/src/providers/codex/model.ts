@@ -143,7 +143,11 @@ export function createCodexModel(token: string, modelId: string, fetcher: typeof
       headers,
       body: JSON.stringify(body),
     });
-    return completedResponse(response);
+
+    // Codex only answers with events. A streaming caller reads them as they are; folding them
+    // into one body is only for a caller that asked for one, and a streaming parser that gets
+    // that body finds no events at all — no text, and no tool call.
+    return original.stream === true ? response : completedResponse(response);
   };
 
   return createOpenAI({ apiKey: token, baseURL: endpoint, fetch: codexFetch }).responses(modelId);

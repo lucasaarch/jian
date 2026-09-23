@@ -175,14 +175,33 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
     }),
 
     send_session_message: tool({
-      description: 'Send one idempotent message to another session of this profile.',
+      description:
+        'Write into another of your conversations. A WhatsApp or Telegram conversation — a person or an approved group — receives it on that channel, as a message from you; any other session gets it in its inbox. Idempotent by requestKey.',
       inputSchema: z.object({
         toSessionId: z.string().uuid(),
         text: z.string().trim().min(1).max(4000),
         requestKey: z.string().min(1).max(120),
       }),
-      execute: async (input) =>
-        coordination.send(run.profileId, { ...input, fromSessionId: run.sessionId }),
+      execute: async (input) => {
+        // A channel conversation is a person on a phone: an inbox there is read by nobody, and
+        // reporting it as sent is how an agent came to promise messages that never left.
+        const sent = await services.errands.write(
+          run.profileId,
+          input.toSessionId,
+          run.id,
+          input.text,
+          input.requestKey,
+        );
+
+        if (sent) {
+          return { delivered: 'queued on the channel', ...sent };
+        }
+
+        return {
+          delivered: 'inbox only — this session has no channel',
+          ...(await coordination.send(run.profileId, { ...input, fromSessionId: run.sessionId })),
+        };
+      },
     }),
 
     list_agents: tool({
@@ -372,8 +391,9 @@ export const TOOL_GROUPS = {
     tools: ['analyze_media', 'generate_image', 'list_speech_voices', 'generate_speech'],
   },
   files: {
-    summary: 'read, write and list files on the machine this gateway runs on',
-    tools: ['read_file', 'write_file', 'list_directory'],
+    summary:
+      'read, edit, write, find and search files on the machine this gateway runs on — for code too',
+    tools: ['read_file', 'edit_file', 'write_file', 'find_files', 'search_files', 'list_directory'],
   },
   shell: {
     summary: 'run commands on the machine this gateway runs on',

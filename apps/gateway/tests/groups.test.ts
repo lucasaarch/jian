@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { GROUP_AGENT_TURN_LIMIT } from '@jian/contracts';
+import { GROUP_AGENT_TURN_LIMIT, messageRecordSchema } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { IncomingMessage } from '../src/channels/channel.js';
@@ -232,6 +232,15 @@ describe('group conversations', () => {
       const transcript = context.messages.map((message) => message.content).join('\n');
 
       expect(context.messages).toHaveLength(1);
+
+      // What the agent only heard is read back through the same contract as anything else.
+      const history = await f.app.inject({
+        url: `/v1/profiles/${ada.profileId}/sessions/${run.sessionId}/messages`,
+        headers: admin,
+      });
+
+      expect(history.statusCode).toBe(200);
+      expect(messageRecordSchema.array().parse(history.json())).toHaveLength(4);
       expect(transcript).toBe(
         [
           'Lucas: o fornecedor atrasou a entrega para sexta',

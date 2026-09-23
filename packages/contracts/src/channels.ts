@@ -72,32 +72,43 @@ export const ingressSchema = z.strictObject({
   replyTo: z.string().min(1).max(100).optional(),
 });
 
+const telegramEntitiesSchema = z
+  .array(
+    z.object({
+      type: z.string().max(40),
+      offset: z.number().int().nonnegative().optional(),
+      length: z.number().int().nonnegative().optional(),
+      user: z.object({ id: z.number().int() }).optional(),
+    }),
+  )
+  .max(64)
+  .optional();
+
+/**
+ * Only what the gateway reads. Everything else a Telegram message may carry — a photo, a
+ * sticker, the notice that someone joined — is optional here: refusing an update makes Telegram
+ * deliver it again and again, and the messages behind it wait.
+ */
 export const telegramUpdateSchema = z.object({
   update_id: z.number().int(),
   message: z
     .object({
-      from: z.object({
-        id: z.number().int(),
-        first_name: z.string().max(100).optional(),
-        username: z.string().max(100).optional(),
-      }),
+      from: z
+        .object({
+          id: z.number().int(),
+          first_name: z.string().max(100).optional(),
+          username: z.string().max(100).optional(),
+        })
+        .optional(),
       chat: z.object({
         id: z.number().int(),
         type: z.string().max(40).optional(),
         title: z.string().max(200).optional(),
       }),
-      text: z.string().min(1).max(8000),
-      entities: z
-        .array(
-          z.object({
-            type: z.string().max(40),
-            offset: z.number().int().nonnegative().optional(),
-            length: z.number().int().nonnegative().optional(),
-            user: z.object({ id: z.number().int() }).optional(),
-          }),
-        )
-        .max(64)
-        .optional(),
+      text: z.string().max(8000).optional(),
+      caption: z.string().max(8000).optional(),
+      entities: telegramEntitiesSchema,
+      caption_entities: telegramEntitiesSchema,
       reply_to_message: z
         .object({ from: z.object({ id: z.number().int() }).optional() })
         .optional(),

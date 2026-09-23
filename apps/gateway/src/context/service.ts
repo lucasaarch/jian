@@ -1,4 +1,5 @@
 import type { Run } from '@jian/contracts';
+import { listConversations } from '../channels/repository.js';
 import { searchMemories } from '../memories/repository.js';
 import type { RunReader } from '../runs/port.js';
 import type { SessionReader } from '../sessions/port.js';
@@ -20,18 +21,25 @@ export class Contexts {
 
     const session = await this.sessions.session(run.profileId, run.sessionId);
 
-    // Four independent reads: whatever the request mentions, what the profile is busy with,
-    // the record of what was compacted away, and the turns since. `buildContext` is what
-    // decides how much of each survives.
-    const [memories, activities, history] = await Promise.all([
+    // Independent reads: whatever the request mentions, what the profile is busy with, whom it
+    // talks to on its channels, and the turns since the record of what was compacted away.
+    // `buildContext` is what decides how much of each survives.
+    const [memories, activities, conversations, history] = await Promise.all([
       searchMemories(this.store.db, run.profileId, words, 100),
       this.runs.activities(run.profileId),
+      listConversations(this.store.db, run.profileId),
       this.sessions.messages(run.profileId, run.sessionId, 40, session.summarizedUpTo),
     ]);
 
     return buildContext(run, {
       memories,
       activities,
+      conversations: conversations.map((contact) => ({
+        sessionId: contact.sessionId as string,
+        channel: contact.type,
+        with: contact.displayName ?? contact.actorId,
+        ...(contact.scope === 'group' ? { group: true } : {}),
+      })),
       history,
       ...(session.summary ? { summary: session.summary } : {}),
     });

@@ -1,4 +1,4 @@
-import { generateText } from 'ai';
+import { generateText, streamText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createCodexModel } from '../src/providers/codex/model.js';
@@ -109,5 +109,105 @@ describe('ChatGPT Codex model adapter', () => {
         expect.objectContaining({ type: 'function_call_output', call_id: 'call_1' }),
       ]),
     );
+  });
+
+  // The runtime streams, so the run can speak while it works. Codex already answers with
+  // events; turning them into one JSON body is what made every tool call vanish.
+  it('streams a tool call and the answer that follows it', async () => {
+    let calls = 0;
+    const response = (id: string) => ({
+      id,
+      object: 'response',
+      created_at: 1,
+      model: 'gpt-5.6-sol',
+      status: 'completed',
+      output: [],
+      usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+    });
+    const call = {
+      type: 'function_call',
+      id: 'fc_1',
+      call_id: 'call_1',
+      name: 'lookup',
+      arguments: '{"query":"x"}',
+      status: 'completed',
+    };
+    const message = {
+      id: 'msg_2',
+      type: 'message',
+      role: 'assistant',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Found x.', annotations: [] }],
+    };
+    const fetcher: typeof fetch = async () => {
+      calls += 1;
+      const events =
+        calls === 1
+          ? [
+              {
+                type: 'response.created',
+                response: { ...response('resp_1'), status: 'in_progress' },
+              },
+              {
+                type: 'response.output_item.added',
+                output_index: 0,
+                item: { ...call, arguments: '', status: 'in_progress' },
+              },
+              {
+                type: 'response.function_call_arguments.delta',
+                item_id: 'fc_1',
+                output_index: 0,
+                delta: '{"query":"x"}',
+              },
+              { type: 'response.output_item.done', output_index: 0, item: call },
+              { type: 'response.completed', response: response('resp_1') },
+            ]
+          : [
+              {
+                type: 'response.created',
+                response: { ...response('resp_2'), status: 'in_progress' },
+              },
+              {
+                type: 'response.output_item.added',
+                output_index: 0,
+                item: { ...message, content: [], status: 'in_progress' },
+              },
+              {
+                type: 'response.output_text.delta',
+                item_id: 'msg_2',
+                output_index: 0,
+                content_index: 0,
+                delta: 'Found x.',
+              },
+              { type: 'response.output_item.done', output_index: 0, item: message },
+              { type: 'response.completed', response: response('resp_2') },
+            ];
+
+      return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''), {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    };
+
+    const looked: string[] = [];
+    const result = streamText({
+      model: createCodexModel('synthetic-token', 'gpt-5.6-sol', fetcher),
+      prompt: 'Look up x.',
+      tools: {
+        lookup: {
+          inputSchema: z.object({ query: z.string() }),
+          execute: async ({ query }) => {
+            looked.push(query);
+
+            return query;
+          },
+        },
+      },
+      stopWhen: ({ steps }) => steps.length >= 2,
+    });
+
+    expect(await result.text).toBe('Found x.');
+    expect(looked).toEqual(['x']);
+    expect((await result.steps)[0]?.finishReason).toBe('tool-calls');
   });
 });

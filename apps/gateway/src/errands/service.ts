@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import type { ContactRecord } from '../channels/contacts.js';
-import { insertDelivery } from '../channels/repository.js';
+import { insertDelivery, toContact } from '../channels/repository.js';
 import { findConnection } from '../channels/whatsapp/repository.js';
 import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
+import { stableUuid } from '../core/ids.js';
 import { insertMessage } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { channels, contacts, errands } from '../storage/schema.js';
@@ -46,39 +47,8 @@ export class Errands {
       throw new GatewayError(409, 'Write in the room itself rather than to a group contact');
     }
 
-    const connection = await findConnection(this.store.db, contact.channelId);
-
     return this.store.transaction(profileId, async (tx) => {
-      const now = new Date(this.clock());
-
-      await insertDelivery(tx, {
-        id: randomUUID(),
-        profileId,
-        channelId: contact.channelId,
-        chatId: contact.chatId,
-        notice: text,
-        status: 'pending',
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-        remoteMessageIds: [],
-        saidCount: 0,
-        ...(connection ? { connectionGeneration: connection.generation } : {}),
-      });
-
-      // The conversation with this contact is where this message belongs, even though another
-      // conversation is what produced it. Without this the agent writes to someone and their
-      // own history shows nothing, which reads as the message never having been sent.
-      if (contact.sessionId) {
-        await insertMessage(tx, {
-          id: randomUUID(),
-          profileId,
-          sessionId: contact.sessionId,
-          runId,
-          role: 'assistant',
-          content: text,
-          createdAt: now.toISOString(),
-        });
-      }
+      await this.deliver(tx, profileId, contact, runId, text, randomUUID());
 
       const errand = expectReply
         ? await this.open(tx, profileId, contact, fromSessionId, text)
@@ -89,6 +59,102 @@ export class Errands {
         ...(errand ? { errandId: errand.id } : {}),
       };
     });
+  }
+
+  /**
+   * Writes into a channel conversation from anywhere: a direct chat or an approved room. The
+   * agent names the conversation by its session, the way it finds it among its own; the id is
+   * derived from the request key, so a repeated call sends once.
+   */
+  async write(
+    profileId: string,
+    sessionId: string,
+    runId: string,
+    text: string,
+    requestKey: string,
+  ): Promise<{ to: string; channel: string; sessionId: string } | undefined> {
+    const [row] = await this.store.db
+      .select({ contact: contacts, channel: channels.type })
+      .from(contacts)
+      .innerJoin(channels, eq(channels.id, contacts.channelId))
+      .where(
+        and(
+          eq(contacts.profileId, profileId),
+          eq(contacts.sessionId, sessionId),
+          isNull(channels.revokedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!row) {
+      return undefined;
+    }
+
+    const contact = toContact(row.contact, row.channel);
+
+    if (contact.status !== 'approved') {
+      throw new GatewayError(409, 'That conversation is not approved');
+    }
+
+    await this.store.transaction(profileId, (tx) =>
+      this.deliver(
+        tx,
+        profileId,
+        contact,
+        runId,
+        text,
+        stableUuid(`write:${profileId}:${sessionId}:${requestKey}`),
+      ),
+    );
+
+    return { to: contact.displayName ?? contact.actorId, channel: row.channel, sessionId };
+  }
+
+  /**
+   * Queues the message on the contact's channel and records it in their conversation, where it
+   * belongs even when another conversation produced it: without the record the agent writes to
+   * someone and their own history shows nothing, which reads as the message never sent.
+   */
+  private async deliver(
+    tx: Queryable,
+    profileId: string,
+    contact: ContactRecord,
+    runId: string,
+    text: string,
+    id: string,
+  ) {
+    const connection = await findConnection(tx, contact.channelId);
+    const now = new Date(this.clock()).toISOString();
+
+    await insertDelivery(tx, {
+      id,
+      profileId,
+      channelId: contact.channelId,
+      chatId: contact.chatId,
+      notice: text,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+      remoteMessageIds: [],
+      saidCount: 0,
+      ...(connection ? { connectionGeneration: connection.generation } : {}),
+    });
+
+    if (contact.sessionId) {
+      await insertMessage(
+        tx,
+        {
+          id,
+          profileId,
+          sessionId: contact.sessionId,
+          runId,
+          role: 'assistant',
+          content: text,
+          createdAt: now,
+        },
+        true,
+      );
+    }
   }
 
   /** Records that this session is waiting on this contact. The message itself is a delivery. */

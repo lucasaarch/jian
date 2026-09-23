@@ -1,5 +1,5 @@
 import { channelSchema, contactSchema, deliverySchema } from '@jian/contracts';
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { channels, contacts, deliveries } from '../storage/schema.js';
 import type { ChannelType } from './channel.js';
@@ -210,6 +210,26 @@ export async function listContacts(db: Queryable, profileId: string): Promise<Co
     .where(eq(contacts.profileId, profileId))
     .orderBy(desc(contacts.createdAt))
     .limit(200);
+
+  return rows.map((row) => toContact(row.contact, row.type));
+}
+
+/** The approved conversations of a profile that have a session: whom it talks to, and where. */
+export async function listConversations(
+  db: Queryable,
+  profileId: string,
+): Promise<ContactRecord[]> {
+  const rows = await contactQuery(db)
+    .where(
+      and(
+        eq(contacts.profileId, profileId),
+        eq(contacts.status, 'approved'),
+        isNotNull(contacts.sessionId),
+        isNull(channels.revokedAt),
+      ),
+    )
+    .orderBy(desc(contacts.updatedAt))
+    .limit(40);
 
   return rows.map((row) => toContact(row.contact, row.type));
 }

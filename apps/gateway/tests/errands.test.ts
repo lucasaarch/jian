@@ -204,3 +204,53 @@ describe('asking a contact and bringing the answer back', () => {
     expect((await errands.reachable(profile.id))[0]?.waitingOnThem).toBe(true);
   });
 });
+
+describe('writing into another conversation', () => {
+  it('sends to a channel conversation on its channel, once per request, and records it there', async () => {
+    const { services, channels, profile, moabe, asking } = await setup();
+    type SessionMessage = { toSessionId: string; text: string; requestKey: string };
+    const send = profileTools(services, asking).send_session_message as Tool<SessionMessage>;
+
+    if (!send?.execute || !moabe.sessionId) throw new Error('Tool or session missing');
+
+    const input = { toSessionId: moabe.sessionId, text: 'Ping, Moabe.', requestKey: 'ping-1' };
+    const call = () => send.execute?.(input, { toolCallId: 'ping', messages: [], context: {} });
+
+    expect(await call()).toMatchObject({ delivered: 'queued on the channel', channel: 'telegram' });
+    // The model repeats itself; the person must not receive the ping twice.
+    await call();
+    await channels.dispatch();
+
+    expect(sent.filter((item) => item.text === 'Ping, Moabe.')).toEqual([
+      { chatId: '77', text: 'Ping, Moabe.' },
+    ]);
+
+    const history = await services.sessions.messages(profile.id, moabe.sessionId, 20);
+
+    expect(history.filter((message) => message.content === 'Ping, Moabe.')).toHaveLength(1);
+  });
+
+  it('tells an agent reached elsewhere which channel conversations it has', async () => {
+    const { services, moabe, asking } = await setup();
+    const { system } = await services.contexts.context(asking);
+
+    expect(system).toContain('Your conversations on channels');
+    expect(system).toContain(
+      JSON.stringify({ sessionId: moabe.sessionId, channel: 'telegram', with: 'Moabe' }),
+    );
+  });
+
+  it('leaves a session without a channel to its inbox, and says so', async () => {
+    const { services, profile, asking } = await setup();
+    const other = await services.sessions.createSession(profile.id, { title: 'Notas' });
+    type SessionMessage = { toSessionId: string; text: string; requestKey: string };
+    const send = profileTools(services, asking).send_session_message as Tool<SessionMessage>;
+
+    expect(
+      await send.execute?.(
+        { toSessionId: other.id, text: 'Lembrete', requestKey: 'note-1' },
+        { toolCallId: 'note', messages: [], context: {} },
+      ),
+    ).toMatchObject({ delivered: 'inbox only — this session has no channel' });
+  });
+});

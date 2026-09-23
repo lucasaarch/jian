@@ -4452,7 +4452,7 @@ export interface operations {
                 "application/json": {
                     update_id: number;
                     message?: {
-                        from: {
+                        from?: {
                             id: number;
                             first_name?: string;
                             username?: string;
@@ -4462,8 +4462,17 @@ export interface operations {
                             type?: string;
                             title?: string;
                         };
-                        text: string;
+                        text?: string;
+                        caption?: string;
                         entities?: {
+                            type: string;
+                            offset?: number;
+                            length?: number;
+                            user?: {
+                                id: number;
+                            };
+                        }[];
+                        caption_entities?: {
                             type: string;
                             offset?: number;
                             length?: number;

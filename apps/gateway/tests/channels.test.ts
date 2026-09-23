@@ -386,6 +386,50 @@ describe('Telegram transport', () => {
 });
 
 describe('a Telegram group', () => {
+  it('acknowledges an update with no text, so Telegram does not resend it forever', async () => {
+    const f = await setup(async () => Response.json({ ok: true }));
+
+    try {
+      const joined = await f.app.inject({
+        method: 'POST',
+        url: f.url,
+        headers: f.headers,
+        payload: {
+          update_id: 900,
+          message: {
+            from: { id: 42, first_name: 'Ada' },
+            chat: { id: -500, type: 'supergroup', title: 'Equipe' },
+            new_chat_members: [{ id: 700, is_bot: true }],
+          },
+        },
+      });
+
+      expect(joined.statusCode).toBe(200);
+      expect(joined.json()).toEqual({ accepted: false });
+
+      // A photo with a caption is a message like any other.
+      const photo = await f.app.inject({
+        method: 'POST',
+        url: f.url,
+        headers: f.headers,
+        payload: {
+          update_id: 901,
+          message: {
+            from: { id: 42, first_name: 'Ada' },
+            chat: { id: 99 },
+            photo: [{ file_id: 'x' }],
+            caption: 'olha isso',
+          },
+        },
+      });
+
+      expect(photo.statusCode).toBe(200);
+      expect(await f.channels.contacts(f.profile.id)).toHaveLength(1);
+    } finally {
+      await f.app.close();
+    }
+  });
+
   const said = (id: number, text: string, extra: Record<string, unknown> = {}) => ({
     type: 'telegram' as const,
     headers: {},

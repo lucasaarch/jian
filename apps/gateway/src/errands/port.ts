@@ -11,4 +11,12 @@ export interface Outreach {
     text: string,
     expectReply: boolean,
   ): Promise<{ to: string; errandId?: string }>;
+  /** Undefined when the session is not a channel conversation. */
+  write(
+    profileId: string,
+    sessionId: string,
+    runId: string,
+    text: string,
+    requestKey: string,
+  ): Promise<{ to: string; channel: string; sessionId: string } | undefined>;
 }
