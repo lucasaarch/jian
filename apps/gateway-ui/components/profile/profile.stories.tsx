@@ -18,18 +18,31 @@ type Story = StoryObj<typeof meta>;
 
 export const Editor: Story = {
   render: () => {
-    const { profile, api, mutate, busy } = sectionProps();
+    const { profile, api, busy } = sectionProps();
 
-    return <ProfileEditor profile={profile} api={api} mutate={mutate} busy={busy} />;
+    return <ProfileEditor profile={profile} api={api} busy={busy} />;
+  },
+};
+
+/** Resetting asks first, and says what is kept. */
+export const ResetConfirm: Story = {
+  render: () => {
+    const { profile, api, busy } = sectionProps();
+
+    return <ProfileEditor profile={profile} api={api} busy={busy} />;
+  },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: /Reset profile/ }));
+    await expect(await within(document.body).findByText('Reset Zero Two?')).toBeInTheDocument();
   },
 };
 
 /** Deleting asks first, and names what goes with the profile. */
 export const DeleteConfirm: Story = {
   render: () => {
-    const { profile, api, mutate, busy } = sectionProps();
+    const { profile, api, busy } = sectionProps();
 
-    return <ProfileEditor profile={profile} api={api} mutate={mutate} busy={busy} />;
+    return <ProfileEditor profile={profile} api={api} busy={busy} />;
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -42,12 +55,12 @@ export const DeleteConfirm: Story = {
 /** A profile with nothing filled in yet, every switch off. */
 export const EditorBlank: Story = {
   render: () => {
-    const { api, mutate, busy } = sectionProps();
+    const { api, busy } = sectionProps();
     const blank = fixtures.profiles[2];
 
     if (!blank) throw new Error('No blank profile in the fixtures');
 
-    return <ProfileEditor profile={blank} api={api} mutate={mutate} busy={busy} />;
+    return <ProfileEditor profile={blank} api={api} busy={busy} />;
   },
 };
 

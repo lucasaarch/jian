@@ -116,13 +116,6 @@
   .check-row small {
     @apply mt-1 block text-xs leading-relaxed text-muted;
   }
-  .save-bar {
-    @apply sticky bottom-5 z-10 ml-auto mt-8 flex w-fit max-w-full items-center justify-between gap-6 rounded-md bg-ink py-2 pl-5 pr-2 text-canvas;
-    box-shadow: 0 8px 28px color-mix(in srgb, var(--shade) 15%, transparent);
-  }
-  .save-bar > span {
-    @apply flex items-center gap-2 text-xs text-canvas;
-  }
   .avatar-field {
     @apply mb-6 flex items-start gap-5;
   }
@@ -193,11 +186,24 @@
   .request-message {
     @apply mt-2 break-words text-sm text-ink;
   }
+  .autosave-note {
+    @apply mt-8 flex items-center gap-1.5 text-xs text-muted;
+  }
   .danger-zone {
     @apply mt-16 flex flex-wrap items-center gap-5 rounded-lg border border-bad/40 bg-bad-soft px-6 py-5;
   }
   .danger-zone h2 {
     @apply text-lg text-bad;
+  }
+  /* Forgetting is recoverable in spirit — the agent is still there — so it is not red. */
+  .danger-zone.reset {
+    @apply border-line bg-surface;
+  }
+  .danger-zone.reset h2 {
+    @apply text-ink;
+  }
+  .danger-zone.reset + .danger-zone {
+    @apply mt-4;
   }
   .danger-zone p {
     @apply mt-1 max-w-prose text-sm text-ink;
@@ -397,15 +403,6 @@
     @apply gap-3 p-4;
   }
   .resource-row > .small {
-    @apply hidden;
-  }
-  .save-bar {
-    @apply gap-2 p-3;
-  }
-  .save-bar > span {
-    @apply text-[11px];
-  }
-  .save-bar > span svg {
     @apply hidden;
   }
   .session-history {

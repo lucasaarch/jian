@@ -18,6 +18,7 @@ import {
   listRevisions,
   updateProfileRow,
 } from './repository.js';
+import { forget, hasActiveRun } from './reset.js';
 
 /** One value on its way to the vault, still carrying which server and which slot it came from. */
 type TypedMcpValue = { server: string; kind: 'header' | 'env'; name: string; value: string };
@@ -272,5 +273,31 @@ export class Profiles {
     });
 
     return { id };
+  }
+
+  /**
+   * The profile forgets everything it lived: sessions, memories and its activity. What the
+   * owner gave it stays — name, instructions, skills, MCP servers, permissions, model defaults,
+   * channels, contacts and secrets. Refused while an answer is running, which would otherwise
+   * write into a conversation that no longer exists.
+   */
+  async resetProfile(id: string): Promise<{ id: string; sessions: number; memories: number }> {
+    await this.profile(id);
+
+    return this.store.transaction(id, async (tx) => {
+      if (await hasActiveRun(tx, id)) {
+        throw new GatewayError(
+          409,
+          'An answer is still running. Wait for it to finish, or cancel it, then reset.',
+        );
+      }
+
+      const forgotten = await forget(tx, id);
+
+      // The feed starts over with this, so an open panel reloads what is left.
+      await recordEvent(tx, this.clock, id, 'profile.reset', forgotten);
+
+      return { id, ...forgotten };
+    });
   }
 }
