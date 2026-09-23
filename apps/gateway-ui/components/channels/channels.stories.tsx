@@ -1,14 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
-import { fn } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import * as fixtures from '../../stories/fixtures';
 import { ids } from '../../stories/fixtures';
 import { emptyHandlers } from '../../stories/handlers';
 import { profileData, sectionProps } from '../../stories/section';
 import { Channels } from '.';
-import { Known } from './known';
+import { Conversations } from './conversations';
 import { Pairing } from './pairing';
 import { Requests } from './requests';
-import { Rooms } from './rooms';
 
 const meta = {
   title: 'Sections/Channels',
@@ -18,7 +17,22 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Connected: Story = { render: () => <Channels {...sectionProps()} /> };
+export const List: Story = { render: () => <Channels {...sectionProps()} /> };
+
+/** Telegram opened: its connection, its groups and its contacts, each one revocable. */
+export const TelegramExpanded: Story = {
+  render: () => <Channels {...sectionProps()} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const [, telegram] = canvas.getAllByRole('button', { name: /Manage/ });
+
+    if (!telegram) throw new Error('No Telegram row');
+
+    await userEvent.click(telegram);
+    // The row opens with a short fade, so visibility is awaited rather than read at once.
+    await waitFor(() => expect(canvas.getByText('Equipe')).toBeVisible());
+  },
+};
 
 export const NothingConnected: Story = {
   parameters: { msw: { handlers: emptyHandlers } },
@@ -29,12 +43,18 @@ export const NothingConnected: Story = {
   ),
 };
 
-/** A stranger wrote first and waits for the owner. */
+/** Someone new wrote first and waits for the owner. */
 export const PendingRequests: Story = { render: () => <Requests {...sectionProps()} /> };
 
-export const KnownContacts: Story = { render: () => <Known {...sectionProps()} /> };
+export const ChannelConversations: Story = {
+  render: () => {
+    const channel = fixtures.channels.find((item) => item.id === ids.telegram);
 
-export const GroupRooms: Story = { render: () => <Rooms {...sectionProps()} /> };
+    if (!channel) throw new Error('No Telegram channel in the fixtures');
+
+    return <Conversations {...sectionProps()} channel={channel} />;
+  },
+};
 
 /** Scanning the QR to link WhatsApp. */
 export const WhatsAppPairing: Story = {

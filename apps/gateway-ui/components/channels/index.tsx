@@ -1,16 +1,15 @@
 'use client';
 
-import { ArrowUpRight, ChevronDown, QrCode, Unplug } from 'lucide-react';
+import { ChevronDown, QrCode, Unplug } from 'lucide-react';
 import { useState } from 'react';
 import type { Channel, ChannelType } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionProps } from '../props';
 import { Badge, Button, Confirm, Field, Secret, SectionHeading } from '../ui';
+import { Conversations } from './conversations';
 import { kinds } from './kinds';
-import { Known } from './known';
 import { Pairing } from './pairing';
 import { Requests } from './requests';
-import { Rooms } from './rooms';
 
 export function Channels(props: SectionProps) {
   const { profile, data, api, mutate, busy } = props;
@@ -57,6 +56,18 @@ export function Channels(props: SectionProps) {
     );
   };
 
+  const reach = (channel: Channel) => {
+    const decided = data.contacts.filter(
+      (contact) => contact.channelId === channel.id && contact.status === 'approved',
+    );
+    const groups = decided.filter((contact) => contact.scope === 'group').length;
+    const people = decided.length - groups;
+
+    return `${people === 1 ? '1 contact' : `${people} contacts`} · ${
+      groups === 1 ? '1 group' : `${groups} groups`
+    }`;
+  };
+
   return (
     <>
       <SectionHeading
@@ -64,54 +75,54 @@ export function Channels(props: SectionProps) {
         description="Take the conversation to where you already are."
       />
       <Requests {...props} />
-      <div className="connections-grid channels-grid">
+      <div className="resource-list">
         {kinds.map((kind) => {
           const channel = connected(kind.type);
+          const open = editing === kind.type;
 
           return (
-            <article className="connection-card" data-connected={!!channel} key={kind.type}>
-              <header className="connection-card-header">
-                <span className="channel-symbol">
-                  <kind.icon size={24} strokeWidth={1.5} />
-                </span>
-                <Badge tone={channel ? 'good' : 'neutral'}>
-                  {channel ? 'Connected' : 'Not connected'}
-                </Badge>
-              </header>
-              <h2>{kind.name}</h2>
-              <p className="connection-description">
-                {
-                  {
-                    whatsapp: 'Talk through your own WhatsApp.',
-                    telegram: 'Receive messages through your bot.',
-                    api: 'Plug in your own systems.',
-                  }[kind.type]
-                }
-              </p>
-              <p className="connection-meta">
-                {
-                  {
-                    whatsapp: 'Pairing by QR code',
-                    telegram: 'A BotFather token',
-                    api: 'A webhook URL and token',
-                  }[kind.type]
-                }
-              </p>
-              <button
-                type="button"
-                className="connection-action"
-                disabled={busy}
-                aria-expanded={editing === kind.type}
-                aria-controls={`channel-${kind.type}`}
-                onClick={() => setEditing(editing === kind.type ? undefined : kind.type)}
-              >
-                {editing === kind.type ? 'Close' : channel ? 'Manage connection' : 'Set up'}
-                {editing === kind.type ? <ChevronDown size={16} /> : <ArrowUpRight size={16} />}
-              </button>
+            <article
+              className="resource-row items-start provider-row"
+              data-connected={!!channel}
+              key={kind.type}
+            >
+              <div className="resource-icon provider-symbol" aria-hidden="true">
+                <kind.icon size={20} strokeWidth={1.6} />
+              </div>
+              <div className="grow">
+                <h3>
+                  {kind.name}
+                  <Badge tone={channel ? 'good' : 'neutral'}>
+                    {channel ? 'Connected' : 'Not connected'}
+                  </Badge>
+                </h3>
+                <p>{kind.description}</p>
+                {channel && (
+                  <div className="connection-meta">
+                    <span>{reach(channel)}</span>
+                    <span>Connected on {date(channel.createdAt)}</span>
+                  </div>
+                )}
+              </div>
+              <div className="row-actions">
+                <Button
+                  variant="quiet"
+                  disabled={busy}
+                  aria-expanded={open}
+                  aria-controls={`channel-${kind.type}`}
+                  onClick={() => {
+                    setEditing(open ? undefined : kind.type);
+                    setError('');
+                  }}
+                >
+                  {open ? 'Close' : channel ? 'Manage' : 'Connect'}
+                  <ChevronDown size={16} className={open ? 'rotate-180' : undefined} />
+                </Button>
+              </div>
               <div
-                className="connection-disclosure"
+                className="connection-disclosure basis-full"
                 id={`channel-${kind.type}`}
-                hidden={editing !== kind.type}
+                hidden={!open}
               >
                 {channel ? (
                   <>
@@ -143,6 +154,7 @@ export function Channels(props: SectionProps) {
                         Disconnect
                       </Button>
                     </div>
+                    <Conversations {...props} channel={channel} />
                   </>
                 ) : (
                   <form
@@ -191,65 +203,16 @@ export function Channels(props: SectionProps) {
                     </div>
                   </form>
                 )}
+                {error && open && (
+                  <p className="form-error" role="alert">
+                    {error}
+                  </p>
+                )}
               </div>
             </article>
           );
         })}
       </div>
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      )}
-      <Rooms {...props} />
-      <Known {...props} />
-      {data.deliveries.length > 0 && (
-        <section className="subsection">
-          <h2>Entregas recentes</h2>
-          <div className="resource-list">
-            {data.deliveries.slice(0, 10).map((item) => (
-              <div className="resource-row" key={item.id}>
-                <div className="grow">
-                  <strong>
-                    {kinds.find(
-                      (kind) =>
-                        kind.type ===
-                        data.channels.find((channel) => channel.id === item.channelId)?.type,
-                    )?.name ?? 'Channel'}
-                  </strong>
-                  <p>
-                    {item.chatId} · {date(item.updatedAt)}
-                    {item.notice ? ' · approval notice' : ''}
-                  </p>
-                </div>
-                <Badge
-                  tone={
-                    item.status === 'sent'
-                      ? 'good'
-                      : ['failed', 'unknown'].includes(item.status)
-                        ? 'bad'
-                        : 'warn'
-                  }
-                >
-                  {
-                    {
-                      pending: 'Pending',
-                      sending: 'Sending',
-                      sent: 'Sent',
-                      failed: 'Failed',
-                      unknown: 'Outcome unknown',
-                    }[item.status]
-                  }
-                </Badge>
-              </div>
-            ))}
-          </div>
-          <p className="note">
-            A delivery whose outcome is unknown is never resent on its own, so nothing arrives
-            twice.
-          </p>
-        </section>
-      )}
       {pairing && (
         <Pairing
           profileId={profile.id}

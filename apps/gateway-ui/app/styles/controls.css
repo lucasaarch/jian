@@ -135,27 +135,8 @@
     @apply mb-8 border-b border-line pb-8;
   }
 
-  .connections-grid {
-    @apply grid items-start gap-5;
-  }
   .providers-grid {
     @apply grid-cols-1 min-[1050px]:grid-cols-2;
-  }
-  .channels-grid {
-    @apply grid-cols-1 min-[1200px]:grid-cols-3;
-  }
-  .connection-card {
-    @apply relative min-w-0 rounded-lg bg-surface/70 p-6;
-  }
-  .connection-card[data-connected="true"] {
-    box-shadow: inset 0 2px 0 var(--accent);
-  }
-  .connection-card-header {
-    @apply mb-5 flex items-center justify-between gap-3;
-  }
-  .provider-symbol,
-  .channel-symbol {
-    @apply grid h-10 w-10 place-items-center rounded-md bg-canvas text-accent;
   }
   .provider-symbol {
     @apply font-display text-3xl font-medium;
@@ -173,27 +154,36 @@
   .provider-row .select-trigger {
     @apply bg-canvas;
   }
-  .connection-card h2 {
-    @apply text-3xl;
-  }
-  .connection-description {
-    @apply mt-1 text-sm;
-  }
   .connection-meta {
     @apply mt-5 flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted;
   }
   .connection-meta > span:last-child:not(:first-child) {
     @apply basis-full;
   }
-  .connection-action {
-    @apply mt-5 flex w-full items-center justify-between gap-3 border-t border-line pt-4 text-xs font-medium text-accent;
-  }
-  .connection-action:hover {
-    @apply text-accent-hover;
-  }
   .connection-disclosure:not([hidden]) {
     @apply mt-5;
     animation: arrive 150ms ease-out;
+  }
+  .channel-conversations {
+    @apply mt-6 grid gap-6 border-t border-line pt-6;
+  }
+  .channel-conversations h3 {
+    @apply mb-2 text-xs font-semibold uppercase tracking-wider text-muted;
+  }
+  .conversation-row {
+    @apply flex items-center gap-3 border-b border-line py-3 text-ink last:border-b-0;
+  }
+  .conversation-row > svg {
+    @apply text-muted;
+  }
+  .conversation-row strong {
+    @apply block text-sm font-medium;
+  }
+  .conversation-row small {
+    @apply block truncate text-xs text-muted;
+  }
+  .conversation-row[data-status="blocked"] strong {
+    @apply text-muted;
   }
   .connection-disclosure input {
     @apply bg-canvas;
@@ -431,9 +421,6 @@
   }
   .accent-picker {
     @apply gap-4;
-  }
-  .connection-card {
-    @apply p-5;
   }
   .save-bar {
     @apply bottom-3 gap-3;
