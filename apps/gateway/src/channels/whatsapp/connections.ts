@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { InlineMedia } from '@jian/contracts';
 import { assertFound, GatewayError } from '../../core/errors.js';
 import type { SecretBox } from '../../security/crypto.js';
 import type { Queryable, Store } from '../../storage/database.js';
@@ -494,6 +495,13 @@ export class WhatsAppConnections {
       // A timeout can follow a successful remote write. Never replay an uncertain message.
       return { status: attempted ? 'unknown' : 'failed', remoteMessageIds };
     }
+  }
+
+  /** Only the process holding the device can ask; anywhere else there is simply no picture. */
+  async avatar(id: string, chatId: string): Promise<InlineMedia | undefined> {
+    const local = this.devices.get(id);
+
+    return local?.device.avatar?.(chatId).catch(() => undefined);
   }
 
   async typing(id: string, chatId: string, generation?: number): Promise<void> {

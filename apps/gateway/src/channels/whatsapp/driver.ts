@@ -21,6 +21,9 @@ import { DEVICE_SEND_TIMEOUT_MS } from './types.js';
 /** Signal rotates keys in bursts; one grouped write per burst instead of one per key. */
 const SESSION_WRITE_DELAY_MS = 1000;
 
+/** A thumbnail is a few kilobytes; anything much larger is not what was asked for. */
+const MAX_AVATAR_BYTES = 120_000;
+
 /** Keeps a fresh QR inside the 45 s window the panel publishes; the library defaults to 60 s. */
 const QR_REFRESH_MS = 30_000;
 
@@ -388,6 +391,27 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
             handle(() => deliver(message));
           }
         });
+      },
+      avatar: async (chatId) => {
+        const jid = toDeviceJid(chatId);
+
+        if (closed || !socket || !jid) {
+          return undefined;
+        }
+
+        // `preview` is the thumbnail: a few kilobytes, which is all a list of contacts needs.
+        const url = await socket.profilePictureUrl(jid, 'preview').catch(() => undefined);
+
+        if (!url) {
+          return undefined;
+        }
+
+        const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+        const bytes = Buffer.from(await response.arrayBuffer());
+
+        return response.ok && bytes.length <= MAX_AVATAR_BYTES
+          ? { mimeType: 'image/jpeg', data: bytes.toString('base64') }
+          : undefined;
       },
       typing: async (chatId) => {
         const jid = toDeviceJid(chatId);

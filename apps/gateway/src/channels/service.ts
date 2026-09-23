@@ -39,10 +39,12 @@ import {
   insertChannel,
   insertDelivery,
   listChannels,
+  listContacts,
   listDeliveries,
   listDeliveriesByPhase,
   listGroupContacts,
   markChannelRevoked,
+  setContactAvatar,
   updateDelivery,
 } from './repository.js';
 import { findConnection, writeAuthChunks, writeConnection } from './whatsapp/repository.js';
@@ -317,8 +319,98 @@ export class Channels {
     }
   }
 
-  contacts(profileId: string) {
-    return this.people.list(profileId);
+  async contacts(profileId: string) {
+    const list = await this.people.list(profileId);
+
+    // Contacts that have not written since pictures existed get theirs when the owner looks.
+    void this.refreshAvatars(profileId).catch(() => {});
+
+    return list;
+  }
+
+  /** Asked at most this often per contact: a picture changes rarely, and each ask is a call. */
+  private static readonly AVATAR_TTL_MS = 24 * 60 * 60 * 1000;
+  private readonly fetchingAvatars = new Set<string>();
+
+  private async refreshAvatars(profileId: string) {
+    const stale = (await listContacts(this.services.store.db, profileId))
+      .filter((contact) => this.avatarStale(contact))
+      .slice(0, 12);
+
+    for (const contact of stale) {
+      const channel = await findChannel(this.services.store.db, contact.channelId);
+
+      if (channel && !channel.revokedAt) {
+        await this.refreshAvatar(channel, contact);
+      }
+    }
+  }
+
+  private avatarStale(contact: ContactRecord) {
+    return (
+      !contact.avatarCheckedAt ||
+      Date.parse(contact.avatarCheckedAt) < Date.now() - Channels.AVATAR_TTL_MS
+    );
+  }
+
+  /**
+   * Fetches the picture the protocol shows for this contact and keeps it on the contact. The
+   * attempt is recorded either way, so a contact without a picture is not asked on every
+   * message. Nothing here can fail the caller.
+   */
+  private async refreshAvatar(channel: ChannelRecord, contact: ContactRecord) {
+    const adapter = this.registry.get(channel.type);
+
+    if (!adapter.avatar || !this.avatarStale(contact) || this.fetchingAvatars.has(contact.id)) {
+      return;
+    }
+
+    this.fetchingAvatars.add(contact.id);
+
+    try {
+      const credential = await this.services.vault.read(
+        channel.profileId,
+        channelSecret(channel.id),
+      );
+      const picture = await adapter
+        .avatar(
+          { chatId: contact.chatId, actorId: contact.actorId, scope: contact.scope },
+          {
+            channelId: channel.id,
+            ...(credential ? { credential } : {}),
+            fetch: this.fetcher,
+            signal: this.abort.signal,
+          },
+        )
+        .catch(() => undefined);
+
+      const avatar = picture ? `data:${picture.mimeType};base64,${picture.data}` : undefined;
+
+      await this.services.store.transaction(channel.profileId, async (tx) => {
+        await setContactAvatar(tx, contact.id, avatar, new Date());
+
+        // An open panel reloads on contact events; a new picture is worth one.
+        if (avatar && avatar !== contact.avatar) {
+          await recordEvent(tx, Date.now, channel.profileId, 'contact.updated', { id: contact.id });
+        }
+      });
+    } finally {
+      this.fetchingAvatars.delete(contact.id);
+    }
+  }
+
+  /** After a message, the one who wrote it: the moment a picture is most likely to be new. */
+  private async refreshAvatarOf(channel: ChannelRecord, data: IncomingMessage) {
+    const contact = await findContactByIdentity(
+      this.services.store.db,
+      channel.id,
+      data.chatId,
+      data.scope === 'group' ? data.chatId : data.actorId,
+    );
+
+    if (contact) {
+      await this.refreshAvatar(channel, contact);
+    }
   }
 
   /**
@@ -392,7 +484,11 @@ export class Channels {
       return { accepted: false };
     }
 
-    return this.accept(channel, data);
+    const accepted = await this.accept(channel, data);
+
+    void this.refreshAvatarOf(channel, data).catch(() => {});
+
+    return accepted;
   }
 
   /** Called only by the worker that owns an authenticated linked-device connection. */
@@ -417,7 +513,11 @@ export class Channels {
       return { accepted: false };
     }
 
-    return this.accept(channel, data, generation);
+    const accepted = await this.accept(channel, data, generation);
+
+    void this.refreshAvatarOf(channel, data).catch(() => {});
+
+    return accepted;
   }
 
   private async accept(

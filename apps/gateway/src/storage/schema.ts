@@ -422,6 +422,10 @@ export const contacts = pgTable(
     heldMessageId: text('held_message_id'),
     agentTurns: integer('agent_turns').notNull().default(0),
     seen: jsonb('seen').$type<string[]>().notNull().default([]),
+    // The channel's own picture of this contact, small, and when it was last asked for: a
+    // contact with none is asked again later, not on every message.
+    avatar: text('avatar'),
+    avatarCheckedAt: timestamp('avatar_checked_at', { withTimezone: true }),
     createdAt,
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

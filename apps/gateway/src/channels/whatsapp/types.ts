@@ -58,6 +58,8 @@ export interface LinkedDevice {
   send(chatId: string, text: string, signal: AbortSignal, media?: InlineMedia): Promise<string>;
   /** The composing bubble. WhatsApp drops it after a few seconds, so it is re-sent, not held. */
   typing(chatId: string): Promise<void>;
+  /** The small profile picture WhatsApp shows for a person or a group, when it has one. */
+  avatar?(chatId: string): Promise<InlineMedia | undefined>;
   stop(logout: boolean): Promise<void>;
 }
 

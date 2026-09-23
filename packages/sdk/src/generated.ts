@@ -4196,6 +4196,8 @@ export interface operations {
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
                         message?: string;
+                        /** @description The picture the contact or group uses on its channel, as a data URL. */
+                        avatar?: string;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -4345,6 +4347,8 @@ export interface operations {
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
                         message?: string;
+                        /** @description The picture the contact or group uses on its channel, as a data URL. */
+                        avatar?: string;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -4494,6 +4498,8 @@ export interface operations {
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
                         message?: string;
+                        /** @description The picture the contact or group uses on its channel, as a data URL. */
+                        avatar?: string;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */

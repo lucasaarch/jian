@@ -88,4 +88,13 @@ export interface Channel {
    * so it is called again on every dispatch tick and never has to be switched off.
    */
   typing?(chatId: string, context: DeliveryContext): Promise<void>;
+
+  /**
+   * The picture a person or a group shows on this protocol, small, or nothing when there is
+   * none or it cannot be read from here. Never a reason to fail anything.
+   */
+  avatar?(
+    target: { chatId: string; actorId: string; scope: 'direct' | 'group' },
+    context: DeliveryContext,
+  ): Promise<InlineMedia | undefined>;
 }

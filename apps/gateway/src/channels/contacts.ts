@@ -27,6 +27,7 @@ export type ContactRecord = z.infer<typeof contactSchema> & {
   requestKey?: string;
   agentTurns?: number;
   seen?: string[];
+  avatarCheckedAt?: string;
 };
 
 export type Contact = z.infer<typeof contactSchema>;
@@ -65,7 +66,13 @@ export class Contacts {
   }
 
   /** The owner-facing shape of a contact. */
-  view({ requestKey: _key, agentTurns: _turns, seen: _seen, ...contact }: ContactRecord): Contact {
+  view({
+    requestKey: _key,
+    agentTurns: _turns,
+    seen: _seen,
+    avatarCheckedAt: _checked,
+    ...contact
+  }: ContactRecord): Contact {
     return contact;
   }
 

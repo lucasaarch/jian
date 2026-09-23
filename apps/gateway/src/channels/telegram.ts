@@ -1,4 +1,5 @@
 import type { ApiMethods, ApiResponse } from '@grammyjs/types';
+import type { InlineMedia } from '@jian/contracts';
 import { telegramUpdateSchema } from '@jian/contracts';
 import { z } from 'zod';
 import { readMediaBody } from '../media/providers.js';
@@ -22,6 +23,8 @@ const DEFAULT_COOLDOWN_MS = 5_000;
 const GROUP_CHATS = new Set(['group', 'supergroup']);
 
 const BOT_TOKEN = /^\d+:[A-Za-z0-9_-]+$/;
+/** The smallest photo size is 160 px; this bounds a download that is anything else. */
+const MAX_AVATAR_BYTES = 120_000;
 
 // The Bot API is plain HTTP, so there is no client to adopt — but its method table is published
 // as types. Parameters and results are read from it, which is what keeps the bodies below honest
@@ -179,6 +182,62 @@ export class TelegramChannel implements Channel {
     );
 
     return body?.ok === true;
+  }
+
+  /**
+   * A person's newest profile photo, or a group's photo, in its smallest size. Three calls: find
+   * the file, ask where it is, download it — each bounded, and any failure is just no picture.
+   */
+  async avatar(
+    target: { chatId: string; actorId: string; scope: 'direct' | 'group' },
+    context: DeliveryContext,
+  ): Promise<InlineMedia | undefined> {
+    const token = context.credential;
+
+    if (!token || !BOT_TOKEN.test(token)) {
+      return undefined;
+    }
+
+    const options = { fetch: context.fetch, signal: context.signal };
+    let fileId: string | undefined;
+
+    if (target.scope === 'group') {
+      const chat = await this.request('getChat', token, { chat_id: target.chatId }, options);
+
+      fileId = chat?.ok ? chat.result.photo?.small_file_id : undefined;
+    } else {
+      const photos = await this.request(
+        'getUserProfilePhotos',
+        token,
+        { user_id: Number(target.actorId), limit: 1 },
+        options,
+      );
+
+      fileId = photos?.ok ? photos.result.photos[0]?.[0]?.file_id : undefined;
+    }
+
+    if (!fileId) {
+      return undefined;
+    }
+
+    const file = await this.request('getFile', token, { file_id: fileId }, options);
+    const path = file?.ok ? file.result.file_path : undefined;
+
+    if (!path) {
+      return undefined;
+    }
+
+    try {
+      const response = await context.fetch(`https://api.telegram.org/file/bot${token}/${path}`, {
+        signal: AbortSignal.any([context.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+      });
+      const bytes = await readMediaBody(response, MAX_AVATAR_BYTES);
+
+      return response.ok ? { mimeType: 'image/jpeg', data: bytes.toString('base64') } : undefined;
+    } catch {
+      // The URL holds the bot token; nothing about the failure is repeated.
+      return undefined;
+    }
   }
 
   /** Telegram clears this when a message lands, so it is re-armed on every dispatch tick. */
