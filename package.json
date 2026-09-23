@@ -13,7 +13,7 @@
     "build": "pnpm --filter @jian/gateway build",
     "start": "pnpm --filter @jian/gateway start",
     "typecheck": "pnpm --filter @jian/contracts build && pnpm --filter @jian/sdk build && pnpm -r --if-present run typecheck",
-    "test": "pnpm --filter @jian/contracts build && pnpm --filter @jian/gateway test",
+    "test": "pnpm --filter @jian/contracts build && pnpm --filter @jian/gateway test && pnpm --filter @jian/gateway-ui test",
     "test:integration": "pnpm --filter @jian/contracts build && pnpm --filter @jian/gateway test:integration",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm contracts:check",
     "setup": "node scripts/setup.mjs",

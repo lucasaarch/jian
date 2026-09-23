@@ -72,7 +72,7 @@ export class AgentRuntime {
         policy,
         messages,
         tools: {},
-        instructions: `${instructions}\n\nYou have used everything this turn allows. Answer now with what you already have, and call nothing further. Say plainly what you found, what you did, and what is still unknown. Never imply you finished work you did not.`,
+        instructions: `${instructions}\n\nThis turn ended without a final report. Answer now with what you already have, and call nothing further. Say plainly what you found, what you did, and what is still unknown. Never imply you finished work you did not.`,
       });
       const { text, usage } = await generateText({
         model,
@@ -543,11 +543,14 @@ export class AgentRuntime {
       // A loop that runs out of steps has done the work and simply never wrote it down.
       // Failing there threw the whole turn away — the person paid for the tools and got a
       // sentence pointing at a log. One more call, with no tools, turns it into an answer.
-      if (
+      const exhausted =
         (spent && finishReason !== 'stop') ||
         finishReason === 'tool-calls' ||
-        (!answer.trim() && finishReason === 'length')
-      ) {
+        (!answer.trim() && finishReason === 'length');
+
+      // A provider can return stop with reasoning but no text. Recover only the report;
+      // replaying the loop could repeat writes that already succeeded.
+      if (exhausted || !answer.trim()) {
         answer = await this.closingWords(
           model,
           instructions,
@@ -557,7 +560,7 @@ export class AgentRuntime {
           policy,
           signal,
         );
-        if (!answer.trim()) {
+        if (!answer.trim() && exhausted) {
           answer = `Work saved in the checkpoints for run ${runId}. The turn reached its limit before a final report could be written. Resume from the saved results; do not repeat completed actions.`;
         }
       }
@@ -680,6 +683,14 @@ function executionFailureMessage(
 
   if (aborted) {
     return 'Execution interrupted. Inspect saved steps before continuing.';
+  }
+
+  if (
+    causes(error).some(
+      (cause) => cause.message === 'Agent stopped without a complete final response',
+    )
+  ) {
+    return 'The provider ended the turn without a final response. Completed actions remain saved; inspect the checkpoints before repeating work.';
   }
 
   // A budget failure is the gateway's own arithmetic, so its numbers are safe to show and are

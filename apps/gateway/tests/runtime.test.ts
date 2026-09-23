@@ -22,6 +22,70 @@ const answer = (text: string) => ({
   warnings: [],
 });
 
+it('recovers an empty final response without repeating completed actions', async () => {
+  const { services, profile, run } = await fixture();
+  let step = 0;
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (!options.tools?.length) {
+        expect(JSON.stringify(options.prompt)).toContain('Deploy at 21:00');
+        return answer('Saved the deployment time.');
+      }
+      if (step++ === 0) {
+        return {
+          content: [
+            { type: 'text', text: 'Found it.' },
+            {
+              type: 'tool-call',
+              toolCallId: 'save-time',
+              toolName: 'remember',
+              input: JSON.stringify({
+                key: 'deploy',
+                content: 'Deploy at 21:00',
+                expectedVersion: 0,
+              }),
+            },
+          ],
+          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+          usage,
+          warnings: [],
+        };
+      }
+      return {
+        ...answer(''),
+        content: [{ type: 'reasoning', text: 'The work is saved.' }],
+      };
+    },
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const finished = await services.runs.run(profile.id, run.id);
+  expect(finished.status).toBe('completed');
+  expect(finished.output).toBe('Saved the deployment time.');
+  expect(await services.memories.memories(profile.id)).toMatchObject([
+    { key: 'deploy', content: 'Deploy at 21:00', version: 1 },
+  ]);
+});
+
+it('reports a missing final response when the recovery also returns no text', async () => {
+  const { services, profile, run } = await fixture();
+  let calls = 0;
+  const model = mockModel({
+    doGenerate: async () => {
+      calls++;
+      return answer('');
+    },
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const finished = await services.runs.run(profile.id, run.id);
+  expect(finished.status).toBe('failed');
+  expect(finished.error).toContain('without a final response');
+  expect(calls).toBe(2);
+});
+
 it('names a new conversation without an uncounted model request', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);

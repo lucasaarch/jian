@@ -448,3 +448,32 @@ it('stops waiting on a slow colleague and carries the answer back when it lands'
   await impatient.deliverLate(callee.id, pending.id);
   expect(await services.runs.activities(caller.id)).toHaveLength(1);
 });
+
+it('carries saved progress when a colleague fails before its final report', async () => {
+  const { services, caller, callee } = await pair();
+  const asking = await ownerRun(services, caller, 'Review the changes');
+  const peers = new Peers(services, Date.now, { answerWithin: 0, pollEvery: 1 });
+  await peers.ask(asking, {
+    toProfileId: callee.id,
+    text: 'Q'.repeat(4000),
+    requestKey: 'partial',
+  });
+  const pending = await queuedRun(services, callee.id);
+  await services.lifecycle.claim(asking.id, caller.id, 'caller');
+  await services.lifecycle.finish(caller.id, asking.id, 'caller', 'completed', 'Waiting.');
+  await services.lifecycle.claim(pending.id, callee.id, 'worker');
+  await services.lifecycle.say(
+    callee.id,
+    pending.id,
+    'worker',
+    `${'x'.repeat(3950)}\nFour changes were merged.`,
+  );
+  await services.lifecycle.finish(callee.id, pending.id, 'worker', 'failed', 'No final response.');
+
+  await peers.deliverLate(callee.id, pending.id);
+
+  const [carried] = await services.runs.activities(caller.id);
+  expect(carried?.input).toContain('Four changes were merged.');
+  expect(carried?.input).toContain('No final response.');
+  expect(carried?.input).toContain('Do not assume nothing was done');
+});

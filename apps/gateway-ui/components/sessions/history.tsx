@@ -14,7 +14,7 @@ export function History({
   sessionId,
   initialRun,
 }: {
-  api: GatewayApi;
+  api: Pick<GatewayApi, 'messages' | 'activities'>;
   profileId: string;
   sessionId: string;
   initialRun?: Run;
@@ -24,7 +24,6 @@ export function History({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
-  const runId = run?.id;
   const isRunning = running(run);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry explicitly restarts a failed read.
   useEffect(() => {
@@ -32,13 +31,18 @@ export function History({
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
-        const [history, active] = await Promise.all([
+        const [history, activities] = await Promise.all([
           api.messages(profileId, sessionId),
-          runId && isRunning ? api.run(profileId, runId) : Promise.resolve(undefined),
+          api.activities(profileId),
         ]);
         if (stopped) return;
         setMessages(history);
-        if (active) setRun(active);
+        setRun(
+          activities
+            .filter((activity) => activity.sessionId === sessionId)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+            .at(-1),
+        );
         setError('');
         timer = setTimeout(poll, isRunning ? 3000 : 10000);
       } catch (failure) {
@@ -53,7 +57,7 @@ export function History({
       stopped = true;
       clearTimeout(timer);
     };
-  }, [api, profileId, sessionId, runId, isRunning, retry]);
+  }, [api, profileId, sessionId, isRunning, retry]);
 
   return (
     <div className="session-history">

@@ -33,6 +33,22 @@ function spoken(run: Run): string {
   return [...(run.commentary ?? []), run.output ?? ''].filter(Boolean).join('\n\n');
 }
 
+function unfinished(run: Run): string {
+  // The relay includes a question of up to 4,000 characters in an 8,000-character turn.
+  // Quote recent progress here; the complete record stays in the colleague's session.
+  const progress = spoken(run).slice(-3000);
+
+  return [
+    `could not finish: ${(run.error ?? run.status).slice(0, 500)}`,
+    'Do not assume nothing was done. Earlier actions may have succeeded; verify saved progress before repeating them.',
+    progress
+      ? `Recent progress reported before the failure (not a final report):\n${progress}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 /** How long a caller waits for a colleague and how often it looks, in milliseconds. */
 export type PeerTiming = { answerWithin: number; pollEvery: number };
 
@@ -193,7 +209,7 @@ export class Peers implements PeerAgents {
       }
 
       if (current.status !== 'queued' && current.status !== 'running') {
-        throw new GatewayError(502, `${name} could not answer: ${current.error ?? current.status}`);
+        throw new GatewayError(502, `${name} could not answer: ${unfinished(current)}`);
       }
 
       signal?.throwIfAborted();
@@ -224,8 +240,7 @@ export class Peers implements PeerAgents {
       return;
     }
 
-    const said =
-      run.status === 'completed' ? spoken(run) : `could not finish: ${run.error ?? run.status}`;
+    const said = run.status === 'completed' ? spoken(run) : unfinished(run);
 
     await this.services.runs.relayTo(profileId, runId, null);
 
