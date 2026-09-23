@@ -37,9 +37,114 @@ function connectionFailure(error: unknown): string {
   return text.replace(/\s+/g, ' ').trim().slice(0, 200);
 }
 
+/** One tool a server offers, under the name the model calls and the name the server gave it. */
+export type McpEntry = { name: string; server: string; tool: string; description: string };
+
+/** Results per search: enough to choose from, few enough to keep the answer short. */
+const SEARCH_RESULTS = 15;
+/** Names per server spelled out in the prompt; a longer catalog is reached by searching. */
+const PROMPT_NAMES = 60;
+
+/**
+ * Words as a person would type them: `createIssue`, `create_issue` and "Create issue" are the
+ * same three words, and accents do not decide a match.
+ */
+function words(text: string): string[] {
+  return text
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length > 1);
+}
+
+/** A word matches its own plural, a prefix of four letters or more, and nothing shorter. */
+function matches(candidate: string, word: string): boolean {
+  if (candidate === word) {
+    return true;
+  }
+
+  const [short, long] = candidate.length < word.length ? [candidate, word] : [word, candidate];
+
+  return short.length >= 4 && long.startsWith(short);
+}
+
+/**
+ * Ranks the catalog by how many of the query's words each tool carries — in its name first,
+ * then its server, then its description — instead of requiring the query as one exact phrase.
+ * A model asks in words ("create issue"); requiring `create_issue` verbatim is what made it
+ * conclude a tool that exists did not.
+ */
+export function searchCatalog(catalog: McpEntry[], query: string, server?: string): McpEntry[] {
+  const wanted = [...new Set(words(query))];
+  const pool = server ? catalog.filter((entry) => entry.server === server) : catalog;
+
+  if (wanted.length === 0) {
+    return pool.slice(0, SEARCH_RESULTS);
+  }
+
+  return pool
+    .map((entry, index) => {
+      const fields = [
+        { weight: 3, words: words(entry.tool) },
+        { weight: 2, words: words(entry.server) },
+        { weight: 1, words: words(entry.description) },
+      ];
+      const score = wanted.reduce(
+        (total, word) =>
+          total +
+          Math.max(
+            0,
+            ...fields.map((field) =>
+              field.words.some((candidate) => matches(candidate, word)) ? field.weight : 0,
+            ),
+          ),
+        0,
+      );
+
+      return { entry, score, index };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, SEARCH_RESULTS)
+    .map((item) => item.entry);
+}
+
+/**
+ * Finds a catalog entry by the name the model has at hand: the exposed name, `server.tool`, or
+ * the server's own tool name when only one server offers it. The prompt shows the servers' own
+ * names, so refusing them would turn a correct request into "no such tool".
+ */
+function resolveEntry(catalog: McpEntry[], name: string): McpEntry | undefined {
+  const exact = catalog.find((entry) => entry.name === name);
+
+  if (exact) {
+    return exact;
+  }
+
+  const qualified = catalog.find((entry) => `${entry.server}.${entry.tool}` === name);
+
+  if (qualified) {
+    return qualified;
+  }
+
+  const bare = catalog.filter((entry) => entry.tool === name);
+
+  return bare.length === 1 ? bare[0] : undefined;
+}
+
+const brief = (entry: McpEntry) => ({
+  name: entry.name,
+  server: entry.server,
+  tool: entry.tool,
+  ...(entry.description ? { description: entry.description.slice(0, 300) } : {}),
+});
+
 /** Discover what each server offers now; expose a full schema only when the agent selects it. */
 export async function connectMcpTools(run: Run, tools: ToolSet, context: McpContext) {
   const mcpToolNames: string[] = [];
+  const catalog: McpEntry[] = [];
   const selectedMcpTools = new Set<string>();
   const unavailable: Array<{ name: string; reason: string }> = [];
 
@@ -64,8 +169,19 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
       // agent has loaded are sent with a request, so a server with a hundred of them is no
       // heavier than one with three until they are used.
       for (const [name, remote] of Object.entries(await client.tools())) {
-        tools[exposedName(config.name, name)] = remote;
-        mcpToolNames.push(exposedName(config.name, name));
+        const exposed = exposedName(config.name, name);
+
+        tools[exposed] = remote;
+        mcpToolNames.push(exposed);
+        catalog.push({
+          name: exposed,
+          server: config.name,
+          tool: name,
+          description:
+            typeof remote.description === 'string'
+              ? remote.description.replace(/\s+/g, ' ').trim()
+              : '',
+        });
       }
     } catch (error) {
       context.signal.throwIfAborted();
@@ -73,18 +189,29 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
     }
   }
 
-  if (mcpToolNames.length > 0) {
+  if (catalog.length > 0) {
+    const servers = [...new Set(catalog.map((entry) => entry.server))];
+
     tools.load_mcp_tools = tool({
-      description: `Load MCP tools before calling them. Previously loaded tools stay available, up to 32 per turn. Available names: ${mcpToolNames.slice(0, 10).join(', ')}${mcpToolNames.length > 10 ? '. Use search_mcp_tools for the rest.' : ''}`,
+      description: `Load MCP tools before calling them; a loaded tool stays available for the rest of the turn, up to 32 at a time. Accepts the exposed name, server.tool, or the server's own tool name.${
+        catalog.length <= 10
+          ? ` Available: ${catalog.map((entry) => `${entry.name} (${entry.server}.${entry.tool})`).join(', ')}`
+          : ' Find names with search_mcp_tools.'
+      }`,
       inputSchema: z.object({ names: z.array(z.string()).min(1).max(10) }),
       execute: async ({ names }) => {
-        if (names.some((name) => !mcpToolNames.includes(name))) {
-          throw new Error('No connected MCP server offers that tool');
+        const chosen = names.map((name) => ({ name, entry: resolveEntry(catalog, name) }));
+        const unknown = chosen.filter((item) => !item.entry).map((item) => item.name);
+
+        if (unknown.length > 0) {
+          throw new Error(
+            `No connected MCP server offers ${unknown.join(', ')}. Search with search_mcp_tools; connected servers: ${servers.join(', ')}`,
+          );
         }
 
-        for (const name of names) {
-          selectedMcpTools.delete(name);
-          selectedMcpTools.add(name);
+        for (const { entry } of chosen) {
+          selectedMcpTools.delete((entry as McpEntry).name);
+          selectedMcpTools.add((entry as McpEntry).name);
         }
 
         // Switching between two servers must not evict and reload the same schemas each step.
@@ -96,31 +223,59 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
         return { selected: [...selectedMcpTools] };
       },
     });
-  }
 
-  if (mcpToolNames.length > 10) {
     tools.search_mcp_tools = tool({
-      description:
-        'Search the connected MCP servers by tool name or description. Load chosen names with load_mcp_tools.',
-      inputSchema: z.object({ query: z.string().min(1).max(100) }),
-      execute: async ({ query }) =>
-        mcpToolNames
-          .filter((name) =>
-            `${name} ${tools[name]?.description ?? ''}`.toLowerCase().includes(query.toLowerCase()),
-          )
-          .slice(0, 10)
-          .map((name) => {
-            const description = tools[name]?.description;
+      description: `Find tools on the connected MCP servers (${servers.join(', ')}) by what they do, in a few words — "create issue", "send email". Matches names and descriptions word by word. Give a server alone to list its tools. Load what you choose with load_mcp_tools.`,
+      inputSchema: z.object({
+        query: z.string().max(200).default(''),
+        server: z.enum(servers as [string, ...string[]]).optional(),
+      }),
+      execute: async ({ query, server }) => {
+        const results = searchCatalog(catalog, query, server);
 
-            return {
-              name,
-              description: typeof description === 'string' ? description.slice(0, 300) : undefined,
+        return results.length > 0
+          ? { results: results.map(brief) }
+          : {
+              results: [],
+              hint: `Nothing matched. Try other words or the English terms, or list one server: ${servers
+                .map(
+                  (name) =>
+                    `${name} (${catalog.filter((entry) => entry.server === name).length} tools)`,
+                )
+                .join(', ')}.`,
             };
-          }),
+      },
     });
   }
 
-  return { mcpToolNames, selectedMcpTools, unavailable };
+  return { mcpToolNames, selectedMcpTools, unavailable, catalog };
+}
+
+/**
+ * The servers and what they offer, in the system prompt. Without it the agent learns that MCP
+ * tools exist only from a loader's description, and answers "I have no tool for that" about a
+ * tool it was given. Names only — descriptions are one search away and would cost every turn.
+ */
+export function availableNote(catalog: McpEntry[]): string {
+  if (catalog.length === 0) {
+    return '';
+  }
+
+  const servers = [...new Set(catalog.map((entry) => entry.server))].map((server) => {
+    const names = catalog.filter((entry) => entry.server === server).map((entry) => entry.tool);
+    const shown = names.slice(0, PROMPT_NAMES).join(', ');
+
+    return `- ${server} (${names.length} tools): ${shown}${
+      names.length > PROMPT_NAMES ? `, and ${names.length - PROMPT_NAMES} more` : ''
+    }`;
+  });
+
+  return (
+    'These MCP servers are connected for this run, and every tool they offer is yours to use:\n' +
+    `${servers.join('\n')}\n` +
+    'Their tools are not in your tool list until loaded: find one with search_mcp_tools and load ' +
+    'it with load_mcp_tools. Before saying you cannot do something, search these servers for it.'
+  );
 }
 
 /**

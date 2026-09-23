@@ -25,7 +25,7 @@ import { providerSecret } from '../providers/service.js';
 import { createSafeFetch } from '../security/outbound.js';
 import type { WebSearch } from '../web/service.js';
 import { type CacheTtl, cacheable, cacheableInstructions } from './cache.js';
-import { connectMcpTools, unavailableNote } from './mcp.js';
+import { availableNote, connectMcpTools, unavailableNote } from './mcp.js';
 import { Narrator } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
@@ -216,16 +216,22 @@ export class AgentRuntime {
       // Loaded within the run and never across runs: a turn states what it needs.
       const loadedTools = new Set<string>();
       const { gated } = deferTools(tools, loadedTools);
-      const { mcpToolNames, selectedMcpTools, unavailable } = await connectMcpTools(run, tools, {
-        vault: this.options.vault,
-        secrets,
-        clients,
-        fetcher: outbound.fetch,
-        signal,
-        ...(this.options.mcpOAuth ? { oauth: this.options.mcpOAuth } : {}),
-      });
+      const { mcpToolNames, selectedMcpTools, unavailable, catalog } = await connectMcpTools(
+        run,
+        tools,
+        {
+          vault: this.options.vault,
+          secrets,
+          clients,
+          fetcher: outbound.fetch,
+          signal,
+          ...(this.options.mcpOAuth ? { oauth: this.options.mcpOAuth } : {}),
+        },
+      );
 
-      const mcpNote = unavailableNote(unavailable);
+      const mcpNote = [availableNote(catalog), unavailableNote(unavailable)]
+        .filter(Boolean)
+        .join('\n\n');
 
       for (const server of unavailable) {
         console.warn(`jian: MCP server ${server.name} is unavailable — ${server.reason}`);

@@ -186,10 +186,8 @@ it.each([false, true])(
         }
 
         if (largeCatalog && phase === 3) {
-          const selector = options.tools
-            ?.filter((t) => t.type === 'function')
-            .find((t) => t.name === 'load_mcp_tools');
-          const name = selector?.description?.match(/mcp__docs_archive_0_[a-f0-9]{8}/)?.[0];
+          // A search ranks by shared words: the other archives come after the exact one.
+          const name = JSON.stringify(options.prompt).match(/mcp__docs_archive_0_[a-f0-9]{8}/)?.[0];
           assert.ok(name);
           return {
             content: [
