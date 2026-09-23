@@ -1,4 +1,7 @@
+import type { Tool } from 'ai';
 import { describe, expect, it } from 'vitest';
+import type { z } from 'zod';
+import { profileTools } from '../src/agent/tools.js';
 import type { ChannelRequest } from '../src/channels/channel.js';
 import { Channels } from '../src/channels/service.js';
 import { Errands } from '../src/errands/service.js';
@@ -80,6 +83,38 @@ async function setup() {
 }
 
 describe('asking a contact and bringing the answer back', () => {
+  it('delivers a long contact message without blocking the replies queued behind it', async () => {
+    const { services, channels, profile, moabe, owner, asking } = await setup();
+    const errands = new Errands(services.store);
+    const text = 'a'.repeat(9000);
+    type ContactMessage = { contactId: string; text: string; expectReply: boolean };
+    const message = profileTools(services, asking).message_contact as Tool<ContactMessage>;
+
+    if (!message?.execute) throw new Error('Contact tool missing');
+
+    const input = (message.inputSchema as z.ZodType<ContactMessage>).parse({
+      contactId: moabe.id,
+      text,
+      expectReply: false,
+    });
+
+    await message.execute(input, { toolCallId: 'long-contact-message', messages: [], context: {} });
+    await errands.ask(profile.id, moabe.id, owner.id, asking.id, 'Ainda estou aqui.', false);
+
+    await channels.dispatch();
+    await channels.dispatch();
+
+    expect(sent.slice(-4)).toEqual([
+      { chatId: '77', text: 'a'.repeat(4000) },
+      { chatId: '77', text: 'a'.repeat(4000) },
+      { chatId: '77', text: 'a'.repeat(1000) },
+      { chatId: '77', text: 'Ainda estou aqui.' },
+    ]);
+    expect((await channels.deliveries(profile.id)).every((item) => item.status === 'sent')).toBe(
+      true,
+    );
+  });
+
   it('delivers the question, then turns the reply into a turn in the asking conversation', async () => {
     const { services, channels, profile, moabe, owner, asking, webhook, channel } = await setup();
     const errands = new Errands(services.store);

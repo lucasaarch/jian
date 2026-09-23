@@ -211,7 +211,7 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
         'Write to one of this profile’s approved contacts on their own channel. With expectReply, their answer comes back to this conversation instead of theirs — say so to whoever asked, because it will not arrive in this turn.',
       inputSchema: z.object({
         contactId: z.string().uuid(),
-        text: z.string().trim().min(1).max(4000),
+        text: z.string().trim().min(1),
         expectReply: z.boolean().default(false),
       }),
       execute: async ({ contactId, text, expectReply }) =>

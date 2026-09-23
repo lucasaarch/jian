@@ -152,9 +152,8 @@ export const deliverySchema = z.strictObject({
   saidCount: z.number().int().nonnegative().default(0),
   notice: z
     .string()
-    .max(1000)
     .optional()
-    .describe('Gateway-authored text sent without a run, such as the approval notice.'),
+    .describe('Text sent without a delivery run, such as an approval notice or a contact message.'),
 });
 
 /** Linking a device grants account access, so these endpoints are administrator-only. */

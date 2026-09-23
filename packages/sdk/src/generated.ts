@@ -3593,7 +3593,7 @@ export interface operations {
                         remoteMessageIds: (number | string)[];
                         /** @default 0 */
                         saidCount: number;
-                        /** @description Gateway-authored text sent without a run, such as the approval notice. */
+                        /** @description Text sent without a delivery run, such as an approval notice or a contact message. */
                         notice?: string;
                     }[];
                 };

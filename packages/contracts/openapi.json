@@ -5862,9 +5862,8 @@
                         "maximum": 9007199254740991
                       },
                       "notice": {
-                        "description": "Gateway-authored text sent without a run, such as the approval notice.",
-                        "type": "string",
-                        "maxLength": 1000
+                        "description": "Text sent without a delivery run, such as an approval notice or a contact message.",
+                        "type": "string"
                       }
                     },
                     "required": [
