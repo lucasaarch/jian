@@ -15,7 +15,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const List: Story = { render: () => <Sessions {...sectionProps()} /> };
+/** The messenger fills the height it is given, as it does beside the app's sidebar. */
+export const List: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => (
+    <div style={{ height: '100dvh' }}>
+      <Sessions {...sectionProps()} />
+    </div>
+  ),
+};
 
 export const Conversation: Story = {
   render: () => <History api={sectionProps().api} profileId={ids.zero} sessionId={ids.ownerChat} />,
