@@ -53,7 +53,7 @@ export function Channels(props: SectionProps) {
           );
         }
       },
-      `${kinds.find((kind) => kind.type === type)?.name} conectado.`,
+      `${kinds.find((kind) => kind.type === type)?.name} connected.`,
     );
   };
 
@@ -92,8 +92,8 @@ export function Channels(props: SectionProps) {
                 {
                   {
                     whatsapp: 'Pareamento por QR Code',
-                    telegram: 'Token do BotFather',
-                    api: 'URL e token de webhook',
+                    telegram: 'A BotFather token',
+                    api: 'A webhook URL and token',
                   }[kind.type]
                 }
               </p>
@@ -152,7 +152,7 @@ export function Channels(props: SectionProps) {
                       event.preventDefault();
 
                       if (kind.type === 'telegram' && !token.trim()) {
-                        setError('Informe o token do bot do Telegram.');
+                        setError('Enter the Telegram bot token.');
 
                         return;
                       }
@@ -162,7 +162,7 @@ export function Channels(props: SectionProps) {
                   >
                     {kind.type === 'telegram' && (
                       <Field
-                        label="Token do bot"
+                        label="Bot token"
                         hint="The token is encrypted here and never shown again."
                       >
                         <input

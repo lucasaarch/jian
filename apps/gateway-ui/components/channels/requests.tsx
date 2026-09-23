@@ -33,7 +33,7 @@ export function Requests({ profile, data, api, mutate, busy }: SectionProps) {
           <h2>Contact requests</h2>
           <p>Someone new wrote. The agent answers only after you approve them.</p>
         </div>
-        <Badge tone="warn">{pending.length} aguardando</Badge>
+        <Badge tone="warn">{pending.length} waiting</Badge>
       </header>
       {pending.map((contact) => (
         <article className="request-row" key={contact.id}>

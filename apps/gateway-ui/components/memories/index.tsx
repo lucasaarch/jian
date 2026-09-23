@@ -20,7 +20,7 @@ export function Memories({ profile, data, api, mutate, busy }: SectionProps) {
     <>
       <SectionHeading
         title="Memories"
-        description="O que o agente guardou entre as conversas deste perfil."
+        description="What the agent kept across this profile’s conversations."
       />
       <div className="notice">
         <BookOpen size={18} />
@@ -61,7 +61,7 @@ export function Memories({ profile, data, api, mutate, busy }: SectionProps) {
       ) : data.memories.length ? (
         <Empty title="Nothing found">No memory matches that search.</Empty>
       ) : (
-        <Empty title="Um lugar para o que importa">
+        <Empty title="A place for what matters">
           The agent has kept nothing yet. What it records during conversations shows up here.
         </Empty>
       )}

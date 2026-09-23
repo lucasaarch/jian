@@ -37,7 +37,7 @@ function message(status: number, detail: Detail | undefined): string {
   }
 
   if (detail?.issues?.length) {
-    return `Confira os campos: ${detail.issues.map((issue) => issue.path).join(', ')}.`;
+    return `Check these fields: ${detail.issues.map((issue) => issue.path).join(', ')}.`;
   }
 
   return detail?.error ?? `The request could not be completed (${status}).`;

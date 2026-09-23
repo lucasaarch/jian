@@ -179,7 +179,7 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
                   </p>
                 )}
                 <Field
-                  label={`Modelo · ${role.label}`}
+                  label={`Model · ${role.label}`}
                   hint={
                     value.manual
                       ? 'An id typed by hand. Use it when the provider publishes no list.'

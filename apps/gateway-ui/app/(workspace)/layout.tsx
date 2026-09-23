@@ -156,7 +156,7 @@ function Shell({ children }: { children: ReactNode }) {
                 </>
               ) : (
                 <Button variant="secondary" onClick={() => void refresh()}>
-                  Tentar carregar novamente
+                  Try loading again
                 </Button>
               )}
             </div>

@@ -5,6 +5,8 @@ import type { SectionProps } from '../props';
 import { Badge } from '../ui';
 import { kinds } from './kinds';
 
+const agents = (count: number) => (count === 1 ? '1 agent' : `${count} agents`);
+
 export function Rooms({ profile, data }: SectionProps) {
   const rooms = data.groups.filter((group) =>
     group.profiles.some((item) => item.status === 'approved'),
@@ -16,7 +18,7 @@ export function Rooms({ profile, data }: SectionProps) {
 
   return (
     <section className="subsection">
-      <h2>Grupos</h2>
+      <h2>Groups</h2>
       <div className="resource-list">
         {rooms.map((room) => (
           <div className="resource-row" key={`${room.type}:${room.chatId}`}>
@@ -30,7 +32,7 @@ export function Rooms({ profile, data }: SectionProps) {
                 {room.profiles
                   .filter((item) => item.status === 'approved')
                   .map((item) =>
-                    item.profileId === profile.id ? `${item.name} (este)` : item.name,
+                    item.profileId === profile.id ? `${item.name} (this one)` : item.name,
                   )
                   .join(', ')}
               </p>
@@ -40,14 +42,15 @@ export function Rooms({ profile, data }: SectionProps) {
                 room.profiles.some((item) => item.profileId === profile.id) ? 'good' : 'neutral'
               }
             >
-              {room.profiles.filter((item) => item.status === 'approved').length} agente(s)
+              {agents(room.profiles.filter((item) => item.status === 'approved').length)}
             </Badge>
           </div>
         ))}
       </div>
       <p className="note">
-        In a room with more than one agent, each answers only when a message carries its name. A
-        conversation between agents is capped in turns, and starts over when a person writes.
+        An agent reads everything said in a group and answers only when someone mentions it or
+        replies to it. A conversation between agents is capped in turns, and starts over when a
+        person writes.
       </p>
     </section>
   );
