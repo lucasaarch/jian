@@ -2,8 +2,10 @@
 
 import { MessageCircle, ShieldOff, UserCheck, Users, UserX } from 'lucide-react';
 import type { Channel, Contact } from '../../lib/api';
+import { date } from '../../lib/format';
 import type { SectionProps } from '../props';
 import { Badge, Button } from '../ui';
+import { kinds } from './kinds';
 
 const agents = (count: number) => (count === 1 ? '1 agent' : `${count} agents`);
 
@@ -43,13 +45,71 @@ export function Conversations({
         : `${name} revoked. The agent no longer answers there.`,
     );
 
-  const row = (contact: Contact, detail: string, icon: typeof Users) => {
+  // A request is a decision, not a row: it gets room for who wrote, what they said, and the
+  // two answers, with the one that approves last and strongest.
+  const request = (contact: Contact, detail: string, icon: typeof Users) => {
     const Icon = icon;
     const name = contact.displayName ?? contact.actorId;
-    const said =
-      contact.scope === 'group'
-        ? 'Approving covers the whole group.'
-        : (contact.message ?? 'Nothing is waiting from them.');
+    const channelName = kinds.find((kind) => kind.type === contact.type)?.name;
+
+    return (
+      <article className="request-card" key={contact.id}>
+        <header>
+          <span className="request-icon" aria-hidden="true">
+            <Icon size={18} />
+          </span>
+          <div className="grow">
+            <h4>
+              {name}
+              <Badge tone="accent">Pending</Badge>
+            </h4>
+            <small>
+              {channelName}
+              {detail !== name && ` · ${detail}`}
+            </small>
+          </div>
+          <time dateTime={contact.createdAt}>{date(contact.createdAt)}</time>
+        </header>
+        {contact.scope === 'group' ? (
+          <p className="request-note">
+            The agent was added to this group. Approving covers everyone in it.
+          </p>
+        ) : contact.message ? (
+          <blockquote className="request-quote">{contact.message}</blockquote>
+        ) : (
+          <p className="request-note">They have not written anything yet.</p>
+        )}
+        <footer>
+          <p>
+            {contact.scope === 'group'
+              ? 'Until you approve, the agent reads nothing there.'
+              : 'Approving hands this message to the agent, and it answers.'}
+          </p>
+          <Button
+            variant="quiet"
+            disabled={busy}
+            aria-label={`Decline ${name}`}
+            onClick={() => void refuse(contact, name)}
+          >
+            <UserX size={16} />
+            Decline
+          </Button>
+          <Button variant="secondary" disabled={busy} onClick={() => void approve(contact, name)}>
+            <UserCheck size={16} />
+            Approve
+          </Button>
+        </footer>
+      </article>
+    );
+  };
+
+  const row = (contact: Contact, detail: string, icon: typeof Users) => {
+    if (contact.status === 'pending') {
+      return request(contact, detail, icon);
+    }
+
+    const Icon = icon;
+    const name = contact.displayName ?? contact.actorId;
 
     return (
       <div className="conversation-row" key={contact.id} data-status={contact.status}>
@@ -57,25 +117,8 @@ export function Conversations({
         <div className="grow">
           <strong>{name}</strong>
           {detail !== name && <small>{detail}</small>}
-          {contact.status === 'pending' && <p className="conversation-message">{said}</p>}
         </div>
-        {contact.status === 'pending' ? (
-          <>
-            <Badge tone="accent">Pending</Badge>
-            <Button variant="secondary" disabled={busy} onClick={() => void approve(contact, name)}>
-              <UserCheck size={16} />
-              Approve
-            </Button>
-            <Button
-              variant="quiet"
-              disabled={busy}
-              aria-label={`Decline ${name}`}
-              onClick={() => void refuse(contact, name)}
-            >
-              <UserX size={16} />
-            </Button>
-          </>
-        ) : contact.status === 'approved' ? (
+        {contact.status === 'approved' ? (
           <>
             <Badge tone="good">Approved</Badge>
             <Button
