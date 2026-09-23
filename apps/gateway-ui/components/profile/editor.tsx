@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { GatewayApi, Profile } from '../../lib/api';
@@ -284,9 +284,6 @@ export function ProfileEditor({
             </label>
           </div>
         </div>
-        <p className="autosave-note">
-          <Check size={14} /> Saved as you type. Changes apply to new runs.
-        </p>
       </form>
 
       <section className="danger-zone reset" aria-labelledby="reset-zone">
@@ -321,6 +318,7 @@ export function ProfileEditor({
           title={`Reset ${profile.name}?`}
           description="Every conversation, memory and past activity of this profile is erased. Its configuration, channels and contacts are kept. This cannot be undone."
           busy={working}
+          phrase={profile.name}
           close={() => setResetting(false)}
           confirm={() => void reset()}
         />
@@ -330,6 +328,7 @@ export function ProfileEditor({
           title={`Delete ${profile.name}?`}
           description="Every memory, chat history, message, channel connection, contact and run tied to this profile is deleted along with it. This cannot be undone."
           busy={busy}
+          phrase={profile.name}
           close={() => setDeleting(false)}
           confirm={async () => {
             if (await deleteProfile(profile.id)) {

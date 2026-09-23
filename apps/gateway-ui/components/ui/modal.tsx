@@ -1,8 +1,9 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { type ReactNode, useEffect, useId, useRef } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { Button } from './button';
+import { Field } from './field';
 
 /** A native dialog: Escape and the backdrop are the browser's, so close() is the only exit. */
 export function Modal({
@@ -55,20 +56,38 @@ export function Confirm({
   confirm,
   close,
   busy,
+  phrase,
 }: {
   title: string;
   description: string;
   confirm: () => void;
   close: () => void;
   busy?: boolean;
+  /** For what cannot be undone: confirming waits until this is typed exactly. */
+  phrase?: string;
 }) {
+  const [typed, setTyped] = useState('');
+  const matches = !phrase || typed.trim() === phrase;
+
   return (
     <Modal title={title} description={description} close={close}>
+      {phrase && (
+        <Field label={`Type ${phrase} to confirm`}>
+          <input
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            // biome-ignore lint/a11y/noAutofocus: the dialog exists to take this one answer.
+            autoFocus
+          />
+        </Field>
+      )}
       <footer>
         <Button variant="secondary" onClick={close}>
           Cancel
         </Button>
-        <Button variant="danger" busy={busy} onClick={confirm}>
+        <Button variant="danger" busy={busy} disabled={!matches} onClick={confirm}>
           Confirm
         </Button>
       </footer>

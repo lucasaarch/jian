@@ -1,7 +1,6 @@
 'use client';
 
 import { supportsModelRole, supportsProviderRole } from '@jian/contracts';
-import { Check } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type {
@@ -251,9 +250,6 @@ export function ModelDefaults({ profile, data, api, busy }: SectionProps) {
             </div>
           );
         })}
-        <p className="autosave-note">
-          <Check size={14} /> Each choice is saved as you make it.
-        </p>
       </form>
     </>
   );

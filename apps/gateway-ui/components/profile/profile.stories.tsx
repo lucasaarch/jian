@@ -34,6 +34,14 @@ export const ResetConfirm: Story = {
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: /Reset profile/ }));
     await expect(await within(document.body).findByText('Reset Zero Two?')).toBeInTheDocument();
+
+    const dialog = within(document.body);
+    const confirm = dialog.getByRole('button', { name: 'Confirm' });
+
+    // Nothing irreversible happens until the profile's name is typed.
+    await expect(confirm).toBeDisabled();
+    await userEvent.type(dialog.getByLabelText('Type Zero Two to confirm'), 'Zero Two');
+    await expect(confirm).toBeEnabled();
   },
 };
 
@@ -49,6 +57,14 @@ export const DeleteConfirm: Story = {
 
     await userEvent.click(canvas.getByRole('button', { name: /Delete profile/ }));
     await expect(await within(document.body).findByText('Delete Zero Two?')).toBeInTheDocument();
+
+    const dialog = within(document.body);
+    const confirm = dialog.getByRole('button', { name: 'Confirm' });
+
+    // Nothing irreversible happens until the profile's name is typed.
+    await expect(confirm).toBeDisabled();
+    await userEvent.type(dialog.getByLabelText('Type Zero Two to confirm'), 'Zero Two');
+    await expect(confirm).toBeEnabled();
   },
 };
 
