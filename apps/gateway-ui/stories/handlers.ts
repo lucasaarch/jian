@@ -22,6 +22,7 @@ export const handlers = [
 
     return ok({ ...current, ...patch });
   }),
+  http.delete('*/v1/profiles/:profileId', ({ params }) => ok({ id: params.profileId })),
   http.post('*/v1/profiles', async ({ request }) => {
     const input = (await request.json().catch(() => ({}))) as Record<string, unknown>;
 
