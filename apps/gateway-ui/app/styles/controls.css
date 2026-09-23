@@ -524,12 +524,6 @@
   .search-field input {
     @apply pl-10;
   }
-  .history-caption {
-    @apply mb-5 flex items-center gap-2 border-b border-line pb-4 text-xs text-muted;
-  }
-  .history-caption > span:last-child {
-    @apply ml-auto;
-  }
   .history-loading,
   .catalog-loading {
     @apply flex min-h-40 items-center justify-center gap-3 text-sm text-muted;
