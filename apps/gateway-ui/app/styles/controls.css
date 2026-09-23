@@ -66,6 +66,9 @@
   .select-option[data-selected] {
     @apply font-medium text-accent;
   }
+  .select-option[data-disabled] {
+    @apply cursor-not-allowed text-muted;
+  }
   .select-option-copy {
     @apply min-w-0 flex-1;
   }

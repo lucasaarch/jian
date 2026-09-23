@@ -133,12 +133,24 @@ export type ModelRole = z.infer<typeof modelRoleSchema>;
 export type ModelSelection = z.infer<typeof modelSelectionSchema>;
 export type ReasoningEffort = z.infer<typeof reasoningEffortSchema>;
 
+/** Providers must implement the endpoint used by the activity, independent of the model. */
+export function supportsProviderRole(
+  provider: Pick<ProviderRecord, 'kind' | 'authMode'>,
+  role: ModelRole,
+): boolean {
+  if (role === 'audio') return provider.kind === 'google';
+  if (['image', 'speech', 'transcription'].includes(role))
+    return provider.authMode !== 'codex' && ['openai', 'google'].includes(provider.kind);
+  return true;
+}
+
 /** Endpoint compatibility matters as well as input/output modalities. */
 export function supportsModelRole(
   provider: Pick<ProviderRecord, 'kind' | 'authMode'>,
   model: Pick<ProviderModel, 'id' | 'inputModalities' | 'outputModalities' | 'known'>,
   role: ModelRole,
 ): boolean {
+  if (!supportsProviderRole(provider, role)) return false;
   const id = model.id.toLowerCase();
   if (role === 'image')
     return (

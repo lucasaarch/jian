@@ -5,7 +5,13 @@ import { Select as BaseSelect } from '@base-ui/react/select';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { type ReactNode, useRef, useState } from 'react';
 
-export type SelectOption = { value: string; label: string; detail?: string; icon?: ReactNode };
+export type SelectOption = {
+  value: string;
+  label: string;
+  detail?: string;
+  icon?: ReactNode;
+  disabled?: boolean;
+};
 type Props = {
   value: string;
   onValueChange: (value: string) => void;
@@ -111,7 +117,12 @@ export function Select({
               <Combobox.Empty className="select-empty">No result.</Combobox.Empty>
               <Combobox.List className="select-list">
                 {(option: SelectOption) => (
-                  <Combobox.Item className="select-option" key={option.value} value={option}>
+                  <Combobox.Item
+                    className="select-option"
+                    key={option.value}
+                    value={option}
+                    disabled={option.disabled}
+                  >
                     <OptionContent option={option} />
                     <Combobox.ItemIndicator className="select-check">
                       <Check size={15} />
@@ -149,7 +160,12 @@ export function Select({
           <BaseSelect.Popup className="select-popup">
             <BaseSelect.List className="select-list">
               {options.map((option) => (
-                <BaseSelect.Item className="select-option" key={option.value} value={option.value}>
+                <BaseSelect.Item
+                  className="select-option"
+                  key={option.value}
+                  value={option.value}
+                  disabled={option.disabled}
+                >
                   <OptionContent option={option} />
                   <BaseSelect.ItemIndicator className="select-check">
                     <Check size={15} />

@@ -1,0 +1,73 @@
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { expect, it } from 'vitest';
+import type { SectionProps } from '../props';
+import { ModelDefaults } from './model-defaults';
+
+async function imageProviders(apiKey: boolean) {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  const props = {
+    profile: { id: 'profile' },
+    data: {
+      providers: [
+        { id: 'google', name: 'Gemini', kind: 'google' },
+        { id: 'anthropic', name: 'Anthropic', kind: 'anthropic' },
+        { id: 'codex', name: 'OpenAI', kind: 'openai', authMode: 'codex' },
+        ...(apiKey ? [{ id: 'openai', name: 'OpenAI', kind: 'openai', authMode: 'api' }] : []),
+      ],
+      providerModels: {},
+      modelDefaults: {},
+    },
+    api: {},
+    mutate: async () => {},
+    busy: false,
+  } as unknown as SectionProps;
+  await act(async () => root.render(<ModelDefaults {...props} />));
+  const label = Array.from(element.querySelectorAll('label')).find(
+    (item) => item.textContent === 'Provider · Image generation',
+  );
+  const trigger = document.getElementById(label?.htmlFor ?? '') as HTMLButtonElement | null;
+  if (!trigger) throw new Error('Image provider selector missing');
+  await act(async () => trigger.click());
+  return {
+    element,
+    close: async () => {
+      await act(async () => root.unmount());
+      element.remove();
+    },
+  };
+}
+
+it('offers only image-capable providers and explains the missing OpenAI API key', async () => {
+  const view = await imageProviders(false);
+  try {
+    const options = Array.from(document.querySelectorAll('[role="option"]'));
+    expect(options.map((item) => item.textContent)).toEqual([
+      'Automatic',
+      'Gemini',
+      'OpenAI · API key required',
+    ]);
+    expect(options.at(-1)?.getAttribute('aria-disabled')).toBe('true');
+    expect(view.element.textContent).toContain('ChatGPT login does not authorize image generation');
+  } finally {
+    await view.close();
+  }
+});
+
+it('offers the configured OpenAI API key for image generation', async () => {
+  const view = await imageProviders(true);
+  try {
+    const options = Array.from(document.querySelectorAll('[role="option"]'));
+    expect(options.map((item) => item.textContent)).toEqual([
+      'Automatic',
+      'Gemini',
+      'OpenAI · API key',
+    ]);
+    expect(options.at(-1)?.getAttribute('aria-disabled')).not.toBe('true');
+  } finally {
+    await view.close();
+  }
+});

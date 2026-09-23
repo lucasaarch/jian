@@ -1,6 +1,6 @@
 'use client';
 
-import { supportsModelRole } from '@jian/contracts';
+import { supportsModelRole, supportsProviderRole } from '@jian/contracts';
 import { Save } from 'lucide-react';
 import { useState } from 'react';
 import type {
@@ -51,6 +51,9 @@ function toSelection(value: RoleValue): ModelSelection | null {
 
 export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps) {
   const configured = usableProviders(data);
+  const hasOpenAIKey = configured.some(
+    (provider) => provider.kind === 'openai' && provider.authMode !== 'codex',
+  );
   const [values, setValues] = useState<Record<Role, RoleValue>>(
     () =>
       Object.fromEntries(
@@ -100,6 +103,9 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
       >
         {roles.map((role) => {
           const value = values[role.key];
+          const eligible = configured.filter((provider) =>
+            supportsProviderRole(provider, role.key),
+          );
           const provider = configured.find((item) => item.id === value.providerId);
           const models = (data.providerModels[value.providerId]?.models ?? []).filter(
             (model) => !provider || supportsModelRole(provider, model, role.key),
@@ -117,9 +123,6 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
               <div className="settings-caption">
                 <h2>{role.label}</h2>
                 <p>{role.hint}</p>
-                {!role.runtime && (
-                  <Badge tone="warn">Saved, but nothing runs this activity yet</Badge>
-                )}
                 {selected && !selected.known && (
                   <Badge tone="warn">Capabilities unknown: conservative limits</Badge>
                 )}
@@ -144,25 +147,37 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
                     }
                     options={[
                       { value: '', label: 'Automatic' },
-                      ...configured
-                        .filter(
-                          (provider) =>
-                            !(
-                              ['image', 'speech', 'transcription', 'audio'].includes(role.key) &&
-                              provider.authMode === 'codex'
-                            ),
-                        )
-                        .map((provider) => ({
-                          value: provider.id,
-                          label: `${provider.name}${provider.kind === 'openai' ? (provider.authMode === 'codex' ? ' · ChatGPT' : ' · API key') : ''}`,
-                        })),
+                      ...eligible.map((provider) => ({
+                        value: provider.id,
+                        label: `${provider.name}${provider.kind === 'openai' ? (provider.authMode === 'codex' ? ' · ChatGPT' : ' · API key') : ''}`,
+                      })),
+                      ...(role.key === 'image' && !hasOpenAIKey
+                        ? [
+                            {
+                              value: '__openai_key_required__',
+                              label: 'OpenAI · API key required',
+                              disabled: true,
+                            },
+                          ]
+                        : []),
                       ...(value.providerId &&
-                      !configured.some((provider) => provider.id === value.providerId)
-                        ? [{ value: value.providerId, label: 'Saved provider (unavailable)' }]
+                      !eligible.some((provider) => provider.id === value.providerId)
+                        ? [
+                            {
+                              value: value.providerId,
+                              label: 'Saved provider (unavailable for this activity)',
+                            },
+                          ]
                         : []),
                     ]}
                   />
                 </Field>
+                {role.key === 'image' && !hasOpenAIKey && (
+                  <p className="note">
+                    <a href="/ui/providers/">Configure an OpenAI API key in Providers.</a> ChatGPT
+                    login does not authorize image generation.
+                  </p>
+                )}
                 <Field
                   label={`Modelo · ${role.label}`}
                   hint={
