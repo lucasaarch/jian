@@ -29,6 +29,8 @@ const toolLabels: Record<string, string> = {
   find_files: 'finding files',
   search_files: 'searching files',
   list_directory: 'listing a directory',
+  web_search: 'searching the web',
+  fetch_url: 'reading a page',
   update_skills: 'rewriting its own skills',
   update_identity: 'adjusting its own identity',
   read_identity: 'rereading its own identity',

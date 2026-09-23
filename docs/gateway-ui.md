@@ -10,6 +10,16 @@
 
 The application exports static routes (`/ui/channels/`, for example). There are no server actions, no SSR and no provider code in the browser. Fonts, icons and the QR code are local, with no external rendering service.
 
+## Storybook
+
+`make storybook` opens every component and every screen on `:6006` without a gateway or a database. The pages render the real workspace layout: each request the panel makes is answered by [Mock Service Worker](https://mswjs.io) from `stories/handlers.ts`, with the synthetic installation in `stories/fixtures.ts` — three agents, their conversations, channels, a pending contact, a group, providers and a year of activity. The toolbar switches the theme and the text size.
+
+- **Components** keep their stories beside them, as `*.stories.tsx`. A section takes the props the layout would hand it from `sectionProps()` in `stories/section.ts`.
+- **Pages** are in `stories/pages`: every route inside the layout, plus a first run with nothing configured, the dialog after an update, and a phone-sized view.
+- **Another state** is another handler list: `parameters: { msw: { handlers: [http.get(...), ...handlers] } }` puts one answer ahead of the defaults.
+
+`make storybook-smoke` builds Storybook and opens each story in headless Chromium, failing on one that throws, logs an error, renders nothing or never gets past the session check. CI runs it on every change. The service worker lives in `.storybook/public`, so it never ships in the panel's export.
+
 ## Setting up a profile
 
 1. Sign in with the host token, `JIAN_API_TOKEN`.

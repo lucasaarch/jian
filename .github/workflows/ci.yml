@@ -20,6 +20,21 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
+  # Every story opened in a real browser: a component change that breaks a screen nobody opened
+  # fails here instead of in the next person's Storybook.
+  storybook:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @jian/contracts build && pnpm --filter @jian/sdk build
+      - run: pnpm --filter @jian/gateway-ui exec playwright install --with-deps chromium
+      - run: pnpm --filter @jian/gateway-ui storybook:smoke
   postgres:
     runs-on: ubuntu-latest
     services:

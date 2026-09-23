@@ -15,7 +15,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .PHONY: help install setup up down logs ps dev db-up db-stop db-reset \
         check test test-integration lint format build image image-push \
-        changelog release \
+        changelog release storybook storybook-smoke \
         apple-test apple-lint apple-lint-fix apple-build apple-index
 
 ##@ General
@@ -50,6 +50,12 @@ ps: ## Show the state of the production containers
 	$(COMPOSE) ps
 
 ##@ Development
+
+storybook: ## Components and whole pages on :6006, with a mocked gateway
+	pnpm --filter @jian/gateway-ui storybook
+
+storybook-smoke: ## Open every story in headless Chromium and fail on a broken one
+	pnpm --filter @jian/gateway-ui storybook:smoke
 
 dev: db-up ## Run the gateway on :4310 and the panel on :3000, both reloading
 	pnpm run dev

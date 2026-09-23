@@ -9,7 +9,10 @@
     "build": "next build",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "brand:generate": "node scripts/generate-brand.mjs"
+    "brand:generate": "node scripts/generate-brand.mjs",
+    "storybook": "storybook dev -p 6006 --no-open",
+    "storybook:build": "storybook build -o storybook-static --quiet",
+    "storybook:smoke": "pnpm storybook:build && node scripts/storybook-smoke.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -26,15 +29,24 @@
     "sonner": "^2.0.8"
   },
   "devDependencies": {
+    "@storybook/addon-a11y": "10.6.0",
+    "@storybook/addon-docs": "10.6.0",
+    "@storybook/nextjs-vite": "10.6.0",
     "@tailwindcss/postcss": "^4.3.3",
+    "@tailwindcss/vite": "4.3.3",
     "@types/node": "^26.6.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.14.5",
+    "msw": "2.15.0",
+    "msw-storybook-addon": "3.0.3",
+    "playwright": "1.63.0",
     "postcss": "^8.5.28",
     "sharp": "^0.35.4",
+    "storybook": "10.6.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
+    "vite": "^8.3.0",
     "vitest": "5.0.1"
   }
 }
