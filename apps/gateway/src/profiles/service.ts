@@ -10,6 +10,7 @@ import type { Vault } from '../security/vault.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { providers } from '../storage/schema.js';
 import {
+  deleteProfileRow,
   findProfile,
   insertProfile,
   insertRevision,
@@ -54,6 +55,17 @@ export class Profiles {
     private readonly vault: Vault,
     private readonly clock: Clock = Date.now,
   ) {}
+
+  /**
+   * Run ahead of every delete, inside the same transaction the row dies in. Wired once, from
+   * outside — `Profiles` does not know `Channels` exists, only that something may need telling
+   * before a profile it is watching disappears (a live WhatsApp socket, an open webhook).
+   */
+  private beforeDelete?: (profileId: string, tx: Queryable) => Promise<void>;
+
+  useBeforeDelete(hook: (profileId: string, tx: Queryable) => Promise<void>): void {
+    this.beforeDelete = hook;
+  }
 
   async profile(id: string, reader: Queryable = this.store.db) {
     return assertFound(await findProfile(reader, id), 'Profile');
@@ -243,5 +255,22 @@ export class Profiles {
     await this.profile(id);
 
     return listRevisions(this.store.db, id);
+  }
+
+  /**
+   * The one row every session, memory, channel, contact, run and secret of this profile
+   * references with `ON DELETE CASCADE` — removing it takes all of that with it, in the
+   * database. `beforeDelete` gets a chance first, inside the same transaction, for whatever
+   * lives outside a row: a linked device's open socket, a webhook a vendor still calls.
+   */
+  async deleteProfile(id: string): Promise<{ id: string }> {
+    await this.profile(id);
+
+    await this.store.transaction(id, async (tx) => {
+      await this.beforeDelete?.(id, tx);
+      await deleteProfileRow(tx, id);
+    });
+
+    return { id };
   }
 }

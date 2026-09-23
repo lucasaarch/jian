@@ -10,6 +10,8 @@ export const profileCalls = (client: Client) => ({
   createProfile: (body: NewProfile) => result(client.POST('/v1/profiles', { body })),
   updateProfile: (profileId: string, body: ProfilePatch) =>
     result(client.PATCH('/v1/profiles/{profileId}', { params: profile(profileId), body })),
+  deleteProfile: (profileId: string) =>
+    result(client.DELETE('/v1/profiles/{profileId}', { params: profile(profileId) })),
   checkMcpServer: (profileId: string, name: string) =>
     result(
       client.POST('/v1/profiles/{profileId}/mcp-servers/{name}/check', {

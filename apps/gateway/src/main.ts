@@ -122,6 +122,10 @@ const channels = new Channels(services, outbound.fetch, channelRegistry);
 // A colleague's late answer has no incoming message to hang a delivery on; channels give it one.
 services.peers.useDeliveries(channels);
 
+// Deleting a profile disconnects its channels first, inside the same transaction: a WhatsApp
+// socket a worker still holds open has to be told, not just left to find out from a missing row.
+services.profiles.useBeforeDelete((profileId, tx) => channels.revokeAll(profileId, tx));
+
 const runtime = new AgentRuntime(services, undefined, {
   vault,
   gatewayVault,

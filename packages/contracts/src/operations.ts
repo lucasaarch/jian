@@ -507,6 +507,16 @@ export const operations: Operation[] = [
     response: profileRecordSchema,
   },
   {
+    // Everything the profile ever wrote — sessions, memories, channels, contacts, runs, media —
+    // cascades from this row in the database, so the confirmation the owner sees is the whole
+    // truth: nothing survives it.
+    method: 'DELETE',
+    path: profile,
+    operationId: 'deleteProfile',
+    access: 'admin',
+    response: z.strictObject({ id: z.uuid() }),
+  },
+  {
     method: 'GET',
     path: `${profile}/revisions`,
     operationId: 'listRevisions',

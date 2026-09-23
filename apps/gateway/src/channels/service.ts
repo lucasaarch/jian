@@ -262,39 +262,59 @@ export class Channels {
     );
   }
 
-  async revoke(profileId: string, id: string) {
-    const record = await this.services.store.transaction(profileId, async (tx) => {
-      const value = await findChannel(tx, id);
-      const channel = assertFound(value?.profileId === profileId ? value : null, 'Channel');
-      const record = { ...channel, revokedAt: new Date().toISOString() };
+  private async revokeWithin(profileId: string, id: string, tx: Queryable): Promise<ChannelRecord> {
+    const value = await findChannel(tx, id);
+    const channel = assertFound(value?.profileId === profileId ? value : null, 'Channel');
+    const record = { ...channel, revokedAt: new Date().toISOString() };
 
-      await markChannelRevoked(tx, id, new Date(record.revokedAt));
-      await this.services.vault.discard(profileId, channelSecret(id), tx);
+    await markChannelRevoked(tx, id, new Date(record.revokedAt));
+    await this.services.vault.discard(profileId, channelSecret(id), tx);
 
-      await recordEvent(tx, () => Date.parse(record.revokedAt), profileId, 'channel.disconnected', {
-        id: record.id,
-        type: record.type,
-      });
-
-      const connection = await findConnection(tx, id);
-
-      if (connection) {
-        // Revocation also invalidates linked-device callbacks and removes the recoverable session.
-        await writeConnection(tx, {
-          id,
-          profileId,
-          desired: false,
-          generation: connection.generation + 1,
-          status: 'disconnected',
-          updatedAt: record.revokedAt,
-        });
-        await writeAuthChunks(tx, id, profileId, [], new Date(record.revokedAt));
-      }
-
-      return record;
+    await recordEvent(tx, () => Date.parse(record.revokedAt), profileId, 'channel.disconnected', {
+      id: record.id,
+      type: record.type,
     });
 
+    const connection = await findConnection(tx, id);
+
+    if (connection) {
+      // Revocation also invalidates linked-device callbacks and removes the recoverable session.
+      await writeConnection(tx, {
+        id,
+        profileId,
+        desired: false,
+        generation: connection.generation + 1,
+        status: 'disconnected',
+        updatedAt: record.revokedAt,
+      });
+      await writeAuthChunks(tx, id, profileId, [], new Date(record.revokedAt));
+    }
+
+    return record;
+  }
+
+  async revoke(profileId: string, id: string) {
+    const record = await this.services.store.transaction(profileId, (tx) =>
+      this.revokeWithin(profileId, id, tx),
+    );
+
     return this.metadata(record);
+  }
+
+  /**
+   * Every live channel disconnected, ahead of deleting the profile they belong to. Takes the
+   * caller's transaction rather than opening one of its own: `deleteProfile` already holds this
+   * profile's advisory lock for the delete, and a second `store.transaction` call here would
+   * queue behind it in another session and never return. A row that cascades from the profile
+   * takes its channel with it either way; this is what stops a WhatsApp socket still open in a
+   * worker's memory from outliving the row it was reading.
+   */
+  async revokeAll(profileId: string, tx: Queryable): Promise<void> {
+    const live = (await listChannels(tx, profileId)).filter((channel) => !channel.revokedAt);
+
+    for (const channel of live) {
+      await this.revokeWithin(profileId, channel.id, tx);
+    }
   }
 
   contacts(profileId: string) {

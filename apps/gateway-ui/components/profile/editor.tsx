@@ -1,9 +1,10 @@
 'use client';
 
-import { Plus, Save } from 'lucide-react';
+import { Plus, Save, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { GatewayApi, Mutation, Profile } from '../../lib/api';
-import { Button, Field, Modal, SectionHeading } from '../ui';
+import { useWorkspace } from '../../lib/workspace';
+import { Button, Confirm, Field, Modal, SectionHeading } from '../ui';
 import { AvatarField } from './avatar-field';
 
 const lines = (value: string) =>
@@ -97,6 +98,9 @@ export function ProfileEditor({
   mutate: Mutation;
   busy: boolean;
 }) {
+  const { deleteProfile } = useWorkspace();
+  const [deleting, setDeleting] = useState(false);
+
   const legacyIdentity = [
     profile.identity.role && `Role: ${profile.identity.role}`,
     profile.identity.tone && `Tone: ${profile.identity.tone}`,
@@ -218,6 +222,35 @@ export function ProfileEditor({
           </Button>
         </div>
       </form>
+
+      <SectionHeading
+        title="Danger zone"
+        description="This deletes the profile itself, not just what it says."
+      />
+      <div className="save-bar">
+        <span>
+          Every session, memory, message, channel, contact and run this profile has ever held is
+          removed with it. There is no undo.
+        </span>
+        <Button variant="danger" onClick={() => setDeleting(true)}>
+          <Trash2 size={16} />
+          Delete profile
+        </Button>
+      </div>
+
+      {deleting && (
+        <Confirm
+          title={`Delete ${profile.name}?`}
+          description="Every memory, chat history, message, channel connection, contact and run tied to this profile is deleted along with it. This cannot be undone."
+          busy={busy}
+          close={() => setDeleting(false)}
+          confirm={async () => {
+            if (await deleteProfile(profile.id)) {
+              setDeleting(false);
+            }
+          }}
+        />
+      )}
     </>
   );
 }

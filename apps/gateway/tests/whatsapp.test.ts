@@ -330,6 +330,71 @@ describe('WhatsApp linked device', () => {
   });
 });
 
+describe('deleting a profile with a live WhatsApp connection', () => {
+  it('closes the linked device even when the worker only learns of it through the database', async () => {
+    // Two independent `WhatsAppConnections` stand in for the API and worker running as
+    // separate processes: they share nothing but the store, exactly as they would over a real
+    // network. The API side never touches `worker`'s in-memory device map directly — the only
+    // channel between them is what each can read back from Postgres.
+    const services = await testServices();
+    const box = new SecretBox({ activeKeyId: 'v1', keys: { v1: randomBytes(32) } });
+    const sockets: Array<{ channelId: string; open: boolean }> = [];
+
+    const factory: DeviceFactory = async (id) => {
+      // A real external effect a test can observe without reading `WhatsAppConnections`'s own
+      // bookkeeping: whether this device's socket considers itself open.
+      const socket = { channelId: id, open: true };
+      sockets.push(socket);
+
+      return {
+        start: async () => {},
+        send: async () => 'wa-sent',
+        typing: async () => {},
+        stop: async () => {
+          socket.open = false;
+        },
+      };
+    };
+
+    const worker = new WhatsAppConnections(services.store, box, factory);
+    const registry = new ChannelRegistry([new WhatsAppChannel(worker)]);
+    const channels = new Channels(services, fetch, registry);
+    services.profiles.useBeforeDelete((profileId, tx) => channels.revokeAll(profileId, tx));
+
+    const profile = await services.profiles.createProfile({
+      name: 'WhatsApp',
+      instructions: 'Help.',
+      model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    });
+    const binding = await channels.connect(profile.id, { type: 'whatsapp' });
+
+    try {
+      await worker.connect(profile.id, binding.id);
+      await worker.tick(async () => undefined);
+
+      const socket = sockets.find((item) => item.channelId === binding.id);
+      if (!socket) throw new Error('Device missing');
+      expect(socket.open).toBe(true);
+      expect(await worker.canSend(binding.id)).toBe(false); // not "ready" yet, but the device exists
+
+      // The delete runs on the API side, through the profile's own transaction — the worker
+      // does not observe it until its next poll, exactly as two processes would behave.
+      await services.profiles.deleteProfile(profile.id);
+      expect(socket.open).toBe(true); // the cascade already ran; the worker has not polled yet
+
+      await worker.tick(async () => undefined);
+
+      // The channel row is gone with the profile, so the worker can no longer find this
+      // connection through `listConnections()` — the external effect proves the device was
+      // still told to stop despite that.
+      expect(socket.open).toBe(false);
+      expect(await worker.canSend(binding.id)).toBe(false);
+    } finally {
+      await worker.stop();
+    }
+  });
+});
+
 it.each(['image', 'speech'] as const)(
   'delivers generated %s to WhatsApp once without substituting a text link',
   async (kind) => {
