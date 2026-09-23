@@ -59,10 +59,22 @@ export class TelegramChannel implements Channel {
       ...(name ? { displayName: name } : {}),
       scope: group ? 'group' : 'direct',
       ...(group && message.chat.title ? { groupName: message.chat.title } : {}),
-      // Only a mention that names an account carries its id; an @username entity does not.
-      mentions: (message.entities ?? []).flatMap((entity) =>
-        entity.user ? [String(entity.user.id)] : [],
-      ),
+      // A mention of an account without a username carries its id; an `@username` carries only
+      // the text, which is compared with the handle the bot was identified by.
+      mentions: (message.entities ?? []).flatMap((entity) => {
+        if (entity.user) {
+          return [String(entity.user.id)];
+        }
+
+        if (entity.type === 'mention' && entity.offset !== undefined && entity.length) {
+          return [message.text.slice(entity.offset, entity.offset + entity.length).toLowerCase()];
+        }
+
+        return [];
+      }),
+      ...(message.reply_to_message?.from
+        ? { replyTo: String(message.reply_to_message.from.id) }
+        : {}),
     };
   }
 
@@ -116,19 +128,28 @@ export class TelegramChannel implements Channel {
     }
   }
 
-  /** The bot's own numeric id, which is how its messages are recognised in a group. */
+  /**
+   * The bot's own numeric id, which is how its messages are recognised in a group, and its
+   * `@username`, which is how people mention it there.
+   */
   async identify(
     credential: string,
     fetch: typeof globalThis.fetch,
     signal: AbortSignal,
-  ): Promise<string | undefined> {
+  ): Promise<{ address: string; handle?: string } | undefined> {
     if (!BOT_TOKEN.test(credential)) {
       return undefined;
     }
 
     const body = await this.request('getMe', credential, undefined, { fetch, signal });
 
-    return body?.ok ? String(body.result.id) : undefined;
+    if (!body?.ok) {
+      return undefined;
+    }
+
+    const { id, username } = body.result;
+
+    return { address: String(id), ...(username ? { handle: `@${username.toLowerCase()}` } : {}) };
   }
 
   /** Replaces whatever webhook the bot had, so the last connection is the one Telegram calls. */

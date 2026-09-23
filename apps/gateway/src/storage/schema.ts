@@ -227,9 +227,8 @@ export const messages = pgTable(
     sessionId: uuid('session_id')
       .notNull()
       .references(() => sessions.id, { onDelete: 'cascade' }),
-    runId: uuid('run_id')
-      .notNull()
-      .references(() => runs.id, { onDelete: 'cascade' }),
+    // Null on what the agent read in a group without being called.
+    runId: uuid('run_id').references(() => runs.id, { onDelete: 'cascade' }),
     role: messageRole('role').notNull(),
     content: text('content').notNull(),
     createdAt,
@@ -371,6 +370,9 @@ export const channels = pgTable(
     type: channelType('type').notNull(),
     // How this connection is addressed on its protocol; how an agent recognises a colleague.
     address: text('address'),
+    // The name people type to mention it, where that differs from the address: a Telegram
+    // `@username` names the bot without carrying its id.
+    handle: text('handle'),
     webhookTokenHash: text('webhook_token_hash').notNull(),
     createdAt,
     revokedAt: timestamp('revoked_at', { withTimezone: true }),

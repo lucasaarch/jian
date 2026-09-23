@@ -41,18 +41,22 @@ The channel marks the conversation: `scope: "group"`. On WhatsApp that is a `@g.
 The owner approves the room once, not each participant. The request records the conversation, and whoever writes there later comes in under the same decision.
 
 - A pending room starts no run, produces no delivery and receives no automatic notice: the gateway does not write inside a room the owner has not approved, not even to explain that it is waiting.
-- Nothing is held. In a private conversation the first message waits for approval and is released afterwards; in a room it is not kept, because releasing it would make the agent answer a message that named nobody.
+- Nothing is held. In a private conversation the first message waits for approval and is released afterwards; in a room it is not kept, because releasing it would make the agent answer a message that called nobody.
 - Each profile sees the room through its own connection, so each has its own request and its own session. Approving for one profile approves for none of the others.
 - Renaming the room does not reopen the request; the new name updates the title.
 
-### Only the agent addressed answers
+### The agent reads everything and answers when called
 
-In a room where more than one agent of the installation is approved, an agent stays quiet by default and answers only when it is addressed. Without that, three agents answer the same message and the room becomes noise. An agent knows it was called in two ways:
+An approved room behaves like a person who follows the conversation without taking part: the agent reads every message, and answers only the ones that call it — even when it is the only agent there. A message that does not call it is written to the room's session as `Author: text`, with no run and no delivery, so when it is called it answers with what the room already said. A redelivered message is written once. An attachment in a message that did not call the agent is noted but not opened: opening it costs a provider call.
 
-- A protocol mention of its own connection's address, where the protocol carries one — `mentionedJid` on WhatsApp, `text_mention` on Telegram.
-- The profile's name written in the message, compared without case or accents and respecting word boundaries. A compound name also answers to its first name, at three letters or more.
+A person calls the agent the way the protocol offers:
 
-A message from another agent always has to address the agent. A message from a person needs the name when more than one agent is approved in the room; with a single agent there is nobody to talk over, and it answers as it would in private.
+- A mention of its connection — `mentionedJid` on WhatsApp, resolved from LID to phone; on Telegram a `text_mention`, or the bot's `@username`, which the channel reads with `getMe` when it connects. A Telegram channel connected before this learned no username, and has to be connected again for `@username` to call it.
+- A reply to one of its messages.
+
+Writing the agent's name is not a call: people also talk *about* the agent. Agents of the installation cannot mention or quote, so a message from another agent calls by name instead — compared without case or accents, at word boundaries, a compound name also answering to its first word at three letters or more.
+
+On Telegram a bot in privacy mode receives only the messages that call it, and then reads nothing else. Turn privacy off in BotFather (`/setprivacy` → Disable) and add the bot to the group again for the change to reach that group.
 
 ### The loop between agents ends
 
@@ -78,7 +82,7 @@ A connection the protocol cannot identify has no address, and its messages count
 
 ## API server
 
-Send `actorId`, `chatId`, `text`, `requestKey` and, if you have it, `displayName` to `POST /v1/ingress/{channelId}`, using `X-Jian-Channel-Token`. For a room, send `scope: "group"` with the room's `chatId`, the `actorId` of whoever wrote and, if you have them, `groupName` and `mentions`. The adapter that calls this route must authenticate the external identity before filling the ids in; whoever holds the token can represent any sender, and each new sender becomes a contact request. The answer carries `accepted`, the run id when there is one, and the contact's state. Read results through the admin API.
+Send `actorId`, `chatId`, `text`, `requestKey` and, if you have it, `displayName` to `POST /v1/ingress/{channelId}`, using `X-Jian-Channel-Token`. For a room, send `scope: "group"` with the room's `chatId`, the `actorId` of whoever wrote and, if you have them, `groupName`, `mentions` and `replyTo` — the address of whoever wrote the message being answered. The adapter that calls this route must authenticate the external identity before filling the ids in; whoever holds the token can represent any sender, and each new sender becomes a contact request. The answer carries `accepted`, the run id when there is one, and the contact's state. Read results through the admin API.
 
 This channel sends no answer back to an external service. Turning it into an OpenAI-compatible endpoint is a task of its own; what is described here is the intake as it stands.
 

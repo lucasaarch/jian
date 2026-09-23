@@ -28,22 +28,35 @@ const fold = (value: string) =>
     .toLowerCase();
 
 /**
- * A room where more than one agent listens. Two rules keep it usable: an agent stays quiet
- * unless a message names it, and the agents of this installation share one budget of
+ * A room where people and agents write. Two rules keep it usable: an agent reads everything but
+ * answers only when called, and the agents of this installation share one budget of
  * consecutive turns, so a conversation between them ends without a person having to stop it.
  */
 export class Groups {
   constructor(private readonly profiles: ProfileReader) {}
 
   /**
-   * Addressed by the protocol's own mention of this connection, or by name in the text. The
-   * first word of a composed name counts, because that is how people write in a group.
+   * A person calls an agent the way the protocol offers: a mention of its connection, or a
+   * reply to one of its messages. Writing the name is not a call — people talk *about* an agent
+   * too. Agents cannot produce either gesture, so from another agent the name in the text counts,
+   * and the first word of a composed name with it, because that is how a name is written.
    */
-  static addressed(message: IncomingMessage, name: string, address?: string): boolean {
-    if (address && message.mentions.includes(address)) {
+  static addressed(
+    message: IncomingMessage,
+    self: { name: string; address?: string; handle?: string },
+    fromAgent: boolean,
+  ): boolean {
+    const called = [self.address, self.handle].filter((item): item is string => Boolean(item));
+
+    if (called.some((item) => message.mentions.includes(item) || message.replyTo === item)) {
       return true;
     }
 
+    if (!fromAgent) {
+      return false;
+    }
+
+    const name = self.name;
     const text = fold(message.text);
     const full = fold(name).trim();
     const first = full.split(/\s+/)[0] ?? '';
@@ -118,13 +131,14 @@ export class Groups {
 
     const participants = await this.participants(tx, contact);
     const others = participants.filter((item) => item.profileId !== channel.profileId);
+    const self = {
+      name: profileName,
+      ...(channel.address ? { address: channel.address } : {}),
+      ...(channel.handle ? { handle: channel.handle } : {}),
+    };
 
-    // With a single agent in the room there is nobody to talk over, so a person is answered
-    // as in a private conversation. Another agent always has to name who it wants.
-    if (
-      (fromAgent || others.length > 0) &&
-      !Groups.addressed(message, profileName, channel.address)
-    ) {
+    // Even alone in the room: a group is a conversation among people, not a request to the agent.
+    if (!Groups.addressed(message, self, fromAgent)) {
       await save(observed);
 
       return { speak: false, reason: 'unaddressed' };

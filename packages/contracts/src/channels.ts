@@ -68,6 +68,8 @@ export const ingressSchema = z.strictObject({
   groupName: z.string().trim().min(1).max(100).optional(),
   // Addresses the protocol itself marks as addressed by this message, when it carries them.
   mentions: z.array(z.string().min(1).max(100)).max(32).default([]),
+  // The address of whoever wrote the message this one answers, when it quotes one.
+  replyTo: z.string().min(1).max(100).optional(),
 });
 
 export const telegramUpdateSchema = z.object({
@@ -89,10 +91,15 @@ export const telegramUpdateSchema = z.object({
         .array(
           z.object({
             type: z.string().max(40),
+            offset: z.number().int().nonnegative().optional(),
+            length: z.number().int().nonnegative().optional(),
             user: z.object({ id: z.number().int() }).optional(),
           }),
         )
         .max(64)
+        .optional(),
+      reply_to_message: z
+        .object({ from: z.object({ id: z.number().int() }).optional() })
         .optional(),
     })
     .optional(),

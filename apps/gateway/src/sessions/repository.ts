@@ -24,7 +24,7 @@ export function toMessage(row: MessageRow): Message {
     id: row.id,
     profileId: row.profileId,
     sessionId: row.sessionId,
-    runId: row.runId,
+    ...(row.runId ? { runId: row.runId } : {}),
     role: row.role,
     content: row.content,
     createdAt: row.createdAt.toISOString(),

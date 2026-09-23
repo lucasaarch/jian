@@ -81,7 +81,7 @@ async function setup() {
   const say = async (
     author: { name: string; address: string },
     text: string,
-    options: { requestKey?: string; mentions?: string[] } = {},
+    options: { requestKey?: string; mentions?: string[]; replyTo?: string } = {},
   ) => {
     const requestKey = options.requestKey ?? `wa-group-${++messages}`;
 
@@ -99,6 +99,7 @@ async function setup() {
         groupName: 'Equipe',
         scope: 'group',
         mentions: options.mentions ?? [],
+        ...(options.replyTo ? { replyTo: options.replyTo } : {}),
       });
     }
 
@@ -141,7 +142,7 @@ async function setup() {
 }
 
 describe('group conversations', () => {
-  it('answers in a room with several agents only the message that names it', async () => {
+  it('answers in a room with several agents only the message that mentions it', async () => {
     const f = await setup();
 
     try {
@@ -157,7 +158,7 @@ describe('group conversations', () => {
       expect(await f.runs(ada.profileId)).toEqual([]);
       expect(await f.runs(bia.profileId)).toEqual([]);
 
-      await f.say(owner, 'Ada, você consegue olhar o relatório?');
+      await f.say(owner, 'Ada, você consegue olhar o relatório?', { mentions: [ada.address] });
 
       const answering = await f.runs(ada.profileId);
 
@@ -193,12 +194,57 @@ describe('group conversations', () => {
         expect(contacts[0]?.message).toBeUndefined();
       }
 
-      // With one agent approved there is nobody to talk over, so a person is simply answered.
       await f.approve(ada.profileId);
-      await f.say(owner, 'e agora?');
+      await f.say(owner, 'e agora?', { mentions: [ada.address] });
 
       expect(await f.runs(ada.profileId)).toHaveLength(1);
       expect(await f.runs(bia.profileId)).toEqual([]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('reads the whole room but answers only a mention or a reply, even when alone', async () => {
+    const f = await setup();
+
+    try {
+      const ada = await f.join('Ada', '5511800000001@c.us');
+
+      await f.say(owner, 'oi');
+      await f.approve(ada.profileId);
+
+      await f.say(owner, 'o fornecedor atrasou a entrega para sexta');
+      await f.say(guest, 'a Ada sabe disso?');
+      // A redelivery of something only heard is still heard once.
+      await f.say(guest, 'vou avisar o cliente', { requestKey: 'wa-heard' });
+      await f.say(guest, 'vou avisar o cliente', { requestKey: 'wa-heard' });
+
+      // Being talked about is not being called.
+      expect(await f.runs(ada.profileId)).toEqual([]);
+
+      await f.say(owner, 'o que você acha?', { mentions: [ada.address] });
+
+      const [run] = await f.services.runs.activities(ada.profileId);
+
+      if (!run) throw new Error('Run missing');
+
+      const context = await f.services.contexts.context(run);
+      const transcript = context.messages.map((message) => message.content).join('\n');
+
+      expect(context.messages).toHaveLength(1);
+      expect(transcript).toBe(
+        [
+          'Lucas: o fornecedor atrasou a entrega para sexta',
+          'Marina: a Ada sabe disso?',
+          'Marina: vou avisar o cliente',
+          'Lucas: o que você acha?',
+        ].join('\n\n'),
+      );
+
+      await f.reply(ada.profileId, 'Sexta, então.');
+      await f.say(guest, 'pode ser sábado?', { replyTo: ada.address });
+
+      expect(await f.runs(ada.profileId)).toHaveLength(2);
     } finally {
       await f.close();
     }
@@ -216,7 +262,7 @@ describe('group conversations', () => {
       expect(await f.channels.contacts(ada.profileId)).toHaveLength(1);
 
       await f.approve(ada.profileId);
-      await f.say(guest, 'terceiro');
+      await f.say(guest, 'terceiro', { mentions: [ada.address] });
 
       const runs = await f.runs(ada.profileId);
 
@@ -238,12 +284,12 @@ describe('group conversations', () => {
       await f.approve(ada.profileId);
       await f.approve(bia.profileId);
 
-      await f.say(owner, 'Ada, combine o prazo com a equipe');
+      await f.say(owner, 'Ada, combine o prazo com a equipe', { mentions: [ada.address] });
 
       expect(await f.services.runs.activities(bia.profileId)).toEqual([]);
       await f.reply(ada.profileId, 'Bia, qual prazo consegue?');
 
-      // Each agent names the next one, which is the only way the next one answers at all.
+      // Agents cannot mention or quote, so between them the name in the text is the call.
       const spoken = ['Ada'];
 
       for (const turn of [
@@ -270,7 +316,7 @@ describe('group conversations', () => {
       expect(await f.services.runs.activities(bia.profileId)).toEqual([]);
 
       // A person writing returns the budget to the room.
-      await f.say(owner, 'Ada, resume para mim');
+      await f.say(owner, 'Ada, resume para mim', { mentions: [ada.address] });
 
       const resumed = await f.services.runs.activities(ada.profileId);
 
@@ -291,8 +337,10 @@ describe('group conversations', () => {
       await f.say(owner, 'oi');
       await f.approve(ada.profileId);
 
-      await f.say(owner, 'Ada, confirma?', { requestKey: 'wa-repeated' });
-      await f.say(owner, 'Ada, confirma?', { requestKey: 'wa-repeated' });
+      const call = { requestKey: 'wa-repeated', mentions: [ada.address] };
+
+      await f.say(owner, 'Ada, confirma?', call);
+      await f.say(owner, 'Ada, confirma?', call);
 
       const runs = await f.runs(ada.profileId);
 

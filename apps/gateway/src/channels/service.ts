@@ -53,7 +53,16 @@ import { findConnection, writeAuthChunks, writeConnection } from './whatsapp/rep
 export type ChannelRecord = z.infer<typeof channelSchema> & {
   tokenHash: string;
   address?: string;
+  handle?: string;
 };
+
+/** A message id derived from what it records, so a protocol redelivery writes it once. */
+const stableId = (source: string) =>
+  createHash('sha256')
+    .update(source)
+    .digest('hex')
+    .slice(0, 32)
+    .replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
 
 /** Where a channel's bot token lives in the vault. Revoking the channel takes it with it. */
 export const channelSecret = (channelId: string) => `channel:${channelId}`;
@@ -142,7 +151,12 @@ export class Channels {
     await this.pending;
   }
 
-  private metadata({ tokenHash: _hash, address: _address, ...channel }: ChannelRecord) {
+  private metadata({
+    tokenHash: _hash,
+    address: _address,
+    handle: _handle,
+    ...channel
+  }: ChannelRecord) {
     return channel;
   }
 
@@ -198,14 +212,15 @@ export class Channels {
     }
 
     const issued = issueToken();
-    const address = botToken ? await this.identify(data.type, botToken) : undefined;
+    const identity = botToken ? await this.identify(data.type, botToken) : undefined;
 
     const record: ChannelRecord = {
       id: randomUUID(),
       profileId,
       type: data.type,
       tokenHash: issued.hash,
-      ...(address ? { address } : {}),
+      ...(identity?.address ? { address: identity.address } : {}),
+      ...(identity?.handle ? { handle: identity.handle } : {}),
       createdAt: new Date().toISOString(),
     };
 
@@ -411,6 +426,25 @@ export class Channels {
         if (outcome.status === 'approved' && data.scope === 'group') {
           const profile = await this.services.profiles.profile(channel.profileId, tx);
           decision = await this.rooms.observe(tx, channel, outcome.contact, data, profile.name);
+
+          // What was not said to the agent is still what it heard: when it is called later, it
+          // answers the room with the conversation it followed, like anyone else who was there.
+          if (!decision.speak && outcome.contact.sessionId) {
+            await insertMessage(
+              tx,
+              {
+                id: stableId(`heard:${channel.id}:${data.chatId}:${data.requestKey}`),
+                profileId: channel.profileId,
+                sessionId: outcome.contact.sessionId,
+                role: 'user',
+                content: `${data.displayName ?? data.actorId}: ${data.text}${
+                  data.media?.length ? '\n[Attachment not opened: it was not sent to you.]' : ''
+                }`,
+                createdAt: new Date().toISOString(),
+              },
+              true,
+            );
+          }
         }
         // Intake and attachment persistence share the approval lock: approval cannot miss pixels.
         if (
@@ -537,11 +571,7 @@ export class Channels {
           insertMessage(
             tx,
             {
-              id: createHash('sha256')
-                .update(`relay:${run.id}:${data.requestKey}`)
-                .digest('hex')
-                .slice(0, 32)
-                .replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5'),
+              id: stableId(`relay:${run.id}:${data.requestKey}`),
               profileId: channel.profileId,
               sessionId: contact.sessionId as string,
               runId: run.id,

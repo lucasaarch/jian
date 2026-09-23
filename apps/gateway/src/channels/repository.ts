@@ -26,6 +26,7 @@ export function toChannel(row: ChannelRow): ChannelRecord {
     }),
     tokenHash: row.webhookTokenHash ?? '',
     ...(row.address ? { address: row.address } : {}),
+    ...(row.handle ? { handle: row.handle } : {}),
   };
 }
 
@@ -83,6 +84,7 @@ export async function insertChannel(db: Queryable, record: ChannelRecord): Promi
     profileId: record.profileId,
     type: record.type,
     address: record.address ?? null,
+    handle: record.handle ?? null,
     webhookTokenHash: record.tokenHash,
     createdAt: new Date(record.createdAt),
     revokedAt: record.revokedAt ? new Date(record.revokedAt) : null,

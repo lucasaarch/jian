@@ -76,19 +76,13 @@ const toDeviceJid = (chatId: string) => {
   return CONTACT_JID.test(chatId) ? chatId.replace(/@c\.us$/, '@s.whatsapp.net') : undefined;
 };
 
-/** Who the message itself marks as addressed, which is how a room mention reaches the gateway. */
-const mentionsOf = (message: WAMessage) =>
-  (
-    (
-      normalizeMessageContent(message.message)?.extendedTextMessage ??
-      normalizeMessageContent(message.message)?.imageMessage ??
-      normalizeMessageContent(message.message)?.audioMessage
-    )?.contextInfo?.mentionedJid ?? []
-  ).flatMap((jid) => {
-    const contact = toContactJid(jid);
+/** Where a message says whom it mentions and which message it answers. */
+const contextOf = (message: WAMessage) => {
+  const content = normalizeMessageContent(message.message);
 
-    return contact ? [contact] : [];
-  });
+  return (content?.extendedTextMessage ?? content?.imageMessage ?? content?.audioMessage)
+    ?.contextInfo;
+};
 
 /** The close reason travels as a Boom payload; read it structurally rather than depend on Boom. */
 const statusCodeOf = (error: unknown) =>
@@ -269,6 +263,27 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
       return subject;
     };
 
+    /**
+     * A participant as the gateway addresses them: the phone JID. Rooms increasingly name people
+     * by LID, in mentions and quotes too, and a LID is compared with nothing the gateway stores,
+     * so it is resolved through the account's mapping — this account's own LID included.
+     */
+    const personOf = async (jid: string | null | undefined) => {
+      const contact = toContactJid(jid);
+
+      if (!contact?.endsWith('@lid')) {
+        return contact;
+      }
+
+      if (jidDecode(socket?.user?.lid)?.user === contact.split('@')[0]) {
+        return toContactJid(socket?.user?.id);
+      }
+
+      return (
+        toContactJid(await socket?.signalRepository.lidMapping.getPNForLID(jid ?? '')) ?? contact
+      );
+    };
+
     const deliver = async (message: WAMessage) => {
       if (message.key.fromMe || !message.key.id) return;
       const address = message.key.remoteJid ?? '';
@@ -285,16 +300,16 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
       // In a room the conversation is the group and the sender is the participant, so the two
       // identifiers part ways: approval is decided about the room, delivery goes back to it.
       if (GROUP_JID.test(remote)) {
-        const author = message.key.participantAlt ?? message.key.participant;
-        const from =
-          toContactJid(author) ??
-          (author?.endsWith('@lid')
-            ? toContactJid(await socket?.signalRepository.lidMapping.getPNForLID(author))
-            : undefined);
+        const from = await personOf(message.key.participantAlt ?? message.key.participant);
 
         if (!from) return;
 
         const subject = await subjectOf(remote);
+        const context = contextOf(message);
+        const mentions = (
+          await Promise.all((context?.mentionedJid ?? []).map((jid) => personOf(jid)))
+        ).filter((jid): jid is string => Boolean(jid));
+        const replyTo = context?.stanzaId ? await personOf(context.participant) : undefined;
 
         await callbacks.message({
           actorId: from,
@@ -305,7 +320,8 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           scope: 'group',
           ...(subject ? { groupName: subject } : {}),
           ...(message.pushName ? { displayName: message.pushName.slice(0, 100) } : {}),
-          mentions: mentionsOf(message),
+          mentions,
+          ...(replyTo ? { replyTo } : {}),
         });
 
         return;

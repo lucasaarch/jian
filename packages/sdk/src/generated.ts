@@ -4309,6 +4309,7 @@ export interface operations {
                     groupName?: string;
                     /** @default [] */
                     mentions?: string[];
+                    replyTo?: string;
                 };
             };
         };
@@ -4464,10 +4465,17 @@ export interface operations {
                         text: string;
                         entities?: {
                             type: string;
+                            offset?: number;
+                            length?: number;
                             user?: {
                                 id: number;
                             };
                         }[];
+                        reply_to_message?: {
+                            from?: {
+                                id: number;
+                            };
+                        };
                     };
                 };
             };
@@ -4628,7 +4636,7 @@ export interface operations {
                             /** Format: uuid */
                             sessionId: string;
                             /** Format: uuid */
-                            runId: string;
+                            runId?: string;
                             /** @enum {string} */
                             role: "user" | "assistant";
                             content: string;
@@ -4770,7 +4778,7 @@ export interface operations {
                             /** Format: uuid */
                             sessionId: string;
                             /** Format: uuid */
-                            runId: string;
+                            runId?: string;
                             /** @enum {string} */
                             role: "user" | "assistant";
                             content: string;
@@ -8934,7 +8942,7 @@ export interface operations {
                         /** Format: uuid */
                         sessionId: string;
                         /** Format: uuid */
-                        runId: string;
+                        runId?: string;
                         /** @enum {string} */
                         role: "user" | "assistant";
                         content: string;

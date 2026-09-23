@@ -36,7 +36,8 @@ export const messageRecordSchema = z.strictObject({
   id: uuid,
   profileId: uuid,
   sessionId: uuid,
-  runId: uuid,
+  // Absent on what the agent read in a group without being called: no run answered it.
+  runId: uuid.optional(),
   role: z.enum(['user', 'assistant']),
   content: z.string(),
   createdAt: timestamp,

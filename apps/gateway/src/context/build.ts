@@ -116,8 +116,9 @@ export function buildContext(
     // the budget below is the only thing that ends a conversation between agents.
     ...(run.group
       ? [
-          `This turn comes from the group ${JSON.stringify(run.group.name ?? run.group.chatId)}, where ${JSON.stringify(run.group.fromName)} named you.`,
+          `This turn comes from the group ${JSON.stringify(run.group.name ?? run.group.chatId)}, where ${JSON.stringify(run.group.fromName)} called you.`,
           'Everyone in the group reads your reply; each message is prefixed with who wrote it.',
+          'You read every message in the group but answer only when called; the earlier messages you did not answer are the conversation you followed.',
           run.group.agents.length
             ? `The other agents here are ${JSON.stringify(run.group.agents.join(', '))}, and they answer only when a message names them.`
             : 'You are the only agent in this group.',
@@ -155,8 +156,19 @@ export function buildContext(
     ...earlier,
   ].join('\n\n');
 
-  return {
-    system,
-    messages: selected.map((message) => ({ role: message.role, content: message.content })),
-  };
+  // What the agent read in a group without answering arrives as a run of user messages. It is
+  // one stretch of conversation, and not every provider accepts two user turns in a row.
+  const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+  for (const message of selected) {
+    const last = messages.at(-1);
+
+    if (last?.role === 'user' && message.role === 'user') {
+      last.content = `${last.content}\n\n${message.content}`;
+    } else {
+      messages.push({ role: message.role, content: message.content });
+    }
+  }
+
+  return { system, messages };
 }

@@ -58,7 +58,7 @@ export interface Channel {
     credential: string,
     fetch: typeof globalThis.fetch,
     signal: AbortSignal,
-  ): Promise<string | undefined>;
+  ): Promise<{ address: string; handle?: string } | undefined>;
 
   /**
    * Points the protocol at this channel's webhook under `origin`, signed with `secret`. False

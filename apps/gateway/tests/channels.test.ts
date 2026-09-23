@@ -24,7 +24,7 @@ async function setup(fetcher: typeof fetch, clock: () => number = Date.now) {
   // each test inspects.
   const telegram: typeof fetch = async (url, options) =>
     String(url).endsWith('/getMe')
-      ? Response.json({ ok: true, result: { id: 700 } })
+      ? Response.json({ ok: true, result: { id: 700, username: 'ZeroTwoBot' } })
       : fetcher(url, options);
 
   const registry = new ChannelRegistry([new ApiChannel(), new TelegramChannel(clock)]);
@@ -383,6 +383,57 @@ describe('Telegram transport', () => {
       }
     },
   );
+});
+
+describe('a Telegram group', () => {
+  const said = (id: number, text: string, extra: Record<string, unknown> = {}) => ({
+    type: 'telegram' as const,
+    headers: {},
+    payload: {
+      update_id: id,
+      message: {
+        from: { id: 42, first_name: 'Ada' },
+        chat: { id: -500, type: 'supergroup', title: 'Equipe' },
+        text,
+        ...extra,
+      },
+    },
+  });
+
+  it('answers the bot @username and a reply to it, and only reads the rest', async () => {
+    const f = await setup(async () => Response.json({ ok: true, result: { message_id: 1 } }));
+    const receive = (id: number, text: string, extra?: Record<string, unknown>) =>
+      f.channels.receive(f.channel.id, {
+        ...said(id, text, extra),
+        headers: { 'x-telegram-bot-api-secret-token': f.channel.webhookToken },
+      });
+
+    try {
+      await receive(1, 'oi');
+      const [room] = await f.channels.contacts(f.profile.id);
+
+      if (!room) throw new Error('Group request missing');
+      await f.channels.approveContact(f.profile.id, room.id);
+
+      // Written about the agent, not to it: read, and left unanswered.
+      expect(await receive(2, 'o P vem hoje?')).toMatchObject({
+        accepted: false,
+        silence: 'unaddressed',
+      });
+
+      expect(
+        await receive(3, '@ZeroTwoBot vem hoje?', {
+          entities: [{ type: 'mention', offset: 0, length: 11 }],
+        }),
+      ).toMatchObject({ accepted: true, runId: expect.any(String) });
+
+      expect(
+        await receive(4, 'e amanhã?', { reply_to_message: { from: { id: 700 } } }),
+      ).toMatchObject({ accepted: true, runId: expect.any(String) });
+    } finally {
+      await f.app.close();
+    }
+  });
 });
 
 describe('what a chat sees while the agent is still working', () => {
