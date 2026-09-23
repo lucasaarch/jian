@@ -29,9 +29,13 @@ describe('media providers', () => {
 
   it('wraps Gemini PCM speech in a playable WAV file', async () => {
     const client = new MediaProviders(async (_url, options) => {
-      expect(JSON.parse(String(options?.body)).generationConfig.responseModalities).toEqual([
-        'AUDIO',
-      ]);
+      const body = JSON.parse(String(options?.body));
+      expect(body.generationConfig.responseModalities).toEqual(['AUDIO']);
+      expect(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe(
+        'Leda',
+      );
+      expect(body.contents[0].parts[0].text).toContain('Speaking style: Meiga e alegre.');
+      expect(body.contents[0].parts[0].text).toMatch(/text aloud.*Olá$/s);
       return Response.json({
         candidates: [
           {
@@ -54,11 +58,84 @@ describe('media providers', () => {
       { provider: 'google', modelId: 'gemini-2.5-flash-preview-tts' },
       'synthetic-key',
       'Olá',
-      'Kore',
+      'leda',
       signal,
+      undefined,
+      'Meiga e alegre.',
     );
     expect(audio.mimeType).toBe('audio/wav');
     expect(Buffer.from(audio.data, 'base64').subarray(0, 4).toString()).toBe('RIFF');
+  });
+
+  it('rejects voices from another provider with usable Gemini choices before sending text', async () => {
+    let sent = false;
+    const client = new MediaProviders(async () => {
+      sent = true;
+      return Response.json({});
+    });
+    await expect(
+      client.generate(
+        'speech',
+        { provider: 'google', modelId: 'gemini-2.5-flash-preview-tts' },
+        'synthetic-key',
+        'Olá',
+        'shimmer',
+        signal,
+      ),
+    ).rejects.toThrow(/Gemini.*Kore.*Leda/);
+    expect(sent).toBe(false);
+  });
+
+  it('keeps speaking instructions separate from the text with OpenAI speech', async () => {
+    const client = new MediaProviders(async (_url, options) => {
+      expect(JSON.parse(String(options?.body))).toMatchObject({
+        input: 'Olá',
+        voice: 'nova',
+        instructions: 'Speak cheerfully.',
+      });
+      return new Response('OggS-test');
+    });
+    const result = await client.generate(
+      'speech',
+      { provider: 'openai', modelId: 'gpt-4o-mini-tts' },
+      'synthetic-key',
+      'Olá',
+      'Nova',
+      signal,
+      undefined,
+      'Speak cheerfully.',
+    );
+    expect(result.mimeType).toBe('audio/ogg');
+  });
+
+  it('refuses unsupported voices on legacy OpenAI speech models', async () => {
+    const client = new MediaProviders(async () => Response.json({}));
+    await expect(
+      client.generate(
+        'speech',
+        { provider: 'openai', modelId: 'tts-1' },
+        'synthetic-key',
+        'Olá',
+        'marin',
+        signal,
+      ),
+    ).rejects.toThrow(/tts-1.*nova/);
+  });
+
+  it('explains when a legacy speech model cannot honor style instructions', async () => {
+    const client = new MediaProviders(async () => Response.json({}));
+    await expect(
+      client.generate(
+        'speech',
+        { provider: 'openai', modelId: 'tts-1-hd' },
+        'synthetic-key',
+        'Olá',
+        undefined,
+        signal,
+        undefined,
+        'Speak cheerfully.',
+      ),
+    ).rejects.toThrow('does not support style instructions');
   });
 
   it('does not treat a blocked image response as successful generation', async () => {
@@ -394,4 +471,32 @@ it('preserves a legacy transcription selection as the incoming audio default', a
   expect(defaults.audio).toEqual(selection);
   await f.services.providers.setModelDefaults(f.profile.id, { audio: null });
   expect((await f.services.providers.modelDefaults(f.profile.id)).audio).toBeNull();
+});
+
+it('discovers voices for the profile speech provider instead of its conversation provider', async () => {
+  const f = await mediaFixture();
+  const provider = await f.services.providers.createProvider({
+    name: 'Gemini',
+    kind: 'google',
+    secret: 'synthetic-google-key-1234567890',
+  });
+  await f.services.providers.setModelDefaults(f.profile.id, {
+    speech: { providerId: provider.id, modelId: 'gemini-2.5-flash-preview-tts' },
+  });
+  await f.incoming('Choose a voice', 'voices');
+  const [contact] = await f.channels.contacts(f.profile.id);
+  if (!contact) throw new Error('Missing contact');
+  await f.channels.approveContact(f.profile.id, contact.id);
+  const [run] = await f.services.runs.recent(f.profile.id);
+  if (!run) throw new Error('Missing run');
+  const tool = f.services.media.tools(run).list_speech_voices;
+  if (!tool?.execute) throw new Error('Missing voice discovery');
+  const result = await tool.execute({}, { toolCallId: 'voices', messages: [], context: {} });
+  expect(result).toMatchObject({
+    provider: 'Gemini',
+    defaultVoice: 'Kore',
+    supportsInstructions: true,
+    voices: expect.arrayContaining([{ name: 'Leda', character: 'Youthful' }]),
+  });
+  expect(JSON.stringify(result)).not.toContain('shimmer');
 });

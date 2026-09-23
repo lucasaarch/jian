@@ -369,7 +369,7 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
 export const TOOL_GROUPS = {
   media: {
     summary: 'inspect images and audio, generate images, and reply with voice recordings',
-    tools: ['analyze_media', 'generate_image', 'generate_speech'],
+    tools: ['analyze_media', 'generate_image', 'list_speech_voices', 'generate_speech'],
   },
   files: {
     summary: 'read, write and list files on the machine this gateway runs on',

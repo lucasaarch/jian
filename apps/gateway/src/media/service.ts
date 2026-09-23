@@ -23,6 +23,7 @@ import { mediaAssets } from '../storage/schema.js';
 import { voiceNote } from './audio.js';
 import { type MediaMeter, MediaProviders } from './providers.js';
 import { findMedia, type MediaAsset, mediaIdsIn, mediaMarker } from './repository.js';
+import { speechVoices } from './voices.js';
 
 type MediaRole = 'vision' | 'audio' | 'image' | 'speech';
 
@@ -287,7 +288,7 @@ export class Media {
     }
   }
 
-  tools(run: Run, account?: MediaMeter): ToolSet {
+  tools(run: Run, account?: MediaMeter) {
     return {
       analyze_media: tool({
         description:
@@ -324,14 +325,31 @@ export class Media {
             account,
           ),
       }),
+      list_speech_voices: tool({
+        description:
+          'List voices, their characteristics, the default voice and style support for this profile’s configured speech provider. Call before selecting a voice; providers use different names.',
+        inputSchema: z.object({}),
+        execute: async () => {
+          const { config } = await this.selection(run.profileId, 'speech');
+          return speechVoices(config);
+        },
+      }),
       generate_speech: tool({
         description:
-          'Speak text using the configured speech model and queue the audio for this conversation. Use when the user requests an audio/voice reply. Voice is a provider voice name, not a person to imitate.',
+          'Speak text using the configured speech model and queue the audio for this conversation. Use when the user requests an audio/voice reply. Omit voice to use the provider default, or call list_speech_voices first and choose a returned name. Never guess a voice from another provider. Put tone, accent and pace in instructions; text contains only words to speak.',
         inputSchema: z.object({
           text: z.string().min(1).max(4000),
           voice: z.string().min(1).max(80).optional(),
+          instructions: z
+            .string()
+            .min(1)
+            .max(1000)
+            .optional()
+            .describe(
+              'Speaking style, such as gentle and cheerful Brazilian Portuguese. Use only when list_speech_voices reports supportsInstructions.',
+            ),
         }),
-        execute: async ({ text, voice }, options) =>
+        execute: async ({ text, voice, instructions }, options) =>
           this.generate(
             run,
             'speech',
@@ -340,9 +358,10 @@ export class Media {
             options.toolCallId,
             options.abortSignal,
             account,
+            instructions,
           ),
       }),
-    };
+    } satisfies ToolSet;
   }
 
   async generate(
@@ -353,6 +372,7 @@ export class Media {
     toolCallId: string,
     signal?: AbortSignal,
     account?: MediaMeter,
+    instructions?: string,
   ) {
     const sourceKey = createHash('sha256')
       .update(JSON.stringify([run.id, toolCallId, kind]))
@@ -369,7 +389,7 @@ export class Media {
       AbortSignal.timeout(180_000),
     ]);
     const generated = inlineMediaSchema.parse(
-      await this.client.generate(kind, config, key, prompt, voice, deadline, account),
+      await this.client.generate(kind, config, key, prompt, voice, deadline, account, instructions),
     );
     const media = kind === 'speech' ? await voiceNote(generated, deadline) : generated;
     const bytes = Buffer.from(media.data, 'base64').length;

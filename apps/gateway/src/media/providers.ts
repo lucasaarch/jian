@@ -5,6 +5,7 @@ import {
   type ModelConfig,
 } from '@jian/contracts';
 import { z } from 'zod';
+import { speechVoice, speechVoices } from './voices.js';
 
 export type MediaUsage = { inputTokens: number; outputTokens: number; cachedInputTokens: number };
 export type MediaMeter = (usage: MediaUsage) => Promise<void>;
@@ -190,20 +191,33 @@ export class MediaProviders {
     voice: string | undefined,
     signal: AbortSignal,
     account?: MediaMeter,
+    instructions?: string,
   ): Promise<InlineMedia> {
     if (config.provider === 'openai-codex')
       throw new Error('Image and speech generation require an OpenAI API key, not a ChatGPT login');
+    const selectedVoice = kind === 'speech' ? speechVoice(config, voice) : undefined;
+    if (kind === 'speech' && instructions && !speechVoices(config).supportsInstructions)
+      throw new Error(
+        'This speech model does not support style instructions. Omit instructions or choose a newer speech model.',
+      );
     if (config.provider === 'google') {
       const parts = await this.google(
         config,
         key,
-        [{ text: prompt }],
+        [
+          {
+            text:
+              kind === 'speech' && instructions
+                ? `Speaking style: ${instructions}\nRead only the following text aloud, without reading these instructions:\n${prompt}`
+                : prompt,
+          },
+        ],
         kind === 'image'
           ? { responseModalities: ['TEXT', 'IMAGE'] }
           : {
               responseModalities: ['AUDIO'],
               speechConfig: {
-                voiceConfig: { prebuiltVoiceConfig: { voiceName: voice ?? 'Kore' } },
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } },
               },
             },
         signal,
@@ -244,7 +258,8 @@ export class MediaProviders {
             : {
                 model: config.modelId,
                 input: prompt,
-                voice: voice ?? 'nova',
+                voice: selectedVoice,
+                ...(instructions ? { instructions } : {}),
                 response_format: 'opus',
               },
         ),
