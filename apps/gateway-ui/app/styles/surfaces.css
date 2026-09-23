@@ -292,41 +292,84 @@
   .loading-state {
     @apply flex min-h-96 items-center justify-center gap-3 text-muted;
   }
-  .sessions-layout {
-    @apply grid min-h-[580px] grid-cols-[220px_minmax(0,1fr)] overflow-hidden rounded-sm border border-line;
-  }
-  .session-row {
-    @apply flex items-center rounded-sm;
-  }
-  .session-list {
-    @apply max-h-[780px] overflow-auto border-r border-line bg-surface p-3;
-  }
-  .session-list button {
-    @apply flex w-full items-start gap-2.5 rounded-sm border border-transparent p-3 text-left;
-  }
-  .session-list button svg {
-    @apply mt-0.5 text-muted;
-  }
-  .session-list button span {
-    @apply min-w-0;
-  }
-  .session-list strong {
-    @apply block break-words text-xs font-medium;
-  }
-  .session-list strong.unnamed {
-    @apply italic text-muted;
-  }
-  .session-list small {
-    @apply mt-1.5 block text-[11px] text-muted;
-  }
-  .session-row.selected {
-    @apply border-l-2 border-accent bg-canvas;
-  }
   .session-history {
-    @apply flex min-w-0 flex-col p-6;
+    @apply flex min-h-0 min-w-0 flex-1 flex-col px-6 pb-4 pt-3;
   }
   .message-history {
-    @apply max-h-[640px] min-h-64 flex-1 overscroll-contain overflow-auto p-1;
+    @apply min-h-0 flex-1 overscroll-contain overflow-auto p-1;
+  }
+
+  /* Sessions: the whole area beside the app's sidebar, like a messaging app. */
+  .main-content.fill {
+    @apply h-dvh max-w-none overflow-hidden p-0;
+  }
+  .main-content.fill > .page-enter {
+    @apply h-full;
+  }
+  .messenger {
+    @apply grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)];
+  }
+  .messenger.empty-state {
+    @apply grid-cols-1 place-items-center;
+  }
+  .conversation-list {
+    @apply flex min-h-0 flex-col border-r border-line bg-surface;
+  }
+  .conversation-list > header {
+    @apply grid gap-3 border-b border-line px-4 pb-4 pt-6;
+  }
+  .conversation-list h1 {
+    @apply text-3xl;
+  }
+  .conversation-scroll {
+    @apply min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3;
+  }
+  .conversation-scroll h2 {
+    @apply flex items-center justify-between px-3 pb-1 pt-3 font-sans text-[11px] font-semibold uppercase tracking-wider text-muted;
+  }
+  .conversation-item {
+    @apply flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-canvas;
+  }
+  .conversation-item[aria-current="true"] {
+    @apply bg-accent-soft;
+  }
+  .conversation-avatar,
+  .face.conversation-avatar {
+    @apply grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-accent-soft object-cover text-sm font-semibold text-accent;
+  }
+  .conversation-avatar.symbol {
+    @apply bg-canvas text-muted;
+  }
+  .conversation-text {
+    @apply min-w-0 flex-1;
+  }
+  .conversation-text strong {
+    @apply block truncate text-sm font-medium text-ink;
+  }
+  .conversation-text small {
+    @apply block truncate text-xs text-muted;
+  }
+  .conversation-item time {
+    @apply shrink-0 self-start pt-0.5 text-[11px] text-muted;
+  }
+  .conversation-none {
+    @apply px-3 py-6 text-center text-sm text-muted;
+  }
+  .conversation-pane {
+    @apply flex min-h-0 min-w-0 flex-col;
+  }
+  .conversation-pane > header {
+    @apply flex items-center gap-3 border-b border-line px-6 py-4;
+  }
+  .conversation-pane > header h2 {
+    @apply truncate text-xl;
+  }
+  .conversation-pane > header small {
+    @apply block truncate text-xs text-muted;
+  }
+  /* Only a phone has a list to go back to. */
+  .conversation-pane .conversation-back {
+    @apply hidden;
   }
   .message-history .empty {
     @apply border-0;
@@ -357,12 +400,6 @@
 @media (max-width: 1100px) {
   .settings-section {
     @apply grid-cols-1 gap-3;
-  }
-  .sessions-layout {
-    @apply grid-cols-1;
-  }
-  .session-list {
-    @apply max-h-44 border-b border-r-0;
   }
   .memory-grid {
     @apply grid-cols-1;
@@ -403,7 +440,24 @@
     @apply hidden;
   }
   .session-history {
-    @apply p-3;
+    @apply px-3;
+  }
+  /* A phone shows the list or the conversation, never both. */
+  .main-content.fill {
+    height: calc(100dvh - 3.5rem);
+  }
+  .messenger {
+    @apply grid-cols-1;
+  }
+  .messenger[data-reading="true"] .conversation-list,
+  .messenger[data-reading="false"] .conversation-pane {
+    @apply hidden;
+  }
+  .conversation-pane .conversation-back {
+    @apply inline-flex;
+  }
+  .conversation-pane > header {
+    @apply px-3;
   }
   .message.user {
     @apply ml-4;

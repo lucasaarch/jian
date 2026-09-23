@@ -1,10 +1,10 @@
 'use client';
 
-import { MessageCircle, ShieldOff, UserCheck, Users, UserX } from 'lucide-react';
+import { ShieldOff, UserCheck, UserX } from 'lucide-react';
 import type { Channel, Contact } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionProps } from '../props';
-import { Badge, Button } from '../ui';
+import { Badge, Button, Face } from '../ui';
 import { kinds } from './kinds';
 
 const agents = (count: number) => (count === 1 ? '1 agent' : `${count} agents`);
@@ -47,17 +47,14 @@ export function Conversations({
 
   // A request is a decision, not a row: it gets room for who wrote, what they said, and the
   // two answers, with the one that approves last and strongest.
-  const request = (contact: Contact, detail: string, icon: typeof Users) => {
-    const Icon = icon;
+  const request = (contact: Contact, detail: string) => {
     const name = contact.displayName ?? contact.actorId;
     const channelName = kinds.find((kind) => kind.type === contact.type)?.name;
 
     return (
       <article className="request-card" key={contact.id}>
         <header>
-          <span className="request-icon" aria-hidden="true">
-            <Icon size={18} />
-          </span>
+          <Face name={name} picture={contact.avatar} className="request-face" />
           <div className="grow">
             <h4>
               {name}
@@ -103,17 +100,16 @@ export function Conversations({
     );
   };
 
-  const row = (contact: Contact, detail: string, icon: typeof Users) => {
+  const row = (contact: Contact, detail: string) => {
     if (contact.status === 'pending') {
-      return request(contact, detail, icon);
+      return request(contact, detail);
     }
 
-    const Icon = icon;
     const name = contact.displayName ?? contact.actorId;
 
     return (
       <div className="conversation-row" key={contact.id} data-status={contact.status}>
-        <Icon size={18} aria-hidden="true" />
+        <Face name={name} picture={contact.avatar} />
         <div className="grow">
           <strong>{name}</strong>
           {detail !== name && <small>{detail}</small>}
@@ -167,7 +163,6 @@ export function Conversations({
               others.length
                 ? `With ${others.map((item) => item.name).join(', ')} · ${agents(others.length + 1)}`
                 : 'The only agent here',
-              Users,
             );
           })
         ) : (
@@ -177,7 +172,7 @@ export function Conversations({
       <section>
         <h3>Contacts</h3>
         {people.length ? (
-          people.map((contact) => row(contact, contact.actorId, MessageCircle))
+          people.map((contact) => row(contact, contact.actorId))
         ) : (
           <p className="note">Nobody yet. Someone's first message shows up here as a request.</p>
         )}
