@@ -13,3 +13,8 @@ const destination = new URL('../dist/ui/', import.meta.url);
 await rm(destination, { recursive: true, force: true });
 await cp(new URL('../../gateway-ui/out/', import.meta.url), destination, { recursive: true });
 console.log('Gateway UI embedded at /ui.');
+
+// The notes travel with the build, so the panel can say what changed in the version it runs.
+const notes = new URL('../dist/release-notes/', import.meta.url);
+await rm(notes, { recursive: true, force: true });
+await cp(new URL('../../../docs/releases/', import.meta.url), notes, { recursive: true });

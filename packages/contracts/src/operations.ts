@@ -53,6 +53,7 @@ import {
   runRecordSchema,
   sessionRecordSchema,
 } from './records.js';
+import { releasesSchema } from './releases.js';
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
 import { catalogQuerySchema, catalogSchema, skillImportSchema } from './skills.js';
 import { webSearchInputSchema, webSearchStatusSchema } from './web.js';
@@ -84,6 +85,20 @@ export const cursorSchema = z.strictObject({
 });
 
 export const operations: Operation[] = [
+  {
+    method: 'GET',
+    path: '/v1/releases',
+    operationId: 'getReleases',
+    access: 'admin',
+    response: releasesSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/releases/seen',
+    operationId: 'markReleasesSeen',
+    access: 'admin',
+    response: releasesSchema,
+  },
   {
     method: 'GET',
     path: '/v1/web-search',

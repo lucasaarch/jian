@@ -4,6 +4,7 @@ import { LoaderCircle, Plus } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
 import { NewProfileDialog } from '../../components/profile/editor';
+import { ReleaseDialog } from '../../components/releases/dialog';
 import { NoticeBar } from '../../components/shell/notice';
 import { Sidebar } from '../../components/shell/sidebar';
 import { Topbar } from '../../components/shell/topbar';
@@ -107,6 +108,7 @@ function Shell({ children }: { children: ReactNode }) {
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
+      <ReleaseDialog />
       {mobile && (
         <button
           className="sidebar-backdrop"

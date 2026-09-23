@@ -359,6 +359,16 @@ export const secrets = pgTable(
   (table) => [primaryKey({ columns: [table.profileId, table.name] })],
 );
 
+/**
+ * How far the owner has read the release notes: the version they were last shown. One row, since
+ * an installation has one owner; `scope` is its key so the table never grows a second.
+ */
+export const releaseReads = pgTable('release_reads', {
+  scope: text('scope').primaryKey(),
+  version: text('version').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const channelType = pgEnum('channel_type', ['api', 'telegram', 'whatsapp']);
 
 export const channels = pgTable(

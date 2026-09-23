@@ -7,6 +7,7 @@ export * from './peers.js';
 export * from './profile.js';
 export * from './providers.js';
 export * from './records.js';
+export * from './releases.js';
 export * from './security.js';
 export * from './skills.js';
 export * from './web.js';

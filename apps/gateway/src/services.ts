@@ -8,6 +8,7 @@ import { Peers } from './peers/service.js';
 import { Profiles } from './profiles/service.js';
 import type { ModelCatalog } from './providers/catalog-source.js';
 import { Providers } from './providers/service.js';
+import { ReleaseNotes } from './releases/service.js';
 import { RunLifecycle } from './runs/lifecycle.js';
 import { Runs } from './runs/service.js';
 import type { GatewayVault } from './security/gateway-vault.js';
@@ -24,6 +25,7 @@ export type Services = {
   memories: Memories;
   media: Media;
   web: WebSearch;
+  releases: ReleaseNotes;
   decisions: Decisions;
   runs: Runs;
   peers: Peers;
@@ -64,6 +66,8 @@ export function buildServices({
     memories,
     media: new Media(store, providers, gatewayVault, fetcher ?? createSafeFetch().fetch),
     web: new WebSearch(store, gatewayVault, fetcher ?? createSafeFetch().fetch),
+    // Stamped into the image at build time; a gateway run from source has none.
+    releases: new ReleaseNotes(store, process.env.JIAN_VERSION),
     decisions,
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),

@@ -16,6 +16,8 @@ RUN pnpm install --frozen-lockfile
 COPY apps/gateway apps/gateway
 COPY apps/gateway-ui apps/gateway-ui
 COPY packages packages
+# The release notes ride in the build, so the panel can say what changed in this version.
+COPY docs/releases docs/releases
 # `deploy` writes a self-contained tree: the gateway's compiled output, the panel exported
 # into it, and production dependencies with the workspace links resolved to real files.
 RUN pnpm build && pnpm --filter @jian/gateway --prod deploy --legacy /runtime
@@ -71,7 +73,8 @@ LABEL org.opencontainers.image.title="Jian Gateway" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.version="${JIAN_VERSION}" \
       org.opencontainers.image.revision="${JIAN_REVISION}"
-ENV NODE_ENV=production HOST=0.0.0.0 PORT=4310
+# The version the panel announces the notes of; CI stamps it from the tag.
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=4310 JIAN_VERSION=${JIAN_VERSION}
 WORKDIR /app
 # Only the deployed tree crosses over: no sources, no toolchain, no pnpm store.
 COPY --from=build --chown=node:node /runtime ./
