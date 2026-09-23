@@ -321,11 +321,28 @@
   .conversation-list h1 {
     @apply text-3xl;
   }
+  /* One tab per channel: a conversation list never mixes where people came from. */
+  .channel-tabs {
+    @apply flex flex-wrap gap-1 border-b border-line px-3 py-2;
+  }
+  .channel-tabs button {
+    @apply relative flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-canvas hover:text-ink;
+  }
+  .channel-tabs button[aria-selected="true"] {
+    @apply bg-canvas text-ink;
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--shade) 14%, transparent);
+  }
+  .channel-count {
+    @apply rounded-full bg-line px-1.5 text-[10px] leading-4 text-muted;
+  }
+  .channel-tabs button[aria-selected="true"] .channel-count {
+    @apply bg-accent-soft text-accent;
+  }
+  .channel-busy {
+    @apply absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent;
+  }
   .conversation-scroll {
     @apply min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3;
-  }
-  .conversation-scroll h2 {
-    @apply flex items-center justify-between px-3 pb-1 pt-3 font-sans text-[11px] font-semibold uppercase tracking-wider text-muted;
   }
   .conversation-item {
     @apply flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-canvas;
@@ -364,21 +381,17 @@
     @apply shrink-0 text-accent;
   }
   .conversation-text .conversation-preview.working {
-    @apply font-medium text-accent;
+    @apply gap-1.5 font-medium text-accent;
   }
-  /* The "typing" of a messaging app: three dots rising in turn while a run is live. */
-  .typing-dots {
-    @apply ml-0.5 inline-flex items-end gap-0.5;
+  .orb {
+    @apply -my-0.5 inline-flex h-5 w-5 shrink-0;
   }
-  .typing-dots i {
-    @apply h-1 w-1 rounded-full bg-current;
-    animation: typing 1.2s infinite ease-in-out;
+  .orb svg {
+    @apply absolute;
   }
-  .typing-dots i:nth-child(2) {
-    animation-delay: 0.15s;
-  }
-  .typing-dots i:nth-child(3) {
-    animation-delay: 0.3s;
+  /* The filter reads the accent through CSS, so it follows the theme and the mode live. */
+  .orb-accent {
+    flood-color: var(--accent);
   }
   .conversation-item time {
     @apply shrink-0 self-start pt-0.5 text-[11px] text-muted;
