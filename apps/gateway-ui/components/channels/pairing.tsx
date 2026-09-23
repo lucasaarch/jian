@@ -89,7 +89,7 @@ export function Pairing({
             <div className="success-orbit">
               <Check size={32} />
             </div>
-            <h3>WhatsApp conectado</h3>
+            <h3>WhatsApp connected</h3>
             <p>{connection.accountId}</p>
             <small>
               {connection.sessionSavedAt
@@ -105,7 +105,7 @@ export function Pairing({
                 size={240}
                 level="M"
                 marginSize={2}
-                title="QR Code para vincular o WhatsApp"
+                title="QR code to link WhatsApp"
               />
             </div>
             <small>The code refreshes on its own.</small>
@@ -116,7 +116,7 @@ export function Pairing({
             <h3>{connection ? states[connection.status] : 'Reading the connection'}</h3>
             <p>
               {connection?.status === 'connecting' || connection?.status === 'qr'
-                ? 'Aguarde o Gateway preparar um novo QR Code.'
+                ? 'Waiting for the gateway to prepare a new QR code.'
                 : 'Start the connection to get a QR code.'}
             </p>
           </>

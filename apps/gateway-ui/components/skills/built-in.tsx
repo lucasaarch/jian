@@ -46,7 +46,7 @@ export function BuiltinSkills({
             ? [...profile.disabledSkills, skill.name]
             : profile.disabledSkills.filter((name) => name !== skill.name),
         }),
-      skill.enabled ? `${skill.name} desativada.` : `${skill.name} ativada.`,
+      skill.enabled ? `${skill.name} switched off.` : `${skill.name} switched on.`,
     );
 
   if (error) {

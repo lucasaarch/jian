@@ -25,11 +25,7 @@ export function NewProfileDialog({
   const [error, setError] = useState('');
 
   return (
-    <Modal
-      title="Um novo perfil"
-      description="Uma identidade para todas as conversas."
-      close={close}
-    >
+    <Modal title="A new profile" description="One identity for every conversation." close={close}>
       <form
         method="post"
         action="/ui/"
@@ -102,9 +98,9 @@ export function ProfileEditor({
   busy: boolean;
 }) {
   const legacyIdentity = [
-    profile.identity.role && `Papel: ${profile.identity.role}`,
-    profile.identity.tone && `Tom: ${profile.identity.tone}`,
-    ...profile.identity.goals.map((goal) => `Objetivo: ${goal}`),
+    profile.identity.role && `Role: ${profile.identity.role}`,
+    profile.identity.tone && `Tone: ${profile.identity.tone}`,
+    ...profile.identity.goals.map((goal) => `Goal: ${goal}`),
   ].filter(Boolean);
   const instructions = [profile.instructions, ...legacyIdentity].join('\n\n');
 

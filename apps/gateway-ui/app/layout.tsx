@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR" data-theme="strelizia" suppressHydrationWarning>
+    <html lang="en" data-theme="strelizia" suppressHydrationWarning>
       <head>
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: Fixed theme allowlist only, hashed by the gateway CSP; must run before first paint. */}
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap + preferencesBootstrap }} />

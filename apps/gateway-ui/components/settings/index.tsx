@@ -77,19 +77,19 @@ export function Settings({ tab }: { tab: 'appearance' | 'accessibility' }) {
           aria-current={tab === 'accessibility' ? 'page' : undefined}
         >
           <Accessibility size={16} />
-          Acessibilidade
+          Accessibility
         </Link>
       </nav>
       {tab === 'appearance' ? (
         <section className="appearance-panel">
           <div className="section-row">
             <div>
-              <h2>Cor de acento</h2>
+              <h2>Accent colour</h2>
               <p className="mt-1 text-sm">Five variations. The same workspace.</p>
             </div>
             <span className="preference-autosave">
               <Check size={14} />
-              Salvo automaticamente
+              Saved automatically
             </span>
           </div>
           <ThemePicker />

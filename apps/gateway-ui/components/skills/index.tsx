@@ -69,7 +69,7 @@ export function Capabilities({
       />
       {isSkill && <SkillImport profile={profile} api={api} mutate={mutate} busy={busy} />}
       {isSkill && <BuiltinSkills profile={profile} api={api} mutate={mutate} busy={busy} />}
-      {isSkill && <h2 className="mb-4 text-2xl">Importadas</h2>}
+      {isSkill && <h2 className="mb-4 text-2xl">Imported</h2>}
       {items.length ? (
         <div className="resource-list">
           {items.map((item, index) =>
@@ -84,7 +84,7 @@ export function Capabilities({
                   {profile.skills[index]?.origin && (
                     <div className="tag-list">
                       <a href={profile.skills[index].origin.url} target="_blank" rel="noreferrer">
-                        Importada de {new URL(profile.skills[index].origin.url).pathname.slice(1)}
+                        Imported from {new URL(profile.skills[index].origin.url).pathname.slice(1)}
                       </a>
                     </div>
                   )}

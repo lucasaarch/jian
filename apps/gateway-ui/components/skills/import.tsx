@@ -25,7 +25,7 @@ export function SkillImport({
           return;
         }
 
-        if (await mutate(() => api.importSkill(profile.id, url.trim()), 'Skill importada.')) {
+        if (await mutate(() => api.importSkill(profile.id, url.trim()), 'Skill imported.')) {
           setUrl('');
         }
       }}
@@ -34,7 +34,7 @@ export function SkillImport({
         <input
           value={url}
           onChange={(event) => setUrl(event.target.value)}
-          placeholder="https://github.com/dono/repositorio/tree/main/skills/deploy"
+          placeholder="https://github.com/owner/repository/tree/main/skills/deploy"
           inputMode="url"
           aria-describedby="skill-import-hint"
         />

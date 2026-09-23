@@ -64,8 +64,8 @@ export function History({
     <div className="session-history">
       <div className="history-caption">
         <LockKeyhole size={14} />
-        <span>Somente leitura</span>
-        <span>{messages.length} mensagens</span>
+        <span>Read only</span>
+        <span>{messages.length === 1 ? '1 message' : `${messages.length} messages`}</span>
       </div>
       <section className="message-history" aria-label="Session history" aria-busy={loading}>
         {loading ? (
@@ -136,8 +136,8 @@ export function History({
           </Badge>
           {run.usage && (
             <small>
-              {(run.usage.inputTokens + run.usage.outputTokens).toLocaleString('pt-BR')} tokens ·{' '}
-              {run.usage.steps} etapas
+              {(run.usage.inputTokens + run.usage.outputTokens).toLocaleString()} tokens ·{' '}
+              {run.usage.steps === 1 ? '1 step' : `${run.usage.steps} steps`}
             </small>
           )}
           {run.error && <p className="text-bad">{run.error}</p>}

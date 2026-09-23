@@ -53,7 +53,7 @@ export function Sessions({
               />
             </div>
             <Select
-              aria-label="Filtrar por canal"
+              aria-label="Filter by channel"
               value={channel}
               onValueChange={setChannel}
               options={[

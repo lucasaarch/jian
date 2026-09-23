@@ -115,7 +115,7 @@ export function AvatarField({
             setError('');
 
             if (!ACCEPTED.includes(chosen.type)) {
-              setError('Escolha uma imagem PNG, JPEG ou WebP.');
+              setError('Choose a PNG, JPEG or WebP image.');
 
               return;
             }
