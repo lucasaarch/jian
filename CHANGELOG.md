@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.1.0](https://github.com/lucasaarch/jian/compare/v2.0.0...v2.1.0) (2026-09-23)
+
+
+### Features
+
+* **agent:** edit code precisely and reach every channel conversation ([cbdf85f](https://github.com/lucasaarch/jian/commit/cbdf85fd8bad9149bf185f9e432e5f0ad5d87041))
+* **decisions:** ask Jev whether a group message calls an agent and whether an action goes too far ([8704289](https://github.com/lucasaarch/jian/commit/87042890ed033b3f5a267760a071757fa213c352))
+* **web:** let an agent search the web and read public pages ([23ca3d7](https://github.com/lucasaarch/jian/commit/23ca3d75d1ba7cc17bf715a950495ca45e0ca65a))
+
+
+### Bug Fixes
+
+* **groups:** hand other agents the whole turn, not only its last paragraph ([ee6ff48](https://github.com/lucasaarch/jian/commit/ee6ff488f5f88c2636fc8ce23cc0f5c8a94cf715))
+* **groups:** show each agent what the others said in a Telegram group ([c5a280d](https://github.com/lucasaarch/jian/commit/c5a280d5e8a94b9879916132de13952f576921e3))
+* **mcp:** tell agents which tools their servers offer and find them by words ([414f601](https://github.com/lucasaarch/jian/commit/414f601f05b396501a1222d4d349479ec2edcc54))
+* **providers:** carry ChatGPT reasoning between steps instead of referring to it ([09a3714](https://github.com/lucasaarch/jian/commit/09a3714dfcd6a7cfd1f8c8a4cb506170a6888a1c))
+
 ## [2.0.0](https://github.com/lucasaarch/jian/compare/v1.0.2...v2.0.0) (2026-09-23)
 
 
