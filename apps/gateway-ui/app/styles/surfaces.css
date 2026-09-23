@@ -186,9 +186,6 @@
   .request-message {
     @apply mt-2 break-words text-sm text-ink;
   }
-  .autosave-note {
-    @apply mt-8 flex items-center gap-1.5 text-xs text-muted;
-  }
   .danger-zone {
     @apply mt-16 flex flex-wrap items-center gap-5 rounded-lg border border-bad/40 bg-bad-soft px-6 py-5;
   }
