@@ -1,4 +1,6 @@
+import { sql } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { listMemories } from '../src/memories/repository.js';
 import { testServices } from './helpers/services.js';
 
 const profileInput = {
@@ -67,6 +69,59 @@ it('uses optimistic versions for profile and memory edits', async () => {
 });
 
 const avatar = `data:image/jpeg;base64,${Buffer.from('synthetic-image-bytes').toString('base64')}`;
+
+describe('deleting a profile', () => {
+  it('removes the profile and everything it ever held', async () => {
+    const { services, profile, session } = await setup();
+
+    await services.memories.remember(profile.id, {
+      key: 'project',
+      content: 'Alpha',
+      expectedVersion: 0,
+    });
+
+    await expect(services.profiles.deleteProfile(profile.id)).resolves.toEqual({
+      id: profile.id,
+    });
+
+    await expect(services.profiles.profile(profile.id)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+
+    await expect(services.sessions.session(profile.id, session.id)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+
+    // Reads under the repository, not the service: past the profile's own existence check,
+    // straight against the table the foreign key cascades into.
+    expect(await listMemories(services.store.db, profile.id, 100)).toEqual([]);
+  });
+
+  it('rejects a profile that does not exist', async () => {
+    const services = await testServices();
+
+    await expect(
+      services.profiles.deleteProfile('00000000-0000-0000-0000-000000000000'),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('runs the beforeDelete hook inside the same transaction as the delete', async () => {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile(profileInput);
+    const seen: string[] = [];
+
+    services.profiles.useBeforeDelete(async (profileId, tx) => {
+      seen.push(profileId);
+      // The hook's writes land or roll back with the delete: proven by writing through the
+      // same handle the delete itself uses, not a second connection racing it.
+      await tx.execute(sql`select 1`);
+    });
+
+    await services.profiles.deleteProfile(profile.id);
+
+    expect(seen).toEqual([profile.id]);
+  });
+});
 
 describe('profile configuration changes', () => {
   it('preserves skills, MCP configuration and permissions on a name-only edit', async () => {

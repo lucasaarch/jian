@@ -44,6 +44,11 @@ export async function updateProfileRow(db: Queryable, profile: Profile): Promise
   await db.update(profiles).set(toRow(profile)).where(eq(profiles.id, profile.id));
 }
 
+/** Every child row cascades from the foreign key; this is the one statement that removes them all. */
+export async function deleteProfileRow(db: Queryable, id: string): Promise<void> {
+  await db.delete(profiles).where(eq(profiles.id, id));
+}
+
 /** The whole document, so a run can read exactly the profile it froze. */
 export async function insertRevision(db: Queryable, profile: Profile): Promise<void> {
   await db.insert(profileRevisions).values({

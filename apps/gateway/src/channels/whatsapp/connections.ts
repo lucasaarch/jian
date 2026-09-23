@@ -334,6 +334,20 @@ export class WhatsAppConnections {
 
   async tick(receive: Receiver) {
     const records = await listConnections(this.store.db, 1000);
+    const live = new Set(records.map((record) => record.id));
+
+    // Deleting a profile cascades its channel and this row away in one transaction, with no
+    // chance to mark `desired: false` where this worker could see it first — the row is simply
+    // gone on the next poll. A device this worker still holds for an id that vanished from the
+    // table has exactly the same one requirement any other stop does: `stop()` before this tick
+    // ends. Snapshotting the ids first means a device opened by this same tick, after the
+    // `records` read, is never mistaken for one whose row disappeared.
+    for (const [channelId, local] of [...this.devices]) {
+      if (!live.has(channelId)) {
+        this.devices.delete(channelId);
+        await local.device.stop(true).catch(() => {});
+      }
+    }
 
     for (const record of records) {
       const channel = await findChannel(this.store.db, record.id);

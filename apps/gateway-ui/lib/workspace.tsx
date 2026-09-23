@@ -31,6 +31,12 @@ type Workspace = {
   selected: string;
   select: (profileId: string) => void;
   adopt: (profile: Profile) => void;
+  /**
+   * Deletes the profile on the gateway, then drops it locally and selects whatever remains.
+   * A bespoke action rather than `mutate` + a local `remove`, because `mutate`'s own refresh
+   * would run first, still pointed at the profile this just deleted — and fail loading it.
+   */
+  deleteProfile: (profileId: string) => Promise<boolean>;
   refresh: () => Promise<void>;
   mutate: Mutation;
   notice: Notice | undefined;
@@ -253,6 +259,40 @@ export function WorkspaceProvider({
     adopt: (created) => {
       setProfiles((current) => [...current, created]);
       setSelected(created.id);
+    },
+    deleteProfile: async (profileId) => {
+      setBusy(true);
+      setNotice(undefined);
+
+      try {
+        await api.deleteProfile(profileId);
+      } catch (error) {
+        setNotice({
+          text: error instanceof Error ? error.message : 'The profile could not be deleted.',
+          error: true,
+        });
+        setBusy(false);
+
+        return false;
+      }
+
+      const remaining = profiles.filter((item) => item.id !== profileId);
+      const next = selected === profileId ? (remaining[0]?.id ?? '') : selected;
+
+      setProfiles(remaining);
+      setSelected(next);
+      setHeld((current) => (current?.profileId === profileId ? undefined : current));
+      setNotice({ text: 'Profile deleted.', error: false });
+      setBusy(false);
+
+      // Refreshes against the new selection, not the one that no longer exists.
+      if (next) {
+        await profileData(api, next)
+          .then((value) => setHeld({ profileId: next, value }))
+          .catch(() => undefined);
+      }
+
+      return true;
     },
     refresh,
     mutate,
