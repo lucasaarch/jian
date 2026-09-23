@@ -454,9 +454,6 @@
   .accent-picker {
     @apply gap-4;
   }
-  .save-bar {
-    @apply bottom-3 gap-3;
-  }
 }
 
 @layer components {

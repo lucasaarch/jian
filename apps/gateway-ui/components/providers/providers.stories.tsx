@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { profileData, sectionProps } from '../../stories/section';
+import { withWorkspace } from '../../stories/workspace';
 import { Providers } from '.';
 import { ModelDefaults } from './model-defaults';
 import { DecisionsRow, WebSearchRow } from './service-keys';
 
 const meta = {
   title: 'Sections/Providers',
+  decorators: [withWorkspace],
   parameters: { layout: 'padded' },
 } satisfies Meta;
 

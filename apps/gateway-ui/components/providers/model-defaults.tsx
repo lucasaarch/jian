@@ -1,16 +1,19 @@
 'use client';
 
 import { supportsModelRole, supportsProviderRole } from '@jian/contracts';
-import { Save } from 'lucide-react';
-import { useState } from 'react';
+import { Check } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 import type {
   ModelDefaultsInput,
   ModelSelection,
   ProfileData,
   ReasoningEffort,
 } from '../../lib/api';
+import { useAutosave } from '../../lib/autosave';
+import { useWorkspace } from '../../lib/workspace';
 import type { SectionProps } from '../props';
-import { Badge, Button, Empty, Field, SectionHeading } from '../ui';
+import { Badge, Empty, Field, SectionHeading } from '../ui';
 import { Select } from '../ui/select';
 import { efforts, modelLabel, type Role, roles, usableProviders } from './catalog';
 
@@ -49,7 +52,7 @@ function toSelection(value: RoleValue): ModelSelection | null {
   };
 }
 
-export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps) {
+export function ModelDefaults({ profile, data, api, busy }: SectionProps) {
   const configured = usableProviders(data);
   const hasOpenAIKey = configured.some(
     (provider) => provider.kind === 'openai' && provider.authMode !== 'codex',
@@ -61,8 +64,34 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
       ) as Record<Role, RoleValue>,
   );
 
-  const change = (role: Role, patch: Partial<RoleValue>) =>
-    setValues((current) => ({ ...current, [role]: { ...current[role], ...patch } }));
+  const { refresh } = useWorkspace();
+  const latest = useRef(values);
+
+  // A choice in a menu is final: it is saved at once, and the next one waits for it.
+  const { schedule, flush } = useAutosave(async () => {
+    try {
+      await api.setModelDefaults(
+        profile.id,
+        Object.fromEntries(
+          roles.map((role) => [role.key, toSelection(latest.current[role.key])]),
+        ) as ModelDefaultsInput,
+      );
+      toast.success('Model defaults saved.', { id: 'model-defaults-autosave' });
+      void refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'The defaults could not be saved.', {
+        id: 'model-defaults-autosave',
+      });
+    }
+  });
+
+  const change = (role: Role, patch: Partial<RoleValue>) => {
+    const next = { ...latest.current, [role]: { ...latest.current[role], ...patch } };
+
+    latest.current = next;
+    setValues(next);
+    schedule(0);
+  };
 
   if (!configured.length) {
     return (
@@ -89,16 +118,7 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
         action="/ui/"
         onSubmit={(event) => {
           event.preventDefault();
-          void mutate(
-            () =>
-              api.setModelDefaults(
-                profile.id,
-                Object.fromEntries(
-                  roles.map((role) => [role.key, toSelection(values[role.key])]),
-                ) as ModelDefaultsInput,
-              ),
-            'Model defaults saved.',
-          );
+          void flush();
         }}
       >
         {roles.map((role) => {
@@ -231,13 +251,9 @@ export function ModelDefaults({ profile, data, api, mutate, busy }: SectionProps
             </div>
           );
         })}
-        <div className="save-bar">
-          <span>Each activity uses its own selection.</span>
-          <Button type="submit" busy={busy}>
-            <Save size={16} />
-            Save the defaults
-          </Button>
-        </div>
+        <p className="autosave-note">
+          <Check size={14} /> Each choice is saved as you make it.
+        </p>
       </form>
     </>
   );
