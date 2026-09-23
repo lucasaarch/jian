@@ -46,6 +46,9 @@
   .nav-group a.active {
     @apply bg-accent-soft font-medium text-accent;
   }
+  .nav-count {
+    @apply ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-on-accent;
+  }
   .nav-group a.active::before {
     @apply absolute inset-y-3 -left-5 w-0.5 bg-accent;
     content: "";

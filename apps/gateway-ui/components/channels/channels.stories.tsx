@@ -7,7 +7,6 @@ import { profileData, sectionProps } from '../../stories/section';
 import { Channels } from '.';
 import { Conversations } from './conversations';
 import { Pairing } from './pairing';
-import { Requests } from './requests';
 
 const meta = {
   title: 'Sections/Channels',
@@ -17,6 +16,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** Someone new wrote on WhatsApp: that row opens by itself, the request first in its list. */
 export const List: Story = { render: () => <Channels {...sectionProps()} /> };
 
 /** Telegram opened: its connection, its groups and its contacts, each one revocable. */
@@ -24,7 +24,9 @@ export const TelegramExpanded: Story = {
   render: () => <Channels {...sectionProps()} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const [, telegram] = canvas.getAllByRole('button', { name: /Manage/ });
+    const telegram = canvasElement.querySelector<HTMLButtonElement>(
+      'button[aria-controls="channel-telegram"]',
+    );
 
     if (!telegram) throw new Error('No Telegram row');
 
@@ -42,9 +44,6 @@ export const NothingConnected: Story = {
     />
   ),
 };
-
-/** Someone new wrote first and waits for the owner. */
-export const PendingRequests: Story = { render: () => <Requests {...sectionProps()} /> };
 
 export const ChannelConversations: Story = {
   render: () => {

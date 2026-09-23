@@ -147,6 +147,10 @@
   .badge.bad {
     @apply bg-bad-soft text-bad;
   }
+  /* Something waiting on the owner: in the theme's own colour, not an alarm. */
+  .badge.accent {
+    @apply bg-accent-soft text-accent;
+  }
   .section-heading {
     @apply mb-8 flex flex-wrap items-start justify-between gap-5;
   }
