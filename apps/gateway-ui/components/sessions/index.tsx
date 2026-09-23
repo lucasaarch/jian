@@ -1,11 +1,21 @@
 'use client';
 
-import { ArrowLeft, Bot, CheckCheck, Search, Terminal } from 'lucide-react';
+import {
+  ArrowLeft,
+  Bot,
+  CheckCheck,
+  LayoutDashboard,
+  MessageSquare,
+  Search,
+  Send,
+  Smartphone,
+  Terminal,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { Contact, Session } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionProps } from '../props';
-import { Empty, Face } from '../ui';
+import { Empty, Face, Orb } from '../ui';
 import { History } from './history';
 
 const channelNames: Record<string, string> = {
@@ -14,7 +24,16 @@ const channelNames: Record<string, string> = {
   api: 'API',
   panel: 'Panel',
   web: 'Panel (legacy)',
-  agent: 'Other agents',
+  agent: 'Agents',
+};
+
+const channelIcons: Record<string, typeof Bot> = {
+  whatsapp: Smartphone,
+  telegram: Send,
+  api: Terminal,
+  agent: Bot,
+  panel: LayoutDashboard,
+  web: LayoutDashboard,
 };
 
 /** Channels in the order people reach the agent through them; anything else after. */
@@ -67,12 +86,8 @@ function Preview({ session, working }: { session: Session; working: boolean }) {
   if (working) {
     return (
       <small className="conversation-preview working">
-        Processing
-        <span className="typing-dots" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
+        <Orb />
+        Processing…
       </small>
     );
   }
@@ -101,6 +116,8 @@ export function Sessions({
   // On a phone the list and the conversation take turns; this is which one is showing.
   const [reading, setReading] = useState(Boolean(initialSession));
   const [query, setQuery] = useState('');
+  // One channel at a time: conversations from different places never share a list.
+  const [tab, setTab] = useState<string>();
 
   const contactOf = (session: Session) =>
     data.contacts.find((contact) => contact.sessionId === session.id);
@@ -114,24 +131,23 @@ export function Sessions({
       .map((run) => run.sessionId),
   );
   // Most recent conversation first, as a messaging app orders them.
-  const filtered = [...data.sessions]
-    .filter((session) =>
-      `${nameOf(session)} ${session.title ?? ''} ${session.lastMessage?.text ?? ''} ${
-        channelNames[session.channel] ?? session.channel
-      }`
-        .toLocaleLowerCase()
-        .includes(query.toLocaleLowerCase()),
-    )
-    .sort((a, b) => lastAt(b).localeCompare(lastAt(a)));
-  const channels = [...new Set(filtered.map((session) => session.channel))].sort(
+  const recent = [...data.sessions].sort((a, b) => lastAt(b).localeCompare(lastAt(a)));
+  const channels = [...new Set(recent.map((session) => session.channel))].sort(
     (a, b) =>
       ((channelOrder.indexOf(a) + 100) % 100) - ((channelOrder.indexOf(b) + 100) % 100) ||
       a.localeCompare(b),
   );
-  const first = channels
-    .map((kind) => filtered.find((session) => session.channel === kind))
-    .find(Boolean);
-  const active = data.sessions.find((session) => session.id === selected) ?? first;
+  const opened = data.sessions.find((session) => session.id === selected);
+  // The open conversation's channel, else the channel where something happened last.
+  const current = tab ?? opened?.channel ?? recent[0]?.channel;
+  const filtered = recent.filter(
+    (session) =>
+      session.channel === current &&
+      `${nameOf(session)} ${session.title ?? ''} ${session.lastMessage?.text ?? ''}`
+        .toLocaleLowerCase()
+        .includes(query.toLocaleLowerCase()),
+  );
+  const active = opened ?? filtered[0];
   const activeContact = active && contactOf(active);
 
   if (!data.sessions.length) {
@@ -159,43 +175,61 @@ export function Sessions({
             />
           </div>
         </header>
-        <div className="conversation-scroll">
+        <div className="channel-tabs" role="tablist" aria-label="Channels">
           {channels.map((kind) => {
-            const group = filtered.filter((session) => session.channel === kind);
+            const Icon = channelIcons[kind] ?? MessageSquare;
+            const count = recent.filter((session) => session.channel === kind).length;
+            const busy = recent.some(
+              (session) => session.channel === kind && working.has(session.id),
+            );
 
             return (
-              <section key={kind}>
-                <h2>
-                  {channelNames[kind] ?? kind}
-                  <span>{group.length}</span>
-                </h2>
-                {group.map((session) => {
-                  const contact = contactOf(session);
-                  const current = active?.id === session.id;
+              <button
+                type="button"
+                role="tab"
+                key={kind}
+                aria-selected={kind === current}
+                onClick={() => {
+                  setTab(kind);
+                  setSelected(undefined);
+                }}
+              >
+                <Icon size={15} aria-hidden="true" />
+                {channelNames[kind] ?? kind}
+                <span className="channel-count">{count}</span>
+                {busy && (
+                  <span className="channel-busy">
+                    <span className="sr-only">An answer is being written</span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div className="conversation-scroll" role="tabpanel">
+          {filtered.map((session) => {
+            const contact = contactOf(session);
 
-                  return (
-                    <button
-                      type="button"
-                      key={session.id}
-                      className="conversation-item"
-                      aria-current={current ? 'true' : undefined}
-                      onClick={() => {
-                        setSelected(session.id);
-                        setReading(true);
-                      }}
-                    >
-                      <ConversationAvatar session={session} {...(contact ? { contact } : {})} />
-                      <span className="conversation-text">
-                        <strong>{nameOf(session)}</strong>
-                        <Preview session={session} working={working.has(session.id)} />
-                      </span>
-                      <time dateTime={lastAt(session)} title={date(lastAt(session))}>
-                        {when(lastAt(session))}
-                      </time>
-                    </button>
-                  );
-                })}
-              </section>
+            return (
+              <button
+                type="button"
+                key={session.id}
+                className="conversation-item"
+                aria-current={active?.id === session.id ? 'true' : undefined}
+                onClick={() => {
+                  setSelected(session.id);
+                  setReading(true);
+                }}
+              >
+                <ConversationAvatar session={session} {...(contact ? { contact } : {})} />
+                <span className="conversation-text">
+                  <strong>{nameOf(session)}</strong>
+                  <Preview session={session} working={working.has(session.id)} />
+                </span>
+                <time dateTime={lastAt(session)} title={date(lastAt(session))}>
+                  {when(lastAt(session))}
+                </time>
+              </button>
             );
           })}
           {!filtered.length && <p className="conversation-none">Nothing matches that search.</p>}

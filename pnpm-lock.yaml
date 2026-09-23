@@ -150,6 +150,9 @@ importers:
       sonner:
         specifier: ^2.0.8
         version: 2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      thinking-orbs:
+        specifier: 0.3.1
+        version: 0.3.1(react@19.3.0)
     devDependencies:
       '@storybook/addon-a11y':
         specifier: 10.6.0
@@ -3599,6 +3602,11 @@ packages:
   temporal-spec@1.0.1:
     resolution: {integrity: sha512-wxVoanmDeavXie1vu2JaQ3WIc3JZnWAOYFBsJyATaVsXsycKYUflGsyBmrRSnoCpZJpwPyr38VpgSUlQ8CbFxg==}
 
+  thinking-orbs@0.3.1:
+    resolution: {integrity: sha512-3BG1aeB1RUTxItCml/BBuIz5JRM4kZqGuyx+vouv0fXTtcR9ZNoKjWGneHPx94y74GxgArwJZ1qbJR5dt54kSw==}
+    peerDependencies:
+      react: '>=18.0.0'
+
   thread-stream@3.2.0:
     resolution: {integrity: sha512-zLBvqpwr4Esa0kRjcrzGU6zL25lePWaCLMx0RQFrmteozIfeNdaMLpG5U7PeHzvlFkAWaRKA9/KVW4F60iB+qw==}
 
@@ -6789,6 +6797,10 @@ snapshots:
   tapable@2.3.3: {}
 
   temporal-spec@1.0.1: {}
+
+  thinking-orbs@0.3.1(react@19.3.0):
+    dependencies:
+      react: 19.3.0
 
   thread-stream@3.2.0:
     dependencies:
