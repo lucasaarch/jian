@@ -330,8 +330,13 @@
   .conversation-item {
     @apply flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-canvas;
   }
+  /* Mixed from the accent rather than its soft tint, which some accents leave too close to
+     the list's own grey. */
   .conversation-item[aria-current="true"] {
-    @apply bg-accent-soft;
+    background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  }
+  .conversation-item[aria-current="true"] strong {
+    @apply font-semibold;
   }
   .conversation-avatar,
   .face.conversation-avatar {
@@ -366,6 +371,16 @@
   }
   .conversation-pane > header small {
     @apply block truncate text-xs text-muted;
+  }
+  /* In the pane the history runs edge to edge; only the messages keep the inner margin. */
+  .conversation-pane .session-history {
+    @apply p-0;
+  }
+  .conversation-pane .message-history {
+    @apply px-6 py-4;
+  }
+  .conversation-pane .run-status {
+    @apply mx-6 mb-4;
   }
   /* Only a phone has a list to go back to. */
   .conversation-pane .conversation-back {
@@ -439,8 +454,11 @@
   .resource-row > .small {
     @apply hidden;
   }
-  .session-history {
+  .conversation-pane .message-history {
     @apply px-3;
+  }
+  .conversation-pane .run-status {
+    @apply mx-3;
   }
   /* A phone shows the list or the conversation, never both. */
   .main-content.fill {

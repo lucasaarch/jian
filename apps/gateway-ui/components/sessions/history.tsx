@@ -1,6 +1,6 @@
 'use client';
 
-import { LoaderCircle, LockKeyhole } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { GatewayApi, Run } from '../../lib/api';
 import { date } from '../../lib/format';
@@ -62,11 +62,6 @@ export function History({
 
   return (
     <div className="session-history">
-      <div className="history-caption">
-        <LockKeyhole size={14} />
-        <span>Read only</span>
-        <span>{messages.length === 1 ? '1 message' : `${messages.length} messages`}</span>
-      </div>
       <section className="message-history" aria-label="Session history" aria-busy={loading}>
         {loading ? (
           <div className="history-loading" role="status">
