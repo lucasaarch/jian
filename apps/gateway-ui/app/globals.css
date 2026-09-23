@@ -69,7 +69,8 @@
   textarea::placeholder {
     @apply text-muted;
   }
-  input:focus,
+  /* As specific as the rule above, or its grey border wins and the ring draws around it. */
+  input:not([type="checkbox"]):not([type="radio"]):focus,
   textarea:focus,
   select:focus {
     @apply border-accent bg-canvas;
