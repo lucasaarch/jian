@@ -40,6 +40,7 @@ import {
 } from './providers.js';
 import {
   activityDaySchema,
+  activityQuerySchema,
   checkpointSchema,
   continuationSchema,
   eventSchema,
@@ -386,6 +387,7 @@ export const operations: Operation[] = [
     path: `${profile}/activity`,
     operationId: 'getActivityCalendar',
     access: 'admin',
+    query: activityQuerySchema,
     response: z.array(activityDaySchema).max(400),
   },
   {

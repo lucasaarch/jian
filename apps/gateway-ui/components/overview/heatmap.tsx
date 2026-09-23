@@ -7,7 +7,11 @@ import type { ActivityDay, GatewayApi, Profile } from '../../lib/api';
 const WEEKS = 53;
 const DAYS = WEEKS * 7;
 
-const iso = (date: Date) => date.toISOString().slice(0, 10);
+/** The day this date falls on where the reader is, which is the day the gateway counted. */
+const iso = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+const zone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
 /** Seven rows, Sunday first: the row a day lands in is its weekday. */
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -27,7 +31,6 @@ const describe = (cell: Cell) =>
 
 const longDate = (date: Date) =>
   date.toLocaleDateString('en', {
-    timeZone: 'UTC',
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -49,15 +52,15 @@ function levelOf(runs: number, busiest: number): number {
 /** Every day of the window, ending today, so the grid is complete even where nothing happened. */
 function calendar(days: Map<string, ActivityDay>): Cell[] {
   const today = new Date();
-  const last = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  const last = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
   // The grid ends on a full week, so the last column is not a ragged stub.
-  last.setUTCDate(last.getUTCDate() + (6 - last.getUTCDay()));
+  last.setDate(last.getDate() + (6 - last.getDay()));
 
   return Array.from({ length: DAYS }, (_, index) => {
     const day = new Date(last);
 
-    day.setUTCDate(day.getUTCDate() - (DAYS - 1 - index));
+    day.setDate(day.getDate() - (DAYS - 1 - index));
 
     const counted = days.get(iso(day));
 
@@ -81,7 +84,7 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
     let alive = true;
 
     api
-      .activityCalendar(profile.id)
+      .activityCalendar(profile.id, zone())
       .then((calendarDays) => alive && setDays(calendarDays))
       .catch(
         (failure) =>
@@ -110,9 +113,9 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
   // week: a month whose first days straddle two columns would otherwise be labelled twice.
   const months = cells.reduce<Array<{ month: number; week: number; label: string }>>(
     (labels, cell, index) => {
-      const month = cell.day.getUTCMonth();
+      const month = cell.day.getMonth();
 
-      if (cell.day.getUTCDate() <= 7 && labels.at(-1)?.month !== month) {
+      if (cell.day.getDate() <= 7 && labels.at(-1)?.month !== month) {
         labels.push({ month, week: Math.floor(index / 7), label: MONTHS[month] as string });
       }
 

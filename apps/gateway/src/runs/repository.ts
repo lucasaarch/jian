@@ -318,10 +318,11 @@ export async function countRunsByDay(
   db: Queryable,
   profileId: string,
   days: number,
+  zone = 'UTC',
 ): Promise<ActivityDay[]> {
   const rows = await db
     .select({
-      day: sql<string>`to_char(${runs.createdAt} at time zone 'UTC', 'YYYY-MM-DD')`.as('day'),
+      day: sql<string>`to_char(${runs.createdAt} at time zone ${zone}, 'YYYY-MM-DD')`.as('day'),
       total: count(),
       // A run that never reached the model carries no usage at all, so the sum is coalesced
       // rather than left null, and comes back as text from the driver.

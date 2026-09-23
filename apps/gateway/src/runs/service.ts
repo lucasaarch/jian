@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  activityQuerySchema,
   continuationSchema,
   type Message,
   type ModelSelection,
@@ -239,11 +240,15 @@ export class Runs {
     return listActiveRuns(this.store.db, profileId, 200);
   }
 
-  /** A year of days and how much this profile ran on each. Days with nothing are absent. */
-  async activity(profileId: string) {
+  /**
+   * A year of days and how much this profile ran on each. Days with nothing are absent, and
+   * the day is the reader's day: a calendar drawn in UTC puts a Brazilian evening on
+   * tomorrow's square and tells them the wrong date about their own work.
+   */
+  async activity(profileId: string, zone?: string) {
     await this.profiles.profile(profileId);
 
-    return countRunsByDay(this.store.db, profileId, 371);
+    return countRunsByDay(this.store.db, profileId, 371, activityQuerySchema.parse({ zone }).zone);
   }
 
   /** What the profile has been doing, finished runs included, newest first. */

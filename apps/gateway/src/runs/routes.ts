@@ -16,8 +16,9 @@ export function registerRunRoutes(app: FastifyInstance, deps: RunRouteServices):
     deps.runs.recent(request.params.profileId),
   );
 
-  app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/activity', async (request) =>
-    deps.runs.activity(request.params.profileId),
+  app.get<{ Params: ProfileParams; Querystring: { zone?: string } }>(
+    '/v1/profiles/:profileId/activity',
+    async (request) => deps.runs.activity(request.params.profileId, request.query.zone),
   );
 
   app.get<{ Params: RunParams }>('/v1/profiles/:profileId/runs/:runId', async (request) =>

@@ -117,6 +117,18 @@ export const runRecordSchema = z.strictObject({
  * How much a profile ran on one day. Days with nothing are left out, because a year of zeroes
  * is the shape of the calendar rather than anything the profile did.
  */
+/**
+ * Which midnight ends a day. A calendar drawn in UTC puts an evening in Brazil on tomorrow's
+ * square, so the reader is told the wrong day about their own work. Absent means UTC.
+ */
+export const activityQuerySchema = z.strictObject({
+  zone: z
+    .string()
+    .regex(/^[A-Za-z][A-Za-z0-9+_-]*(?:\/[A-Za-z0-9+_-]+)*$/)
+    .max(64)
+    .optional(),
+});
+
 export const activityDaySchema = z.strictObject({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   runs: z.number().int().nonnegative(),

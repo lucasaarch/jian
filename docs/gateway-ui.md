@@ -36,6 +36,8 @@ Secrets have no screen of their own: a provider key is typed under **Providers**
 
 **Memories** is read-only: the screen lists what the agent kept, searches by key and by content, and deletes an entry. The agent is the one who writes, through its own tools.
 
+The activity calendar counts a day as it ends where the reader is: the browser's own zone travels with the request, because a calendar drawn in UTC puts an evening in Brazil on tomorrow's square.
+
 ## Security and limits
 
 - The sign-in page and the assets are public. Every API route needs the host token, or the panel cookie signed with it; there is no reduced-permission client key.

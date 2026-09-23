@@ -6154,7 +6154,9 @@ export interface operations {
     };
     getActivityCalendar: {
         parameters: {
-            query?: never;
+            query?: {
+                zone?: string;
+            };
             header?: never;
             path: {
                 profileId: string;
