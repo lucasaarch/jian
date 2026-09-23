@@ -182,14 +182,37 @@
   .conversation-row small {
     @apply block truncate text-xs text-muted;
   }
-  .conversation-row[data-status="pending"] {
-    @apply items-start;
+  .request-card {
+    @apply my-3 overflow-hidden rounded-lg border border-line bg-canvas;
+    box-shadow: inset 3px 0 0 var(--accent);
   }
-  .conversation-row[data-status="pending"] > svg {
-    @apply mt-0.5 text-accent;
+  .request-card > header {
+    @apply flex items-start gap-3 px-5 pt-4;
   }
-  .conversation-message {
-    @apply mt-2 max-w-prose rounded-sm border-l-2 border-accent bg-accent-soft px-3 py-2 text-sm text-ink;
+  .request-icon {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-md bg-accent-soft text-accent;
+  }
+  .request-card h4 {
+    @apply flex flex-wrap items-center gap-2 text-sm font-semibold text-ink;
+  }
+  .request-card header small {
+    @apply mt-0.5 block text-xs text-muted;
+  }
+  .request-card time {
+    @apply shrink-0 pt-0.5 text-xs text-muted;
+  }
+  .request-quote {
+    @apply mx-5 mt-4 mb-0 whitespace-pre-wrap break-words rounded-md bg-surface px-4 py-3 text-sm leading-relaxed text-ink;
+    border-radius: 3px 12px 12px 12px;
+  }
+  .request-note {
+    @apply mx-5 mt-3 text-sm text-muted;
+  }
+  .request-card > footer {
+    @apply mt-4 flex flex-wrap items-center gap-2 border-t border-line bg-surface px-5 py-3;
+  }
+  .request-card > footer p {
+    @apply mr-auto text-xs text-muted;
   }
   .conversation-row[data-status="blocked"] strong {
     @apply text-muted;

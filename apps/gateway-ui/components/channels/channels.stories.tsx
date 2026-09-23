@@ -19,20 +19,37 @@ type Story = StoryObj<typeof meta>;
 /** Someone new wrote on WhatsApp: that row opens by itself, the request first in its list. */
 export const List: Story = { render: () => <Channels {...sectionProps()} /> };
 
-/** Telegram opened: its connection, its groups and its contacts, each one revocable. */
-export const TelegramExpanded: Story = {
-  render: () => <Channels {...sectionProps()} />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const telegram = canvasElement.querySelector<HTMLButtonElement>(
-      'button[aria-controls="channel-telegram"]',
+/** Opens a channel's row unless it already opened itself for a pending request. */
+const open =
+  (type: string) =>
+  async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const toggle = canvasElement.querySelector<HTMLButtonElement>(
+      `button[aria-controls="channel-${type}"]`,
     );
 
-    if (!telegram) throw new Error('No Telegram row');
+    if (!toggle) throw new Error(`No ${type} row`);
 
-    await userEvent.click(telegram);
+    if (toggle.getAttribute('aria-expanded') !== 'true') await userEvent.click(toggle);
+  };
+
+/** Telegram opened: a group asking to be approved, then its groups and contacts. */
+export const TelegramExpanded: Story = {
+  render: () => <Channels {...sectionProps()} />,
+  play: async (context) => {
+    await open('telegram')(context);
     // The row opens with a short fade, so visibility is awaited rather than read at once.
-    await waitFor(() => expect(canvas.getByText('Equipe')).toBeVisible());
+    await waitFor(() => expect(within(context.canvasElement).getByText('Equipe')).toBeVisible());
+  },
+};
+
+/** Someone new wrote on WhatsApp: who, what they said, and the two answers. */
+export const WhatsAppRequest: Story = {
+  render: () => <Channels {...sectionProps()} />,
+  play: async (context) => {
+    await open('whatsapp')(context);
+    await waitFor(() =>
+      expect(within(context.canvasElement).getByText(/Peguei esse número/)).toBeVisible(),
+    );
   },
 };
 
