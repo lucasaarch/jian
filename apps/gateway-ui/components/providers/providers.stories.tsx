@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
+import { expect, userEvent, within } from 'storybook/test';
 import { profileData, sectionProps } from '../../stories/section';
 import { withWorkspace } from '../../stories/workspace';
 import { Providers } from '.';
@@ -23,6 +24,18 @@ export const NoneConnected: Story = {
 };
 
 export const ModelChoices: Story = { render: () => <ModelDefaults {...sectionProps()} /> };
+
+/** One activity's provider, model and effort, opened from its card. */
+export const ConfigureConversations: Story = {
+  render: () => <ModelDefaults {...sectionProps()} />,
+  play: async ({ canvasElement }) => {
+    const [configure] = within(canvasElement).getAllByRole('button', { name: /Configure/ });
+
+    if (!configure) throw new Error('No activity card');
+    await userEvent.click(configure);
+    await expect(await within(document.body).findByText('Provider')).toBeInTheDocument();
+  },
+};
 
 export const ServiceKeys: Story = {
   render: () => {

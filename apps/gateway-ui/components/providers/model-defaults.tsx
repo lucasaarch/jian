@@ -1,6 +1,6 @@
 'use client';
 
-import { supportsModelRole, supportsProviderRole } from '@jian/contracts';
+import { SlidersHorizontal } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type {
@@ -12,17 +12,9 @@ import type {
 import { useAutosave } from '../../lib/autosave';
 import { useWorkspace } from '../../lib/workspace';
 import type { SectionProps } from '../props';
-import { Badge, Empty, Field, SectionHeading } from '../ui';
-import { Select } from '../ui/select';
-import { efforts, modelLabel, type Role, roles, usableProviders } from './catalog';
-
-type RoleValue = {
-  providerId: string;
-  modelId: string;
-  reasoningEffort: string;
-  /** The id was typed instead of picked, so the panel knows nothing about its capabilities. */
-  manual: boolean;
-};
+import { Button, Empty, Modal, SectionHeading } from '../ui';
+import { modelLabel, type Role, roles, usableProviders } from './catalog';
+import { describeRole, RoleFields, type RoleValue } from './role-fields';
 
 const empty: RoleValue = { providerId: '', modelId: '', reasoningEffort: '', manual: false };
 
@@ -84,13 +76,15 @@ export function ModelDefaults({ profile, data, api, busy }: SectionProps) {
     }
   });
 
-  const change = (role: Role, patch: Partial<RoleValue>) => {
+  const change = (role: Role, patch: Partial<RoleValue>, delay = 0) => {
     const next = { ...latest.current, [role]: { ...latest.current[role], ...patch } };
 
     latest.current = next;
     setValues(next);
-    schedule(0);
+    schedule(delay);
   };
+  const [open, setOpen] = useState<Role>();
+  const editing = roles.find((role) => role.key === open);
 
   if (!configured.length) {
     return (
@@ -120,137 +114,57 @@ export function ModelDefaults({ profile, data, api, busy }: SectionProps) {
           void flush();
         }}
       >
-        {roles.map((role) => {
-          const value = values[role.key];
-          const eligible = configured.filter((provider) =>
-            supportsProviderRole(provider, role.key),
-          );
-          const provider = configured.find((item) => item.id === value.providerId);
-          const models = (data.providerModels[value.providerId]?.models ?? []).filter(
-            (model) => !provider || supportsModelRole(provider, model, role.key),
-          );
-          const list = value.providerId ? data.providerModels[value.providerId] : undefined;
-          const selected = models.find((model) => model.id === value.modelId);
-          // A typed id has no capability row here, so every level is offered and the gateway
-          // refuses the ones the model does not take.
-          const allowed = value.manual
-            ? efforts
-            : efforts.filter((effort) => selected?.reasoningEfforts.includes(effort.value));
+        <div className="model-grid">
+          {roles.map((role) => {
+            const value = values[role.key];
+            const { provider, selected, allowed } = describeRole(role, value, data, configured);
+            const effort = allowed.find((item) => item.value === value.reasoningEffort);
 
-          return (
-            <div className="settings-section" key={role.key}>
-              <div className="settings-caption">
+            return (
+              <article className="model-card" key={role.key}>
                 <h2>{role.label}</h2>
-                <p>{role.hint}</p>
-                {selected && !selected.known && (
-                  <Badge tone="warn">Capabilities unknown: conservative limits</Badge>
-                )}
-                {list?.stale && (
-                  <p className="note" role="status">
-                    The list is stale: the provider did not answer the last read.
-                  </p>
-                )}
-              </div>
-              <div className="settings-fields">
-                <Field label={`Provider · ${role.label}`}>
-                  <Select
-                    value={value.providerId}
-                    disabled={busy}
-                    onValueChange={(providerId) =>
-                      change(role.key, {
-                        providerId,
-                        modelId: '',
-                        reasoningEffort: '',
-                        manual: false,
-                      })
-                    }
-                    options={[
-                      { value: '', label: 'Automatic' },
-                      ...eligible.map((provider) => ({
-                        value: provider.id,
-                        label: `${provider.name}${provider.kind === 'openai' ? (provider.authMode === 'codex' ? ' · ChatGPT' : ' · API key') : ''}`,
-                      })),
-                      ...(role.key === 'image' && !hasOpenAIKey
-                        ? [
-                            {
-                              value: '__openai_key_required__',
-                              label: 'OpenAI · API key required',
-                              disabled: true,
-                            },
-                          ]
-                        : []),
-                      ...(value.providerId &&
-                      !eligible.some((provider) => provider.id === value.providerId)
-                        ? [
-                            {
-                              value: value.providerId,
-                              label: 'Saved provider (unavailable for this activity)',
-                            },
-                          ]
-                        : []),
-                    ]}
-                  />
-                </Field>
-                {role.key === 'image' && !hasOpenAIKey && (
-                  <p className="note">
-                    <a href="/ui/providers/">Configure an OpenAI API key in Providers.</a> ChatGPT
-                    login does not authorize image generation.
-                  </p>
-                )}
-                <Field
-                  label={`Model · ${role.label}`}
-                  hint={
-                    value.manual
-                      ? 'An id typed by hand. Use it when the provider publishes no list.'
-                      : undefined
-                  }
-                >
-                  {value.manual ? (
-                    <input
-                      type="text"
-                      value={value.modelId}
-                      disabled={busy || !value.providerId}
-                      maxLength={160}
-                      placeholder="Model id"
-                      onChange={(event) => change(role.key, { modelId: event.target.value })}
-                    />
+                <p className="model-card-hint">{role.hint}</p>
+                <div className="model-card-choice">
+                  {provider && value.modelId ? (
+                    <>
+                      <strong>{selected ? modelLabel(selected) : value.modelId}</strong>
+                      <small>
+                        {provider.name}
+                        {effort ? ` · ${effort.label}` : ''}
+                      </small>
+                    </>
                   ) : (
-                    <Select
-                      value={value.modelId}
-                      disabled={busy || !value.providerId}
-                      onValueChange={(modelId) =>
-                        modelId === '__manual__'
-                          ? change(role.key, { manual: true, modelId: '', reasoningEffort: '' })
-                          : change(role.key, { modelId, reasoningEffort: '' })
-                      }
-                      options={[
-                        { value: '', label: 'Automatic' },
-                        ...models.map((model) => ({ value: model.id, label: modelLabel(model) })),
-                        { value: '__manual__', label: 'Type an id…' },
-                      ]}
-                    />
+                    <>
+                      <strong>Automatic</strong>
+                      <small>The fallback described above</small>
+                    </>
                   )}
-                </Field>
-                <Field
-                  label={`Effort · ${role.label}`}
-                  hint={
-                    allowed.length
-                      ? undefined
-                      : 'No reasoning levels are catalogued for this model.'
-                  }
-                >
-                  <Select
-                    value={value.reasoningEffort}
-                    disabled={busy || !allowed.length}
-                    onValueChange={(reasoningEffort) => change(role.key, { reasoningEffort })}
-                    options={[{ value: '', label: "The provider's own default" }, ...allowed]}
-                  />
-                </Field>
-              </div>
-            </div>
-          );
-        })}
+                </div>
+                <Button variant="secondary" disabled={busy} onClick={() => setOpen(role.key)}>
+                  <SlidersHorizontal size={16} />
+                  Configure
+                </Button>
+              </article>
+            );
+          })}
+        </div>
       </form>
+      {editing && (
+        <Modal title={editing.label} description={editing.hint} close={() => setOpen(undefined)}>
+          <RoleFields
+            role={editing}
+            value={values[editing.key]}
+            data={data}
+            configured={configured}
+            hasOpenAIKey={hasOpenAIKey}
+            busy={busy}
+            change={change}
+          />
+          <footer>
+            <Button onClick={() => setOpen(undefined)}>Done</Button>
+          </footer>
+        </Modal>
+      )}
     </>
   );
 }

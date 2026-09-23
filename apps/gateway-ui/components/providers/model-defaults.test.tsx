@@ -9,6 +9,13 @@ vi.mock('../../lib/workspace', () => ({ useWorkspace: () => ({ refresh: async ()
 
 async function imageProviders(apiKey: boolean) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  // happy-dom has no modal dialogs; the component only needs the calls to exist.
+  HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) {
+    this.setAttribute('open', '');
+  };
+  HTMLDialogElement.prototype.close ??= function close(this: HTMLDialogElement) {
+    this.removeAttribute('open');
+  };
   const element = document.createElement('div');
   document.body.append(element);
   const root = createRoot(element);
@@ -29,8 +36,15 @@ async function imageProviders(apiKey: boolean) {
     busy: false,
   } as unknown as SectionProps;
   await act(async () => root.render(<ModelDefaults {...props} />));
+  // Each activity's selects live in its own dialog, opened from its card.
+  const card = Array.from(element.querySelectorAll('.model-card')).find(
+    (item) => item.querySelector('h2')?.textContent === 'Image generation',
+  );
+  const configure = card?.querySelector('button');
+  if (!configure) throw new Error('Image generation card missing');
+  await act(async () => configure.click());
   const label = Array.from(element.querySelectorAll('label')).find(
-    (item) => item.textContent === 'Provider · Image generation',
+    (item) => item.textContent === 'Provider',
   );
   const trigger = document.getElementById(label?.htmlFor ?? '') as HTMLButtonElement | null;
   if (!trigger) throw new Error('Image provider selector missing');

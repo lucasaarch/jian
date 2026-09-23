@@ -164,6 +164,34 @@
     @apply mt-5;
     animation: arrive 150ms ease-out;
   }
+  /* One card per activity, three across: the whole set fits a screen, the detail lives in a dialog. */
+  .model-grid {
+    @apply grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 min-[640px]:grid-cols-3;
+  }
+  .model-card {
+    @apply flex flex-col rounded-lg border border-line bg-canvas p-5;
+  }
+  .model-card h2 {
+    @apply text-lg;
+  }
+  .model-card-hint {
+    @apply mt-1 line-clamp-2 text-xs text-muted;
+  }
+  .model-card-choice {
+    @apply my-4 min-w-0 rounded-md bg-surface px-3 py-2.5;
+  }
+  .model-card-choice strong {
+    @apply block truncate text-sm font-medium text-ink;
+  }
+  .model-card-choice small {
+    @apply block truncate text-xs text-muted;
+  }
+  .model-card > .button {
+    @apply mt-auto self-start;
+  }
+  .modal .settings-fields {
+    @apply grid gap-5;
+  }
   .channel-conversations {
     @apply mt-6 grid gap-6 border-t border-line pt-6;
   }
