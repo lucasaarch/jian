@@ -39,7 +39,7 @@ export function Requests({ profile, data, api, mutate, busy }: SectionProps) {
         <article className="request-row" key={contact.id}>
           <div className="grow">
             <h3>
-              {contact.scope === 'group' ? 'Room: ' : ''}
+              {contact.scope === 'group' ? 'Group: ' : ''}
               {contact.displayName ?? contact.actorId}
             </h3>
             <small>
@@ -48,7 +48,7 @@ export function Requests({ profile, data, api, mutate, busy }: SectionProps) {
             </small>
             <p className="request-message">
               {contact.scope === 'group'
-                ? 'Approving covers the whole room. Inside it the agent answers only when someone writes its name.'
+                ? 'Approving covers the whole group. The agent reads it and answers when someone mentions it or replies to it.'
                 : (contact.message ?? 'No message waiting.')}
             </p>
           </div>
