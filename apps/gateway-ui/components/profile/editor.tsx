@@ -223,20 +223,20 @@ export function ProfileEditor({
         </div>
       </form>
 
-      <SectionHeading
-        title="Danger zone"
-        description="This deletes the profile itself, not just what it says."
-      />
-      <div className="save-bar">
-        <span>
-          Every session, memory, message, channel, contact and run this profile has ever held is
-          removed with it. There is no undo.
-        </span>
-        <Button variant="danger" onClick={() => setDeleting(true)}>
+      {/* Not a save bar: that one floats over the form, and two of them stack on each other. */}
+      <section className="danger-zone" aria-labelledby="danger-zone">
+        <div className="grow">
+          <h2 id="danger-zone">Delete this profile</h2>
+          <p>
+            Every session, memory, message, channel, contact and run it has held goes with it. There
+            is no undo.
+          </p>
+        </div>
+        <Button variant="danger" disabled={busy} onClick={() => setDeleting(true)}>
           <Trash2 size={16} />
           Delete profile
         </Button>
-      </div>
+      </section>
 
       {deleting && (
         <Confirm

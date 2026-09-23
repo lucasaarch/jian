@@ -129,7 +129,7 @@ export function AvatarField({
         />
         <Button variant="secondary" onClick={() => file.current?.click()}>
           <ImageUp size={16} />
-          {value ? 'Trocar imagem' : 'Escolher imagem'}
+          {value ? 'Change picture' : 'Choose a picture'}
         </Button>
         {value && (
           <Button variant="quiet" onClick={() => setValue('')}>
@@ -137,7 +137,7 @@ export function AvatarField({
             Remove
           </Button>
         )}
-        <small>PNG, JPEG ou WebP. Recortada em quadrado e reduzida a 256 px.</small>
+        <small>PNG, JPEG or WebP. Cropped square and scaled down to 256 px.</small>
         {error && (
           <p role="alert" className="form-error">
             {error}

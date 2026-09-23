@@ -193,6 +193,15 @@
   .request-message {
     @apply mt-2 break-words text-sm text-ink;
   }
+  .danger-zone {
+    @apply mt-16 flex flex-wrap items-center gap-5 rounded-lg border border-bad/40 bg-bad-soft px-6 py-5;
+  }
+  .danger-zone h2 {
+    @apply text-lg text-bad;
+  }
+  .danger-zone p {
+    @apply mt-1 max-w-prose text-sm text-ink;
+  }
   .modal {
     @apply m-auto w-[min(600px,calc(100vw-32px))] max-h-[calc(100dvh-48px)] overflow-y-auto rounded-xl border border-line bg-canvas p-7 text-ink shadow-2xl;
   }
