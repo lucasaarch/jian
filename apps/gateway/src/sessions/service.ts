@@ -15,6 +15,7 @@ import {
   findSession,
   insertMessage,
   insertSession,
+  lastMessages,
   listSessionMessages,
   listSessions,
   renameSession,
@@ -139,6 +140,41 @@ export class Sessions {
     await this.profiles.profile(profileId);
 
     return listSessions(this.store.db, profileId, 100);
+  }
+
+  /** The list the panel shows: each session with its last message on one line, newest first. */
+  async overview(profileId: string) {
+    const [list, last] = await Promise.all([
+      this.sessions(profileId),
+      lastMessages(this.store.db, profileId),
+    ]);
+
+    return list
+      .map((session) => {
+        const message = last.get(session.id);
+
+        return message
+          ? {
+              ...session,
+              lastMessage: {
+                role: message.role,
+                // One line of it: media ids and line breaks are not something to read in a list.
+                text: message.content
+                  .replace(/\[Attached media: [0-9a-f-]{36}\]/g, '📎')
+                  .replace(/\s+/g, ' ')
+                  .trim()
+                  .slice(0, 200),
+                at: message.createdAt.toISOString(),
+              },
+            }
+          : session;
+      })
+      .sort((a, b) =>
+        ('lastMessage' in a ? a.lastMessage.at : a.createdAt) <
+        ('lastMessage' in b ? b.lastMessage.at : b.createdAt)
+          ? 1
+          : -1,
+      );
   }
 
   /** Writes one turn of a conversation the gateway itself is keeping, such as a peer thread. */

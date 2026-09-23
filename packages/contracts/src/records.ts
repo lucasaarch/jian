@@ -32,6 +32,20 @@ export const sessionRecordSchema = sessionSchema.extend({
   createdAt: timestamp,
 });
 
+/**
+ * A session as a list shows it: with the last thing said in it, cut to a line, so the owner
+ * reads where each conversation stands without opening it.
+ */
+export const sessionSummarySchema = sessionRecordSchema.extend({
+  lastMessage: z
+    .strictObject({
+      role: z.enum(['user', 'assistant']),
+      text: z.string().max(200),
+      at: timestamp,
+    })
+    .optional(),
+});
+
 export const messageRecordSchema = z.strictObject({
   id: uuid,
   profileId: uuid,

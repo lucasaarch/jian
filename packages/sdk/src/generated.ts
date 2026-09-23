@@ -9800,6 +9800,13 @@ export interface operations {
                         summarizedUpTo?: string;
                         /** Format: date-time */
                         createdAt: string;
+                        lastMessage?: {
+                            /** @enum {string} */
+                            role: "user" | "assistant";
+                            text: string;
+                            /** Format: date-time */
+                            at: string;
+                        };
                     }[];
                 };
             };

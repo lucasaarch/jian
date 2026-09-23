@@ -71,6 +71,28 @@ export async function listSessions(
   return rows.map(toSession);
 }
 
+/**
+ * The newest message of each session, one row per session: what a conversation list shows under
+ * each name. Newest first per session, read once for the whole profile.
+ */
+export async function lastMessages(
+  db: Queryable,
+  profileId: string,
+): Promise<Map<string, { role: 'user' | 'assistant'; content: string; createdAt: Date }>> {
+  const rows = await db
+    .selectDistinctOn([messages.sessionId], {
+      sessionId: messages.sessionId,
+      role: messages.role,
+      content: messages.content,
+      createdAt: messages.createdAt,
+    })
+    .from(messages)
+    .where(eq(messages.profileId, profileId))
+    .orderBy(messages.sessionId, desc(messages.createdAt));
+
+  return new Map(rows.map(({ sessionId, ...last }) => [sessionId, last]));
+}
+
 /** The one session this profile keeps for a peer: a column and an index, never a scan. */
 export async function findPeerSession(
   db: Queryable,
