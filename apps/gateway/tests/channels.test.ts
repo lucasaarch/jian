@@ -788,7 +788,23 @@ describe('agents in the same Telegram group', () => {
     }
 
     await person('@miku_bot os links dos épicos', [{ type: 'mention', offset: 0, length: 9 }]);
-    await answer(miku.profile.id, 'Os épicos são #299 e #300.');
+
+    // Miku says two paragraphs while working, sent as they come, then ends with the last one.
+    const [working] = await services.runs.activities(miku.profile.id);
+
+    if (!working) throw new Error('Run missing');
+    await services.lifecycle.claim(working.id, miku.profile.id, 'worker');
+    await services.lifecycle.say(miku.profile.id, working.id, 'worker', 'Há dois épicos:');
+    await services.lifecycle.say(miku.profile.id, working.id, 'worker', '#299 Compatibilidade');
+    await channels.dispatch();
+    await services.lifecycle.finish(
+      miku.profile.id,
+      working.id,
+      'worker',
+      'completed',
+      '#300 Aliases',
+    );
+    await channels.dispatch();
 
     const [zeroRoom] = await channels.contacts(zero.profile.id);
 
@@ -796,7 +812,9 @@ describe('agents in the same Telegram group', () => {
 
     const heard = await services.sessions.messages(zero.profile.id, zeroRoom.sessionId, 20);
 
-    expect(heard.map((message) => message.content)).toContain('Miku: Os épicos são #299 e #300.');
+    expect(heard.map((message) => message.content)).toContain(
+      'Miku: Há dois épicos:\n\n#299 Compatibilidade\n\n#300 Aliases',
+    );
     // Heard, not called: Zero Two stays quiet.
     expect(await services.runs.activities(zero.profile.id)).toEqual([]);
 

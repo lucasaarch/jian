@@ -766,6 +766,8 @@ export class Channels {
 
       let text = delivery.notice ?? '';
       let commentary: string[] = [];
+      // What the room received from the agent itself, not a failure notice the gateway wrote.
+      let spoken = Boolean(delivery.notice);
 
       if (delivery.runId) {
         const run = await this.services.runs.run(delivery.profileId, delivery.runId);
@@ -784,6 +786,7 @@ export class Channels {
 
         text =
           run.output ?? 'The agent could not complete this request. Check the gateway for details.';
+        spoken = run.output !== undefined;
       }
 
       const channel = await findChannel(this.services.store.db, delivery.channelId);
@@ -835,9 +838,12 @@ export class Channels {
         status: outcome.status,
       });
 
-      if (outcome.status === 'sent' && channel && text) {
-        // The room already has the message; what the other agents missed is logged, not retried.
-        await this.showToOtherAgents(channel, delivery, text).catch(() =>
+      if (outcome.status === 'sent' && channel && spoken) {
+        // The paragraphs said while working went out first; the other agents read the turn
+        // whole, as the room did. What they missed is logged, not retried: the room has it.
+        const turn = [...commentary, text].filter(Boolean).join('\n\n');
+
+        await this.showToOtherAgents(channel, delivery, turn).catch(() =>
           channelLog('delivery.peer_failed', {
             channelId: delivery.channelId,
             deliveryId: delivery.id,
