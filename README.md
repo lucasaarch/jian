@@ -28,7 +28,7 @@ connected.
 - **A vault, not a config file.** Provider, MCP and channel secrets are typed where the
   thing is configured and stored encrypted with AES-256-GCM, never read back.
 - **A typed contract.** OpenAPI 3.1 generated from the schemas the server validates
-  against, with a TypeScript SDK and a Swift client generated from the same document.
+  against, with a TypeScript SDK generated from the same document.
 - **A web panel** for profiles, usage, memories, skills, MCP servers and channels.
 
 Isolation is per profile. One installation serves one trusted owner; it is not a
@@ -36,15 +36,14 @@ multi-tenant SaaS.
 
 ## Clients
 
-The web panel ships inside the gateway. **Jian**, a native SwiftUI app for iOS and
-macOS, lives in `apps/apple` and talks to the same contract.
+The web panel ships inside the gateway and talks to it through the same contract any
+other client would use.
 
 ## Repository
 
 ```text
 apps/gateway/       HTTP API, runtime and workers
 apps/gateway-ui/    Web panel, exported into the gateway
-apps/apple/         Jian, iOS and macOS
 packages/contracts/ Zod schemas — the source of the HTTP contract
 packages/sdk/       Generated TypeScript client
 docs/               Architecture, security, channels, panel

@@ -45,6 +45,18 @@ const preview: Preview = {
         dynamicTitle: true,
       },
     },
+    mode: {
+      description: 'Light or dark',
+      toolbar: {
+        title: 'Mode',
+        icon: 'mirror',
+        items: [
+          { value: 'light', title: 'Light', icon: 'sun' },
+          { value: 'dark', title: 'Dark', icon: 'moon' },
+        ],
+        dynamicTitle: true,
+      },
+    },
     text: {
       description: 'Text size preference',
       toolbar: {
@@ -58,11 +70,12 @@ const preview: Preview = {
       },
     },
   },
-  initialGlobals: { theme: 'strelizia', text: 'default' },
+  initialGlobals: { theme: 'strelizia', mode: 'light', text: 'default' },
   decorators: [
     // The panel reads its theme and text size from the root element, as the head script sets.
     (Story, { globals }) => {
       document.documentElement.dataset.theme = String(globals.theme ?? 'strelizia');
+      document.documentElement.dataset.mode = String(globals.mode ?? 'light');
       document.documentElement.dataset.text = String(globals.text ?? 'default');
 
       return <Story />;

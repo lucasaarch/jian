@@ -3,7 +3,7 @@ import { fn } from 'storybook/test';
 import { withWorkspace } from '../../stories/workspace';
 import { ProfileSwitcher } from './profile-switcher';
 import { Sidebar } from './sidebar';
-import { ThemePicker } from './theme-picker';
+import { AccentPicker, ModePicker } from './theme-picker';
 import { Topbar } from './topbar';
 
 const meta = {
@@ -35,8 +35,14 @@ export const ProfileSelector: Story = {
   render: () => <ProfileSwitcher onCreate={fn()} />,
 };
 
-/** The five themes; the toolbar above switches the whole canvas between them too. */
-export const Themes: Story = {
+/** Light, dark or the system's; the toolbar above switches the whole canvas too. */
+export const Mode: Story = {
   parameters: { layout: 'padded' },
-  render: () => <ThemePicker />,
+  render: () => <ModePicker />,
+};
+
+/** The five accents, each drawn in the active mode. */
+export const Accent: Story = {
+  parameters: { layout: 'padded' },
+  render: () => <AccentPicker />,
 };

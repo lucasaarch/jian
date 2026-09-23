@@ -1,14 +1,13 @@
 # Jian
 
 Self-hosted agent gateway. One trusted owner per installation, isolation per profile.
-TypeScript on Node 24+, Fastify, PostgreSQL, pg-boss. Native Apple client in Swift.
+TypeScript on Node 24+, Fastify, PostgreSQL, pg-boss.
 
 ## Layout
 
 ```text
 apps/gateway/       HTTP API, runtime, workers, tests
 apps/gateway-ui/    Next.js panel, statically exported into the gateway
-apps/apple/         Jian, one SwiftUI target for iOS and macOS
 packages/contracts/ Zod schemas — the source of the HTTP contract
 packages/sdk/       Generated TypeScript client
 docs/               Architecture, security, channels, panel
@@ -19,7 +18,7 @@ Products share contracts, never each other's internals.
 ## Commands
 
 The Makefile is the entry point; `make` alone lists every target. It delegates — pnpm owns
-the Node work, Docker the containers, Xcode the Apple side.
+the Node work, Docker the containers.
 
 ```bash
 make install     # pnpm install --frozen-lockfile
@@ -29,20 +28,17 @@ make dev         # gateway on :4310 and the panel with hot reload on :3000
 make storybook   # components and whole pages on :6006, no gateway needed
 make check       # lint, typecheck, unit tests, build, contract drift
 make up          # production stack: published image plus its own PostgreSQL
-make apple-test  # JianKit unit tests
-make apple-lint  # SwiftLint, strict
 make release VERSION=1.2.3  # after writing docs/releases/1.2.3.md; tags and publishes
 ```
 
-`package.json` keeps only the Node scripts. Anything that shells out to Docker or Xcode
+`package.json` keeps only the Node scripts. Anything that shells out to Docker
 lives in the Makefile, so there is one place to look and one place to change.
 
 ## Generated code
 
 Zod schemas in `packages/contracts/src` are the single source. `pnpm contracts:generate`
-writes the OpenAPI document and the TypeScript client; the Swift package reads the same
-document through a symlink and regenerates its types on every Xcode build. Never edit a
-generated file, and never hand-patch the Swift output — fix the schema instead.
+writes the OpenAPI document and the TypeScript client. Never edit a generated file — fix
+the schema instead.
 `pnpm contracts:check` fails when a generated file is stale.
 
 Running it by hand is rarely needed: `pnpm dev` regenerates on every save of a schema and
@@ -52,7 +48,7 @@ stages the outputs before it lands.
 ## Conventions
 
 Biome formats and lints the TypeScript side: two spaces, single quotes, semicolons, 100
-columns. SwiftLint covers the Swift side. Both run on staged files before a commit.
+columns. It runs on staged files before a commit.
 
 Comments explain why a rule exists, what it guarantees, its units and its traps. They do
 not narrate what the code already says. Keep modules small and responsibilities named.

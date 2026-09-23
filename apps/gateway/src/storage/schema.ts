@@ -579,7 +579,7 @@ export const channelInbox = pgTable(
   (table) => [index('channel_inbox_pending').on(table.channelId, table.status, table.receivedAt)],
 );
 
-/** The durable feed the panel and the Apple client follow, ordered by a single sequence. */
+/** The durable feed the panel follows, ordered by a single sequence. */
 export const events = pgTable(
   'events',
   {

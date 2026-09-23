@@ -7,9 +7,6 @@
 @import "./styles/resources.css";
 
 @layer base {
-  :root {
-    color-scheme: light;
-  }
   body {
     @apply m-0 bg-canvas font-sans text-sm leading-relaxed text-ink antialiased;
   }
@@ -60,7 +57,7 @@
     outline-offset: 0;
   }
   ::selection {
-    @apply bg-accent text-white;
+    @apply bg-accent text-on-accent;
   }
   input:not([type="checkbox"]):not([type="radio"]),
   textarea,
@@ -113,7 +110,7 @@
     transform: translateY(1px);
   }
   .button.primary {
-    @apply border-accent bg-accent text-white hover:border-accent-hover hover:bg-accent-hover;
+    @apply border-accent bg-accent text-on-accent hover:border-accent-hover hover:bg-accent-hover;
     box-shadow: inset 0 -2px 0 #0000001a;
   }
   .button.secondary {
@@ -124,7 +121,7 @@
     border-radius: 4px;
   }
   .button.danger {
-    @apply bg-bad text-white hover:brightness-90;
+    @apply bg-bad text-on-accent hover:brightness-90;
   }
   .icon-button {
     @apply inline-flex min-h-10 min-w-10 items-center justify-center rounded-sm text-muted hover:bg-accent-soft hover:text-accent;

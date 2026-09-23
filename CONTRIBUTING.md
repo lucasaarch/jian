@@ -13,8 +13,8 @@ Use Node.js 24+ and the pnpm version pinned in the repository. Install with
 
 ## Style
 
-Biome enforces two spaces, single quotes, semicolons and 100 columns on the TypeScript
-side; SwiftLint covers Swift. Husky and lint-staged check staged files before each commit.
+Biome enforces two spaces, single quotes, semicolons and 100 columns. Husky and
+lint-staged check staged files before each commit.
 
 Prefer descriptive names, one responsibility per function, and named functions over deeply
 nested expressions. Separate validation, reads, decisions, effects and the return value

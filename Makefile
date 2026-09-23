@@ -1,5 +1,5 @@
 # Entry point of the repository. Every target delegates: pnpm owns the Node work, Docker
-# owns the containers, Xcode owns the Apple side. Nothing is reimplemented here.
+# owns the containers. Nothing is reimplemented here.
 # `make` alone prints the list below, built from the `##` comment on each target, so the
 # list cannot drift from the targets it describes.
 
@@ -15,8 +15,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .PHONY: help install setup up down logs ps dev db-up db-stop db-reset \
         check test test-integration lint format build image image-push \
-        changelog release storybook storybook-smoke \
-        apple-test apple-lint apple-lint-fix apple-build apple-index
+        changelog release storybook storybook-smoke
 
 ##@ General
 
@@ -115,23 +114,3 @@ changelog: ## Write CHANGELOG.md from the notes in docs/releases
 release: ## Cut a release: write docs/releases/<v>.md, then `make release VERSION=1.2.3`
 	@test "$(origin VERSION)" = "command line" || { echo "usage: make release VERSION=1.2.3"; exit 1; }
 	node scripts/release.mjs $(VERSION)
-
-##@ Apple
-
-apple-test: ## JianKit unit tests
-	cd apps/apple/Packages/JianKit && swift test
-
-apple-lint: ## SwiftLint, strict
-	cd apps/apple && swiftlint lint --quiet --strict
-
-apple-lint-fix: ## Rewrite the violations SwiftLint can fix
-	cd apps/apple && swiftlint lint --quiet --fix
-
-apple-build: ## Build the Jian target for the iOS Simulator
-	xcodebuild -project apps/apple/Jian.xcodeproj -scheme Jian \
-		-destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build
-
-apple-index: ## Refresh the sourcekit-lsp index so editors stop reporting phantom errors
-	cd apps/apple && xcode-build-server config -project Jian.xcodeproj -scheme Jian \
-		&& xcodebuild -project Jian.xcodeproj -scheme Jian -destination 'platform=macOS' \
-			-skipPackagePluginValidation build | xcode-build-server parse -a

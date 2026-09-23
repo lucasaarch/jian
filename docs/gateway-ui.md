@@ -12,7 +12,7 @@ The application exports static routes (`/ui/channels/`, for example). There are 
 
 ## Storybook
 
-`make storybook` opens every component and every screen on `:6006` without a gateway or a database. The pages render the real workspace layout: each request the panel makes is answered by [Mock Service Worker](https://mswjs.io) from `stories/handlers.ts`, with the synthetic installation in `stories/fixtures.ts` — three agents, their conversations, channels, a pending contact, a group, providers and a year of activity. The toolbar switches the theme and the text size.
+`make storybook` opens every component and every screen on `:6006` without a gateway or a database. The pages render the real workspace layout: each request the panel makes is answered by [Mock Service Worker](https://mswjs.io) from `stories/handlers.ts`, with the synthetic installation in `stories/fixtures.ts` — three agents, their conversations, channels, a pending contact, a group, providers and a year of activity. The toolbar switches the accent, light or dark mode, and the text size.
 
 - **Components** keep their stories beside them, as `*.stories.tsx`. A section takes the props the layout would hand it from `sectionProps()` in `stories/section.ts`.
 - **Pages** are in `stories/pages`: every route inside the layout, plus a first run with nothing configured, the dialog after an update, and a phone-sized view.
@@ -52,7 +52,7 @@ The activity calendar counts a day as it ends where the reader is: the browser's
 ## Security and limits
 
 - The sign-in page and the assets are public. Every API route needs the host token, or the panel cookie signed with it; there is no reduced-permission client key.
-- The sign-in form only enables submission after hydration and falls back to POST, so the token never travels in a URL. The host token is exchanged once for a session cookie and is kept in neither localStorage nor sessionStorage. Visual preferences, such as theme and motion, live in localStorage.
+- The sign-in form only enables submission after hydration and falls back to POST, so the token never travels in a URL. The host token is exchanged once for a session cookie and is kept in neither localStorage nor sessionStorage. Visual preferences — accent colour, light or dark mode, motion and text size — live in localStorage. The mode defaults to the device's own setting. Every colour is declared once with `light-dark()` in `app/styles/themes.css`, so an accent is one entry with a light and a dark value, not a second theme.
 - The panel cookie is `HttpOnly`, `SameSite=Strict`, valid for 30 days, and `Secure` when the request arrives over HTTPS. It carries only its own expiry and an HMAC signature derived from `JIAN_API_TOKEN`: nothing is stored in the database, and changing the host token ends every open session. Reloading keeps the session; signing out deletes the cookie.
 - The gateway accepts the cookie only on requests that also send `x-jian-panel: 1`. A custom header needs a CORS preflight, which the gateway does not answer, so another site cannot use the cookie. Sign-in has its own limit of 10 attempts a minute.
 - Requests go to the same origin, with no cache and with a timeout. The panel carries no credentials in its build.

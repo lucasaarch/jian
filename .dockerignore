@@ -7,7 +7,6 @@
 **/coverage
 work
 secrets
-apps/apple
 
 **/.next
 **/out
