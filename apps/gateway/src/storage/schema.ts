@@ -53,6 +53,7 @@ export const profiles = pgTable('profiles', {
   mcpServers: jsonb('mcp_servers').$type<McpServer[]>().notNull().default([]),
   allowSelfManagement: boolean('allow_self_management').notNull().default(false),
   allowShell: boolean('allow_shell').notNull().default(false),
+  allowWebSearch: boolean('allow_web_search').notNull().default(false),
   version: integer('version').notNull(),
   createdAt,
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

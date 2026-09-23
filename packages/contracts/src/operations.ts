@@ -54,6 +54,7 @@ import {
 } from './records.js';
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
 import { catalogQuerySchema, catalogSchema, skillImportSchema } from './skills.js';
+import { webSearchInputSchema, webSearchStatusSchema } from './web.js';
 
 /**
  * `access` is the whole authorization model: the host token opens everything marked `admin`,
@@ -82,6 +83,28 @@ export const cursorSchema = z.strictObject({
 });
 
 export const operations: Operation[] = [
+  {
+    method: 'GET',
+    path: '/v1/web-search',
+    operationId: 'getWebSearch',
+    access: 'admin',
+    response: webSearchStatusSchema,
+  },
+  {
+    method: 'PUT',
+    path: '/v1/web-search',
+    operationId: 'setWebSearch',
+    access: 'admin',
+    body: webSearchInputSchema,
+    response: webSearchStatusSchema,
+  },
+  {
+    method: 'DELETE',
+    path: '/v1/web-search',
+    operationId: 'removeWebSearch',
+    access: 'admin',
+    response: webSearchStatusSchema,
+  },
   {
     method: 'POST',
     path: '/v1/providers/openai/oauth',

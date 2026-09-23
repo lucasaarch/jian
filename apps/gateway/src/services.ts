@@ -14,6 +14,7 @@ import { createSafeFetch } from './security/outbound.js';
 import type { Vault } from './security/vault.js';
 import { Sessions } from './sessions/service.js';
 import type { Store } from './storage/database.js';
+import { WebSearch } from './web/service.js';
 
 export type Services = {
   profiles: Profiles;
@@ -21,6 +22,7 @@ export type Services = {
   sessions: Sessions;
   memories: Memories;
   media: Media;
+  web: WebSearch;
   runs: Runs;
   peers: Peers;
   lifecycle: RunLifecycle;
@@ -58,6 +60,7 @@ export function buildServices({
     sessions,
     memories,
     media: new Media(store, providers, gatewayVault, fetcher ?? createSafeFetch().fetch),
+    web: new WebSearch(store, gatewayVault, fetcher ?? createSafeFetch().fetch),
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),
     lifecycle: new RunLifecycle(store, runs, clock),

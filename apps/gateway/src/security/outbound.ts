@@ -276,7 +276,9 @@ export function createSafeFetch(options: SafeFetchOptions = {}): {
 
       return (await undiciFetch(request.url, {
         ...request.init,
-        redirect: 'error',
+        // Never followed here: the next address has not been checked. A caller that asks for
+        // `manual` gets the 3xx back and sends the next hop through this same guard.
+        redirect: init?.redirect === 'manual' ? 'manual' : 'error',
         dispatcher: agent,
       })) as unknown as Response;
     } catch (error) {

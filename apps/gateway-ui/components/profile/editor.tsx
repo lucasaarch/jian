@@ -138,6 +138,7 @@ export function ProfileEditor({
                 },
                 allowSelfManagement: form.get('selfManagement') === 'on',
                 allowShell: form.get('shell') === 'on',
+                allowWebSearch: form.get('webSearch') === 'on',
               }),
             'Profile updated.',
           );
@@ -198,6 +199,16 @@ export function ProfileEditor({
                   The agent may read files, write files and run commands on this machine, with the
                   privileges of whoever started the gateway. This holds over WhatsApp and Telegram
                   too: any approved contact gains that path.
+                </small>
+              </span>
+            </label>
+            <label className="check-row">
+              <input name="webSearch" type="checkbox" defaultChecked={profile.allowWebSearch} />
+              <span>
+                <strong>Allow web search</strong>
+                <small>
+                  The agent may search the internet and read public pages, through the search key
+                  under Providers. Pages are written by strangers and can try to steer it.
                 </small>
               </span>
             </label>

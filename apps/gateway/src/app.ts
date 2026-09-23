@@ -24,6 +24,7 @@ import { registerSessionRoutes } from './sessions/routes.js';
 import { registerSkillRoutes } from './skills/routes.js';
 import type { Skills } from './skills/service.js';
 import type { Store } from './storage/database.js';
+import { registerWebRoutes } from './web/routes.js';
 
 export function createApp(
   options: Services & {
@@ -94,6 +95,7 @@ export function createApp(
   registerRunRoutes(app, options);
   registerCoordinationRoutes(app, { coordination });
   registerChannelRoutes(app, options);
+  registerWebRoutes(app, options);
 
   registerEventRoutes(app, options);
 

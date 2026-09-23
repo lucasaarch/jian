@@ -219,6 +219,11 @@ export const profileSchema = z.strictObject({
    * else: it is the one setting that turns a conversation into access to a computer.
    */
   allowShell: z.boolean().default(false),
+  /**
+   * Searching the web and reading public pages, through the installation's search service.
+   * What comes back is written by strangers, so it reaches the agent as data to weigh.
+   */
+  allowWebSearch: z.boolean().default(false),
 });
 
 export const profilePatchSchema = profileSchema.partial().extend({
@@ -236,6 +241,7 @@ export const profilePatchSchema = profileSchema.partial().extend({
   mcpServers: z.array(mcpSchema).max(10).optional(),
   allowSelfManagement: z.boolean().optional(),
   allowShell: z.boolean().optional(),
+  allowWebSearch: z.boolean().optional(),
 });
 
 export const sessionSchema = z.strictObject({

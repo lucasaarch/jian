@@ -399,6 +399,10 @@ export const TOOL_GROUPS = {
     summary: 'run commands on the machine this gateway runs on',
     tools: ['run_command'],
   },
+  web: {
+    summary: 'search the web and read public pages',
+    tools: ['web_search', 'fetch_url'],
+  },
   conversations: {
     summary: 'read and write this profile’s other sessions, and search their history',
     tools: [

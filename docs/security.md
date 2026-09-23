@@ -43,6 +43,8 @@ Skills and tool results are untrusted instructions and data. Choosing which MCP 
 
 A profile can also be given the machine: reading files, writing files and running commands, with the privileges of whoever started the gateway. There is no sandbox around it, it is off by default, and it reaches as far as an approved contact on a chat channel can ask the agent to go. Turn it on only for a profile whose channels you control. In the published image that is the unprivileged `node` user, with no `sudo`; what bounds it is the container, which mounts no Docker socket and no host path. Mounting either hands the agent the host.
 
+A profile can be allowed to search the web. Searches go to the installation's Tavily key, set once under **Providers** and stored in the gateway vault like any other credential; reading a page goes through the same outbound guard as every other call, one redirect at a time, so a public page cannot send the gateway to an address inside its network. Off by default. Everything a search or a page returns was written by strangers and can try to steer the agent: it arrives as data, and a profile that can also run commands should be the one whose output you watch.
+
 ## Failures and outside effects
 
 An expired lease interrupts a run; it does not restart tools on its own. Continuing needs explicit reconciliation, creates another run and preserves the earlier checkpoints. It does not offer exactly-once execution of outside effects.

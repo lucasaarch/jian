@@ -8,6 +8,7 @@ import type { SectionProps } from '../props';
 import { Badge, Button, Field, SectionHeading } from '../ui';
 import { Select } from '../ui/select';
 import { anthropicCredentials, providers } from './catalog';
+import { WebSearchRow } from './web-search';
 
 /** What the row says about the credential in place, in one line. */
 function credentialLine(provider: {
@@ -272,6 +273,7 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
             </article>
           );
         })}
+        <WebSearchRow api={api} mutate={mutate} busy={busy} />
       </div>
     </>
   );
