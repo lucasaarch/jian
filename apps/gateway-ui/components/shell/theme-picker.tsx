@@ -1,84 +1,125 @@
 'use client';
 
-import { Check } from 'lucide-react';
+import { Check, Monitor, Moon, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { isTheme, type ThemeId, themeKey, themes } from '../../lib/themes';
+import {
+  isMode,
+  isTheme,
+  type Mode,
+  modeKey,
+  modes,
+  type ThemeId,
+  themeKey,
+  themes,
+} from '../../lib/themes';
 
-export function ThemePicker() {
-  const [selected, setSelected] = useState<ThemeId>('strelizia');
+/**
+ * A preference kept by this browser and mirrored on the root element, where the stylesheet
+ * reads it. Another tab changing it is followed here too.
+ */
+function useRootPreference<T extends string>(
+  key: string,
+  attribute: 'theme' | 'mode',
+  fallback: T,
+  valid: (value: unknown) => value is T,
+) {
+  const [value, setValue] = useState<T>(fallback);
+
   useEffect(() => {
-    const current = document.documentElement.dataset.theme;
-    if (isTheme(current)) setSelected(current);
+    const current = document.documentElement.dataset[attribute];
+
+    if (valid(current)) setValue(current);
+
     const sync = (event: StorageEvent) => {
-      if (event.key !== themeKey && event.key !== null) return;
-      const next = isTheme(event.newValue) ? event.newValue : 'strelizia';
-      document.documentElement.dataset.theme = next;
-      setSelected(next);
+      if (event.key !== key && event.key !== null) return;
+
+      const next = valid(event.newValue) ? event.newValue : fallback;
+
+      document.documentElement.dataset[attribute] = next;
+      setValue(next);
     };
+
     window.addEventListener('storage', sync);
+
     return () => window.removeEventListener('storage', sync);
-  }, []);
+  }, [key, attribute, fallback, valid]);
+
+  const choose = (next: T, done: string) => {
+    document.documentElement.dataset[attribute] = next;
+    setValue(next);
+
+    try {
+      localStorage.setItem(key, next);
+      toast.success(done, { id: attribute });
+    } catch {
+      toast.error('Applied for this session. The browser would not let it be saved.');
+    }
+  };
+
+  return [value, choose] as const;
+}
+
+const modeOptions: Record<Mode, { label: string; icon: typeof Sun }> = {
+  system: { label: 'System', icon: Monitor },
+  light: { label: 'Light', icon: Sun },
+  dark: { label: 'Dark', icon: Moon },
+};
+
+export function ModePicker() {
+  const [mode, choose] = useRootPreference<Mode>(modeKey, 'mode', 'system', isMode);
 
   return (
-    <fieldset className="theme-picker">
-      <legend className="sr-only">Squad 13 theme</legend>
-      <div className="theme-grid">
-        {themes.map((theme) => (
-          <label
-            key={theme.id}
-            data-theme={theme.id}
-            className="theme-option"
-            title={`${theme.name} · ${theme.pilot}`}
-          >
+    <fieldset className="mode-picker">
+      <legend className="sr-only">Mode</legend>
+      {modes.map((option) => {
+        const { label, icon: Icon } = modeOptions[option];
+
+        return (
+          <label key={option} className="mode-option">
             <input
               type="radio"
-              name="theme"
-              value={theme.id}
-              aria-label={`${theme.name} — ${theme.pilot} (${theme.color})`}
-              checked={selected === theme.id}
-              onChange={() => {
-                document.documentElement.dataset.theme = theme.id;
-                setSelected(theme.id);
-                try {
-                  localStorage.setItem(themeKey, theme.id);
-                  toast.success(`Tema ${theme.name} aplicado.`, { id: 'theme' });
-                } catch {
-                  toast.error(
-                    'Theme applied for this session. The browser would not let it be saved.',
-                  );
-                }
-              }}
+              name="mode"
+              value={option}
+              checked={mode === option}
+              onChange={() => choose(option, `${label} mode.`)}
             />
-            <span className="theme-preview" aria-hidden="true">
-              <span className="preview-rail">
-                <i />
-                <i />
-                <i />
-              </span>
-              <span className="preview-page">
-                <span className="preview-title" />
-                <span className="preview-line" />
-                <span className="preview-stats">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                <span className="preview-button" />
-              </span>
-            </span>
-            <span className="theme-card-caption">
-              <span>
-                <strong>{theme.name}</strong>
-                <small>{theme.pilot}</small>
-              </span>
-              <span className="theme-indicator">
-                {selected === theme.id ? <Check size={13} /> : null}
-              </span>
-            </span>
+            <Icon size={16} aria-hidden="true" />
+            {label}
           </label>
-        ))}
-      </div>
+        );
+      })}
+    </fieldset>
+  );
+}
+
+export function AccentPicker() {
+  const [theme, choose] = useRootPreference<ThemeId>(themeKey, 'theme', 'strelizia', isTheme);
+
+  return (
+    <fieldset className="accent-picker">
+      <legend className="sr-only">Accent colour</legend>
+      {themes.map((option) => (
+        <label
+          key={option.id}
+          className="accent-option"
+          data-theme={option.id}
+          title={`${option.name} · ${option.pilot}`}
+        >
+          <input
+            type="radio"
+            name="accent"
+            value={option.id}
+            aria-label={`${option.name} — ${option.color}`}
+            checked={theme === option.id}
+            onChange={() => choose(option.id, `${option.name} accent.`)}
+          />
+          <span className="accent-swatch" aria-hidden="true">
+            <Check size={16} strokeWidth={3} />
+          </span>
+          <span className="accent-name">{option.name}</span>
+        </label>
+      ))}
     </fieldset>
   );
 }

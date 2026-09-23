@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { type Preference, preferenceOptions } from '../../lib/preferences';
-import { ThemePicker } from '../shell/theme-picker';
+import { AccentPicker, ModePicker } from '../shell/theme-picker';
 import { Field, SectionHeading } from '../ui';
 import { Select } from '../ui/select';
 
@@ -84,19 +84,28 @@ export function Settings({ tab }: { tab: 'appearance' | 'accessibility' }) {
         <section className="appearance-panel">
           <div className="section-row">
             <div>
-              <h2>Accent colour</h2>
-              <p className="mt-1 text-sm">Five variations. The same workspace.</p>
+              <h2>Mode</h2>
+              <p className="mt-1 text-sm">
+                System follows the light or dark setting of this device.
+              </p>
             </div>
             <span className="preference-autosave">
               <Check size={14} />
               Saved automatically
             </span>
           </div>
-          <ThemePicker />
+          <ModePicker />
+          <div className="section-row mt-10">
+            <div>
+              <h2>Accent colour</h2>
+              <p className="mt-1 text-sm">Five colours, each tuned for light and for dark.</p>
+            </div>
+          </div>
+          <AccentPicker />
           <div className="appearance-note">
             <SlidersHorizontal size={18} />
             <p>
-              The theme follows you when you switch profiles. Alert colours keep the same meaning
+              Both follow you when you switch profiles. Alert colours keep the same meaning
               throughout.
             </p>
           </div>

@@ -42,8 +42,8 @@
     max-width: calc(100vw - 32px);
     transform-origin: var(--transform-origin);
     box-shadow:
-      0 16px 48px #20252d1f,
-      0 2px 8px #20252d0a;
+      0 16px 48px color-mix(in srgb, var(--shade) 12%, transparent),
+      0 2px 8px color-mix(in srgb, var(--shade) 4%, transparent);
     transition:
       opacity 120ms,
       transform 120ms;
@@ -220,71 +220,60 @@
   .preference-autosave {
     @apply flex items-center gap-1.5 text-xs text-muted;
   }
-  .theme-picker {
-    @apply m-0 border-0 p-0;
+  .mode-picker {
+    @apply m-0 inline-flex gap-1 rounded-md border border-line bg-surface p-1;
   }
-  .theme-grid {
-    @apply grid grid-cols-2 gap-4 min-[1100px]:grid-cols-3 min-[1400px]:grid-cols-5;
+  .mode-option {
+    @apply relative flex min-h-10 cursor-pointer items-center gap-2 rounded px-4 text-xs font-medium text-muted transition-colors;
   }
-  .theme-option {
-    @apply relative block min-w-0 cursor-pointer rounded-lg border border-line p-2 transition-colors;
+  .mode-option:hover {
+    @apply text-ink;
   }
-  .theme-option:has(input:checked) {
-    @apply border-accent bg-accent-soft;
-    box-shadow: 0 0 0 1px var(--accent);
+  .mode-option:has(input:checked) {
+    @apply bg-canvas text-ink;
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--shade) 14%, transparent);
   }
-  .theme-option:has(input:focus-visible) {
+  .mode-option:has(input:focus-visible),
+  .accent-option:has(input:focus-visible) .accent-swatch {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
-  .theme-option input {
+  .mode-option input,
+  .accent-option input {
     @apply absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0;
   }
-  .theme-preview {
-    @apply flex h-28 overflow-hidden rounded border border-line bg-canvas;
+  .accent-picker {
+    @apply m-0 flex flex-wrap gap-6 border-0 p-0;
   }
-  .preview-rail {
-    @apply flex w-1/4 flex-col gap-2 border-r border-line px-2 py-4;
+  .accent-option {
+    @apply relative flex w-20 cursor-pointer flex-col items-center gap-2.5;
   }
-  .preview-rail i {
-    @apply h-1 rounded-sm bg-line;
+  /* The accent inside is the option's own, so each swatch shows its colour in the active mode. */
+  .accent-swatch {
+    @apply grid h-12 w-12 place-items-center rounded-full bg-accent text-on-accent transition-transform;
+    box-shadow:
+      0 0 0 3px var(--canvas),
+      0 0 0 4px transparent;
   }
-  .preview-rail i:first-child {
-    @apply mb-2 h-3 w-3 bg-accent;
-    clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+  .accent-swatch svg {
+    @apply opacity-0 transition-opacity;
   }
-  .preview-page {
-    @apply flex flex-1 flex-col p-3;
+  .accent-option:hover .accent-swatch {
+    transform: scale(1.06);
   }
-  .preview-title {
-    @apply h-1.5 w-2/3 bg-ink;
+  .accent-option:has(input:checked) .accent-swatch {
+    box-shadow:
+      0 0 0 3px var(--canvas),
+      0 0 0 5px var(--accent);
   }
-  .preview-line {
-    @apply mt-2 h-1 w-full bg-line;
+  .accent-option:has(input:checked) .accent-swatch svg {
+    @apply opacity-100;
   }
-  .preview-stats {
-    @apply my-3 flex gap-1.5;
+  .accent-name {
+    @apply text-xs text-muted;
   }
-  .preview-stats i {
-    @apply h-5 flex-1 border-b border-accent bg-accent-soft;
-  }
-  .preview-button {
-    @apply ml-auto mt-auto h-3 w-9 rounded-sm bg-accent;
-  }
-  .theme-card-caption {
-    @apply flex items-center justify-between gap-2 px-1 py-3;
-  }
-  .theme-card-caption strong {
-    @apply block text-xs font-medium;
-  }
-  .theme-card-caption small {
-    @apply mt-0.5 block text-[11px] text-muted;
-  }
-  .theme-indicator {
-    @apply grid h-4 w-4 shrink-0 place-items-center rounded-full border border-control text-white;
-  }
-  .theme-option:has(input:checked) .theme-indicator {
-    @apply border-accent bg-accent;
+  .accent-option:has(input:checked) .accent-name {
+    @apply font-medium text-ink;
   }
   .appearance-note {
     @apply mt-8 flex items-start gap-3 rounded-md bg-surface px-5 py-4 text-muted;
@@ -392,7 +381,7 @@
   border-radius: 12px;
   border-left: 3px solid var(--accent);
   font-family: inherit;
-  box-shadow: 0 8px 32px #20252d1a;
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--shade) 10%, transparent);
   gap: 12px;
 }
 [data-sonner-toaster] [data-sonner-toast].jian-toast [data-icon] {
@@ -440,8 +429,8 @@
   .overview-profile h2 {
     @apply text-3xl;
   }
-  .theme-grid {
-    @apply gap-3;
+  .accent-picker {
+    @apply gap-4;
   }
   .connection-card {
     @apply p-5;

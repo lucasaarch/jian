@@ -1,8 +1,7 @@
 # Jian: first gateway
 
 Jian gives each agent profile one persistent identity shared by independent sessions.
-The first deliverable is a self-hosted, single-owner HTTP backend. The macOS client,
-channel connectors, semantic retrieval, arbitrary shell execution and automatic
+The first deliverable is a self-hosted, single-owner HTTP backend. Channel connectors, semantic retrieval, arbitrary shell execution and automatic
 continuation after an uncertain external effect are subsequent milestones.
 
 ## Design

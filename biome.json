@@ -15,7 +15,6 @@
       "!packages/sdk/src/generated.ts",
       "!apps/gateway/migrations",
       "!packages/contracts/openapi.json",
-      "!apps/apple",
       "!!**/.next",
       "!!apps/gateway-ui/out",
       "!!apps/gateway-ui/storybook-static",

@@ -91,7 +91,7 @@ export function Channels(props: SectionProps) {
               <p className="connection-meta">
                 {
                   {
-                    whatsapp: 'Pareamento por QR Code',
+                    whatsapp: 'Pairing by QR code',
                     telegram: 'A BotFather token',
                     api: 'A webhook URL and token',
                   }[kind.type]

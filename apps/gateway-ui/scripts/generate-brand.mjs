@@ -1,11 +1,9 @@
-import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const web = `${root}/apps/gateway-ui/public/brand`;
-const apple = `${root}/apps/apple`;
 const wing = 'M8 9 53 27 72 49 58 62 33 51 18 34 48 48 12 22 54 40Z';
 const body = 'm42 95 7-28 10-12 13-18 12-4 14 8-14 4-9 19-14 12Z';
 const bird = `<path d="${wing}"/><path d="${body}"/>`;
@@ -48,58 +46,10 @@ await writeFile(`${web}/readme-banner.svg`, banner);
 // Raster copy is portable across Markdown viewers that restrict SVG embedded fonts.
 await sharp(Buffer.from(banner)).png().toFile(`${web}/readme-banner.png`);
 
-const icon = svg(
-  `<rect x="76" y="76" width="872" height="872" rx="200" fill="#e4e5e9"/><rect x="76" y="64" width="872" height="872" rx="200" fill="#fff"/>
-<path d="m512 130 322 186v372L512 874 190 688V316Z" fill="none" stroke="#e6e7eb" stroke-width="5"/>
-<path d="M127 405V255l125-72M772 826l125-72V604" stroke="#b51e49" stroke-width="10" fill="none"/>
-<g transform="translate(180 171) scale(6.4)" fill="#b51e49">${bird}</g>`,
-  1024,
-);
-const iosIcon = svg(
+// A phone keeps the panel on its home screen with this, drawn edge to edge as iOS expects.
+const touchIcon = svg(
   `<rect width="1024" height="1024" fill="#fff"/><g transform="translate(154 154) scale(6.9)" fill="#b51e49">${bird}</g>`,
   1024,
 );
-const appiconset = `${apple}/Jian/Assets.xcassets/AppIcon.appiconset`;
-const exports = `${apple}/Brand/exports`;
-const iconset = `${apple}/Brand/Jian.iconset`;
-await Promise.all([appiconset, exports, iconset].map((path) => mkdir(path, { recursive: true })));
-await writeFile(`${apple}/Brand/AppIcon.svg`, icon);
-const images = [];
-for (const size of [16, 32, 64, 128, 256, 512, 1024]) {
-  for (const scale of [1, 2]) {
-    const pixels = size * scale;
-    // Small icons keep only the silhouette, avoiding unreadable frame detail.
-    const source =
-      pixels <= 64
-        ? svg(
-            `<rect x="8" y="6" width="88" height="90" rx="21" fill="#fff"/><g transform="translate(9 9) scale(.83)" fill="#b51e49">${bird}</g>`,
-            104,
-          )
-        : icon;
-    const buffer = await sharp(Buffer.from(source)).resize(pixels, pixels).png().toBuffer();
-    const filename = `icon_${size}x${size}${scale === 2 ? '@2x' : ''}.png`;
-    await writeFile(`${exports}/${filename}`, buffer);
-    // Xcode's macOS catalog accepts these five point sizes; 64px is 32pt @2x.
-    if ([16, 32, 128, 256, 512].includes(size)) {
-      await writeFile(`${iconset}/${filename}`, buffer);
-      await writeFile(`${appiconset}/${filename}`, buffer);
-      images.push({ idiom: 'mac', size: `${size}x${size}`, scale: `${scale}x`, filename });
-    }
-  }
-}
-await sharp(Buffer.from(iosIcon)).removeAlpha().png().toFile(`${appiconset}/icon_ios_1024.png`);
-images.push({
-  idiom: 'universal',
-  platform: 'ios',
-  size: '1024x1024',
-  filename: 'icon_ios_1024.png',
-});
-await writeFile(
-  `${appiconset}/Contents.json`,
-  `${JSON.stringify({ images, info: { author: 'xcode', version: 1 } }, null, 2)}\n`,
-);
-await sharp(Buffer.from(iosIcon)).resize(180).png().toFile(`${web}/apple-touch-icon.png`);
-if (process.platform === 'darwin') {
-  execFileSync('iconutil', ['-c', 'icns', iconset, '-o', `${apple}/Brand/Jian.icns`]);
-}
-console.log('Jian: SVG logos, README banner, Apple icon catalog and size exports generated.');
+await sharp(Buffer.from(touchIcon)).resize(180).png().toFile(`${web}/apple-touch-icon.png`);
+console.log('Jian: SVG logos, README banner and touch icon generated.');

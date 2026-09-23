@@ -72,3 +72,18 @@ export const Mobile: Story = {
   ...page(SessionsPage, '/sessions'),
   globals: { viewport: { value: 'mobile2', isRotated: false } },
 };
+
+/** The same screens on the dark canvas. */
+export const OverviewDark: Story = { ...page(OverviewPage, '/'), globals: { mode: 'dark' } };
+export const ChannelsDark: Story = {
+  ...page(ChannelsPage, '/channels'),
+  globals: { mode: 'dark' },
+};
+export const SessionsDark: Story = {
+  ...page(SessionsPage, '/sessions'),
+  globals: { mode: 'dark' },
+};
+export const AppearanceDark: Story = {
+  ...page(AppearancePage, '/settings/appearance'),
+  globals: { mode: 'dark' },
+};

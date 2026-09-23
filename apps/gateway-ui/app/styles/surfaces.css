@@ -114,11 +114,11 @@
     @apply mt-1 block text-xs leading-relaxed text-muted;
   }
   .save-bar {
-    @apply sticky bottom-5 z-10 ml-auto mt-8 flex w-fit max-w-full items-center justify-between gap-6 rounded-md bg-ink py-2 pl-5 pr-2 text-white;
-    box-shadow: 0 8px 28px #20252d26;
+    @apply sticky bottom-5 z-10 ml-auto mt-8 flex w-fit max-w-full items-center justify-between gap-6 rounded-md bg-ink py-2 pl-5 pr-2 text-canvas;
+    box-shadow: 0 8px 28px color-mix(in srgb, var(--shade) 15%, transparent);
   }
   .save-bar > span {
-    @apply flex items-center gap-2 text-xs text-white;
+    @apply flex items-center gap-2 text-xs text-canvas;
   }
   .avatar-field {
     @apply mb-6 flex items-start gap-5;
@@ -194,7 +194,7 @@
     @apply m-auto w-[min(600px,calc(100vw-32px))] max-h-[calc(100dvh-48px)] overflow-y-auto rounded-xl border border-line bg-canvas p-7 text-ink shadow-2xl;
   }
   .modal::backdrop {
-    background: #20252d70;
+    background: color-mix(in srgb, var(--shade) 44%, transparent);
     backdrop-filter: blur(4px);
   }
   .modal > header {

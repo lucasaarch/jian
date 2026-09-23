@@ -36,8 +36,7 @@
   },
   "lint-staged": {
     "*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc}": "biome check --write --no-errors-on-unmatched --error-on-warnings",
-    "packages/contracts/src/**/*.ts": "sh -c 'pnpm contracts:generate'",
-    "apps/apple/**/*.swift": "sh -c 'make apple-lint'"
+    "packages/contracts/src/**/*.ts": "sh -c 'pnpm contracts:generate'"
   },
   "packageManager": "pnpm@11.9.0",
   "license": "Apache-2.0"
