@@ -49,6 +49,8 @@ An expired lease interrupts a run; it does not restart tools on its own. Continu
 
 Resource leases coordinate sessions of the same profile and hand out an increasing fence number. An external resource is protected from a stale holder only if it validates that number too; a lease does not intercept every MCP call on its own.
 
+A remote call that never came back leaves an effect nobody can account for: the run stops, no further tool starts, and the owner reconciles before continuing. A server that answers and reports a failure is a different thing — it says what happened, so the agent is told and carries on.
+
 A delivery with no confirmation is recorded as `unknown` and is never resent on its own. An abandoned send is marked uncertain after ten minutes. Check the destination before resending by hand. Cancelling a run does not undo what already happened.
 
 ## Reporting a vulnerability

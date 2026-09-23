@@ -340,7 +340,10 @@ export class AgentRuntime {
               try {
                 const output = await execute(input, options);
 
-                // MCP can report failure in a successful HTTP response after applying an effect.
+                // A server that answers with `isError` is reporting a failure it knows about:
+                // the request reached it and it said no. That is a fact the agent can act on,
+                // so it goes back as the tool's result. Only a call that never came back
+                // leaves an effect nobody can account for, and that is handled below.
                 if (
                   mcpToolNames.includes(name) &&
                   output &&
@@ -349,18 +352,28 @@ export class AgentRuntime {
                   output.isError === true
                 ) {
                   await this.services.lifecycle.checkpoint(profileId, runId, owner, {
-                    phase: 'tool-uncertain',
+                    phase: 'tool-refused',
                     toolName: name,
                     toolCallId: options.toolCallId,
                     result: await boundToolResult(output, name, run, secrets, this.options),
                   });
-
-                  throw new Error('External tool outcome is uncertain');
                 }
 
                 return await boundToolResult(output, name, run, secrets, this.options);
               } catch (error) {
+                // The call never came back, so whether the server acted on it is unknowable.
+                // Everything stops: another tool starting now could act on a state nobody has
+                // established, and the owner is told to reconcile before continuing.
                 if (mcpToolNames.includes(name)) {
+                  await this.services.lifecycle
+                    .checkpoint(profileId, runId, owner, {
+                      phase: 'tool-uncertain',
+                      toolName: name,
+                      toolCallId: options.toolCallId,
+                      reason: reason(error, secrets),
+                    })
+                    .catch(() => {});
+
                   externalUncertain = true;
                   controller.abort();
 

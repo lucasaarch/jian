@@ -229,7 +229,7 @@ it.each([false, true])(
 );
 
 it.each(['disconnect', 'isError'])(
-  'interrupts uncertain remote effects (%s) without retries',
+  'stops on an unknowable remote outcome and carries on from a refused one (%s)',
   async (failure) => {
     let effects = 0;
 
@@ -358,6 +358,17 @@ it.each(['disconnect', 'isError'])(
             };
           }
 
+          // Told the server refused, the agent stops asking and says so, which is what a
+          // reported failure is for.
+          if (calls > 2) {
+            return {
+              content: [{ type: 'text', text: 'The server refused the change.' }],
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage,
+              warnings: [],
+            };
+          }
+
           return {
             content: [
               {
@@ -384,18 +395,30 @@ it.each(['disconnect', 'isError'])(
 
       const finished = await services.runs.run(profile.id, run.id);
 
-      expect(finished.status).toBe('interrupted');
-      expect(effects).toBe(1);
-      expect(calls).toBe(2);
-      expect(finished.error).toContain('reconcil');
+      if (failure === 'disconnect') {
+        // The call never came back, so whether the server acted is unknowable: the second call
+        // of the same step never starts and everything stops until the owner has looked.
+        expect(effects).toBe(1);
+        expect(finished.status).toBe('interrupted');
+        expect(calls).toBe(2);
+        expect(finished.error).toContain('reconcil');
+      } else {
+        // A refusal stops nothing: the other call of the step still runs.
+        expect(effects).toBe(2);
+        // The server answered and said no. That is a fact the agent can act on, so the turn
+        // carries on with it rather than being abandoned.
+        expect(finished.status).toBe('completed');
+        expect(calls).toBeGreaterThan(2);
+      }
 
+      // One record per call actually started: a call that never started leaves none.
       expect(
         (await services.lifecycle.checkpoints(profile.id, run.id)).filter((checkpoint) => {
           const data = checkpoint.data as { phase?: string; toolName?: string };
 
           return data.phase === 'tool-started' && data.toolName === remoteName;
         }),
-      ).toHaveLength(1);
+      ).toHaveLength(failure === 'disconnect' ? 1 : 2);
     } finally {
       await outbound.close();
       server.closeAllConnections();

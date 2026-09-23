@@ -229,12 +229,14 @@ export class Peers implements PeerAgents {
 
     await this.services.runs.relayTo(profileId, runId, null);
 
+    const caller = await this.services.profiles.profile(profileId);
+
     const carried = await this.services.runs.submit(
       run.call.fromProfileId,
       run.relayTo,
       {
         text: [
-          `${(await this.services.profiles.profile(profileId)).name} answered the question you left with them.`,
+          `${caller.name} answered the question you left with them.`,
           `You asked: ${run.input}`,
           `They replied: ${said}`,
         ].join('\n\n'),
@@ -246,6 +248,18 @@ export class Peers implements PeerAgents {
     // Without this the answer reaches the transcript and stops there: nothing on the chat is
     // waiting for a run the person never sent a message to start.
     await this.deliveries?.deliverRun(run.call.fromProfileId, run.relayTo, carried.id);
+
+    // The thread this caller keeps with the colleague: an answer that arrived late belongs
+    // there as much as one that arrived in time, or its half has the question and no reply.
+    const thread = await this.services.sessions.peerSession(
+      run.call.fromProfileId,
+      profileId,
+      `Agente · ${caller.name}`,
+    );
+
+    await this.services.sessions
+      .record(run.call.fromProfileId, thread.id, carried.id, 'user', said)
+      .catch(() => {});
   }
 
   private async record(profileId: string, runId: string, type: string, data: unknown) {
