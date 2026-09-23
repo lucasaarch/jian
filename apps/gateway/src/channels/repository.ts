@@ -328,6 +328,17 @@ export async function listDeliveriesByPhase(
   return rows.map(toDelivery).filter((delivery) => delivery.status === phase);
 }
 
+/** Whether this run already has a way out, so a second one never replays what was sent. */
+export async function hasDelivery(db: Queryable, runId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: deliveries.id })
+    .from(deliveries)
+    .where(eq(deliveries.runId, runId))
+    .limit(1);
+
+  return Boolean(row);
+}
+
 export async function insertDelivery(db: Queryable, delivery: DeliveryRecord): Promise<void> {
   await db.insert(deliveries).values(toDeliveryRow(delivery)).onConflictDoNothing();
 }

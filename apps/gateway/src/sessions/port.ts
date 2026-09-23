@@ -28,6 +28,13 @@ export interface SessionWriter extends SessionReader {
 
 /** The session two agents share. Held apart from `SessionWriter`: only peer calls open one. */
 export interface PeerSessions {
+  record(
+    profileId: string,
+    sessionId: string,
+    runId: string,
+    role: 'user' | 'assistant',
+    content: string,
+  ): Promise<void>;
   peerSession(
     profileId: string,
     peerProfileId: string,

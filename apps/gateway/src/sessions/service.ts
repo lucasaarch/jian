@@ -13,6 +13,7 @@ import type { Queryable, Store } from '../storage/database.js';
 import {
   findPeerSession,
   findSession,
+  insertMessage,
   insertSession,
   listSessionMessages,
   listSessions,
@@ -138,6 +139,27 @@ export class Sessions {
     await this.profiles.profile(profileId);
 
     return listSessions(this.store.db, profileId, 100);
+  }
+
+  /** Writes one turn of a conversation the gateway itself is keeping, such as a peer thread. */
+  async record(
+    profileId: string,
+    sessionId: string,
+    runId: string,
+    role: 'user' | 'assistant',
+    content: string,
+  ) {
+    await this.store.transaction(profileId, (tx) =>
+      insertMessage(tx, {
+        id: randomUUID(),
+        profileId,
+        sessionId,
+        runId,
+        role,
+        content,
+        createdAt: nowIso(this.clock),
+      }),
+    );
   }
 
   async messages(profileId: string, sessionId: string, limit = 100, after?: string) {

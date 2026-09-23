@@ -29,6 +29,7 @@ import {
   findContactBySession,
   findDelivery,
   findLiveChannel,
+  hasDelivery,
   insertChannel,
   insertDelivery,
   listChannels,
@@ -625,6 +626,13 @@ export class Channels {
     const contact = await findContactBySession(this.services.store.db, profileId, sessionId);
 
     if (contact?.status !== 'approved') {
+      return;
+    }
+
+    // A run already on its way out needs no second exit. A late answer that arrived while the
+    // conversation was busy joins the turn in flight instead of starting one, and a second
+    // delivery against that turn would replay every message it had already sent.
+    if (await hasDelivery(this.services.store.db, runId)) {
       return;
     }
 

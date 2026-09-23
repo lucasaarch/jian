@@ -12,6 +12,8 @@ describe('what a bubble that does not render markdown receives', () => {
       '| Pro | R$ 90 | 24 meses |',
     ].join('\n');
 
+    // One message, not one per row: a blank line between rows is a message boundary, and a
+    // table of twelve rows became twelve notifications.
     expect(plainText(answer)).toBe(
       [
         'Os dois planos:',
@@ -19,7 +21,7 @@ describe('what a bubble that does not render markdown receives', () => {
         'Básico',
         'Preço: R$ 30',
         'Prazo: 12 meses',
-        '',
+        '—',
         'Pro',
         'Preço: R$ 90',
         'Prazo: 24 meses',

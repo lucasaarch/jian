@@ -24,6 +24,15 @@ type PeerServices = {
   store: Store;
 };
 
+/**
+ * Everything the colleague said this turn, in order. A run's output is only its closing
+ * paragraph — the rest was released as it was written — so reading the output alone hands the
+ * caller the last line of an answer and loses the answer.
+ */
+function spoken(run: Run): string {
+  return [...(run.commentary ?? []), run.output ?? ''].filter(Boolean).join('\n\n');
+}
+
 /** How long a caller waits for a colleague and how often it looks, in milliseconds. */
 export type PeerTiming = { answerWithin: number; pollEvery: number };
 
@@ -82,6 +91,16 @@ export class Peers implements PeerAgents {
       `Agente · ${run.profile.name}`,
     );
 
+    // The same thread from this side. Without it the agent that asked has no record of what it
+    // asked or what came back, and cannot read its own half of a conversation it is in.
+    const mine = await this.services.sessions.peerSession(
+      run.profileId,
+      callee.id,
+      `Agente · ${callee.name}`,
+    );
+
+    await this.services.sessions.record(run.profileId, mine.id, run.id, 'assistant', data.text);
+
     // Both sides record the call so the owner can audit who spoke to whom. A retried request
     // key records the attempt again and still reaches the single run the first one created.
     await this.record(run.profileId, run.id, 'agent.call.sent', {
@@ -105,6 +124,10 @@ export class Peers implements PeerAgents {
     });
 
     const answer = await this.answer(callee.id, answering.id, callee.name, run.sessionId, signal);
+
+    if (answer.status === 'answered' && answer.text) {
+      await this.services.sessions.record(run.profileId, mine.id, run.id, 'user', answer.text);
+    }
 
     return { fromProfileId: callee.id, fromName: callee.name, ...answer };
   }
@@ -166,7 +189,7 @@ export class Peers implements PeerAgents {
       const current = await this.services.runs.run(profileId, runId);
 
       if (current.status === 'completed') {
-        return { status: 'answered', text: current.output ?? '' };
+        return { status: 'answered', text: spoken(current) };
       }
 
       if (current.status !== 'queued' && current.status !== 'running') {
@@ -202,9 +225,7 @@ export class Peers implements PeerAgents {
     }
 
     const said =
-      run.status === 'completed'
-        ? (run.output ?? '')
-        : `could not finish: ${run.error ?? run.status}`;
+      run.status === 'completed' ? spoken(run) : `could not finish: ${run.error ?? run.status}`;
 
     await this.services.runs.relayTo(profileId, runId, null);
 

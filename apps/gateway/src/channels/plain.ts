@@ -17,10 +17,16 @@ export function plainText(markdown: string): string {
       const header = cells(line);
       let cursor = index + 2;
 
+      // The whole table is one message. A blank line between rows would make each one its own
+      // message, so a table of twelve rows became twelve notifications.
+      const rows: string[] = [];
+
       while (cursor < lines.length && isTableRow(lines[cursor] as string)) {
-        out.push(...row(header, cells(lines[cursor] as string)));
+        rows.push(row(header, cells(lines[cursor] as string)).join('\n'));
         cursor += 1;
       }
+
+      out.push(rows.join('\n—\n'), '');
 
       index = cursor - 1;
       continue;
@@ -65,7 +71,7 @@ function row(header: string[], values: string[]): string[] {
     block.push(label ? `${label}: ${value}` : value);
   }
 
-  return [...block.filter(Boolean), ''];
+  return block.filter(Boolean);
 }
 
 function inline(line: string): string {
