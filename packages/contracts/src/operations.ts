@@ -20,6 +20,7 @@ import {
   mailSchema,
   pageQuerySchema,
 } from './coordination.js';
+import { decisionsInputSchema, decisionsStatusSchema } from './decisions.js';
 import { mediaContentSchema } from './media.js';
 import {
   builtinSkillSchema,
@@ -104,6 +105,28 @@ export const operations: Operation[] = [
     operationId: 'removeWebSearch',
     access: 'admin',
     response: webSearchStatusSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/decisions',
+    operationId: 'getDecisions',
+    access: 'admin',
+    response: decisionsStatusSchema,
+  },
+  {
+    method: 'PUT',
+    path: '/v1/decisions',
+    operationId: 'setDecisions',
+    access: 'admin',
+    body: decisionsInputSchema,
+    response: decisionsStatusSchema,
+  },
+  {
+    method: 'DELETE',
+    path: '/v1/decisions',
+    operationId: 'removeDecisions',
+    access: 'admin',
+    response: decisionsStatusSchema,
   },
   {
     method: 'POST',

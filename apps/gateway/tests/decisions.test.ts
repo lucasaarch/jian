@@ -1,0 +1,99 @@
+import { describe, expect, it } from 'vitest';
+import { createApp } from '../src/app.js';
+import { Decisions } from '../src/decisions/service.js';
+import { testServices } from './helpers/services.js';
+
+const token = 'synthetic-decisions-admin-token-32-chars';
+const admin = { authorization: `Bearer ${token}` };
+const question = {
+  state: { message: 'Ada, pode confirmar?' },
+  instructions: 'Is this message speaking to Ada?',
+  yes: 'It is.',
+  no: 'It is not.',
+};
+
+async function setup(respond: (init?: RequestInit) => Response | Promise<Response>) {
+  const services = await testServices();
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const reports: string[] = [];
+  const decisions = new Decisions(
+    services.store,
+    services.gatewayVault,
+    async (input, init) => {
+      requests.push({ url: String(input), ...(init ? { init } : {}) });
+
+      return respond(init);
+    },
+    (line) => reports.push(line),
+  );
+  const app = createApp({ ...services, decisions, token, logger: false });
+
+  return { decisions, requests, reports, app };
+}
+
+describe('asking Jev', () => {
+  it('asks nothing and sends nothing until the owner saves a key', async () => {
+    const { decisions, requests } = await setup(() => Response.json({}));
+
+    expect(await decisions.ask(question)).toBeUndefined();
+    expect(requests).toEqual([]);
+  });
+
+  it('keeps the key write-only and sends it only to TypeSafe', async () => {
+    const { app, decisions, requests } = await setup(() =>
+      Response.json({ answers: { answer: { type: 'noul', noul: 0.82, confidence: 0.9 } } }),
+    );
+
+    const saved = await app.inject({
+      method: 'PUT',
+      url: '/v1/decisions',
+      headers: admin,
+      payload: { provider: 'jev', apiKey: 'jev-synthetic' },
+    });
+
+    expect(saved.statusCode).toBe(200);
+    expect(saved.body).not.toContain('jev-synthetic');
+    expect(saved.json()).toMatchObject({ provider: 'jev', configured: true });
+
+    expect(await decisions.ask(question)).toBe(0.82);
+    expect(requests[0]?.url).toBe('https://api.typesafe.ai/v1/systemone');
+    expect(new Headers(requests[0]?.init?.headers).get('authorization')).toBe(
+      'Bearer jev-synthetic',
+    );
+    expect(JSON.parse(String(requests[0]?.init?.body))).toMatchObject({
+      model: 'jev-latest',
+      questions: { answer: { type: 'noul' } },
+    });
+
+    const removed = await app.inject({ method: 'DELETE', url: '/v1/decisions', headers: admin });
+
+    expect(removed.json()).toMatchObject({ configured: false });
+    expect(await decisions.ask(question)).toBeUndefined();
+  });
+
+  it('leaves the decision to the caller when Jev fails, without logging what it answered', async () => {
+    const { decisions, reports } = await setup(
+      () => new Response('{"detail":"Ada, pode confirmar?"}', { status: 529 }),
+    );
+
+    await decisions.configure({ provider: 'jev', apiKey: 'jev-synthetic' });
+
+    expect(await decisions.ask(question)).toBeUndefined();
+    expect(reports.join('\n')).toContain('529');
+    expect(reports.join('\n')).not.toContain('pode confirmar');
+  });
+
+  it('stops waiting when Jev is slow', async () => {
+    // Like fetch, the synthetic Jev gives up only when the request is aborted.
+    const { decisions } = await setup(
+      (init) =>
+        new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason)),
+        ),
+    );
+
+    await decisions.configure({ provider: 'jev', apiKey: 'jev-synthetic' });
+
+    expect(await decisions.ask(question, { timeoutMs: 50 })).toBeUndefined();
+  });
+});

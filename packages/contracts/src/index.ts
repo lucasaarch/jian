@@ -1,5 +1,6 @@
 export * from './channels.js';
 export * from './coordination.js';
+export * from './decisions.js';
 export * from './media.js';
 export * from './operations.js';
 export * from './peers.js';

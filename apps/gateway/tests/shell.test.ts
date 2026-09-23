@@ -3,12 +3,24 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { profileTools } from '../src/agent/tools.js';
+import { Decisions } from '../src/decisions/service.js';
 import { testServices } from './helpers/services.js';
 
 const model = { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' };
 
-async function toolsFor(allowShell: boolean) {
+async function toolsFor(allowShell: boolean, jev?: () => Response) {
   const services = await testServices();
+  const decisions = new Decisions(
+    services.store,
+    services.gatewayVault,
+    async () => jev?.() ?? Response.json({}),
+    () => {},
+  );
+
+  if (jev) {
+    await decisions.configure({ provider: 'jev', apiKey: 'jev-synthetic' });
+  }
+
   const profile = await services.profiles.createProfile({
     name: 'Atlas',
     instructions: 'Help.',
@@ -21,7 +33,7 @@ async function toolsFor(allowShell: boolean) {
     requestKey: 'one',
   });
 
-  return profileTools({ ...services, store: services.store }, run);
+  return profileTools({ ...services, decisions, store: services.store }, run);
 }
 
 const call = async (tool: unknown, input: unknown) =>
@@ -205,5 +217,34 @@ describe('working on code', () => {
         limit: 50,
       }),
     ).toEqual({ matches: `${file}:2:const b = 2;` });
+  });
+
+  it('holds back an action Jev judges destructive, and runs nothing', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jian-guard-'));
+    const file = join(dir, 'keep.txt');
+    const risky = () => Response.json({ answers: { answer: { type: 'noul', noul: 0.95 } } });
+    const tools = await toolsFor(true, risky);
+
+    writeFileSync(file, 'dados');
+
+    expect(await call(tools.run_command, { command: `rm ${file}`, timeoutMs: 5000 })).toMatchObject(
+      { held: expect.stringContaining('Held back') },
+    );
+    expect(readFileSync(file, 'utf8')).toBe('dados');
+  });
+
+  it('runs as before when Jev sees no risk, has no key, or does not answer', async () => {
+    const safe = () => Response.json({ answers: { answer: { type: 'noul', noul: 0.05 } } });
+    const down = () => new Response('overloaded', { status: 529 });
+
+    // Each set of tools is used before the next is built: every test store starts empty.
+    for (const jev of [safe, undefined, down]) {
+      const tools = await toolsFor(true, jev);
+
+      expect(await call(tools.run_command, { command: 'echo oi', timeoutMs: 5000 })).toMatchObject({
+        exitCode: 0,
+        stdout: 'oi\n',
+      });
+    }
   });
 });

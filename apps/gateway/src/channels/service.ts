@@ -10,6 +10,7 @@ import type { z } from 'zod';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { stableUuid } from '../core/ids.js';
+import type { Decisions } from '../decisions/service.js';
 import { Errands } from '../errands/service.js';
 import { bindMedia, releaseHeldMedia } from '../media/repository.js';
 import type { Media } from '../media/service.js';
@@ -102,6 +103,7 @@ type ChannelServices = {
   store: Store;
   vault: Vault;
   media?: Media;
+  decisions?: Pick<Decisions, 'ask'>;
 };
 
 export class Channels {
@@ -116,7 +118,7 @@ export class Channels {
     private readonly registry = new ChannelRegistry(),
     private readonly errands = new Errands(services.store),
     private readonly people = new Contacts(services),
-    private readonly rooms = new Groups(services.profiles),
+    private readonly rooms = new Groups(services.profiles, services.decisions?.ask),
   ) {}
 
   start() {
@@ -408,6 +410,11 @@ export class Channels {
       return { accepted: false };
     }
 
+    // Asked before the transaction: an answer from outside must not hold the profile's lock.
+    const verdict =
+      data.scope === 'group'
+        ? await this.rooms.verdict(this.services.store.db, channel, data)
+        : undefined;
     const mediaIds: string[] = [];
     const intake = await this.services.store.transaction(
       channel.profileId,
@@ -418,7 +425,14 @@ export class Channels {
         let decision: GroupDecision | undefined;
         if (outcome.status === 'approved' && data.scope === 'group') {
           const profile = await this.services.profiles.profile(channel.profileId, tx);
-          decision = await this.rooms.observe(tx, channel, outcome.contact, data, profile.name);
+          decision = await this.rooms.observe(
+            tx,
+            channel,
+            outcome.contact,
+            data,
+            profile.name,
+            verdict,
+          );
 
           // What was not said to the agent is still what it heard: when it is called later, it
           // answers the room with the conversation it followed, like anyone else who was there.

@@ -1,27 +1,48 @@
 'use client';
 
-import { ChevronDown, Globe, KeyRound, Save, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import type { GatewayApi } from '../../lib/api';
+import { ChevronDown, Globe, KeyRound, type LucideIcon, Save, Scale, Trash2 } from 'lucide-react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { date } from '../../lib/format';
 import type { SectionProps } from '../props';
 import { Badge, Button, Field } from '../ui';
 
-type Status = Awaited<ReturnType<GatewayApi['webSearch']>>;
+type Status = { configured: boolean; updatedAt?: string };
+type RowProps = Pick<SectionProps, 'api' | 'mutate' | 'busy'>;
 
 /**
- * The search service every agent with web search switched on uses. It sits beside the model
- * providers because it is a credential of the installation, but it chooses no model.
+ * A service the whole installation shares through one key. These rows sit beside the model
+ * providers because each is a credential of the installation, but none of them chooses a model.
  */
-export function WebSearchRow({ api, mutate, busy }: Pick<SectionProps, 'api' | 'mutate' | 'busy'>) {
+function ServiceKeyRow({
+  id,
+  icon: Icon,
+  title,
+  vendor,
+  children,
+  source,
+  load,
+  save,
+  remove,
+  mutate,
+  busy,
+}: {
+  id: string;
+  icon: LucideIcon;
+  title: string;
+  vendor: string;
+  children: ReactNode;
+  source: string;
+  load: () => Promise<Status>;
+  save: (key: string) => Promise<Status>;
+  remove: () => Promise<Status>;
+} & Pick<SectionProps, 'mutate' | 'busy'>) {
   const [status, setStatus] = useState<Status>();
   const [open, setOpen] = useState(false);
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
     let active = true;
-    void api
-      .webSearch()
+    void load()
       .then((state) => {
         if (active) setStatus(state);
       })
@@ -29,7 +50,7 @@ export function WebSearchRow({ api, mutate, busy }: Pick<SectionProps, 'api' | '
     return () => {
       active = false;
     };
-  }, [api]);
+  }, [load]);
 
   const change = async (action: () => Promise<Status>, done: string) => {
     let next: Status | undefined;
@@ -43,25 +64,22 @@ export function WebSearchRow({ api, mutate, busy }: Pick<SectionProps, 'api' | '
   return (
     <article className="resource-row items-start provider-row">
       <div className="resource-icon provider-symbol" aria-hidden="true">
-        <Globe size={18} />
+        <Icon size={18} />
       </div>
       <div className="grow">
         <h3>
-          Web search · Tavily
+          {title} · {vendor}
           <Badge tone={status?.configured ? 'good' : 'neutral'}>
             {status?.configured ? 'Connected' : 'Not configured'}
           </Badge>
         </h3>
-        <p>
-          Lets the profiles with web search switched on search the internet and read pages. The free
-          plan covers 1,000 searches a month.
-        </p>
+        <p>{children}</p>
         <div className="connection-meta">
           <KeyRound size={13} />
           <span>
             {status?.configured && status.updatedAt
               ? `Key saved on ${date(status.updatedAt)}`
-              : 'A key from tavily.com'}
+              : `A key from ${source}`}
           </span>
         </div>
       </div>
@@ -71,7 +89,7 @@ export function WebSearchRow({ api, mutate, busy }: Pick<SectionProps, 'api' | '
           variant="quiet"
           disabled={busy}
           aria-expanded={open}
-          aria-controls="provider-web-search"
+          aria-controls={id}
           onClick={() => {
             setOpen(!open);
             setFormError('');
@@ -81,7 +99,7 @@ export function WebSearchRow({ api, mutate, busy }: Pick<SectionProps, 'api' | '
           <ChevronDown size={16} className={open ? 'rotate-180' : undefined} />
         </Button>
       </div>
-      <div id="provider-web-search" className="connection-disclosure basis-full" hidden={!open}>
+      <div id={id} className="connection-disclosure basis-full" hidden={!open}>
         <form
           className="connection-form"
           method="post"
@@ -92,15 +110,15 @@ export function WebSearchRow({ api, mutate, busy }: Pick<SectionProps, 'api' | '
             const element = event.currentTarget;
             const key = String(new FormData(element).get('secret') ?? '').trim();
             if (!key) {
-              setFormError('Enter the Tavily key.');
+              setFormError(`Enter the ${vendor} key.`);
               return;
             }
-            if (await change(() => api.setWebSearch(key), 'Web search configured.')) {
+            if (await change(() => save(key), `${title} configured.`)) {
               element.reset();
             }
           }}
         >
-          <Field label="Tavily key" hint="What you save here is never shown again.">
+          <Field label={`${vendor} key`} hint="What you save here is never shown again.">
             <input name="secret" type="password" autoComplete="off" required />
           </Field>
           <div className="flex flex-wrap items-center gap-3">
@@ -113,7 +131,7 @@ export function WebSearchRow({ api, mutate, busy }: Pick<SectionProps, 'api' | '
                 type="button"
                 variant="quiet"
                 disabled={busy}
-                onClick={() => void change(() => api.removeWebSearch(), 'Web search removed.')}
+                onClick={() => void change(remove, `${title} removed.`)}
               >
                 <Trash2 size={16} />
                 Remove it
@@ -128,5 +146,46 @@ export function WebSearchRow({ api, mutate, busy }: Pick<SectionProps, 'api' | '
         </form>
       </div>
     </article>
+  );
+}
+
+export function WebSearchRow({ api, mutate, busy }: RowProps) {
+  return (
+    <ServiceKeyRow
+      id="provider-web-search"
+      icon={Globe}
+      title="Web search"
+      vendor="Tavily"
+      source="tavily.com"
+      load={api.webSearch}
+      save={api.setWebSearch}
+      remove={api.removeWebSearch}
+      mutate={mutate}
+      busy={busy}
+    >
+      Lets the profiles with web search switched on search the internet and read pages. The free
+      plan covers 1,000 searches a month.
+    </ServiceKeyRow>
+  );
+}
+
+export function DecisionsRow({ api, mutate, busy }: RowProps) {
+  return (
+    <ServiceKeyRow
+      id="provider-decisions"
+      icon={Scale}
+      title="Decisions"
+      vendor="Jev"
+      source="typesafe.ai"
+      load={api.decisions}
+      save={api.setDecisions}
+      remove={api.removeDecisions}
+      mutate={mutate}
+      busy={busy}
+    >
+      Tells whether a group message that names an agent is speaking to it, and holds back shell
+      commands and file changes that go further than what was asked. Without it, the fixed rules
+      decide.
+    </ServiceKeyRow>
   );
 }

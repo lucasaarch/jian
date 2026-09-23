@@ -1,5 +1,6 @@
 import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
+import { Decisions } from './decisions/service.js';
 import { Errands } from './errands/service.js';
 import { Media } from './media/service.js';
 import { Memories } from './memories/service.js';
@@ -23,6 +24,7 @@ export type Services = {
   memories: Memories;
   media: Media;
   web: WebSearch;
+  decisions: Decisions;
   runs: Runs;
   peers: Peers;
   lifecycle: RunLifecycle;
@@ -53,6 +55,7 @@ export function buildServices({
   const sessions = new Sessions(store, profiles, clock);
   const memories = new Memories(store, profiles, sessions, clock);
   const runs = new Runs(store, profiles, sessions, providers, clock);
+  const decisions = new Decisions(store, gatewayVault, fetcher ?? createSafeFetch().fetch);
 
   return {
     profiles,
@@ -61,6 +64,7 @@ export function buildServices({
     memories,
     media: new Media(store, providers, gatewayVault, fetcher ?? createSafeFetch().fetch),
     web: new WebSearch(store, gatewayVault, fetcher ?? createSafeFetch().fetch),
+    decisions,
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),
     lifecycle: new RunLifecycle(store, runs, clock),

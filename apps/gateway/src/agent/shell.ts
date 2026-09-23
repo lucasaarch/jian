@@ -3,6 +3,7 @@ import { isAbsolute } from 'node:path';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { fileTools } from './files.js';
+import type { Guard } from './guard.js';
 
 /**
  * Running commands on the machine the gateway runs on, with the file tools beside them.
@@ -14,7 +15,8 @@ import { fileTools } from './files.js';
  *
  * Read this as what it is: anyone who can make this agent act — including an approved contact
  * on a chat channel — can make it run a command. The limits below are about keeping a run
- * alive and its results readable, not about containment.
+ * alive and its results readable, not about containment. A `guard`, when given, is asked before
+ * each action that changes the machine; it is a second opinion, not a boundary.
  */
 
 /** Long enough for a build, short enough that a run does not die waiting on a hung command. */
@@ -34,8 +36,11 @@ function clip(text: string, limit: number): string {
     : text;
 }
 
-export function shellTools(): ToolSet {
-  return {
+/** The tools whose action changes the machine, and so pass the guard first. */
+const GUARDED = ['run_command', 'write_file', 'edit_file'];
+
+export function shellTools(guard?: Guard): ToolSet {
+  const tools: ToolSet = {
     run_command: tool({
       description:
         'Run a command on the machine this gateway runs on and read what it printed. Prefer a single command over a shell pipeline you cannot inspect. Anything destructive needs the owner to have asked for it in this conversation.',
@@ -66,4 +71,26 @@ export function shellTools(): ToolSet {
 
     ...fileTools(),
   };
+
+  if (!guard) {
+    return tools;
+  }
+
+  for (const name of GUARDED) {
+    const original = tools[name];
+    const execute = original?.execute;
+
+    if (original && execute) {
+      tools[name] = {
+        ...original,
+        execute: async (input, options) => {
+          const held = await guard(name, input);
+
+          return held ? { held } : execute(input, options);
+        },
+      };
+    }
+  }
+
+  return tools;
 }

@@ -8,6 +8,7 @@ import { Channels } from '../src/channels/service.js';
 import { WhatsAppChannel } from '../src/channels/whatsapp/adapter.js';
 import { WhatsAppConnections } from '../src/channels/whatsapp/connections.js';
 import type { DeviceCallbacks, DeviceFactory } from '../src/channels/whatsapp/types.js';
+import { Decisions } from '../src/decisions/service.js';
 import { SecretBox } from '../src/security/crypto.js';
 import { runRows } from './helpers/rows.js';
 import { testServices } from './helpers/services.js';
@@ -24,8 +25,27 @@ const guest = { address: '5511911111111@c.us', name: 'Marina' };
  * decided to build it: each agent has its own number, so the protocol itself carries what one
  * agent writes to the others.
  */
-async function setup() {
+async function setup(jev?: (state: { message: string }) => number) {
   const services = await testServices();
+  const asked: Array<{ message: string }> = [];
+  // A synthetic Jev: it answers yes-or-no from the message it was shown, as the real one would.
+  const decisions = new Decisions(
+    services.store,
+    services.gatewayVault,
+    async (_url, init) => {
+      const state = JSON.parse(JSON.parse(String(init?.body)).state);
+
+      asked.push(state);
+
+      return Response.json({ answers: { answer: { type: 'noul', noul: jev?.(state) ?? 0 } } });
+    },
+    () => {},
+  );
+
+  if (jev) {
+    await decisions.configure({ provider: 'jev', apiKey: 'jev-synthetic' });
+  }
+
   const store = services.store;
   const box = new SecretBox({ activeKeyId: 'v1', keys: { v1: randomBytes(32) } });
   const devices = new Map<string, DeviceCallbacks>();
@@ -48,7 +68,7 @@ async function setup() {
 
   const whatsapp = new WhatsAppConnections(store, box, factory);
   const registry = new ChannelRegistry([new WhatsAppChannel(whatsapp)]);
-  const channels = new Channels(services, fetch, registry);
+  const channels = new Channels({ ...services, decisions }, fetch, registry);
   const receive = (id: string, input: IncomingMessage, generation: number) =>
     channels.receiveLinked(id, input, generation);
   const app = createApp({ ...services, channels, whatsapp, token, logger: false });
@@ -109,6 +129,7 @@ async function setup() {
   return {
     services,
     store,
+    asked,
     channels,
     whatsapp,
     app,
@@ -254,6 +275,64 @@ describe('group conversations', () => {
       await f.say(guest, 'pode ser sábado?', { replyTo: ada.address });
 
       expect(await f.runs(ada.profileId)).toHaveLength(2);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('answers a person who speaks to it by name when Jev says so, and not one who talks about it', async () => {
+    const f = await setup((state) => (state.message.startsWith('Ada,') ? 0.9 : 0.1));
+
+    try {
+      const ada = await f.join('Ada', '5511800000001@c.us');
+
+      await f.say(owner, 'Ada, está aí?');
+
+      // An unapproved room's messages never leave the gateway.
+      expect(f.asked).toEqual([]);
+
+      await f.approve(ada.profileId);
+      await f.say(guest, 'a Ada sabe disso?');
+
+      expect(await f.runs(ada.profileId)).toEqual([]);
+
+      await f.say(guest, 'Ada, pode confirmar a entrega?');
+
+      const runs = await f.runs(ada.profileId);
+
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.input).toContain('Marina: Ada, pode confirmar a entrega?');
+      expect(f.asked.at(-1)).toMatchObject({ agent: 'Ada', from: 'Marina' });
+
+      // A message without the name is not worth a question.
+      const before = f.asked.length;
+
+      await f.say(guest, 'obrigada');
+
+      expect(f.asked).toHaveLength(before);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('keeps an agent quiet when another agent only talks about it', async () => {
+    const f = await setup((state) => (state.message.includes('como a Bia disse') ? 0 : 1));
+
+    try {
+      const ada = await f.join('Ada', '5511800000001@c.us');
+      const bia = await f.join('Bia', '5511800000002@c.us');
+
+      await f.say(owner, 'oi');
+      await f.approve(ada.profileId);
+      await f.approve(bia.profileId);
+
+      await f.say(ada, 'como a Bia disse, a entrega fica para sexta');
+
+      expect(await f.services.runs.activities(bia.profileId)).toEqual([]);
+
+      await f.say(ada, 'Bia, você confirma?');
+
+      expect(await f.services.runs.activities(bia.profileId)).toHaveLength(1);
     } finally {
       await f.close();
     }

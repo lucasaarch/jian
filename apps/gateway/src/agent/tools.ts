@@ -4,6 +4,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { Coordination } from '../coordination/service.js';
 import { assertFound, GatewayError } from '../core/errors.js';
+import type { Decisions } from '../decisions/service.js';
 import type { Outreach } from '../errands/port.js';
 import type { MemoryWriter } from '../memories/port.js';
 import type { PeerAgents } from '../peers/port.js';
@@ -13,6 +14,7 @@ import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions
 import { builtinSkillNames, findSkill } from '../skills/builtin/index.js';
 import type { Store } from '../storage/database.js';
 import { artifacts, checkpoints } from '../storage/schema.js';
+import { actionGuard } from './guard.js';
 import { artifactPage } from './results.js';
 import { shellTools } from './shell.js';
 
@@ -26,6 +28,7 @@ export type ToolServices = {
   lifecycle: RunExecution;
   errands: Outreach;
   store: Store;
+  decisions?: Pick<Decisions, 'ask'>;
 };
 
 export function profileTools(services: ToolServices, run: Run): ToolSet {
@@ -266,7 +269,10 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
   };
 
   if (run.profile.allowShell) {
-    Object.assign(tools, shellTools());
+    Object.assign(
+      tools,
+      shellTools(services.decisions ? actionGuard(services.decisions.ask, run) : undefined),
+    );
   }
 
   if (run.profile.allowSelfManagement) {
