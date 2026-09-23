@@ -1,4 +1,5 @@
-import type { JSONValue, ModelMessage } from 'ai';
+import type { JSONValue, ModelMessage, SystemModelMessage } from 'ai';
+import { CLAUDE_CODE_IDENTITY } from '../providers/claude-subscription.js';
 
 /** What Anthropic accepts per request. Anything past it is refused and silently not cached. */
 const BREAKPOINTS = 4;
@@ -11,6 +12,28 @@ const BREAKPOINTS = 4;
  * that retention, so they stay on the cheaper write.
  */
 export type CacheTtl = '5m' | '1h';
+
+/** Keep the reusable instructions cached when retrieved memories or the session summary change. */
+export function cacheableInstructions(system: string, ttl: CacheTtl): SystemModelMessage[] {
+  const messages: SystemModelMessage[] = [];
+  if (system.startsWith(CLAUDE_CODE_IDENTITY)) {
+    messages.push({ role: 'system', content: CLAUDE_CODE_IDENTITY });
+    system = system.slice(CLAUDE_CODE_IDENTITY.length).trim();
+  }
+  const boundary = system.indexOf('Relevant shared memories:');
+  const stable = boundary < 0 ? system : system.slice(0, boundary).trimEnd();
+  messages.push({
+    role: 'system',
+    content: stable,
+    providerOptions: {
+      anthropic: {
+        cacheControl: ttl === '1h' ? { type: 'ephemeral', ttl } : { type: 'ephemeral' },
+      },
+    },
+  });
+  if (boundary >= 0) messages.push({ role: 'system', content: system.slice(boundary) });
+  return messages;
+}
 
 /** A message can carry a mark only if it has content for the mark to sit on. */
 function markable(message: ModelMessage): boolean {
@@ -36,7 +59,11 @@ function markable(message: ModelMessage): boolean {
  * prefix below the model's minimum is simply not cached, so marking a short prompt costs
  * nothing.
  */
-export function cacheable(messages: ModelMessage[], ttl: CacheTtl = '5m'): ModelMessage[] {
+export function cacheable(
+  messages: ModelMessage[],
+  ttl: CacheTtl = '5m',
+  breakpoints = BREAKPOINTS,
+): ModelMessage[] {
   const eligible = messages.flatMap((message, index) => (markable(message) ? [index] : []));
 
   if (eligible.length === 0) {
@@ -44,7 +71,7 @@ export function cacheable(messages: ModelMessage[], ttl: CacheTtl = '5m'): Model
   }
 
   const head = eligible[0] as number;
-  const marks = new Set([head, ...eligible.slice(-(BREAKPOINTS - 1))]);
+  const marks = new Set([head, ...eligible.slice(-(breakpoints - 1))]);
 
   return messages.map((message, index) => {
     const anthropic = { ...message.providerOptions?.anthropic } as Record<string, JSONValue>;

@@ -57,7 +57,7 @@ function schemaText(tools: ToolSet): string {
 }
 
 /** A tool result must stay beside its assistant call when older history is removed. */
-function blocksOf(messages: readonly ModelMessage[]): ModelMessage[][] {
+export function blocksOf(messages: readonly ModelMessage[]): ModelMessage[][] {
   const blocks: ModelMessage[][] = [];
 
   for (const message of messages) {
@@ -71,6 +71,23 @@ function blocksOf(messages: readonly ModelMessage[]): ModelMessage[][] {
   return blocks;
 }
 
+export function promptTokens(input: {
+  provider: string;
+  modelId: string;
+  instructions: string;
+  messages: readonly ModelMessage[];
+  tools: ToolSet;
+}): number {
+  const count = tokenCounter(input.provider, input.modelId);
+  return (
+    count(input.instructions) +
+    count(schemaText(input.tools)) +
+    32 * Object.keys(input.tools).length +
+    32 +
+    input.messages.reduce((sum, message) => sum + count(JSON.stringify(message)) + 16, 0)
+  );
+}
+
 export function fitPrompt(input: {
   provider: string;
   modelId: string;
@@ -78,7 +95,12 @@ export function fitPrompt(input: {
   instructions: string;
   messages: readonly ModelMessage[];
   tools: ToolSet;
-}): { instructions: string; messages: ModelMessage[]; tokens: number } {
+}): {
+  instructions: string;
+  messages: ModelMessage[];
+  tokens: number;
+  breakdown: { system: number; tools: number; messages: number };
+} {
   const count = tokenCounter(input.provider, input.modelId);
   const limit = input.policy.inputTokens - input.policy.outputTokens;
 
@@ -88,8 +110,9 @@ export function fitPrompt(input: {
 
   const schema = schemaText(input.tools);
 
-  const fixedTokens =
-    count(input.instructions) + count(schema) + 32 * Object.keys(input.tools).length + 32;
+  const systemTokens = count(input.instructions) + 32;
+  const toolTokens = count(schema) + 32 * Object.keys(input.tools).length;
+  const fixedTokens = systemTokens + toolTokens;
 
   const blocks = blocksOf(input.messages);
   const lastUserIndex = blocks.findLastIndex((block) => block[0]?.role === 'user');
@@ -129,5 +152,6 @@ export function fitPrompt(input: {
     instructions: input.instructions,
     messages: blocks.flatMap((block, index) => (selected[index] ? block : [])),
     tokens,
+    breakdown: { system: systemTokens, tools: toolTokens, messages: tokens - fixedTokens },
   };
 }

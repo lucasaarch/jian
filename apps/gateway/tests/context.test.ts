@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { fitPrompt, tokenCounter } from '../src/context/budget.js';
 import { buildContext } from '../src/context/build.js';
-import { compact, needsCompaction } from '../src/context/compaction.js';
+import { compactPrompt, needsCompaction } from '../src/context/compaction.js';
 import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
@@ -192,13 +192,20 @@ describe('compaction', () => {
 
   it('replaces the older turns and keeps the recent ones as written', async () => {
     const history = Array.from({ length: 12 }, (_, index) =>
-      message(`m${index}`, `turn ${index}`, new Date(1700000000000 + index * 1000).toISOString()),
+      message(
+        `m${index}`,
+        `turn ${index}: ${'details '.repeat(100)}`,
+        new Date(1700000000000 + index * 1000).toISOString(),
+      ),
     );
 
     let asked = '';
 
-    const compacted = await compact({
-      run: { profileId: 'p', sessionId: 's' } as never,
+    const compacted = await compactPrompt({
+      provider: 'openai',
+      modelId: 'test',
+      policy: { inputTokens: 16000, outputTokens: 512 },
+      onUsage: async () => {},
       model: mockModel({
         doGenerate: async (options) => {
           asked = JSON.stringify(options.prompt);
@@ -215,29 +222,33 @@ describe('compaction', () => {
         },
       }),
       previous: undefined,
-      history,
-      maxOutputTokens: 512,
+      messages: history.map(({ role, content }) => ({ role, content })),
       signal: AbortSignal.timeout(5000),
     });
 
-    // The last six turns stay verbatim, so the summary stops before them.
-    expect(compacted?.upTo).toBe(history[5]?.createdAt);
-    expect(asked).toContain('turn 5');
-    expect(asked).not.toContain('turn 6');
+    expect(compacted?.messages.at(-1)?.content).toBe(history[11]?.content);
+    expect(asked).toContain('turn 9');
+    expect(asked).not.toContain('turn 10');
   });
 
   it('leaves a short conversation alone', async () => {
-    const history = Array.from({ length: 6 }, (_, index) =>
-      message(`m${index}`, `turn ${index}`, new Date(1700000000000 + index * 1000).toISOString()),
+    const history = Array.from({ length: 3 }, (_, index) =>
+      message(
+        `m${index}`,
+        `turn ${index}: ${'details '.repeat(100)}`,
+        new Date(1700000000000 + index * 1000).toISOString(),
+      ),
     );
 
     await expect(
-      compact({
-        run: {} as never,
+      compactPrompt({
+        provider: 'openai',
+        modelId: 'test',
+        policy: { inputTokens: 16000, outputTokens: 512 },
+        onUsage: async () => {},
         model: mockModel({ doGenerate: async () => ({}) as never }),
         previous: undefined,
-        history,
-        maxOutputTokens: 512,
+        messages: history.map(({ role, content }) => ({ role, content })),
         signal: AbortSignal.timeout(5000),
       }),
     ).resolves.toBeUndefined();

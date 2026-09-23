@@ -22,10 +22,43 @@ const answer = (text: string) => ({
   warnings: [],
 });
 
-async function fixture(contextPolicy?: Record<string, number>) {
+it('names a new conversation without an uncounted model request', async () => {
   const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, {});
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Please prepare a deployment report with all the completed steps and remaining checks.',
+    requestKey: 'title',
+  });
+  let calls = 0;
+  const model = mockModel({
+    doGenerate: async () => {
+      calls++;
+      return answer('Report ready.');
+    },
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+  expect((await services.sessions.session(profile.id, session.id)).title).toContain(
+    'Please prepare',
+  );
+  expect(calls).toBe(1);
+});
+
+async function fixture(contextPolicy?: Record<string, number>, subscription = false) {
+  const services = await testServices();
+  const configured = subscription
+    ? {
+        ...input,
+        model: {
+          provider: 'anthropic',
+          modelId: 'test',
+          credential: 'subscription',
+          apiKeyEnv: 'ANTHROPIC_API_TOKEN',
+        },
+      }
+    : input;
   const profile = await services.profiles.createProfile(
-    contextPolicy ? { ...input, contextPolicy } : input,
+    contextPolicy ? { ...configured, contextPolicy } : configured,
   );
   const session = await services.sessions.createSession(profile.id, { title: 'Mac' });
 
@@ -200,10 +233,16 @@ it('resolves a provider key from the installation vault and keeps it out of dura
   );
 });
 
-it('stops a run at its cumulative token cap and answers with what it has', async () => {
+it.each([31700, 32000])('answers at or beyond the token cap (input: %s)', async (inputTokens) => {
   const services = await testServices();
   const profile = await services.profiles.createProfile({
     ...input,
+    model: {
+      provider: 'anthropic',
+      modelId: 'test',
+      credential: 'subscription',
+      apiKeyEnv: 'ANTHROPIC_API_TOKEN',
+    },
     contextPolicy: { maxRunTokens: 32000 },
   });
   const session = await services.sessions.createSession(profile.id, { title: 'Budget' });
@@ -218,6 +257,14 @@ it('stops a run at its cumulative token cap and answers with what it has', async
       calls++;
 
       if (!options.tools?.length) {
+        if (
+          !JSON.stringify(options.prompt).includes(
+            "You are Claude Code, Anthropic's official CLI for Claude.",
+          )
+        ) {
+          throw new Error('Missing subscription identity on closing call');
+        }
+        expect(JSON.stringify(options.prompt)).toContain('Hello');
         return {
           content: [{ type: 'text', text: 'I ran out of budget mid-way.' }],
           finishReason: { unified: 'stop', raw: 'stop' },
@@ -240,7 +287,7 @@ it('stops a run at its cumulative token cap and answers with what it has', async
         ],
         finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
         usage: {
-          inputTokens: { total: 32000, noCache: 32000, cacheRead: 0, cacheWrite: 0 },
+          inputTokens: { total: inputTokens, noCache: inputTokens, cacheRead: 0, cacheWrite: 0 },
           outputTokens: { total: 300, text: 300, reasoning: 0 },
         },
         warnings: [],
@@ -251,8 +298,8 @@ it('stops a run at its cumulative token cap and answers with what it has', async
   await new AgentRuntime(services, () => model).execute(profile.id, run.id);
 
   expect((await services.runs.run(profile.id, run.id)).usage).toEqual({
-    inputTokens: 32000,
-    outputTokens: 300,
+    inputTokens: inputTokens + 10,
+    outputTokens: 305,
     cachedInputTokens: 0,
     estimated: false,
     steps: 1,
@@ -316,11 +363,123 @@ it('uses conservative estimates when a provider omits usage counters', async () 
 
   const finished = await services.runs.run(profile.id, run.id);
 
-  expect(finished.status).toBe('failed');
+  expect(finished.status).toBe('completed');
   expect(calls).toBeLessThan(12);
   expect(finished.usage?.inputTokens).toBeGreaterThan(0);
-  expect(finished.error).toContain('token budget');
+  expect(finished.output).toContain('checkpoint');
 });
+
+it('does not charge the estimated full prompt against the remaining run budget', async () => {
+  const { services, profile, run } = await fixture({ maxRunTokens: 32000 });
+  let step = 0;
+  const model = mockModel({
+    doGenerate: async () => {
+      if (step++ > 0) return answer('The saved work is ready.');
+      return {
+        content: [
+          { type: 'tool-call', toolCallId: 'read', toolName: 'list_activities', input: '{}' },
+        ],
+        finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+        usage: {
+          inputTokens: { total: 30000, noCache: 30000, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 10, text: 10, reasoning: 0 },
+        },
+        warnings: [],
+      };
+    },
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+  const finished = await services.runs.run(profile.id, run.id);
+  expect(finished.status).toBe('completed');
+  expect(finished.output).toBe('The saved work is ready.');
+});
+
+it('keeps a complete answer that crosses the budget without paying for a second answer', async () => {
+  const { services, profile, run } = await fixture({ maxRunTokens: 32000 });
+  const model = mockModel({
+    doGenerate: async () => ({
+      ...answer('All requested work is done.'),
+      usage: {
+        inputTokens: { total: 32000, noCache: 32000, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 300, text: 300, reasoning: 0 },
+      },
+    }),
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+  const finished = await services.runs.run(profile.id, run.id);
+  expect(finished.output).toBe('All requested work is done.');
+  expect(finished.usage?.inputTokens).toBe(32000);
+});
+
+it.each([false, true])(
+  'compacts tool work into a durable checkpoint (subscription: %s)',
+  async (subscription) => {
+    const { services, profile, session, run } = await fixture(
+      {
+        inputTokens: 32000,
+        historyTokens: 1000,
+        toolResultTokens: 8000,
+        maxSteps: 10,
+      },
+      subscription,
+    );
+    await services.memories.remember(
+      profile.id,
+      {
+        key: 'unrelated',
+        content: `receipt-123 ${'large result '.repeat(280)}`,
+        expectedVersion: 0,
+      },
+      session.id,
+    );
+    let step = 0;
+    let afterCheckpoint = false;
+    const model = mockModel({
+      doGenerate: async (options) => {
+        const prompt = JSON.stringify(options.prompt);
+        if (!options.tools?.length) {
+          if (
+            subscription &&
+            !prompt.includes("You are Claude Code, Anthropic's official CLI for Claude.")
+          ) {
+            throw new Error('Missing subscription system identity');
+          }
+          expect(prompt).toContain('receipt-123');
+          return answer('Checkpoint: receipt-123 was inspected; finish the deployment report.');
+        }
+        if (prompt.includes('Checkpoint: receipt-123')) {
+          afterCheckpoint = true;
+          expect(prompt).toContain('Remember the deployment time');
+          return answer('Report complete using receipt-123.');
+        }
+        return {
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: `read-${step++}`,
+              toolName: 'read_memories',
+              input: '{}',
+            },
+          ],
+          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+          usage,
+          warnings: [],
+        };
+      },
+    });
+    await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+    const finished = await services.runs.run(profile.id, run.id);
+    expect(afterCheckpoint).toBe(true);
+    expect(finished.status).toBe('completed');
+    expect(finished.commentary ?? []).not.toContain(
+      'Summarising what we said earlier so I can carry on.',
+    );
+    expect((await services.sessions.session(profile.id, session.id)).summary).toContain(
+      'receipt-123',
+    );
+    expect(finished.usage?.inputTokens).toBe((step + 2) * 10);
+  },
+);
 
 it('reports a safe context-budget error when required prompt content cannot fit', async () => {
   const services = await testServices();

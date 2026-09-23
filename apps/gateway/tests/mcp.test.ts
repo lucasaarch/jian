@@ -185,6 +185,33 @@ it.each([false, true])(
           };
         }
 
+        if (largeCatalog && phase === 3) {
+          const selector = options.tools
+            ?.filter((t) => t.type === 'function')
+            .find((t) => t.name === 'load_mcp_tools');
+          const name = selector?.description?.match(/mcp__docs_archive_0_[a-f0-9]{8}/)?.[0];
+          assert.ok(name);
+          return {
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'add-another',
+                toolName: 'load_mcp_tools',
+                input: JSON.stringify({ names: [name] }),
+              },
+            ],
+            finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+            usage,
+            warnings: [],
+          };
+        }
+        if (largeCatalog && phase === 4) {
+          const names =
+            options.tools?.filter((t) => t.type === 'function').map((t) => t.name) ?? [];
+          expect(names.some((name) => name.includes('archive_19_'))).toBe(true);
+          expect(names.some((name) => name.includes('archive_0_'))).toBe(true);
+        }
+
         return {
           content: [{ type: 'text', text: 'Found the documentation.' }],
           finishReason: { unified: 'stop', raw: 'stop' },

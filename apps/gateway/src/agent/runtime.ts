@@ -4,20 +4,21 @@ import type { Run } from '@jian/contracts';
 import {
   generateText,
   type LanguageModel,
+  type LanguageModelUsage,
   type ModelMessage,
   stepCountIs,
   ToolLoopAgent,
   type ToolSet,
 } from 'ai';
-import { fitPrompt, tokenCounter } from '../context/budget.js';
-import { COMPACTING_NOTICE, compact, needsCompaction } from '../context/compaction.js';
+import { fitPrompt, promptTokens, tokenCounter } from '../context/budget.js';
+import { compactPrompt, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
 import { anthropicCredential, withClaudeCodeIdentity } from '../providers/claude-subscription.js';
 import { reasoningProviderOptions } from '../providers/effort.js';
 import { resolveModel } from '../providers/models.js';
 import { providerSecret } from '../providers/service.js';
 import { createSafeFetch } from '../security/outbound.js';
-import { type CacheTtl, cacheable } from './cache.js';
+import { type CacheTtl, cacheable, cacheableInstructions } from './cache.js';
 import { connectMcpTools, unavailableNote } from './mcp.js';
 import { Narrator } from './narrator.js';
 import { ProgressReporter } from './progress.js';
@@ -39,125 +40,11 @@ export class AgentRuntime {
     private options: RuntimeOptions = {},
   ) {}
 
-  /**
-   * Names the conversation from its first exchange, once. Deliberately after the run is
-   * already finished and outside its budget: a failure here costs a nameless conversation the
-   * owner can rename, never an answer they already earned.
-   */
-  private async nameConversation(run: Run, model: LanguageModel, secrets: Set<string>) {
-    try {
-      // Checked before the call, not after: a conversation that already has a name must not
-      // cost a model request on every answer.
-      const session = await this.services.sessions.session(run.profileId, run.sessionId);
-
-      if (session.title) {
-        return;
-      }
-
-      // A first message short enough to read as a title already is one. Spending a whole
-      // request to restate six words was the second model call of every new conversation.
-      const opening = run.input.trim().replace(/\s+/g, ' ');
-
-      if (opening.length <= 60) {
-        await this.services.sessions.nameIfUnnamed(run.profileId, run.sessionId, opening);
-
-        return;
-      }
-
-      const { text } = await generateText({
-        model,
-        maxOutputTokens: 64,
-        prompt:
-          'Write a short title for this conversation, three to six words, in the language of the ' +
-          'message. Answer with the title alone: no quotes and no trailing punctuation.\n\n' +
-          `Mensagem: ${run.input.slice(0, 2000)}`,
-      });
-
-      const title = redactText(text, secrets)
-        .trim()
-        .replace(/^["']|["'.]+$/g, '');
-
-      if (title) {
-        await this.services.sessions.nameIfUnnamed(run.profileId, run.sessionId, title);
-      }
-    } catch {
-      // A conversation with no name is a cosmetic gap; it is not worth a failed run.
-    }
-  }
-
-  /**
-   * Replaces the older turns with a record of them when the prompt has grown past what the
-   * budget leaves for it, and says so on the channel first. Returns whether anything changed.
-   *
-   * A failure here is never the run's failure: the step then proceeds on the prompt it has,
-   * and `fitPrompt` drops what does not fit, which is the behaviour that existed before.
-   */
-  private async compactIfNeeded(
-    run: Run,
-    owner: string,
-    context: { system: string; messages: Array<{ role: 'user' | 'assistant'; content: string }> },
-    pending: readonly ModelMessage[],
-    model: LanguageModel,
-    policy: NonNullable<Run['contextPolicy']>,
-    secrets: Set<string>,
-    signal: AbortSignal,
-  ): Promise<boolean> {
-    const count = tokenCounter(
-      (run.model ?? run.profile.model).provider,
-      (run.model ?? run.profile.model).modelId,
-    );
-
-    // What this step would send: the rebuilt context plus the tool calls and results the loop
-    // has accumulated since it started, which is the half that grows without anyone asking.
-    const carried =
-      count(context.system) +
-      context.messages.reduce((total, message) => total + count(message.content), 0) +
-      pending.reduce((total, message) => total + count(JSON.stringify(message)), 0);
-
-    if (!needsCompaction(carried, policy.inputTokens - policy.outputTokens)) {
-      return false;
-    }
-
-    try {
-      // Said before the call, not after: summarising takes a request of its own, and silence
-      // for that long reads as the agent having stopped.
-      await this.services.lifecycle
-        .say(run.profileId, run.id, owner, COMPACTING_NOTICE)
-        .catch(() => {});
-
-      const session = await this.services.sessions.session(run.profileId, run.sessionId);
-      const history = await this.services.sessions.messages(
-        run.profileId,
-        run.sessionId,
-        40,
-        session.summarizedUpTo,
-      );
-
-      const compacted = await compact({
-        run,
-        model,
-        previous: session.summary,
-        history,
-        maxOutputTokens: Math.min(2048, policy.outputTokens),
-        signal,
-      });
-
-      if (!compacted) {
-        return false;
-      }
-
-      await this.services.sessions.summarize(
-        run.profileId,
-        run.sessionId,
-        redactText(compacted.summary, secrets),
-        compacted.upTo,
-      );
-
-      return true;
-    } catch {
-      // Including an aborted run: the caller checks the signal on its own next line.
-      return false;
-    }
+  /** Naming is cosmetic and must not spend a separate, uncounted model request. */
+  private async nameConversation(run: Run, secrets: Set<string>) {
+    const opening = redactText(run.input, secrets).trim().replace(/\s+/g, ' ');
+    const title = opening.length <= 60 ? opening : `${opening.slice(0, 59).trimEnd()}…`;
+    await this.services.sessions.nameIfUnnamed(run.profileId, run.sessionId, title).catch(() => {});
   }
 
   /**
@@ -168,28 +55,35 @@ export class AgentRuntime {
   private async closingWords(
     model: LanguageModel,
     instructions: string,
-    response: { messages: ModelMessage[] },
+    messages: ModelMessage[],
+    config: { provider: string; modelId: string },
+    account: (
+      usage: LanguageModelUsage,
+      inputTokens: number,
+      text: string,
+      steps: number,
+    ) => Promise<unknown>,
     policy: NonNullable<Run['contextPolicy']>,
     signal: AbortSignal,
   ): Promise<string> {
     try {
-      const { text } = await generateText({
+      const fitted = fitPrompt({
+        ...config,
+        policy,
+        messages,
+        tools: {},
+        instructions: `${instructions}\n\nYou have used everything this turn allows. Answer now with what you already have, and call nothing further. Say plainly what you found, what you did, and what is still unknown. Never imply you finished work you did not.`,
+      });
+      const { text, usage } = await generateText({
         model,
-        system: instructions,
+        system: fitted.instructions,
+        maxRetries: 0,
         maxOutputTokens: policy.outputTokens,
         abortSignal: signal,
-        messages: [
-          ...response.messages,
-          {
-            role: 'user',
-            content:
-              'You have used everything this turn allows. Answer now with what you ' +
-              'already have, and call nothing further. Say plainly what you found, what you ' +
-              'did, and what is still unknown — never imply you finished work you did not.',
-          },
-        ],
+        messages: fitted.messages,
       });
 
+      await account(usage, fitted.tokens, text, 0);
       return text.trim();
     } catch {
       return '';
@@ -225,9 +119,7 @@ export class AgentRuntime {
     const secrets = new Set<string>();
     let externalUncertain = false;
     let spent = false;
-    // One compaction a turn. The prompt shrinks but the loop's own messages keep growing, so a
-    // second pass would fire two steps later, and every step after that, each a model call.
-    let compacted = false;
+    let lastCompactionAttempt = -4;
 
     const progress = new ProgressReporter((snapshot) =>
       this.services.lifecycle.progress(runId, owner, snapshot),
@@ -396,6 +288,33 @@ export class AgentRuntime {
       const reasoning = reasoningProviderOptions(config, policy.outputTokens);
       let usedTokens = 0;
       let preparedInputTokens = 0;
+      let preparedPrompt: unknown;
+      let lastMessages = context.messages as ModelMessage[];
+      const estimate = tokenCounter(config.provider, config.modelId);
+      const account = async (
+        usage: LanguageModelUsage,
+        fallbackInput: number,
+        text: string,
+        steps: number,
+      ) => {
+        const reported = usage.inputTokens !== undefined && usage.outputTokens !== undefined;
+        const inputTokens = usage.inputTokens ?? fallbackInput;
+        const outputTokens = usage.outputTokens ?? Math.max(1, estimate(text));
+        const cachedInputTokens = Math.min(
+          inputTokens,
+          usage.inputTokenDetails?.cacheReadTokens ?? 0,
+        );
+        usedTokens += Math.max(0, inputTokens - cachedInputTokens) + outputTokens;
+        spent ||= usedTokens >= policy.maxRunTokens;
+        await this.services.lifecycle.recordUsage(profileId, runId, owner, {
+          inputTokens,
+          outputTokens,
+          cachedInputTokens,
+          estimated: !reported,
+          steps,
+        });
+        return { inputTokens, outputTokens, cachedInputTokens, estimated: !reported };
+      };
 
       // Built once for the turn and held. Rebuilding it every step — the same memories, the
       // same skills, a different list of what the profile happens to be doing — changed the
@@ -411,7 +330,7 @@ export class AgentRuntime {
         return subscription ? withClaudeCodeIdentity(noted) : noted;
       };
 
-      let instructions = dress(context.system);
+      const instructions = dress(context.system);
 
       const agent = new ToolLoopAgent({
         model,
@@ -421,37 +340,13 @@ export class AgentRuntime {
         maxRetries: 0,
         maxOutputTokens: policy.outputTokens,
         ...(reasoning ? { providerOptions: reasoning } : {}),
-        prepareStep: async ({ messages }) => {
+        prepareStep: async ({ messages, stepNumber }) => {
           if (externalUncertain) {
             throw new Error('External tool outcome is uncertain');
           }
 
           signal.throwIfAborted();
           await this.services.lifecycle.heartbeat(profileId, runId, owner);
-
-          if (usedTokens >= policy.maxRunTokens) {
-            throw new Error('Run token budget exceeded');
-          }
-
-          // Compaction happens here rather than at the end of a turn: the prompt is only ever
-          // too large at the moment it is being built, and the turns that overflowed it are the
-          // ones this step would otherwise have to drop in silence.
-          if (
-            !compacted &&
-            (await this.compactIfNeeded(
-              run,
-              owner,
-              { system: instructions, messages: [] },
-              messages,
-              model,
-              policy,
-              secrets,
-              signal,
-            ))
-          ) {
-            compacted = true;
-            instructions = dress((await this.services.contexts.context(run)).system);
-          }
 
           // What the person said after this run began. It arrives as their own turn, at the
           // point the loop reached, so the agent answers what they are asking now rather than
@@ -473,68 +368,111 @@ export class AgentRuntime {
             activeNames.map((name) => [name, guarded[name]]),
           ) as ToolSet;
 
+          const before = promptTokens({ ...config, instructions, messages, tools: activeTools });
+          if (
+            stepNumber - lastCompactionAttempt >= 4 &&
+            needsCompaction(before, policy.inputTokens - policy.outputTokens)
+          ) {
+            lastCompactionAttempt = stepNumber;
+            try {
+              const session = await this.services.sessions.session(profileId, run.sessionId);
+              const compacted = await compactPrompt({
+                model,
+                ...config,
+                messages,
+                previous: session.summary,
+                policy,
+                signal,
+                dress,
+                onUsage: async (usage, tokens, text) => {
+                  await account(usage, tokens, text, 0);
+                },
+              });
+              if (compacted) {
+                const summary = redactText(compacted.summary, secrets);
+                // Save the tool work before replacing the request. A later turn can resume it.
+                await this.services.lifecycle.checkpoint(profileId, runId, owner, {
+                  phase: 'context-compacted',
+                  summary,
+                  beforeTokens: before,
+                  afterTokens: promptTokens({
+                    ...config,
+                    instructions,
+                    messages: compacted.messages,
+                    tools: activeTools,
+                  }),
+                });
+                await this.services.sessions.summarize(
+                  profileId,
+                  run.sessionId,
+                  summary,
+                  run.createdAt,
+                );
+                messages = compacted.messages.map((message) => ({
+                  ...message,
+                  content:
+                    typeof message.content === 'string'
+                      ? redactText(message.content, secrets)
+                      : message.content,
+                })) as ModelMessage[];
+              }
+            } catch (error) {
+              signal.throwIfAborted();
+              await this.services.lifecycle.checkpoint(profileId, runId, owner, {
+                phase: 'compaction-failed',
+                reason: reason(error, secrets),
+              });
+            }
+          }
+
           const fitted = fitPrompt({
             provider: config.provider,
             modelId: config.modelId,
             policy,
             instructions,
             messages,
-            tools: activeTools,
+            tools: spent ? {} : activeTools,
           });
 
           preparedInputTokens = fitted.tokens;
+          preparedPrompt = {
+            estimatedTokens: fitted.tokens,
+            ...fitted.breakdown,
+            activeTools: spent ? [] : activeNames,
+          };
+          lastMessages = fitted.messages;
 
-          const availableOutput = policy.maxRunTokens - usedTokens - fitted.tokens;
-
-          if (availableOutput < 1) {
-            throw new Error('Run token budget exceeded');
-          }
-
+          // The full prompt includes cached input. Charging its estimate again rejects
+          // useful work before the provider has reported what was actually new.
           return {
-            instructions: fitted.instructions,
+            instructions:
+              config.provider === 'anthropic'
+                ? cacheableInstructions(fitted.instructions, cacheTtl)
+                : fitted.instructions,
             // Only Anthropic needs telling: OpenAI matches a long prefix on its own.
             messages:
               config.provider === 'anthropic'
-                ? cacheable(fitted.messages, cacheTtl)
+                ? cacheable(fitted.messages, cacheTtl, 3)
                 : fitted.messages,
-            activeTools: activeNames,
-            maxOutputTokens: Math.min(policy.outputTokens, availableOutput),
+            activeTools: spent ? [] : activeNames,
+            maxOutputTokens: policy.outputTokens,
           };
         },
         onStepEnd: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
           await narrator.endStep(toolCalls.length > 0).catch(() => {});
 
-          const estimate = tokenCounter(config.provider, config.modelId);
-
-          const reported = Boolean(usage.inputTokens && usage.inputTokens > 0);
-          const inputTokens = reported ? (usage.inputTokens as number) : preparedInputTokens;
-
-          const outputTokens =
-            usage.outputTokens && usage.outputTokens > 0
-              ? usage.outputTokens
-              : Math.max(1, estimate(JSON.stringify({ text, toolCalls })));
-
-          // The run's budget measures work done, not bytes re-sent. Every step carries the
-          // whole prompt again, and the part the provider reads back from its cache is neither
-          // new context nor charged as one — counting it killed ordinary tool loops at step 9.
-          const cachedInputTokens = usage.inputTokenDetails?.cacheReadTokens ?? 0;
-
-          usedTokens += Math.max(0, inputTokens - cachedInputTokens) + outputTokens;
-
-          await this.services.lifecycle.recordUsage(profileId, runId, owner, {
-            inputTokens,
-            outputTokens,
-            // The part of the input the provider served from its own cache. Reported by
-            // Anthropic and OpenAI, absent elsewhere, and never inferred when it is missing.
-            cachedInputTokens,
-            estimated: !reported,
-            steps: 1,
-          });
+          const measured = await account(
+            usage,
+            preparedInputTokens,
+            JSON.stringify({ text, toolCalls }),
+            1,
+          );
 
           await this.services.lifecycle.checkpoint(profileId, runId, owner, {
             phase: 'step-completed',
             finishReason,
-            usage: { inputTokens, outputTokens },
+            usage: measured,
+            prompt: preparedPrompt,
             tools: toolResults.map((result) => ({
               toolName: result.toolName,
               toolCallId: result.toolCallId,
@@ -546,12 +484,6 @@ export class AgentRuntime {
 
           if (externalUncertain) {
             throw new Error('External tool outcome is uncertain');
-          }
-
-          // Spent, not failed: the loop stops here and the turn still answers with what it
-          // has. Throwing threw away work the owner had already paid for.
-          if (usedTokens > policy.maxRunTokens) {
-            spent = true;
           }
         },
       });
@@ -611,14 +543,23 @@ export class AgentRuntime {
       // A loop that runs out of steps has done the work and simply never wrote it down.
       // Failing there threw the whole turn away — the person paid for the tools and got a
       // sentence pointing at a log. One more call, with no tools, turns it into an answer.
-      if (spent || finishReason === 'tool-calls' || (!answer.trim() && finishReason === 'length')) {
+      if (
+        (spent && finishReason !== 'stop') ||
+        finishReason === 'tool-calls' ||
+        (!answer.trim() && finishReason === 'length')
+      ) {
         answer = await this.closingWords(
           model,
-          context.system,
-          await result.response,
+          instructions,
+          [...lastMessages, ...((await result.steps).at(-1)?.response.messages ?? [])],
+          config,
+          account,
           policy,
           signal,
         );
+        if (!answer.trim()) {
+          answer = `Work saved in the checkpoints for run ${runId}. The turn reached its limit before a final report could be written. Resume from the saved results; do not repeat completed actions.`;
+        }
       }
 
       if (!answer.trim()) {
@@ -636,7 +577,7 @@ export class AgentRuntime {
       // Addressed only when the agent that asked gave up waiting; otherwise it already has it.
       await this.services.peers.deliverLate(profileId, runId).catch(() => {});
 
-      await this.nameConversation(run, model, secrets);
+      await this.nameConversation(run, secrets);
     } catch (error) {
       // The stored message stays generic because a provider error can echo a key back. The
       // operator still needs the cause, so it goes to the log with the known secrets removed.

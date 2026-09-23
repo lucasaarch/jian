@@ -1,7 +1,7 @@
 import { modelSchema } from '@jian/contracts';
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { cacheable } from '../src/agent/cache.js';
+import { cacheable, cacheableInstructions } from '../src/agent/cache.js';
 import {
   anthropicCredential,
   CLAUDE_CODE_IDENTITY,
@@ -39,6 +39,40 @@ describe('providers', () => {
       ),
     ).rejects.toThrow('Provider key is not configured');
   });
+});
+
+it('keeps a cache boundary before changing memories without breaking subscription identity', async () => {
+  const bodies: Array<{ system: Array<{ text: string; cache_control?: unknown }> }> = [];
+  const model = await resolveModel(
+    { provider: 'anthropic', modelId: 'test', credential: 'subscription' },
+    {},
+    async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json(
+        { type: 'error', error: { type: 'invalid_request_error', message: 'synthetic' } },
+        { status: 400 },
+      );
+    },
+    'sk-ant-oat01-synthetic',
+  );
+  for (const value of ['first', 'second']) {
+    await expect(
+      generateText({
+        model,
+        maxRetries: 0,
+        system: cacheableInstructions(
+          withClaudeCodeIdentity(`Help the owner.\n\nRelevant shared memories: ${value}`),
+          '1h',
+        ),
+        messages: cacheable([{ role: 'user', content: 'Hello' }], '1h', 3),
+      }),
+    ).rejects.toThrow();
+  }
+  expect(bodies[0]?.system[0]?.text).toBe(CLAUDE_CODE_IDENTITY);
+  expect(bodies[0]?.system[1]).toEqual(bodies[1]?.system[1]);
+  expect(bodies[0]?.system[1]?.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+  expect(bodies[0]?.system[2]?.text).toContain('first');
+  expect(bodies[1]?.system[2]?.text).toContain('second');
 });
 
 it('rejects a compatible provider without an endpoint before making a request', async () => {

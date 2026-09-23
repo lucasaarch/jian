@@ -75,17 +75,22 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
 
   if (mcpToolNames.length > 0) {
     tools.load_mcp_tools = tool({
-      description: `Select the MCP tools to use before calling them. Available names: ${mcpToolNames.slice(0, 10).join(', ')}${mcpToolNames.length > 10 ? '. Use search_mcp_tools for the rest.' : ''}`,
+      description: `Load MCP tools before calling them. Previously loaded tools stay available, up to 32 per turn. Available names: ${mcpToolNames.slice(0, 10).join(', ')}${mcpToolNames.length > 10 ? '. Use search_mcp_tools for the rest.' : ''}`,
       inputSchema: z.object({ names: z.array(z.string()).min(1).max(10) }),
       execute: async ({ names }) => {
         if (names.some((name) => !mcpToolNames.includes(name))) {
           throw new Error('No connected MCP server offers that tool');
         }
 
-        selectedMcpTools.clear();
-
         for (const name of names) {
+          selectedMcpTools.delete(name);
           selectedMcpTools.add(name);
+        }
+
+        // Switching between two servers must not evict and reload the same schemas each step.
+        // Bound the working set so discovery cannot eventually load the whole catalog.
+        while (selectedMcpTools.size > 32) {
+          selectedMcpTools.delete(selectedMcpTools.values().next().value as string);
         }
 
         return { selected: [...selectedMcpTools] };

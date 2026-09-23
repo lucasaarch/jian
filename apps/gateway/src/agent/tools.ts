@@ -13,6 +13,7 @@ import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions
 import { builtinSkillNames, findSkill } from '../skills/builtin/index.js';
 import type { Store } from '../storage/database.js';
 import { artifacts, checkpoints } from '../storage/schema.js';
+import { artifactPage } from './results.js';
 import { shellTools } from './shell.js';
 
 /** What the tool set reaches for on the profile's behalf during a run. */
@@ -29,11 +30,6 @@ export type ToolServices = {
 
 export function profileTools(services: ToolServices, run: Run): ToolSet {
   const coordination = new Coordination(services);
-
-  const artifactPageChars = Math.max(
-    1,
-    Math.floor(((run.contextPolicy ?? run.profile.contextPolicy).toolResultTokens - 64) / 4),
-  );
 
   const tools: ToolSet = {
     list_activities: tool({
@@ -110,7 +106,7 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
       inputSchema: z.object({
         artifactId: z.string().uuid(),
         offset: z.number().int().min(0).default(0),
-        limit: z.number().int().min(1).max(4000).default(artifactPageChars),
+        limit: z.number().int().min(1).max(16000).default(16000),
       }),
       execute: async ({ artifactId, offset, limit }) => {
         // The profile in the where clause is the owner check: another profile's artifact is
@@ -122,12 +118,7 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
           .limit(1);
 
         const { content } = assertFound(record, 'Artifact');
-        const end = Math.min(offset + Math.min(limit, artifactPageChars), content.length);
-
-        return {
-          content: content.slice(offset, end),
-          nextOffset: end < content.length ? end : null,
-        };
+        return artifactPage(content, offset, limit, run);
       },
     }),
 

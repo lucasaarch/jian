@@ -47,6 +47,40 @@ export function redactOutput(output: unknown, secrets: ReadonlySet<string>): unk
   return visit(normalized);
 }
 
+/** MCP often wraps structured data in a text block; keep one representation for paging. */
+function structuredMcpResult(output: unknown): unknown {
+  if (!output || typeof output !== 'object') return output;
+  const result = output as { content?: Array<{ type: string; text?: string }>; isError?: boolean };
+  if (result.content?.length !== 1 || result.content[0]?.type !== 'text') return output;
+  try {
+    const data: unknown = JSON.parse(result.content[0].text ?? '');
+    if (!data || typeof data !== 'object') return output;
+    const { content: _, ...rest } = result;
+    return { ...rest, data };
+  } catch {
+    return output;
+  }
+}
+
+/** Fit the serialized page, including escaped quotes and its cursor, rather than guessing chars. */
+export function artifactPage(content: string, offset: number, limit: number, run: Run) {
+  const model = run.model ?? run.profile.model;
+  const count = tokenCounter(model.provider, model.modelId);
+  const budget = (run.contextPolicy ?? run.profile.contextPolicy).toolResultTokens;
+  const page = (size: number) => ({
+    content: content.slice(offset, offset + size),
+    nextOffset: offset + size < content.length ? offset + size : null,
+  });
+  let low = 0;
+  let high = Math.max(0, Math.min(limit, content.length - offset));
+  while (low < high) {
+    const size = Math.ceil((low + high) / 2);
+    if (count(JSON.stringify(page(size))) <= budget) low = size;
+    else high = size - 1;
+  }
+  return page(low);
+}
+
 export async function boundToolResult(
   output: unknown,
   toolName: string,
@@ -54,7 +88,10 @@ export async function boundToolResult(
   secrets: ReadonlySet<string>,
   options: Pick<RuntimeOptions, 'storeArtifact'>,
 ): Promise<unknown> {
-  const sanitized = redactOutput(output, secrets);
+  const sanitized = redactOutput(
+    toolName.startsWith('mcp__') ? structuredMcpResult(output) : output,
+    secrets,
+  );
   const json = JSON.stringify(sanitized) ?? 'null';
   const model = run.model ?? run.profile.model;
   const count = tokenCounter(model.provider, model.modelId);

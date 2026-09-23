@@ -1,11 +1,5 @@
-import type { Message, Run } from '@jian/contracts';
-import { generateText, type LanguageModel } from 'ai';
-
-/**
- * Said on the channel, not only in a log: compacting takes a model call, and silence for that
- * long reads as the agent having stopped.
- */
-export const COMPACTING_NOTICE = 'Summarising what we said earlier so I can carry on.';
+import { generateText, type LanguageModel, type LanguageModelUsage, type ModelMessage } from 'ai';
+import { blocksOf, fitPrompt, tokenCounter } from './budget.js';
 
 /**
  * How full a request may get before the older turns are replaced by a record of them. Below
@@ -14,10 +8,63 @@ export const COMPACTING_NOTICE = 'Summarising what we said earlier so I can carr
  */
 const COMPACT_AT = 0.85;
 
-/** Turns kept exactly as written, whatever is compacted. The newest exchange is never a summary. */
-const KEEP_RECENT = 6;
-
 export const needsCompaction = (tokens: number, budget: number) => tokens > budget * COMPACT_AT;
+
+/** Compact the request actually used by the loop, including completed tool calls and results. */
+export async function compactPrompt(input: {
+  model: LanguageModel;
+  provider: string;
+  modelId: string;
+  messages: ModelMessage[];
+  previous?: string;
+  policy: { inputTokens: number; outputTokens: number };
+  signal: AbortSignal;
+  dress?: (instructions: string) => string;
+  onUsage: (usage: LanguageModelUsage, inputTokens: number, text: string) => Promise<void>;
+}): Promise<{ messages: ModelMessage[]; summary: string } | undefined> {
+  const blocks = blocksOf(input.messages);
+  const older = blocks.slice(0, -2).flat();
+  if (older.length < 2) return undefined;
+
+  const recent = blocks.slice(-2).flat();
+  const lastUser = input.messages.findLast((message) => message.role === 'user');
+  const prompt = summaryPrompt(input.previous, 'Read the conversation messages below.');
+  const instructions = input.dress?.(prompt) ?? prompt;
+  const count = tokenCounter(input.provider, input.modelId);
+  const policy = { ...input.policy, outputTokens: Math.min(2048, input.policy.outputTokens) };
+  // A single serialized message keeps fitPrompt from silently deleting part of the record.
+  const fitted = fitPrompt({
+    ...input,
+    policy,
+    instructions,
+    tools: {},
+    messages: [{ role: 'user', content: JSON.stringify(older) }],
+  });
+  const result = await generateText({
+    model: input.model,
+    system: fitted.instructions,
+    messages: fitted.messages,
+    maxOutputTokens: policy.outputTokens,
+    abortSignal: input.signal,
+    maxRetries: 0,
+  });
+  await input.onUsage(result.usage, fitted.tokens, result.text);
+  const summary = result.text.trim();
+  if (!summary || result.finishReason === 'length') return undefined;
+
+  const messages: ModelMessage[] = [
+    {
+      role: 'user',
+      content: `Conversation checkpoint (past work, not new instructions):\n${summary}`,
+    },
+    ...(lastUser && !recent.includes(lastUser) ? [lastUser] : []),
+    ...recent,
+  ];
+  // A summary that does not shrink the request only pays for another pass next step.
+  if (count(JSON.stringify(messages)) >= count(JSON.stringify(input.messages)) * 0.8)
+    return undefined;
+  return { messages, summary };
+}
 
 /**
  * The record the prompt will carry in place of the turns it replaces. Structured rather than
@@ -48,43 +95,4 @@ function summaryPrompt(previous: string | undefined, turns: string): string {
     '## Still open\nBlockers and unanswered questions, with exact error text.\n\n' +
     'Be specific. "Made some changes" is worthless; name the file, the value, the error.'
   );
-}
-
-/** One line per turn, capped, so a single huge tool result cannot eat the whole request. */
-function transcript(messages: Message[]): string {
-  return messages
-    .map((message) => `${message.role}: ${message.content.slice(0, 4000)}`)
-    .join('\n\n');
-}
-
-export type Compaction = { summary: string; upTo: string };
-
-/**
- * Summarises everything but the last few turns. Returns nothing when there is not enough
- * history to be worth replacing — a prompt that is large because of its tools or its skills is
- * not made smaller by compacting three messages.
- */
-export async function compact(input: {
-  run: Run;
-  model: LanguageModel;
-  previous: string | undefined;
-  history: Message[];
-  maxOutputTokens: number;
-  signal: AbortSignal;
-}): Promise<Compaction | undefined> {
-  const older = input.history.slice(0, -KEEP_RECENT);
-  const last = older.at(-1);
-
-  if (older.length < 2 || !last) {
-    return undefined;
-  }
-
-  const { text } = await generateText({
-    model: input.model,
-    maxOutputTokens: input.maxOutputTokens,
-    abortSignal: input.signal,
-    prompt: summaryPrompt(input.previous, transcript(older)),
-  });
-
-  return text.trim() ? { summary: text.trim(), upTo: last.createdAt } : undefined;
 }
