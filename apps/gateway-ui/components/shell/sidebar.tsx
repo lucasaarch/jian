@@ -20,6 +20,8 @@ export function Sidebar({
   const pathname = usePathname();
   const active = currentSection(pathname);
   const { data, loading, signOut } = useWorkspace();
+  // Requests waiting on the owner, shown wherever they are in the panel.
+  const pending = data?.contacts.filter((contact) => contact.status === 'pending').length ?? 0;
 
   return (
     <aside id="main-navigation" className={`sidebar ${open ? 'open' : ''}`}>
@@ -54,6 +56,12 @@ export function Sidebar({
                 >
                   <item.icon size={18} strokeWidth={1.7} />
                   <span>{item.label}</span>
+                  {item.href === '/channels' && pending > 0 && (
+                    <span className="nav-count">
+                      {pending}
+                      <span className="sr-only"> waiting for approval</span>
+                    </span>
+                  )}
                 </Link>
               ))}
           </div>

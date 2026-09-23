@@ -9,11 +9,18 @@ import { Badge, Button, Confirm, Field, Secret, SectionHeading } from '../ui';
 import { Conversations } from './conversations';
 import { kinds } from './kinds';
 import { Pairing } from './pairing';
-import { Requests } from './requests';
 
 export function Channels(props: SectionProps) {
   const { profile, data, api, mutate, busy } = props;
-  const [editing, setEditing] = useState<ChannelType>();
+  // A channel with someone waiting opens on its own: the decision is why the owner came here.
+  const [editing, setEditing] = useState<ChannelType | undefined>(
+    () =>
+      data.channels.find((channel) =>
+        data.contacts.some(
+          (contact) => contact.channelId === channel.id && contact.status === 'pending',
+        ),
+      )?.type,
+  );
   const [pairing, setPairing] = useState<Channel>();
   const [secret, setSecret] = useState<string>();
   const [token, setToken] = useState('');
@@ -56,6 +63,11 @@ export function Channels(props: SectionProps) {
     );
   };
 
+  const waiting = (channel: Channel) =>
+    data.contacts.filter(
+      (contact) => contact.channelId === channel.id && contact.status === 'pending',
+    ).length;
+
   const reach = (channel: Channel) => {
     const decided = data.contacts.filter(
       (contact) => contact.channelId === channel.id && contact.status === 'approved',
@@ -74,7 +86,6 @@ export function Channels(props: SectionProps) {
         title="Channels"
         description="Take the conversation to where you already are."
       />
-      <Requests {...props} />
       <div className="resource-list">
         {kinds.map((kind) => {
           const channel = connected(kind.type);
@@ -95,6 +106,9 @@ export function Channels(props: SectionProps) {
                   <Badge tone={channel ? 'good' : 'neutral'}>
                     {channel ? 'Connected' : 'Not connected'}
                   </Badge>
+                  {channel && waiting(channel) > 0 && (
+                    <Badge tone="accent">{waiting(channel)} pending</Badge>
+                  )}
                 </h3>
                 <p>{kind.description}</p>
                 {channel && (

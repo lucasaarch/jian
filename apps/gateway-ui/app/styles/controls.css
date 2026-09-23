@@ -182,6 +182,15 @@
   .conversation-row small {
     @apply block truncate text-xs text-muted;
   }
+  .conversation-row[data-status="pending"] {
+    @apply items-start;
+  }
+  .conversation-row[data-status="pending"] > svg {
+    @apply mt-0.5 text-accent;
+  }
+  .conversation-message {
+    @apply mt-2 max-w-prose rounded-sm border-l-2 border-accent bg-accent-soft px-3 py-2 text-sm text-ink;
+  }
   .conversation-row[data-status="blocked"] strong {
     @apply text-muted;
   }
