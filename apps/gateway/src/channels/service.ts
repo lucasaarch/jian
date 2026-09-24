@@ -726,6 +726,14 @@ export class Channels {
     }
 
     if (target && channel.address && !data.replyTo) data.replyTo = channel.address;
+
+    // WhatsApp quotes the words but not who wrote them; the room's members are known by now.
+    if (data.quoted && !data.quoted.name && !mine && data.replyTo) {
+      const author = await findPerson(this.services.store.db, channel.id, data.replyTo);
+
+      if (author?.displayName) data.quoted = { ...data.quoted, name: author.displayName };
+    }
+
     data.text = withQuote(data, mine).slice(0, 8000);
 
     if (data.reaction) {

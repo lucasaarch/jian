@@ -237,5 +237,15 @@ export function buildContext(
     }
   }
 
-  return { system, messages };
+  // How full the request is before any tool has run, said in the prompt: an agent that cannot
+  // see its context filling up cannot choose when to compact it. Said once per turn, at the
+  // end, so the prefix a provider caches stays the same from step to step.
+  const used =
+    count(system) + messages.reduce((sum, message) => sum + count(message.content) + 8, 0);
+  const share = Math.min(100, Math.round((used / policy.inputTokens) * 100));
+
+  return {
+    system: `${system}\n\nContext: this turn starts at about ${used.toLocaleString('en')} of ${policy.inputTokens.toLocaleString('en')} tokens (${share}%). Tool results add to it as you work; near the limit the older part is summarised automatically. See managing-context.`,
+    messages,
+  };
 }

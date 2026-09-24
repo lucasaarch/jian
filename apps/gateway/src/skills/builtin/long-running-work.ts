@@ -6,9 +6,9 @@ export const longRunningWork: Skill = {
     'Use when work spans several turns or sessions, a tool result is too large to read at once, context is running out, or two sessions could repeat one effect.',
   instructions: `# Work that outlives one turn
 
-A run is one turn: at most ten minutes and a budget of tokens. A task can be longer than
-that. What survives a turn is your memories, the conversation history, the record of your
-runs and your schedules.
+A run is one turn. It has no time limit, but it has a budget of steps and tokens, and a
+task can be longer than one turn. What survives a turn is your memories, the conversation
+history, the record of your runs and your schedules.
 
 The tools below are in the \`tasks\` group; load it with \`load_tools\`.
 
@@ -28,9 +28,7 @@ a page at a time. Read the pages you need, and say which part you quoted.
 
 ## Context that runs out
 
-Older turns are summarised automatically when the conversation grows. Before a long stretch
-of work, \`compact_context\` asks for that summary now, keeping recent work and the latest
-request. Memories are for what must outlive the conversation; the summary is not.
+See \`managing-context\`: how full your context is, and when to compact it.
 
 ## Picking a task back up
 

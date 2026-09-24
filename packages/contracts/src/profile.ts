@@ -173,9 +173,9 @@ export const contextPolicySchema = z
     memoryTokens: z.number().int().min(0).max(32000).default(1500),
     historyTokens: z.number().int().min(0).max(200000).default(6000),
     toolResultTokens: z.number().int().min(128).max(32000).default(1500),
-    // A backstop, not the thing that should fire. What really ends a turn is the token budget
-    // and the ten-minute clock; a step ceiling low enough to be reached is a turn thrown away
-    // with the work already paid for.
+    // A backstop, not the thing that should fire. What really ends a turn is its token budget;
+    // a step ceiling low enough to be reached is a turn thrown away with the work already paid
+    // for. There is no clock on a turn: only a call that stops answering is given up on.
     maxSteps: z.number().int().min(1).max(500).default(200),
     // A stop for a turn that has gone wrong, not a bound on a turn doing its job: reaching it
     // ends the loop with an answer rather than a failure.
@@ -239,6 +239,12 @@ export const profileSchema = z.strictObject({
    * What comes back is written by strangers, so it reaches the agent as data to weigh.
    */
   allowWebSearch: z.boolean().default(false),
+  /**
+   * After a turn worth looking back on — many tools, an error it recovered from, or enough
+   * turns since the last look — the agent reviews it in the background and keeps what it
+   * learned as a skill or a memory, in its Learning conversation.
+   */
+  learnFromWork: z.boolean().default(true),
 });
 
 export const profilePatchSchema = profileSchema.partial().extend({
@@ -257,6 +263,7 @@ export const profilePatchSchema = profileSchema.partial().extend({
   allowSelfManagement: z.boolean().optional(),
   allowShell: z.boolean().optional(),
   allowWebSearch: z.boolean().optional(),
+  learnFromWork: z.boolean().optional(),
 });
 
 /**
@@ -264,6 +271,8 @@ export const profilePatchSchema = profileSchema.partial().extend({
  * gateway opens it on its own, exactly one per profile, so no caller may create another.
  */
 export const GATEWAY_SESSION_CHANNEL = 'gateway';
+/** Where an agent reviews its own turns and says what it kept: one per profile. */
+export const LEARNING_SESSION_CHANNEL = 'learning';
 
 export const sessionSchema = z.strictObject({
   // Absent on purpose: the agent names the conversation from its first message, and the owner
@@ -273,9 +282,12 @@ export const sessionSchema = z.strictObject({
   channel: z
     .string()
     .regex(/^[a-z0-9_-]{1,40}$/)
-    .refine((channel) => channel !== GATEWAY_SESSION_CHANNEL, {
-      message: 'The gateway conversation is opened by the gateway itself',
-    })
+    .refine(
+      (channel) => channel !== GATEWAY_SESSION_CHANNEL && channel !== LEARNING_SESSION_CHANNEL,
+      {
+        message: 'The gateway and learning conversations are opened by the gateway itself',
+      },
+    )
     .default('api'),
 });
 

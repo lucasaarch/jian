@@ -408,13 +408,15 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
         const mentions = (
           await Promise.all((context?.mentionedJid ?? []).map((jid) => personOf(jid)))
         ).filter((jid): jid is string => Boolean(jid));
-        // A reaction on the agent's own message speaks to it, the way a reply does.
-        const replyTo =
-          reaction && answered?.mine
+        // Whose message a reply answers or a reaction is on: the agent's own speaks to it, and
+        // anyone else's is how the gateway names them above the quote.
+        const replyTo = reaction
+          ? answered?.mine
             ? own
-            : !reaction && context?.stanzaId
-              ? await personOf(context.participant)
-              : undefined;
+            : await personOf(reaction.key?.participant)
+          : context?.stanzaId
+            ? await personOf(context.participant)
+            : undefined;
 
         await callbacks.message({
           actorId: from,

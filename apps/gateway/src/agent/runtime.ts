@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { MCPClient } from '@ai-sdk/mcp';
-import type { ModelConfig, Run } from '@jian/contracts';
+import { LEARNING_SESSION_CHANNEL, type ModelConfig, type Run } from '@jian/contracts';
 import {
   generateText,
   type LanguageModel,
@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { fitPrompt, promptTokens, tokenCounter } from '../context/budget.js';
 import { compactPrompt, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
+import type { Learning } from '../learning/service.js';
 import type { Media } from '../media/service.js';
 import { anthropicCredential, withClaudeCodeIdentity } from '../providers/claude-subscription.js';
 import { reasoningProviderOptions } from '../providers/effort.js';
@@ -32,6 +33,13 @@ import { boundToolResult, redactOutput, redactText } from './results.js';
 import { deferTools, profileTools, type ToolServices } from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
 
+/**
+ * How long a model call or a tool may go without a sign of life before the turn is given up.
+ * Longer than a machine command may run (two minutes) or a colleague is waited for, so it
+ * fires on something that hung, not on work that takes its time.
+ */
+const STALLED_AFTER_MS = 5 * 60_000;
+
 export type { RuntimeOptions } from './types.js';
 
 /** The run services the runtime drives, plus what it hands to the tool set it builds. */
@@ -40,7 +48,26 @@ export type RuntimeServices = ToolServices & {
   providers?: Pick<Providers, 'selectedModel'>;
   media?: Pick<Media, 'prepare' | 'tools'>;
   web?: Pick<WebSearch, 'tools'>;
+  learning?: Pick<Learning, 'consider'>;
 };
+
+/**
+ * What a look back may touch: its memories and its skills, nothing that reaches a person or
+ * the machine. A review that could send a message would be a turn nobody asked for.
+ */
+const LEARNING_TOOLS = new Set([
+  'read_memories',
+  'remember',
+  'forget_memory',
+  'link_memories',
+  'unlink_memories',
+  'create_skill',
+  'update_skill',
+  'delete_skill',
+  'load_skill',
+]);
+/** A look back is short: a few reads and a write or two. */
+const LEARNING_STEPS = 8;
 
 export class AgentRuntime {
   private controllers = new Map<string, AbortController>();
@@ -123,7 +150,21 @@ export class AgentRuntime {
 
     this.controllers.set(runId, controller);
 
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(10 * 60_000)]);
+    // No clock on the whole turn: a long conversation doing its work is never cut. What stops
+    // a turn is the owner's Cancel, the step and token budgets, and this: a model call or a
+    // tool that has produced nothing for STALLED_AFTER_MS is not coming back.
+    const stalled = new AbortController();
+    let lastSign = Date.now();
+    const alive = () => {
+      lastSign = Date.now();
+    };
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastSign > STALLED_AFTER_MS) stalled.abort();
+    }, 5_000);
+
+    watchdog.unref();
+
+    const signal = AbortSignal.any([controller.signal, stalled.signal]);
     const clients: MCPClient[] = [];
     const outbound = this.options.outbound ?? createSafeFetch();
     const ownsOutbound = !this.options.outbound;
@@ -183,6 +224,9 @@ export class AgentRuntime {
         ) === 'subscription';
 
       const model = await this.model(config, process.env, outbound.fetch, providerKey);
+      const learning =
+        (await this.services.sessions.session(profileId, run.sessionId)).channel ===
+        LEARNING_SESSION_CHANNEL;
       const tools: ToolSet = {
         ...profileTools(this.services, run),
         ...this.services.media?.tools(run, async (usage) => {
@@ -213,11 +257,16 @@ export class AgentRuntime {
           },
         }),
       };
-      // Loaded within the run and never across runs: a turn states what it needs.
-      const loadedTools = new Set<string>();
+      if (learning) {
+        for (const name of Object.keys(tools)) if (!LEARNING_TOOLS.has(name)) delete tools[name];
+      }
+
+      // Loaded within the run and never across runs: a turn states what it needs. A look back
+      // has only a handful, all loaded from the start.
+      const loadedTools = new Set<string>(learning ? Object.keys(tools) : []);
       const { gated } = deferTools(tools, loadedTools);
       const { mcpToolNames, selectedMcpTools, unavailable, catalog } = await connectMcpTools(
-        run,
+        learning ? { ...run, profile: { ...run.profile, mcpServers: [] } } : run,
         tools,
         {
           vault: this.options.vault,
@@ -396,11 +445,15 @@ export class AgentRuntime {
         model,
         instructions,
         tools: guarded,
-        stopWhen: [stepCountIs(policy.maxSteps), () => spent],
+        stopWhen: [
+          stepCountIs(learning ? Math.min(LEARNING_STEPS, policy.maxSteps) : policy.maxSteps),
+          () => spent,
+        ],
         maxRetries: 0,
         maxOutputTokens: policy.outputTokens,
         ...(reasoning ? { providerOptions: reasoning } : {}),
         prepareStep: async ({ messages, stepNumber }) => {
+          alive();
           if (externalUncertain) {
             throw new Error('External tool outcome is uncertain');
           }
@@ -608,8 +661,12 @@ export class AgentRuntime {
       // A step that throws is reported on the stream, not as a rejection: without this the
       // run would fail with "no output generated" and lose the reason entirely.
       let streamError: unknown;
+      // What the turn did, for looking back on it once it is over.
+      const work: Array<{ id: string; name: string; error?: string }> = [];
 
       for await (const part of stream.fullStream) {
+        alive();
+
         switch (part.type) {
           case 'error':
             streamError ??= part.error;
@@ -624,7 +681,14 @@ export class AgentRuntime {
             break;
           case 'tool-call':
             progress.usingTool(part.toolName);
+            work.push({ id: part.toolCallId, name: part.toolName });
             break;
+          case 'tool-error': {
+            const failed = work.find((item) => item.id === part.toolCallId);
+
+            if (failed) failed.error = describe(part.error).slice(0, 300);
+            break;
+          }
           case 'finish-step':
             progress.stepEnded();
             // Here, in the stream's order, and not in onStepEnd: that runs as the model finishes,
@@ -695,6 +759,17 @@ export class AgentRuntime {
       // Addressed only when the agent that asked gave up waiting; otherwise it already has it.
       await this.services.peers.deliverLate(profileId, runId).catch(() => {});
 
+      if (!learning) {
+        await this.services.learning
+          ?.consider(run, {
+            tools: work.map(({ name, error }) => ({ name, ...(error ? { error } : {}) })),
+            answer,
+          })
+          .catch((error) =>
+            console.error(`jian: run ${runId} could not be looked back on — ${describe(error)}`),
+          );
+      }
+
       await this.nameConversation(run, secrets);
     } catch (error) {
       // The stored message stays generic because a provider error can echo a key back. The
@@ -710,7 +785,9 @@ export class AgentRuntime {
             runId,
             owner,
             externalUncertain || signal.aborted ? 'interrupted' : 'failed',
-            executionFailureMessage(error, externalUncertain, signal.aborted, secrets),
+            stalled.signal.aborted
+              ? `Stopped: nothing came back from the model or a tool for ${STALLED_AFTER_MS / 60_000} minutes. Completed steps are saved; inspect them before continuing.`
+              : executionFailureMessage(error, externalUncertain, signal.aborted, secrets),
           )
           .catch(() => {});
 
@@ -719,6 +796,7 @@ export class AgentRuntime {
       }
     } finally {
       clearInterval(pulse);
+      clearInterval(watchdog);
       this.controllers.delete(runId);
       await Promise.allSettled(clients.map((client) => client.close()));
 

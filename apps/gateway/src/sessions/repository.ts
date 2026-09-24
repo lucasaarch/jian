@@ -18,6 +18,7 @@ export function toSession(row: SessionRow): Session {
     title: row.title,
     channel: row.channel,
     ...(row.peerProfileId ? { peerProfileId: row.peerProfileId } : {}),
+    ...(row.scope ? { scope: row.scope } : {}),
     ...(row.summary ? { summary: row.summary } : {}),
     ...(row.summarizedUpTo ? { summarizedUpTo: row.summarizedUpTo.toISOString() } : {}),
     createdAt: row.createdAt.toISOString(),
@@ -44,6 +45,7 @@ export async function insertSession(db: Queryable, session: Session): Promise<vo
   await db.insert(sessions).values({
     ...session,
     peerProfileId: session.peerProfileId ?? null,
+    scope: session.scope ?? null,
     summary: session.summary ?? null,
     summarizedUpTo: session.summarizedUpTo ? new Date(session.summarizedUpTo) : null,
     createdAt: new Date(session.createdAt),
@@ -123,14 +125,20 @@ export async function findPeerSession(
   return row ? toSession(row) : null;
 }
 
-export async function findGatewaySession(
+export async function findGatewaySession(db: Queryable, profileId: string) {
+  return findOwnSession(db, profileId, GATEWAY_SESSION_CHANNEL);
+}
+
+/** One of the conversations the gateway keeps for a profile, one of each: gateway, learning. */
+export async function findOwnSession(
   db: Queryable,
   profileId: string,
+  channel: string,
 ): Promise<Session | null> {
   const [row] = await db
     .select()
     .from(sessions)
-    .where(and(eq(sessions.profileId, profileId), eq(sessions.channel, GATEWAY_SESSION_CHANNEL)))
+    .where(and(eq(sessions.profileId, profileId), eq(sessions.channel, channel)))
     .limit(1);
 
   return row ? toSession(row) : null;

@@ -23,7 +23,12 @@ export interface SessionNamer {
 }
 
 export interface SessionWriter extends SessionReader {
-  createSession(profileId: string, input: unknown, transaction?: Queryable): Promise<Session>;
+  createSession(
+    profileId: string,
+    input: unknown,
+    transaction?: Queryable,
+    scope?: 'direct' | 'group',
+  ): Promise<Session>;
 }
 
 /** The session two agents share. Held apart from `SessionWriter`: only peer calls open one. */
