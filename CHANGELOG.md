@@ -5,7 +5,7 @@ Every release of Jian, newest first.
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit a note there and run
      `make changelog`; editing this file is editing the copy rather than the thing. -->
 
-## 2.2.0-rc.3 — 2026-09-25
+## 2.2.0-rc.3 — 2026-09-24
 
 An agent that learns from its own work, turns without a time limit, and an agent that knows how full its context is.
 
