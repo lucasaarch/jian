@@ -18,7 +18,7 @@ import type { ProfileReader } from '../profiles/port.js';
 import { GATEWAY_SCOPE, type GatewayVault } from '../security/gateway-vault.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { modelCapabilities } from './capabilities.js';
-import { environmentProvider, providerKinds } from './catalog.js';
+import { environmentProvider, GROQ_BASE_URL, providerKinds } from './catalog.js';
 import type { ModelCatalog } from './catalog-source.js';
 import { anthropicCredential } from './claude-subscription.js';
 import {
@@ -65,7 +65,16 @@ export class Providers {
   }
 
   async createProvider(input: unknown) {
-    const { secret, credential, ...data } = providerInputSchema.parse(input);
+    const { secret, credential, baseURL, ...data } = providerInputSchema.parse(input);
+    const server = data.kind === 'openai-compatible';
+
+    if (server && !baseURL) {
+      throw new GatewayError(400, 'Give the address of the server, such as http://whisper:8000/v1');
+    }
+
+    if (!server && !secret) {
+      throw new GatewayError(400, 'Paste the API key for this provider');
+    }
 
     return this.register(
       {
@@ -74,6 +83,8 @@ export class Providers {
         ...(data.kind === 'anthropic'
           ? { credential: anthropicCredential(credential, undefined, secret) }
           : {}),
+        // An address is the server's alone; every vendor has its own, fixed.
+        ...(server && baseURL ? { baseURL: baseURL.replace(/\/+$/, '') } : {}),
         id: randomUUID(),
         createdAt: nowIso(this.clock),
       },
@@ -100,7 +111,7 @@ export class Providers {
    * Nothing is announced — an installation credential belongs to no profile's event stream,
    * and the row's own timestamps are what says when it arrived and when it went.
    */
-  private async register(provider: ProviderRecord, secret: string) {
+  private async register(provider: ProviderRecord, secret?: string) {
     return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
       const now = new Date(this.clock());
 
@@ -113,7 +124,7 @@ export class Providers {
         await this.vault.discard(providerSecret(revoked), tx);
       }
 
-      await this.vault.put(providerSecret(provider.id), secret, tx);
+      if (secret) await this.vault.put(providerSecret(provider.id), secret, tx);
 
       try {
         await insertProvider(tx, provider);
@@ -257,7 +268,15 @@ export class Providers {
     // Ceilings, not targets: a large context window must not inflate routine memory/history.
     return {
       config: {
-        provider: provider.authMode === 'codex' ? ('openai-codex' as const) : provider.kind,
+        // Groq and a server the owner runs both speak the OpenAI API at their own address.
+        ...(provider.kind === 'groq' || provider.kind === 'openai-compatible'
+          ? {
+              provider: 'openai-compatible' as const,
+              baseURL: provider.kind === 'groq' ? GROQ_BASE_URL : (provider.baseURL ?? ''),
+            }
+          : {
+              provider: provider.authMode === 'codex' ? ('openai-codex' as const) : provider.kind,
+            }),
         modelId: selection.modelId,
         ...(provider.kind === 'anthropic'
           ? { credential: anthropicCredential(provider.credential, provider.apiKeyEnv, undefined) }

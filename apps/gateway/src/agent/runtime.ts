@@ -40,6 +40,13 @@ import type { ModelResolver, RuntimeOptions } from './types.js';
  */
 const STALLED_AFTER_MS = 5 * 60_000;
 
+/**
+ * Keys and tokens by their look — OpenAI and Anthropic, Google, Groq, GitHub — and whatever
+ * follows a bearer or an `api_key=`: an error can quote a credential this run never held.
+ */
+const CREDENTIAL_SHAPES =
+  /\b(sk-[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{30,}|gsk_[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{20,})\b|\bBearer\s+\S+|\b(api[_-]?key|token|secret|password)(["']?\s*[:=]\s*["']?)[^\s"',;&]+/gi;
+
 export type { RuntimeOptions } from './types.js';
 
 /** The run services the runtime drives, plus what it hands to the tool set it builds. */
@@ -836,7 +843,18 @@ function causes(error: unknown): Error[] {
 function reason(error: unknown, secrets: Set<string>): string {
   const text = error instanceof Error ? error.message : String(error);
 
-  return redactText(text, secrets).replace(/\s+/g, ' ').trim().slice(0, 300);
+  // Credentials this run did not hold can still appear in an error; their shapes are masked too.
+  return redactText(text, secrets)
+    .replace(CREDENTIAL_SHAPES, (match, _key, name?: string, joint?: string) =>
+      name
+        ? `${name}${joint}[REDACTED]`
+        : /^bearer/i.test(match)
+          ? 'Bearer [REDACTED]'
+          : '[REDACTED]',
+    )
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 300);
 }
 
 function toolFailure(error: unknown, secrets: Set<string>): string {
@@ -914,7 +932,16 @@ function executionFailureMessage(
       return 'The provider does not know this model on this account. Choose another model.';
     case 400:
       return 'The provider refused the request. Check the model, the reasoning effort and the selected tools.';
-    default:
-      return 'The run failed. The reason is in the gateway log.';
+    default: {
+      // The deepest error is the one that says what went wrong; the ones around it only say
+      // where. Redacted and cut to a line, it is safe to show and far more useful than a
+      // pointer to a log the owner may not be able to read.
+      const root = causes(error).at(-1) ?? error;
+      const said = reason(root, secrets);
+
+      return said
+        ? `The run failed${status ? ` (HTTP ${status})` : ''}: ${said}`
+        : 'The run failed. The reason is in the gateway log.';
+    }
   }
 }

@@ -333,8 +333,10 @@ export class Media {
           : config.providerId
             ? await this.vault.read(providerSecret(config.providerId))
             : undefined;
-    if (!key) throw new Error('Media provider key is not configured');
-    return { config, key };
+    // A server the owner runs, such as a local Whisper, may take no key at all.
+    if (!key && !(config.provider === 'openai-compatible' && config.providerId))
+      throw new Error('Media provider key is not configured');
+    return { config, key: key ?? '' };
   }
 
   private async analyze(

@@ -84,6 +84,8 @@ export const providerKind = pgEnum('provider_kind', [
   'anthropic',
   'google',
   'openrouter',
+  'groq',
+  'openai-compatible',
 ]);
 
 /**
@@ -102,6 +104,8 @@ export const providers = pgTable(
     // written before the panel asked, where the credential's own prefix answers instead.
     credential: text('credential').$type<ProviderCredential>(),
     apiKeyEnv: text('api_key_env'),
+    // Where an OpenAI-compatible server's API is; null for every vendor with a fixed address.
+    baseUrl: text('base_url'),
     createdAt,
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },

@@ -167,6 +167,15 @@ A Telegram bot and a paired WhatsApp account show their profile's picture. The w
 
 ## Images and voice
 
+### Incoming audio without a paid plan
+
+Incoming audio is transcribed by the model chosen under **Model defaults › Incoming audio**. Gemini also describes sounds; a Whisper model only transcribes speech, which is what a voice note needs. Two Whisper routes cost nothing:
+
+- **Groq.** Add it under **Providers** with a key from console.groq.com, then choose `whisper-large-v3-turbo` for Incoming audio. Its free tier has daily limits; check them in the Groq console.
+- **A Whisper server you run.** Any server that speaks the OpenAI transcription API (`POST /v1/audio/transcriptions`) works: [speaches](https://github.com/speaches-ai/speaches) or a `whisper.cpp` server, for example. Run it beside the gateway, add it under **Providers › OpenAI-compatible server** with its address, such as `http://whisper:8000/v1`, and choose one of its Whisper models. A private address is refused unless it is allowed: set `JIAN_ALLOW_PRIVATE_ORIGINS=http://whisper:8000`. Nothing runs unless you start it, so an installation that does not use it pays nothing for it; a `small` model needs roughly 0.5–1 GB of memory while it runs.
+
+A provider that answers 5xx — Gemini answers 503 when a model is overloaded — is asked twice more, after one and three seconds, before the audio is reported as unreadable.
+
 WhatsApp attachments are stored per profile and conversation; unapproved direct contacts may hold four attachments until approval. Blocked contacts never reach a media model. Incoming images go directly to a vision-capable conversation model unless an auxiliary image-analysis model is selected. Text-only models receive an auxiliary description. Voice notes and ordinary audio files share the Incoming audio model. It transcribes speech verbatim and adds relevant sound context before the conversation model runs; transcription-only models preserve speech without sound analysis. Transcripts are reused rather than charged again on every step.
 
 Agents load the `media` tool group to call `analyze_media`, `generate_image`, `list_speech_voices`, and `generate_speech`. Generation uses the profile's Model defaults. Images support OpenAI API and Gemini; speech supports OpenAI API and Gemini. Generated files appear in the session history and are queued as actual attachments on WhatsApp or Telegram. Voice replies use Opus/OGG; the Docker image includes ffmpeg to convert Gemini PCM speech. Local development needs ffmpeg for that conversion, but no local speech-recognition model is required. OpenAI API billing is separate from a ChatGPT login.

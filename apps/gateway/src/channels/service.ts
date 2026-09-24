@@ -1200,8 +1200,13 @@ export class Channels {
           continue;
         }
 
+        // The reason the gateway stored is already redacted and one line: saying it here is what
+        // lets someone on a phone understand what went wrong without the gateway's log.
         text =
-          run.output ?? 'The agent could not complete this request. Check the gateway for details.';
+          run.output ??
+          (run.error
+            ? `⚠️ I could not finish this.\n\n${run.error}`
+            : '⚠️ I could not finish this, and no reason was recorded.');
         spoken = run.output !== undefined;
       }
 

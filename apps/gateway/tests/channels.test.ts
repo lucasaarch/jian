@@ -345,6 +345,38 @@ describe('Telegram transport', () => {
     }
   });
 
+  it('tells the chat why a turn failed instead of pointing at the gateway', async () => {
+    const sent: string[] = [];
+    const f = await setup(async (_url, options) => {
+      sent.push(JSON.parse(String(options?.body)).text);
+
+      return Response.json({ ok: true, result: { message_id: sent.length } });
+    });
+
+    try {
+      await f.channels.receive(f.channel.id, webhook(f.channel.webhookToken));
+      const [pending] = await f.channels.contacts(f.profile.id);
+      if (!pending) throw new Error('Contact request missing');
+      await f.channels.approveContact(f.profile.id, pending.id);
+      const [run] = await f.services.runs.activities(f.profile.id);
+      if (!run) throw new Error('Run missing');
+
+      await f.services.lifecycle.claim(run.id, f.profile.id, 'worker');
+      await f.services.lifecycle.finish(
+        f.profile.id,
+        run.id,
+        'worker',
+        'failed',
+        'The provider refused with 429: quota exhausted for gemini-3.8-flash',
+      );
+      await f.channels.dispatch();
+
+      expect(sent.at(-1)).toContain('quota exhausted for gemini-3.8-flash');
+    } finally {
+      await f.app.close();
+    }
+  });
+
   it('releases the waiting message once when the owner approves, and blocks silently', async () => {
     const sent: string[] = [];
 
