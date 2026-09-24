@@ -138,6 +138,7 @@ export const ids = {
   planningChat: '04a28114-545a-41b7-ba17-8673134b85d1',
   reportChat: '4e5f6a7b-8c9d-4e0f-9a1b-3c4d5e6f7a8b',
   emptyChat: '6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d',
+  learning: '7b8c9d0e-1f2a-4b3c-9d4e-5f6a7b8c9d0e',
   runLive: '66b4c0ba-1111-4a4a-8a8a-000000000002',
   runFailed: '66b4c0ba-1111-4a4a-8a8a-000000000003',
 };
@@ -267,6 +268,12 @@ script(zero, ids.launchGroup, [
     launch.maya,
   ),
   user(
+    60 * 4 - 5.5,
+    `I thought it was a tech ant\n[File not opened, it was not sent to you: image/png, media ID ${mediaId('poster')}. Open it with analyze_media if it matters.]`,
+    undefined,
+    launch.maya,
+  ),
+  user(
     60 * 4 - 6,
     '[Replying to your message: "Printing is budgeted at 320. Poster v2 at A2 for 40 copies comes to about 290, so it fits with a little room."]\nAnd at A1?',
     undefined,
@@ -330,7 +337,7 @@ messages.push(
     runId: uuid('66b4c0ba', 901),
     role: 'assistant',
     content:
-      'Hi Miku, Zero Two here. Lucas asks for a memory clean-up now that memories can be deleted: drop duplicates and stale status, and link what belongs together. No need to report back.',
+      'Hi Miku, Zero Two here. Rowan asks for a memory clean-up now that memories can be deleted: drop duplicates and stale status, and link what belongs together. No need to report back.',
     call,
     createdAt: at(12),
   },
@@ -359,6 +366,24 @@ timelines[mikuThread] = [
     ),
   },
 ];
+
+/* Where Zero Two looks back on its work: one look that kept a skill, one that kept nothing. */
+script(zero, ids.learning, [
+  user(
+    60 * 25,
+    '[Learning] Looking back at a turn with 33 tool calls: "Nightly report for 2026-09-23."\nThis is your own review, not a message from anyone.',
+  ),
+  agent(
+    60 * 25 - 1,
+    'Kept **nightly-report** as a skill: the checks in the order that found the queue peak, and the format Rowan asked for last week.',
+    [tool('create_skill', 0.4)],
+  ),
+  user(
+    60 * 3,
+    '[Learning] Looking back at the last 15 turns: "Could you review PR #325?"\nThis is your own review, not a message from anyone.',
+  ),
+  agent(60 * 3 - 1, 'Nothing to keep.'),
+]);
 
 /* API Server: a scripted report in Markdown behind many tools, and a request that failed. */
 script(zero, ids.reportChat, [

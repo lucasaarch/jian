@@ -14,7 +14,7 @@ export function conversationName(
 
   const contact = contacts.find((item) => item.sessionId === session.id);
   const peer = profiles.find((item) => item.id === session.peerProfileId);
-  const stored = session.title?.replace(/^(Agente?|WhatsApp|Telegram)\s·\s/, '');
+  const stored = session.title?.replace(/^(Agent|WhatsApp|Telegram)\s·\s/, '');
 
   if (session.channel === 'whatsapp' || session.channel === 'telegram') {
     const app = session.channel === 'whatsapp' ? 'WhatsApp' : 'Telegram';

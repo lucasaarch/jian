@@ -1,7 +1,11 @@
 'use client';
 
-import { AGENT_SESSION_CHANNEL, GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
-import { ArrowLeft, Bot, CheckCheck, Search, Terminal } from 'lucide-react';
+import {
+  AGENT_SESSION_CHANNEL,
+  GATEWAY_SESSION_CHANNEL,
+  LEARNING_SESSION_CHANNEL,
+} from '@jian/contracts';
+import { ArrowLeft, Bot, CheckCheck, GraduationCap, Search, Terminal } from 'lucide-react';
 import { type ComponentType, useState } from 'react';
 import type { Contact, Profile, Run, Session } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
@@ -14,24 +18,28 @@ import { History } from './history';
 import { statusOf } from './progress';
 
 /**
- * The four kinds of conversation a profile has, besides the gateway one pinned above them. A
- * channel the panel does not know, such as a session opened through the API, reads as API.
+ * The kinds of conversation a profile has, besides the gateway one pinned above them, and last
+ * the one where it looks back on its work. A channel the panel does not know, such as a
+ * session opened through the API, reads as API.
  */
-type Kind = 'whatsapp' | 'telegram' | 'agent' | 'api';
+type Kind = 'whatsapp' | 'telegram' | 'agent' | 'api' | 'learning';
 
 const kinds: { kind: Kind; name: string; icon: ComponentType<{ size?: number }> }[] = [
   { kind: 'whatsapp', name: 'WhatsApp', icon: WhatsAppLogo },
   { kind: 'telegram', name: 'Telegram', icon: TelegramLogo },
   { kind: 'agent', name: 'Agents', icon: Bot },
   { kind: 'api', name: 'API Server', icon: Terminal },
+  { kind: 'learning', name: 'Learning', icon: GraduationCap },
 ];
 
 const kindOf = (session: Session): Kind =>
-  session.channel === 'whatsapp' ||
-  session.channel === 'telegram' ||
-  session.channel === AGENT_SESSION_CHANNEL
-    ? (session.channel as Kind)
-    : 'api';
+  session.channel === LEARNING_SESSION_CHANNEL
+    ? 'learning'
+    : session.channel === 'whatsapp' ||
+        session.channel === 'telegram' ||
+        session.channel === AGENT_SESSION_CHANNEL
+      ? (session.channel as Kind)
+      : 'api';
 
 const isGateway = (session: Session) => session.channel === GATEWAY_SESSION_CHANNEL;
 
@@ -68,10 +76,10 @@ function ConversationAvatar({
 
   const kind = kindOf(session);
 
-  if (kind === 'api') {
+  if (kind === 'api' || kind === 'learning') {
     return (
       <span className="conversation-avatar symbol" aria-hidden="true">
-        <Terminal size={18} />
+        {kind === 'api' ? <Terminal size={18} /> : <GraduationCap size={18} />}
       </span>
     );
   }
@@ -124,10 +132,15 @@ function preview(text: string) {
 
   if (scheduled) return `⏰ ${scheduled[1]}`;
 
+  const learning = /^\[Learning\] ([^\n]*)/.exec(text);
+
+  if (learning) return learning[1] ?? '';
+
   return plainText(
     text
       .replace(/\[Reacted (\S+) to [^\]]*\]$/, 'Reacted $1')
-      .replace(/\[Replying to [^\n]*\]\n/, ''),
+      .replace(/\[Replying to [^\n]*\]\n/, '')
+      .replace(/\n?\[File not (opened|kept)[^\]]*\]/g, ' 📎'),
   );
 }
 
@@ -154,9 +167,10 @@ export function Sessions({
   const nameOf = (session: Session) => {
     if (isGateway(session)) return profile.name;
     const kind = kindOf(session);
-    const stored = session.title?.replace(/^(Agente?|WhatsApp|Telegram)\s·\s/, '');
+    const stored = session.title?.replace(/^(Agent|WhatsApp|Telegram)\s·\s/, '');
 
     if (kind === 'api') return session.title ?? 'Untitled conversation';
+    if (kind === 'learning') return 'What it learned';
     if (kind === 'agent') return peerOf(session)?.name ?? stored ?? 'Agent';
 
     return contactOf(session)?.displayName ?? stored ?? 'Unknown contact';
@@ -280,7 +294,7 @@ export function Sessions({
                 {isGateway(active)
                   ? 'Gateway'
                   : kinds.find((item) => item.kind === kindOf(active))?.name}
-                {activeContact?.scope === 'group' ? ' · Group' : ''}
+                {active.scope === 'group' || activeContact?.scope === 'group' ? ' · Group' : ''}
                 {activeContact && activeContact.displayName !== activeContact.actorId
                   ? ` · ${activeContact.actorId}`
                   : ''}
@@ -293,7 +307,7 @@ export function Sessions({
             profileId={profile.id}
             sessionId={active.id}
             revision={sent}
-            group={activeContact?.scope === 'group'}
+            group={active.scope === 'group' || activeContact?.scope === 'group'}
             empty={
               isGateway(active)
                 ? `Write to ${profile.name} below.`

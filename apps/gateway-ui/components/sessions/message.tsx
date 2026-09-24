@@ -1,6 +1,6 @@
 'use client';
 
-import { AlarmClock } from 'lucide-react';
+import { AlarmClock, GraduationCap } from 'lucide-react';
 import type { Message, Person } from '../../lib/api';
 import { Face } from '../ui';
 import { Markdown } from '../ui/markdown';
@@ -116,7 +116,12 @@ export function ChatMessage({
   before?: React.ReactNode;
   children?: React.ReactNode;
 }) {
-  const clean = (text: string) => text.replace(/\[Attached media: [0-9a-f-]{36}\]/g, '').trim();
+  // Attachment markers and the gateway's notes about files are drawn as attachments below.
+  const clean = (text: string) =>
+    text
+      .replace(/\[Attached media: [0-9a-f-]{36}\]/g, '')
+      .replace(/\n?\[File not (opened|kept)[^\]]*\]/g, '')
+      .trim();
 
   // In an agent conversation this profile started, it only carried the question: the other
   // agent is the one who works and answers, so it takes the agent's side, on the left.
@@ -126,6 +131,22 @@ export function ChatMessage({
     message.role === 'user' && !message.call
       ? /^\[Scheduled: ([^\]]+)\] ([\s\S]*)$/.exec(message.content)
       : null;
+
+  // The brief of a look back is the gateway's, written for the agent: only its first line, which
+  // says what is being looked back on, is for the owner.
+  const learning = message.role === 'user' ? /^\[Learning\] ([^\n]*)/.exec(message.content) : null;
+
+  if (learning) {
+    return (
+      <article className="chat-line scheduled">
+        <span className="scheduled-label">
+          <GraduationCap size={13} />
+          {learning[1]}
+        </span>
+        {children}
+      </article>
+    );
+  }
 
   if (scheduled) {
     return (

@@ -62,6 +62,7 @@ const profileBase = {
   allowSelfManagement: false,
   allowShell: false,
   allowWebSearch: false,
+  learnFromWork: true,
   version: 3,
   createdAt: at(60 * 24 * 30),
   updatedAt: at(60 * 3),
@@ -102,6 +103,7 @@ export const profiles: Profile[] = [
     ],
     allowSelfManagement: true,
     allowWebSearch: true,
+    learnFromWork: true,
   },
   {
     ...profileBase,
@@ -154,6 +156,7 @@ export const sessions: Session[] = [
   session(ids.theoChat, 'telegram', 'Telegram · Theo Park', 60 * 24 * 9),
   session(ids.designGroup, 'telegram', 'Telegram · Design Team', 60 * 24 * 4),
   session(ids.peerChat, 'agent', 'Agent · Miku', 60 * 24 * 2, { peerProfileId: ids.miku }),
+  session(ids.learning, 'learning', 'Learning', 60 * 24 * 3),
   session(ids.reportChat, 'api', 'Nightly report', 60 * 24 * 20),
   session(ids.planningChat, 'api', 'Planning the week', 60 * 5, {
     summary: 'The owner asked for the week in review; the provider key was missing.',
