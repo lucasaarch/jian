@@ -54,7 +54,17 @@ export const messageRecordSchema = z.strictObject({
   runId: uuid.optional(),
   role: z.enum(['user', 'assistant']),
   content: z.string(),
+  // Who wrote it, in a room where several people write: their id on the channel and the name
+  // they showed. The content still carries the name first, because the agent reads it there.
+  author: z.strictObject({ id: z.string(), name: z.string().optional() }).optional(),
   createdAt: timestamp,
+});
+
+/** Someone who wrote in a group conversation, and the picture they show on its channel. */
+export const personSchema = z.strictObject({
+  id: z.string(),
+  name: z.string().optional(),
+  avatar: z.string().optional(),
 });
 
 export const memoryRecordSchema = z.strictObject({
@@ -64,6 +74,8 @@ export const memoryRecordSchema = z.strictObject({
   content: z.string(),
   version: z.number().int().positive(),
   sourceSessionId: uuid.optional(),
+  // The keys of the memories recalled together with this one.
+  links: z.array(z.string()).optional(),
   updatedAt: timestamp,
 });
 
@@ -175,6 +187,7 @@ export type Profile = z.infer<typeof profileRecordSchema>;
 export type Session = z.infer<typeof sessionRecordSchema>;
 
 export type Message = z.infer<typeof messageRecordSchema>;
+export type Person = z.infer<typeof personSchema>;
 
 export type Memory = z.infer<typeof memoryRecordSchema>;
 
@@ -201,6 +214,28 @@ export const checkpointSchema = z.strictObject({
 });
 
 export type Checkpoint = z.infer<typeof checkpointSchema>;
+
+/**
+ * One tool the agent used during a turn, as the owner's timeline shows it: what it was, how long
+ * it took and how it ended. `stopped` is a tool that started in a turn that ended before it came
+ * back. What it received and returned stays in the run's checkpoints.
+ */
+export const toolStepSchema = z.strictObject({
+  toolCallId: z.string(),
+  toolName: z.string(),
+  status: z.enum(['running', 'done', 'failed', 'refused', 'uncertain', 'stopped']),
+  startedAt: timestamp,
+  finishedAt: timestamp.optional(),
+  error: z.string().optional(),
+});
+
+export const runTimelineSchema = z.strictObject({
+  runId: uuid,
+  steps: z.array(toolStepSchema),
+});
+
+export type ToolStep = z.infer<typeof toolStepSchema>;
+export type RunTimeline = z.infer<typeof runTimelineSchema>;
 
 export const continuationSchema = z.strictObject({
   text: z.string().trim().min(1).max(4000),

@@ -1,7 +1,7 @@
 import type { Memory } from '@jian/contracts';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
-import { memories } from '../storage/schema.js';
+import { memories, memoryLinks } from '../storage/schema.js';
 
 type Row = typeof memories.$inferSelect;
 
@@ -125,4 +125,86 @@ export async function writeMemory(
 
 export async function deleteMemory(db: Queryable, profileId: string, key: string): Promise<void> {
   await db.delete(memories).where(and(eq(memories.profileId, profileId), eq(memories.key, key)));
+}
+
+/** A link is stored once, the smaller key first: a to b and b to a are the same row. */
+const pair = (a: string, b: string) => (a < b ? { aKey: a, bKey: b } : { aKey: b, bKey: a });
+
+/** Each memory's linked keys, for the given keys, or for every memory of the profile. */
+export async function linksOf(
+  db: Queryable,
+  profileId: string,
+  keys?: string[],
+): Promise<Map<string, string[]>> {
+  const links = new Map<string, string[]>();
+
+  if (keys && keys.length === 0) return links;
+
+  const rows = await db
+    .select({ aKey: memoryLinks.aKey, bKey: memoryLinks.bKey })
+    .from(memoryLinks)
+    .where(
+      and(
+        eq(memoryLinks.profileId, profileId),
+        keys ? or(inArray(memoryLinks.aKey, keys), inArray(memoryLinks.bKey, keys)) : undefined,
+      ),
+    );
+
+  for (const { aKey, bKey } of rows) {
+    links.set(aKey, [...(links.get(aKey) ?? []), bKey]);
+    links.set(bKey, [...(links.get(bKey) ?? []), aKey]);
+  }
+
+  return links;
+}
+
+/** The memories with the keys they are linked to. */
+export async function withLinks(
+  db: Queryable,
+  profileId: string,
+  list: Memory[],
+): Promise<Memory[]> {
+  const links = await linksOf(
+    db,
+    profileId,
+    list.map((memory) => memory.key),
+  );
+
+  return list.map((memory) => ({ ...memory, links: (links.get(memory.key) ?? []).sort() }));
+}
+
+export async function findMemories(
+  db: Queryable,
+  profileId: string,
+  keys: string[],
+): Promise<Memory[]> {
+  if (keys.length === 0) return [];
+
+  const rows = await db
+    .select()
+    .from(memories)
+    .where(and(eq(memories.profileId, profileId), inArray(memories.key, keys)));
+
+  return rows.map(toMemory);
+}
+
+export async function addLink(db: Queryable, profileId: string, a: string, b: string) {
+  await db
+    .insert(memoryLinks)
+    .values({ profileId, ...pair(a, b) })
+    .onConflictDoNothing();
+}
+
+export async function removeLink(db: Queryable, profileId: string, a: string, b: string) {
+  const { aKey, bKey } = pair(a, b);
+
+  await db
+    .delete(memoryLinks)
+    .where(
+      and(
+        eq(memoryLinks.profileId, profileId),
+        eq(memoryLinks.aKey, aKey),
+        eq(memoryLinks.bKey, bKey),
+      ),
+    );
 }

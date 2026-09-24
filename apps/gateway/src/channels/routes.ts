@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { GatewayError } from '../core/errors.js';
-import type { ChannelParams, ContactParams, ProfileParams } from '../http/params.js';
+import type { ChannelParams, ContactParams, ProfileParams, SessionParams } from '../http/params.js';
 import type { Channels } from './service.js';
 import type { WhatsAppConnections } from './whatsapp/connections.js';
 
@@ -47,6 +47,11 @@ export function registerChannelRoutes(app: FastifyInstance, deps: ChannelRouteSe
 
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/deliveries', async (request) =>
     channels().deliveries(request.params.profileId),
+  );
+
+  app.get<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/people',
+    async (request) => channels().sessionPeople(request.params.profileId, request.params.sessionId),
   );
 
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/contacts', async (request) =>

@@ -104,7 +104,7 @@ export class Peers implements PeerAgents {
     const session = await this.services.sessions.peerSession(
       callee.id,
       run.profileId,
-      `Agente · ${run.profile.name}`,
+      `Agent · ${run.profile.name}`,
     );
 
     // The same thread from this side. Without it the agent that asked has no record of what it
@@ -112,7 +112,7 @@ export class Peers implements PeerAgents {
     const mine = await this.services.sessions.peerSession(
       run.profileId,
       callee.id,
-      `Agente · ${callee.name}`,
+      `Agent · ${callee.name}`,
     );
 
     await this.services.sessions.record(run.profileId, mine.id, run.id, 'assistant', data.text);
@@ -269,7 +269,7 @@ export class Peers implements PeerAgents {
     const thread = await this.services.sessions.peerSession(
       run.call.fromProfileId,
       profileId,
-      `Agente · ${caller.name}`,
+      `Agent · ${caller.name}`,
     );
 
     await this.services.sessions

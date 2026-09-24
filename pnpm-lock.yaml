@@ -59,6 +59,9 @@ importers:
       baileys:
         specifier: 7.0.0-rc14
         version: 7.0.0-rc14(sharp@0.35.4(@types/node@26.6.2))(supports-color@10.2.2)
+      cron-parser:
+        specifier: 5.10.1
+        version: 5.10.1
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)

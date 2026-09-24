@@ -286,6 +286,59 @@ it('streams committed events over HTTP and resumes after a cursor', async () => 
   }
 });
 
+it('streams an agent at work as it goes, without moving the cursor a client resumes from', async () => {
+  const { app, services } = await setup();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Oi',
+    requestKey: 'live',
+  });
+  const url = await app.listen({ host: '127.0.0.1', port: 0 });
+  const controller = new AbortController();
+
+  await services.lifecycle.claim(run.id, profile.id, 'worker');
+
+  try {
+    const response = await fetch(`${url}/v1/profiles/${profile.id}/events/stream`, {
+      headers,
+      signal: controller.signal,
+    });
+
+    assert.ok(response.body, 'SSE response must have a body');
+    const reader = response.body.getReader();
+    let data = '';
+    const read = async (until: (text: string) => boolean) => {
+      while (!until(data)) {
+        const chunk = await reader.read();
+
+        if (chunk.done) break;
+        data += new TextDecoder().decode(chunk.value);
+      }
+    };
+
+    await read((text) => text.includes('event: run.progress'));
+    const first = data.split('event: run.progress').length;
+
+    await services.lifecycle.progress(run.id, 'worker', {
+      phase: 'writing',
+      text: 'Oi',
+      steps: 1,
+      updatedAt: new Date(Date.now() + 1000).toISOString(),
+    });
+    await read((text) => text.split('event: run.progress').length > first);
+
+    const progress = data.slice(data.lastIndexOf('event: run.progress'));
+
+    expect(progress).toContain(`"sessionId":"${session.id}"`);
+    // Only durable events carry an id; a live update between them has none.
+    expect(progress.split('\n\n')[0]).not.toContain('id: ');
+    await reader.cancel();
+  } finally {
+    controller.abort();
+  }
+});
+
 describe('panel session', () => {
   const panel = { 'x-jian-panel': '1' };
 

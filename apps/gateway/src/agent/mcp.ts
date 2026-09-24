@@ -168,7 +168,13 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
       // Everything the server offers. A long catalog costs nothing per turn: only the tools the
       // agent has loaded are sent with a request, so a server with a hundred of them is no
       // heavier than one with three until they are used.
+      const disabled = new Set(config.disabledTools ?? []);
+
       for (const [name, remote] of Object.entries(await client.tools())) {
+        // Switched off by the owner: not callable, and not even findable, so the agent never
+        // plans around a tool it would be refused.
+        if (disabled.has(name)) continue;
+
         const exposed = exposedName(config.name, name);
 
         tools[exposed] = remote;

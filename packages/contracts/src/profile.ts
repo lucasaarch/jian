@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_MESSAGE_MEDIA } from './media.js';
 import {
   modelSelectionSchema,
   providerCredentialSchema,
@@ -109,6 +110,8 @@ export const mcpSchema = z
     command: z.string().trim().min(1).max(400).optional(),
     args: z.array(z.string().max(400)).max(30).default([]),
     env: z.array(mcpValueSchema).max(20).default([]),
+    /** The server's own names of tools the owner switched off: the agent is never offered them. */
+    disabledTools: z.array(z.string().min(1).max(200)).max(200).default([]),
   })
   .superRefine((value, ctx) => {
     if (value.transport === 'http' && !value.url) {
@@ -244,6 +247,12 @@ export const profilePatchSchema = profileSchema.partial().extend({
   allowWebSearch: z.boolean().optional(),
 });
 
+/**
+ * The channel of the one conversation the owner holds with a profile through the panel. The
+ * gateway opens it on its own, exactly one per profile, so no caller may create another.
+ */
+export const GATEWAY_SESSION_CHANNEL = 'gateway';
+
 export const sessionSchema = z.strictObject({
   // Absent on purpose: the agent names the conversation from its first message, and the owner
   // renames it whenever they like. Asking for a name before there is anything to name is not
@@ -252,6 +261,9 @@ export const sessionSchema = z.strictObject({
   channel: z
     .string()
     .regex(/^[a-z0-9_-]{1,40}$/)
+    .refine((channel) => channel !== GATEWAY_SESSION_CHANNEL, {
+      message: 'The gateway conversation is opened by the gateway itself',
+    })
     .default('api'),
 });
 
@@ -259,12 +271,18 @@ export const sessionRenameSchema = z.strictObject({
   title: z.string().trim().min(1).max(160),
 });
 
-export const submitSchema = z.strictObject({
-  mediaIds: z.array(z.uuid()).max(4).optional(),
-  text: z.string().trim().min(1).max(8_000),
-  requestKey: z.string().min(1).max(120),
-  model: modelSelectionSchema.optional(),
-});
+export const submitSchema = z
+  .strictObject({
+    mediaIds: z.array(z.uuid()).max(MAX_MESSAGE_MEDIA).optional(),
+    // May be empty when attachments are the message, as a voice note is.
+    text: z.string().trim().max(8_000),
+    requestKey: z.string().min(1).max(120),
+    model: modelSelectionSchema.optional(),
+  })
+  .refine((input) => input.text.length > 0 || Boolean(input.mediaIds?.length), {
+    message: 'A message needs text or an attachment',
+    path: ['text'],
+  });
 
 export const memoryKeySchema = z.string().regex(/^[a-z0-9_-]{1,100}$/);
 
@@ -272,6 +290,15 @@ export const memorySchema = z.strictObject({
   key: memoryKeySchema,
   content: z.string().trim().min(1).max(4_000),
   expectedVersion: z.number().int().nonnegative(),
+});
+
+/** How many memories one can be linked to: enough for a topic, few enough to stay a topic. */
+export const MEMORY_LINK_LIMIT = 12;
+
+/** The owner rewriting a memory from the panel, against the version they read. */
+export const memoryEditSchema = z.strictObject({
+  content: z.string().trim().min(1).max(4_000),
+  expectedVersion: z.number().int().positive(),
 });
 
 export type McpStatus = z.infer<typeof mcpStatusSchema>;

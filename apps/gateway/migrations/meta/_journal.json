@@ -169,6 +169,41 @@
       "when": 1790129600000,
       "tag": "0023_contact-avatars",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790216000000,
+      "tag": "0024_gateway-session",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790302400000,
+      "tag": "0025_message-authors",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790388800000,
+      "tag": "0026_media-names",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790475200000,
+      "tag": "0027_memory-links",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790561600000,
+      "tag": "0028_schedules",
+      "breakpoints": true
     }
   ]
 }

@@ -20,9 +20,11 @@ import type { ProviderModels } from './providers/discovery.js';
 import { registerProviderRoutes } from './providers/routes.js';
 import { registerReleaseRoutes } from './releases/routes.js';
 import { registerRunRoutes } from './runs/routes.js';
+import { registerScheduleRoutes } from './schedules/routes.js';
 import { registerSecurityRoutes } from './security/routes.js';
 import type { Services } from './services.js';
 import { registerSessionRoutes } from './sessions/routes.js';
+import { registerSettingsRoutes } from './settings/routes.js';
 import { registerSkillRoutes } from './skills/routes.js';
 import type { Skills } from './skills/service.js';
 import type { Store } from './storage/database.js';
@@ -40,6 +42,11 @@ export function createApp(
     whatsapp?: WhatsAppConnections;
     maxStreams?: number;
     uiRoot?: string;
+    /**
+     * The guarded client every outbound call of the gateway goes through, with the private
+     * origins the operator allowed. Absent, a request made from a route allows none.
+     */
+    fetcher?: typeof globalThis.fetch;
     onCancel?: (runId: string) => void;
   },
 ) {
@@ -69,7 +76,10 @@ export function createApp(
   });
 
   void app.register(helmet, {
-    contentSecurityPolicy: { directives: { mediaSrc: ["'self'", 'data:'] } },
+    // A PDF attachment opens in the browser's reader from a local blob address.
+    contentSecurityPolicy: {
+      directives: { mediaSrc: ["'self'", 'data:'], frameSrc: ["'self'", 'blob:'] },
+    },
   });
   void app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
 
@@ -93,6 +103,8 @@ export function createApp(
   registerProfileRoutes(app, options);
   registerSessionRoutes(app, { ...options, coordination });
   registerMemoryRoutes(app, options);
+  registerScheduleRoutes(app, options);
+  registerSettingsRoutes(app, options);
   registerMediaRoutes(app, options);
   registerRunRoutes(app, options);
   registerCoordinationRoutes(app, { coordination });

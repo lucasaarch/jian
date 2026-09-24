@@ -27,6 +27,14 @@ import { type ContactRecord, Contacts, type Intake } from './contacts.js';
 import { conversational } from './conversation.js';
 import { type GroupDecision, Groups } from './groups.js';
 import { channelLog } from './logging.js';
+import {
+  findPerson,
+  type PersonRecord,
+  rememberPerson,
+  sessionPeople,
+  setPersonAvatar,
+  toPerson,
+} from './people.js';
 import { plainText } from './plain.js';
 import { ChannelRegistry } from './registry.js';
 import {
@@ -71,6 +79,12 @@ const MESSAGE_LIMIT = 4000;
 /** The longest a part waits behind the composing bubble before it is sent. */
 const BETWEEN_MESSAGES_MS = 1200;
 const UNCERTAIN_DELIVERY_AFTER_MS = 10 * 60_000;
+
+/** Who wrote a message in a room, as the panel shows it beside the message. */
+const authorOf = (data: IncomingMessage) => ({
+  id: data.actorId,
+  ...(data.displayName ? { name: data.displayName } : {}),
+});
 
 /** Sent once to a sender the owner has not decided on yet. It must never depend on a run. */
 const APPROVAL_NOTICE =
@@ -346,7 +360,7 @@ export class Channels {
     }
   }
 
-  private avatarStale(contact: ContactRecord) {
+  private avatarStale(contact: { avatarCheckedAt?: string }) {
     return (
       !contact.avatarCheckedAt ||
       Date.parse(contact.avatarCheckedAt) < Date.now() - Channels.AVATAR_TTL_MS
@@ -410,6 +424,71 @@ export class Channels {
 
     if (contact) {
       await this.refreshAvatar(channel, contact);
+    }
+
+    if (data.scope === 'group') {
+      const person = await findPerson(this.services.store.db, channel.id, data.actorId);
+
+      if (person) {
+        await this.refreshPersonAvatar(channel, data.chatId, person);
+      }
+    }
+  }
+
+  /**
+   * Everyone who wrote in a group conversation, with their pictures. A member not asked for a
+   * picture lately is asked in the background, so the next read has it.
+   */
+  async sessionPeople(profileId: string, sessionId: string) {
+    await this.services.sessions.session(profileId, sessionId);
+
+    const list = await sessionPeople(this.services.store.db, profileId, sessionId);
+    const contact = await findContactBySession(this.services.store.db, profileId, sessionId);
+    const channel = contact && (await findChannel(this.services.store.db, contact.channelId));
+
+    if (contact && channel) {
+      void (async () => {
+        for (const person of list.filter((item) => this.avatarStale(item)).slice(0, 12)) {
+          await this.refreshPersonAvatar(channel, contact.chatId, person);
+        }
+      })().catch(() => {});
+    }
+
+    return list.map(toPerson);
+  }
+
+  /** As `refreshAvatar`, for a member of a group: their own picture, not the group's. */
+  private async refreshPersonAvatar(channel: ChannelRecord, chatId: string, person: PersonRecord) {
+    const adapter = this.registry.get(channel.type);
+    const key = `${channel.id}:${person.actorId}`;
+
+    if (!adapter.avatar || !this.avatarStale(person) || this.fetchingAvatars.has(key)) {
+      return;
+    }
+
+    this.fetchingAvatars.add(key);
+
+    try {
+      const credential = await this.services.vault.read(
+        channel.profileId,
+        channelSecret(channel.id),
+      );
+      const picture = await adapter
+        .avatar(
+          { chatId, actorId: person.actorId, scope: 'direct' },
+          {
+            channelId: channel.id,
+            ...(credential ? { credential } : {}),
+            fetch: this.fetcher,
+            signal: this.abort.signal,
+          },
+        )
+        .catch(() => undefined);
+      const avatar = picture ? `data:${picture.mimeType};base64,${picture.data}` : undefined;
+
+      await setPersonAvatar(this.services.store.db, channel.id, person.actorId, avatar, new Date());
+    } finally {
+      this.fetchingAvatars.delete(key);
     }
   }
 
@@ -544,6 +623,12 @@ export class Channels {
           await this.notify(tx, channel, data.chatId, connectionGeneration);
         let decision: GroupDecision | undefined;
         if (outcome.status === 'approved' && data.scope === 'group') {
+          await rememberPerson(tx, {
+            profileId: channel.profileId,
+            channelId: channel.id,
+            actorId: data.actorId,
+            ...(data.displayName ? { displayName: data.displayName } : {}),
+          });
           const profile = await this.services.profiles.profile(channel.profileId, tx);
           decision = await this.rooms.observe(
             tx,
@@ -567,10 +652,15 @@ export class Channels {
                 content: `${data.displayName ?? data.actorId}: ${data.text}${
                   data.media?.length ? '\n[Attachment not opened: it was not sent to you.]' : ''
                 }`,
+                author: authorOf(data),
                 createdAt: new Date().toISOString(),
               },
               true,
             );
+            // An open conversation shows it now, as it would a turn the agent answered.
+            await recordEvent(tx, Date.now, channel.profileId, 'session.message', {
+              sessionId: outcome.contact.sessionId,
+            });
           }
         }
         // Intake and attachment persistence share the approval lock: approval cannot miss pixels.
@@ -646,6 +736,7 @@ export class Channels {
       connectionGeneration,
       intake.decision?.turn,
       mediaIds,
+      data.scope === 'group' ? authorOf(data) : undefined,
     );
 
     return { accepted: true, runId: run.id, contact: 'approved' as const };
@@ -732,6 +823,7 @@ export class Channels {
     connectionGeneration?: number,
     group?: GroupTurn,
     mediaIds: string[] = [],
+    author?: { id: string; name?: string },
   ) {
     const sessionId = assertFound(contact.sessionId ?? null, 'Session');
 
@@ -745,7 +837,7 @@ export class Channels {
           .update(JSON.stringify([channel.id, contact.chatId, contact.actorId, requestKey]))
           .digest('hex'),
       },
-      { activity: 'channel', ...(group ? { group } : {}) },
+      { activity: 'channel', ...(group ? { group } : {}), ...(author ? { author } : {}) },
     );
 
     if (this.registry.get(channel.type).send) {

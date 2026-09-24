@@ -890,3 +890,100 @@ describe('contact pictures', () => {
     expect(asked.filter((item) => item === 'download')).toHaveLength(1);
   });
 });
+
+describe('who wrote in a group', () => {
+  it('keeps each author on their messages and shows each member with their own picture', async () => {
+    const services = await testServices();
+    const jpeg = Buffer.from('synthetic-member-jpeg');
+    // Ada has a picture; Bia has none. The group itself has none either.
+    const telegram: typeof fetch = async (url, options) => {
+      const path = String(url);
+      const method = path.split('/').pop() ?? '';
+      const body = JSON.parse(String(options?.body ?? '{}'));
+
+      if (method === 'getMe')
+        return Response.json({ ok: true, result: { id: 700, username: 'ZeroTwoBot' } });
+      if (method === 'getUserProfilePhotos')
+        return Response.json({
+          ok: true,
+          result:
+            body.user_id === 42
+              ? { total_count: 1, photos: [[{ file_id: 'ada', width: 160, height: 160 }]] }
+              : { total_count: 0, photos: [] },
+        });
+      if (method === 'getChat') return Response.json({ ok: true, result: { id: -500 } });
+      if (method === 'getFile')
+        return Response.json({ ok: true, result: { file_id: 'ada', file_path: 'p/ada.jpg' } });
+      if (path.includes('/file/')) return new Response(jpeg);
+
+      return Response.json({ ok: true, result: { message_id: 1 } });
+    };
+    const channels = new Channels(
+      services,
+      telegram,
+      new ChannelRegistry([new ApiChannel(), new TelegramChannel()]),
+    );
+    const input = {
+      instructions: 'Help',
+      model: { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    };
+    const profile = await services.profiles.createProfile({ ...input, name: 'P' });
+    const other = await services.profiles.createProfile({ ...input, name: 'Other' });
+    const channel = await channels.connect(profile.id, {
+      type: 'telegram',
+      botToken: '123:synthetic-test-token',
+    });
+    const write = (id: number, from: { id: number; first_name: string }, text: string) =>
+      channels.receive(channel.id, {
+        type: 'telegram',
+        headers: { 'x-telegram-bot-api-secret-token': channel.webhookToken },
+        payload: {
+          update_id: id,
+          message: {
+            from,
+            chat: { id: -500, type: 'supergroup', title: 'Equipe' },
+            text,
+            ...(text.startsWith('@')
+              ? { entities: [{ type: 'mention', offset: 0, length: 11 }] }
+              : {}),
+          },
+        },
+      });
+
+    await write(1, { id: 42, first_name: 'Ada' }, 'oi');
+    const [room] = await channels.contacts(profile.id);
+
+    if (!room) throw new Error('Group request missing');
+    const approved = await channels.approveContact(profile.id, room.id);
+    const sessionId = approved.sessionId ?? '';
+
+    // One heard without being called, one addressed to the agent: both carry their author.
+    await write(2, { id: 43, first_name: 'Bia' }, 'bom dia');
+    await write(3, { id: 42, first_name: 'Ada' }, '@ZeroTwoBot resume?');
+
+    const authored = (await services.sessions.messages(profile.id, sessionId)).filter(
+      (message) => message.author,
+    );
+
+    expect(authored.map((message) => message.author)).toEqual([
+      { id: '43', name: 'Bia' },
+      { id: '42', name: 'Ada' },
+    ]);
+
+    await vi.waitFor(async () => {
+      const people = await channels.sessionPeople(profile.id, sessionId);
+
+      expect(people).toEqual(
+        expect.arrayContaining([
+          { id: '42', name: 'Ada', avatar: `data:image/jpeg;base64,${jpeg.toString('base64')}` },
+          { id: '43', name: 'Bia' },
+        ]),
+      );
+    });
+
+    // The room is this profile's: another one cannot list who is in it.
+    await expect(channels.sessionPeople(other.id, sessionId)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+  });
+});
