@@ -94,6 +94,40 @@ function wav(pcm: Buffer, rate: number): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
+/**
+ * What a provider said when it refused: the `message` of its JSON error, one line. Only that
+ * field, never the raw body, which can echo the media sent; and with the request's own key and
+ * anything shaped like a credential masked, since an error can quote either.
+ */
+async function refusal(response: Response, headers: RequestInit['headers']) {
+  try {
+    const body = JSON.parse((await readMediaBody(response, 8_000)).toString('utf8')) as {
+      error?: { message?: unknown } | string;
+      message?: unknown;
+    };
+    const raw =
+      typeof body.error === 'string'
+        ? body.error
+        : typeof body.error?.message === 'string'
+          ? body.error.message
+          : typeof body.message === 'string'
+            ? body.message
+            : '';
+    const sent = new Headers(headers);
+    const key =
+      sent.get('authorization')?.replace(/^Bearer\s+/i, '') ?? sent.get('x-goog-api-key') ?? '';
+
+    return (key ? raw.replaceAll(key, '[REDACTED]') : raw)
+      .replace(/\b(sk-|gsk_|AIza)[A-Za-z0-9_-]{8,}/g, '[REDACTED]')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 240);
+  } catch {
+    await response.body?.cancel().catch(() => {});
+    return '';
+  }
+}
+
 /** Pauses before asking a busy provider again. */
 const RETRY_PAUSES_MS = [1_000, 3_000];
 
@@ -117,15 +151,16 @@ export class MediaProviders {
       response = await this.fetcher(url, options);
     }
     if (!response.ok) {
-      await response.body?.cancel();
-      // Provider error bodies can echo credentials or private media.
+      const said = await refusal(response, options.headers);
       const hint =
         response.status === 429
           ? ': rate limit or quota exhausted; check provider billing and limits'
           : response.status === 404
             ? ': model unavailable; choose another model in Model defaults'
             : '';
-      throw new Error(`Media provider answered HTTP ${response.status}${hint}`);
+      throw new Error(
+        `Media provider answered HTTP ${response.status}${hint}${said ? ` — ${said}` : ''}`,
+      );
     }
     return response;
   }

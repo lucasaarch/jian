@@ -371,6 +371,9 @@ export class AgentRuntime {
                     })
                     .catch(() => {});
 
+                  console.error(
+                    `jian: run ${runId} tool ${name} did not come back — ${reason(error, secrets)}`,
+                  );
                   externalUncertain = true;
                   controller.abort();
 
@@ -380,6 +383,9 @@ export class AgentRuntime {
                 // The agent has to be able to say what went wrong: a bare "it failed" leaves it
                 // guessing, and the person then has to read the gateway log to learn anything.
                 const failure = toolFailure(error, secrets);
+
+                // And the operator sees every failure, not only the ones that end a turn.
+                console.error(`jian: run ${runId} tool ${name} failed — ${failure}`);
 
                 await this.services.lifecycle
                   .checkpoint(profileId, runId, owner, {

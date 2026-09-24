@@ -3,6 +3,7 @@ import { aboutJian } from './about-jian.js';
 import { channelReplies } from './channel-replies.js';
 import { codingWork } from './coding-work.js';
 import { conversations } from './conversations.js';
+import { handlingErrors } from './handling-errors.js';
 import { longRunningWork } from './long-running-work.js';
 import { machineTools } from './machine-tools.js';
 import { managingContext } from './managing-context.js';
@@ -35,6 +36,7 @@ const ALWAYS: readonly Skill[] = [
   workingWithAgents,
   longRunningWork,
   managingContext,
+  handlingErrors,
   // Starts switched off on a new profile (OPT_IN_SKILLS); the owner turns it on in Skills.
   discernmentNudge,
 ];

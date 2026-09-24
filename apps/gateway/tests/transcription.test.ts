@@ -112,3 +112,35 @@ it('adds Groq with a key, a server with an address, and routes both through the 
   expect(supportsModelRole(groq, model('llama-3.3-70b-versatile'), 'audio')).toBe(false);
   expect(supportsModelRole(whisper, model('Systran/faster-whisper-small'), 'audio')).toBe(true);
 });
+
+it('says what the provider refused, with its key masked', async () => {
+  const client = new MediaProviders(
+    async () =>
+      Response.json(
+        {
+          error: {
+            message: 'file must be one of flac mp3 ogg; key gsk_synthetic_12345678 was used',
+            type: 'invalid_request_error',
+          },
+        },
+        { status: 400 },
+      ),
+    [],
+  );
+
+  await expect(
+    client.analyze(
+      {
+        provider: 'openai-compatible',
+        modelId: 'whisper-large-v3',
+        baseURL: 'https://api.groq.com/openai/v1',
+      },
+      'gsk_synthetic_12345678',
+      audio,
+      'Transcribe.',
+      signal,
+    ),
+  ).rejects.toThrow(
+    'Media provider answered HTTP 400 — file must be one of flac mp3 ogg; key [REDACTED] was used',
+  );
+});
