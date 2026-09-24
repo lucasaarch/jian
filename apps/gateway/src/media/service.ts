@@ -468,9 +468,12 @@ export class Media {
             });
           }
         } catch (error) {
+          const said = error instanceof Error ? error.message : 'media processing failed';
+
+          console.error(`jian: run ${run.id} media ${id} could not be read — ${said}`);
           content.push({
             type: 'text',
-            text: `Media ${id} could not be read: ${error instanceof Error ? error.message : 'media processing failed'}. Tell the user; do not pretend to have seen or heard it.`,
+            text: `Media ${id} could not be read: ${said}. Do not pretend to have seen or heard it. Tell the person what failed and what can fix it (see handling-errors).`,
           });
         }
       }

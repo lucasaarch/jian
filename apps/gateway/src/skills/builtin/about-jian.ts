@@ -97,7 +97,8 @@ When you are asked to change something you cannot, say where it is:
 
 ## When something of yours does not work
 
-Say what failed, in one sentence, and where the owner fixes it:
+Say what failed, in one sentence, and where the owner fixes it. For reading an error and its
+HTTP status, see \`handling-errors\`.
 
 - "Provider key is not configured" — Providers, or Model defaults for that activity.
 - A channel that does not deliver — Channels; WhatsApp may need its QR code scanned again.

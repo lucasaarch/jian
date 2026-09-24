@@ -160,6 +160,25 @@ async function asUndiciRequest(
   init: RequestInit | undefined,
 ): Promise<{ url: string; init: Record<string, unknown> }> {
   if (!(input instanceof Request)) {
+    // Node's FormData is not the bundled undici's: handed over as is, it is sent as the text
+    // "[object FormData]" with no multipart type, and an upload arrives empty. Encoded here by
+    // Node's own Response, it goes as bytes with its boundary in the content type.
+    if (init?.body instanceof FormData) {
+      const encoded = new Response(init.body);
+      const headers = new Headers(init.headers);
+
+      headers.set('content-type', encoded.headers.get('content-type') ?? 'multipart/form-data');
+
+      return {
+        url: String(input),
+        init: {
+          ...(init as Record<string, unknown>),
+          headers: Object.fromEntries(headers.entries()),
+          body: Buffer.from(await encoded.arrayBuffer()),
+        },
+      };
+    }
+
     return { url: String(input), init: (init ?? {}) as Record<string, unknown> };
   }
 

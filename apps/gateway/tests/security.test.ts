@@ -135,6 +135,45 @@ describe('outbound policy', () => {
     expect(() => validateEndpoint('http://0177.0.0.1/', ['http://127.0.0.1'])).toThrow();
   });
 
+  it('sends a file upload as multipart, as a transcription server requires', async () => {
+    const server = createServer((request, response) => {
+      let body = '';
+
+      request.on('data', (chunk) => {
+        body += chunk;
+      });
+      request.on('end', () => {
+        response.end(
+          JSON.stringify({
+            type: request.headers['content-type'],
+            file: body.includes('filename="voice.ogg"') && body.includes('ogg-bytes'),
+          }),
+        );
+      });
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const client = createSafeFetch({ allowPrivateOrigins: [origin] });
+    const form = new FormData();
+
+    form.set('model', 'whisper-large-v3');
+    form.set('file', new Blob(['ogg-bytes'], { type: 'audio/ogg' }), 'voice.ogg');
+    clients.push(client);
+
+    try {
+      const answer = await (
+        await client.fetch(`${origin}/v1/audio/transcriptions`, { method: 'POST', body: form })
+      ).json();
+
+      expect(answer.type).toMatch(/^multipart\/form-data; boundary=/);
+      expect(answer.file).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('rejects any private DNS answer, including a mixed answer set', async () => {
     const client = createSafeFetch({ lookup: async () => ['8.8.8.8', '127.0.0.1'] });
 
