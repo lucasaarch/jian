@@ -260,6 +260,18 @@ script(zero, ids.launchGroup, [
     [tool('read_file', 0.2), tool('web_search', 2.2)],
   ),
   user(60 * 4 - 3, '', ['memberVoice'], launch.hidden),
+  user(
+    60 * 4 - 5,
+    '[Reacted 😂 to your message: "Printing is budgeted at 320. Poster v2 at A2 for 40 copies comes to about 290, so it fits with a little room."]',
+    undefined,
+    launch.maya,
+  ),
+  user(
+    60 * 4 - 6,
+    '[Replying to your message: "Printing is budgeted at 320. Poster v2 at A2 for 40 copies comes to about 290, so it fits with a little room."]\nAnd at A1?',
+    undefined,
+    launch.omar,
+  ),
 ]);
 
 /* Telegram, one person, with the agent working right now. */
@@ -302,20 +314,68 @@ script(zero, ids.peerChat, [
   ),
 ]);
 
-/* API Server: a scripted report with many tools, and a request that failed. */
+/*
+ * Then Zero Two carried a question to Miku: here Zero Two only asks, and Miku is the one who
+ * works, with tools kept in Miku's own profile and session.
+ */
+const mikuThread = '3d4e5f6a-7b8c-4d9e-8f0a-2b3c4d5e6f7a';
+const mikuRun = uuid('66b4c0ba', 900);
+const call = { profileId: ids.miku, sessionId: mikuThread, runId: mikuRun };
+
+messages.push(
+  {
+    id: uuid('a1000000', 900),
+    profileId: zero,
+    sessionId: ids.peerChat,
+    runId: uuid('66b4c0ba', 901),
+    role: 'assistant',
+    content:
+      'Hi Miku, Zero Two here. Lucas asks for a memory clean-up now that memories can be deleted: drop duplicates and stale status, and link what belongs together. No need to report back.',
+    call,
+    createdAt: at(12),
+  },
+  {
+    id: uuid('a1000000', 901),
+    profileId: zero,
+    sessionId: ids.peerChat,
+    runId: uuid('66b4c0ba', 901),
+    role: 'user',
+    content: 'Done, Zero Two. **9 duplicates** removed and 4 memories linked.',
+    call,
+    createdAt: at(10),
+  },
+);
+timelines[mikuThread] = [
+  {
+    runId: mikuRun,
+    steps: ['read_memories', 'forget_memory', 'forget_memory', 'link_memories'].map(
+      (toolName, index) => ({
+        toolCallId: `${mikuRun}-${index}`,
+        toolName,
+        status: 'done' as const,
+        startedAt: at(12 - index * 0.3),
+        finishedAt: at(12 - index * 0.3 - 0.2),
+      }),
+    ),
+  },
+];
+
+/* API Server: a scripted report in Markdown behind many tools, and a request that failed. */
 script(zero, ids.reportChat, [
   user(60 * 26 + 5, 'Nightly report for 2026-09-23.', ['config']),
   agent(
     60 * 26,
-    'No alerts. 3 replicas healthy in eu-west, the canary held at 5% with no errors, and backups finished in 4 minutes.',
     [
-      tool('run_command', 1.8),
-      tool('run_command', 2.4),
-      tool('fetch_url', 1.1),
-      tool('run_command', 0.9),
-      tool('search_history', 0.6),
-      tool('write_file', 0.2),
-      tool('remember', 0.2),
+      '## Nightly report',
+      'No alerts. The canary held at **5%** with no errors, and backups finished in 4 minutes.',
+      '| Region | Replicas | p95 |\n|---|---|---|\n| eu-west | 3 healthy | 182 ms |\n| us-east | 2 healthy | 211 ms |',
+      'Two things to watch:\n- the `orders` queue peaked at 1,204 jobs at 02:10\n- disk on `db-2` is at *81%*, see https://status.example.com/db-2',
+      '```\ndf -h /var/lib/postgresql\n```',
+    ].join('\n\n'),
+    [
+      ...Array.from({ length: 12 }, (_, index) => tool('run_command', 0.6 + (index % 4) * 0.5)),
+      ...Array.from({ length: 8 }, () => tool('fetch_url', 1.1)),
+      ...Array.from({ length: 12 }, (_, index) => tool('read_file', 0.2 + (index % 3) * 0.1)),
       tool('send_session_message', 0.4, 'The session is busy; the message waits in its inbox.'),
     ],
   ),

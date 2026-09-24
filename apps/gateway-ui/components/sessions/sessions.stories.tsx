@@ -56,7 +56,7 @@ export const Working = open(ids.theoChat);
 export const Group = open(ids.designGroup);
 /** Another agent of this installation asking for a review. */
 export const Agent = open(ids.peerChat);
-/** API Server: a scripted report with eight tools, one of them failed. */
+/** API Server: a report in Markdown behind 33 tools, one of them failed. */
 export const ApiReport = open(ids.reportChat);
 /** API Server: a request that failed before the agent could answer. */
 export const Failed = open(ids.planningChat);

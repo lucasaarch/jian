@@ -8,6 +8,7 @@ import { date, LOCALE } from '../../lib/format';
 import { useWorkspace } from '../../lib/workspace';
 import type { SectionProps } from '../props';
 import { Empty, Face, Orb, TelegramLogo, WhatsAppLogo } from '../ui';
+import { plainText } from '../ui/markdown';
 import { Composer } from './composer';
 import { History } from './history';
 import { statusOf } from './progress';
@@ -109,8 +110,24 @@ function Preview({ session, run }: { session: Session; run: Run | undefined }) {
   return (
     <small className="conversation-preview">
       {last.role === 'assistant' && <CheckCheck size={14} aria-label="Sent by the agent" />}
-      <span>{last.text.replace(/^\[Scheduled: ([^\]]+)\].*$/, '⏰ $1') || '📎'}</span>
+      <span>{preview(last.text) || '📎'}</span>
     </small>
+  );
+}
+
+/**
+ * The last message as one line of words: a schedule by its name, a reply without the quote
+ * above it, a reaction as the emoji, and no Markdown marks.
+ */
+function preview(text: string) {
+  const scheduled = /^\[Scheduled: ([^\]]+)\]/.exec(text);
+
+  if (scheduled) return `⏰ ${scheduled[1]}`;
+
+  return plainText(
+    text
+      .replace(/\[Reacted (\S+) to [^\]]*\]$/, 'Reacted $1')
+      .replace(/\[Replying to [^\n]*\]\n/, ''),
   );
 }
 

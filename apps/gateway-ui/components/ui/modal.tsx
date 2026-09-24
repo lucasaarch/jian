@@ -5,7 +5,11 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { Button } from './button';
 import { Field } from './field';
 
-/** A native dialog: Escape and the backdrop are the browser's, so close() is the only exit. */
+/**
+ * A native dialog: Escape and the backdrop are the browser's, so close() is the only exit.
+ * The header stays and the content scrolls under it; a `footer` in the content, even inside a
+ * form, sticks to the bottom, so its actions are always in reach.
+ */
 export function Modal({
   title,
   description,
@@ -48,7 +52,7 @@ export function Modal({
           <X size={20} />
         </button>
       </header>
-      {children}
+      <div className="modal-body">{children}</div>
     </dialog>
   );
 }

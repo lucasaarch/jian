@@ -40,7 +40,7 @@ export function Sidebar({
         </span>
       </Link>
       <ProfileSwitcher onCreate={onCreateProfile} />
-      <nav aria-label="Main navigation">
+      <nav className="sidebar-nav" aria-label="Main navigation">
         {(['workspace', 'capabilities'] as const).map((group) => (
           <div className="nav-group" key={group}>
             <span className="nav-label">{groupLabels[group]}</span>

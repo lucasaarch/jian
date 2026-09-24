@@ -92,9 +92,6 @@
     box-shadow: none;
     outline: none;
   }
-  .select-search:focus-within {
-    @apply border-accent;
-  }
   .select-empty {
     @apply px-4 py-5 text-xs text-muted;
   }

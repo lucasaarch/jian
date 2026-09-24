@@ -30,6 +30,8 @@ export function SkillForm({
             name: String(form.get('name')),
             description: String(form.get('description')),
             instructions: String(form.get('instructions')),
+            // An edit keeps who wrote it: the agent may still refine a skill of its own.
+            ...(skill?.writtenBy ? { writtenBy: skill.writtenBy } : {}),
           });
         }}
       >

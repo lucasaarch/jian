@@ -3,6 +3,7 @@
 import type { OrbState } from 'thinking-orbs';
 import type { Run } from '../../lib/api';
 import { Orb } from '../ui';
+import { Markdown } from '../ui/markdown';
 
 /** What the panel calls each tool, so the owner reads an action instead of a function name. */
 export const toolLabels: Record<string, string> = {
@@ -44,7 +45,9 @@ export const toolLabels: Record<string, string> = {
   list_directory: 'listing a directory',
   web_search: 'searching the web',
   fetch_url: 'reading a page',
-  update_skills: 'rewriting its own skills',
+  create_skill: 'writing a skill',
+  update_skill: 'rewriting a skill',
+  delete_skill: 'removing a skill',
   update_identity: 'adjusting its own identity',
   read_identity: 'rereading its own identity',
   create_profile: 'creating a profile',
@@ -111,20 +114,22 @@ export function RunProgress({
 }) {
   const progress = run.progress;
   const { label, state, tool } = statusOf(run);
+  // Writing is shown by the words themselves: the orb gives way to them, and they are drawn as
+  // the finished answer will be, so nothing reflows when the run ends.
+  const writing = !tool && Boolean(progress?.text);
 
   return (
     <article className="chat-line pending theirs" aria-live="polite">
       {children}
-      {!(tool && toolShown) && (
+      {!writing && !(tool && toolShown) && (
         <span className="run-phase">
           <Orb state={state} />
           {label}
         </span>
       )}
-      {progress?.text && (
-        <div className="chat-text">
-          {progress.text}
-          <span className="caret" aria-hidden="true" />
+      {writing && (
+        <div className="chat-text markdown streaming">
+          <Markdown text={progress?.text ?? ''} breaks />
         </div>
       )}
     </article>

@@ -21,7 +21,7 @@ export function History({
   group = false,
 }: {
   api: Pick<GatewayApi, 'messages' | 'activities'> &
-    Partial<Pick<GatewayApi, 'media' | 'people' | 'timeline'>>;
+    Partial<Pick<GatewayApi, 'media' | 'people' | 'timeline' | 'run'>>;
   profileId: string;
   sessionId: string;
   initialRun?: Run;
@@ -34,6 +34,9 @@ export function History({
   const [messages, setMessages] = useState<Awaited<ReturnType<GatewayApi['messages']>>>([]);
   const [people, setPeople] = useState(new Map<string, Person>());
   const [tools, setTools] = useState(new Map<string, ToolStep[]>());
+  // In an agent conversation this profile started, the other agent's runs and their tools.
+  const [callTools, setCallTools] = useState(new Map<string, ToolStep[]>());
+  const [callRun, setCallRun] = useState<Run>();
   // Bumped by an event about this conversation, so it reads again the moment something happens.
   const [heard, setHeard] = useState(0);
   const { subscribe } = useWorkspace();
@@ -99,7 +102,26 @@ export function History({
           group && api.people ? api.people(profileId, sessionId) : [],
           api.timeline ? api.timeline(profileId, sessionId).catch(() => []) : [],
         ]);
+        // The other agent's tools are read where it worked: its own session, in its profile.
+        const places = [
+          ...new Map(
+            history.flatMap((message) =>
+              message.call
+                ? [[`${message.call.profileId}/${message.call.sessionId}`, message.call]]
+                : [],
+            ),
+          ).values(),
+        ];
+        const worked =
+          api.timeline && places.length
+            ? await Promise.all(
+                places.map(
+                  (call) => api.timeline?.(call.profileId, call.sessionId).catch(() => []) ?? [],
+                ),
+              )
+            : [];
         if (stopped) return;
+        setCallTools(new Map(worked.flat().map((item) => [item.runId, item.steps])));
         setTools(new Map(timeline.map((item) => [item.runId, item.steps])));
         setMessages(history);
         setPeople(new Map(members.map((person) => [person.id, person])));
@@ -126,6 +148,55 @@ export function History({
     };
   }, [api, profileId, sessionId, isRunning, retry, revision, group, heard]);
 
+  // The last question this profile carried to another agent, while its answer has not come back.
+  const lastCall = messages
+    .filter((message) => message.call && message.role === 'assistant')
+    .at(-1)?.call;
+  const pendingCall =
+    lastCall &&
+    !messages.some((message) => message.role === 'user' && message.call?.runId === lastCall.runId)
+      ? lastCall
+      : undefined;
+
+  // The other agent's work reaches this profile's stream only when it ends, so it is followed
+  // here while it runs; its end reads the history again, where the answer lands. Keyed by its
+  // ids, not by the object, which is new on every read of the history.
+  const callKey = pendingCall
+    ? `${pendingCall.profileId} ${pendingCall.sessionId} ${pendingCall.runId}`
+    : '';
+
+  useEffect(() => {
+    const [callProfile, callSession, callRunId] = callKey.split(' ');
+    if (!callProfile || !callSession || !callRunId || !api.run) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const follow = async () => {
+      const [current, steps] = await Promise.all([
+        api.run?.(callProfile, callRunId).catch(() => undefined),
+        api.timeline?.(callProfile, callSession).catch(() => []) ?? [],
+      ]);
+
+      if (stopped) return;
+      setCallRun(current);
+      setCallTools(
+        (known) => new Map([...known, ...steps.map((item) => [item.runId, item.steps] as const)]),
+      );
+
+      if (running(current)) {
+        timer = setTimeout(follow, 1500);
+      } else {
+        setHeard((value) => value + 1);
+      }
+    };
+
+    void follow();
+
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [api, callKey]);
+
   return (
     <div className="session-history">
       <section
@@ -148,17 +219,24 @@ export function History({
           ) : messages.length ? (
             messages.map((message, index) => {
               const previous = messages[index - 1];
-              // The tools of a turn go above the first thing the agent said in it.
+              // Who answers: the agent, or — on a question this profile carried to another
+              // agent — that agent, whose run is kept in its own profile.
+              const answers = (item: typeof message) =>
+                item.call ? item.role === 'user' : item.role === 'assistant';
+              const turn = (item: typeof message) => item.call?.runId ?? item.runId;
+              // The tools of a turn go above the first thing said in answer to it.
               const opensAnswer =
-                message.role === 'assistant' &&
+                answers(message) &&
                 !messages
                   .slice(0, index)
-                  .some((item) => item.role === 'assistant' && item.runId === message.runId);
-              const steps = opensAnswer && message.runId ? tools.get(message.runId) : undefined;
+                  .some((item) => answers(item) && turn(item) === turn(message));
+              const answering = turn(message);
+              const steps =
+                opensAnswer && answering
+                  ? (message.call ? callTools : tools).get(answering)
+                  : undefined;
               const who = (item: typeof message) =>
-                item.role === 'assistant'
-                  ? 'agent'
-                  : (authored(item).id ?? authored(item).name ?? '');
+                answers(item) ? 'agent' : (authored(item).id ?? authored(item).name ?? '');
 
               return (
                 <ChatMessage
@@ -181,6 +259,16 @@ export function History({
             })
           ) : (
             !error && <Empty title="No messages in this session">{empty}</Empty>
+          )}
+          {pendingCall && callRun && running(callRun) && (
+            <RunProgress
+              run={callRun}
+              toolShown={Boolean(
+                callTools.get(callRun.id)?.some((step) => step.status === 'running'),
+              )}
+            >
+              <ToolTimeline steps={callTools.get(callRun.id) ?? []} live />
+            </RunProgress>
           )}
           {run && isRunning && (
             <RunProgress

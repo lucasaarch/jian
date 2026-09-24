@@ -22,6 +22,7 @@
     "@jian/contracts": "workspace:*",
     "@jian/sdk": "workspace:*",
     "lucide-react": "^0.577.0",
+    "motion": "^13.4.1",
     "next": "16.3.5",
     "qrcode.react": "^4.2.0",
     "react": "19.3.0",

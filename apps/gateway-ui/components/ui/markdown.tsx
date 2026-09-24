@@ -1,9 +1,9 @@
 import { Fragment, type ReactNode } from 'react';
 
 /**
- * The little Markdown release notes and skills use — headings, lists, paragraphs, quotes, code
- * blocks, bold, code and links — built as elements rather than injected as HTML, so a note can
- * never carry markup into the panel.
+ * The Markdown release notes, skills and the agent's answers use — headings, lists, paragraphs,
+ * quotes, tables, code blocks, bold, italics, code and links — built as elements rather than
+ * injected as HTML, so no text can carry markup into the panel.
  */
 /** Stable keys from the content itself; a repeated line gets its occurrence appended. */
 function keyed(items: string[]): Array<[string, string]> {
@@ -20,7 +20,8 @@ function keyed(items: string[]): Array<[string, string]> {
 
 function inline(text: string): ReactNode[] {
   const parts: ReactNode[] = [];
-  const pattern = /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+  const pattern =
+    /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(?<![\w*])[*_]([^*_\s](?:[^*_]*[^*_\s])?)[*_](?![\w*])|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g;
   let last = 0;
 
   for (const match of text.matchAll(pattern)) {
@@ -28,14 +29,18 @@ function inline(text: string): ReactNode[] {
 
     if (at > last) parts.push(text.slice(last, at));
 
-    if (match[1]) parts.push(<strong key={at}>{match[1]}</strong>);
+    if (match[1]) parts.push(<strong key={at}>{inline(match[1])}</strong>);
     else if (match[2]) parts.push(<code key={at}>{match[2]}</code>);
-    else
+    else if (match[5]) parts.push(<em key={at}>{match[5]}</em>);
+    else {
+      const href = match[4] ?? match[6] ?? '';
+
       parts.push(
-        <a key={at} href={match[4]} target="_blank" rel="noreferrer">
-          {match[3]}
+        <a key={at} className="text-link" href={href} target="_blank" rel="noreferrer">
+          {match[3] ?? href}
         </a>,
       );
+    }
 
     last = at + match[0].length;
   }
@@ -43,6 +48,22 @@ function inline(text: string): ReactNode[] {
   if (last < text.length) parts.push(text.slice(last));
 
   return parts;
+}
+
+const cells = (line: string) =>
+  line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+
+/** A header row, a `|---|` rule, then rows: the table every model writes. */
+function table(lines: string[]) {
+  if (lines.length < 2 || !lines.every((line) => line.trim().startsWith('|'))) return undefined;
+  if (!/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[1] ?? '')) return undefined;
+
+  return { head: cells(lines[0] ?? ''), rows: lines.slice(2).map(cells) };
 }
 
 /** The text between code fences, and what is left around them, in order. */
@@ -76,8 +97,51 @@ function list(lines: string[], marker: RegExp) {
   }, []);
 }
 
-function Blocks({ text }: { text: string }) {
-  const blocks = text
+type Kind = 'heading' | 'bullet' | 'numbered' | 'table' | 'quote' | 'text';
+
+const kindOf = (line: string): Kind =>
+  /^#{1,6}\s/.test(line)
+    ? 'heading'
+    : bullet.test(line)
+      ? 'bullet'
+      : numbered.test(line)
+        ? 'numbered'
+        : line.trim().startsWith('|')
+          ? 'table'
+          : line.startsWith('>')
+            ? 'quote'
+            : 'text';
+
+/**
+ * Models often start a list, a table or a heading on the line right under a sentence. A blank
+ * line is put wherever the kind of line changes, so each becomes its own block; an indented
+ * line stays with the item above it.
+ */
+function separated(text: string) {
+  let previous: Kind | undefined;
+
+  return text
+    .split('\n')
+    .map((line) => {
+      if (!line.trim()) {
+        previous = undefined;
+        return line;
+      }
+
+      if (/^\s{2,}\S/.test(line) && (previous === 'bullet' || previous === 'numbered')) return line;
+
+      const kind = kindOf(line);
+      const apart = previous && (kind !== previous || kind === 'heading');
+
+      previous = kind;
+
+      return apart ? `\n${line}` : line;
+    })
+    .join('\n');
+}
+
+function Blocks({ text, breaks }: { text: string; breaks: boolean }) {
+  const blocks = separated(text)
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean);
@@ -88,10 +152,44 @@ function Blocks({ text }: { text: string }) {
         const heading = /^(#{1,6})\s+(.*)$/.exec(block);
 
         if (heading) {
-          return <h3 key={key}>{inline(heading[2] ?? '')}</h3>;
+          return heading[1] === '#' || heading[1] === '##' ? (
+            <h3 key={key}>{inline(heading[2] ?? '')}</h3>
+          ) : (
+            <h4 key={key}>{inline(heading[2] ?? '')}</h4>
+          );
         }
 
         const lines = block.split('\n');
+        const grid = table(lines);
+
+        if (grid) {
+          return (
+            <div key={key} className="markdown-table">
+              <table>
+                <thead>
+                  <tr>
+                    {keyed(grid.head).map(([cellKey, cell]) => (
+                      <th key={cellKey}>{inline(cell)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {keyed(grid.rows.map((row) => row.join('|'))).map(([rowKey], index) => (
+                    <tr key={rowKey}>
+                      {keyed(grid.rows[index] ?? []).map(([cellKey, cell]) => (
+                        <td key={cellKey}>{inline(cell)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+
+        if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(block)) {
+          return <hr key={key} />;
+        }
         const continued = (line: string) => /^\s{2,}\S/.test(line);
 
         if (lines.every((line) => bullet.test(line) || continued(line))) {
@@ -126,7 +224,7 @@ function Blocks({ text }: { text: string }) {
           <p key={key}>
             {keyed(lines).map(([lineKey, line], position) => (
               <Fragment key={lineKey}>
-                {position > 0 && ' '}
+                {position > 0 && (breaks ? <br /> : ' ')}
                 {inline(line)}
               </Fragment>
             ))}
@@ -137,7 +235,11 @@ function Blocks({ text }: { text: string }) {
   );
 }
 
-export function Markdown({ text }: { text: string }) {
+/**
+ * `breaks` keeps a single line break as one, the way a chat reads; documents join the lines of
+ * a paragraph, the way Markdown does.
+ */
+export function Markdown({ text, breaks = false }: { text: string; breaks?: boolean }) {
   return (
     <>
       {keyed(segments(text).map((part) => `${part.code ? '```' : ''}${part.text}`)).map(
@@ -147,9 +249,21 @@ export function Markdown({ text }: { text: string }) {
               <code>{part.slice(3)}</code>
             </pre>
           ) : (
-            <Blocks key={key} text={part} />
+            <Blocks key={key} text={part} breaks={breaks} />
           ),
       )}
     </>
   );
+}
+
+/** The words of a Markdown text on one line, for a preview: marks, fences and pipes gone. */
+export function plainText(text: string) {
+  return text
+    .replace(/```[^\n]*\n?/g, '')
+    .replace(/^\s*(#{1,6}|>|[-*]|\d+[.)])\s+/gm, '')
+    .replace(/^\s*\|?\s*:?-{2,}[-|:\s]*$/gm, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\*\*|`|\|/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
