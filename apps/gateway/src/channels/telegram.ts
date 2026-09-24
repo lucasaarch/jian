@@ -2,6 +2,7 @@ import type { ApiMethods, ApiResponse } from '@grammyjs/types';
 import type { InlineMedia } from '@jian/contracts';
 import { fileNameOf, MAX_MEDIA_BYTES, mediaMimeOf, telegramUpdateSchema } from '@jian/contracts';
 import { z } from 'zod';
+import { asJpeg } from '../media/picture.js';
 import { readMediaBody } from '../media/providers.js';
 import type {
   Channel,
@@ -56,6 +57,19 @@ function fileOf(message: TelegramMessage) {
   } as const;
 }
 
+type Quoted = NonNullable<TelegramMessage['reply_to_message']>;
+
+/** The message a reply answers, as a line the agent reads above the reply. */
+function answered(quoted: Quoted) {
+  const text = (quoted.text ?? quoted.caption)?.trim().slice(0, 1000);
+  const name = quoted.from?.first_name ?? quoted.from?.username;
+
+  return {
+    ...(quoted.message_id !== undefined ? { target: String(quoted.message_id) } : {}),
+    ...(text ? { quoted: { text, ...(name ? { name } : {}) } } : {}),
+  };
+}
+
 /** How the Bot API sends each kind of file, and the form field it expects it in. */
 function sendMethodOf(media: InlineMedia) {
   if (media.mimeType.startsWith('image/') && media.mimeType !== 'image/gif')
@@ -91,6 +105,31 @@ export class TelegramChannel implements Channel {
 
   receive(payload: unknown): IncomingMessage | null {
     const update = telegramUpdateSchema.parse(payload);
+    const reacted = update.message_reaction;
+
+    if (reacted) {
+      const emoji = reacted.new_reaction.find((item) => item.emoji)?.emoji;
+      const who = reacted.user;
+
+      // A reaction taken back, or one from a channel rather than a person: nothing to read.
+      if (!emoji || !who) return null;
+
+      const group = GROUP_CHATS.has(reacted.chat.type ?? '');
+      const name = who.first_name ?? who.username;
+
+      return {
+        actorId: String(who.id),
+        chatId: String(reacted.chat.id),
+        text: emoji,
+        requestKey: String(update.update_id),
+        ...(name ? { displayName: name } : {}),
+        scope: group ? 'group' : 'direct',
+        ...(group && reacted.chat.title ? { groupName: reacted.chat.title } : {}),
+        mentions: [],
+        reaction: true,
+        target: String(reacted.message_id),
+      };
+    }
 
     const message = update.message;
     const file = message ? fileOf(message) : undefined;
@@ -129,6 +168,7 @@ export class TelegramChannel implements Channel {
       ...(message.reply_to_message?.from
         ? { replyTo: String(message.reply_to_message.from.id) }
         : {}),
+      ...(message.reply_to_message ? answered(message.reply_to_message) : {}),
     };
   }
 
@@ -278,7 +318,7 @@ export class TelegramChannel implements Channel {
       {
         url: `${webhook.origin}/v1/telegram/${webhook.channelId}`,
         secret_token: webhook.secret,
-        allowed_updates: ['message'],
+        allowed_updates: ['message', 'message_reaction'],
       },
       { fetch, signal },
     );
@@ -340,6 +380,45 @@ export class TelegramChannel implements Channel {
       // The URL holds the bot token; nothing about the failure is repeated.
       return undefined;
     }
+  }
+
+  /**
+   * The bot's own profile photo. Telegram takes it only as a new upload, never by reference to
+   * a file it already has, so the picture is sent whole each time it changes.
+   */
+  async setPicture(picture: InlineMedia | null, context: DeliveryContext): Promise<boolean> {
+    const token = context.credential;
+
+    if (!token || !BOT_TOKEN.test(token)) {
+      return false;
+    }
+
+    const signal = AbortSignal.any([context.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]);
+    let body: FormData | undefined;
+
+    if (picture) {
+      body = new FormData();
+      body.set('photo', JSON.stringify({ type: 'static', photo: 'attach://picture' }));
+      body.set(
+        'picture',
+        new Blob([new Uint8Array(await asJpeg(picture))], { type: 'image/jpeg' }),
+        'picture.jpg',
+      );
+    }
+
+    const response = await context.fetch(
+      `https://api.telegram.org/bot${token}/${picture ? 'setMyProfilePhoto' : 'removeMyProfilePhoto'}`,
+      { method: 'POST', ...(body ? { body } : {}), signal },
+    );
+    const answer = z
+      .object({ ok: z.boolean(), description: z.string().optional() })
+      .parse(await response.json());
+
+    if (!answer.ok) {
+      throw new Error(`Telegram refused the picture: ${answer.description ?? response.status}`);
+    }
+
+    return true;
   }
 
   /** Telegram clears this when a message lands, so it is re-armed on every dispatch tick. */

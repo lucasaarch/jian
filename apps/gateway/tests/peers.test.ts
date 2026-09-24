@@ -168,6 +168,18 @@ describe('conversation between profiles', () => {
     );
 
     expect(shared?.channel).toBe('agent');
+
+    // The caller's own thread says where the answer was worked on, for the owner's panel to
+    // show that agent at work; the ids stay out of every tool the caller's agent has.
+    const thread = (await services.sessions.sessions(caller.id)).find(
+      (session) => session.peerProfileId === callee.id,
+    );
+    const said = await services.sessions.messages(caller.id, thread?.id as string);
+
+    expect(said.map((message) => [message.role, message.call])).toEqual([
+      ['assistant', { profileId: callee.id, sessionId: shared?.id, runId: answered.id }],
+      ['user', { profileId: callee.id, sessionId: shared?.id, runId: answered.id }],
+    ]);
     expect(await services.sessions.sessions(caller.id)).not.toContainEqual(
       expect.objectContaining({ id: shared?.id }),
     );

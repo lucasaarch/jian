@@ -3,6 +3,7 @@ import { listConversations } from '../channels/repository.js';
 import { findMemories, searchMemories, withLinks } from '../memories/repository.js';
 import type { RunReader } from '../runs/port.js';
 import type { SessionReader } from '../sessions/port.js';
+import { findGatewaySession } from '../sessions/repository.js';
 import type { Store } from '../storage/database.js';
 import { buildContext } from './build.js';
 
@@ -25,9 +26,10 @@ export class Contexts {
     // Independent reads: whatever the request mentions, what the profile is busy with, whom it
     // talks to on its channels, and the turns since the record of what was compacted away.
     // `buildContext` is what decides how much of each survives.
-    const [matched, activities, conversations, history] = await Promise.all([
+    const [matched, activities, gateway, conversations, history] = await Promise.all([
       searchMemories(this.store.db, run.profileId, words, 100),
       this.runs.activities(run.profileId),
+      findGatewaySession(this.store.db, run.profileId),
       listConversations(this.store.db, run.profileId),
       this.sessions.messages(run.profileId, run.sessionId, 40, session.summarizedUpTo),
     ]);
@@ -49,12 +51,19 @@ export class Contexts {
       memories,
       linked,
       activities,
-      conversations: conversations.map((contact) => ({
-        sessionId: contact.sessionId as string,
-        channel: contact.type,
-        with: contact.displayName ?? contact.actorId,
-        ...(contact.scope === 'group' ? { group: true } : {}),
-      })),
+      // The owner's own conversation, from the panel, comes first: it is where they reach the
+      // agent directly, and without it the agent believes the conversation it is in is missing.
+      conversations: [
+        ...(gateway
+          ? [{ sessionId: gateway.id, channel: 'gateway', with: 'your owner, in the Jian panel' }]
+          : []),
+        ...conversations.map((contact) => ({
+          sessionId: contact.sessionId as string,
+          channel: contact.type,
+          with: contact.displayName ?? contact.actorId,
+          ...(contact.scope === 'group' ? { group: true } : {}),
+        })),
+      ],
       history,
       ...(session.summary ? { summary: session.summary } : {}),
     });

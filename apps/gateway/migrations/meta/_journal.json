@@ -211,6 +211,20 @@
       "when": 1790648000000,
       "tag": "0029_opt-in-skills",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790734400000,
+      "tag": "0030_channel-pictures",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790740000000,
+      "tag": "0031_message-calls",
+      "breakpoints": true
     }
   ]
 }

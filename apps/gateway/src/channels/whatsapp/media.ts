@@ -1,5 +1,29 @@
 import { type InlineMedia, MAX_MEDIA_BYTES, mediaMimeOf } from '@jian/contracts';
-import { downloadMediaMessage, normalizeMessageContent, type WAMessage } from 'baileys';
+import { downloadMediaMessage, normalizeMessageContent, type proto, type WAMessage } from 'baileys';
+
+/**
+ * A message as one line of text, for a quote or a reaction: its words, or what it was when it
+ * had none, so "replying to a sticker" still says what was answered.
+ */
+export function describeWhatsApp(message: proto.IMessage | null | undefined): string | undefined {
+  const content = normalizeMessageContent(message);
+  const document =
+    content?.documentMessage ?? content?.documentWithCaptionMessage?.message?.documentMessage;
+  const words =
+    content?.conversation ??
+    content?.extendedTextMessage?.text ??
+    content?.imageMessage?.caption ??
+    content?.videoMessage?.caption ??
+    document?.caption;
+
+  if (words?.trim()) return words.trim().slice(0, 1000);
+  if (content?.stickerMessage) return '[Sticker]';
+  if (content?.imageMessage) return '[Photo]';
+  if (content?.videoMessage) return '[Video]';
+  if (content?.audioMessage) return content.audioMessage.ptt ? '[Voice message]' : '[Audio]';
+  if (document) return document.fileName ? `[File: ${document.fileName}]` : '[File]';
+  return undefined;
+}
 
 export async function readWhatsAppContent(
   message: WAMessage,
@@ -29,9 +53,11 @@ export async function readWhatsAppContent(
         text.trim() ||
         (content?.audioMessage?.ptt
           ? '[Voice message]'
-          : name
-            ? `[File: ${name}]`
-            : '[Media attachment]'),
+          : content?.stickerMessage
+            ? '[Sticker]'
+            : name
+              ? `[File: ${name}]`
+              : '[Media attachment]'),
       media: [
         {
           mimeType: mediaMimeOf(attachment.mimetype, name),

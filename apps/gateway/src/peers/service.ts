@@ -115,8 +115,6 @@ export class Peers implements PeerAgents {
       `Agent · ${callee.name}`,
     );
 
-    await this.services.sessions.record(run.profileId, mine.id, run.id, 'assistant', data.text);
-
     // Both sides record the call so the owner can audit who spoke to whom. A retried request
     // key records the attempt again and still reaches the single run the first one created.
     await this.record(run.profileId, run.id, 'agent.call.sent', {
@@ -132,6 +130,19 @@ export class Peers implements PeerAgents {
       { call: origin },
     );
 
+    // Recorded once the answering run exists, so the question carries where it is being worked
+    // on. A retried call reaches the same run and records the question again, as it always did.
+    const call = { profileId: callee.id, sessionId: session.id, runId: answering.id };
+
+    await this.services.sessions.record(
+      run.profileId,
+      mine.id,
+      run.id,
+      'assistant',
+      data.text,
+      call,
+    );
+
     await this.record(callee.id, answering.id, 'agent.call.received', {
       fromProfileId: origin.fromProfileId,
       fromName: origin.fromName,
@@ -142,7 +153,14 @@ export class Peers implements PeerAgents {
     const answer = await this.answer(callee.id, answering.id, callee.name, run.sessionId, signal);
 
     if (answer.status === 'answered' && answer.text) {
-      await this.services.sessions.record(run.profileId, mine.id, run.id, 'user', answer.text);
+      await this.services.sessions.record(
+        run.profileId,
+        mine.id,
+        run.id,
+        'user',
+        answer.text,
+        call,
+      );
     }
 
     return { fromProfileId: callee.id, fromName: callee.name, ...answer };
@@ -273,7 +291,11 @@ export class Peers implements PeerAgents {
     );
 
     await this.services.sessions
-      .record(run.call.fromProfileId, thread.id, carried.id, 'user', said)
+      .record(run.call.fromProfileId, thread.id, carried.id, 'user', said, {
+        profileId,
+        sessionId: run.sessionId,
+        runId,
+      })
       .catch(() => {});
   }
 

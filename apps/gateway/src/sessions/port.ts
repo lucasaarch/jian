@@ -34,6 +34,7 @@ export interface PeerSessions {
     runId: string,
     role: 'user' | 'assistant',
     content: string,
+    call?: { profileId: string; sessionId: string; runId: string },
   ): Promise<void>;
   peerSession(
     profileId: string,

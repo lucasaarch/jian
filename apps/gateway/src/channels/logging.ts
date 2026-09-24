@@ -5,7 +5,9 @@ type ChannelEvent =
   | 'whatsapp.decrypt.recovered'
   | 'whatsapp.key.invalid'
   | 'delivery.result'
-  | 'delivery.peer_failed';
+  | 'delivery.peer_failed'
+  | 'picture.failed'
+  | 'picture.refused';
 
 type Details = {
   channelId?: string;
