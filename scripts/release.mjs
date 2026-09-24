@@ -2,7 +2,7 @@
 // entry and the GitHub release — and the tag comes last; the Image workflow does the rest.
 // Everything that can be wrong is checked before anything is written or pushed.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -43,21 +43,12 @@ if (git('tag', '--list', `v${version}`)) {
   stop(`v${version} already exists. A published version is never moved; release the next one.`);
 }
 
-// The version the image reports and the changelog the repository shows are written from the
-// note. When either changes, the change is committed by a person, not pushed from here.
-const manifest = join(root, 'package.json');
-const current = JSON.parse(readFileSync(manifest, 'utf8'));
-
-if (current.version !== version) {
-  writeFileSync(manifest, `${JSON.stringify({ ...current, version }, null, 2)}\n`);
-}
-
+// The image takes its version from the tag; package.json stays 0.1.0, since nothing reads it.
+// The changelog is written from the notes, and a change to it is committed by a person.
 execFileSync('node', [join(root, 'scripts/changelog.mjs')], { stdio: 'inherit' });
 
 if (git('status', '--porcelain')) {
-  stop(
-    `package.json and CHANGELOG.md now say ${version}. Commit them ("chore: release ${version}"), push, then run this again.`,
-  );
+  stop(`CHANGELOG.md now includes ${version}. Commit it with its note, push, then run this again.`);
 }
 
 git('tag', '-a', `v${version}`, '-m', `Jian ${version}`);
