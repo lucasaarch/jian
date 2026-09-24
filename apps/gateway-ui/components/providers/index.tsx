@@ -1,11 +1,11 @@
 'use client';
 
-import { Save, Trash2 } from 'lucide-react';
+import { Save, Server, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { GatewayApi } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionProps } from '../props';
-import { Badge, Button, Field, ProviderLogo, ResourceRow, SectionHeading } from '../ui';
+import { Badge, Button, Field, hasLogo, ProviderLogo, ResourceRow, SectionHeading } from '../ui';
 import { Select } from '../ui/select';
 import { anthropicCredentials, providers } from './catalog';
 import { DecisionsRow, WebSearchRow } from './service-keys';
@@ -84,8 +84,11 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
         event.preventDefault();
         setFormError('');
         const element = event.currentTarget;
-        const secret = String(new FormData(element).get('secret') ?? '').trim();
-        if (!secret) {
+        const values = new FormData(element);
+        const secret = String(values.get('secret') ?? '').trim();
+        const baseURL = String(values.get('baseURL') ?? '').trim();
+        const server = entry.kind === 'openai-compatible';
+        if (!secret && !server) {
           setFormError(`Enter the ${entry.name} credential.`);
           return;
         }
@@ -95,7 +98,8 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
             api.createProvider({
               name: entry.name,
               kind: entry.kind,
-              secret,
+              ...(secret ? { secret } : {}),
+              ...(server ? { baseURL } : {}),
               ...(entry.kind === 'anthropic'
                 ? { credential: credential as 'key' | 'subscription' }
                 : {}),
@@ -118,15 +122,42 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
           />
         </Field>
       )}
+      {entry.kind === 'openai-compatible' && (
+        <Field
+          label="Address"
+          hint="Where its API is, up to /v1 — for a Whisper container beside the gateway, http://whisper:8000/v1. A private address must be allowed in JIAN_ALLOW_PRIVATE_ORIGINS."
+        >
+          <input
+            name="baseURL"
+            type="url"
+            required
+            placeholder="http://whisper:8000/v1"
+            defaultValue={configured?.baseURL ?? ''}
+          />
+        </Field>
+      )}
       <Field
-        label={entry.kind === 'openai' ? 'API key' : `${entry.name} credential`}
+        label={
+          entry.kind === 'openai-compatible'
+            ? 'API key (optional)'
+            : entry.kind === 'openai' || entry.kind === 'groq'
+              ? 'API key'
+              : `${entry.name} credential`
+        }
         hint={
           configured?.apiKeyEnv
             ? `Currently ${configured.apiKeyEnv}. What you save here replaces it.`
-            : 'What you save here is never shown again.'
+            : entry.kind === 'openai-compatible'
+              ? 'Only if your server asks for one. It is never shown again.'
+              : 'What you save here is never shown again.'
         }
       >
-        <input name="secret" type="password" autoComplete="off" required />
+        <input
+          name="secret"
+          type="password"
+          autoComplete="off"
+          required={entry.kind !== 'openai-compatible'}
+        />
       </Field>
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" busy={busy}>
@@ -226,7 +257,13 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
               <ResourceRow
                 key={item.kind}
                 id={`provider-${item.kind}`}
-                icon={<ProviderLogo kind={item.kind} size={24} />}
+                icon={
+                  hasLogo(item.kind) ? (
+                    <ProviderLogo kind={item.kind} size={24} />
+                  ) : (
+                    <Server size={22} strokeWidth={1.6} />
+                  )
+                }
                 name={item.name}
                 description={item.description}
                 badges={
@@ -248,7 +285,13 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
                   </>
                 }
                 facts={[
-                  live.configured ? credentialLine(live.configured) : `Or ${item.variables}`,
+                  live.configured
+                    ? live.configured.baseURL
+                      ? `At ${live.configured.baseURL}`
+                      : credentialLine(live.configured)
+                    : item.variables
+                      ? `Or ${item.variables}`
+                      : 'Not set up',
                   ...(uncatalogued ? [`${uncatalogued} with unknown capabilities`] : []),
                   ...(list?.stale
                     ? [
