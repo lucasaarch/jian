@@ -1,4 +1,6 @@
+import { fileNameOf, type InlineMedia } from '@jian/contracts';
 import {
+  type AnyMessageContent,
   type AuthenticationCreds,
   type AuthenticationState,
   BufferJSON,
@@ -83,9 +85,41 @@ const toDeviceJid = (chatId: string) => {
 const contextOf = (message: WAMessage) => {
   const content = normalizeMessageContent(message.message);
 
-  return (content?.extendedTextMessage ?? content?.imageMessage ?? content?.audioMessage)
-    ?.contextInfo;
+  return (
+    content?.extendedTextMessage ??
+    content?.imageMessage ??
+    content?.audioMessage ??
+    content?.videoMessage ??
+    content?.documentMessage ??
+    content?.documentWithCaptionMessage?.message?.documentMessage
+  )?.contextInfo;
 };
+
+/**
+ * How a file goes out: a picture or a video as one, an Ogg recording as a voice note, other
+ * audio as a track, and anything else as a document under its name. Only a voice note has no
+ * caption, so its text is lost; the gateway sends generated speech without one.
+ */
+export function outgoingMedia(media: InlineMedia, text: string): AnyMessageContent {
+  const data = Buffer.from(media.data, 'base64');
+  const caption = text ? { caption: text } : {};
+
+  if (media.mimeType.startsWith('image/'))
+    return { image: data, mimetype: media.mimeType, ...caption };
+  if (media.mimeType.startsWith('video/'))
+    return { video: data, mimetype: media.mimeType, ...caption };
+  if (media.mimeType === 'audio/ogg')
+    return { audio: data, mimetype: 'audio/ogg; codecs=opus', ptt: true };
+  if (media.mimeType.startsWith('audio/') && !media.name)
+    return { audio: data, mimetype: media.mimeType };
+
+  return {
+    document: data,
+    mimetype: media.mimeType,
+    fileName: fileNameOf(media.mimeType, media.name),
+    ...caption,
+  };
+}
 
 /** The close reason travels as a Boom payload; read it structurally rather than depend on Boom. */
 const statusCodeOf = (error: unknown) =>
@@ -443,23 +477,7 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
 
         try {
           const result = await Promise.race([
-            socket.sendMessage(
-              jid,
-              media
-                ? media.mimeType.startsWith('image/')
-                  ? {
-                      image: Buffer.from(media.data, 'base64'),
-                      mimetype: media.mimeType,
-                      ...(text ? { caption: text } : {}),
-                    }
-                  : {
-                      audio: Buffer.from(media.data, 'base64'),
-                      mimetype:
-                        media.mimeType === 'audio/ogg' ? 'audio/ogg; codecs=opus' : media.mimeType,
-                      ptt: media.mimeType === 'audio/ogg',
-                    }
-                : { text },
-            ),
+            socket.sendMessage(jid, media ? outgoingMedia(media, text) : { text }),
             interrupted,
           ]);
 

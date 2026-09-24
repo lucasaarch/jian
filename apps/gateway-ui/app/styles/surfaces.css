@@ -625,6 +625,19 @@
   .viewer-pdf {
     @apply h-full w-full max-w-5xl rounded-lg bg-white;
   }
+  .viewer-video {
+    @apply max-h-full max-w-full rounded-lg bg-black;
+  }
+  .viewer-file {
+    @apply grid justify-items-center gap-2 rounded-lg bg-surface px-10 py-8 text-center text-ink;
+  }
+  .viewer-file span,
+  .viewer-file p {
+    @apply text-sm text-muted;
+  }
+  .viewer-file .button.primary {
+    @apply mt-3;
+  }
   .viewer-text {
     @apply h-full w-full max-w-4xl overflow-auto whitespace-pre-wrap break-words rounded-lg bg-surface p-6 font-mono text-sm leading-6 text-ink;
   }

@@ -1,4 +1,4 @@
-import { type InlineMedia, MAX_MEDIA_BYTES, mediaMimeSchema } from '@jian/contracts';
+import { type InlineMedia, MAX_MEDIA_BYTES, mediaMimeOf } from '@jian/contracts';
 import { downloadMediaMessage, normalizeMessageContent, type WAMessage } from 'baileys';
 
 export async function readWhatsAppContent(
@@ -6,28 +6,38 @@ export async function readWhatsAppContent(
   download = downloadAttachment,
 ): Promise<{ text: string; media?: InlineMedia[] }> {
   const content = normalizeMessageContent(message.message);
+  // A document sent with a caption arrives wrapped once more than one without.
+  const document =
+    content?.documentMessage ?? content?.documentWithCaptionMessage?.message?.documentMessage;
   const attachment =
     content?.imageMessage ??
     content?.audioMessage ??
-    content?.documentMessage ??
+    content?.videoMessage ??
+    document ??
     content?.stickerMessage;
-  const caption = content?.imageMessage?.caption ?? content?.documentMessage?.caption;
+  const caption =
+    content?.imageMessage?.caption ?? content?.videoMessage?.caption ?? document?.caption;
   const text = content?.conversation ?? content?.extendedTextMessage?.text ?? caption ?? '';
   if (!attachment) return { text };
-  const type = mediaMimeSchema.safeParse(attachment.mimetype?.split(';')[0]?.trim());
-  if (!type.success)
-    return { text: `${text}\n[This attachment has an unsupported media format.]`.trim() };
+  const name = document?.fileName?.trim().slice(0, 200) || undefined;
   try {
     if (Number(attachment.fileLength ?? 0) > MAX_MEDIA_BYTES) throw new Error('too large');
     const data = await download({ ...message, message: content });
     if (!data.length || data.length > MAX_MEDIA_BYTES) throw new Error('too large');
     return {
-      text: text.trim() || (content?.audioMessage?.ptt ? '[Voice message]' : '[Media attachment]'),
+      text:
+        text.trim() ||
+        (content?.audioMessage?.ptt
+          ? '[Voice message]'
+          : name
+            ? `[File: ${name}]`
+            : '[Media attachment]'),
       media: [
         {
-          mimeType: type.data,
+          mimeType: mediaMimeOf(attachment.mimetype, name),
           data: data.toString('base64'),
           ...(content?.audioMessage?.ptt ? { voice: true } : {}),
+          ...(name ? { name } : {}),
         },
       ],
     };
@@ -43,7 +53,9 @@ async function downloadAttachment(message: WAMessage): Promise<Buffer> {
   const item =
     content?.imageMessage ??
     content?.audioMessage ??
+    content?.videoMessage ??
     content?.documentMessage ??
+    content?.documentWithCaptionMessage?.message?.documentMessage ??
     content?.stickerMessage;
   if (item?.url) {
     const url = new URL(item.url);

@@ -22,7 +22,28 @@ export const kindNames: Record<string, string> = {
   'text/csv': 'CSV',
   'application/json': 'JSON',
   'text/plain': 'Text',
+  'text/html': 'HTML',
+  'application/xml': 'XML',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Excel',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PowerPoint',
+  'application/vnd.oasis.opendocument.text': 'OpenDocument text',
+  'application/vnd.oasis.opendocument.spreadsheet': 'OpenDocument spreadsheet',
+  'application/vnd.oasis.opendocument.presentation': 'OpenDocument presentation',
+  'application/msword': 'Word',
+  'application/vnd.ms-excel': 'Excel',
+  'application/vnd.ms-powerpoint': 'PowerPoint',
+  'application/rtf': 'Rich text',
+  'application/zip': 'ZIP archive',
+  'video/mp4': 'Video',
+  'video/quicktime': 'Video',
+  'video/webm': 'Video',
+  'application/octet-stream': 'File',
 };
+
+/** Shown as text in the viewer; every other document is offered as a download. */
+export const readsAsText = (mimeType: string) =>
+  mimeType.startsWith('text/') || mimeType === 'application/json' || mimeType === 'application/xml';
 
 export const nameOf = (media: LoadedMedia) =>
   media.name ?? `${kindNames[media.mimeType] ?? 'File'} document`;

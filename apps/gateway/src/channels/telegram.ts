@@ -1,6 +1,6 @@
 import type { ApiMethods, ApiResponse } from '@grammyjs/types';
 import type { InlineMedia } from '@jian/contracts';
-import { telegramUpdateSchema } from '@jian/contracts';
+import { fileNameOf, MAX_MEDIA_BYTES, mediaMimeOf, telegramUpdateSchema } from '@jian/contracts';
 import { z } from 'zod';
 import { readMediaBody } from '../media/providers.js';
 import type {
@@ -23,6 +23,51 @@ const DEFAULT_COOLDOWN_MS = 5_000;
 const GROUP_CHATS = new Set(['group', 'supergroup']);
 
 const BOT_TOKEN = /^\d+:[A-Za-z0-9_-]+$/;
+/** A 16 MB file on a slow link; the webhook waits for it before it answers. */
+const FILE_TIMEOUT_MS = 60_000;
+
+type TelegramMessage = NonNullable<z.infer<typeof telegramUpdateSchema>['message']>;
+
+/**
+ * The one file a message carries, with what the gateway stores it as. Telegram sends a photo in
+ * several sizes and names only documents; the rest take their type from the kind of message.
+ */
+function fileOf(message: TelegramMessage) {
+  const photo = message.photo?.at(-1);
+  if (photo) return { ...photo, mimeType: 'image/jpeg', label: '[Photo]' } as const;
+  if (message.voice)
+    return {
+      ...message.voice,
+      mimeType: 'audio/ogg',
+      voice: true,
+      label: '[Voice message]',
+    } as const;
+  if (message.video_note)
+    return { ...message.video_note, mimeType: 'video/mp4', label: '[Video message]' } as const;
+  const file = message.document ?? message.audio ?? message.video;
+  if (!file) return undefined;
+  const name = file.file_name?.trim().slice(0, 200) || undefined;
+
+  return {
+    ...file,
+    mimeType: mediaMimeOf(file.mime_type, name),
+    ...(name ? { name } : {}),
+    label: name ? `[File: ${name}]` : '[Media attachment]',
+  } as const;
+}
+
+/** How the Bot API sends each kind of file, and the form field it expects it in. */
+function sendMethodOf(media: InlineMedia) {
+  if (media.mimeType.startsWith('image/') && media.mimeType !== 'image/gif')
+    return { method: 'sendPhoto', field: 'photo' } as const;
+  if (media.mimeType === 'audio/ogg' && !media.name)
+    return { method: 'sendVoice', field: 'voice' } as const;
+  if (media.mimeType.startsWith('video/')) return { method: 'sendVideo', field: 'video' } as const;
+  if (media.mimeType.startsWith('audio/') && !media.name)
+    return { method: 'sendAudio', field: 'audio' } as const;
+  return { method: 'sendDocument', field: 'document' } as const;
+}
+
 /** The smallest photo size is 160 px; this bounds a download that is anything else. */
 const MAX_AVATAR_BYTES = 120_000;
 
@@ -48,9 +93,11 @@ export class TelegramChannel implements Channel {
     const update = telegramUpdateSchema.parse(payload);
 
     const message = update.message;
-    const text = message?.text ?? message?.caption;
+    const file = message ? fileOf(message) : undefined;
+    // A file without a caption is still a message: what it holds is what was said.
+    const text = message?.text ?? message?.caption ?? file?.label;
 
-    // A join notice, a sticker or a photo without caption: nothing to answer, and not an error.
+    // A join notice or a sticker: nothing to answer, and not an error.
     if (!message?.from || !text?.trim()) {
       return null;
     }
@@ -83,6 +130,61 @@ export class TelegramChannel implements Channel {
         ? { replyTo: String(message.reply_to_message.from.id) }
         : {}),
     };
+  }
+
+  async download(
+    payload: unknown,
+    context: DeliveryContext,
+  ): Promise<{ media?: InlineMedia[]; note?: string }> {
+    const message = telegramUpdateSchema.parse(payload).message;
+    const file = message ? fileOf(message) : undefined;
+    const token = context.credential;
+
+    if (!file || !token || !BOT_TOKEN.test(token)) {
+      return {};
+    }
+
+    const failed = {
+      note: '[The attachment could not be downloaded or exceeds 16 MB. Ask the sender to send it again in a smaller file.]',
+    };
+
+    if ((file.file_size ?? 0) > MAX_MEDIA_BYTES) {
+      return failed;
+    }
+
+    const options = { fetch: context.fetch, signal: context.signal };
+    const found = await this.request('getFile', token, { file_id: file.file_id }, options);
+    const path = found?.ok ? found.result.file_path : undefined;
+
+    if (!path) {
+      return failed;
+    }
+
+    try {
+      const response = await context.fetch(`https://api.telegram.org/file/bot${token}/${path}`, {
+        signal: AbortSignal.any([context.signal, AbortSignal.timeout(FILE_TIMEOUT_MS)]),
+      });
+
+      if (!response.ok) {
+        return failed;
+      }
+
+      const bytes = await readMediaBody(response, MAX_MEDIA_BYTES);
+
+      return {
+        media: [
+          {
+            mimeType: file.mimeType,
+            data: bytes.toString('base64'),
+            ...('voice' in file ? { voice: true } : {}),
+            ...('name' in file && file.name ? { name: file.name } : {}),
+          },
+        ],
+      };
+    } catch {
+      // The URL holds the bot token; nothing about the failure is repeated.
+      return failed;
+    }
   }
 
   /**
@@ -272,28 +374,25 @@ export class TelegramChannel implements Channel {
     }
 
     if (message.media) {
-      const image = message.media.mimeType.startsWith('image/');
+      const { method, field } = sendMethodOf(message.media);
       const form = new FormData();
       form.set('chat_id', message.chatId);
       if (message.text) form.set('caption', message.text.slice(0, 1024));
       form.set(
-        image ? 'photo' : 'voice',
+        field,
         new Blob([new Uint8Array(Buffer.from(message.media.data, 'base64'))], {
           type: message.media.mimeType,
         }),
-        image ? 'image.png' : 'voice.ogg',
+        fileNameOf(message.media.mimeType, message.media.name),
       );
       if ((this.coolUntil.get(context.channelId) ?? 0) > this.clock())
         return { status: 'pending', remoteMessageIds };
       try {
-        const response = await context.fetch(
-          `https://api.telegram.org/bot${token}/${image ? 'sendPhoto' : 'sendVoice'}`,
-          {
-            method: 'POST',
-            body: form,
-            signal: AbortSignal.any([context.signal, AbortSignal.timeout(30_000)]),
-          },
-        );
+        const response = await context.fetch(`https://api.telegram.org/bot${token}/${method}`, {
+          method: 'POST',
+          body: form,
+          signal: AbortSignal.any([context.signal, AbortSignal.timeout(30_000)]),
+        });
         const body = z
           .object({
             ok: z.boolean(),

@@ -57,6 +57,16 @@ export interface Channel {
   receive(payload: unknown): IncomingMessage | null;
 
   /**
+   * The files a received payload points to, fetched with the channel's credential. A protocol
+   * whose payload already carries its files has none of this. A file that cannot be fetched is
+   * a note for the agent, never a lost message.
+   */
+  download?(
+    payload: unknown,
+    context: DeliveryContext,
+  ): Promise<{ media?: InlineMedia[]; note?: string }>;
+
+  /**
    * What this connection speaks as on its protocol, asked once when the channel is connected.
    * A protocol that cannot answer leaves the connection unidentified, and the messages of the
    * installation's other agents are then read as anyone else's.

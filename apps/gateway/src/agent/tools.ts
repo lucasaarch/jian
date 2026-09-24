@@ -438,8 +438,16 @@ export const TOOL_GROUPS = {
     tools: ['forget_memory', 'link_memories', 'unlink_memories'],
   },
   media: {
-    summary: 'inspect images and audio, generate images, and reply with voice recordings',
-    tools: ['analyze_media', 'generate_image', 'list_speech_voices', 'generate_speech'],
+    summary:
+      'open attachments, send files and documents on any chat, generate images, and reply with voice',
+    tools: [
+      'analyze_media',
+      'send_file',
+      'save_attachment',
+      'generate_image',
+      'list_speech_voices',
+      'generate_speech',
+    ],
   },
   files: {
     summary:

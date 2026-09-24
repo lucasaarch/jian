@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight, Download, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { type LoadedMedia, nameOf } from './media';
+import { kindNames, type LoadedMedia, nameOf, readsAsText, size } from './media';
 import { ZoomableImage } from './zoom';
 
 /** How long the viewer takes to fade out; the CSS animation runs for the same time. */
@@ -117,8 +117,23 @@ export function MediaViewer({
           />
         ) : media.mimeType === 'application/pdf' ? (
           <Pdf media={media} />
-        ) : (
+        ) : media.mimeType.startsWith('video/') ? (
+          // biome-ignore lint/a11y/useMediaCaption: A file someone sent; it has no captions to offer.
+          <video className="viewer-video" src={media.url} controls />
+        ) : readsAsText(media.mimeType) ? (
           <pre className="viewer-text">{decode(media.data)}</pre>
+        ) : (
+          <div className="viewer-file">
+            <strong>{nameOf(media)}</strong>
+            <span>
+              {kindNames[media.mimeType] ?? media.mimeType} · {size(media.bytes)}
+            </span>
+            <p>No preview for this format.</p>
+            <a className="button primary" href={media.url} download={nameOf(media)}>
+              <Download size={16} />
+              Download
+            </a>
+          </div>
         )}
       </div>
       {many && (

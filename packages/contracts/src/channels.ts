@@ -94,6 +94,13 @@ const telegramEntitiesSchema = z
  * sticker, the notice that someone joined — is optional here: refusing an update makes Telegram
  * deliver it again and again, and the messages behind it wait.
  */
+const telegramFileSchema = z.object({
+  file_id: z.string().min(1).max(200),
+  file_name: z.string().max(255).optional(),
+  mime_type: z.string().max(120).optional(),
+  file_size: z.number().int().nonnegative().optional(),
+});
+
 export const telegramUpdateSchema = z.object({
   update_id: z.number().int(),
   message: z
@@ -112,6 +119,13 @@ export const telegramUpdateSchema = z.object({
       }),
       text: z.string().max(8000).optional(),
       caption: z.string().max(8000).optional(),
+      // Sizes smallest first; the gateway downloads the largest.
+      photo: z.array(telegramFileSchema).max(10).optional(),
+      document: telegramFileSchema.optional(),
+      voice: telegramFileSchema.optional(),
+      audio: telegramFileSchema.optional(),
+      video: telegramFileSchema.optional(),
+      video_note: telegramFileSchema.optional(),
       entities: telegramEntitiesSchema,
       caption_entities: telegramEntitiesSchema,
       reply_to_message: z
