@@ -30,6 +30,20 @@ export const providers = [
     symbol: '◎',
     variables: 'OPENAI_API_KEY',
   },
+  {
+    kind: 'groq',
+    name: 'Groq',
+    description: 'Fast Whisper transcription for incoming audio, with a free tier.',
+    symbol: 'G',
+    variables: 'GROQ_API_KEY',
+  },
+  {
+    kind: 'openai-compatible',
+    name: 'OpenAI-compatible server',
+    description: 'A server you run that speaks the OpenAI API, such as a local Whisper.',
+    symbol: '⌘',
+    variables: '',
+  },
 ] as const;
 
 /**
@@ -82,7 +96,7 @@ export const roles = [
   {
     key: 'audio',
     label: 'Incoming audio',
-    hint: 'Voice notes and audio files share this model. Preserves speech and, when supported, describes relevant sounds. Unset, it uses Gemini.',
+    hint: 'Voice notes and audio files share this model. Gemini also describes relevant sounds; Whisper, from OpenAI, Groq or your own server, transcribes the speech. Unset, it uses Gemini.',
     runtime: true,
   },
   {
