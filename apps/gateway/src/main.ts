@@ -121,6 +121,15 @@ const channels = new Channels(services, outbound.fetch, channelRegistry);
 
 // A colleague's late answer has no incoming message to hang a delivery on; channels give it one.
 services.peers.useDeliveries(channels);
+// Nor has a run a schedule starts in a chat: its answer goes out the same way.
+services.schedules.useDeliveries(channels);
+
+/**
+ * How often due schedules are looked for, in milliseconds. A schedule set for 08:00 starts
+ * within this much of it; every worker looks, and a schedule starts once however many do.
+ */
+const SCHEDULE_TICK_MS = 15_000;
+let scheduleTimer: ReturnType<typeof setInterval> | undefined;
 
 // Deleting a profile disconnects its channels first, inside the same transaction: a WhatsApp
 // socket a worker still holds open has to be told, not just left to find out from a missing row.
@@ -150,6 +159,7 @@ const app =
         channels,
         whatsapp,
         ...(mcpLogins ? { mcpLogins } : {}),
+        fetcher: outbound.fetch,
         token: config.data.JIAN_API_TOKEN,
         onCancel: (id) => runtime.cancel(id),
       })
@@ -164,6 +174,7 @@ async function shutdown() {
 
   stopping = true;
   codexLogin.stop();
+  clearInterval(scheduleTimer);
   // End long-lived event streams before waiting for HTTP shutdown.
   app?.server.closeAllConnections();
   await app?.close();
@@ -192,6 +203,12 @@ try {
   if (config.data.JIAN_ROLE !== 'api') {
     whatsapp.start((id, input, generation) => channels.receiveLinked(id, input, generation));
     channels.start();
+    scheduleTimer = setInterval(() => {
+      void services.schedules
+        .fireDue()
+        .catch(() => console.error('jian: schedules could not be started; will retry'));
+    }, SCHEDULE_TICK_MS);
+    scheduleTimer.unref();
   }
 
   if (app) {

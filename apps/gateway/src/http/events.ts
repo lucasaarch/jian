@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
-import { readEvents } from '../core/event-feed.js';
+import { readEvents, readProgress } from '../core/event-feed.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { Store } from '../storage/database.js';
 
@@ -59,6 +59,8 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
 
       let closed = false;
       let timer: ReturnType<typeof setTimeout>;
+      // When each working run last changed its progress, as this stream last told it.
+      const told = new Map<string, string>();
 
       reply.raw.on('close', () => {
         closed = true;
@@ -102,6 +104,21 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
             if (!ready) {
               break;
             }
+          }
+
+          // Progress changes many times a second and is not worth a row each time; a stream
+          // hears of it here, without an id, so it never moves the cursor it resumes from.
+          const working = await readProgress(options.store.db, profileId);
+
+          for (const run of working) {
+            if (told.get(run.runId) !== run.at) {
+              told.set(run.runId, run.at);
+              reply.raw.write(`event: run.progress\ndata: ${JSON.stringify(run)}\n\n`);
+            }
+          }
+
+          for (const runId of told.keys()) {
+            if (!working.some((run) => run.runId === runId)) told.delete(runId);
           }
 
           if (events.length === 0) {

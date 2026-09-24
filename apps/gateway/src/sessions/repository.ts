@@ -1,4 +1,9 @@
-import { AGENT_SESSION_CHANNEL, type Message, type Session } from '@jian/contracts';
+import {
+  AGENT_SESSION_CHANNEL,
+  GATEWAY_SESSION_CHANNEL,
+  type Message,
+  type Session,
+} from '@jian/contracts';
 import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { messages, sessions } from '../storage/schema.js';
@@ -27,6 +32,9 @@ export function toMessage(row: MessageRow): Message {
     ...(row.runId ? { runId: row.runId } : {}),
     role: row.role,
     content: row.content,
+    ...(row.authorId
+      ? { author: { id: row.authorId, ...(row.authorName ? { name: row.authorName } : {}) } }
+      : {}),
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -114,12 +122,31 @@ export async function findPeerSession(
   return row ? toSession(row) : null;
 }
 
+export async function findGatewaySession(
+  db: Queryable,
+  profileId: string,
+): Promise<Session | null> {
+  const [row] = await db
+    .select()
+    .from(sessions)
+    .where(and(eq(sessions.profileId, profileId), eq(sessions.channel, GATEWAY_SESSION_CHANNEL)))
+    .limit(1);
+
+  return row ? toSession(row) : null;
+}
+
 export async function insertMessage(
   db: Queryable,
   message: Message,
   repeatable = false,
 ): Promise<void> {
-  const insert = db.insert(messages).values({ ...message, createdAt: new Date(message.createdAt) });
+  const { author, ...rest } = message;
+  const insert = db.insert(messages).values({
+    ...rest,
+    authorId: author?.id ?? null,
+    authorName: author?.name ?? null,
+    createdAt: new Date(message.createdAt),
+  });
   if (repeatable) await insert.onConflictDoNothing({ target: messages.id });
   else await insert;
 }

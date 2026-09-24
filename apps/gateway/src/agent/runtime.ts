@@ -274,6 +274,8 @@ export class AgentRuntime {
                 phase: 'tool-started',
                 toolName: name,
                 toolCallId: options.toolCallId,
+                // What it was asked, for the owner's timeline; secrets are masked like results.
+                input: redactOutput(input, secrets),
               });
 
               try {
@@ -321,7 +323,18 @@ export class AgentRuntime {
 
                 // The agent has to be able to say what went wrong: a bare "it failed" leaves it
                 // guessing, and the person then has to read the gateway log to learn anything.
-                throw new Error(`Tool ${name} failed: ${toolFailure(error, secrets)}`);
+                const failure = toolFailure(error, secrets);
+
+                await this.services.lifecycle
+                  .checkpoint(profileId, runId, owner, {
+                    phase: 'tool-failed',
+                    toolName: name,
+                    toolCallId: options.toolCallId,
+                    reason: failure,
+                  })
+                  .catch(() => {});
+
+                throw new Error(`Tool ${name} failed: ${failure}`);
               }
             } finally {
               release();

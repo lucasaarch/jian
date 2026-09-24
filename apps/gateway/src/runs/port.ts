@@ -7,6 +7,8 @@ export type SubmitOptions = {
   activity?: 'conversation' | 'channel';
   call?: AgentCallOrigin;
   group?: GroupTurn;
+  /** Who wrote the message, when the conversation is a room with several people in it. */
+  author?: { id: string; name?: string };
 };
 
 export interface RunReader {

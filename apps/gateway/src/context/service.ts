@@ -1,6 +1,6 @@
 import type { Run } from '@jian/contracts';
 import { listConversations } from '../channels/repository.js';
-import { searchMemories } from '../memories/repository.js';
+import { findMemories, searchMemories, withLinks } from '../memories/repository.js';
 import type { RunReader } from '../runs/port.js';
 import type { SessionReader } from '../sessions/port.js';
 import type { Store } from '../storage/database.js';
@@ -11,6 +11,7 @@ export class Contexts {
     private readonly store: Store,
     private readonly runs: RunReader,
     private readonly sessions: SessionReader,
+    private readonly settings?: { timeZone(): Promise<string> },
   ) {}
 
   async context(run: Run) {
@@ -24,15 +25,29 @@ export class Contexts {
     // Independent reads: whatever the request mentions, what the profile is busy with, whom it
     // talks to on its channels, and the turns since the record of what was compacted away.
     // `buildContext` is what decides how much of each survives.
-    const [memories, activities, conversations, history] = await Promise.all([
+    const [matched, activities, conversations, history] = await Promise.all([
       searchMemories(this.store.db, run.profileId, words, 100),
       this.runs.activities(run.profileId),
       listConversations(this.store.db, run.profileId),
       this.sessions.messages(run.profileId, run.sessionId, 40, session.summarizedUpTo),
     ]);
 
+    // One step out from what matched: the memories linked to it, which the request may not
+    // mention at all.
+    const memories = await withLinks(this.store.db, run.profileId, matched);
+    const matchedKeys = new Set(memories.map((memory) => memory.key));
+    const linked = await findMemories(
+      this.store.db,
+      run.profileId,
+      [...new Set(memories.flatMap((memory) => memory.links ?? []))].filter(
+        (key) => !matchedKeys.has(key),
+      ),
+    );
+
     return buildContext(run, {
+      ...(this.settings ? { timeZone: await this.settings.timeZone() } : {}),
       memories,
+      linked,
       activities,
       conversations: conversations.map((contact) => ({
         sessionId: contact.sessionId as string,

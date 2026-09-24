@@ -1,3 +1,4 @@
+import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
 import { testServices } from './helpers/services.js';
 
@@ -137,7 +138,10 @@ describe('the conversation list', () => {
     await say(newer.id, 'first', 'a');
     await say(older.id, 'Line one\nline two', 'b');
 
-    const list = await services.sessions.overview(profile.id);
+    // The gateway conversation is always there too; the panel pins it apart from this order.
+    const list = (await services.sessions.overview(profile.id)).filter(
+      (session) => session.channel !== GATEWAY_SESSION_CHANNEL,
+    );
 
     expect(list.map((session) => session.title)).toEqual(['Older', 'Newer', 'Quiet']);
     expect(list[0]).toMatchObject({ lastMessage: { role: 'assistant', text: 'Ok.' } });

@@ -21,10 +21,11 @@ import {
   pageQuerySchema,
 } from './coordination.js';
 import { decisionsInputSchema, decisionsStatusSchema } from './decisions.js';
-import { mediaContentSchema } from './media.js';
+import { inlineMediaSchema, mediaContentSchema, mediaRecordSchema } from './media.js';
 import {
   builtinSkillSchema,
   mcpStatusSchema,
+  memoryEditSchema,
   memoryKeySchema,
   profilePatchSchema,
   profileSchema,
@@ -48,13 +49,23 @@ import {
   eventSchema,
   memoryRecordSchema,
   messageRecordSchema,
+  personSchema,
   profileRecordSchema,
   revisionRecordSchema,
   runRecordSchema,
+  runTimelineSchema,
   sessionRecordSchema,
   sessionSummarySchema,
 } from './records.js';
 import { releasesSchema } from './releases.js';
+import {
+  gatewaySettingsPatchSchema,
+  gatewaySettingsSchema,
+  scheduleInputSchema,
+  schedulePatchSchema,
+  scheduleRecordSchema,
+  scheduleRunSchema,
+} from './schedules.js';
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
 import { catalogQuerySchema, catalogSchema, skillImportSchema } from './skills.js';
 import { webSearchInputSchema, webSearchStatusSchema } from './web.js';
@@ -577,10 +588,99 @@ export const operations: Operation[] = [
   },
   {
     method: 'POST',
+    path: `${session}/media`,
+    operationId: 'uploadMedia',
+    access: 'admin',
+    body: inlineMediaSchema,
+    response: mediaRecordSchema,
+    status: 201,
+  },
+  {
+    method: 'GET',
+    path: `${session}/timeline`,
+    operationId: 'listSessionTimeline',
+    access: 'admin',
+    response: z.array(runTimelineSchema),
+  },
+  {
+    method: 'GET',
+    path: `${session}/people`,
+    operationId: 'listSessionPeople',
+    access: 'admin',
+    response: z.array(personSchema),
+  },
+  {
+    method: 'POST',
     path: `${session}/messages`,
     operationId: 'submitMessage',
     access: 'admin',
     body: submitSchema,
+    response: runRecordSchema,
+    status: 202,
+  },
+  {
+    method: 'GET',
+    path: `${profile}/schedules`,
+    operationId: 'listSchedules',
+    access: 'admin',
+    response: z.array(scheduleRecordSchema),
+  },
+  {
+    method: 'POST',
+    path: `${profile}/schedules`,
+    operationId: 'createSchedule',
+    access: 'admin',
+    body: scheduleInputSchema,
+    response: scheduleRecordSchema,
+    status: 201,
+  },
+  {
+    method: 'PATCH',
+    path: `${profile}/schedules/:scheduleId`,
+    operationId: 'updateSchedule',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), scheduleId: z.uuid() }),
+    body: schedulePatchSchema,
+    response: scheduleRecordSchema,
+  },
+  {
+    method: 'DELETE',
+    path: `${profile}/schedules/:scheduleId`,
+    operationId: 'deleteSchedule',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), scheduleId: z.uuid() }),
+    response: scheduleRecordSchema,
+  },
+  {
+    method: 'GET',
+    path: `${profile}/schedules/:scheduleId/history`,
+    operationId: 'listScheduleRuns',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), scheduleId: z.uuid() }),
+    response: z.array(scheduleRunSchema),
+  },
+  {
+    method: 'GET',
+    path: '/v1/settings',
+    operationId: 'getSettings',
+    access: 'admin',
+    response: gatewaySettingsSchema,
+  },
+  {
+    method: 'PUT',
+    path: '/v1/settings',
+    operationId: 'updateSettings',
+    access: 'admin',
+    body: gatewaySettingsPatchSchema,
+    response: gatewaySettingsSchema,
+  },
+  {
+    // Now, once, without moving when it runs next: to see what it does before waiting for it.
+    method: 'POST',
+    path: `${profile}/schedules/:scheduleId/run`,
+    operationId: 'runSchedule',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), scheduleId: z.uuid() }),
     response: runRecordSchema,
     status: 202,
   },
@@ -592,12 +692,45 @@ export const operations: Operation[] = [
     response: z.array(memoryRecordSchema),
   },
   {
-    // Only the agent writes a memory; the owner can read the shelf and take one off it.
+    method: 'PUT',
+    path: `${profile}/memories/:memoryKey`,
+    operationId: 'editMemory',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), memoryKey: memoryKeySchema }),
+    body: memoryEditSchema,
+    response: memoryRecordSchema,
+  },
+  {
     method: 'DELETE',
     path: `${profile}/memories/:memoryKey`,
     operationId: 'forgetMemory',
     access: 'admin',
     params: z.strictObject({ profileId: z.uuid(), memoryKey: memoryKeySchema }),
+    response: memoryRecordSchema,
+  },
+  {
+    // Links go both ways: linking a to b is linking b to a, and the answer is `memoryKey`.
+    method: 'PUT',
+    path: `${profile}/memories/:memoryKey/links/:linkedKey`,
+    operationId: 'linkMemories',
+    access: 'admin',
+    params: z.strictObject({
+      profileId: z.uuid(),
+      memoryKey: memoryKeySchema,
+      linkedKey: memoryKeySchema,
+    }),
+    response: memoryRecordSchema,
+  },
+  {
+    method: 'DELETE',
+    path: `${profile}/memories/:memoryKey/links/:linkedKey`,
+    operationId: 'unlinkMemories',
+    access: 'admin',
+    params: z.strictObject({
+      profileId: z.uuid(),
+      memoryKey: memoryKeySchema,
+      linkedKey: memoryKeySchema,
+    }),
     response: memoryRecordSchema,
   },
   {

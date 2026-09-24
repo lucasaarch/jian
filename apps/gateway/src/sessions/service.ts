@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   AGENT_SESSION_CHANNEL,
+  GATEWAY_SESSION_CHANNEL,
   type Profile,
   type Session,
   sessionRenameSchema,
@@ -9,8 +10,10 @@ import {
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
 import {
+  findGatewaySession,
   findPeerSession,
   findSession,
   insertMessage,
@@ -131,6 +134,36 @@ export class Sessions {
     return transaction ? open(transaction) : this.store.transaction(profileId, open);
   }
 
+  /**
+   * The conversation the owner holds with this profile through the panel, found or opened. A
+   * profile has exactly one: the gateway opens it, a reset that clears the sessions lets the
+   * next read open it again, and the public session input cannot create another.
+   */
+  async gatewaySession(profileId: string) {
+    return this.store.transaction(profileId, async (tx) => {
+      const existing = await findGatewaySession(tx, profileId);
+
+      if (existing) {
+        return existing;
+      }
+
+      await this.profiles.profile(profileId, tx);
+
+      const session: Session = {
+        title: 'Gateway',
+        channel: GATEWAY_SESSION_CHANNEL,
+        id: randomUUID(),
+        profileId,
+        createdAt: nowIso(this.clock),
+      };
+
+      await insertSession(tx, session);
+      await recordEvent(tx, this.clock, profileId, 'session.created', session);
+
+      return session;
+    });
+  }
+
   /** Belonging to the profile is a condition of the read, so another profile's session is a 404. */
   async session(profileId: string, sessionId: string, reader: Queryable = this.store.db) {
     return assertFound(await findSession(reader, profileId, sessionId), 'Session');
@@ -144,6 +177,8 @@ export class Sessions {
 
   /** The list the panel shows: each session with its last message on one line, newest first. */
   async overview(profileId: string) {
+    await this.gatewaySession(profileId);
+
     const [list, last] = await Promise.all([
       this.sessions(profileId),
       lastMessages(this.store.db, profileId),
@@ -175,6 +210,13 @@ export class Sessions {
           ? 1
           : -1,
       );
+  }
+
+  /** The tools the agent used in each recent turn here, for the owner's timeline. */
+  async timeline(profileId: string, sessionId: string) {
+    await this.session(profileId, sessionId);
+
+    return sessionTimeline(this.store.db, profileId, sessionId);
   }
 
   /** Writes one turn of a conversation the gateway itself is keeping, such as a peer thread. */

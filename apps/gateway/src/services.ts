@@ -11,10 +11,12 @@ import { Providers } from './providers/service.js';
 import { ReleaseNotes } from './releases/service.js';
 import { RunLifecycle } from './runs/lifecycle.js';
 import { Runs } from './runs/service.js';
+import { Schedules } from './schedules/service.js';
 import type { GatewayVault } from './security/gateway-vault.js';
 import { createSafeFetch } from './security/outbound.js';
 import type { Vault } from './security/vault.js';
 import { Sessions } from './sessions/service.js';
+import { Settings } from './settings/service.js';
 import type { Store } from './storage/database.js';
 import { WebSearch } from './web/service.js';
 
@@ -29,6 +31,8 @@ export type Services = {
   decisions: Decisions;
   runs: Runs;
   peers: Peers;
+  schedules: Schedules;
+  settings: Settings;
   lifecycle: RunLifecycle;
   contexts: Contexts;
   errands: Errands;
@@ -57,6 +61,7 @@ export function buildServices({
   const sessions = new Sessions(store, profiles, clock);
   const memories = new Memories(store, profiles, sessions, clock);
   const runs = new Runs(store, profiles, sessions, providers, clock);
+  const settings = new Settings(store);
   const decisions = new Decisions(store, gatewayVault, fetcher ?? createSafeFetch().fetch);
 
   return {
@@ -71,8 +76,10 @@ export function buildServices({
     decisions,
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),
+    schedules: new Schedules(store, profiles, sessions, runs, clock),
+    settings,
     lifecycle: new RunLifecycle(store, runs, clock),
-    contexts: new Contexts(store, runs, sessions),
+    contexts: new Contexts(store, runs, sessions, settings),
     errands: new Errands(store, clock),
     vault,
     gatewayVault,

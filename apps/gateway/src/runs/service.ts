@@ -89,11 +89,11 @@ export class Runs {
   }
 
   async submit(profileId: string, sessionId: string, input: unknown, options: SubmitOptions = {}) {
-    const { continuationOf, activity = 'conversation', call, group } = options;
+    const { continuationOf, activity = 'conversation', call, group, author } = options;
     const parsed = submitSchema.parse(input);
     const data = {
       ...parsed,
-      text: [parsed.text, ...(parsed.mediaIds ?? []).map(mediaMarker)].join('\n'),
+      text: [parsed.text, ...(parsed.mediaIds ?? []).map(mediaMarker)].filter(Boolean).join('\n'),
     };
 
     // Choosing a model for an owner who has not can reach the provider, and the profile lock
@@ -142,6 +142,7 @@ export class Runs {
           runId: inFlight.id,
           role: 'user',
           content: data.text,
+          ...(author ? { author } : {}),
           createdAt: nowIso(this.clock),
         });
 
@@ -221,6 +222,7 @@ export class Runs {
         runId: run.id,
         role: 'user',
         content: data.text,
+        ...(author ? { author } : {}),
         createdAt: nowIso(this.clock),
       };
 

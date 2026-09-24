@@ -6,7 +6,7 @@ import type { SessionWriter } from './port.js';
 import type { Sessions } from './service.js';
 
 type SessionRouteServices = {
-  sessions: SessionWriter & Pick<Sessions, 'renameSession' | 'overview'>;
+  sessions: SessionWriter & Pick<Sessions, 'renameSession' | 'overview' | 'timeline'>;
   runs: RunWriter;
   // History spans every message of a profile or a session, so it comes from coordination.
   coordination: Pick<Coordination, 'history'>;
@@ -46,6 +46,11 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
     '/v1/profiles/:profileId/sessions/:sessionId/history',
     async (request) =>
       deps.coordination.history(request.params.profileId, request.params.sessionId, request.query),
+  );
+
+  app.get<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/timeline',
+    async (request) => deps.sessions.timeline(request.params.profileId, request.params.sessionId),
   );
 
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/history', async (request) =>

@@ -18,6 +18,8 @@ import {
   bigint,
   bigserial,
   boolean,
+  check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -156,6 +158,8 @@ export const sessions = pgTable(
   (table) => [
     index('sessions_recent').on(table.profileId, table.createdAt.desc()),
     index('sessions_peer').on(table.profileId, table.peerProfileId),
+    // One gateway conversation per profile, whatever races to open it.
+    uniqueIndex('sessions_gateway').on(table.profileId).where(sql`${table.channel} = 'gateway'`),
   ],
 );
 
@@ -232,6 +236,9 @@ export const messages = pgTable(
     runId: uuid('run_id').references(() => runs.id, { onDelete: 'cascade' }),
     role: messageRole('role').notNull(),
     content: text('content').notNull(),
+    // Set in a group: who wrote it, by their id on the channel and the name they showed.
+    authorId: text('author_id'),
+    authorName: text('author_name'),
     createdAt,
   },
   (table) => [
@@ -263,6 +270,96 @@ export const memories = pgTable(
       'gin',
       sql`to_tsvector('simple', ${table.key} || ' ' || ${table.content})`,
     ),
+  ],
+);
+
+/**
+ * Something the agent does at a time: once (`at`) or on a repetition (`cron`), in a time zone,
+ * in one conversation. `next_run_at` is what the scheduler looks at; it is absent once a
+ * single time has passed or while the schedule is switched off.
+ */
+export const schedules = pgTable(
+  'schedules',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    instruction: text('instruction').notNull(),
+    at: timestamp('at', { withTimezone: true }),
+    cron: text('cron'),
+    timeZone: text('time_zone').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    nextRunAt: timestamp('next_run_at', { withTimezone: true }),
+    lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+    lastRunId: uuid('last_run_id'),
+    lastError: text('last_error'),
+    createdBy: text('created_by').$type<'owner' | 'agent'>().notNull(),
+    createdAt,
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('schedules_profile').on(table.profileId, table.createdAt),
+    index('schedules_due').on(table.nextRunAt).where(sql`${table.enabled}`),
+    check('schedules_timing', sql`(${table.at} IS NULL) <> (${table.cron} IS NULL)`),
+  ],
+);
+
+/** One time a schedule started, or tried to: kept for thirty days as its history. */
+export const scheduleRuns = pgTable(
+  'schedule_runs',
+  {
+    id: uuid('id').primaryKey(),
+    scheduleId: uuid('schedule_id')
+      .notNull()
+      .references(() => schedules.id, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
+    manual: boolean('manual').notNull().default(false),
+    runId: uuid('run_id'),
+    error: text('error'),
+    createdAt,
+  },
+  (table) => [index('schedule_runs_schedule').on(table.scheduleId, table.createdAt.desc())],
+);
+
+/** Settings of the whole installation, one row per setting. */
+export const gatewaySettings = pgTable('gateway_settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Two memories recalled together. A link has no direction, so it is stored once, the smaller
+ * key first, and goes when either memory does.
+ */
+export const memoryLinks = pgTable(
+  'memory_links',
+  {
+    profileId: uuid('profile_id').notNull(),
+    aKey: text('a_key').notNull(),
+    bKey: text('b_key').notNull(),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.aKey, table.bKey] }),
+    index('memory_links_b').on(table.profileId, table.bKey),
+    check('memory_links_order', sql`${table.aKey} < ${table.bKey}`),
+    foreignKey({
+      columns: [table.profileId, table.aKey],
+      foreignColumns: [memories.profileId, memories.key],
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.profileId, table.bKey],
+      foreignColumns: [memories.profileId, memories.key],
+    }).onDelete('cascade'),
   ],
 );
 
@@ -433,6 +530,29 @@ export const contacts = pgTable(
     uniqueIndex('contacts_identity').on(table.channelId, table.chatId, table.actorId),
     index('contacts_pending').on(table.profileId, table.status),
   ],
+);
+
+/**
+ * Someone who wrote in a group through a channel. They are not contacts: the group is the
+ * contact the owner approved, and its members come and go without asking. This keeps only what
+ * the panel shows beside their messages — the name they last used and their picture.
+ */
+export const people = pgTable(
+  'people',
+  {
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => channels.id, { onDelete: 'cascade' }),
+    actorId: text('actor_id').notNull(),
+    displayName: text('display_name'),
+    avatar: text('avatar'),
+    avatarCheckedAt: timestamp('avatar_checked_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.channelId, table.actorId] })],
 );
 
 export const deliveryStatus = pgEnum('delivery_status', [
@@ -614,6 +734,7 @@ export const mediaAssets = pgTable(
     data: text('data').notNull(),
     bytes: integer('bytes').notNull(),
     voice: boolean('voice').notNull().default(false),
+    name: text('name'),
     analysis: text('analysis'),
     held: boolean('held').notNull().default(false),
     createdAt,

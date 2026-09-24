@@ -19,6 +19,7 @@
     "@jian/contracts": "workspace:*",
     "ai": "^7.0.108",
     "baileys": "7.0.0-rc14",
+    "cron-parser": "5.10.1",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.12.5",
     "ipaddr.js": "^2.5.0",

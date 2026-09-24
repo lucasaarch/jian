@@ -1,15 +1,23 @@
-import { agentCallSchema, memorySchema, type Run, skillSchema } from '@jian/contracts';
+import {
+  agentCallSchema,
+  memoryKeySchema,
+  memorySchema,
+  type Run,
+  skillSchema,
+} from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { Coordination } from '../coordination/service.js';
 import { assertFound, GatewayError } from '../core/errors.js';
+import { gatewayTimeZone } from '../core/time-zone.js';
 import type { Decisions } from '../decisions/service.js';
 import type { Outreach } from '../errands/port.js';
 import type { MemoryWriter } from '../memories/port.js';
 import type { PeerAgents } from '../peers/port.js';
 import type { ProfileAdmin } from '../profiles/port.js';
 import type { RunExecution, RunReader } from '../runs/port.js';
+import type { Schedules } from '../schedules/service.js';
 import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions/port.js';
 import { builtinSkillNames, findSkill } from '../skills/builtin/index.js';
 import type { Store } from '../storage/database.js';
@@ -29,6 +37,8 @@ export type ToolServices = {
   errands: Outreach;
   store: Store;
   decisions?: Pick<Decisions, 'ask'>;
+  schedules?: Pick<Schedules, 'list' | 'create' | 'update' | 'remove'>;
+  settings?: { timeZone(): Promise<string> };
 };
 
 export function profileTools(services: ToolServices, run: Run): ToolSet {
@@ -49,9 +59,10 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
     }),
 
     read_memories: tool({
-      description: 'Read shared memories and their versions before changing an existing key.',
-      inputSchema: z.object({}),
-      execute: async () => (await services.memories.memories(run.profileId)).slice(0, 30),
+      description:
+        'Find shared memories, with their versions and what each is linked to. Give a few words of the subject to search; with none, the most recent. Search before remember, and update the memory you find instead of writing a near-duplicate.',
+      inputSchema: z.object({ query: z.string().max(200).optional() }),
+      execute: async ({ query }) => services.memories.search(run.profileId, query ?? ''),
     }),
 
     remember: tool({
@@ -59,6 +70,32 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
         'Save a fact or decision shared by all sessions of this profile. Use expectedVersion=0 for a new key, or the current version for an update.',
       inputSchema: memorySchema,
       execute: async (input) => services.memories.remember(run.profileId, input, run.sessionId),
+    }),
+
+    ...(services.schedules
+      ? scheduleTools(services.schedules, run, () =>
+          services.settings ? services.settings.timeZone() : Promise.resolve(gatewayTimeZone()),
+        )
+      : {}),
+
+    forget_memory: tool({
+      description:
+        'Delete one of your memories, and its links, when it is wrong, superseded, or merged into another. It cannot be undone.',
+      inputSchema: z.object({ key: memoryKeySchema }),
+      execute: async ({ key }) => services.memories.forget(run.profileId, key),
+    }),
+
+    link_memories: tool({
+      description:
+        'Link two memories about the same subject, or worth recalling together: whenever one is relevant to a request, the other is recalled with it. Links go both ways.',
+      inputSchema: z.object({ key: memoryKeySchema, with: memoryKeySchema }),
+      execute: async (input) => services.memories.link(run.profileId, input.key, input.with),
+    }),
+
+    unlink_memories: tool({
+      description: 'Undo a link between two memories that no longer belong together.',
+      inputSchema: z.object({ key: memoryKeySchema, from: memoryKeySchema }),
+      execute: async (input) => services.memories.unlink(run.profileId, input.key, input.from),
     }),
 
     list_sessions: tool({
@@ -392,6 +429,14 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
  * profiles still costs one call rather than two.
  */
 export const TOOL_GROUPS = {
+  schedules: {
+    summary: 'do something later or on a repetition: reminders, daily summaries, recurring checks',
+    tools: ['list_schedules', 'create_schedule', 'update_schedule', 'delete_schedule'],
+  },
+  memory: {
+    summary: 'tidy your memories: delete one, and link those recalled together',
+    tools: ['forget_memory', 'link_memories', 'unlink_memories'],
+  },
   media: {
     summary: 'inspect images and audio, generate images, and reply with voice recordings',
     tools: ['analyze_media', 'generate_image', 'list_speech_voices', 'generate_speech'],
@@ -489,4 +534,78 @@ export function deferTools(tools: ToolSet, loaded: Set<string>): { gated: Set<st
   });
 
   return { gated };
+}
+
+/**
+ * The profile's schedules, managed by the agent as fully as by the owner. A schedule runs the
+ * instruction as a new turn in its conversation at the time; in a chat, the answer goes out
+ * on the channel. Times are read in the owner's zone unless one is named.
+ */
+function scheduleTools(
+  schedules: NonNullable<ToolServices['schedules']>,
+  run: Run,
+  zone: () => Promise<string>,
+): ToolSet {
+  const timing = {
+    at: z
+      .string()
+      .optional()
+      .describe(
+        `A single time, ISO 8601 with its offset, e.g. 2026-10-02T15:00:00-03:00. Exclusive with cron.`,
+      ),
+    cron: z
+      .string()
+      .optional()
+      .describe(
+        'A repetition, five cron fields: minute hour day-of-month month day-of-week. "0 8 * * *" is every day at 08:00; "30 9 * * 1-5" is weekdays at 09:30. At most every 5 minutes. Exclusive with at.',
+      ),
+    timeZone: z
+      .string()
+      .optional()
+      .describe(
+        "IANA zone the time is read in. Default: the gateway's, the one the current time above is given in.",
+      ),
+  };
+
+  return {
+    list_schedules: tool({
+      description: 'List this profile’s schedules: what, when, where, whether on, and when next.',
+      inputSchema: z.object({}),
+      execute: async () => schedules.list(run.profileId),
+    }),
+    create_schedule: tool({
+      description:
+        'Do something later, once or on a repetition: remind the owner, send a summary every morning, check something weekly. At the time, the instruction runs as a new turn in the chosen conversation — this one unless you give another session id, such as a WhatsApp group from your conversations — and your answer there goes out on its channel. Write the instruction as the request you will receive then, with everything needed and nothing assumed from this conversation.',
+      inputSchema: z.object({
+        name: z.string().min(1).max(80).describe('Short, for the owner’s list: "Morning summary".'),
+        instruction: z.string().min(1).max(4000),
+        sessionId: z.string().uuid().optional(),
+        ...timing,
+      }),
+      execute: async ({ sessionId, timeZone, ...input }) =>
+        schedules.create(
+          run.profileId,
+          { ...input, sessionId: sessionId ?? run.sessionId, timeZone: timeZone ?? (await zone()) },
+          'agent',
+        ),
+    }),
+    update_schedule: tool({
+      description:
+        'Change a schedule: its name, instruction, conversation, time, zone, or switch it off (enabled: false) and on. A new time replaces the old one.',
+      inputSchema: z.object({
+        id: z.string().uuid(),
+        name: z.string().min(1).max(80).optional(),
+        instruction: z.string().min(1).max(4000).optional(),
+        sessionId: z.string().uuid().optional(),
+        enabled: z.boolean().optional(),
+        ...timing,
+      }),
+      execute: async ({ id, ...patch }) => schedules.update(run.profileId, id, patch),
+    }),
+    delete_schedule: tool({
+      description: 'Delete a schedule for good. To pause one instead, switch it off.',
+      inputSchema: z.object({ id: z.string().uuid() }),
+      execute: async ({ id }) => schedules.remove(run.profileId, id),
+    }),
+  };
 }
