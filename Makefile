@@ -5,7 +5,8 @@
 
 IMAGE ?= ghcr.io/lucasaarch/jian-gateway
 # The version `make release` writes, so a local image and a published one agree.
-VERSION ?= $(shell node -p "require('./package.json').version")
+# The newest release tag; a checkout without tags builds as a developer's image.
+VERSION ?= $(or $(patsubst v%,%,$(shell git describe --tags --abbrev=0 2>/dev/null)),0.0.0-dev)
 REVISION ?= $(shell git rev-parse HEAD)
 
 COMPOSE := docker compose -f compose.yaml
