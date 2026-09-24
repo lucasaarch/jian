@@ -5,6 +5,21 @@ Every release of Jian, newest first.
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit a note there and run
      `make changelog`; editing this file is editing the copy rather than the thing. -->
 
+## 2.2.0-rc.5 — 2026-09-24
+
+File uploads that reach the provider, errors that say what went wrong, and an agent that knows what to do with them.
+
+### Features
+
+* **agent:** a new built-in skill, handling-errors, teaches the agent to read an error and its HTTP status, say what failed and why, and point to where it is fixed ([b73ecca](https://github.com/lucasaarch/jian/commit/b73ecca2a1fc10ff471e1a4c018bc06d1ff83769))
+* **media:** when a provider refuses, its own reason comes with the status, one line, with credentials masked ([b73ecca](https://github.com/lucasaarch/jian/commit/b73ecca2a1fc10ff471e1a4c018bc06d1ff83769))
+
+### Bug Fixes
+
+* **outbound:** file uploads were sent without their multipart type, so Groq and OpenAI refused voice notes to transcribe and Telegram refused photos, voice replies and documents; they are sent as uploads again ([b73ecca](https://github.com/lucasaarch/jian/commit/b73ecca2a1fc10ff471e1a4c018bc06d1ff83769))
+* **logs:** every failed tool and unreadable attachment is written to the gateway log, not only a failed turn ([b73ecca](https://github.com/lucasaarch/jian/commit/b73ecca2a1fc10ff471e1a4c018bc06d1ff83769))
+* **panel:** Incoming audio, Text to speech and Image generation no longer warn about unknown capabilities or offer an effort, since neither applies to them ([0d5c176](https://github.com/lucasaarch/jian/commit/0d5c1766cc059fc14def504c71f009ae72e6d066))
+
 ## 2.2.0-rc.4 — 2026-09-24
 
 Voice notes transcribed for free with Groq or a Whisper server you run, busy providers asked again, and a failed turn that says why.
