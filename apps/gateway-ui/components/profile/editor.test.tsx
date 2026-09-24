@@ -17,6 +17,7 @@ const profile = {
   allowSelfManagement: false,
   allowShell: false,
   allowWebSearch: false,
+  learnFromWork: true,
   version: 3,
 } as unknown as Profile;
 

@@ -66,7 +66,12 @@ export function MessageMedia({
 }) {
   const ids = [
     ...new Set(
-      [...content.matchAll(/\[Attached media: ([0-9a-f-]{36})\]/g)].map((match) => match[1] ?? ''),
+      // A file posted in a group but not to the agent is noted with its id; it is still there.
+      [
+        ...content.matchAll(
+          /\[(?:Attached media: |File not opened, it was not sent to you: [^\]]*?media ID )([0-9a-f-]{36})/g,
+        ),
+      ].map((match) => match[1] ?? ''),
     ),
   ];
   const key = ids.join(',');

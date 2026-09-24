@@ -157,6 +157,7 @@ export function ProfileEditor({
       selfManagement: profile.allowSelfManagement,
       shell: profile.allowShell,
       webSearch: profile.allowWebSearch,
+      learn: profile.learnFromWork,
     };
 
     for (const [name, value] of Object.entries(values)) {
@@ -192,6 +193,7 @@ export function ProfileEditor({
       allowSelfManagement: data.get('selfManagement') === 'on',
       allowShell: data.get('shell') === 'on',
       allowWebSearch: data.get('webSearch') === 'on',
+      learnFromWork: data.get('learn') === 'on',
     };
     const snapshot = JSON.stringify(patch);
 
@@ -316,6 +318,17 @@ export function ProfileEditor({
                 <small>
                   The agent may search the internet and read public pages, through the search key
                   under Providers. Pages are written by strangers and can try to steer it.
+                </small>
+              </span>
+            </label>
+            <label className="check-row">
+              <input name="learn" type="checkbox" defaultChecked={profile.learnFromWork} />
+              <span>
+                <strong>Learn from its work</strong>
+                <small>
+                  After a long turn, an error it recovered from, or every fifteen turns, the agent
+                  looks back and keeps what helps as a skill or a memory. What it kept, and why, is
+                  under Sessions › Learning.
                 </small>
               </span>
             </label>
