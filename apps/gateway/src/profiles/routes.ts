@@ -12,6 +12,11 @@ type ProfileRouteServices = {
   vault: Vault;
   /** Absent in a gateway with no public address configured; OAuth servers then cannot sign in. */
   mcpLogins?: McpLogins;
+  /**
+   * The gateway's guarded client. The check must reach a server the way a run does, private
+   * origins the operator allowed included, or it reports failures a run would not have.
+   */
+  fetcher?: typeof globalThis.fetch;
 };
 
 /** The only HTML this gateway serves outside the panel: where a redirect lands. */
@@ -55,7 +60,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteSe
         await deps.profiles.profile(profileId),
         name,
         deps.vault,
-        undefined,
+        deps.fetcher,
         deps.mcpLogins?.provider,
       );
 
