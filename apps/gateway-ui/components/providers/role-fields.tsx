@@ -59,7 +59,7 @@ export function RoleFields({
 
   return (
     <>
-      {selected && !selected.known && (
+      {selected && !selected.known && role.tools && (
         <Badge tone="warn">Capabilities unknown: conservative limits</Badge>
       )}
       {list?.stale && (
@@ -140,23 +140,28 @@ export function RoleFields({
               }
               options={[
                 { value: '', label: 'Automatic' },
-                ...models.map((model) => ({ value: model.id, label: modelLabel(model) })),
+                ...models.map((model) => ({
+                  value: model.id,
+                  label: modelLabel(model, role.tools),
+                })),
                 { value: '__manual__', label: 'Type an id…' },
               ]}
             />
           )}
         </Field>
-        <Field
-          label="Effort"
-          hint={allowed.length ? undefined : 'No reasoning levels are catalogued for this model.'}
-        >
-          <Select
-            value={value.reasoningEffort}
-            disabled={busy || !allowed.length}
-            onValueChange={(reasoningEffort) => change(role.key, { reasoningEffort })}
-            options={[{ value: '', label: "The provider's own default" }, ...allowed]}
-          />
-        </Field>
+        {role.tools && (
+          <Field
+            label="Effort"
+            hint={allowed.length ? undefined : 'No reasoning levels are catalogued for this model.'}
+          >
+            <Select
+              value={value.reasoningEffort}
+              disabled={busy || !allowed.length}
+              onValueChange={(reasoningEffort) => change(role.key, { reasoningEffort })}
+              options={[{ value: '', label: "The provider's own default" }, ...allowed]}
+            />
+          </Field>
+        )}
       </div>
     </>
   );

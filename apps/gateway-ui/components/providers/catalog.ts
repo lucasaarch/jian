@@ -61,6 +61,9 @@ export const anthropicCredentials = [
 
 /**
  * Each activity selects a model independently; empty selections use the stated fallback.
+ * `tools` marks the activities that run the model as an agent, where its context window and
+ * reasoning levels set the limits; generating images or speech and transcribing audio use
+ * neither, so what is not catalogued about their models does not matter.
  */
 export const roles = [
   {
@@ -68,42 +71,49 @@ export const roles = [
     label: 'Conversations',
     hint: 'Used by the API when a request names no model.',
     runtime: true,
+    tools: true,
   },
   {
     key: 'channel',
     label: 'Channels',
     hint: 'WhatsApp, Telegram and webhooks. Unset, it follows the conversation default.',
     runtime: true,
+    tools: true,
   },
   {
     key: 'compaction',
     label: 'Context compaction',
     hint: 'Summarises older context automatically or when the agent requests it. Unset, it uses the conversation model.',
     runtime: true,
+    tools: true,
   },
   {
     key: 'image',
     label: 'Image generation',
     hint: 'Generates images with an OpenAI API key or Gemini. Unset, it uses Gemini when configured.',
     runtime: true,
+    tools: false,
   },
   {
     key: 'vision',
     label: 'Image analysis',
     hint: 'When selected, analyzes incoming images. Otherwise the conversation model sees them directly when supported; Gemini is the fallback.',
     runtime: true,
+    tools: true,
   },
   {
     key: 'audio',
     label: 'Incoming audio',
     hint: 'Voice notes and audio files share this model. Gemini also describes relevant sounds; Whisper, from OpenAI, Groq or your own server, transcribes the speech. Unset, it uses Gemini.',
     runtime: true,
+    tools: false,
   },
   {
     key: 'speech',
     label: 'Text to speech',
     hint: 'Generates voice replies with OpenAI or Gemini. Unset, it uses Gemini with the Kore voice.',
     runtime: true,
+    tools: false,
   },
 ] as const;
 
@@ -121,5 +131,5 @@ export const efforts: Array<{ value: ReasoningEffort; label: string }> = [
 export const usableProviders = (data: ProfileData) =>
   data.providers.filter((provider) => !provider.revokedAt);
 
-export const modelLabel = (model: ProviderModel) =>
-  `${model.displayName ?? model.id}${model.known ? '' : ' · capabilities unknown'}`;
+export const modelLabel = (model: ProviderModel, catalogued = true) =>
+  `${model.displayName ?? model.id}${model.known || !catalogued ? '' : ' · capabilities unknown'}`;
