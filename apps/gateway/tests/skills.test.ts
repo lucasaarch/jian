@@ -1,6 +1,7 @@
+import { skillSchema } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
 import { profileTools } from '../src/agent/tools.js';
-import { availableSkills, findSkill } from '../src/skills/builtin/index.js';
+import { availableSkills, builtinSkills, findSkill } from '../src/skills/builtin/index.js';
 import { parseSkillDocument } from '../src/skills/document.js';
 import { Skills } from '../src/skills/service.js';
 import { testServices } from './helpers/services.js';
@@ -235,6 +236,71 @@ describe('a self-managing agent and the skills the owner imported', () => {
 });
 
 describe('the skills every profile carries', () => {
+  it('teaches web research, code and MCP only to a profile that has those tools', async () => {
+    const services = await testServices();
+    const plain = await services.profiles.createProfile({
+      name: 'Atlas',
+      instructions: 'Help.',
+      model,
+    });
+    const equipped = await services.profiles.createProfile({
+      name: 'Zero',
+      instructions: 'Help.',
+      model,
+      allowShell: true,
+      allowWebSearch: true,
+      mcpServers: [{ name: 'docs', transport: 'http', url: 'https://mcp.example.test/mcp' }],
+    });
+    const names = (profile: typeof plain) => availableSkills(profile).map((skill) => skill.name);
+
+    for (const skill of ['coding-work', 'web-research', 'mcp-servers', 'machine-tools']) {
+      expect(names(plain)).not.toContain(skill);
+      expect(names(equipped)).toContain(skill);
+    }
+
+    expect(names(plain)).toEqual(expect.arrayContaining(['about-jian', 'schedules', 'media']));
+  });
+
+  it('starts a new profile without the opt-in skills, and turns one on when asked', async () => {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({
+      name: 'Atlas',
+      instructions: 'Help.',
+      model,
+    });
+
+    expect(availableSkills(profile).map((skill) => skill.name)).not.toContain('discernment-nudge');
+
+    const on = await services.profiles.updateProfile(profile.id, {
+      expectedVersion: profile.version,
+      disabledSkills: [],
+    });
+
+    expect(availableSkills(on).map((skill) => skill.name)).toContain('discernment-nudge');
+  });
+
+  it('keeps every built-in skill within what a skill may be', () => {
+    for (const skill of builtinSkills({
+      allowSelfManagement: true,
+      allowShell: true,
+      allowWebSearch: true,
+      mcpServers: [
+        {
+          name: 'x',
+          transport: 'http',
+          url: 'https://x.test',
+          auth: 'none',
+          headers: [],
+          args: [],
+          env: [],
+          disabledTools: [],
+        },
+      ],
+    })) {
+      expect(() => skillSchema.parse(skill), skill.name).not.toThrow();
+    }
+  });
+
   it('offers them without the profile storing one, and keeps self-management out of reach', async () => {
     const services = await testServices();
     const plain = await services.profiles.createProfile({
@@ -254,8 +320,8 @@ describe('the skills every profile carries', () => {
     const offered = availableSkills(plain).map((skill) => skill.name);
 
     expect(offered).toContain('owner-and-contacts');
-    expect(offered).not.toContain('writing-your-skills');
-    expect(availableSkills(managing).map((skill) => skill.name)).toContain('writing-your-skills');
+    expect(offered).not.toContain('managing-yourself');
+    expect(availableSkills(managing).map((skill) => skill.name)).toContain('managing-yourself');
   });
 
   it('explains the machine only to a profile that can run commands on it', async () => {

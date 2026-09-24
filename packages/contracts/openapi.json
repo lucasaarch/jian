@@ -14078,7 +14078,9 @@
                       }
                     },
                     "disabledSkills": {
-                      "default": [],
+                      "default": [
+                        "discernment-nudge"
+                      ],
                       "maxItems": 20,
                       "type": "array",
                       "items": {
@@ -14721,7 +14723,9 @@
                         }
                       },
                       "disabledSkills": {
-                        "default": [],
+                        "default": [
+                          "discernment-nudge"
+                        ],
                         "maxItems": 20,
                         "type": "array",
                         "items": {
@@ -15345,7 +15349,9 @@
                     }
                   },
                   "disabledSkills": {
-                    "default": [],
+                    "default": [
+                      "discernment-nudge"
+                    ],
                     "maxItems": 20,
                     "type": "array",
                     "items": {
@@ -15761,7 +15767,9 @@
                       }
                     },
                     "disabledSkills": {
-                      "default": [],
+                      "default": [
+                        "discernment-nudge"
+                      ],
                       "maxItems": 20,
                       "type": "array",
                       "items": {
@@ -16413,7 +16421,9 @@
                       }
                     },
                     "disabledSkills": {
-                      "default": [],
+                      "default": [
+                        "discernment-nudge"
+                      ],
                       "maxItems": 20,
                       "type": "array",
                       "items": {
@@ -17440,7 +17450,9 @@
                       }
                     },
                     "disabledSkills": {
-                      "default": [],
+                      "default": [
+                        "discernment-nudge"
+                      ],
                       "maxItems": 20,
                       "type": "array",
                       "items": {
@@ -18549,7 +18561,9 @@
                             }
                           },
                           "disabledSkills": {
-                            "default": [],
+                            "default": [
+                              "discernment-nudge"
+                            ],
                             "maxItems": 20,
                             "type": "array",
                             "items": {

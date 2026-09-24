@@ -3,44 +3,52 @@ import type { Skill } from '@jian/contracts';
 export const longRunningWork: Skill = {
   name: 'long-running-work',
   description:
-    'Use when work spans messages, a result is paged, or two sessions could repeat one effect.',
-  instructions: `# Work that outlives one message
+    'Use when work spans several turns or sessions, a tool result is too large to read at once, context is running out, or two sessions could repeat one effect.',
+  instructions: `# Work that outlives one turn
 
-A run is one turn. The task can be longer than that, and the only things that survive the
-turn are your memories, the conversation history and the record of your runs.
+A run is one turn: at most ten minutes and a budget of tokens. A task can be longer than
+that. What survives a turn is your memories, the conversation history, the record of your
+runs and your schedules.
 
-## Before you start something that exists already
+The tools below are in the \`tasks\` group; load it with \`load_tools\`.
 
-\`list_activities\` shows what is queued or running across this profile's sessions. Another
-session may already be doing what you are about to start. Look before you begin anything
-that has an effect outside the conversation.
+## Before starting something with an effect
 
-When two sessions must not do a thing at the same time, take a lease:
-\`acquire_resource\` with a name for the thing and a TTL, keep the fence it returns, and
-\`release_resource\` with that fence when you are done. A lease you forget to release blocks
-the other session until it expires, so pick a TTL close to how long you actually need.
+\`list_activities\` shows what is queued or running across this profile. Another session may
+already be doing it. Look before anything that acts outside the conversation.
 
-## Reading a result that does not fit
+When two sessions must not do the same thing at once, take a lease: \`acquire_resource\` with
+a name and a TTL, keep the fence it returns, and \`release_resource\` with it when done. A
+lease you forget blocks the others until it expires, so choose a TTL close to what you need.
 
-A large tool result is stored and you are handed its artifact id instead of the whole thing.
-\`read_artifact\` reads it a page at a time. Read the pages you need, not all of them — and
-say which part you read when you quote it.
+## Results that do not fit
+
+A large tool result is stored, and you are given its artifact id. \`read_artifact\` reads it
+a page at a time. Read the pages you need, and say which part you quoted.
+
+## Context that runs out
+
+Older turns are summarised automatically when the conversation grows. Before a long stretch
+of work, \`compact_context\` asks for that summary now, keeping recent work and the latest
+request. Memories are for what must outlive the conversation; the summary is not.
 
 ## Picking a task back up
 
-\`read_run_checkpoints\` shows what a previous run of this profile actually did: which tools
-ran, what came back, where it stopped. Read it before repeating a step that had an effect
-outside this gateway. A message that was sent cannot be unsent by running the step again.
+\`read_run_checkpoints\` shows what an earlier run actually did: which tools ran, what came
+back, where it stopped. Read it before repeating any step with an outside effect. A message
+that was sent cannot be unsent by sending it again.
 
-\`search_history\` finds the earlier conversation by words, across sessions or inside one.
-Use it instead of asking the person to repeat themselves.
+## Continuing later
+
+When the rest of the work belongs to a later time — "check again tomorrow", "every hour
+until it is done" — schedule it (see \`schedules\`) rather than promising to remember.
 
 ## Saying where you are
 
-- Report what happened, not what you set out to do. A tool that failed is a failure, and it
-  gets one clear sentence.
-- Never say a message was sent, a fact was saved or a task finished before the tool
-  returned. If you do not know, say you do not know and check.
-- When you stop with part of the work done, say which part, and say what is left.
+- Report what happened, not what you set out to do. A failed tool is a failure, in one clear
+  sentence.
+- Never say something was sent, saved or finished before the tool returned. If you do not
+  know, say so and check.
+- When you stop part-way, say what is done and what is left.
 - A step you skipped is a step you report.`,
 };

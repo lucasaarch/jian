@@ -3,20 +3,24 @@ import type { Skill } from '@jian/contracts';
 export const machineTools: Skill = {
   name: 'machine-tools',
   description:
-    'Use before running commands: what the machine already has, how to install more, and what survives an update.',
+    'Use before running commands or installing anything: what the machine has, how to install more without root, logins and keys, and the limits of a command.',
   instructions: `# The machine you run commands on
 
-Check first: \`echo $JIAN_TOOLBOX\`. If it prints \`1\` you are in the Jian image and what
-follows holds. Otherwise the gateway runs straight on the owner's machine: find what exists
-with \`command -v <tool>\`, and install nothing there without the owner asking.
+Commands run with \`run_command\`, in the \`shell\` tool group: load it with \`load_tools\`
+first. They run on the machine the gateway runs on, as whoever started it. There is no
+sandbox.
 
-## Already installed
+Check where you are: \`echo $JIAN_TOOLBOX\`. If it prints \`1\` you are in the Jian image and
+what follows holds. Otherwise the gateway runs directly on the owner's machine: find what
+exists with \`command -v <tool>\`, and install nothing there unless the owner asks.
+
+## Already installed in the image
 
 - Runtimes: Node 24 with npm, pnpm and yarn (through corepack); Python 3 with pip, venv and
-  \`uv\`/\`uvx\`; Go (\`go\`).
-- Version control and the network: \`git\`, \`gh\`, \`ssh\`, \`scp\`, \`curl\`, \`wget\`, \`rsync\`.
-- Text: \`sed\`, \`awk\` (gawk), \`grep\`, \`rg\` (ripgrep), \`fd\`, \`jq\`, \`diff\`, \`patch\`,
-  \`less\`, \`nano\`, \`vi\`, \`tree\`, \`file\`.
+  \`uv\`/\`uvx\`; Go.
+- Git and the network: \`git\`, \`gh\`, \`ssh\`, \`scp\`, \`curl\`, \`wget\`, \`rsync\`.
+- Text: \`rg\` (ripgrep), \`fd\`, \`jq\`, \`sed\`, \`awk\`, \`grep\`, \`diff\`, \`patch\`, \`tree\`,
+  \`file\`, \`less\`, \`nano\`, \`vi\`.
 - Archives: \`tar\`, \`zip\`/\`unzip\`, \`xz\`, \`bzip2\`, \`zstd\`.
 - Builds: \`gcc\`, \`g++\`, \`make\`, \`pkg-config\`.
 - Diagnosis: \`ps\`, \`kill\`, \`lsof\`, \`ip\`, \`ping\`, \`dig\`, \`nc\`.
@@ -24,39 +28,42 @@ with \`command -v <tool>\`, and install nothing there without the owner asking.
 
 ## Installing more
 
-You run as the user \`node\`, without root and without \`sudo\`. Everything under
-\`/home/node\` lives on a volume and survives a new image, so install there:
+You are the user \`node\`, without root and without \`sudo\`. Everything under \`/home/node\`
+lives on a volume that survives a new image, so install there:
 
 - Node: \`npm install -g <pkg>\` (lands in \`~/.local\`).
-- Python CLI: \`uv tool install <pkg>\`. A project: \`uv venv\` and \`uv pip install\`. Not a
-  bare \`pip install\`: the system Python refuses it.
+- Python tools: \`uv tool install <pkg>\`. A project: \`uv venv\`, then \`uv pip install\`. A
+  bare \`pip install\` is refused by the system Python.
 - Go: \`go install <module>@latest\` (lands in \`~/go/bin\`).
 - A single binary: download it to \`~/.local/bin\` and \`chmod +x\` it.
 
-\`apt\` is not available. When a task truly needs a system package, look for a static
-binary or a per-user build first; if there is none, tell the owner which package, so it can
-be added to the image. \`ping\` may be refused on some hosts.
-
-Install what the task needs, not what might be handy. Say what you installed.
+There is no \`apt\`. When a task needs a system package, look for a static binary or a
+per-user build first; if there is none, tell the owner which package, so it can be added to
+the image. Install what the task needs, not what might be handy, and say what you installed.
 
 ## Logins and keys
 
-\`gh\` needs a token: \`gh auth login --with-token\` reading it from the owner, or \`GH_TOKEN\`
-in the command's environment. SSH keys go in \`~/.ssh\` with mode \`600\`, and Git needs
-\`git config --global user.name\` and \`user.email\` before a commit. All three persist in the
-home volume. Never print a token or a private key back into the conversation.
+- \`gh\` needs a token: \`gh auth login --with-token\` with one the owner gives you, or
+  \`GH_TOKEN\` in the command's environment.
+- SSH keys go in \`~/.ssh\` with mode \`600\`.
+- Git needs \`git config --global user.name\` and \`user.email\` before a commit.
 
-## Working on code
+All of them persist in the home volume. Never print a token, a password or a private key
+into the conversation, and never send one anywhere the owner did not ask.
 
-Use the file tools, not the shell, to read and change files: \`read_file\` returns numbered
-lines, \`edit_file\` replaces exact passages without rewriting the rest, \`search_files\` and
-\`find_files\` sweep a codebase. A file must be read in this run before it is changed, and is
-refused if it changed since. Keep \`run_command\` for builds, tests, Git and everything else.
+## Limits of a command
 
-## Limits
+- A command stops after at most two minutes (\`timeoutMs\`, 30 seconds unless you raise it).
+- Output past about 60,000 characters is cut.
+- A long job: split it into steps, or start it in the background writing to a log file, and
+  read the log afterwards.
 
-A command stops after two minutes at most, and output past about 60,000 characters is cut.
-Split a long build into steps, or send it to the background and write its log to a file you
-read afterwards.
-`,
+## Before you run something
+
+Say what you are about to do when it changes anything. Never run something destructive — a
+delete, an overwrite, a force-push, a migration — that nobody in this conversation asked
+for. A command can be held back by the Decisions check; the answer tells you why. Then ask
+the owner to confirm that exact action, and do not try to reach the same effect another way.
+
+For reading and changing code, load the \`coding-work\` skill.`,
 };

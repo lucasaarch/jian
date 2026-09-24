@@ -487,6 +487,13 @@ export const modelDefaults: ModelDefaults = {
   transcription: null,
 };
 
+const builtin = (name: string, description: string, enabled = true): BuiltinSkill => ({
+  name,
+  description,
+  instructions: `# ${name}\n\nThe full text ships with the gateway.`,
+  enabled,
+});
+
 export const builtinSkills: BuiltinSkill[] = [
   {
     name: 'channel-replies',
@@ -496,13 +503,35 @@ export const builtinSkills: BuiltinSkill[] = [
       '# Writing for the channel you are in\n\nA chat app is not a document. Write the way a person texts:\n\n- One idea per message, short\n- **No Markdown**: WhatsApp and Telegram show the asterisks\n- Links on their own line\n\n## In a group\n\n1. Answer only when called by name or mention\n2. Say who you are answering when several people asked\n\n> When in doubt, shorter.\n\n```\nGood: Done, the invoice is in your email.\nBad: **Summary:** I have completed the following steps…\n```',
     enabled: true,
   },
+  builtin(
+    'about-jian',
+    'Use when asked what you are, what Jian is, who made it, where to get it, or why something of yours is not working.',
+  ),
+  builtin(
+    'schedules',
+    'Use when asked to remind someone, do something later or at a time, or repeat something.',
+  ),
+  builtin(
+    'media',
+    'Use when someone sends an image, voice note, PDF or file, or asks for an image or a voice reply.',
+  ),
+  builtin(
+    'coding-work',
+    'Use when asked to read, fix, change or review code, run tests, or work with Git or GitHub.',
+  ),
   {
     name: 'machine-tools',
-    description: 'Use before running commands: what the machine already has, how to install more.',
+    description:
+      'Use before running commands or installing anything: what the machine has and how to install more.',
     instructions:
-      '# The machine you run commands on\n\nCommands run in a container with Node, Python and git. Install more for this user only:\n\n```\nnpm install --prefix ~/.local <package>\npip install --user <package>\n```\n\nThere is no `sudo`, and nothing outside `/home/node` survives a restart.',
-    enabled: false,
+      '# The machine you run commands on\n\nCommands run in a container with Node, Python and git. Install more for this user only:\n\n```\nnpm install -g <package>\nuv tool install <package>\n```\n\nThere is no `sudo`, and nothing outside `/home/node` survives a restart.',
+    enabled: true,
   },
+  builtin(
+    'discernment-nudge',
+    'Use after advice, a draft or an analysis the owner may act on: append two or three specific checks.',
+    false,
+  ),
 ];
 
 /** A year of work with a rhythm to it: busy weekdays, quiet weekends, a gap in the middle. */

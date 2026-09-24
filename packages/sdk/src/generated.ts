@@ -8034,7 +8034,11 @@ export interface operations {
                                 importedAt: string;
                             };
                         }[];
-                        /** @default [] */
+                        /**
+                         * @default [
+                         *       "discernment-nudge"
+                         *     ]
+                         */
                         disabledSkills: string[];
                         /** @default [] */
                         mcpServers: {
@@ -8288,7 +8292,11 @@ export interface operations {
                                 importedAt: string;
                             };
                         }[];
-                        /** @default [] */
+                        /**
+                         * @default [
+                         *       "discernment-nudge"
+                         *     ]
+                         */
                         disabledSkills: string[];
                         /** @default [] */
                         mcpServers: {
@@ -8536,7 +8544,11 @@ export interface operations {
                             importedAt: string;
                         };
                     }[];
-                    /** @default [] */
+                    /**
+                     * @default [
+                     *       "discernment-nudge"
+                     *     ]
+                     */
                     disabledSkills?: string[];
                     /** @default [] */
                     mcpServers?: {
@@ -8674,7 +8686,11 @@ export interface operations {
                                 importedAt: string;
                             };
                         }[];
-                        /** @default [] */
+                        /**
+                         * @default [
+                         *       "discernment-nudge"
+                         *     ]
+                         */
                         disabledSkills: string[];
                         /** @default [] */
                         mcpServers: {
@@ -8930,7 +8946,11 @@ export interface operations {
                                 importedAt: string;
                             };
                         }[];
-                        /** @default [] */
+                        /**
+                         * @default [
+                         *       "discernment-nudge"
+                         *     ]
+                         */
                         disabledSkills: string[];
                         /** @default [] */
                         mcpServers: {
@@ -9410,7 +9430,11 @@ export interface operations {
                                 importedAt: string;
                             };
                         }[];
-                        /** @default [] */
+                        /**
+                         * @default [
+                         *       "discernment-nudge"
+                         *     ]
+                         */
                         disabledSkills: string[];
                         /** @default [] */
                         mcpServers: {
@@ -9796,7 +9820,11 @@ export interface operations {
                                     importedAt: string;
                                 };
                             }[];
-                            /** @default [] */
+                            /**
+                             * @default [
+                             *       "discernment-nudge"
+                             *     ]
+                             */
                             disabledSkills: string[];
                             /** @default [] */
                             mcpServers: {

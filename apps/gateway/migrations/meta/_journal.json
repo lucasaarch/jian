@@ -204,6 +204,13 @@
       "when": 1790561600000,
       "tag": "0028_schedules",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790648000000,
+      "tag": "0029_opt-in-skills",
+      "breakpoints": true
     }
   ]
 }
