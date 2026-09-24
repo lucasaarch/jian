@@ -5603,6 +5603,12 @@ export interface operations {
                     /** @default [] */
                     mentions?: string[];
                     replyTo?: string;
+                    quoted?: {
+                        text: string;
+                        name?: string;
+                    };
+                    reaction?: boolean;
+                    target?: string;
                 };
             };
         };
@@ -5626,7 +5632,7 @@ export interface operations {
                          * @description Why an approved group message produced no run.
                          * @enum {string}
                          */
-                        silence?: "unaddressed" | "budget";
+                        silence?: "unaddressed" | "budget" | "reaction";
                     };
                 };
             };
@@ -5744,6 +5750,23 @@ export interface operations {
             content: {
                 "application/json": {
                     update_id: number;
+                    message_reaction?: {
+                        chat: {
+                            id: number;
+                            type?: string;
+                            title?: string;
+                        };
+                        message_id: number;
+                        user?: {
+                            id: number;
+                            first_name?: string;
+                            username?: string;
+                        };
+                        new_reaction: {
+                            type: string;
+                            emoji?: string;
+                        }[];
+                    };
                     message?: {
                         from?: {
                             id: number;
@@ -5810,9 +5833,14 @@ export interface operations {
                             };
                         }[];
                         reply_to_message?: {
+                            message_id?: number;
                             from?: {
                                 id: number;
+                                first_name?: string;
+                                username?: string;
                             };
+                            text?: string;
+                            caption?: string;
                         };
                     };
                 };
@@ -5838,7 +5866,7 @@ export interface operations {
                          * @description Why an approved group message produced no run.
                          * @enum {string}
                          */
-                        silence?: "unaddressed" | "budget";
+                        silence?: "unaddressed" | "budget" | "reaction";
                     };
                 };
             };
@@ -5981,6 +6009,14 @@ export interface operations {
                             author?: {
                                 id: string;
                                 name?: string;
+                            };
+                            call?: {
+                                /** Format: uuid */
+                                profileId: string;
+                                /** Format: uuid */
+                                sessionId: string;
+                                /** Format: uuid */
+                                runId: string;
                             };
                             /** Format: date-time */
                             createdAt: string;
@@ -6127,6 +6163,14 @@ export interface operations {
                             author?: {
                                 id: string;
                                 name?: string;
+                            };
+                            call?: {
+                                /** Format: uuid */
+                                profileId: string;
+                                /** Format: uuid */
+                                sessionId: string;
+                                /** Format: uuid */
+                                runId: string;
                             };
                             /** Format: date-time */
                             createdAt: string;
@@ -7722,6 +7766,8 @@ export interface operations {
                             /** Format: date-time */
                             importedAt: string;
                         };
+                        /** @constant */
+                        writtenBy?: "agent";
                         enabled: boolean;
                     }[];
                 };
@@ -8069,6 +8115,8 @@ export interface operations {
                                 /** Format: date-time */
                                 importedAt: string;
                             };
+                            /** @constant */
+                            writtenBy?: "agent";
                         }[];
                         /**
                          * @default [
@@ -8327,6 +8375,8 @@ export interface operations {
                                 /** Format: date-time */
                                 importedAt: string;
                             };
+                            /** @constant */
+                            writtenBy?: "agent";
                         }[];
                         /**
                          * @default [
@@ -8579,6 +8629,8 @@ export interface operations {
                             /** Format: date-time */
                             importedAt: string;
                         };
+                        /** @constant */
+                        writtenBy?: "agent";
                     }[];
                     /**
                      * @default [
@@ -8721,6 +8773,8 @@ export interface operations {
                                 /** Format: date-time */
                                 importedAt: string;
                             };
+                            /** @constant */
+                            writtenBy?: "agent";
                         }[];
                         /**
                          * @default [
@@ -8981,6 +9035,8 @@ export interface operations {
                                 /** Format: date-time */
                                 importedAt: string;
                             };
+                            /** @constant */
+                            writtenBy?: "agent";
                         }[];
                         /**
                          * @default [
@@ -9331,6 +9387,8 @@ export interface operations {
                             /** Format: date-time */
                             importedAt: string;
                         };
+                        /** @constant */
+                        writtenBy?: "agent";
                     }[];
                     disabledSkills?: string[];
                     mcpServers?: {
@@ -9465,6 +9523,8 @@ export interface operations {
                                 /** Format: date-time */
                                 importedAt: string;
                             };
+                            /** @constant */
+                            writtenBy?: "agent";
                         }[];
                         /**
                          * @default [
@@ -9855,6 +9915,8 @@ export interface operations {
                                     /** Format: date-time */
                                     importedAt: string;
                                 };
+                                /** @constant */
+                                writtenBy?: "agent";
                             }[];
                             /**
                              * @default [
@@ -10612,6 +10674,14 @@ export interface operations {
                         author?: {
                             id: string;
                             name?: string;
+                        };
+                        call?: {
+                            /** Format: uuid */
+                            profileId: string;
+                            /** Format: uuid */
+                            sessionId: string;
+                            /** Format: uuid */
+                            runId: string;
                         };
                         /** Format: date-time */
                         createdAt: string;

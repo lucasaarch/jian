@@ -54,6 +54,11 @@ export class Narrator {
     }
   }
 
+  /** What is being written and not released yet, as it stands. */
+  get draft(): string {
+    return this.buffer.trimStart();
+  }
+
   /** What has not been released: the run's answer. */
   get rest(): string {
     return this.buffer.trim();

@@ -14,8 +14,9 @@ import {
   type WAMessage,
   type WASocket,
 } from 'baileys';
+import { asJpeg } from '../../media/picture.js';
 import { MAX_DEVICE_SESSION_BYTES } from './connections.js';
-import { readWhatsAppContent } from './media.js';
+import { describeWhatsApp, readWhatsAppContent } from './media.js';
 import { quietLibsignal } from './quiet.js';
 import type { DeviceFactory } from './types.js';
 import { DEVICE_SEND_TIMEOUT_MS } from './types.js';
@@ -81,19 +82,26 @@ const toDeviceJid = (chatId: string) => {
   return CONTACT_JID.test(chatId) ? chatId.replace(/@c\.us$/, '@s.whatsapp.net') : undefined;
 };
 
-/** Where a message says whom it mentions and which message it answers. */
-const contextOf = (message: WAMessage) => {
+/**
+ * Where a message says whom it mentions and which message it answers. Every kind of message
+ * carries it — a sticker or a voice note answering someone too — so it is read from whichever
+ * kind this one is, not from a list that can miss one.
+ */
+export const contextOf = (message: WAMessage): proto.IContextInfo | undefined => {
   const content = normalizeMessageContent(message.message);
+  const document = content?.documentWithCaptionMessage?.message?.documentMessage;
 
-  return (
-    content?.extendedTextMessage ??
-    content?.imageMessage ??
-    content?.audioMessage ??
-    content?.videoMessage ??
-    content?.documentMessage ??
-    content?.documentWithCaptionMessage?.message?.documentMessage
-  )?.contextInfo;
+  for (const part of [...Object.values(content ?? {}), document]) {
+    const info = (part as { contextInfo?: proto.IContextInfo } | null | undefined)?.contextInfo;
+
+    if (info) return info;
+  }
+
+  return undefined;
 };
+
+/** How many recent messages the device remembers, to say what a reaction was to. */
+const REMEMBERED_MESSAGES = 500;
 
 /**
  * How a file goes out: a picture or a video as one, an Ogg recording as a voice note, other
@@ -321,18 +329,73 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
       );
     };
 
+    /**
+     * What recent messages said and whether this account wrote them. A reaction names only the
+     * id of the message it is on; this is how the agent learns which one, and whether it was
+     * its own. Kept in memory: after a restart a reaction says only that it was a reaction.
+     */
+    const said = new Map<string, { text: string; mine: boolean }>();
+    const remember = (id: string | null | undefined, text: string | undefined, mine: boolean) => {
+      if (!id || !text) return;
+      said.delete(id);
+      said.set(id, { text: text.slice(0, 1000), mine });
+      if (said.size > REMEMBERED_MESSAGES) said.delete(said.keys().next().value as string);
+    };
+
     const deliver = async (message: WAMessage) => {
       if (message.key.fromMe || !message.key.id) return;
       const address = message.key.remoteJid ?? '';
       if (!GROUP_JID.test(address) && !toContactJid(address)) return;
-      const { text, media } = await readWhatsAppContent(message);
       const requestKey = message.key.id;
+      const reaction = normalizeMessageContent(message.message)?.reactionMessage;
+      const context = contextOf(message);
+      let text: string;
+      let media: InlineMedia[] | undefined;
+      let answered: { text?: string; mine: boolean; target?: string } | undefined;
 
-      if (message.key.fromMe || !requestKey || !text?.trim() || text.length > 8000) {
+      if (reaction) {
+        // An emptied reaction takes one back; there is nothing new to read.
+        if (!reaction.text || !reaction.key?.id) return;
+        text = reaction.text;
+        const target = said.get(reaction.key.id);
+        // The key is written from the reactor's side: in a chat, a message that is not theirs is
+        // this account's; in a room, its participant says whose it is.
+        const ours = GROUP_JID.test(address)
+          ? (await personOf(reaction.key.participant)) === toContactJid(socket?.user?.id)
+          : !reaction.key.fromMe;
+        answered = {
+          mine: target?.mine ?? ours,
+          target: reaction.key.id,
+          ...(target ? { text: target.text } : {}),
+        };
+      } else {
+        ({ text, media } = await readWhatsAppContent(message));
+        remember(requestKey, describeWhatsApp(message.message), false);
+
+        if (context?.stanzaId) {
+          const quoted =
+            describeWhatsApp(context.quotedMessage) ?? said.get(context.stanzaId)?.text;
+          answered = {
+            mine: said.get(context.stanzaId)?.mine ?? false,
+            target: context.stanzaId,
+            ...(quoted ? { text: quoted } : {}),
+          };
+        }
+      }
+
+      if (!text?.trim() || text.length > 8000) {
         return;
       }
 
       const remote = message.key.remoteJid ?? '';
+      const own = toContactJid(socket?.user?.id);
+      const about = answered
+        ? {
+            ...(answered.target ? { target: answered.target } : {}),
+            ...(answered.text !== undefined ? { quoted: { text: answered.text } } : {}),
+            ...(reaction ? { reaction: true } : {}),
+          }
+        : {};
 
       // In a room the conversation is the group and the sender is the participant, so the two
       // identifiers part ways: approval is decided about the room, delivery goes back to it.
@@ -342,11 +405,16 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
         if (!from) return;
 
         const subject = await subjectOf(remote);
-        const context = contextOf(message);
         const mentions = (
           await Promise.all((context?.mentionedJid ?? []).map((jid) => personOf(jid)))
         ).filter((jid): jid is string => Boolean(jid));
-        const replyTo = context?.stanzaId ? await personOf(context.participant) : undefined;
+        // A reaction on the agent's own message speaks to it, the way a reply does.
+        const replyTo =
+          reaction && answered?.mine
+            ? own
+            : !reaction && context?.stanzaId
+              ? await personOf(context.participant)
+              : undefined;
 
         await callbacks.message({
           actorId: from,
@@ -359,6 +427,7 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           ...(message.pushName ? { displayName: message.pushName.slice(0, 100) } : {}),
           mentions,
           ...(replyTo ? { replyTo } : {}),
+          ...about,
         });
 
         return;
@@ -383,6 +452,8 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
         requestKey,
         scope: 'direct',
         mentions: [],
+        ...(answered?.mine && own ? { replyTo: own } : {}),
+        ...about,
       });
     };
 
@@ -425,6 +496,19 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
             handle(() => deliver(message));
           }
         });
+      },
+      setPicture: async (picture) => {
+        const own = socket?.user?.id;
+
+        if (closed || !socket || !own) {
+          throw new Error('Device unavailable');
+        }
+
+        if (picture) {
+          await socket.updateProfilePicture(own, await asJpeg(picture));
+        } else {
+          await socket.removeProfilePicture(own);
+        }
       },
       avatar: async (chatId) => {
         const jid = toDeviceJid(chatId);
@@ -484,6 +568,12 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           if (!result?.key.id) {
             throw new Error('WhatsApp send was not confirmed');
           }
+
+          remember(
+            result.key.id,
+            text || (media?.name ? `[File: ${media.name}]` : '[Media]'),
+            true,
+          );
 
           return result.key.id;
         } catch {

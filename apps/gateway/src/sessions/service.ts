@@ -226,6 +226,7 @@ export class Sessions {
     runId: string,
     role: 'user' | 'assistant',
     content: string,
+    call?: { profileId: string; sessionId: string; runId: string },
   ) {
     await this.store.transaction(profileId, (tx) =>
       insertMessage(tx, {
@@ -235,6 +236,7 @@ export class Sessions {
         runId,
         role,
         content,
+        ...(call ? { call } : {}),
         createdAt: nowIso(this.clock),
       }),
     );

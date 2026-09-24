@@ -1,10 +1,4 @@
-import {
-  agentCallSchema,
-  memoryKeySchema,
-  memorySchema,
-  type Run,
-  skillSchema,
-} from '@jian/contracts';
+import { agentCallSchema, memoryKeySchema, memorySchema, type Run } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -19,7 +13,8 @@ import type { ProfileAdmin } from '../profiles/port.js';
 import type { RunExecution, RunReader } from '../runs/port.js';
 import type { Schedules } from '../schedules/service.js';
 import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions/port.js';
-import { builtinSkillNames, findSkill } from '../skills/builtin/index.js';
+import { findSkill } from '../skills/builtin/index.js';
+import { skillTools } from '../skills/tools.js';
 import type { Store } from '../storage/database.js';
 import { artifacts, checkpoints } from '../storage/schema.js';
 import { actionGuard } from './guard.js';
@@ -137,8 +132,13 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
         limit: z.number().int().min(1).max(20).default(10),
         q: z.string().trim().min(1).max(200).optional(),
       }),
-      execute: async ({ sessionId, ...query }) =>
-        coordination.history(run.profileId, sessionId, query),
+      execute: async ({ sessionId, ...query }) => {
+        const page = await coordination.history(run.profileId, sessionId, query);
+
+        // Where another agent answered is the panel's to show; to this agent it is the other
+        // side of the wall, so its ids never reach the model.
+        return { ...page, items: page.items.map(({ call: _call, ...message }) => message) };
+      },
     }),
 
     read_artifact: tool({
@@ -312,48 +312,11 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
     );
   }
 
+  // Writing its own skills is part of every agent's work, not of managing itself: what it
+  // writes is marked as its own, shown to the owner under Skills, and only it can change it.
+  Object.assign(tools, skillTools(services.profiles, run));
+
   if (run.profile.allowSelfManagement) {
-    tools.update_skills = tool({
-      description:
-        'Version your skill instructions for future runs. Cannot change MCPs, keys or permissions.',
-      inputSchema: z.object({
-        expectedVersion: z.number().int().positive(),
-        skills: z.array(skillSchema.omit({ origin: true })).max(20),
-      }),
-      execute: async (input) => {
-        const current = await services.profiles.profile(run.profileId);
-
-        if (!current.allowSelfManagement) {
-          throw new GatewayError(403, 'Self-management is disabled');
-        }
-
-        // Imported skills belong to the owner: the agent writes its own and never drops one
-        // it did not write, so "who wrote this instruction" stays answerable.
-        const imported = current.skills.filter((skill) => skill.origin);
-        const written = input.skills.filter(
-          (skill) => !imported.some((owned) => owned.name === skill.name),
-        );
-
-        // A built-in name is the gateway's. Letting a written skill take one would silently
-        // replace instructions the owner never wrote and cannot see in the profile.
-        const shadowed = written.find((skill) => builtinSkillNames.has(skill.name));
-
-        if (shadowed) {
-          throw new GatewayError(409, `${shadowed.name} is a built-in skill of this gateway`);
-        }
-
-        const updated = await services.profiles.updateProfile(run.profileId, {
-          ...input,
-          skills: [...imported, ...written],
-        });
-
-        return {
-          version: updated.version,
-          skills: updated.skills.map(({ name, description }) => ({ name, description })),
-        };
-      },
-    });
-
     tools.update_identity = tool({
       description:
         'Version an update to your own identity. Applies to new runs. Cannot change permissions, keys or providers.',
@@ -433,6 +396,11 @@ export const TOOL_GROUPS = {
     summary: 'do something later or on a repetition: reminders, daily summaries, recurring checks',
     tools: ['list_schedules', 'create_schedule', 'update_schedule', 'delete_schedule'],
   },
+  skills: {
+    summary:
+      'write, rewrite and remove your own skills: routines you follow the same way each time',
+    tools: ['create_skill', 'update_skill', 'delete_skill'],
+  },
   memory: {
     summary: 'tidy your memories: delete one, and link those recalled together',
     tools: ['forget_memory', 'link_memories', 'unlink_memories'],
@@ -487,8 +455,8 @@ export const TOOL_GROUPS = {
     tools: ['list_contacts', 'message_contact'],
   },
   self: {
-    summary: 'read and version your own identity and skills',
-    tools: ['read_identity', 'update_identity', 'update_skills', 'create_profile'],
+    summary: 'read and version your own identity, and create profiles',
+    tools: ['read_identity', 'update_identity', 'create_profile'],
   },
 } as const;
 

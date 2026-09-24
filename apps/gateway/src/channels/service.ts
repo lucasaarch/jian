@@ -5,6 +5,7 @@ import {
   type deliverySchema,
   type Group,
   type GroupTurn,
+  type ingressResultSchema,
 } from '@jian/contracts';
 import type { z } from 'zod';
 import { assertFound, GatewayError } from '../core/errors.js';
@@ -12,6 +13,7 @@ import { recordEvent } from '../core/events.js';
 import { stableUuid } from '../core/ids.js';
 import type { Decisions } from '../decisions/service.js';
 import { Errands } from '../errands/service.js';
+import { pictureOf } from '../media/picture.js';
 import { bindMedia, releaseHeldMedia } from '../media/repository.js';
 import type { Media } from '../media/service.js';
 import type { ProfileReader } from '../profiles/port.js';
@@ -42,6 +44,7 @@ import {
   findContactByIdentity,
   findContactBySession,
   findDelivery,
+  findDeliveryByRemoteId,
   findLiveChannel,
   hasDelivery,
   insertChannel,
@@ -51,7 +54,9 @@ import {
   listDeliveries,
   listDeliveriesByPhase,
   listGroupContacts,
+  listPictureTargets,
   markChannelRevoked,
+  markPictureSynced,
   setContactAvatar,
   updateDelivery,
 } from './repository.js';
@@ -74,6 +79,10 @@ export const channelSecret = (channelId: string) => `channel:${channelId}`;
 export type DeliveryRecord = z.infer<typeof deliverySchema> & { connectionGeneration?: number };
 
 const DISPATCH_INTERVAL_MS = 2000;
+/** How often channels are compared with their profile's picture: a change shows within this. */
+const PICTURE_SYNC_MS = 15_000;
+/** After a refusal, how long before the same picture is offered again. */
+const PICTURE_RETRY_MS = 10 * 60_000;
 /** What one message holds on the chat protocols; the adapter still enforces its own. */
 const MESSAGE_LIMIT = 4000;
 /** The longest a part waits behind the composing bubble before it is sent. */
@@ -85,6 +94,32 @@ const authorOf = (data: IncomingMessage) => ({
   id: data.actorId,
   ...(data.displayName ? { name: data.displayName } : {}),
 });
+
+type IngressResult = z.infer<typeof ingressResultSchema>;
+
+/** How much of a quoted message the agent reads: enough to know which one, not a copy of it. */
+const QUOTE_CHARS = 300;
+
+/**
+ * The message a reply answers or a reaction is on, put where the agent reads it: a reply gets
+ * the quote above its text, and a reaction becomes a line saying what it was on.
+ */
+export function withQuote(data: IncomingMessage, mine: boolean) {
+  const words = data.quoted?.text.replace(/\s+/g, ' ').trim();
+  const quote = words
+    ? `: "${words.length > QUOTE_CHARS ? `${words.slice(0, QUOTE_CHARS)}…` : words}"`
+    : '';
+  const whose = mine
+    ? 'your message'
+    : data.quoted?.name
+      ? `${data.quoted.name}'s message`
+      : 'a message';
+
+  if (data.reaction) return `[Reacted ${data.text} to ${whose}${quote}]`;
+  if (!quote && !mine) return data.text;
+
+  return `[Replying to ${whose}${quote}]\n${data.text}`;
+}
 
 /** Sent once to a sender the owner has not decided on yet. It must never depend on a run. */
 const APPROVAL_NOTICE =
@@ -143,7 +178,10 @@ export class Channels {
         return;
       }
 
-      this.pending = this.dispatch().catch((error) => channelLog('dispatch.failed', {}, error));
+      this.pending = this.dispatch()
+        .catch((error) => channelLog('dispatch.failed', {}, error))
+        .then(() => this.syncPictures())
+        .catch((error) => channelLog('picture.failed', {}, error));
       await this.pending;
 
       if (!this.stopped) {
@@ -345,6 +383,56 @@ export class Channels {
   /** Asked at most this often per contact: a picture changes rarely, and each ask is a call. */
   private static readonly AVATAR_TTL_MS = 24 * 60 * 60 * 1000;
   private readonly fetchingAvatars = new Set<string>();
+
+  private picturesDueAt = 0;
+  private readonly pictureRefused = new Map<string, { value: string; until: number }>();
+
+  /**
+   * Keeps each channel's account showing its profile's picture, so it is changed in one place.
+   * What a channel last showed is kept against the account it showed it on: a new picture, a
+   * picture taken off, or another number paired on the channel each count as a change. A
+   * channel that never showed one is left alone while the profile has none.
+   */
+  async syncPictures() {
+    if (Date.now() < this.picturesDueAt) return;
+    this.picturesDueAt = Date.now() + PICTURE_SYNC_MS;
+
+    for (const { channel, avatar, synced } of await listPictureTargets(this.services.store.db)) {
+      const adapter = this.registry.get(channel.type);
+      const account = channel.address ?? '';
+
+      if (!adapter.setPicture || !account) continue;
+
+      const want = avatar
+        ? `${account}:${createHash('sha256').update(avatar).digest('hex').slice(0, 32)}`
+        : synced?.startsWith(`${account}:`)
+          ? `${account}:none`
+          : undefined;
+
+      if (!want || want === synced) continue;
+
+      const refused = this.pictureRefused.get(channel.id);
+
+      if (refused?.value === want && refused.until > Date.now()) continue;
+
+      try {
+        const done = await adapter.setPicture(avatar ? pictureOf(avatar) : null, {
+          channelId: channel.id,
+          credential: await this.services.vault.read(channel.profileId, channelSecret(channel.id)),
+          fetch: this.fetcher,
+          signal: this.abort.signal,
+        });
+
+        if (done) {
+          await markPictureSynced(this.services.store.db, channel.id, want);
+          this.pictureRefused.delete(channel.id);
+        }
+      } catch (error) {
+        this.pictureRefused.set(channel.id, { value: want, until: Date.now() + PICTURE_RETRY_MS });
+        channelLog('picture.refused', { channelId: channel.id }, error);
+      }
+    }
+  }
 
   private async refreshAvatars(profileId: string) {
     const stale = (await listContacts(this.services.store.db, profileId))
@@ -615,10 +703,33 @@ export class Channels {
     channel: ChannelRecord,
     data: IncomingMessage,
     connectionGeneration?: number,
-  ) {
+  ): Promise<IngressResult> {
     // A message this connection wrote itself is not a turn someone took in the conversation.
     if (channel.address && data.actorId === channel.address) {
       return { accepted: false };
+    }
+
+    // A reply or a reaction on something the agent sent: known from the delivery that sent it,
+    // which also says what it was when the protocol did not quote it.
+    const target = data.target
+      ? await findDeliveryByRemoteId(this.services.store.db, channel.id, data.target)
+      : null;
+    const mine = Boolean(target) || (Boolean(channel.address) && data.replyTo === channel.address);
+
+    if (target && !data.quoted) {
+      const said = target.runId
+        ? (await this.services.runs.run(channel.profileId, target.runId).catch(() => undefined))
+            ?.output
+        : target.notice;
+
+      if (said) data.quoted = { text: said.slice(0, 1000) };
+    }
+
+    if (target && channel.address && !data.replyTo) data.replyTo = channel.address;
+    data.text = withQuote(data, mine).slice(0, 8000);
+
+    if (data.reaction) {
+      return this.noteReaction(channel, data);
     }
 
     // Asked before the transaction: an answer from outside must not hold the profile's lock.
@@ -767,6 +878,50 @@ export class Channels {
     );
 
     return { accepted: true, runId: run.id, contact: 'approved' as const };
+  }
+
+  /**
+   * A reaction is read, not answered: it goes into the conversation as a line the agent sees
+   * next time it speaks there, and starts nothing. Only a conversation already approved keeps
+   * one; a stranger's reaction is not a request.
+   */
+  private async noteReaction(
+    channel: ChannelRecord,
+    data: IncomingMessage,
+  ): Promise<IngressResult> {
+    const group = data.scope === 'group';
+
+    return this.services.store.transaction(channel.profileId, async (tx) => {
+      const contact = await findContactByIdentity(
+        tx,
+        channel.id,
+        data.chatId,
+        group ? data.chatId : data.actorId,
+      );
+
+      if (contact?.status !== 'approved' || !contact.sessionId) {
+        return { accepted: false };
+      }
+
+      await insertMessage(
+        tx,
+        {
+          id: stableUuid(`reaction:${channel.id}:${data.chatId}:${data.requestKey}`),
+          profileId: channel.profileId,
+          sessionId: contact.sessionId,
+          role: 'user',
+          content: group ? `${data.displayName ?? data.actorId}: ${data.text}` : data.text,
+          ...(group ? { author: authorOf(data) } : {}),
+          createdAt: new Date().toISOString(),
+        },
+        true,
+      );
+      await recordEvent(tx, Date.now, channel.profileId, 'session.message', {
+        sessionId: contact.sessionId,
+      });
+
+      return { accepted: false, contact: 'approved' as const, silence: 'reaction' as const };
+    });
   }
 
   /**

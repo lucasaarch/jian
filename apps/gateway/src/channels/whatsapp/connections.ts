@@ -497,6 +497,22 @@ export class WhatsAppConnections {
     }
   }
 
+  /**
+   * Only the process holding a paired device can change its picture; anywhere else, or before
+   * pairing, the answer is "not now" and the channel tries again later.
+   */
+  async setPicture(id: string, picture: InlineMedia | null): Promise<boolean> {
+    const local = this.devices.get(id);
+
+    if (!local?.device.setPicture || !(await this.canSend(id))) {
+      return false;
+    }
+
+    await local.device.setPicture(picture);
+
+    return true;
+  }
+
   /** Only the process holding the device can ask; anywhere else there is simply no picture. */
   async avatar(id: string, chatId: string): Promise<InlineMedia | undefined> {
     const local = this.devices.get(id);

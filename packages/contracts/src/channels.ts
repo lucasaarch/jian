@@ -75,6 +75,17 @@ export const ingressSchema = z.strictObject({
   mentions: z.array(z.string().min(1).max(100)).max(32).default([]),
   // The address of whoever wrote the message this one answers, when it quotes one.
   replyTo: z.string().min(1).max(100).optional(),
+  // What the quoted message said, and who wrote it, so the agent reads what is being answered.
+  quoted: z
+    .strictObject({
+      text: z.string().max(1000),
+      name: z.string().trim().min(1).max(100).optional(),
+    })
+    .optional(),
+  // A reaction to a message: `text` is the emoji. It is kept in the conversation, not answered.
+  reaction: z.boolean().optional(),
+  // The protocol's id of the message a reaction or a reply points to.
+  target: z.string().min(1).max(200).optional(),
 });
 
 const telegramEntitiesSchema = z
@@ -103,6 +114,27 @@ const telegramFileSchema = z.object({
 
 export const telegramUpdateSchema = z.object({
   update_id: z.number().int(),
+  // Sent only for chats where the bot may see reactions: private chats, and groups as an admin.
+  message_reaction: z
+    .object({
+      chat: z.object({
+        id: z.number().int(),
+        type: z.string().max(40).optional(),
+        title: z.string().max(200).optional(),
+      }),
+      message_id: z.number().int(),
+      user: z
+        .object({
+          id: z.number().int(),
+          first_name: z.string().max(100).optional(),
+          username: z.string().max(100).optional(),
+        })
+        .optional(),
+      new_reaction: z
+        .array(z.object({ type: z.string().max(40), emoji: z.string().max(20).optional() }))
+        .max(20),
+    })
+    .optional(),
   message: z
     .object({
       from: z
@@ -129,7 +161,18 @@ export const telegramUpdateSchema = z.object({
       entities: telegramEntitiesSchema,
       caption_entities: telegramEntitiesSchema,
       reply_to_message: z
-        .object({ from: z.object({ id: z.number().int() }).optional() })
+        .object({
+          message_id: z.number().int().optional(),
+          from: z
+            .object({
+              id: z.number().int(),
+              first_name: z.string().max(100).optional(),
+              username: z.string().max(100).optional(),
+            })
+            .optional(),
+          text: z.string().max(8000).optional(),
+          caption: z.string().max(8000).optional(),
+        })
         .optional(),
     })
     .optional(),
@@ -143,7 +186,7 @@ export const ingressResultSchema = z.strictObject({
     .optional()
     .describe('Absent when the payload carried no message to route.'),
   silence: z
-    .enum(['unaddressed', 'budget'])
+    .enum(['unaddressed', 'budget', 'reaction'])
     .optional()
     .describe('Why an approved group message produced no run.'),
 });

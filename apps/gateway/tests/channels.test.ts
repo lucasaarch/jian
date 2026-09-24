@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import { ApiChannel } from '../src/channels/api.js';
@@ -128,7 +129,7 @@ describe('Telegram transport', () => {
           body: {
             url: `https://jian.example.com/v1/telegram/${channel.id}`,
             secret_token: channel.webhookToken,
-            allowed_updates: ['message'],
+            allowed_updates: ['message', 'message_reaction'],
           },
         },
       ]);
@@ -198,6 +199,148 @@ describe('Telegram transport', () => {
       expect(JSON.parse(sent[0] as string).chat_id).toBe('99');
       expect(JSON.parse(sent[0] as string).text).toContain('approve');
     } finally {
+      await f.app.close();
+    }
+  });
+
+  it('reads a reply with the message it answers, and keeps a reaction without answering it', async () => {
+    let next = 0;
+    const f = await setup(async () => Response.json({ ok: true, result: { message_id: ++next } }));
+
+    try {
+      await f.channels.receive(f.channel.id, webhook(f.channel.webhookToken));
+      const [pending] = await f.channels.contacts(f.profile.id);
+      if (!pending) throw new Error('Contact request missing');
+      const approved = await f.channels.approveContact(f.profile.id, pending.id);
+      const [run] = await f.services.runs.activities(f.profile.id);
+      if (!run) throw new Error('Run missing');
+
+      await f.services.lifecycle.claim(run.id, f.profile.id, 'worker');
+      await f.services.lifecycle.finish(
+        f.profile.id,
+        run.id,
+        'worker',
+        'completed',
+        'Deploy moved to Friday.',
+      );
+      await f.channels.dispatch();
+
+      const answer = (await f.channels.deliveries(f.profile.id)).find(
+        (item) => item.runId === run.id,
+      );
+      const messageId = answer?.remoteMessageIds[0];
+      if (messageId === undefined) throw new Error('Answer not sent');
+
+      const reacted = await f.app.inject({
+        method: 'POST',
+        url: f.url,
+        headers: f.headers,
+        payload: {
+          update_id: 300,
+          message_reaction: {
+            chat: { id: 99, type: 'private' },
+            message_id: messageId,
+            user: { id: 42, first_name: 'Ada' },
+            new_reaction: [{ type: 'emoji', emoji: '👍' }],
+          },
+        },
+      });
+
+      expect(reacted.json()).toEqual({ accepted: false, contact: 'approved', silence: 'reaction' });
+      expect(await f.services.runs.activities(f.profile.id)).toHaveLength(0);
+
+      const history = await f.services.sessions.messages(
+        f.profile.id,
+        approved.sessionId as string,
+        20,
+      );
+      expect(history.map((message) => message.content)).toContain(
+        '[Reacted 👍 to your message: "Deploy moved to Friday."]',
+      );
+
+      // Telegram quotes the words only when it has them; the delivery says whose they were.
+      await f.app.inject({
+        method: 'POST',
+        url: f.url,
+        headers: f.headers,
+        payload: {
+          update_id: 301,
+          message: {
+            from: { id: 42, first_name: 'Ada' },
+            chat: { id: 99 },
+            text: 'Why?',
+            reply_to_message: { message_id: messageId, from: { id: 700 } },
+          },
+        },
+      });
+
+      const [reply] = await f.services.runs.activities(f.profile.id);
+      expect(reply?.input).toBe('[Replying to your message: "Deploy moved to Friday."]\nWhy?');
+    } finally {
+      await f.app.close();
+    }
+  });
+
+  it('puts the profile picture on the bot, follows each change, and takes it off', async () => {
+    const png = (
+      await sharp({
+        create: { width: 8, height: 8, channels: 3, background: '#b51e49' },
+      })
+        .png()
+        .toBuffer()
+    ).toString('base64');
+    const calls: Array<{ method: string; photo?: string; file?: File }> = [];
+    const f = await setup(async (url, options) => {
+      const form = options?.body instanceof FormData ? options.body : undefined;
+
+      calls.push({
+        method: String(url).split('/').at(-1) ?? '',
+        ...(form ? { photo: String(form.get('photo')), file: form.get('picture') as File } : {}),
+      });
+
+      return Response.json({ ok: true, result: true });
+    });
+    let now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const sync = async () => {
+      now += 60_000;
+      await f.channels.syncPictures();
+    };
+    const picture = async (avatar: string | null) => {
+      const current = await f.services.profiles.profile(f.profile.id);
+
+      await f.services.profiles.updateProfile(f.profile.id, {
+        avatar,
+        expectedVersion: current.version,
+      });
+    };
+
+    try {
+      // A bot that never showed a picture keeps whatever it has while the profile has none.
+      await sync();
+      expect(calls).toEqual([]);
+
+      await picture(`data:image/png;base64,${png}`);
+      await sync();
+      await sync();
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatchObject({
+        method: 'setMyProfilePhoto',
+        photo: JSON.stringify({ type: 'static', photo: 'attach://picture' }),
+      });
+      expect(calls[0]?.file?.type).toBe('image/jpeg');
+
+      await picture(null);
+      await sync();
+      await sync();
+
+      expect(calls.map((call) => call.method)).toEqual([
+        'setMyProfilePhoto',
+        'removeMyProfilePhoto',
+      ]);
+    } finally {
+      clock.mockRestore();
       await f.app.close();
     }
   });

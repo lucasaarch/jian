@@ -1,4 +1,4 @@
-import { ingressSchema } from '@jian/contracts';
+import { type InlineMedia, ingressSchema } from '@jian/contracts';
 import type { Channel, DeliveryContext, OutgoingMessage } from '../channel.js';
 import type { WhatsAppConnections } from './connections.js';
 
@@ -27,6 +27,10 @@ export class WhatsAppChannel implements Channel {
       context.channelId,
       target.scope === 'group' ? target.chatId : target.actorId,
     );
+  }
+
+  setPicture(picture: InlineMedia | null, context: DeliveryContext) {
+    return this.connections.setPicture(context.channelId, picture);
   }
 
   send(message: OutgoingMessage, context: DeliveryContext) {

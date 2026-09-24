@@ -161,6 +161,10 @@ Answers use the shared delivery queue. `sent` means the library confirmed the se
 Automated validation uses a simulated device. Pairing, restoring a session and real delivery need a worker with outbound access to WhatsApp and a phone. The local tests connect no real account.
 
 
+## Profile picture
+
+A Telegram bot and a paired WhatsApp account show their profile's picture. The worker compares each live channel with its profile every 15 seconds and uploads the picture as a 640 px JPEG when it changed, when it was removed, or when another account was paired on the channel. A channel that never showed a Jian picture is left alone while the profile has none. A refused upload is logged and offered again after 10 minutes. Only the worker holding a WhatsApp device can change its picture.
+
 ## Images and voice
 
 WhatsApp attachments are stored per profile and conversation; unapproved direct contacts may hold four attachments until approval. Blocked contacts never reach a media model. Incoming images go directly to a vision-capable conversation model unless an auxiliary image-analysis model is selected. Text-only models receive an auxiliary description. Voice notes and ordinary audio files share the Incoming audio model. It transcribes speech verbatim and adds relevant sound context before the conversation model runs; transcription-only models preserve speech without sound analysis. Transcripts are reused rather than charged again on every step.

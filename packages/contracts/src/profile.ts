@@ -70,9 +70,11 @@ export const skillSchema = z.strictObject({
   name: skillNameSchema,
   description: z.string().min(1).max(300),
   instructions: z.string().min(1).max(12_000),
-  // Present only on a skill the owner imported. A self-managing agent writes its own skills
-  // and never this field, which is what keeps "who wrote this instruction" answerable.
+  // Present only on a skill the owner imported.
   origin: skillOriginSchema.optional(),
+  // Set on a skill the agent wrote for itself: the only skills it may change or remove. What
+  // the owner wrote or imported stays theirs, so "who wrote this instruction" stays answerable.
+  writtenBy: z.literal('agent').optional(),
 });
 
 /**

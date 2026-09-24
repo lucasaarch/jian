@@ -22,6 +22,41 @@ const answer = (text: string) => ({
   warnings: [],
 });
 
+it('keeps what the agent said before a tool apart from what it says after', async () => {
+  const { services, profile, run } = await fixture();
+  let step = 0;
+  const model = mockModel({
+    doGenerate: async () =>
+      step++ === 0
+        ? {
+            content: [
+              { type: 'text', text: 'Saving the deploy time now.' },
+              {
+                type: 'tool-call',
+                toolCallId: 'save-time',
+                toolName: 'remember',
+                input: JSON.stringify({
+                  key: 'deploy',
+                  content: 'Deploy at 21:00',
+                  expectedVersion: 0,
+                }),
+              },
+            ],
+            finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+            usage,
+            warnings: [],
+          }
+        : answer('Saved: deploy at 21:00.'),
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const finished = await services.runs.run(profile.id, run.id);
+
+  expect(finished.commentary).toEqual(['Saving the deploy time now.']);
+  expect(finished.output).toBe('Saved: deploy at 21:00.');
+});
+
 it('recovers an empty final response without repeating completed actions', async () => {
   const { services, profile, run } = await fixture();
   let step = 0;
@@ -949,9 +984,9 @@ it('answers with what it has when the agent exhausts its tool budget', async () 
   expect(closingTools ?? []).toHaveLength(0);
 });
 
-it('versions self-managed skills without accepting new capability grants', async () => {
+it('writes its own skill through the loop without accepting new capability grants', async () => {
   const services = await testServices();
-  const profile = await services.profiles.createProfile({ ...input, allowSelfManagement: true });
+  const profile = await services.profiles.createProfile(input);
   const session = await services.sessions.createSession(profile.id, { title: 'Skills' });
 
   const run = await services.runs.submit(profile.id, session.id, {
@@ -972,7 +1007,7 @@ it('versions self-managed skills without accepting new capability grants', async
               type: 'tool-call',
               toolCallId: 'load',
               toolName: 'load_tools',
-              input: JSON.stringify({ groups: ['self'] }),
+              input: JSON.stringify({ groups: ['skills'] }),
             },
           ],
           finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
@@ -987,16 +1022,13 @@ it('versions self-managed skills without accepting new capability grants', async
             {
               type: 'tool-call',
               toolCallId: 'skill',
-              toolName: 'update_skills',
+              toolName: 'create_skill',
               input: JSON.stringify({
-                expectedVersion: 1,
-                skills: [
-                  {
-                    name: 'release',
-                    description: 'Release checklist',
-                    instructions: 'Confirm tests before release.',
-                  },
-                ],
+                name: 'release',
+                description: 'Release checklist',
+                instructions: 'Confirm tests before release.',
+                // Not in the tool's input: a model cannot grant itself anything through it.
+                model: { provider: 'openai', modelId: 'other' },
               }),
             },
           ],
@@ -1016,7 +1048,7 @@ it('versions self-managed skills without accepting new capability grants', async
   const updated = await services.profiles.profile(profile.id);
 
   expect(updated.version).toBe(2);
-  expect(updated.skills[0]?.name).toBe('release');
+  expect(updated.skills[0]).toMatchObject({ name: 'release', writtenBy: 'agent' });
   expect(updated.model).toEqual(profile.model);
   expect(updated.mcpServers).toEqual([]);
 });

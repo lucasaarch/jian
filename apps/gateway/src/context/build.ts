@@ -11,7 +11,7 @@ export interface ContextSources {
   /** The memories linked to those, recalled with them when there is room. */
   linked?: Memory[];
   activities: Run[];
-  /** The profile's approved channel conversations: whom it talks to, and on which channel. */
+  /** The gateway conversation and the approved channel ones: whom it talks to, and where. */
   conversations?: Array<{ sessionId: string; channel: string; with: string; group?: boolean }>;
   history: Message[];
   /** What the turns before this history held, once they stopped fitting in a request. */
@@ -210,7 +210,7 @@ export function buildContext(
     // cannot write there. Listed with the session id, which is all the sending tool needs.
     ...(sources.conversations?.length
       ? [
-          `Your conversations on channels — this one is marked current; write into any other with send_session_message and its sessionId (the conversations tools), and it reaches that person or group on that channel: ${JSON.stringify(
+          `Your conversations — the gateway one is your owner writing from the Jian panel, and this one is marked current; write into any other with send_session_message and its sessionId (the conversations tools), and it reaches that person or group where they are: ${JSON.stringify(
             sources.conversations.map((conversation) =>
               conversation.sessionId === run.sessionId
                 ? { ...conversation, current: true }

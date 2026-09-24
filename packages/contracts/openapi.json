@@ -9218,6 +9218,32 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 100
+                  },
+                  "quoted": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "maxLength": 1000
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "reaction": {
+                    "type": "boolean"
+                  },
+                  "target": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
                   }
                 },
                 "required": [
@@ -9261,7 +9287,8 @@
                       "type": "string",
                       "enum": [
                         "unaddressed",
-                        "budget"
+                        "budget",
+                        "reaction"
                       ]
                     }
                   },
@@ -9479,6 +9506,83 @@
                     "type": "integer",
                     "minimum": -9007199254740991,
                     "maximum": 9007199254740991
+                  },
+                  "message_reaction": {
+                    "type": "object",
+                    "properties": {
+                      "chat": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "type": {
+                            "type": "string",
+                            "maxLength": 40
+                          },
+                          "title": {
+                            "type": "string",
+                            "maxLength": 200
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ]
+                      },
+                      "message_id": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "user": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "first_name": {
+                            "type": "string",
+                            "maxLength": 100
+                          },
+                          "username": {
+                            "type": "string",
+                            "maxLength": 100
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ]
+                      },
+                      "new_reaction": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "maxLength": 40
+                            },
+                            "emoji": {
+                              "type": "string",
+                              "maxLength": 20
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "chat",
+                      "message_id",
+                      "new_reaction"
+                    ]
                   },
                   "message": {
                     "type": "object",
@@ -9774,6 +9878,11 @@
                       "reply_to_message": {
                         "type": "object",
                         "properties": {
+                          "message_id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "from": {
                             "type": "object",
                             "properties": {
@@ -9781,11 +9890,27 @@
                                 "type": "integer",
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
+                              },
+                              "first_name": {
+                                "type": "string",
+                                "maxLength": 100
+                              },
+                              "username": {
+                                "type": "string",
+                                "maxLength": 100
                               }
                             },
                             "required": [
                               "id"
                             ]
+                          },
+                          "text": {
+                            "type": "string",
+                            "maxLength": 8000
+                          },
+                          "caption": {
+                            "type": "string",
+                            "maxLength": 8000
                           }
                         }
                       }
@@ -9832,7 +9957,8 @@
                       "type": "string",
                       "enum": [
                         "unaddressed",
-                        "budget"
+                        "budget",
+                        "reaction"
                       ]
                     }
                   },
@@ -10135,6 +10261,32 @@
                             },
                             "required": [
                               "id"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "call": {
+                            "type": "object",
+                            "properties": {
+                              "profileId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "sessionId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "runId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "required": [
+                              "profileId",
+                              "sessionId",
+                              "runId"
                             ],
                             "additionalProperties": false
                           },
@@ -10452,6 +10604,32 @@
                             },
                             "required": [
                               "id"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "call": {
+                            "type": "object",
+                            "properties": {
+                              "profileId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "sessionId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "runId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "required": [
+                              "profileId",
+                              "sessionId",
+                              "runId"
                             ],
                             "additionalProperties": false
                           },
@@ -13499,6 +13677,10 @@
                         ],
                         "additionalProperties": false
                       },
+                      "writtenBy": {
+                        "type": "string",
+                        "const": "agent"
+                      },
                       "enabled": {
                         "type": "boolean"
                       }
@@ -14244,6 +14426,10 @@
                               "importedAt"
                             ],
                             "additionalProperties": false
+                          },
+                          "writtenBy": {
+                            "type": "string",
+                            "const": "agent"
                           }
                         },
                         "required": [
@@ -14889,6 +15075,10 @@
                                 "importedAt"
                               ],
                               "additionalProperties": false
+                            },
+                            "writtenBy": {
+                              "type": "string",
+                              "const": "agent"
                             }
                           },
                           "required": [
@@ -15515,6 +15705,10 @@
                             "importedAt"
                           ],
                           "additionalProperties": false
+                        },
+                        "writtenBy": {
+                          "type": "string",
+                          "const": "agent"
                         }
                       },
                       "required": [
@@ -15933,6 +16127,10 @@
                               "importedAt"
                             ],
                             "additionalProperties": false
+                          },
+                          "writtenBy": {
+                            "type": "string",
+                            "const": "agent"
                           }
                         },
                         "required": [
@@ -16587,6 +16785,10 @@
                               "importedAt"
                             ],
                             "additionalProperties": false
+                          },
+                          "writtenBy": {
+                            "type": "string",
+                            "const": "agent"
                           }
                         },
                         "required": [
@@ -17201,6 +17403,10 @@
                             "importedAt"
                           ],
                           "additionalProperties": false
+                        },
+                        "writtenBy": {
+                          "type": "string",
+                          "const": "agent"
                         }
                       },
                       "required": [
@@ -17616,6 +17822,10 @@
                               "importedAt"
                             ],
                             "additionalProperties": false
+                          },
+                          "writtenBy": {
+                            "type": "string",
+                            "const": "agent"
                           }
                         },
                         "required": [
@@ -18727,6 +18937,10 @@
                                     "importedAt"
                                   ],
                                   "additionalProperties": false
+                                },
+                                "writtenBy": {
+                                  "type": "string",
+                                  "const": "agent"
                                 }
                               },
                               "required": [
@@ -20345,6 +20559,32 @@
                         },
                         "required": [
                           "id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "call": {
+                        "type": "object",
+                        "properties": {
+                          "profileId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "sessionId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "runId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "profileId",
+                          "sessionId",
+                          "runId"
                         ],
                         "additionalProperties": false
                       },

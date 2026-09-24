@@ -57,6 +57,9 @@ export const messageRecordSchema = z.strictObject({
   // Who wrote it, in a room where several people write: their id on the channel and the name
   // they showed. The content still carries the name first, because the agent reads it there.
   author: z.strictObject({ id: z.string(), name: z.string().optional() }).optional(),
+  // In an agent conversation this profile started: the other agent's run that answers it, in
+  // that agent's own session. The asking agent only carries the message; the other one works.
+  call: z.strictObject({ profileId: uuid, sessionId: uuid, runId: uuid }).optional(),
   createdAt: timestamp,
 });
 

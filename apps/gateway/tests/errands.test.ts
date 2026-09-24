@@ -230,13 +230,21 @@ describe('writing into another conversation', () => {
     expect(history.filter((message) => message.content === 'Ping, Moabe.')).toHaveLength(1);
   });
 
-  it('tells an agent reached elsewhere which channel conversations it has', async () => {
-    const { services, moabe, asking } = await setup();
+  it('tells an agent reached elsewhere which conversations it has, the gateway one first', async () => {
+    const { services, profile, moabe, asking } = await setup();
+    const gateway = await services.sessions.gatewaySession(profile.id);
     const { system } = await services.contexts.context(asking);
 
-    expect(system).toContain('Your conversations on channels');
+    expect(system).toContain('Your conversations');
     expect(system).toContain(
       JSON.stringify({ sessionId: moabe.sessionId, channel: 'telegram', with: 'Moabe' }),
+    );
+    expect(system).toContain(
+      JSON.stringify({
+        sessionId: gateway.id,
+        channel: 'gateway',
+        with: 'your owner, in the Jian panel',
+      }),
     );
   });
 

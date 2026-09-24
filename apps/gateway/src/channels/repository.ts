@@ -1,7 +1,7 @@
 import { channelSchema, contactSchema, deliverySchema } from '@jian/contracts';
-import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
-import { channels, contacts, deliveries } from '../storage/schema.js';
+import { channels, contacts, deliveries, profiles } from '../storage/schema.js';
 import type { ChannelType } from './channel.js';
 import type { ContactRecord } from './contacts.js';
 import type { ChannelRecord, DeliveryRecord } from './service.js';
@@ -62,6 +62,26 @@ export async function listChannels(db: Queryable, profileId: string): Promise<Ch
     .limit(100);
 
   return rows.map(toChannel);
+}
+
+/** Live channels that can show a profile picture, with the picture and what they last showed. */
+export async function listPictureTargets(db: Queryable) {
+  const rows = await db
+    .select({ channel: channels, avatar: profiles.avatar })
+    .from(channels)
+    .innerJoin(profiles, eq(profiles.id, channels.profileId))
+    .where(and(isNull(channels.revokedAt), inArray(channels.type, ['telegram', 'whatsapp'])))
+    .limit(500);
+
+  return rows.map((row) => ({
+    channel: toChannel(row.channel),
+    avatar: row.avatar,
+    synced: row.channel.pictureSynced,
+  }));
+}
+
+export async function markPictureSynced(db: Queryable, channelId: string, value: string) {
+  await db.update(channels).set({ pictureSynced: value }).where(eq(channels.id, channelId));
 }
 
 /** Every profile's live connection of one type: how an agent recognises a colleague in a room. */
@@ -329,6 +349,35 @@ function toDeliveryRow(delivery: DeliveryRecord): typeof deliveries.$inferInsert
     createdAt: new Date(delivery.createdAt),
     updatedAt: new Date(delivery.updatedAt),
   };
+}
+
+/**
+ * The delivery that put a given protocol message on a channel: how a reply or a reaction is
+ * known to be on the agent's own words. Telegram numbers its messages and WhatsApp names them,
+ * so both forms are looked for.
+ */
+export async function findDeliveryByRemoteId(
+  db: Queryable,
+  channelId: string,
+  remoteId: string,
+): Promise<DeliveryRecord | null> {
+  const forms = [JSON.stringify([remoteId])];
+
+  if (/^\d{1,15}$/.test(remoteId)) forms.push(JSON.stringify([Number(remoteId)]));
+
+  const [row] = await db
+    .select()
+    .from(deliveries)
+    .where(
+      and(
+        eq(deliveries.channelId, channelId),
+        or(...forms.map((form) => sql`${deliveries.remoteMessageIds} @> ${form}::jsonb`)),
+      ),
+    )
+    .orderBy(desc(deliveries.createdAt))
+    .limit(1);
+
+  return row ? toDelivery(row) : null;
 }
 
 export async function findDelivery(db: Queryable, id: string): Promise<DeliveryRecord | null> {

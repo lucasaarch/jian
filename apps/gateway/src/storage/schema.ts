@@ -239,6 +239,7 @@ export const messages = pgTable(
     // Set in a group: who wrote it, by their id on the channel and the name they showed.
     authorId: text('author_id'),
     authorName: text('author_name'),
+    call: jsonb('call').$type<{ profileId: string; sessionId: string; runId: string }>(),
     createdAt,
   },
   (table) => [
@@ -481,6 +482,8 @@ export const channels = pgTable(
     // The name people type to mention it, where that differs from the address: a Telegram
     // `@username` names the bot without carrying its id.
     handle: text('handle'),
+    // The profile picture last put on the account, as `<address>:<hash>` or `<address>:none`.
+    pictureSynced: text('picture_synced'),
     webhookTokenHash: text('webhook_token_hash').notNull(),
     createdAt,
     revokedAt: timestamp('revoked_at', { withTimezone: true }),

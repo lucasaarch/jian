@@ -571,8 +571,6 @@ export class AgentRuntime {
           };
         },
         onStepEnd: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
-          await narrator.endStep(toolCalls.length > 0).catch(() => {});
-
           const measured = await account(
             usage,
             preparedInputTokens,
@@ -617,9 +615,9 @@ export class AgentRuntime {
             streamError ??= part.error;
             break;
           case 'text-delta':
-            progress.delta(part.text);
             // Released as it is written, not once the run is over.
             await narrator.delta(part.text).catch(() => {});
+            progress.draft(narrator.draft);
             break;
           case 'reasoning-start':
             progress.thinking();
@@ -629,6 +627,11 @@ export class AgentRuntime {
             break;
           case 'finish-step':
             progress.stepEnded();
+            // Here, in the stream's order, and not in onStepEnd: that runs as the model finishes,
+            // before this loop has read the step's last words, which then ran into the next
+            // step's first ones as one message.
+            await narrator.endStep(part.finishReason === 'tool-calls').catch(() => {});
+            progress.draft(narrator.draft);
             break;
           default:
             break;

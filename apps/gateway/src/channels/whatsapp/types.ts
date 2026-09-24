@@ -60,6 +60,8 @@ export interface LinkedDevice {
   typing(chatId: string): Promise<void>;
   /** The small profile picture WhatsApp shows for a person or a group, when it has one. */
   avatar?(chatId: string): Promise<InlineMedia | undefined>;
+  /** The paired account's own profile picture; null takes it off. */
+  setPicture?(picture: InlineMedia | null): Promise<void>;
   stop(logout: boolean): Promise<void>;
 }
 

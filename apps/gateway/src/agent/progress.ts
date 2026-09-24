@@ -56,14 +56,22 @@ export class ProgressReporter {
     this.mark(true);
   }
 
-  delta(text: string): void {
-    if (!text) {
+  /**
+   * The answer as it stands: only what has not gone out yet. A paragraph the agent already sent
+   * is a message of the conversation, so keeping it here would show it twice.
+   */
+  draft(text: string): void {
+    if (text === this.text) {
       return;
     }
 
-    this.phase = 'writing';
-    this.tool = undefined;
-    this.text += text;
+    this.text = text;
+
+    if (text) {
+      this.phase = 'writing';
+      this.tool = undefined;
+    }
+
     this.mark(false);
   }
 

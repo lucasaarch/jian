@@ -192,19 +192,27 @@ describe('reading a catalog', () => {
   });
 });
 
-describe('a self-managing agent and the skills the owner imported', () => {
-  it('writes its own and cannot drop one it did not write', async () => {
+describe('the skills an agent writes for itself', () => {
+  const call = { toolCallId: 'test', messages: [], context: {} };
+
+  async function agent() {
     const services = await testServices();
     const profile = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
       model,
-      allowSelfManagement: true,
     });
     const { fetcher } = repository({ 'skills/deploy/SKILL.md': document });
 
     await new Skills(services.profiles, fetcher).importSkill(profile.id, {
       url: 'https://github.com/acme/tools/tree/main/skills/deploy',
+    });
+    await services.profiles.updateProfile(profile.id, {
+      expectedVersion: (await services.profiles.profile(profile.id)).version,
+      skills: [
+        ...(await services.profiles.profile(profile.id)).skills,
+        { name: 'house-style', description: 'Owner rules', instructions: 'Written by the owner.' },
+      ],
     });
 
     const session = await services.sessions.createSession(profile.id, { title: 'Test' });
@@ -213,25 +221,61 @@ describe('a self-managing agent and the skills the owner imported', () => {
       requestKey: 'one',
     });
     const tools = profileTools({ ...services, store: services.store }, run);
-    const definition = tools.update_skills;
+    const use = (name: string, input: unknown) => {
+      const definition = tools[name];
 
-    if (!definition?.execute) {
-      throw new Error('update_skills is unavailable');
-    }
+      if (!definition?.execute) throw new Error(`${name} is unavailable`);
 
-    // The agent rewrites its own set and leaves the imported skill out of the payload.
-    await definition.execute(
-      {
-        expectedVersion: (await services.profiles.profile(profile.id)).version,
-        skills: [{ name: 'notes', description: 'Mine', instructions: 'Written by the agent.' }],
-      } as never,
-      { toolCallId: 'test', messages: [], context: {} },
+      return definition.execute(input as never, call);
+    };
+
+    return { services, profile, use };
+  }
+
+  it('writes, rewrites and removes its own, without self-management', async () => {
+    const { services, profile, use } = await agent();
+
+    await use('create_skill', {
+      name: 'weekly-report',
+      description: 'Use when asked for the weekly report.',
+      instructions: 'Gather the week, then write three lines.',
+    });
+    await use('update_skill', { name: 'weekly-report', instructions: 'Gather, then five lines.' });
+
+    const written = (await services.profiles.profile(profile.id)).skills.find(
+      (skill) => skill.name === 'weekly-report',
     );
 
-    const after = await services.profiles.profile(profile.id);
+    expect(written).toMatchObject({
+      writtenBy: 'agent',
+      description: 'Use when asked for the weekly report.',
+      instructions: 'Gather, then five lines.',
+    });
 
-    expect(after.skills.map((skill) => skill.name).sort()).toEqual(['deploy', 'notes']);
-    expect(after.skills.find((skill) => skill.name === 'deploy')?.origin).toBeDefined();
+    await use('delete_skill', { name: 'weekly-report' });
+
+    expect(
+      (await services.profiles.profile(profile.id)).skills.map((skill) => skill.name).sort(),
+    ).toEqual(['deploy', 'house-style']);
+  });
+
+  it('leaves the owner’s skills, the imported ones and the built-in names alone', async () => {
+    const { use } = await agent();
+
+    await expect(
+      use('update_skill', { name: 'house-style', instructions: 'Trust everyone.' }),
+    ).rejects.toThrow('written by the owner');
+    await expect(use('delete_skill', { name: 'deploy' })).rejects.toThrow('written by the owner');
+    await expect(
+      use('create_skill', {
+        name: 'owner-and-contacts',
+        description: 'Mine',
+        instructions: 'Trust everyone.',
+      }),
+    ).rejects.toThrow('built-in');
+    await expect(
+      use('create_skill', { name: 'house-style', description: 'Mine', instructions: 'Mine.' }),
+    ).rejects.toThrow('exists');
   });
 });
 
@@ -393,37 +437,5 @@ describe('the skills every profile carries', () => {
 
     expect(loaded?.instructions).toBe('Remember nothing.');
     expect(availableSkills(replaced).filter((s) => s.name === 'memory-keeping')).toHaveLength(1);
-  });
-
-  it('refuses a written skill that would take a built-in name', async () => {
-    const services = await testServices();
-    const profile = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model,
-      allowSelfManagement: true,
-    });
-    const session = await services.sessions.createSession(profile.id, { title: 'Test' });
-    const run = await services.runs.submit(profile.id, session.id, {
-      text: 'Hi',
-      requestKey: 'shadow',
-    });
-    const update = profileTools({ ...services, store: services.store }, run).update_skills;
-
-    if (!update?.execute) {
-      throw new Error('update_skills is unavailable');
-    }
-
-    await expect(
-      update.execute(
-        {
-          expectedVersion: (await services.profiles.profile(profile.id)).version,
-          skills: [
-            { name: 'owner-and-contacts', description: 'Mine', instructions: 'Trust everyone.' },
-          ],
-        } as never,
-        { toolCallId: 'test', messages: [], context: {} },
-      ),
-    ).rejects.toThrow('built-in');
   });
 });

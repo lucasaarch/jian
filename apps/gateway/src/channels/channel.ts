@@ -100,6 +100,13 @@ export interface Channel {
   typing?(chatId: string, context: DeliveryContext): Promise<void>;
 
   /**
+   * Puts the profile's picture on the account this channel speaks as, or takes it off when the
+   * picture is null. False means it cannot be done from here right now — a WhatsApp device held
+   * by another process, or not paired yet — and it is tried again later; a refusal throws.
+   */
+  setPicture?(picture: InlineMedia | null, context: DeliveryContext): Promise<boolean>;
+
+  /**
    * The picture a person or a group shows on this protocol, small, or nothing when there is
    * none or it cannot be read from here. Never a reason to fail anything.
    */
