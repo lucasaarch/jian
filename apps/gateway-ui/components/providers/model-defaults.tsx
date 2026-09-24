@@ -127,7 +127,7 @@ export function ModelDefaults({ profile, data, api, busy }: SectionProps) {
                 <div className="model-card-choice">
                   {provider && value.modelId ? (
                     <>
-                      <strong>{selected ? modelLabel(selected) : value.modelId}</strong>
+                      <strong>{selected ? modelLabel(selected, role.tools) : value.modelId}</strong>
                       <small>
                         {provider.name}
                         {effort ? ` · ${effort.label}` : ''}
