@@ -47,13 +47,16 @@ export function Empty({
 export function Badge({
   children,
   tone = 'neutral',
+  dot = true,
 }: {
   children: ReactNode;
   tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'accent';
+  /** The dot marks a state; a badge that only counts something has none. */
+  dot?: boolean;
 }) {
   return (
     <span className={`badge ${tone}`}>
-      <span className="badge-dot" />
+      {dot && <span className="badge-dot" />}
       {children}
     </span>
   );

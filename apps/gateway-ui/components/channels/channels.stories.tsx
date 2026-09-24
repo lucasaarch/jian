@@ -38,7 +38,9 @@ export const TelegramExpanded: Story = {
   play: async (context) => {
     await open('telegram')(context);
     // The row opens with a short fade, so visibility is awaited rather than read at once.
-    await waitFor(() => expect(within(context.canvasElement).getByText('Equipe')).toBeVisible());
+    await waitFor(() =>
+      expect(within(context.canvasElement).getByText('Design Team')).toBeVisible(),
+    );
   },
 };
 

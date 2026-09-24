@@ -18,6 +18,7 @@ import {
   type ProfileData,
   type ProviderModelList,
 } from './api';
+import type { GatewayEvent } from './api/events';
 
 export type Notice = { text: string; error: boolean };
 
@@ -38,6 +39,11 @@ type Workspace = {
    */
   deleteProfile: (profileId: string) => Promise<boolean>;
   refresh: () => Promise<void>;
+  /**
+   * Hears every event of the open profile as it arrives, for a screen that keeps something
+   * live of its own, such as an open conversation. Returns the way to stop listening.
+   */
+  subscribe: (listener: (event: GatewayEvent) => void) => () => void;
   mutate: Mutation;
   notice: Notice | undefined;
   setNotice: (notice: Notice | undefined) => void;
@@ -137,6 +143,53 @@ export function WorkspaceProvider({
   const [notice, setNotice] = useState<Notice>();
   // A load that started before a profile switch must not overwrite the one that follows it.
   const generation = useRef(0);
+  const listeners = useRef(new Set<(event: GatewayEvent) => void>());
+  const subscribe = useCallback((listener: (event: GatewayEvent) => void) => {
+    listeners.current.add(listener);
+
+    return () => {
+      listeners.current.delete(listener);
+    };
+  }, []);
+
+  /**
+   * The conversations and what the agent is doing, reloaded alone: they change with every turn,
+   * and reloading the whole profile each time would ask the providers for their models too.
+   * Only the work in progress is read again when that is all that changed.
+   */
+  const live = useRef<{ timer?: ReturnType<typeof setTimeout>; sessions: boolean }>({
+    sessions: false,
+  });
+  const refreshLive = useCallback(
+    (sessions: boolean) => {
+      live.current.sessions ||= sessions;
+      clearTimeout(live.current.timer);
+      live.current.timer = setTimeout(async () => {
+        const withSessions = live.current.sessions;
+        const profileId = selected;
+
+        live.current.sessions = false;
+        try {
+          const [activities, list] = await Promise.all([
+            api.activities(profileId),
+            withSessions ? api.sessions(profileId) : undefined,
+          ]);
+
+          setHeld((current) =>
+            current && current.profileId === profileId
+              ? {
+                  profileId,
+                  value: { ...current.value, activities, ...(list ? { sessions: list } : {}) },
+                }
+              : current,
+          );
+        } catch {
+          // The next event, or the next full refresh, brings it.
+        }
+      }, 200);
+    },
+    [api, selected],
+  );
 
   const refresh = useCallback(async () => {
     const current = ++generation.current;
@@ -201,7 +254,13 @@ export function WorkspaceProvider({
 
             if (event.type.startsWith('contact.') || event.type.startsWith('channel.')) {
               void refresh();
+            } else if (event.type === 'run.progress') {
+              refreshLive(false);
+            } else if (event.type.startsWith('run.') || event.type.startsWith('session.')) {
+              refreshLive(true);
             }
+
+            for (const listener of listeners.current) listener(event);
           },
           controller.signal,
         );
@@ -220,7 +279,7 @@ export function WorkspaceProvider({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [api, selected, refresh]);
+  }, [api, selected, refresh, refreshLive]);
 
   const mutate: Mutation = async (action, message = 'Changes saved.') => {
     setBusy(true);
@@ -295,6 +354,7 @@ export function WorkspaceProvider({
       return true;
     },
     refresh,
+    subscribe,
     mutate,
     notice,
     setNotice,

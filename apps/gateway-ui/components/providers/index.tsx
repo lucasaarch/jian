@@ -1,11 +1,11 @@
 'use client';
 
-import { ChevronDown, KeyRound, Save, Trash2 } from 'lucide-react';
+import { Save, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { GatewayApi } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionProps } from '../props';
-import { Badge, Button, Field, SectionHeading } from '../ui';
+import { Badge, Button, Field, ProviderLogo, ResourceRow, SectionHeading } from '../ui';
 import { Select } from '../ui/select';
 import { anthropicCredentials, providers } from './catalog';
 import { DecisionsRow, WebSearchRow } from './service-keys';
@@ -63,219 +63,224 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
     return () => clearInterval(timer);
   }, [api, codexLogin?.status, mutate]);
 
+  const entry = providers.find((item) => item.kind === editing);
+  const liveOf = (kind: string) => ({
+    configured: data.providers.find(
+      (provider) => provider.kind === kind && !provider.revokedAt && provider.authMode !== 'codex',
+    ),
+    codex: data.providers.find(
+      (provider) => provider.kind === kind && provider.authMode === 'codex' && !provider.revokedAt,
+    ),
+  });
+  const { configured, codex } = liveOf(editing ?? '');
+
+  // The settings of the open row: its credential, and for OpenAI the ChatGPT sign-in beside it.
+  const form = (entry: (typeof providers)[number]) => (
+    <form
+      className="connection-form"
+      method="post"
+      action="/ui/"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setFormError('');
+        const element = event.currentTarget;
+        const secret = String(new FormData(element).get('secret') ?? '').trim();
+        if (!secret) {
+          setFormError(`Enter the ${entry.name} credential.`);
+          return;
+        }
+        // Registering replaces the provider of this vendor, key included.
+        const ok = await mutate(
+          () =>
+            api.createProvider({
+              name: entry.name,
+              kind: entry.kind,
+              secret,
+              ...(entry.kind === 'anthropic'
+                ? { credential: credential as 'key' | 'subscription' }
+                : {}),
+            }),
+          `${entry.name} configured.`,
+        );
+        if (ok) {
+          element.reset();
+          setEditing(undefined);
+        }
+      }}
+    >
+      {entry.kind === 'anthropic' && (
+        <Field label="Credential type" hint="Anthropic refuses either one sent as the other.">
+          <Select
+            value={credential}
+            onValueChange={setCredential}
+            options={[...anthropicCredentials]}
+            aria-label="Credential type"
+          />
+        </Field>
+      )}
+      <Field
+        label={entry.kind === 'openai' ? 'API key' : `${entry.name} credential`}
+        hint={
+          configured?.apiKeyEnv
+            ? `Currently ${configured.apiKeyEnv}. What you save here replaces it.`
+            : 'What you save here is never shown again.'
+        }
+      >
+        <input name="secret" type="password" autoComplete="off" required />
+      </Field>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" busy={busy}>
+          <Save size={16} />
+          {configured ? 'Replace it' : 'Save it'}
+        </Button>
+        {configured && !configured.apiKeyEnv && (
+          <Button
+            type="button"
+            variant="quiet"
+            disabled={busy}
+            onClick={async () => {
+              if (
+                await mutate(() => api.revokeProvider(configured.id), `${entry.name} disconnected.`)
+              )
+                setEditing(undefined);
+            }}
+          >
+            <Trash2 size={16} />
+            Remove it
+          </Button>
+        )}
+      </div>
+      {entry.kind === 'openai' && (
+        <div className="provider-alternative">
+          <p>Or use your ChatGPT plan instead of an API key.</p>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy || codexLogin?.status === 'pending'}
+              onClick={() =>
+                void api
+                  .startCodexLogin()
+                  .then(setCodexLogin)
+                  .catch((error) =>
+                    setFormError(
+                      error instanceof Error ? error.message : 'The login is unavailable.',
+                    ),
+                  )
+              }
+            >
+              Sign in with ChatGPT
+            </Button>
+            {codex && (
+              <Button
+                type="button"
+                variant="quiet"
+                disabled={busy}
+                onClick={() =>
+                  void mutate(() => api.revokeProvider(codex.id), 'ChatGPT disconnected.')
+                }
+              >
+                Disconnect ChatGPT
+              </Button>
+            )}
+          </div>
+          {codexLogin?.status === 'pending' && (
+            <p className="note">
+              Open{' '}
+              <a href={codexLogin.verificationUrl} target="_blank" rel="noreferrer">
+                the OpenAI login
+              </a>{' '}
+              and enter the code <strong>{codexLogin.userCode}</strong>.
+            </p>
+          )}
+          {codexLogin?.status === 'failed' && codexLogin.error && (
+            <p className="form-error" role="alert">
+              {codexLogin.error}
+            </p>
+          )}
+        </div>
+      )}
+      {formError && (
+        <p className="form-error" role="alert">
+          {formError}
+        </p>
+      )}
+    </form>
+  );
+
   return (
     <>
       <SectionHeading
         title="Providers"
         description="Connect once, use from every profile. Each profile picks its own model under Model defaults."
       />
-      <div className="resource-list">
-        {providers.map((entry) => {
-          const configured = data.providers.find(
-            (provider) =>
-              provider.kind === entry.kind && !provider.revokedAt && provider.authMode !== 'codex',
-          );
-          const codex = data.providers.find(
-            (provider) =>
-              provider.kind === entry.kind && provider.authMode === 'codex' && !provider.revokedAt,
-          );
-          const list = configured ? data.providerModels[configured.id] : undefined;
-          const uncatalogued = list?.models.filter((model) => !model.known).length ?? 0;
-          const open = editing === entry.kind;
-          return (
-            <article className="resource-row items-start provider-row" key={entry.kind}>
-              <div className="resource-icon provider-symbol" aria-hidden="true">
-                {entry.symbol}
-              </div>
-              <div className="grow">
-                <h3>
-                  {entry.name}
-                  <Badge tone={configured || codex ? 'good' : 'neutral'}>
-                    {configured ? 'Connected' : codex ? 'ChatGPT connected' : 'Not configured'}
-                  </Badge>
-                </h3>
-                <p>{entry.description}</p>
-                {entry.kind === 'openai' && codexLogin?.status === 'connected' && (
-                  <p>
-                    ChatGPT is connected. An API key can be configured alongside it for image and
-                    voice generation.
-                  </p>
-                )}
-                <div className="connection-meta">
-                  <KeyRound size={13} />
-                  <span>{configured ? credentialLine(configured) : entry.variables}</span>
-                  {list && !list.stale && (
-                    <span>
-                      {list.models.length} models available
-                      {uncatalogued > 0 && ` · ${uncatalogued} with unknown capabilities`}
-                    </span>
-                  )}
-                </div>
-                {list?.stale && (
-                  <p className="note" role="status">
-                    {list.models.length ? `List from ${date(list.fetchedAt)}. ` : ''}
-                    {list.reason ?? 'The model list could not be refreshed.'}
-                  </p>
-                )}
-              </div>
-              <div className="row-actions">
-                <Button
-                  type="button"
-                  variant="quiet"
-                  disabled={busy}
-                  aria-expanded={open}
-                  aria-controls={`provider-${entry.kind}`}
-                  onClick={() => {
-                    setEditing(open ? undefined : entry.kind);
-                    setCredential(configured?.credential ?? 'key');
-                    setFormError('');
-                  }}
-                >
-                  {open ? 'Close' : configured ? 'Manage' : 'Connect'}
-                  <ChevronDown size={16} className={open ? 'rotate-180' : undefined} />
-                </Button>
-              </div>
-              <div
-                id={`provider-${entry.kind}`}
-                className="connection-disclosure basis-full"
-                hidden={!open}
-              >
-                <form
-                  className="connection-form"
-                  method="post"
-                  action="/ui/"
-                  onSubmit={async (event) => {
-                    event.preventDefault();
-                    setFormError('');
-                    const element = event.currentTarget;
-                    const secret = String(new FormData(element).get('secret') ?? '').trim();
-                    if (!secret) {
-                      setFormError(`Enter the ${entry.name} credential.`);
-                      return;
-                    }
-                    // Registering replaces the provider of this vendor, key included.
-                    const ok = await mutate(
-                      () =>
-                        api.createProvider({
-                          name: entry.name,
-                          kind: entry.kind,
-                          secret,
-                          ...(entry.kind === 'anthropic'
-                            ? { credential: credential as 'key' | 'subscription' }
-                            : {}),
-                        }),
-                      `${entry.name} configured.`,
-                    );
-                    if (ok) element.reset();
-                  }}
-                >
-                  {entry.kind === 'anthropic' && (
-                    <Field
-                      label="Credential type"
-                      hint="Anthropic refuses either one sent as the other."
-                    >
-                      <Select
-                        value={credential}
-                        onValueChange={setCredential}
-                        options={[...anthropicCredentials]}
-                        aria-label="Credential type"
-                      />
-                    </Field>
-                  )}
-                  <Field
-                    label={`${entry.name} credential`}
-                    hint={
-                      configured?.apiKeyEnv
-                        ? `Currently ${configured.apiKeyEnv}. What you save here replaces it.`
-                        : 'What you save here is never shown again.'
-                    }
-                  >
-                    <input name="secret" type="password" autoComplete="off" required />
-                  </Field>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Button type="submit" busy={busy}>
-                      <Save size={16} />
-                      {configured ? 'Replace it' : 'Save it'}
-                    </Button>
-                    {configured && !configured.apiKeyEnv && (
-                      <Button
-                        type="button"
-                        variant="quiet"
-                        disabled={busy}
-                        onClick={() =>
-                          void mutate(
-                            () => api.revokeProvider(configured.id),
-                            `${entry.name} disconnected.`,
-                          )
-                        }
-                      >
-                        <Trash2 size={16} />
-                        {configured.authMode === 'codex' ? 'Disconnect ChatGPT' : 'Remove it'}
-                      </Button>
+      <section className="row-group" aria-labelledby="provider-models">
+        <h2 id="provider-models">Models</h2>
+        <div className="resource-list">
+          {providers.map((item) => {
+            const live = liveOf(item.kind);
+            const list = live.configured ? data.providerModels[live.configured.id] : undefined;
+            const uncatalogued = list?.models.filter((model) => !model.known).length ?? 0;
+
+            return (
+              <ResourceRow
+                key={item.kind}
+                id={`provider-${item.kind}`}
+                icon={<ProviderLogo kind={item.kind} size={24} />}
+                name={item.name}
+                description={item.description}
+                badges={
+                  <>
+                    {list?.stale ? (
+                      <Badge tone="bad">Unreachable</Badge>
+                    ) : live.configured ? (
+                      <Badge tone="good">Connected</Badge>
+                    ) : live.codex ? (
+                      <Badge tone="good">ChatGPT connected</Badge>
+                    ) : (
+                      <Badge>Not connected</Badge>
                     )}
-                  </div>
-                  {entry.kind === 'openai' && (
-                    <div className="mt-5 border-t border-line pt-5">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={busy || codexLogin?.status === 'pending'}
-                        onClick={() =>
-                          void api
-                            .startCodexLogin()
-                            .then(setCodexLogin)
-                            .catch((error) =>
-                              setFormError(
-                                error instanceof Error
-                                  ? error.message
-                                  : 'The login is unavailable.',
-                              ),
-                            )
-                        }
-                      >
-                        Sign in with ChatGPT
-                      </Button>
-                      {codex && (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={busy}
-                          onClick={() =>
-                            void mutate(() => api.revokeProvider(codex.id), 'ChatGPT disconnected.')
-                          }
-                        >
-                          Disconnect ChatGPT
-                        </Button>
-                      )}
-                      {codexLogin?.status === 'pending' && (
-                        <p className="note">
-                          Open{' '}
-                          <a href={codexLogin.verificationUrl} target="_blank" rel="noreferrer">
-                            the OpenAI login
-                          </a>{' '}
-                          and enter the code <strong>{codexLogin.userCode}</strong>.
-                        </p>
-                      )}
-                      {codexLogin?.status === 'failed' && codexLogin.error && (
-                        <p className="form-error" role="alert">
-                          {codexLogin.error}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  {formError && open && (
-                    <p className="form-error" role="alert">
-                      {formError}
-                    </p>
-                  )}
-                </form>
-              </div>
-            </article>
-          );
-        })}
-        <WebSearchRow api={api} mutate={mutate} busy={busy} />
-        <DecisionsRow api={api} mutate={mutate} busy={busy} />
-      </div>
+                    {list?.models.length ? (
+                      <Badge dot={false}>
+                        {list.models.length} {list.models.length === 1 ? 'model' : 'models'}
+                      </Badge>
+                    ) : null}
+                  </>
+                }
+                facts={[
+                  live.configured ? credentialLine(live.configured) : `Or ${item.variables}`,
+                  ...(uncatalogued ? [`${uncatalogued} with unknown capabilities`] : []),
+                  ...(list?.stale
+                    ? [
+                        `${list.models.length ? `List from ${date(list.fetchedAt)}. ` : ''}${list.reason ?? 'The model list could not be refreshed.'}`,
+                      ]
+                    : []),
+                  ...(item.kind === 'openai' && live.codex && !live.configured
+                    ? ['An API key alongside it adds image and voice generation.']
+                    : []),
+                ]}
+                action={live.configured || live.codex ? 'Manage' : 'Connect'}
+                busy={busy}
+                open={editing === item.kind}
+                onToggle={() => {
+                  setEditing(editing === item.kind ? undefined : item.kind);
+                  setCredential(live.configured?.credential ?? 'key');
+                  setFormError('');
+                }}
+              >
+                {entry && form(entry)}
+              </ResourceRow>
+            );
+          })}
+        </div>
+      </section>
+      <section className="row-group" aria-labelledby="provider-services">
+        <h2 id="provider-services">Services</h2>
+        <div className="resource-list">
+          <WebSearchRow api={api} mutate={mutate} busy={busy} />
+          <DecisionsRow api={api} mutate={mutate} busy={busy} />
+        </div>
+      </section>
     </>
   );
 }

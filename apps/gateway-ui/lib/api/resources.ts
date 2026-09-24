@@ -1,5 +1,6 @@
 import { type Client, profile } from './params';
 import { result } from './result';
+import type { ScheduleInput, SchedulePatch } from './types';
 
 /** What the agent carries between runs: what it remembers and what it knows how to do. */
 export const resourceCalls = (client: Client) => ({
@@ -9,6 +10,57 @@ export const resourceCalls = (client: Client) => ({
     result(
       client.DELETE('/v1/profiles/{profileId}/memories/{memoryKey}', {
         params: { path: { profileId, memoryKey } },
+      }),
+    ),
+  editMemory: (profileId: string, memoryKey: string, content: string, expectedVersion: number) =>
+    result(
+      client.PUT('/v1/profiles/{profileId}/memories/{memoryKey}', {
+        params: { path: { profileId, memoryKey } },
+        body: { content, expectedVersion },
+      }),
+    ),
+  linkMemories: (profileId: string, memoryKey: string, linkedKey: string) =>
+    result(
+      client.PUT('/v1/profiles/{profileId}/memories/{memoryKey}/links/{linkedKey}', {
+        params: { path: { profileId, memoryKey, linkedKey } },
+      }),
+    ),
+  unlinkMemories: (profileId: string, memoryKey: string, linkedKey: string) =>
+    result(
+      client.DELETE('/v1/profiles/{profileId}/memories/{memoryKey}/links/{linkedKey}', {
+        params: { path: { profileId, memoryKey, linkedKey } },
+      }),
+    ),
+  schedules: (profileId: string) =>
+    result(client.GET('/v1/profiles/{profileId}/schedules', { params: profile(profileId) })),
+  createSchedule: (profileId: string, body: ScheduleInput) =>
+    result(client.POST('/v1/profiles/{profileId}/schedules', { params: profile(profileId), body })),
+  updateSchedule: (profileId: string, scheduleId: string, body: SchedulePatch) =>
+    result(
+      client.PATCH('/v1/profiles/{profileId}/schedules/{scheduleId}', {
+        params: { path: { profileId, scheduleId } },
+        body,
+      }),
+    ),
+  deleteSchedule: (profileId: string, scheduleId: string) =>
+    result(
+      client.DELETE('/v1/profiles/{profileId}/schedules/{scheduleId}', {
+        params: { path: { profileId, scheduleId } },
+      }),
+    ),
+  scheduleHistory: (profileId: string, scheduleId: string) =>
+    result(
+      client.GET('/v1/profiles/{profileId}/schedules/{scheduleId}/history', {
+        params: { path: { profileId, scheduleId } },
+      }),
+    ),
+  settings: () => result(client.GET('/v1/settings')),
+  updateSettings: (timeZone: string | null) =>
+    result(client.PUT('/v1/settings', { body: { timeZone } })),
+  runSchedule: (profileId: string, scheduleId: string) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/schedules/{scheduleId}/run', {
+        params: { path: { profileId, scheduleId } },
       }),
     ),
   builtinSkills: (profileId: string) =>

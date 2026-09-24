@@ -4,19 +4,21 @@ import { ArrowUpRight, Check, Download, LoaderCircle, Search } from 'lucide-reac
 import { useEffect, useState } from 'react';
 import type { GatewayApi } from '../../lib/api';
 import type { SectionProps } from '../props';
-import { Button, Confirm } from '../ui';
+import { Button, Confirm, ProviderLogo } from '../ui';
 
 const sources = [
   {
     id: 'claude',
     name: 'Claude',
     publisher: 'Anthropic',
+    logo: 'anthropic',
     url: 'https://github.com/anthropics/skills/tree/main/skills',
   },
   {
     id: 'codex',
     name: 'Codex',
     publisher: 'OpenAI',
+    logo: 'openai',
     url: 'https://github.com/openai/skills/tree/main/skills/.curated',
   },
 ] as const;
@@ -70,14 +72,11 @@ export function SkillCatalog({
     `${entry.name} ${entry.description}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
   );
   return (
-    <section className="skill-marketplace" aria-label="Skill catalogs">
-      <header className="section-row">
-        <div>
-          <h2>Browse skills</h2>
-          <p className="mt-1 text-sm">Official catalogs, ready to add to this profile.</p>
-        </div>
-        <span className="text-xs text-muted">{profile.skills.length}/20 installed</span>
-      </header>
+    <section className="row-group" aria-labelledby="skills-browse">
+      <h2 id="skills-browse">Browse</h2>
+      <p>
+        Official catalogs, ready to add to this profile. {profile.skills.length} of 20 installed.
+      </p>
       <div className="catalog-toolbar">
         <fieldset className="catalog-sources">
           <legend className="sr-only">Where the skills come from</legend>
@@ -91,6 +90,7 @@ export function SkillCatalog({
                 setQuery('');
               }}
             >
+              <ProviderLogo kind={item.logo} size={18} />
               <strong>{item.name}</strong>
               <small>{item.publisher}</small>
             </button>
@@ -143,7 +143,10 @@ export function SkillCatalog({
                 </div>
                 {entry.description !== 'Skill in this repository' && <p>{entry.description}</p>}
                 <footer>
-                  <span>{source.publisher}</span>
+                  <span className="catalog-publisher">
+                    <ProviderLogo kind={source.logo} size={14} />
+                    {source.publisher}
+                  </span>
                   <Button
                     variant="quiet"
                     disabled={busy || installed || (!existing && profile.skills.length >= 20)}

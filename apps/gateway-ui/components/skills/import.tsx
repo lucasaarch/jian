@@ -41,7 +41,7 @@ export function SkillImport({
       </Field>
       <Button type="submit" busy={busy} disabled={!url.trim()}>
         <Download size={16} />
-        Importar
+        Import
       </Button>
       <p id="skill-import-hint" className="skill-import-hint">
         The GitHub address of a skill, or of a folder of skills. The instructions are copied once.
