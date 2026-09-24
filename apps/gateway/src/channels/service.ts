@@ -563,6 +563,18 @@ export class Channels {
       return { accepted: false };
     }
 
+    if (adapter.download) {
+      const files = await adapter.download(request.payload, {
+        channelId: channel.id,
+        credential: await this.services.vault.read(channel.profileId, channelSecret(channel.id)),
+        fetch: this.fetcher,
+        signal: this.abort.signal,
+      });
+
+      if (files.media?.length) data.media = files.media;
+      if (files.note) data.text = `${data.text.slice(0, 7800)}\n${files.note}`;
+    }
+
     const accepted = await this.accept(channel, data);
 
     void this.refreshAvatarOf(channel, data).catch(() => {});
@@ -642,6 +654,23 @@ export class Channels {
           // What was not said to the agent is still what it heard: when it is called later, it
           // answers the room with the conversation it followed, like anyone else who was there.
           if (!decision.speak && outcome.contact.sessionId) {
+            const heard: string[] = [];
+            for (const [index, media] of (data.media ?? []).entries()) {
+              const id = await this.services.media
+                ?.keepHeard(
+                  tx,
+                  channel.profileId,
+                  outcome.contact.sessionId,
+                  `heard:${channel.id}:${data.requestKey}:${index}`,
+                  media,
+                )
+                .catch(() => undefined);
+              heard.push(
+                id
+                  ? `\n[File not opened, it was not sent to you: ${media.name ?? media.mimeType}, media ID ${id}. Open it with analyze_media if it matters.]`
+                  : '\n[File not kept: it was not sent to you.]',
+              );
+            }
             await insertMessage(
               tx,
               {
@@ -649,9 +678,7 @@ export class Channels {
                 profileId: channel.profileId,
                 sessionId: outcome.contact.sessionId,
                 role: 'user',
-                content: `${data.displayName ?? data.actorId}: ${data.text}${
-                  data.media?.length ? '\n[Attachment not opened: it was not sent to you.]' : ''
-                }`,
+                content: `${data.displayName ?? data.actorId}: ${data.text}${heard.join('')}`,
                 author: authorOf(data),
                 createdAt: new Date().toISOString(),
               },
@@ -1260,6 +1287,7 @@ export class Channels {
             media: {
               mimeType: media.mimeType as import('@jian/contracts').InlineMedia['mimeType'],
               data: media.data,
+              ...(media.name ? { name: media.name } : {}),
             },
           },
           context,

@@ -5588,7 +5588,7 @@ export interface operations {
                     requestKey: string;
                     media?: {
                         /** @enum {string} */
-                        mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "application/json";
+                        mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "text/html" | "application/json" | "application/xml" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "application/vnd.openxmlformats-officedocument.presentationml.presentation" | "application/vnd.oasis.opendocument.text" | "application/vnd.oasis.opendocument.spreadsheet" | "application/vnd.oasis.opendocument.presentation" | "application/msword" | "application/vnd.ms-excel" | "application/vnd.ms-powerpoint" | "application/rtf" | "application/zip" | "video/mp4" | "video/quicktime" | "video/webm" | "application/octet-stream";
                         data: string;
                         voice?: boolean;
                         name?: string;
@@ -5757,6 +5757,42 @@ export interface operations {
                         };
                         text?: string;
                         caption?: string;
+                        photo?: {
+                            file_id: string;
+                            file_name?: string;
+                            mime_type?: string;
+                            file_size?: number;
+                        }[];
+                        document?: {
+                            file_id: string;
+                            file_name?: string;
+                            mime_type?: string;
+                            file_size?: number;
+                        };
+                        voice?: {
+                            file_id: string;
+                            file_name?: string;
+                            mime_type?: string;
+                            file_size?: number;
+                        };
+                        audio?: {
+                            file_id: string;
+                            file_name?: string;
+                            mime_type?: string;
+                            file_size?: number;
+                        };
+                        video?: {
+                            file_id: string;
+                            file_name?: string;
+                            mime_type?: string;
+                            file_size?: number;
+                        };
+                        video_note?: {
+                            file_id: string;
+                            file_name?: string;
+                            mime_type?: string;
+                            file_size?: number;
+                        };
                         entities?: {
                             type: string;
                             offset?: number;
@@ -10433,7 +10469,7 @@ export interface operations {
                         /** Format: uuid */
                         profileId: string;
                         /** @enum {string} */
-                        mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "application/json";
+                        mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "text/html" | "application/json" | "application/xml" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "application/vnd.openxmlformats-officedocument.presentationml.presentation" | "application/vnd.oasis.opendocument.text" | "application/vnd.oasis.opendocument.spreadsheet" | "application/vnd.oasis.opendocument.presentation" | "application/msword" | "application/vnd.ms-excel" | "application/vnd.ms-powerpoint" | "application/rtf" | "application/zip" | "video/mp4" | "video/quicktime" | "video/webm" | "application/octet-stream";
                         name?: string;
                         bytes: number;
                         /** Format: date-time */
@@ -10933,7 +10969,7 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "application/json";
+                    mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "text/html" | "application/json" | "application/xml" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "application/vnd.openxmlformats-officedocument.presentationml.presentation" | "application/vnd.oasis.opendocument.text" | "application/vnd.oasis.opendocument.spreadsheet" | "application/vnd.oasis.opendocument.presentation" | "application/msword" | "application/vnd.ms-excel" | "application/vnd.ms-powerpoint" | "application/rtf" | "application/zip" | "video/mp4" | "video/quicktime" | "video/webm" | "application/octet-stream";
                     data: string;
                     voice?: boolean;
                     name?: string;
@@ -10953,7 +10989,7 @@ export interface operations {
                         /** Format: uuid */
                         profileId: string;
                         /** @enum {string} */
-                        mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "application/json";
+                        mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "text/html" | "application/json" | "application/xml" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "application/vnd.openxmlformats-officedocument.presentationml.presentation" | "application/vnd.oasis.opendocument.text" | "application/vnd.oasis.opendocument.spreadsheet" | "application/vnd.oasis.opendocument.presentation" | "application/msword" | "application/vnd.ms-excel" | "application/vnd.ms-powerpoint" | "application/rtf" | "application/zip" | "video/mp4" | "video/quicktime" | "video/webm" | "application/octet-stream";
                         name?: string;
                         bytes: number;
                         /** Format: date-time */

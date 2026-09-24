@@ -101,7 +101,12 @@ async function setup(jev?: (state: { message: string }) => number) {
   const say = async (
     author: { name: string; address: string },
     text: string,
-    options: { requestKey?: string; mentions?: string[]; replyTo?: string } = {},
+    options: {
+      requestKey?: string;
+      mentions?: string[];
+      replyTo?: string;
+      media?: IncomingMessage['media'];
+    } = {},
   ) => {
     const requestKey = options.requestKey ?? `wa-group-${++messages}`;
 
@@ -120,6 +125,7 @@ async function setup(jev?: (state: { message: string }) => number) {
         scope: 'group',
         mentions: options.mentions ?? [],
         ...(options.replyTo ? { replyTo: options.replyTo } : {}),
+        ...(options.media ? { media: options.media } : {}),
       });
     }
 
@@ -275,6 +281,47 @@ describe('group conversations', () => {
       await f.say(guest, 'pode ser sábado?', { replyTo: ada.address });
 
       expect(await f.runs(ada.profileId)).toHaveLength(2);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('keeps a file posted in the room for the agent to open when it is called', async () => {
+    const f = await setup();
+
+    try {
+      const ada = await f.join('Ada', '5511800000001@c.us');
+
+      await f.say(owner, 'oi');
+      await f.approve(ada.profileId);
+      await f.say(guest, '[File: prices.csv]', {
+        media: [
+          {
+            mimeType: 'text/csv',
+            data: Buffer.from('item,price\ncoffee,12\n').toString('base64'),
+            name: 'prices.csv',
+          },
+        ],
+      });
+      await f.say(owner, 'Ada, what does coffee cost?', { mentions: [ada.address] });
+
+      const [run] = await f.services.runs.activities(ada.profileId);
+
+      if (!run) throw new Error('Run missing');
+
+      const context = await f.services.contexts.context(run);
+      const heard = context.messages.map((message) => message.content).join('\n');
+      const mediaId = heard.match(/prices\.csv, media ID ([0-9a-f-]{36})/)?.[1];
+
+      if (!mediaId) throw new Error(`File not kept: ${heard}`);
+
+      const open = f.services.media.tools(run).analyze_media;
+      const read = await open?.execute?.(
+        { mediaId, question: 'What does coffee cost?' },
+        { toolCallId: 'open', messages: [], context: {} },
+      );
+
+      expect(JSON.stringify(read)).toContain('coffee,12');
     } finally {
       await f.close();
     }

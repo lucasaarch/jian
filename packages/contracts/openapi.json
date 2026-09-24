@@ -9144,7 +9144,24 @@
                             "text/plain",
                             "text/markdown",
                             "text/csv",
-                            "application/json"
+                            "text/html",
+                            "application/json",
+                            "application/xml",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                            "application/vnd.oasis.opendocument.text",
+                            "application/vnd.oasis.opendocument.spreadsheet",
+                            "application/vnd.oasis.opendocument.presentation",
+                            "application/msword",
+                            "application/vnd.ms-excel",
+                            "application/vnd.ms-powerpoint",
+                            "application/rtf",
+                            "application/zip",
+                            "video/mp4",
+                            "video/quicktime",
+                            "video/webm",
+                            "application/octet-stream"
                           ]
                         },
                         "data": {
@@ -9515,6 +9532,166 @@
                       "caption": {
                         "type": "string",
                         "maxLength": 8000
+                      },
+                      "photo": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "file_id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "file_name": {
+                              "type": "string",
+                              "maxLength": 255
+                            },
+                            "mime_type": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "file_size": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "file_id"
+                          ]
+                        }
+                      },
+                      "document": {
+                        "type": "object",
+                        "properties": {
+                          "file_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "file_name": {
+                            "type": "string",
+                            "maxLength": 255
+                          },
+                          "mime_type": {
+                            "type": "string",
+                            "maxLength": 120
+                          },
+                          "file_size": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "file_id"
+                        ]
+                      },
+                      "voice": {
+                        "type": "object",
+                        "properties": {
+                          "file_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "file_name": {
+                            "type": "string",
+                            "maxLength": 255
+                          },
+                          "mime_type": {
+                            "type": "string",
+                            "maxLength": 120
+                          },
+                          "file_size": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "file_id"
+                        ]
+                      },
+                      "audio": {
+                        "type": "object",
+                        "properties": {
+                          "file_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "file_name": {
+                            "type": "string",
+                            "maxLength": 255
+                          },
+                          "mime_type": {
+                            "type": "string",
+                            "maxLength": 120
+                          },
+                          "file_size": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "file_id"
+                        ]
+                      },
+                      "video": {
+                        "type": "object",
+                        "properties": {
+                          "file_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "file_name": {
+                            "type": "string",
+                            "maxLength": 255
+                          },
+                          "mime_type": {
+                            "type": "string",
+                            "maxLength": 120
+                          },
+                          "file_size": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "file_id"
+                        ]
+                      },
+                      "video_note": {
+                        "type": "object",
+                        "properties": {
+                          "file_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "file_name": {
+                            "type": "string",
+                            "maxLength": 255
+                          },
+                          "mime_type": {
+                            "type": "string",
+                            "maxLength": 120
+                          },
+                          "file_size": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "file_id"
+                        ]
                       },
                       "entities": {
                         "maxItems": 64,
@@ -19861,7 +20038,24 @@
                         "text/plain",
                         "text/markdown",
                         "text/csv",
-                        "application/json"
+                        "text/html",
+                        "application/json",
+                        "application/xml",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        "application/vnd.oasis.opendocument.text",
+                        "application/vnd.oasis.opendocument.spreadsheet",
+                        "application/vnd.oasis.opendocument.presentation",
+                        "application/msword",
+                        "application/vnd.ms-excel",
+                        "application/vnd.ms-powerpoint",
+                        "application/rtf",
+                        "application/zip",
+                        "video/mp4",
+                        "video/quicktime",
+                        "video/webm",
+                        "application/octet-stream"
                       ]
                     },
                     "name": {
@@ -21069,7 +21263,24 @@
                       "text/plain",
                       "text/markdown",
                       "text/csv",
-                      "application/json"
+                      "text/html",
+                      "application/json",
+                      "application/xml",
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                      "application/vnd.oasis.opendocument.text",
+                      "application/vnd.oasis.opendocument.spreadsheet",
+                      "application/vnd.oasis.opendocument.presentation",
+                      "application/msword",
+                      "application/vnd.ms-excel",
+                      "application/vnd.ms-powerpoint",
+                      "application/rtf",
+                      "application/zip",
+                      "video/mp4",
+                      "video/quicktime",
+                      "video/webm",
+                      "application/octet-stream"
                     ]
                   },
                   "data": {
@@ -21131,7 +21342,24 @@
                         "text/plain",
                         "text/markdown",
                         "text/csv",
-                        "application/json"
+                        "text/html",
+                        "application/json",
+                        "application/xml",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        "application/vnd.oasis.opendocument.text",
+                        "application/vnd.oasis.opendocument.spreadsheet",
+                        "application/vnd.oasis.opendocument.presentation",
+                        "application/msword",
+                        "application/vnd.ms-excel",
+                        "application/vnd.ms-powerpoint",
+                        "application/rtf",
+                        "application/zip",
+                        "video/mp4",
+                        "video/quicktime",
+                        "video/webm",
+                        "application/octet-stream"
                       ]
                     },
                     "name": {

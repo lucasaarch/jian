@@ -1,4 +1,4 @@
-import { MAX_MEDIA_BYTES, MAX_MESSAGE_MEDIA } from '@jian/contracts';
+import { MAX_MEDIA_BYTES, MAX_MESSAGE_MEDIA, mediaMimeOf } from '@jian/contracts';
 
 export { MAX_MEDIA_BYTES, MAX_MESSAGE_MEDIA };
 
@@ -57,14 +57,6 @@ const textExtensions: Record<string, string> = {
   ),
 };
 
-/** What the file picker offers; the same rules as `classify`. */
-export const accept = [
-  ...images,
-  ...audio,
-  'application/pdf',
-  ...Object.keys(textExtensions).map((extension) => `.${extension}`),
-].join(',');
-
 /** The type the gateway stores a file under, or why it cannot take it. */
 export function classify(file: {
   name: string;
@@ -79,14 +71,14 @@ export function classify(file: {
 
   if (images.includes(type)) return { mimeType: type, kind: 'image' };
   if (audio.includes(type)) return { mimeType: type, kind: 'audio' };
-  if (type === 'application/pdf') return { mimeType: type, kind: 'document' };
 
   const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
   const text = textExtensions[extension];
 
   if (text) return { mimeType: text, kind: 'document' };
 
-  return { error: `${file.name} is not a supported file. Send images, audio, PDF or text files.` };
+  // Any other file goes as it is; the gateway reads what it can and keeps the rest.
+  return { mimeType: mediaMimeOf(type, file.name), kind: 'document' };
 }
 
 export async function base64(blob: Blob): Promise<string> {

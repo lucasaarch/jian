@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from 'react';
 import type { MediaUpload } from '../../lib/api';
 import {
   type AttachmentKind,
-  accept,
   base64,
   classify,
   MAX_MESSAGE_MEDIA,
@@ -309,7 +308,6 @@ export function Composer({
                 ref={picker}
                 type="file"
                 multiple
-                accept={accept}
                 hidden
                 onChange={(event) => {
                   attach([...(event.target.files ?? [])]);
