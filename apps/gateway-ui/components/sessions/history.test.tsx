@@ -4,6 +4,9 @@ import { expect, it, vi } from 'vitest';
 import type { Run } from '../../lib/api';
 import { History } from './history';
 
+// No stream here: the history falls back to reading again on its own.
+vi.mock('../../lib/workspace', () => ({ useWorkspace: () => ({ subscribe: () => () => {} }) }));
+
 it('shows a new run failure when the open session was previously completed', async () => {
   vi.useFakeTimers();
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -42,7 +45,8 @@ it('shows a new run failure when the open session was previously completed', asy
         <History api={api} profileId="profile" sessionId="session" initialRun={previous} />,
       );
     });
-    expect(element.textContent).toContain('Completed');
+    expect(element.textContent).toContain('Done.');
+    expect(element.textContent).not.toContain('Failed');
 
     latest = {
       ...previous,
@@ -54,7 +58,7 @@ it('shows a new run failure when the open session was previously completed', asy
       updatedAt: '2026-09-22T00:03:00Z',
     };
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(30_000);
     });
 
     expect(element.textContent).toContain('Found it.');

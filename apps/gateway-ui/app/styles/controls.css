@@ -164,6 +164,233 @@
     @apply mt-5;
     animation: arrive 150ms ease-out;
   }
+  /* A tool of an MCP server: on, it reads as a tag; switched off, it fades and is struck out. */
+  .mcp-tool {
+    @apply inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 font-mono text-xs text-ink transition-colors hover:border-accent disabled:opacity-60;
+  }
+  .mcp-tool[aria-pressed="true"] svg {
+    @apply text-good;
+  }
+  .mcp-tool[aria-pressed="false"] {
+    @apply border-dashed text-muted line-through;
+  }
+  .mcp-hint {
+    @apply mt-1 text-xs text-muted;
+  }
+  /* Memories: the search, rows whose text is cut at three lines, and the
+     memories each one is recalled with as chips that lead to them. */
+  .memory-toolbar {
+    @apply mb-4 flex flex-wrap items-center gap-4;
+  }
+  .memory-toolbar .search-field {
+    @apply min-w-64 flex-1;
+  }
+  .memory-row .resource-row > .grow > p {
+    @apply line-clamp-3 whitespace-pre-line;
+  }
+  .memory-row[data-focused="true"] .resource-row {
+    animation: memory-found 1.6s ease-out;
+  }
+  .memory-links {
+    @apply mt-3 flex flex-wrap gap-1.5;
+  }
+  .memory-links button {
+    @apply inline-flex items-center gap-1 rounded-full border border-line bg-surface px-2.5 py-1 font-mono text-[11px] text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-60;
+  }
+  .memory-editor-links {
+    @apply grid gap-2 border-t border-line pt-5;
+  }
+  .memory-editor-links h3 {
+    @apply text-sm font-semibold;
+  }
+  .memory-editor-links > p {
+    @apply -mt-1 text-xs text-muted;
+  }
+  /* Pickers: a field-like trigger, and a popup with a month calendar and time columns. */
+  .picker-trigger {
+    @apply flex w-full items-center justify-between gap-3 border border-control bg-surface/40 px-3.5 py-3 text-left text-sm text-ink transition-colors hover:border-accent;
+    border-radius: 3px 10px 3px 3px;
+  }
+  .picker-trigger[data-popup-open] {
+    @apply border-accent bg-canvas;
+  }
+  .picker-trigger svg {
+    @apply shrink-0 text-muted;
+  }
+  .picker-popup {
+    @apply flex overflow-hidden rounded-lg border border-line bg-canvas text-sm text-ink shadow-xl;
+    transform-origin: var(--transform-origin);
+    transition:
+      opacity 140ms,
+      transform 140ms;
+  }
+  .picker-popup[data-starting-style],
+  .picker-popup[data-ending-style] {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  .time-columns {
+    @apply flex h-64;
+  }
+  .time-column {
+    @apply relative w-16 overflow-y-auto p-1.5;
+  }
+  .time-column + .time-column {
+    @apply border-l border-line;
+  }
+  .time-column fieldset {
+    @apply m-0 grid gap-0.5 rounded-none border-0 p-0;
+  }
+  .time-columns button,
+  .calendar-grid button {
+    @apply rounded-md py-1.5 text-center font-mono text-sm tabular-nums transition-colors hover:bg-surface;
+  }
+  .time-columns button[aria-pressed="true"],
+  .calendar-grid button[aria-pressed="true"] {
+    @apply bg-accent text-on-accent hover:bg-accent;
+  }
+  .calendar {
+    @apply w-72 border-r border-line p-3;
+  }
+  .calendar header {
+    @apply mb-2 flex items-center justify-between;
+  }
+  .calendar header strong {
+    @apply text-sm font-semibold capitalize;
+  }
+  .calendar header button {
+    @apply grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-surface hover:text-ink;
+  }
+  .calendar-grid {
+    @apply grid grid-cols-7 gap-0.5;
+  }
+  .calendar-grid button {
+    @apply font-sans;
+  }
+  .calendar-grid button:disabled {
+    @apply cursor-default text-muted/40 hover:bg-transparent;
+  }
+  .calendar-weekday {
+    @apply py-1 text-center text-[11px] font-semibold text-muted;
+  }
+  .calendar-popup .time-columns {
+    @apply h-auto max-h-[304px];
+  }
+  /* Schedules: a single time that already ran fades under the ones still to come. */
+  .schedule-row[data-done="true"] {
+    @apply opacity-55 transition-opacity hover:opacity-100;
+  }
+  .schedule-history {
+    @apply grid;
+  }
+  .schedule-history li {
+    @apply relative flex gap-3 pb-4;
+    animation: arrive 220ms ease-out both;
+    animation-delay: calc(min(var(--i), 12) * 30ms);
+  }
+  /* The thread from one mark down to the next, stopping at the oldest. */
+  .schedule-history li:not(:last-child)::before {
+    @apply absolute bottom-0 left-[9px] top-6 w-px bg-line;
+    content: "";
+  }
+  .history-mark {
+    @apply relative z-[1] mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-line bg-surface text-muted;
+  }
+  .schedule-history li[data-outcome="done"] .history-mark {
+    @apply border-accent bg-accent text-on-accent;
+  }
+  .schedule-history li[data-outcome="failed"] .history-mark {
+    @apply border-bad bg-bad-soft text-bad;
+  }
+  .history-body {
+    @apply grid min-w-0 flex-1 gap-1;
+  }
+  .history-head {
+    @apply flex flex-wrap items-center gap-2;
+  }
+  .history-head strong {
+    @apply text-sm font-medium;
+  }
+  .history-status {
+    @apply text-xs text-muted;
+  }
+  .schedule-history li[data-outcome="failed"] .history-status {
+    @apply text-bad;
+  }
+  .schedule-history .run-error {
+    @apply text-xs text-bad;
+  }
+  .schedule-history a {
+    @apply inline-flex w-fit items-center gap-1 text-xs text-accent;
+  }
+  .schedule-when {
+    @apply m-0 grid gap-4 border-0 p-0;
+  }
+  .schedule-when legend {
+    @apply mb-2 text-sm font-medium text-ink;
+  }
+  .segmented {
+    @apply inline-flex w-fit rounded-lg border border-line bg-surface p-1;
+  }
+  .segmented button {
+    @apply rounded-md px-4 py-1.5 text-sm text-muted transition-colors;
+  }
+  .segmented button[aria-pressed="true"] {
+    @apply bg-canvas font-medium text-ink shadow-sm;
+  }
+  .schedule-repeat {
+    @apply grid gap-4 sm:grid-cols-3;
+  }
+  .switch {
+    @apply relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-control bg-surface transition-colors disabled:opacity-50;
+  }
+  .switch[aria-checked="true"] {
+    @apply border-accent bg-accent;
+  }
+  .switch-knob {
+    @apply absolute left-0.5 h-[18px] w-[18px] rounded-full bg-ink/60 shadow-sm transition-all;
+    transition-timing-function: cubic-bezier(0.3, 1.3, 0.5, 1);
+  }
+  .switch[aria-checked="true"] .switch-knob {
+    @apply left-[calc(100%-20px)] bg-on-accent;
+  }
+  /* Rows grouped under a small heading, as Providers, Skills and MCP list what they hold. */
+  .row-group + .row-group {
+    @apply mt-10;
+  }
+  .row-group > h2 {
+    @apply mb-2 font-sans text-xs font-semibold uppercase tracking-wider text-muted;
+  }
+  .row-group > p {
+    @apply -mt-1 mb-2 text-sm text-muted;
+  }
+  /* A mark or a logo on a quiet tile, so a brand's own colours are not fighting the accent. */
+  .resource-icon.tile {
+    @apply border border-line bg-surface text-ink;
+  }
+  .expandable-row .skill-body {
+    @apply mb-4;
+  }
+  .expandable-row h3 {
+    @apply flex flex-wrap items-center gap-2;
+  }
+  .row-facts {
+    @apply mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted;
+  }
+  /* What went wrong with a row, where it cannot be missed. */
+  .row-error {
+    @apply mt-2.5 flex w-fit items-start gap-2 rounded-md bg-bad-soft px-2.5 py-1.5 text-xs font-medium text-bad;
+  }
+  .row-error svg {
+    @apply mt-px shrink-0;
+  }
+  .row-facts > span + span::before {
+    @apply mr-3 text-line;
+    content: "·";
+  }
+  .provider-alternative {
+    @apply mt-2 grid gap-3 border-t border-line pt-5 text-sm text-muted;
+  }
   /* One card per activity, three across: the whole set fits a screen, the detail lives in a dialog. */
   .model-grid {
     @apply grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 min-[640px]:grid-cols-3;
@@ -559,7 +786,7 @@
     @apply m-0 flex gap-2 border-0 p-0;
   }
   .catalog-sources button {
-    @apply flex items-baseline gap-2 rounded-md border border-line px-4 py-2 text-sm text-muted;
+    @apply flex items-center gap-2 rounded-md border border-line px-4 py-2 text-sm text-muted;
   }
   .catalog-sources button[aria-pressed="true"] {
     @apply border-accent bg-accent-soft text-accent;
@@ -596,5 +823,8 @@
   }
   .skill-catalog-card footer > span {
     @apply text-[11px] text-muted;
+  }
+  .catalog-publisher {
+    @apply inline-flex items-center gap-1.5;
   }
 }

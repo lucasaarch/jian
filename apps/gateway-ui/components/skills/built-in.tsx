@@ -1,10 +1,11 @@
 'use client';
 
-import { ArrowUpRight, ChevronDown, ShieldCheck } from 'lucide-react';
+import { Eye, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { BuiltinSkill } from '../../lib/api';
 import type { SectionProps } from '../props';
-import { Button } from '../ui';
+import { Button, ResourceRow, Switch } from '../ui';
+import { SkillView } from './skill-view';
 
 /**
  * Skills that ship with the gateway. The owner cannot edit one, so the instructions are shown
@@ -57,51 +58,46 @@ export function BuiltinSkills({
     );
   }
 
+  const viewing = skills?.find((skill) => skill.name === open);
+
   return (
-    <section className="built-in-skills" aria-label="Built-in skills">
-      <header className="section-row">
-        <div>
-          <h2>Built in</h2>
-          <p className="mt-1 text-sm">
-            They ship with the gateway and are already on. They teach the agent to use what Jian
-            gives it.
-          </p>
-        </div>
-      </header>
+    <section className="row-group" aria-labelledby="skills-built-in">
+      <h2 id="skills-built-in">Built in</h2>
+      <p>They ship with the gateway and teach the agent to use what Jian gives it.</p>
       <div className="resource-list">
         {(skills ?? []).map((skill) => (
-          <article className="resource-row built-in-row" key={skill.name}>
-            <div className="resource-icon">
-              <ShieldCheck size={20} />
-            </div>
-            <div className="grow">
-              <h3>{skill.name}</h3>
-              <p>{skill.description}</p>
-              {skill.origin && (
-                <div className="tag-list">
-                  <a href={skill.origin.url} target="_blank" rel="noreferrer">
-                    {skill.origin.marketplace ?? 'Marketplace'}
-                    <ArrowUpRight size={13} />
-                  </a>
-                </div>
-              )}
-              <button
-                type="button"
-                className="text-button"
-                aria-expanded={open === skill.name}
-                onClick={() => setOpen(open === skill.name ? undefined : skill.name)}
-              >
-                <ChevronDown size={14} />
-                {open === skill.name ? 'Hide the instructions' : 'Read the instructions'}
-              </button>
-              {open === skill.name && <pre className="skill-body">{skill.instructions}</pre>}
-            </div>
-            <Button variant="quiet" busy={busy} onClick={() => void toggle(skill)}>
-              {skill.enabled ? 'Turn off' : 'Turn on'}
-            </Button>
-          </article>
+          <ResourceRow
+            key={skill.name}
+            id={`skill-${skill.name}`}
+            icon={<ShieldCheck size={20} strokeWidth={1.6} />}
+            name={skill.name}
+            description={skill.description}
+            facts={skill.origin ? [`From ${skill.origin.marketplace ?? 'a marketplace'}`] : []}
+            actions={
+              <>
+                <Button variant="quiet" onClick={() => setOpen(skill.name)}>
+                  <Eye size={16} />
+                  View
+                </Button>
+                <Switch
+                  checked={skill.enabled}
+                  label={`${skill.name} ${skill.enabled ? 'on' : 'off'}`}
+                  disabled={busy}
+                  onChange={() => void toggle(skill)}
+                />
+              </>
+            }
+          />
         ))}
       </div>
+      {viewing && (
+        <SkillView
+          name={viewing.name}
+          description={viewing.description}
+          instructions={viewing.instructions}
+          close={() => setOpen(undefined)}
+        />
+      )}
     </section>
   );
 }

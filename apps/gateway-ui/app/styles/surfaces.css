@@ -208,6 +208,9 @@
   .modal {
     @apply m-auto w-[min(600px,calc(100vw-32px))] max-h-[calc(100dvh-48px)] overflow-y-auto rounded-xl border border-line bg-canvas p-7 text-ink shadow-2xl;
   }
+  .modal.wide {
+    @apply w-[min(780px,calc(100vw-32px))];
+  }
   .modal::backdrop {
     background: color-mix(in srgb, var(--shade) 44%, transparent);
     backdrop-filter: blur(4px);
@@ -237,11 +240,28 @@
     @apply mt-5 mb-2 text-base font-semibold;
   }
   .release-notes p,
-  .release-notes ul {
+  .release-notes ul,
+  .release-notes ol,
+  .release-notes blockquote {
     @apply mb-3 text-sm;
   }
   .release-notes ul {
     @apply list-disc pl-5;
+  }
+  .release-notes ol {
+    @apply list-decimal pl-5;
+  }
+  .release-notes blockquote {
+    @apply border-l-2 border-line pl-3 text-muted;
+  }
+  .release-notes pre {
+    @apply mb-3 overflow-x-auto rounded-md bg-surface p-3 font-mono text-xs leading-5;
+  }
+  .release-notes pre code {
+    @apply bg-transparent p-0;
+  }
+  .release-notes > h3:first-child {
+    @apply mt-0;
   }
   .release-notes li + li {
     @apply mt-1;
@@ -321,28 +341,17 @@
   .conversation-list h1 {
     @apply text-3xl;
   }
-  /* One tab per channel: a conversation list never mixes where people came from. */
-  .channel-tabs {
-    @apply flex flex-wrap gap-1 border-b border-line px-3 py-2;
-  }
-  .channel-tabs button {
-    @apply relative flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-canvas hover:text-ink;
-  }
-  .channel-tabs button[aria-selected="true"] {
-    @apply bg-canvas text-ink;
-    box-shadow: 0 1px 3px color-mix(in srgb, var(--shade) 14%, transparent);
-  }
-  .channel-count {
-    @apply rounded-full bg-line px-1.5 text-[10px] leading-4 text-muted;
-  }
-  .channel-tabs button[aria-selected="true"] .channel-count {
-    @apply bg-accent-soft text-accent;
-  }
-  .channel-busy {
-    @apply absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent;
-  }
   .conversation-scroll {
     @apply min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3;
+  }
+  .conversation-scroll h2 {
+    @apply flex items-center gap-1.5 px-3 pb-1 pt-3 font-sans text-[11px] font-semibold uppercase tracking-wider text-muted;
+  }
+  .conversation-scroll h2 > span {
+    @apply ml-auto;
+  }
+  .conversation-scroll section + section {
+    @apply mt-3;
   }
   .conversation-item {
     @apply flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-canvas;
@@ -421,6 +430,251 @@
   .conversation-pane .run-status {
     @apply mx-6 mb-4;
   }
+  /* The gateway conversation, pinned above the channels. */
+  .conversation-pinned {
+    @apply border-b border-line pb-2;
+  }
+  /* The composer as AI chats draw it: one rounded box holding the files, the text and the
+     buttons, floating over the end of the conversation. */
+  .composer {
+    @apply grid gap-2 px-6 pb-5 pt-2;
+  }
+  .composer-box {
+    @apply grid gap-2 rounded-3xl border border-line bg-surface p-3 transition-colors;
+  }
+  .composer-box:focus-within {
+    @apply border-accent;
+  }
+  .composer-box[data-dragging="true"] {
+    @apply border-dashed border-accent bg-accent-soft;
+  }
+  /* The box draws the border and the focus; the field inside is only text. */
+  .composer-box textarea,
+  .composer-box textarea:focus {
+    @apply max-h-48 min-h-10 resize-none border-0 bg-transparent px-2 py-1.5 text-[15px];
+    box-shadow: none;
+    field-sizing: content;
+  }
+  .composer-actions {
+    @apply flex items-center gap-1;
+  }
+  .composer-tool {
+    @apply grid h-9 w-9 place-items-center rounded-full text-muted transition-colors hover:bg-canvas hover:text-ink;
+  }
+  .composer-tool.recording {
+    @apply bg-bad text-white hover:bg-bad hover:text-white;
+  }
+  .composer-send {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-on-accent transition-opacity disabled:opacity-40;
+  }
+  .composer-error {
+    @apply text-sm text-bad;
+  }
+  .composer-recording {
+    @apply flex min-h-10 items-center gap-2 px-2 text-sm font-medium text-ink;
+  }
+  .recording-dot {
+    @apply h-2.5 w-2.5 rounded-full bg-bad;
+    animation: recording 1s ease-in-out infinite alternate;
+  }
+  .composer-attachments {
+    @apply flex flex-wrap gap-2;
+  }
+  .attachment {
+    @apply relative;
+  }
+  .attachment.image img {
+    @apply h-16 w-16 rounded-xl border border-line object-cover;
+  }
+  .attachment.audio .audio-player {
+    @apply w-72;
+  }
+  .attachment[data-state="failed"] {
+    @apply rounded-xl ring-1 ring-bad;
+  }
+  .attachment-file {
+    @apply flex h-16 w-56 items-center gap-3 rounded-xl border border-line bg-canvas px-3;
+  }
+  .attachment-busy {
+    @apply absolute inset-0 grid place-items-center rounded-xl bg-surface/70 text-accent;
+  }
+  .attachment-remove {
+    @apply absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-ink text-surface shadow;
+  }
+  /* A document, in the composer and in the conversation alike. */
+  .file-card {
+    @apply flex w-72 max-w-full items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 text-ink transition-colors hover:bg-canvas;
+  }
+  .file-icon {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent;
+  }
+  .file-text {
+    @apply grid min-w-0 flex-1;
+  }
+  .file-text strong {
+    @apply truncate text-sm font-medium;
+  }
+  .file-text small {
+    @apply truncate text-xs text-muted;
+  }
+  /* Files and voice notes first, pictures under them, all on the side of whoever sent them. */
+  .message-media {
+    @apply mt-2 flex max-w-full flex-col items-start gap-2;
+  }
+  .chat-line.mine .message-media {
+    @apply items-end;
+  }
+  .file-card {
+    @apply text-left;
+  }
+  /* A mosaic as WhatsApp lays one out: one picture alone, two side by side, three as one large
+     and two small, four and more as a square whose last tile counts what it hides. */
+  .mosaic {
+    @apply grid w-80 max-w-full gap-1 overflow-hidden rounded-2xl;
+  }
+  .mosaic[data-count="1"] {
+    @apply w-auto;
+  }
+  .mosaic[data-count="2"],
+  .mosaic[data-count="3"],
+  .mosaic[data-count="4"] {
+    @apply h-80 grid-cols-2;
+  }
+  .mosaic[data-count="2"] {
+    @apply h-44;
+  }
+  .mosaic[data-count="3"] .mosaic-tile:first-child {
+    @apply row-span-2;
+  }
+  .mosaic-tile {
+    @apply relative block min-h-0 overflow-hidden bg-canvas;
+  }
+  .mosaic-tile img {
+    @apply h-full w-full object-cover transition-transform duration-200;
+  }
+  .mosaic-tile:hover img {
+    @apply scale-[1.03];
+  }
+  .mosaic[data-count="1"] .mosaic-tile img {
+    @apply h-auto max-h-80 w-auto max-w-xs;
+  }
+  .mosaic-more {
+    @apply absolute inset-0 grid place-items-center bg-black/55 text-3xl font-semibold text-white;
+  }
+  /* The viewer takes the whole screen, dark in either mode, as photos are looked at. */
+  .viewer {
+    @apply m-0 h-dvh max-h-none w-screen max-w-none bg-transparent p-0 text-white;
+  }
+  .viewer[open] {
+    @apply flex flex-col;
+  }
+  .viewer::backdrop {
+    background: rgb(0 0 0 / 0.88);
+    backdrop-filter: blur(6px);
+  }
+  .viewer > header {
+    @apply flex items-center gap-3 px-5 py-3 text-sm;
+  }
+  .viewer > header strong {
+    @apply min-w-0 flex-1 truncate font-medium;
+  }
+  .viewer > header span {
+    @apply font-mono text-xs text-white/70;
+  }
+  .viewer-button {
+    @apply grid h-10 w-10 place-items-center rounded-full text-white/85 transition-colors hover:bg-white/15 hover:text-white;
+  }
+  .viewer-stage {
+    @apply grid min-h-0 flex-1 place-items-center px-16 pb-8;
+  }
+  .viewer[open] > * {
+    animation: viewer-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .viewer[open]::backdrop {
+    animation: viewer-fade 200ms ease-out;
+  }
+  .viewer[data-closing="true"] > * {
+    animation: viewer-out 160ms ease-in forwards;
+  }
+  .viewer[data-closing="true"]::backdrop {
+    animation: viewer-fade 160ms ease-in reverse forwards;
+  }
+  /* The picture is looked at, never selected or dragged out as a file. */
+  .viewer {
+    user-select: none;
+  }
+  .viewer-text {
+    user-select: text;
+  }
+  .zoom-frame {
+    @apply grid h-full w-full place-items-center overflow-hidden;
+    touch-action: none;
+  }
+  .zoom-frame img {
+    @apply max-h-full max-w-full rounded-lg object-contain;
+    transform-origin: center;
+    will-change: transform;
+    -webkit-user-drag: none;
+  }
+  .zoom-frame[data-zoomed="true"] {
+    @apply cursor-grab active:cursor-grabbing;
+  }
+  .zoom-frame[data-zoomed="false"] {
+    @apply cursor-zoom-in;
+  }
+  .viewer-pdf {
+    @apply h-full w-full max-w-5xl rounded-lg bg-white;
+  }
+  .viewer-text {
+    @apply h-full w-full max-w-4xl overflow-auto whitespace-pre-wrap break-words rounded-lg bg-surface p-6 font-mono text-sm leading-6 text-ink;
+  }
+  .viewer-previous,
+  .viewer-next {
+    @apply absolute top-1/2 -translate-y-1/2 bg-white/10;
+  }
+  .viewer-previous {
+    @apply left-4;
+  }
+  .viewer-next {
+    @apply right-4;
+  }
+  .media-note {
+    @apply text-xs text-muted;
+  }
+  /* A voice note: the round button, the waveform that fills in as it plays, time and speed. */
+  .audio-player {
+    @apply flex w-80 max-w-full items-center gap-3 rounded-2xl border border-line bg-surface px-3 py-2;
+  }
+  .audio-toggle {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-on-accent;
+  }
+  .audio-track {
+    @apply relative h-8 min-w-0 flex-1;
+  }
+  .audio-bars {
+    @apply flex h-full items-center gap-[2px];
+  }
+  .audio-bars span {
+    @apply min-h-[3px] flex-1 rounded-full bg-muted/35 transition-colors;
+  }
+  .audio-bars span[data-played="true"] {
+    @apply bg-accent;
+  }
+  /* The range drives seeking and the keyboard; the bars under it are what shows. */
+  .audio-track input[type="range"] {
+    @apply absolute inset-0 h-full w-full cursor-pointer opacity-0;
+  }
+  .audio-track:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .audio-time {
+    @apply w-9 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted;
+  }
+  .audio-speed {
+    @apply h-6 shrink-0 rounded-full bg-canvas px-2 text-[11px] font-semibold text-muted hover:text-ink;
+  }
   /* Only a phone has a list to go back to. */
   .conversation-pane .conversation-back {
     @apply hidden;
@@ -428,23 +682,171 @@
   .message-history .empty {
     @apply border-0;
   }
-  .message {
-    @apply mb-5 rounded-sm bg-surface p-4;
+  /* A chat as AI chats lay it out: the reader's side in a pill on the right, the other side
+     as plain text across the column. The column keeps lines short enough to read. */
+  .chat-line {
+    @apply mb-6 flex w-full flex-col;
   }
-  .message.user {
-    @apply ml-10 border-l-2 border-accent bg-accent-soft;
+  .chat-line.mine {
+    @apply items-end;
   }
-  .message.assistant {
-    @apply mr-5;
+  .chat-text {
+    @apply whitespace-pre-wrap break-words text-[15px] leading-7 text-ink;
   }
-  .message header {
-    @apply mb-2 flex flex-wrap items-center justify-between gap-2 text-xs;
+  /* Mixed from the ink so the pill stays a step off the page in both modes. */
+  .chat-line.mine .chat-text {
+    @apply max-w-[80%] rounded-2xl px-4 py-2.5;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
   }
-  .message header time {
-    @apply font-mono text-[10px] text-muted;
+  .chat-line.pending .chat-text.muted {
+    @apply text-sm text-muted;
   }
-  .message p {
-    @apply whitespace-pre-wrap break-words text-sm leading-7 text-ink;
+  /* The tools behind an answer: a summary line that opens a vertical timeline, a mark per
+     tool on a thread that joins them. */
+  .tool-timeline {
+    @apply mb-2 w-full max-w-xl;
+  }
+  .timeline-summary {
+    @apply inline-flex items-center gap-1 rounded-full py-0.5 text-xs font-medium text-muted transition-colors hover:text-ink;
+  }
+  .timeline-failed {
+    @apply text-bad;
+  }
+  .timeline-chevron {
+    @apply shrink-0 transition-transform;
+  }
+  [aria-expanded="true"] > .timeline-chevron {
+    @apply rotate-180;
+  }
+  .timeline-summary {
+    animation: viewer-fade 300ms ease-out;
+  }
+  /* Opening grows the height to fit and the steps arrive one after another; closing sends them
+     back in reverse before the height folds. A step added while open slides in on its own. */
+  .timeline-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    margin-top: 0;
+    transition-property: grid-template-rows, margin-top;
+    transition-duration: 280ms;
+    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* Closing: the fold waits until the last step has gone. */
+    transition-delay: calc(min(var(--n), 10) * 25ms + 100ms);
+  }
+  .timeline-wrap[data-open="true"] {
+    grid-template-rows: 1fr;
+    margin-top: 0.5rem;
+    transition-delay: 0ms;
+  }
+  .tool-timeline[data-live="true"] .timeline-wrap {
+    margin-top: 0;
+  }
+  .timeline {
+    @apply grid min-h-0 overflow-hidden;
+  }
+  .timeline-step {
+    opacity: 0;
+    translate: 0 -6px;
+    transition:
+      opacity 180ms ease-in,
+      translate 180ms ease-in;
+    transition-delay: calc(max(min(var(--n), 10) - 1 - var(--i), 0) * 25ms);
+  }
+  .timeline-wrap[data-open="true"] .timeline-step {
+    opacity: 1;
+    translate: 0 0;
+    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-duration: 260ms;
+    transition-delay: calc(min(var(--i), 10) * 50ms);
+  }
+  /* While the agent works each new tool is the news: it comes in at once, not after the rest. */
+  .tool-timeline[data-live="true"] .timeline-step {
+    transition-delay: 0ms;
+  }
+  @starting-style {
+    .timeline-wrap[data-open="true"] .timeline-step {
+      opacity: 0;
+      translate: 0 -6px;
+    }
+  }
+  .timeline-mark {
+    animation: mark-pop 260ms cubic-bezier(0.3, 1.4, 0.5, 1);
+  }
+  .timeline-step {
+    @apply relative flex items-center gap-3 py-1 text-sm text-ink;
+  }
+  /* The thread: from under one mark to the next, stopping at the last. */
+  .timeline-step:not(:last-child)::before {
+    @apply absolute -bottom-1 left-[9px] top-6 w-px bg-line;
+    content: "";
+  }
+  .timeline-mark {
+    @apply relative z-[1] grid h-5 w-5 shrink-0 place-items-center rounded-full border border-line bg-surface text-muted;
+  }
+  .timeline-step[data-status="done"] .timeline-mark {
+    @apply border-accent bg-accent text-on-accent;
+  }
+  .timeline-step[data-status="failed"] .timeline-mark,
+  .timeline-step[data-status="uncertain"] .timeline-mark,
+  .timeline-step[data-status="refused"] .timeline-mark {
+    @apply border-bad bg-bad-soft text-bad;
+  }
+  .timeline-step[data-status="running"] .timeline-mark {
+    @apply border-0 bg-transparent;
+  }
+  .timeline-label {
+    @apply min-w-0 truncate;
+  }
+  .timeline-step[data-status="running"] .timeline-label {
+    @apply font-medium text-accent;
+  }
+  .timeline-outcome {
+    @apply shrink-0 text-xs text-bad;
+  }
+  /* Right after the label, where the eye already is. */
+  .timeline-time {
+    @apply shrink-0 font-mono text-[11px] text-muted;
+  }
+  /* The agent at work: the orb and what it is on, in the accent, where the answer will go. */
+  .chat-line .run-phase {
+    @apply flex items-center gap-2 text-sm font-medium text-accent;
+  }
+  .chat-line .run-phase + .chat-text {
+    @apply mt-1.5;
+  }
+  /* In a group each person's run of messages opens with their face and name; the rest of the
+     run lines up under it. */
+  /* A schedule's instruction, arriving at its time: set apart from what people wrote. */
+  .chat-line.scheduled {
+    @apply items-center;
+  }
+  .scheduled-label {
+    @apply mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-medium text-accent;
+  }
+  .chat-line.scheduled .chat-text {
+    @apply max-w-[80%] text-center text-sm text-muted;
+  }
+  .chat-line.member {
+    @apply flex-row-reverse items-start gap-3;
+  }
+  .chat-line.member .chat-body {
+    @apply flex flex-col items-end;
+  }
+  .chat-line.member:not(.opens) {
+    @apply -mt-4;
+  }
+  .chat-face,
+  .face.chat-face {
+    @apply grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-accent-soft object-cover text-[11px] font-semibold text-accent;
+  }
+  span.chat-face:empty {
+    @apply bg-transparent;
+  }
+  .chat-body {
+    @apply min-w-0 flex-1;
+  }
+  .chat-author {
+    @apply mb-1 block text-xs font-semibold text-muted;
   }
   .run-status {
     @apply flex flex-wrap items-center gap-3 py-3 text-muted;
@@ -499,6 +901,9 @@
   .conversation-pane .run-status {
     @apply mx-3;
   }
+  .composer {
+    @apply px-3 pb-3;
+  }
   /* A phone shows the list or the conversation, never both. */
   .main-content.fill {
     height: calc(100dvh - 3.5rem);
@@ -515,11 +920,5 @@
   }
   .conversation-pane > header {
     @apply px-3;
-  }
-  .message.user {
-    @apply ml-4;
-  }
-  .message.assistant {
-    @apply mr-2;
   }
 }

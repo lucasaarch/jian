@@ -40,6 +40,26 @@ function OptionContent({ option }: { option: SelectOption }) {
 }
 
 /** Both modes share a trigger; long lists add filtering without changing the field API. */
+/** Case and accents are not what anyone searches by. */
+const fold = (text: string) =>
+  text
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase();
+
+/**
+ * Every word typed must appear in the option's name or in the line under it, so an option can
+ * be found by what it says as well as by what it is called.
+ */
+function matches(option: SelectOption, query: string) {
+  const haystack = fold(`${option.label} ${option.detail ?? ''}`);
+
+  return fold(query)
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((word) => haystack.includes(word));
+}
+
 export function Select({
   value,
   onValueChange,
@@ -100,6 +120,7 @@ export function Select({
         open={open}
         onOpenChange={changeOpen}
         disabled={disabled}
+        filter={(option: SelectOption, query: string) => matches(option, query)}
       >
         <Combobox.Trigger {...triggerProps}>{content}</Combobox.Trigger>
         <Combobox.Portal container={container ?? undefined}>

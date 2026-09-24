@@ -1,8 +1,39 @@
 'use client';
 
+import { FileText } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { GatewayApi } from '../../lib/api';
+import { AudioPlayer } from '../ui';
+import { MediaViewer } from './viewer';
 
+export type LoadedMedia = Awaited<ReturnType<GatewayApi['media']>> & { url: string };
+
+export const size = (bytes: number) =>
+  bytes < 1024
+    ? `${bytes} B`
+    : bytes < 1024 * 1024
+      ? `${Math.round(bytes / 1024)} KB`
+      : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+/** What a document is called when it came without a name, by its type. */
+export const kindNames: Record<string, string> = {
+  'application/pdf': 'PDF',
+  'text/markdown': 'Markdown',
+  'text/csv': 'CSV',
+  'application/json': 'JSON',
+  'text/plain': 'Text',
+};
+
+export const nameOf = (media: LoadedMedia) =>
+  media.name ?? `${kindNames[media.mimeType] ?? 'File'} document`;
+
+/** How many pictures a mosaic shows before the last tile counts the rest. */
+const MOSAIC_TILES = 4;
+
+/**
+ * What a message carries, laid out as a messaging app does: files and voice notes stacked
+ * first, then the pictures as one mosaic. Any picture or document opens in the viewer.
+ */
 export function MessageMedia({
   api,
   profileId,
@@ -17,71 +48,96 @@ export function MessageMedia({
       [...content.matchAll(/\[Attached media: ([0-9a-f-]{36})\]/g)].map((match) => match[1] ?? ''),
     ),
   ];
-  return (
-    <>
-      {ids.map((id) => (
-        <Attachment key={id} api={api} profileId={profileId} id={id} />
-      ))}
-    </>
-  );
-}
+  const key = ids.join(',');
+  const [items, setItems] = useState<Array<LoadedMedia | { id: string; failed: true }>>();
+  const [open, setOpen] = useState<LoadedMedia>();
 
-function Attachment({
-  api,
-  profileId,
-  id,
-}: {
-  api: Pick<GatewayApi, 'media'>;
-  profileId: string;
-  id: string;
-}) {
-  const [media, setMedia] = useState<Awaited<ReturnType<GatewayApi['media']>>>();
-  const [error, setError] = useState('');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for the ids it joins.
   useEffect(() => {
+    if (!ids.length) return;
     let stopped = false;
-    void api
-      .media(profileId, id)
-      .then((value) => {
-        if (!stopped) setMedia(value);
-      })
-      .catch(() => {
-        if (!stopped) setError('Attachment unavailable.');
-      });
+
+    void Promise.all(
+      ids.map((id) =>
+        api
+          .media(profileId, id)
+          .then((media) => ({ ...media, url: `data:${media.mimeType};base64,${media.data}` }))
+          .catch(() => ({ id, failed: true as const })),
+      ),
+    ).then((loaded) => {
+      if (!stopped) setItems(loaded);
+    });
+
     return () => {
       stopped = true;
     };
-  }, [api.media, profileId, id]);
-  if (error) return <p role="status">{error}</p>;
-  if (!media) return <p role="status">Loading attachment…</p>;
-  const url = `data:${media.mimeType};base64,${media.data}`;
+  }, [api.media, profileId, key]);
+
+  if (!ids.length) return null;
+  if (!items) return <p className="media-note">Loading attachments…</p>;
+
+  const loaded = items.filter((item): item is LoadedMedia => !('failed' in item));
+  const images = loaded.filter((item) => item.mimeType.startsWith('image/'));
+  const files = loaded.filter((item) => !item.mimeType.startsWith('image/'));
+  const failed = items.length - loaded.length;
+  const viewable = [...files.filter((item) => !item.mimeType.startsWith('audio/')), ...images];
+
   return (
-    <div className="my-3 max-w-full">
-      {media.mimeType.startsWith('image/') ? (
-        // Native image preserves the authenticated data URL; no public image optimizer can read it.
-        // biome-ignore lint/performance/noImgElement: Private attachment fetched through the authenticated API.
-        <img
-          src={url}
-          alt="Conversation attachment"
-          className="max-h-[500px] max-w-full rounded-lg object-contain"
-        />
-      ) : (
-        <audio
-          controls
-          preload="metadata"
-          src={url}
-          aria-label="Conversation audio"
-          className="max-w-full"
-        >
-          <track kind="captions" />
-        </audio>
+    <div className="message-media">
+      {files.map((media) =>
+        media.mimeType.startsWith('audio/') ? (
+          <AudioPlayer key={media.id} src={media.url} label={media.name ?? 'audio'} />
+        ) : (
+          <button type="button" key={media.id} className="file-card" onClick={() => setOpen(media)}>
+            <span className="file-icon" aria-hidden="true">
+              <FileText size={18} />
+            </span>
+            <span className="file-text">
+              <strong>{nameOf(media)}</strong>
+              <small>
+                {kindNames[media.mimeType] ?? media.mimeType} · {size(media.bytes)}
+              </small>
+            </span>
+          </button>
+        ),
       )}
-      <a
-        href={url}
-        download={`jian-${id}.${media.mimeType.split('/')[1]}`}
-        className="text-sm underline"
-      >
-        Download
-      </a>
+      {images.length > 0 && (
+        <div className="mosaic" data-count={Math.min(images.length, MOSAIC_TILES)}>
+          {images.slice(0, MOSAIC_TILES).map((media, index) => {
+            const hidden = index === MOSAIC_TILES - 1 ? images.length - MOSAIC_TILES : 0;
+
+            return (
+              <button
+                type="button"
+                key={media.id}
+                className="mosaic-tile"
+                aria-label={
+                  hidden > 0 ? `Open ${hidden + 1} more images` : `Open ${media.name ?? 'image'}`
+                }
+                onClick={() => setOpen(media)}
+              >
+                {/* biome-ignore lint/performance/noImgElement: Private attachment fetched through the authenticated API. */}
+                <img src={media.url} alt="" />
+                {hidden > 0 && <span className="mosaic-more">+{hidden}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {failed > 0 && (
+        <p className="media-note">
+          {failed === 1
+            ? 'One attachment is unavailable.'
+            : `${failed} attachments are unavailable.`}
+        </p>
+      )}
+      {open && (
+        <MediaViewer
+          items={viewable}
+          start={viewable.indexOf(open)}
+          close={() => setOpen(undefined)}
+        />
+      )}
     </div>
   );
 }

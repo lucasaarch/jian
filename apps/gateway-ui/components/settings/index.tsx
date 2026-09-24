@@ -1,9 +1,11 @@
 'use client';
-import { Accessibility, Check, Palette, SlidersHorizontal } from 'lucide-react';
+import { Accessibility, Check, Palette, Server, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { type Preference, preferenceOptions } from '../../lib/preferences';
+import { timeZones } from '../../lib/time';
+import { useWorkspace } from '../../lib/workspace';
 import { AccentPicker, ModePicker } from '../shell/theme-picker';
 import { Field, SectionHeading } from '../ui';
 import { Select } from '../ui/select';
@@ -60,12 +62,60 @@ function PreferenceField({
   );
 }
 
-export function Settings({ tab }: { tab: 'appearance' | 'accessibility' }) {
+/** The whole installation's settings, shared by every profile and every browser. */
+function GatewaySettingsPanel() {
+  const { api } = useWorkspace();
+  const [settings, setSettings] = useState<{ timeZone: string; timeZoneSource: string }>();
+
+  useEffect(() => {
+    void api
+      .settings()
+      .then(setSettings)
+      .catch(() => {});
+  }, [api]);
+
+  return (
+    <section className="accessibility-panel">
+      <Field
+        label="Time zone"
+        hint={
+          settings?.timeZoneSource === 'host'
+            ? 'Following the machine the gateway runs on. Agents read the time in it, and schedules run by it.'
+            : 'Agents read the time in it, and schedules run by it.'
+        }
+      >
+        <Select
+          value={settings?.timeZone ?? ''}
+          placeholder="Loading…"
+          options={timeZones().map((value) => ({ value, label: value.replaceAll('_', ' ') }))}
+          onValueChange={(timeZone) =>
+            void api
+              .updateSettings(timeZone)
+              .then((next) => {
+                setSettings(next);
+                toast.success('Time zone saved.', { id: 'time-zone' });
+              })
+              .catch((failure) =>
+                toast.error(failure instanceof Error ? failure.message : 'Could not save.'),
+              )
+          }
+          aria-label="Time zone"
+        />
+      </Field>
+    </section>
+  );
+}
+
+export function Settings({ tab }: { tab: 'appearance' | 'accessibility' | 'gateway' }) {
   return (
     <>
       <SectionHeading
         title="Settings"
-        description="Preferences of this browser, shared by all your profiles."
+        description={
+          tab === 'gateway'
+            ? 'Settings of this Jian, shared by every profile.'
+            : 'Preferences of this browser, shared by all your profiles.'
+        }
       />
       <nav className="settings-tabs" aria-label="Settings">
         <Link href="/settings/appearance" aria-current={tab === 'appearance' ? 'page' : undefined}>
@@ -79,8 +129,14 @@ export function Settings({ tab }: { tab: 'appearance' | 'accessibility' }) {
           <Accessibility size={16} />
           Accessibility
         </Link>
+        <Link href="/settings/gateway" aria-current={tab === 'gateway' ? 'page' : undefined}>
+          <Server size={16} />
+          Gateway
+        </Link>
       </nav>
-      {tab === 'appearance' ? (
+      {tab === 'gateway' ? (
+        <GatewaySettingsPanel />
+      ) : tab === 'appearance' ? (
         <section className="appearance-panel">
           <div className="section-row">
             <div>

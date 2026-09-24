@@ -11,11 +11,14 @@ export function Modal({
   description,
   children,
   close,
+  wide = false,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
   close: () => void;
+  /** Room for reading, as a document shown whole needs. */
+  wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const heading = useId();
@@ -29,7 +32,7 @@ export function Modal({
   return (
     <dialog
       ref={ref}
-      className="modal"
+      className={`modal ${wide ? 'wide' : ''}`}
       aria-labelledby={heading}
       onCancel={(event) => {
         event.preventDefault();

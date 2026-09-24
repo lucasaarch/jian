@@ -1,12 +1,20 @@
 'use client';
 
-import { Pencil, Plug, Trash2 } from 'lucide-react';
+import { Pencil, Plug, RefreshCw, Unplug } from 'lucide-react';
+import { useState } from 'react';
 import type { GatewayApi, McpServer, Profile } from '../../lib/api';
-import { McpCheckButton, McpResult, useMcpCheck } from './mcp-check';
+import { Badge, Button, ProviderLogo, ResourceRow, serviceOf } from '../ui';
+import { McpResult, useMcpCheck } from './mcp-check';
+
+const auths: Record<string, string> = {
+  none: 'No sign-in',
+  headers: 'Signs in with headers',
+  oauth: 'Signs in with OAuth',
+};
 
 /**
- * One connected server. The three actions sit together on the right and stay at the top of the
- * row, so the answer to a check can grow underneath without pushing them out of reach.
+ * One connected server. Opening it checks the connection, since what a server offers is the
+ * first thing to know about it, and the answer lands in the badges as well as underneath.
  */
 export function McpRow({
   server,
@@ -14,44 +22,87 @@ export function McpRow({
   api,
   onEdit,
   onRemove,
+  onToggleTool,
+  saving,
 }: {
   server: McpServer;
   profile: Profile;
   api: GatewayApi;
   onEdit: () => void;
   onRemove: () => void;
+  onToggleTool: (tool: string) => void;
+  saving: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const { status, error, busy, check } = useMcpCheck(profile, server.name, api);
+  const address =
+    server.transport === 'stdio'
+      ? [server.command, ...server.args].filter(Boolean).join(' ')
+      : (server.url ?? '');
+
+  const off = server.disabledTools ?? [];
+  const on = status?.reachable ? status.tools.filter((tool) => !off.includes(tool.name)).length : 0;
+  const service = serviceOf(`${address} ${server.name}`.toLowerCase());
 
   return (
-    <article className="resource-row items-start">
-      <div className="resource-icon">
-        <Plug size={20} />
-      </div>
-      <div className="grow">
-        <h3>{server.name}</h3>
-        <p className="break-all">{server.url}</p>
-        <McpResult status={status} error={error} />
-      </div>
-      <div className="row-actions">
-        <McpCheckButton name={server.name} busy={busy} onCheck={() => void check()} />
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={`Edit ${server.name}`}
-          onClick={onEdit}
-        >
+    <ResourceRow
+      id={`mcp-${server.name}`}
+      icon={
+        service ? <ProviderLogo kind={service} size={22} /> : <Plug size={20} strokeWidth={1.6} />
+      }
+      name={server.name}
+      badges={
+        busy ? (
+          <Badge>Checking…</Badge>
+        ) : error ? (
+          <Badge tone="bad">Check failed</Badge>
+        ) : status?.reachable ? (
+          <>
+            <Badge tone="good">Connected</Badge>
+            <Badge dot={false}>
+              {on} {on === 1 ? 'tool' : 'tools'}
+              {on < status.tools.length && ` of ${status.tools.length}`}
+            </Badge>
+          </>
+        ) : status?.authorizationUrl ? (
+          <Badge tone="warn">Needs sign-in</Badge>
+        ) : status ? (
+          <Badge tone="bad">Unreachable</Badge>
+        ) : null
+      }
+      description={address}
+      facts={[
+        server.transport === 'stdio' ? 'A command on this machine' : 'Over HTTP',
+        auths[server.auth] ?? server.auth,
+      ]}
+      action="Manage"
+      open={open}
+      onToggle={() => {
+        if (!open && !status && !busy) void check();
+        setOpen(!open);
+      }}
+    >
+      <McpResult
+        status={status}
+        error={error}
+        disabled={off}
+        onToggle={onToggleTool}
+        busy={saving}
+      />
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Button variant="secondary" busy={busy} onClick={() => void check()}>
+          <RefreshCw size={16} />
+          Check again
+        </Button>
+        <Button variant="quiet" onClick={onEdit}>
           <Pencil size={16} />
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={`Remove ${server.name}`}
-          onClick={onRemove}
-        >
-          <Trash2 size={16} />
-        </button>
+          Edit
+        </Button>
+        <Button variant="quiet" onClick={onRemove}>
+          <Unplug size={16} />
+          Disconnect
+        </Button>
       </div>
-    </article>
+    </ResourceRow>
   );
 }

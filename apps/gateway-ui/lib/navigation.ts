@@ -1,4 +1,5 @@
 import {
+  AlarmClock,
   BookOpen,
   Cpu,
   Fingerprint,
@@ -25,6 +26,7 @@ export const navigation: NavigationItem[] = [
   { href: '/models', label: 'Model defaults', icon: Cpu, group: 'workspace' },
   { href: '/channels', label: 'Channels', icon: Smartphone, group: 'workspace' },
   { href: '/sessions', label: 'Sessions', icon: MessageSquare, group: 'workspace' },
+  { href: '/schedules', label: 'Schedules', icon: AlarmClock, group: 'workspace' },
   { href: '/memories', label: 'Memories', icon: BookOpen, group: 'capabilities' },
   { href: '/skills', label: 'Skills', icon: Sparkles, group: 'capabilities' },
   { href: '/mcp', label: 'MCP servers', icon: Plug, group: 'capabilities' },

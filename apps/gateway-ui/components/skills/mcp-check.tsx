@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, ChevronDown, LogIn, Plug, TriangleAlert } from 'lucide-react';
+import { Check, CheckCircle2, ChevronDown, EyeOff, LogIn, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import type { GatewayApi, McpStatus, Profile } from '../../lib/api';
 
@@ -32,7 +32,21 @@ export function useMcpCheck(profile: Profile, name: string, api: GatewayApi) {
 }
 
 /** What the last check answered. Absent until the owner asks, so the row stays a row. */
-export function McpResult({ status, error }: { status?: McpStatus; error: string }) {
+export function McpResult({
+  status,
+  error,
+  disabled = [],
+  onToggle,
+  busy = false,
+}: {
+  status?: McpStatus;
+  error: string;
+  /** The tools switched off for the agent, by the server's own names. */
+  disabled?: string[];
+  /** Present when a tool can be switched here; each tool is then a button. */
+  onToggle?: (tool: string) => void;
+  busy?: boolean;
+}) {
   const [open, setOpen] = useState(false);
 
   if (error) {
@@ -70,6 +84,7 @@ export function McpResult({ status, error }: { status?: McpStatus; error: string
   }
 
   const shown = open ? status.tools : status.tools.slice(0, PREVIEW);
+  const off = status.tools.filter((tool) => disabled.includes(tool.name)).length;
   const rest = status.tools.length - shown.length;
 
   return (
@@ -78,16 +93,35 @@ export function McpResult({ status, error }: { status?: McpStatus; error: string
         <CheckCircle2 size={14} />
         <span>
           Connected — {status.tools.length} {status.tools.length === 1 ? 'tool' : 'tools'}
+          {off > 0 && `, ${off} switched off`}
         </span>
       </p>
+      {onToggle && status.tools.length > 0 && (
+        <p className="mcp-hint">Click a tool to switch it off for the agent, or on again.</p>
+      )}
       {status.tools.length > 0 && (
         <>
           <div className={`mcp-tools ${open ? 'open' : ''}`}>
-            {shown.map((tool) => (
-              <code key={tool.name} title={tool.description}>
-                {tool.name}
-              </code>
-            ))}
+            {shown.map((tool) =>
+              onToggle ? (
+                <button
+                  type="button"
+                  key={tool.name}
+                  className="mcp-tool"
+                  title={tool.description}
+                  aria-pressed={!disabled.includes(tool.name)}
+                  disabled={busy}
+                  onClick={() => onToggle(tool.name)}
+                >
+                  {disabled.includes(tool.name) ? <EyeOff size={12} /> : <Check size={12} />}
+                  {tool.name}
+                </button>
+              ) : (
+                <code key={tool.name} title={tool.description}>
+                  {tool.name}
+                </code>
+              ),
+            )}
           </div>
           {(rest > 0 || open) && (
             <button
@@ -103,29 +137,5 @@ export function McpResult({ status, error }: { status?: McpStatus; error: string
         </>
       )}
     </div>
-  );
-}
-
-/** The action itself, so it sits with edit and remove instead of inside the description. */
-export function McpCheckButton({
-  name,
-  busy,
-  onCheck,
-}: {
-  name: string;
-  busy: boolean;
-  onCheck: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="icon-button"
-      aria-label={`Test the connection to ${name}`}
-      title="Test the connection"
-      disabled={busy}
-      onClick={onCheck}
-    >
-      <Plug size={16} className={busy ? 'spin' : ''} />
-    </button>
   );
 }
