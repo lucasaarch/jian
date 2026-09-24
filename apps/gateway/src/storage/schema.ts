@@ -56,6 +56,7 @@ export const profiles = pgTable('profiles', {
   allowSelfManagement: boolean('allow_self_management').notNull().default(false),
   allowShell: boolean('allow_shell').notNull().default(false),
   allowWebSearch: boolean('allow_web_search').notNull().default(false),
+  learnFromWork: boolean('learn_from_work').notNull().default(true),
   version: integer('version').notNull(),
   createdAt,
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -151,6 +152,8 @@ export const sessions = pgTable(
     channel: text('channel').notNull(),
     // Set on the session a pair of agents shares; the peer never reads it.
     peerProfileId: uuid('peer_profile_id').references(() => profiles.id, { onDelete: 'set null' }),
+    // On a channel conversation: 'direct' or 'group', kept here so it outlives its contact.
+    scope: text('scope').$type<'direct' | 'group'>(),
     summary: text('summary'),
     summarizedUpTo: timestamp('summarized_up_to', { withTimezone: true }),
     createdAt,
@@ -160,6 +163,7 @@ export const sessions = pgTable(
     index('sessions_peer').on(table.profileId, table.peerProfileId),
     // One gateway conversation per profile, whatever races to open it.
     uniqueIndex('sessions_gateway').on(table.profileId).where(sql`${table.channel} = 'gateway'`),
+    uniqueIndex('sessions_learning').on(table.profileId).where(sql`${table.channel} = 'learning'`),
   ],
 );
 

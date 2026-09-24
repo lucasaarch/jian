@@ -2,6 +2,7 @@ import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
 import { Decisions } from './decisions/service.js';
 import { Errands } from './errands/service.js';
+import { Learning } from './learning/service.js';
 import { Media } from './media/service.js';
 import { Memories } from './memories/service.js';
 import { Peers } from './peers/service.js';
@@ -31,6 +32,7 @@ export type Services = {
   decisions: Decisions;
   runs: Runs;
   peers: Peers;
+  learning: Learning;
   schedules: Schedules;
   settings: Settings;
   lifecycle: RunLifecycle;
@@ -76,6 +78,7 @@ export function buildServices({
     decisions,
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),
+    learning: new Learning({ store, profiles, sessions, runs }, clock),
     schedules: new Schedules(store, profiles, sessions, runs, clock),
     settings,
     lifecycle: new RunLifecycle(store, runs, clock),

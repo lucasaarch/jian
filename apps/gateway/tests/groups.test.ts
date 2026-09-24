@@ -106,6 +106,7 @@ async function setup(jev?: (state: { message: string }) => number) {
       mentions?: string[];
       replyTo?: string;
       media?: IncomingMessage['media'];
+      quoted?: IncomingMessage['quoted'];
     } = {},
   ) => {
     const requestKey = options.requestKey ?? `wa-group-${++messages}`;
@@ -126,6 +127,7 @@ async function setup(jev?: (state: { message: string }) => number) {
         mentions: options.mentions ?? [],
         ...(options.replyTo ? { replyTo: options.replyTo } : {}),
         ...(options.media ? { media: options.media } : {}),
+        ...(options.quoted ? { quoted: options.quoted } : {}),
       });
     }
 
@@ -322,6 +324,36 @@ describe('group conversations', () => {
       );
 
       expect(JSON.stringify(read)).toContain('coffee,12');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('names who wrote the message a reply quotes, from the people of the room', async () => {
+    const f = await setup();
+
+    try {
+      const ada = await f.join('Ada', '5511800000001@c.us');
+
+      await f.say(owner, 'oi');
+      await f.approve(ada.profileId);
+      await f.say(guest, 'o fornecedor atrasou');
+      await f.say(owner, 'Ada, e agora?', {
+        mentions: [ada.address],
+        replyTo: guest.address,
+        quoted: { text: 'o fornecedor atrasou' },
+      });
+
+      const [run] = await f.services.runs.activities(ada.profileId);
+
+      expect(run?.input).toBe(
+        'Lucas: [Replying to Marina\'s message: "o fornecedor atrasou"]\nAda, e agora?',
+      );
+
+      // The conversation itself says it is a group, so it stays one without its contact.
+      const room = await f.services.sessions.session(ada.profileId, run?.sessionId as string);
+
+      expect(room).toMatchObject({ scope: 'group', title: 'WhatsApp · Equipe' });
     } finally {
       await f.close();
     }

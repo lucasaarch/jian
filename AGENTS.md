@@ -47,6 +47,9 @@ stages the outputs before it lands.
 
 ## Conventions
 
+English only, everywhere in the product: UI text, messages the gateway writes, titles it stores,
+built-in skills, docs, examples and fixtures, with fictional names. No other language.
+
 Biome formats and lints the TypeScript side: two spaces, single quotes, semicolons, 100
 columns. It runs on staged files before a commit.
 

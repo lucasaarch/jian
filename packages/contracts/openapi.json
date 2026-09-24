@@ -14588,6 +14588,10 @@
                       "default": false,
                       "type": "boolean"
                     },
+                    "learnFromWork": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -14623,6 +14627,7 @@
                     "allowSelfManagement",
                     "allowShell",
                     "allowWebSearch",
+                    "learnFromWork",
                     "id",
                     "version",
                     "createdAt",
@@ -15237,6 +15242,10 @@
                         "default": false,
                         "type": "boolean"
                       },
+                      "learnFromWork": {
+                        "default": true,
+                        "type": "boolean"
+                      },
                       "id": {
                         "type": "string",
                         "format": "uuid",
@@ -15272,6 +15281,7 @@
                       "allowSelfManagement",
                       "allowShell",
                       "allowWebSearch",
+                      "learnFromWork",
                       "id",
                       "version",
                       "createdAt",
@@ -15860,6 +15870,10 @@
                   "allowWebSearch": {
                     "default": false,
                     "type": "boolean"
+                  },
+                  "learnFromWork": {
+                    "default": true,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -16289,6 +16303,10 @@
                       "default": false,
                       "type": "boolean"
                     },
+                    "learnFromWork": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -16324,6 +16342,7 @@
                     "allowSelfManagement",
                     "allowShell",
                     "allowWebSearch",
+                    "learnFromWork",
                     "id",
                     "version",
                     "createdAt",
@@ -16947,6 +16966,10 @@
                       "default": false,
                       "type": "boolean"
                     },
+                    "learnFromWork": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -16982,6 +17005,7 @@
                     "allowSelfManagement",
                     "allowShell",
                     "allowWebSearch",
+                    "learnFromWork",
                     "id",
                     "version",
                     "createdAt",
@@ -17552,6 +17576,9 @@
                   "allowWebSearch": {
                     "type": "boolean"
                   },
+                  "learnFromWork": {
+                    "type": "boolean"
+                  },
                   "expectedVersion": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
@@ -17984,6 +18011,10 @@
                       "default": false,
                       "type": "boolean"
                     },
+                    "learnFromWork": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -18019,6 +18050,7 @@
                     "allowSelfManagement",
                     "allowShell",
                     "allowWebSearch",
+                    "learnFromWork",
                     "id",
                     "version",
                     "createdAt",
@@ -19099,6 +19131,10 @@
                             "default": false,
                             "type": "boolean"
                           },
+                          "learnFromWork": {
+                            "default": true,
+                            "type": "boolean"
+                          },
                           "id": {
                             "type": "string",
                             "format": "uuid",
@@ -19134,6 +19170,7 @@
                           "allowSelfManagement",
                           "allowShell",
                           "allowWebSearch",
+                          "learnFromWork",
                           "id",
                           "version",
                           "createdAt",
@@ -19390,6 +19427,13 @@
                         "type": "string",
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "direct",
+                          "group"
+                        ]
                       },
                       "summary": {
                         "type": "string",
@@ -19697,6 +19741,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "direct",
+                        "group"
+                      ]
+                    },
                     "summary": {
                       "type": "string",
                       "maxLength": 20000
@@ -19984,6 +20035,13 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "direct",
+                        "group"
+                      ]
                     },
                     "summary": {
                       "type": "string",

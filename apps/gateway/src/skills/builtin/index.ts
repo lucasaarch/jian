@@ -5,6 +5,7 @@ import { codingWork } from './coding-work.js';
 import { conversations } from './conversations.js';
 import { longRunningWork } from './long-running-work.js';
 import { machineTools } from './machine-tools.js';
+import { managingContext } from './managing-context.js';
 import { managingYourself } from './managing-yourself.js';
 import { mcpServers } from './mcp-servers.js';
 import { media } from './media.js';
@@ -33,6 +34,7 @@ const ALWAYS: readonly Skill[] = [
   media,
   workingWithAgents,
   longRunningWork,
+  managingContext,
   // Starts switched off on a new profile (OPT_IN_SKILLS); the owner turns it on in Skills.
   discernmentNudge,
 ];

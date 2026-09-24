@@ -40,6 +40,13 @@ Once is not a routine. A one-line rule belongs in a memory or in your identity.
   and how to make them, what to do when a step fails, and the traps you already fell into.
   Write for yourself on a busy day: short, concrete, with the exact names and values.
 
+## Looking back on your own
+
+When the owner leaves learning on, the gateway also asks you to look back after a turn with
+many tools, after one where a tool failed and you recovered, and every fifteen turns. That
+review happens in your Learning conversation, with only the memory and skill tools. Most of
+the time the right answer there is "Nothing to keep."
+
 ## Keeping them good
 
 - \`update_skill\` when a skill was wrong or incomplete — a correction is the best reason.

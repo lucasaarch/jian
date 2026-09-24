@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   AGENT_SESSION_CHANNEL,
   GATEWAY_SESSION_CHANNEL,
+  LEARNING_SESSION_CHANNEL,
   type Profile,
   type Session,
   sessionRenameSchema,
@@ -13,7 +14,7 @@ import { recordEvent } from '../core/events.js';
 import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
 import {
-  findGatewaySession,
+  findOwnSession,
   findPeerSession,
   findSession,
   insertMessage,
@@ -38,7 +39,13 @@ export class Sessions {
   ) {}
 
   /** A caller already inside a profile transaction passes it in: this store never nests locks. */
-  async createSession(profileId: string, input: unknown, transaction?: Queryable) {
+  /** `scope` is the gateway's to set, for a channel conversation; the public input has none. */
+  async createSession(
+    profileId: string,
+    input: unknown,
+    transaction?: Queryable,
+    scope?: 'direct' | 'group',
+  ) {
     const data = sessionSchema.parse(input);
 
     const write = async (tx: Queryable) => {
@@ -49,6 +56,7 @@ export class Sessions {
         title: data.title ?? null,
         id: randomUUID(),
         profileId,
+        ...(scope ? { scope } : {}),
         createdAt: nowIso(this.clock),
       };
 
@@ -140,8 +148,20 @@ export class Sessions {
    * next read open it again, and the public session input cannot create another.
    */
   async gatewaySession(profileId: string) {
+    return this.ownSession(profileId, GATEWAY_SESSION_CHANNEL, 'Gateway');
+  }
+
+  /**
+   * Where the agent looks back on its turns and says what it kept. Opened on the first look, and
+   * the public session input cannot create another.
+   */
+  async learningSession(profileId: string) {
+    return this.ownSession(profileId, LEARNING_SESSION_CHANNEL, 'Learning');
+  }
+
+  private async ownSession(profileId: string, channel: string, title: string) {
     return this.store.transaction(profileId, async (tx) => {
-      const existing = await findGatewaySession(tx, profileId);
+      const existing = await findOwnSession(tx, profileId, channel);
 
       if (existing) {
         return existing;
@@ -150,8 +170,8 @@ export class Sessions {
       await this.profiles.profile(profileId, tx);
 
       const session: Session = {
-        title: 'Gateway',
-        channel: GATEWAY_SESSION_CHANNEL,
+        title,
+        channel,
         id: randomUUID(),
         profileId,
         createdAt: nowIso(this.clock),

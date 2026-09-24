@@ -22,6 +22,8 @@ export const sessionRecordSchema = sessionSchema.extend({
   // Only on the session a pair of agents shares: the profile on the other side of it. The
   // session belongs to this profile alone; the peer never reads it.
   peerProfileId: uuid.optional(),
+  // On a channel conversation: with one person, or with a group of them.
+  scope: z.enum(['direct', 'group']).optional(),
   /**
    * What the conversation held before `summarizedUpTo`, written by the agent's own model when
    * the history outgrew what a request may carry. The turns themselves are kept in the

@@ -60,9 +60,7 @@ export class Contacts {
   ) {}
 
   private title(contact: Pick<ContactRecord, 'type' | 'scope' | 'actorId' | 'displayName'>) {
-    const who = `${contact.scope === 'group' ? 'Grupo ' : ''}${contact.displayName ?? contact.actorId}`;
-
-    return `${names[contact.type]} · ${who}`.slice(0, 160);
+    return `${names[contact.type]} · ${contact.displayName ?? contact.actorId}`.slice(0, 160);
   }
 
   /** The owner-facing shape of a contact. */
@@ -87,6 +85,7 @@ export class Contacts {
       contact.profileId,
       { title: this.title(contact), channel: contact.type },
       tx,
+      contact.scope,
     );
 
     return session.id;

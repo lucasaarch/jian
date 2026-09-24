@@ -8163,6 +8163,8 @@ export interface operations {
                         allowShell: boolean;
                         /** @default false */
                         allowWebSearch: boolean;
+                        /** @default true */
+                        learnFromWork: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -8423,6 +8425,8 @@ export interface operations {
                         allowShell: boolean;
                         /** @default false */
                         allowWebSearch: boolean;
+                        /** @default true */
+                        learnFromWork: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -8677,6 +8681,8 @@ export interface operations {
                     allowShell?: boolean;
                     /** @default false */
                     allowWebSearch?: boolean;
+                    /** @default true */
+                    learnFromWork?: boolean;
                 };
             };
         };
@@ -8821,6 +8827,8 @@ export interface operations {
                         allowShell: boolean;
                         /** @default false */
                         allowWebSearch: boolean;
+                        /** @default true */
+                        learnFromWork: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -9083,6 +9091,8 @@ export interface operations {
                         allowShell: boolean;
                         /** @default false */
                         allowWebSearch: boolean;
+                        /** @default true */
+                        learnFromWork: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -9426,6 +9436,7 @@ export interface operations {
                     allowSelfManagement?: boolean;
                     allowShell?: boolean;
                     allowWebSearch?: boolean;
+                    learnFromWork?: boolean;
                     expectedVersion: number;
                 };
             };
@@ -9571,6 +9582,8 @@ export interface operations {
                         allowShell: boolean;
                         /** @default false */
                         allowWebSearch: boolean;
+                        /** @default true */
+                        learnFromWork: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -9963,6 +9976,8 @@ export interface operations {
                             allowShell: boolean;
                             /** @default false */
                             allowWebSearch: boolean;
+                            /** @default true */
+                            learnFromWork: boolean;
                             /** Format: uuid */
                             id: string;
                             version: number;
@@ -10104,6 +10119,8 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         peerProfileId?: string;
+                        /** @enum {string} */
+                        scope?: "direct" | "group";
                         summary?: string;
                         /** Format: date-time */
                         summarizedUpTo?: string;
@@ -10255,6 +10272,8 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         peerProfileId?: string;
+                        /** @enum {string} */
+                        scope?: "direct" | "group";
                         summary?: string;
                         /** Format: date-time */
                         summarizedUpTo?: string;
@@ -10398,6 +10417,8 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         peerProfileId?: string;
+                        /** @enum {string} */
+                        scope?: "direct" | "group";
                         summary?: string;
                         /** Format: date-time */
                         summarizedUpTo?: string;

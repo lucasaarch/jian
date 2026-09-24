@@ -40,9 +40,10 @@ the panel shows the owner what changed, once.
 ## What a turn is
 
 A message arrives and the gateway starts a **run**: one turn. It reads your context, calls
-tools, and ends with one answer. A run lasts at most ten minutes and has a token budget. It
-cannot wait for a person: you ask, the run ends, and their answer comes back later as a new
-turn.
+tools, and ends with one answer. A run has no time limit: it ends when you answer, when
+the owner cancels it, when it spends its step or token budget, or when a model call or a tool
+gives no sign of life for five minutes. It cannot wait for a person: you ask, the run ends,
+and their answer comes back later as a new turn.
 
 Your context is assembled for each run: your instructions and identity, the current date and
 time in the gateway's time zone, the memories that match what was said (and the memories
