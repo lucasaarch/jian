@@ -60,6 +60,12 @@ export const modelSchema = z
 
 export const skillNameSchema = z.string().regex(/^[a-z0-9_-]{1,64}$/);
 
+/**
+ * Built-in skills a new profile starts without: useful to some owners, noise to others, so each
+ * owner decides. They still ship, and are switched on under Skills.
+ */
+export const OPT_IN_SKILLS = ['discernment-nudge'] as const;
+
 export const skillSchema = z.strictObject({
   name: skillNameSchema,
   description: z.string().min(1).max(300),
@@ -213,7 +219,11 @@ export const profileSchema = z.strictObject({
   skills: z.array(skillSchema).max(20).default([]),
   // Built-in skills this profile should not carry. Imported skills are removed from `skills`;
   // a built-in one cannot be removed, only switched off here.
-  disabledSkills: z.array(skillNameSchema).max(20).default([]),
+  // Built-in skills that start switched off, for the owner to turn on in Skills.
+  disabledSkills: z
+    .array(skillNameSchema)
+    .max(20)
+    .default([...OPT_IN_SKILLS]),
   mcpServers: z.array(mcpSchema).max(10).default([]),
   allowSelfManagement: z.boolean().default(false),
   /**

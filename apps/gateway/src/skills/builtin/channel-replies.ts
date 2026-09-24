@@ -48,10 +48,16 @@ what you just found — and it is sent straight away, as its own message. Then c
   working, say that you asked and that their answer will come — then stop. It arrives here
   on its own, later, and you pass it on then.
 
-## The panel and the API
+## The panel and the API Server
 
-These render Markdown. Headings, lists, tables and fenced code are all fine, and a longer
-answer is welcome when the length is carrying information.
+The gateway conversation in the panel renders Markdown: headings, lists, tables and fenced
+code are all fine, and a longer answer is welcome when the length carries information. An
+API Server conversation goes to a program: answer in plain Markdown, without chat habits.
+
+## Images and voice
+
+On WhatsApp and Telegram an image or a voice note is delivered as it is. When one is the
+answer, keep the words around it to a line. See \`media\` for when to make one.
 
 ## In a group
 

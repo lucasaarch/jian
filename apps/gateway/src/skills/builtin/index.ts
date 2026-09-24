@@ -1,13 +1,19 @@
 import type { Profile, Skill } from '@jian/contracts';
 import { aboutJian } from './about-jian.js';
 import { channelReplies } from './channel-replies.js';
+import { codingWork } from './coding-work.js';
+import { conversations } from './conversations.js';
 import { longRunningWork } from './long-running-work.js';
 import { machineTools } from './machine-tools.js';
+import { managingYourself } from './managing-yourself.js';
+import { mcpServers } from './mcp-servers.js';
+import { media } from './media.js';
 import { memoryKeeping } from './memory-keeping.js';
 import { ownerAndContacts } from './owner-and-contacts.js';
+import { schedules } from './schedules.js';
 import { discernmentNudge } from './vendored/discernment-nudge.js';
+import { webResearch } from './web-research.js';
 import { workingWithAgents } from './working-with-agents.js';
-import { writingYourSkills } from './writing-your-skills.js';
 
 /**
  * Skills every profile carries without importing anything. They ship with the gateway rather
@@ -20,28 +26,38 @@ const ALWAYS: readonly Skill[] = [
   ownerAndContacts,
   channelReplies,
   memoryKeeping,
+  conversations,
+  schedules,
+  media,
   workingWithAgents,
   longRunningWork,
+  // Starts switched off on a new profile (OPT_IN_SKILLS); the owner turns it on in Skills.
   discernmentNudge,
 ];
 
-/** Described in terms of a tool that only exists when the owner allows self-management. */
-const SELF_MANAGED: readonly Skill[] = [writingYourSkills];
-
-/** Described in terms of the command tools, which only exist when the owner allows the shell. */
-const SHELL: readonly Skill[] = [machineTools];
+/**
+ * Each of these describes tools that exist only behind one of the profile's switches, or only
+ * with servers configured. Offered without them, a skill would teach tools the agent does not
+ * have, and it would say it cannot do what the skill promised.
+ */
+const SELF_MANAGED: readonly Skill[] = [managingYourself];
+const SHELL: readonly Skill[] = [machineTools, codingWork];
+const WEB: readonly Skill[] = [webResearch];
+const MCP: readonly Skill[] = [mcpServers];
 
 export const builtinSkillNames: ReadonlySet<string> = new Set(
-  [...ALWAYS, ...SELF_MANAGED, ...SHELL].map((skill) => skill.name),
+  [...ALWAYS, ...SELF_MANAGED, ...SHELL, ...WEB, ...MCP].map((skill) => skill.name),
 );
 
 export function builtinSkills(
-  profile: Pick<Profile, 'allowSelfManagement' | 'allowShell'>,
+  profile: Pick<Profile, 'allowSelfManagement' | 'allowShell' | 'allowWebSearch' | 'mcpServers'>,
 ): readonly Skill[] {
   return [
     ...ALWAYS,
     ...(profile.allowSelfManagement ? SELF_MANAGED : []),
     ...(profile.allowShell ? SHELL : []),
+    ...(profile.allowWebSearch ? WEB : []),
+    ...(profile.mcpServers.length ? MCP : []),
   ];
 }
 
