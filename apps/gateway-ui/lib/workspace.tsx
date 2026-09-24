@@ -191,6 +191,45 @@ export function WorkspaceProvider({
     [api, selected],
   );
 
+  /**
+   * What the agent itself changes — its identity and skills, its memories — read again alone
+   * when the stream says it changed, so a screen follows the agent without a reload and without
+   * asking the providers for their models again.
+   */
+  const changed = useRef<{
+    timer?: ReturnType<typeof setTimeout>;
+    parts: Set<'profiles' | 'memories'>;
+  }>({ parts: new Set() });
+  const refreshChanged = useCallback(
+    (part: 'profiles' | 'memories') => {
+      changed.current.parts.add(part);
+      clearTimeout(changed.current.timer);
+      changed.current.timer = setTimeout(async () => {
+        const parts = new Set(changed.current.parts);
+        const profileId = selected;
+
+        changed.current.parts.clear();
+        try {
+          const [list, memories] = await Promise.all([
+            parts.has('profiles') ? api.profiles() : undefined,
+            parts.has('memories') ? api.memories(profileId) : undefined,
+          ]);
+
+          if (list) setProfiles(list);
+          if (memories)
+            setHeld((current) =>
+              current && current.profileId === profileId
+                ? { profileId, value: { ...current.value, memories } }
+                : current,
+            );
+        } catch {
+          // The next event, or the next full refresh, brings it.
+        }
+      }, 250);
+    },
+    [api, selected],
+  );
+
   const refresh = useCallback(async () => {
     const current = ++generation.current;
 
@@ -258,6 +297,10 @@ export function WorkspaceProvider({
               refreshLive(false);
             } else if (event.type.startsWith('run.') || event.type.startsWith('session.')) {
               refreshLive(true);
+            } else if (event.type.startsWith('profile.')) {
+              refreshChanged('profiles');
+            } else if (event.type.startsWith('memory.')) {
+              refreshChanged('memories');
             }
 
             for (const listener of listeners.current) listener(event);
@@ -279,7 +322,7 @@ export function WorkspaceProvider({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [api, selected, refresh, refreshLive]);
+  }, [api, selected, refresh, refreshLive, refreshChanged]);
 
   const mutate: Mutation = async (action, message = 'Changes saved.') => {
     setBusy(true);

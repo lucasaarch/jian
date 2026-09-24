@@ -1,7 +1,7 @@
 'use client';
 
 import { useId } from 'react';
-import { type OrbState, ThinkingOrb } from 'thinking-orbs';
+import { type OrbSize, type OrbState, ThinkingOrb } from 'thinking-orbs';
 import { useAppearance } from '../../lib/appearance';
 
 /**
@@ -9,12 +9,12 @@ import { useAppearance } from '../../lib/appearance';
  * light ink and a filter keeps each dot's brightness as its opacity and fills it with the
  * accent: the depth of the animation survives, and the colour follows the theme and the mode.
  */
-export function Orb({ state = 'composing' }: { state?: OrbState }) {
+export function Orb({ state = 'composing', size = 20 }: { state?: OrbState; size?: OrbSize }) {
   const { still } = useAppearance();
   const filter = useId().replace(/:/g, '');
 
   return (
-    <span className="orb" aria-hidden="true">
+    <span className="orb" style={{ width: size, height: size }} aria-hidden="true">
       <svg width="0" height="0" focusable="false" aria-hidden="true">
         <filter id={filter} colorInterpolationFilters="sRGB">
           <feColorMatrix
@@ -28,7 +28,7 @@ export function Orb({ state = 'composing' }: { state?: OrbState }) {
       </svg>
       <ThinkingOrb
         state={state}
-        size={20}
+        size={size}
         theme="dark"
         paused={still}
         style={{ filter: `url(#${filter})` }}

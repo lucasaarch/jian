@@ -7,8 +7,19 @@
   .app-shell {
     @apply min-h-dvh;
   }
+  /* The brand and the profile on top and the footer below stay put; only the sections scroll
+     between them, so Settings and Sign out are always in reach. */
   .sidebar {
-    @apply fixed inset-y-0 left-0 z-30 flex w-60 flex-col overflow-y-auto border-r border-line bg-canvas px-5 pb-5 pt-8;
+    @apply fixed inset-y-0 left-0 z-30 flex w-60 flex-col overflow-hidden border-r border-line bg-canvas px-5 pb-5 pt-8;
+  }
+  .sidebar > .brand,
+  .sidebar > .profile-selector,
+  .sidebar-footer {
+    @apply shrink-0;
+  }
+  /* Scrolls edge to edge, so the focus ring of a link is never clipped by it. */
+  .sidebar-nav {
+    @apply -mx-5 min-h-0 flex-1 overflow-y-auto px-5 pb-4;
   }
   .brand {
     @apply flex w-fit items-center gap-3 text-accent;
@@ -57,7 +68,7 @@
     @apply ml-auto font-mono text-[10px];
   }
   .sidebar-footer {
-    @apply mt-auto border-t border-line pt-5 text-xs text-muted;
+    @apply border-t border-line pt-5 text-xs text-muted;
   }
   .sidebar-footer > div {
     @apply flex items-center gap-2;
@@ -206,7 +217,10 @@
     @apply mt-1 max-w-prose text-sm text-ink;
   }
   .modal {
-    @apply m-auto w-[min(600px,calc(100vw-32px))] max-h-[calc(100dvh-48px)] overflow-y-auto rounded-xl border border-line bg-canvas p-7 text-ink shadow-2xl;
+    @apply m-auto w-[min(600px,calc(100vw-32px))] max-h-[calc(100dvh-48px)] overflow-hidden rounded-xl border border-line bg-canvas p-0 text-ink shadow-2xl;
+  }
+  .modal[open] {
+    @apply flex flex-col;
   }
   .modal.wide {
     @apply w-[min(780px,calc(100vw-32px))];
@@ -216,7 +230,7 @@
     backdrop-filter: blur(4px);
   }
   .modal > header {
-    @apply mb-7 flex items-start justify-between gap-5;
+    @apply flex shrink-0 items-start justify-between gap-5 border-b border-line px-7 pb-5 pt-7;
   }
   .modal header h2 {
     @apply text-3xl;
@@ -224,8 +238,18 @@
   .modal header p {
     @apply mt-2 text-sm;
   }
-  .modal footer {
-    @apply mt-4 flex justify-end gap-3 border-t border-line pt-5;
+  .modal-body {
+    @apply min-h-0 flex-1 overflow-y-auto px-7 py-6;
+  }
+  /* The footer ends the content, so the body leaves the bottom padding to it. */
+  .modal-body:has(footer) {
+    @apply pb-0;
+  }
+  .modal-body footer {
+    @apply sticky bottom-0 z-10 -mx-7 mt-4 flex justify-end gap-3 border-t border-line bg-canvas px-7 pb-6 pt-5;
+  }
+  .text-link {
+    @apply text-accent underline-offset-2 hover:underline;
   }
   .release-notes section + section {
     @apply mt-6 border-t border-line pt-6;
@@ -309,8 +333,13 @@
   .empty .button {
     @apply mt-6;
   }
+  /* The middle of the screen, less the page's own top and bottom padding. */
   .loading-state {
-    @apply flex min-h-96 items-center justify-center gap-3 text-muted;
+    @apply flex min-h-[calc(100dvh-6rem)] flex-col items-center justify-center gap-4 text-sm text-muted;
+    animation: viewer-fade 300ms ease-out;
+  }
+  .main-content.fill .loading-state {
+    @apply h-full min-h-0;
   }
   .session-history {
     @apply flex min-h-0 min-w-0 flex-1 flex-col px-6 pb-4 pt-3;
@@ -706,6 +735,89 @@
   .chat-text {
     @apply whitespace-pre-wrap break-words text-[15px] leading-7 text-ink;
   }
+  /* The message a reply answers, inside the reply, as messengers draw it: four lines at most. */
+  .chat-quote {
+    @apply mb-1.5 overflow-hidden rounded-lg border-l-2 border-accent py-1 pl-2.5 pr-2 text-[13px] leading-5 text-muted;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+  }
+  .chat-quote strong {
+    @apply block text-xs font-semibold text-accent;
+  }
+  /* A reaction is a mark on a message, not a message: small, and without a bubble. */
+  .chat-reaction {
+    @apply flex max-w-[80%] items-center gap-2 text-xs text-muted;
+  }
+  .chat-reaction-emoji {
+    @apply text-lg leading-none;
+  }
+  .chat-reaction > span:last-child {
+    @apply min-w-0 truncate;
+  }
+  .chat-reaction q {
+    @apply ml-1 italic;
+  }
+  /* The agent's answer, as Markdown: blocks spaced like paragraphs of a chat, not a page. */
+  .chat-text.markdown {
+    @apply whitespace-normal;
+  }
+  .chat-text.markdown p {
+    @apply text-ink;
+  }
+  .markdown > * + * {
+    @apply mt-3;
+  }
+  .markdown h3 {
+    @apply mt-5 text-base font-semibold;
+  }
+  .markdown h4 {
+    @apply mt-4 text-[15px] font-semibold;
+  }
+  .markdown > :first-child {
+    @apply mt-0;
+  }
+  .markdown ul {
+    @apply list-disc pl-5;
+  }
+  .markdown ol {
+    @apply list-decimal pl-5;
+  }
+  .markdown li + li {
+    @apply mt-1;
+  }
+  .markdown blockquote {
+    @apply border-l-2 border-line pl-3 text-muted;
+  }
+  .markdown code {
+    @apply rounded-sm bg-surface px-1 py-0.5 font-mono text-[13px];
+  }
+  .markdown pre {
+    @apply overflow-x-auto rounded-lg border border-line bg-surface p-3 font-mono text-[13px] leading-6;
+  }
+  .markdown pre code {
+    @apply bg-transparent p-0;
+  }
+  .markdown hr {
+    @apply border-line;
+  }
+  .markdown-table {
+    @apply overflow-x-auto rounded-lg border border-line;
+  }
+  .markdown table {
+    @apply w-full border-collapse text-sm leading-6;
+  }
+  .markdown th {
+    @apply bg-surface text-left font-semibold;
+  }
+  .markdown th,
+  .markdown td {
+    @apply border-b border-line px-3 py-1.5 align-top;
+  }
+  .markdown tr:last-child td {
+    @apply border-b-0;
+  }
   /* Mixed from the ink so the pill stays a step off the page in both modes. */
   .chat-line.mine .chat-text {
     @apply max-w-[80%] rounded-2xl px-4 py-2.5;
@@ -734,21 +846,27 @@
   .timeline-summary {
     animation: viewer-fade 300ms ease-out;
   }
-  /* Opening grows the height to fit and the steps arrive one after another; closing sends them
-     back in reverse before the height folds. A step added while open slides in on its own. */
+  /* Opening grows the height at an even pace that lengthens with the list, up to 700ms, and each
+     step fades in as the height reaches it: its delay is its place in the list times the whole.
+     Closing fades every step at once, then folds. A step added while open slides in alone. */
+  .tool-timeline {
+    --open: calc(min(var(--n), 16) * 30ms + 220ms);
+  }
   .timeline-wrap {
     display: grid;
     grid-template-rows: 0fr;
     margin-top: 0;
     transition-property: grid-template-rows, margin-top;
-    transition-duration: 280ms;
-    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-    /* Closing: the fold waits until the last step has gone. */
-    transition-delay: calc(min(var(--n), 10) * 25ms + 100ms);
+    transition-duration: calc(var(--open) * 0.6);
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    /* Closing: the fold waits for the steps to fade. */
+    transition-delay: 120ms;
   }
   .timeline-wrap[data-open="true"] {
     grid-template-rows: 1fr;
     margin-top: 0.5rem;
+    transition-duration: var(--open);
+    transition-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1);
     transition-delay: 0ms;
   }
   .tool-timeline[data-live="true"] .timeline-wrap {
@@ -759,18 +877,17 @@
   }
   .timeline-step {
     opacity: 0;
-    translate: 0 -6px;
+    translate: 0 -4px;
     transition:
-      opacity 180ms ease-in,
-      translate 180ms ease-in;
-    transition-delay: calc(max(min(var(--n), 10) - 1 - var(--i), 0) * 25ms);
+      opacity 120ms ease-in,
+      translate 120ms ease-in;
   }
   .timeline-wrap[data-open="true"] .timeline-step {
     opacity: 1;
     translate: 0 0;
-    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-    transition-duration: 260ms;
-    transition-delay: calc(min(var(--i), 10) * 50ms);
+    transition-timing-function: ease-out;
+    transition-duration: 220ms;
+    transition-delay: calc(var(--i) / var(--n) * var(--open) * 0.9);
   }
   /* While the agent works each new tool is the news: it comes in at once, not after the rest. */
   .tool-timeline[data-live="true"] .timeline-step {
@@ -779,7 +896,7 @@
   @starting-style {
     .timeline-wrap[data-open="true"] .timeline-step {
       opacity: 0;
-      translate: 0 -6px;
+      translate: 0 -4px;
     }
   }
   .timeline-mark {

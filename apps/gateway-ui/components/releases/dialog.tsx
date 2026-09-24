@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { type GatewayApi, gatewayApi } from '../../lib/api';
 import { date } from '../../lib/format';
 import { Button } from '../ui';
+import { Markdown } from '../ui/markdown';
 import { Modal } from '../ui/modal';
-import { Markdown } from './markdown';
 
 type Releases = Awaited<ReturnType<GatewayApi['releases']>>;
 

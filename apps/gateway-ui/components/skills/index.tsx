@@ -88,12 +88,17 @@ export function Capabilities({
       {isSkill ? (
         <section className="row-group" aria-labelledby="skills-installed">
           <h2 id="skills-installed">Installed</h2>
-          <p>Written here or imported. Each profile keeps its own copy.</p>
+          <p>
+            Written here, imported, or written by the agent itself. Each profile keeps its own copy.
+          </p>
           <SkillImport profile={profile} api={api} mutate={mutate} busy={busy} />
           {profile.skills.length ? (
             <div className="resource-list">
               {profile.skills.map((item, index) => {
-                const from = originOf(item.origin?.url);
+                const from =
+                  item.writtenBy === 'agent'
+                    ? { label: `Written by ${profile.name}` }
+                    : originOf(item.origin?.url);
 
                 return (
                   <ResourceRow

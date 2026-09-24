@@ -4,10 +4,9 @@ import { ArrowUpRight, Settings2 } from 'lucide-react';
 import Link from 'next/link';
 import type { GatewayApi, Profile, ProfileData } from '../../lib/api';
 import { Avatar } from '../profile/avatar-field';
-import { SectionHeading } from '../ui';
+import { CountUp, SectionHeading } from '../ui';
 import { ActivityHeatmap } from './heatmap';
 
-const number = (value: number) => value.toLocaleString('en');
 export function Overview({
   profile,
   data,
@@ -83,7 +82,9 @@ export function Overview({
               {item.label}
               <ArrowUpRight size={15} />
             </span>
-            <strong>{number(item.value)}</strong>
+            <strong>
+              <CountUp value={item.value} />
+            </strong>
             <small>{item.detail}</small>
           </Link>
         ))}
@@ -93,7 +94,7 @@ export function Overview({
         <section className="usage-panel" aria-label="Token usage">
           <span className="eyebrow">Usage</span>
           <h2>
-            {number(input + output)}
+            <CountUp value={input + output} duration={1.6} />
             <small>tokens</small>
           </h2>
           <p>Counted across the last hundred runs</p>
@@ -107,14 +108,18 @@ export function Overview({
                 <span className="usage-dot" />
                 Input
               </dt>
-              <dd>{number(input)}</dd>
+              <dd>
+                <CountUp value={input} />
+              </dd>
             </div>
             <div>
               <dt>
                 <span className="usage-dot output" />
                 Output
               </dt>
-              <dd>{number(output)}</dd>
+              <dd>
+                <CountUp value={output} />
+              </dd>
             </div>
             {cached > 0 && (
               <div>
@@ -122,7 +127,9 @@ export function Overview({
                   <span className="usage-dot cached" />
                   Read from cache
                 </dt>
-                <dd>{number(cached)}</dd>
+                <dd>
+                  <CountUp value={cached} />
+                </dd>
               </div>
             )}
           </dl>

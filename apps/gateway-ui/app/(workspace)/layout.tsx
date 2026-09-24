@@ -1,6 +1,6 @@
 'use client';
 
-import { LoaderCircle, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
 import { NewProfileDialog } from '../../components/profile/editor';
@@ -8,7 +8,7 @@ import { ReleaseDialog } from '../../components/releases/dialog';
 import { NoticeBar } from '../../components/shell/notice';
 import { Sidebar } from '../../components/shell/sidebar';
 import { Topbar } from '../../components/shell/topbar';
-import { Button, Empty } from '../../components/ui';
+import { Button, Empty, Orb } from '../../components/ui';
 import { gatewayApi, type Profile } from '../../lib/api';
 import { useWorkspace, WorkspaceProvider } from '../../lib/workspace';
 
@@ -35,8 +35,8 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
 
   if (!profiles) {
     return (
-      <main className="boot" aria-busy="true">
-        <LoaderCircle size={22} className="spin" aria-label="Checking the session" />
+      <main className="boot" aria-busy="true" aria-label="Checking the session">
+        <Orb size={64} />
       </main>
     );
   }
@@ -154,8 +154,8 @@ function Shell({ children }: { children: ReactNode }) {
             <div className="loading-state" role="status">
               {loading ? (
                 <>
-                  <LoaderCircle className="spin" size={24} />
-                  Loading your workspace…
+                  <Orb size={64} />
+                  <span>Loading your workspace…</span>
                 </>
               ) : (
                 <Button variant="secondary" onClick={() => void refresh()}>

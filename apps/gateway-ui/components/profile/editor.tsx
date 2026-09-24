@@ -127,10 +127,46 @@ export function ProfileEditor({
   const version = useRef(profile.version);
   const saved = useRef('');
 
+  // The versions this form saved; any other arrived from elsewhere.
+  const ours = useRef(new Set<number>());
+
   // Someone else saved meanwhile — the agent itself, with self-management — so the next save
-  // starts from their version rather than failing on a stale one.
+  // starts from their version rather than failing on a stale one, and the fields show what
+  // they wrote. The field being typed in is left alone: the owner's words win there.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The version says when the rest changed.
   useEffect(() => {
     if (profile.version > version.current) version.current = profile.version;
+    if (ours.current.has(profile.version)) return;
+
+    const element = form.current;
+
+    if (!element) return;
+
+    const values: Record<string, string | boolean> = {
+      name: profile.name,
+      instructions: [
+        profile.instructions,
+        profile.identity.role && `Role: ${profile.identity.role}`,
+        profile.identity.tone && `Tone: ${profile.identity.tone}`,
+        ...profile.identity.goals.map((goal) => `Goal: ${goal}`),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+      summary: profile.summary ?? '',
+      boundaries: profile.identity.boundaries.join('\n'),
+      selfManagement: profile.allowSelfManagement,
+      shell: profile.allowShell,
+      webSearch: profile.allowWebSearch,
+    };
+
+    for (const [name, value] of Object.entries(values)) {
+      const field = element.elements.namedItem(name);
+
+      if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) continue;
+      if (field === document.activeElement) continue;
+      if (typeof value === 'boolean' && field instanceof HTMLInputElement) field.checked = value;
+      else if (typeof value === 'string') field.value = value;
+    }
   }, [profile.version]);
 
   const { schedule, flush } = useAutosave(async () => {
@@ -170,6 +206,7 @@ export function ProfileEditor({
       });
 
       version.current = updated.version;
+      ours.current.add(updated.version);
       saved.current = snapshot;
       toast.success('Profile saved.', { id: 'profile-autosave' });
       void refresh();

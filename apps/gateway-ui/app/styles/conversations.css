@@ -1,5 +1,7 @@
-/* Marks the text as unfinished without moving the layout when the next chunk lands. */
-.caret {
+/* Marks the text as unfinished without moving the layout when the next chunk lands. While the
+   agent writes, it sits after the last word, inside whatever block that word is in. */
+.streaming > :last-child::after,
+.streaming > :last-child > li:last-child::after {
   display: inline-block;
   width: 0.5rem;
   height: 1em;
@@ -8,6 +10,16 @@
   background: currentColor;
   opacity: 0.5;
   animation: blink 1.1s step-end infinite;
+}
+.streaming > :last-child::after,
+.streaming > :last-child > li:last-child::after {
+  content: "";
+}
+.streaming > ul:last-child::after,
+.streaming > ol:last-child::after,
+.streaming > .markdown-table:last-child::after,
+.streaming > pre:last-child::after {
+  content: none;
 }
 
 @keyframes blink {

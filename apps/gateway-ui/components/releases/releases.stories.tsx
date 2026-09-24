@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { releases } from '../../stories/fixtures';
 import { updatedHandlers } from '../../stories/handlers';
+import { Markdown } from '../ui/markdown';
 import { ReleaseDialog } from './dialog';
-import { Markdown } from './markdown';
 
 const meta = {
   title: 'Releases',

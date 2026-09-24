@@ -1,7 +1,7 @@
 'use client';
 
-import { Markdown } from '../releases/markdown';
 import { Modal } from '../ui';
+import { Markdown } from '../ui/markdown';
 
 /** A skill's instructions as the agent reads them, rendered, in the release notes' dialog. */
 export function SkillView({

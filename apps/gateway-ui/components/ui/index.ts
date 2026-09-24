@@ -1,6 +1,7 @@
 export { AudioPlayer } from './audio-player';
 export { TelegramLogo, WhatsAppLogo } from './brands';
 export { Button } from './button';
+export { CountUp } from './count-up';
 export { Face } from './face';
 export { Field } from './field';
 export { Badge, Empty, SectionHeading } from './layout';
