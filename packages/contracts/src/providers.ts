@@ -58,9 +58,15 @@ export const providerCredentialSchema = z.enum(['key', 'subscription']);
 /** The key travels once, on the way in. `createdAt` is the only thing said about it afterwards. */
 export const providerInputSchema = z.strictObject({
   name: z.string().trim().min(1).max(100),
-  kind: z.enum(['openai', 'anthropic', 'google', 'openrouter']),
-  secret: secretSchema,
+  kind: z.enum(['openai', 'anthropic', 'google', 'openrouter', 'groq', 'openai-compatible']),
+  // Required for every vendor; a server the owner runs, such as a local Whisper, may need none.
+  secret: secretSchema.optional(),
   credential: providerCredentialSchema.optional(),
+  // Only for an OpenAI-compatible server: where its API is, up to and including `/v1`.
+  baseURL: z
+    .url({ protocol: /^https?$/ })
+    .max(500)
+    .optional(),
 });
 
 /**
@@ -140,8 +146,13 @@ export function supportsProviderRole(
   provider: Pick<ProviderRecord, 'kind' | 'authMode'>,
   role: ModelRole,
 ): boolean {
-  if (['image', 'speech', 'transcription', 'audio'].includes(role))
+  if (['image', 'speech'].includes(role))
     return provider.authMode !== 'codex' && ['openai', 'google'].includes(provider.kind);
+  if (['transcription', 'audio'].includes(role))
+    return (
+      provider.authMode !== 'codex' &&
+      ['openai', 'google', 'groq', 'openai-compatible'].includes(provider.kind)
+    );
   return true;
 }
 
@@ -167,8 +178,12 @@ export function supportsModelRole(
       ((provider.kind === 'google' && id.includes('tts')) ||
         (provider.kind === 'openai' && /(^tts-|tts)/.test(id)))
     );
-  if ((role === 'transcription' || role === 'audio') && provider.kind === 'openai')
-    return provider.authMode !== 'codex' && /whisper|transcribe/.test(id);
+  // The OpenAI transcription endpoint, at OpenAI, at Groq, or on a server the owner runs.
+  if (
+    (role === 'transcription' || role === 'audio') &&
+    ['openai', 'groq', 'openai-compatible'].includes(provider.kind)
+  )
+    return provider.authMode !== 'codex' && /whisper|transcri/.test(id);
   if (role === 'audio' || role === 'transcription')
     return (
       provider.kind === 'google' &&

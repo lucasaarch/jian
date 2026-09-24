@@ -94,11 +94,28 @@ function wav(pcm: Buffer, rate: number): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
-export class MediaProviders {
-  constructor(private readonly fetcher: typeof fetch) {}
+/** Pauses before asking a busy provider again. */
+const RETRY_PAUSES_MS = [1_000, 3_000];
 
+export class MediaProviders {
+  constructor(
+    private readonly fetcher: typeof fetch,
+    private readonly pauses: readonly number[] = RETRY_PAUSES_MS,
+  ) {}
+
+  /**
+   * A 5xx is the provider busy, not the request wrong — Gemini answers 503 when a model is
+   * overloaded — so it is asked again, twice, after a growing pause. A body sent as a stream
+   * cannot be sent twice, but every request here sends a string or a form, which can.
+   */
   private async request(url: string, options: RequestInit) {
-    const response = await this.fetcher(url, options);
+    let response = await this.fetcher(url, options);
+    for (const pause of this.pauses) {
+      if (response.status < 500 || options.signal?.aborted) break;
+      await response.body?.cancel();
+      await new Promise((resolve) => setTimeout(resolve, pause));
+      response = await this.fetcher(url, options);
+    }
     if (!response.ok) {
       await response.body?.cancel();
       // Provider error bodies can echo credentials or private media.
@@ -160,7 +177,9 @@ export class MediaProviders {
       if (!text) throw new Error('Media provider did not return an analysis');
       return text;
     }
-    if (config.provider === 'openai' && media.mimeType.startsWith('audio/')) {
+    const transcribes =
+      config.provider === 'openai' || (config.provider === 'openai-compatible' && config.baseURL);
+    if (transcribes && media.mimeType.startsWith('audio/')) {
       const form = new FormData();
       form.set('model', config.modelId);
       const extension =
@@ -170,9 +189,12 @@ export class MediaProviders {
         new Blob([new Uint8Array(Buffer.from(media.data, 'base64'))], { type: media.mimeType }),
         `audio.${extension}`,
       );
-      const response = await this.request('https://api.openai.com/v1/audio/transcriptions', {
+      // The same endpoint at OpenAI, at Groq, or on a Whisper server the owner runs.
+      const base =
+        config.provider === 'openai-compatible' ? config.baseURL : 'https://api.openai.com/v1';
+      const response = await this.request(`${base}/audio/transcriptions`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${key}` },
+        headers: key ? { authorization: `Bearer ${key}` } : {},
         body: form,
         signal,
       });
@@ -180,7 +202,9 @@ export class MediaProviders {
         .object({ text: z.string().min(1) })
         .parse(JSON.parse((await readMediaBody(response, 100_000)).toString())).text;
     }
-    throw new Error('Select Gemini for audio analysis, or an OpenAI API transcription model');
+    throw new Error(
+      'Select Gemini for audio analysis, or a Whisper model from OpenAI, Groq or your own server',
+    );
   }
 
   async generate(

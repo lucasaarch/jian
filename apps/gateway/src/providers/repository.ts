@@ -28,6 +28,7 @@ export function toProviderRecord(row: Row): ProviderRecord {
     ...(row.authMode ? { authMode: row.authMode } : {}),
     ...(row.credential ? { credential: row.credential } : {}),
     ...(row.apiKeyEnv ? { apiKeyEnv: row.apiKeyEnv } : {}),
+    ...(row.baseUrl ? { baseURL: row.baseUrl } : {}),
     createdAt: row.createdAt.toISOString(),
     ...(row.revokedAt ? { revokedAt: row.revokedAt.toISOString() } : {}),
   });
@@ -71,6 +72,7 @@ export async function insertProvider(db: Queryable, provider: ProviderRecord): P
     authMode: provider.authMode ?? null,
     credential: provider.credential ?? null,
     apiKeyEnv: provider.apiKeyEnv ?? null,
+    baseUrl: provider.baseURL ?? null,
     createdAt: new Date(provider.createdAt),
     revokedAt: provider.revokedAt ? new Date(provider.revokedAt) : null,
   });

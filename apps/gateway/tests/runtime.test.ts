@@ -257,6 +257,25 @@ describe('agent runtime', () => {
     );
   });
 
+  it('says what went wrong, in a line, with every credential masked', async () => {
+    const { services, profile, run } = await fixture();
+
+    const model = mockModel({
+      doGenerate: async () => {
+        throw new Error('fetch failed: upstream reset while sending api_key=abc123secret', {
+          cause: new Error('socket hang up near sk-proj-0123456789abcdefghij'),
+        });
+      },
+    });
+
+    await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+    const { error } = await services.runs.run(profile.id, run.id);
+
+    expect(error).toBe('The run failed: socket hang up near [REDACTED]');
+    expect(error).not.toContain('abc123secret');
+  });
+
   it('does not execute a cancelled or already claimed run', async () => {
     const { services, profile, run } = await fixture();
 

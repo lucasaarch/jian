@@ -2427,9 +2427,11 @@ export interface operations {
                     "application/json": {
                         name: string;
                         /** @enum {string} */
-                        kind: "openai" | "anthropic" | "google" | "openrouter";
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "openai-compatible";
                         /** @enum {string} */
                         credential?: "key" | "subscription";
+                        /** Format: uri */
+                        baseURL?: string;
                         apiKeyEnv?: string;
                         /** @enum {string} */
                         authMode?: "api" | "codex";
@@ -2555,10 +2557,12 @@ export interface operations {
                 "application/json": {
                     name: string;
                     /** @enum {string} */
-                    kind: "openai" | "anthropic" | "google" | "openrouter";
-                    secret: string;
+                    kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "openai-compatible";
+                    secret?: string;
                     /** @enum {string} */
                     credential?: "key" | "subscription";
+                    /** Format: uri */
+                    baseURL?: string;
                 };
             };
         };
@@ -2572,9 +2576,11 @@ export interface operations {
                     "application/json": {
                         name: string;
                         /** @enum {string} */
-                        kind: "openai" | "anthropic" | "google" | "openrouter";
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "openai-compatible";
                         /** @enum {string} */
                         credential?: "key" | "subscription";
+                        /** Format: uri */
+                        baseURL?: string;
                         apiKeyEnv?: string;
                         /** @enum {string} */
                         authMode?: "api" | "codex";
@@ -2846,9 +2852,11 @@ export interface operations {
                     "application/json": {
                         name: string;
                         /** @enum {string} */
-                        kind: "openai" | "anthropic" | "google" | "openrouter";
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "openai-compatible";
                         /** @enum {string} */
                         credential?: "key" | "subscription";
+                        /** Format: uri */
+                        baseURL?: string;
                         apiKeyEnv?: string;
                         /** @enum {string} */
                         authMode?: "api" | "codex";

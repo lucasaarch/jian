@@ -9,7 +9,7 @@ import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
 import { bareModelId, modelCapabilities } from './capabilities.js';
-import type { ProviderKind } from './catalog.js';
+import { GROQ_BASE_URL, type ProviderKind } from './catalog.js';
 import type { ModelCatalog } from './catalog-source.js';
 import {
   anthropicCredential,
@@ -21,12 +21,19 @@ import type { ProviderAdmin } from './port.js';
 import { providerSecret } from './service.js';
 
 /** Each provider's own list of what the authenticated account may call. */
-const endpoints: Record<ProviderKind, string> = {
+const endpoints: Record<Exclude<ProviderKind, 'openai-compatible'>, string> = {
   openai: 'https://api.openai.com/v1/models',
   anthropic: 'https://api.anthropic.com/v1/models?limit=1000',
   google: 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000',
   openrouter: 'https://openrouter.ai/api/v1/models',
+  groq: `${GROQ_BASE_URL}/models`,
 };
+
+/** A server the owner runs lists its models where the OpenAI API does, under its address. */
+const endpointOf = (provider: ProviderRecord) =>
+  provider.kind === 'openai-compatible'
+    ? `${provider.baseURL ?? ''}/models`
+    : endpoints[provider.kind as Exclude<ProviderKind, 'openai-compatible'>];
 
 /** What the router publishes per model; everything the capability table exists to supply. */
 const routed = z.object({
@@ -259,6 +266,8 @@ export class ProviderModels {
     const bearer =
       provider.kind === 'openai' ||
       provider.kind === 'openrouter' ||
+      provider.kind === 'groq' ||
+      (provider.kind === 'openai-compatible' && Boolean(key)) ||
       (provider.kind === 'anthropic' &&
         anthropicCredential(provider.credential, provider.apiKeyEnv, key) === 'subscription');
 
@@ -267,7 +276,7 @@ export class ProviderModels {
     const subscription = provider.kind === 'anthropic' && bearer;
     const fetcher = subscription ? await subscriptionFetch(this.fetcher) : this.fetcher;
 
-    const response = await fetcher(endpoints[kind], {
+    const response = await fetcher(endpointOf(provider), {
       headers: {
         accept: 'application/json',
         ...(provider.kind === 'google' ? { 'x-goog-api-key': key } : {}),
@@ -325,10 +334,11 @@ export class ProviderModels {
 
     const secret = await this.services.vault.read(providerSecret(provider.id));
 
-    if (!secret) {
+    // A server the owner runs may take no key at all.
+    if (!secret && provider.kind !== 'openai-compatible') {
       throw new Error('Provider key is not configured');
     }
 
-    return secret;
+    return secret ?? '';
   }
 }

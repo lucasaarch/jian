@@ -2350,7 +2350,9 @@
                           "openai",
                           "anthropic",
                           "google",
-                          "openrouter"
+                          "openrouter",
+                          "groq",
+                          "openai-compatible"
                         ]
                       },
                       "credential": {
@@ -2359,6 +2361,11 @@
                           "key",
                           "subscription"
                         ]
+                      },
+                      "baseURL": {
+                        "type": "string",
+                        "maxLength": 500,
+                        "format": "uri"
                       },
                       "apiKeyEnv": {
                         "type": "string"
@@ -2598,7 +2605,9 @@
                       "openai",
                       "anthropic",
                       "google",
-                      "openrouter"
+                      "openrouter",
+                      "groq",
+                      "openai-compatible"
                     ]
                   },
                   "secret": {
@@ -2613,12 +2622,16 @@
                       "key",
                       "subscription"
                     ]
+                  },
+                  "baseURL": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "format": "uri"
                   }
                 },
                 "required": [
                   "name",
-                  "kind",
-                  "secret"
+                  "kind"
                 ],
                 "additionalProperties": false
               }
@@ -2644,7 +2657,9 @@
                         "openai",
                         "anthropic",
                         "google",
-                        "openrouter"
+                        "openrouter",
+                        "groq",
+                        "openai-compatible"
                       ]
                     },
                     "credential": {
@@ -2653,6 +2668,11 @@
                         "key",
                         "subscription"
                       ]
+                    },
+                    "baseURL": {
+                      "type": "string",
+                      "maxLength": 500,
+                      "format": "uri"
                     },
                     "apiKeyEnv": {
                       "type": "string"
@@ -3221,7 +3241,9 @@
                         "openai",
                         "anthropic",
                         "google",
-                        "openrouter"
+                        "openrouter",
+                        "groq",
+                        "openai-compatible"
                       ]
                     },
                     "credential": {
@@ -3230,6 +3252,11 @@
                         "key",
                         "subscription"
                       ]
+                    },
+                    "baseURL": {
+                      "type": "string",
+                      "maxLength": 500,
+                      "format": "uri"
                     },
                     "apiKeyEnv": {
                       "type": "string"

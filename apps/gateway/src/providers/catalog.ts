@@ -25,7 +25,21 @@ export const providerCatalog = {
     name: 'OpenRouter',
     env: ['OPENROUTER_API_KEY'],
   },
+  // Fast Whisper transcription with a free tier, behind the OpenAI API at Groq's address.
+  groq: {
+    name: 'Groq',
+    env: ['GROQ_API_KEY'],
+  },
+  // A server the owner points at — a local Whisper, for one. It has an address, not a vendor,
+  // so the environment has no key to offer for it.
+  'openai-compatible': {
+    name: 'OpenAI-compatible server',
+    env: [],
+  },
 } as const;
+
+/** Where the OpenAI API of a vendor that speaks it lives. */
+export const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 
 export type ProviderKind = keyof typeof providerCatalog;
 
