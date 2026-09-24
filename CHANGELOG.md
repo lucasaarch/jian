@@ -5,6 +5,23 @@ Every release of Jian, newest first.
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit a note there and run
      `make changelog`; editing this file is editing the copy rather than the thing. -->
 
+## 2.2.0-rc.4 — 2026-09-24
+
+Voice notes transcribed for free with Groq or a Whisper server you run, busy providers asked again, and a failed turn that says why.
+
+### Features
+
+* **providers:** Groq and any OpenAI-compatible server — a Whisper you run beside the gateway, for one — can be connected under Providers and chosen for incoming audio ([2b2ddc8](https://github.com/lucasaarch/jian/commit/2b2ddc8ccac6ba54e2835534d45344c1f2a7a2e3)) ([9ffc385](https://github.com/lucasaarch/jian/commit/9ffc3859e09a134b549f194171597bb6e204b21f))
+* **agent:** when a turn fails, the chat receives the real reason in a line, with credentials masked, instead of a pointer to the gateway log ([2b2ddc8](https://github.com/lucasaarch/jian/commit/2b2ddc8ccac6ba54e2835534d45344c1f2a7a2e3))
+
+### Bug Fixes
+
+* **media:** a provider that answers 5xx, as Gemini does when a model is overloaded, is asked twice more before a voice note is reported as unreadable ([2b2ddc8](https://github.com/lucasaarch/jian/commit/2b2ddc8ccac6ba54e2835534d45344c1f2a7a2e3))
+
+### Upgrading
+
+One migration runs on start. A Whisper server on a private address must be allowed in `JIAN_ALLOW_PRIVATE_ORIGINS`, for example `http://whisper:8000`; see docs/channels.md.
+
 ## 2.2.0-rc.3 — 2026-09-24
 
 An agent that learns from its own work, turns without a time limit, and an agent that knows how full its context is.
