@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   type InlineMedia,
+  type Profile,
   type Run,
   type Sticker,
   stickerSchema,
@@ -24,8 +25,8 @@ type StickerMedia = {
     profileId: string,
     data: string,
     signal: AbortSignal,
-  ): Promise<{ description: string; tags: string[] }>;
-  sendSticker(run: Run, data: string, toolCallId: string): Promise<unknown>;
+  ): Promise<{ keep: boolean; description: string; tags: string[] }>;
+  sendSticker(run: Run, data: string, toolCallId: string, sessionId?: string): Promise<unknown>;
 };
 
 type Row = typeof stickers.$inferSelect;
@@ -61,11 +62,14 @@ export class Stickers {
   constructor(
     private readonly store: Store,
     private readonly media: StickerMedia,
+    private readonly profiles: { profile(id: string): Promise<Profile> },
   ) {}
 
   /** Keeps a received sticker, or counts it again; a new one is catalogued in the background. */
   async keep(profileId: string, input: InlineMedia): Promise<void> {
     if (input.mimeType !== 'image/webp') return;
+    // Switched off, a sticker costs nothing: not kept, not described.
+    if (!(await this.profiles.profile(profileId)).useStickers) return;
 
     const hash = createHash('sha256').update(input.data).digest('hex');
     const [kept] = await this.store.db
@@ -75,11 +79,18 @@ export class Stickers {
         target: [stickers.profileId, stickers.hash],
         set: { seen: sql`${stickers.seen} + 1` },
       })
-      .returning({ id: stickers.id, seen: stickers.seen, described: stickers.description });
+      .returning({
+        id: stickers.id,
+        seen: stickers.seen,
+        described: stickers.description,
+        declined: stickers.declined,
+      });
 
     if (!kept || kept.seen > 1) {
       // Seen before, but never described — the model was down, say: this is another chance.
-      if (kept && !kept.described) void this.describe(profileId, kept.id, input.data);
+      // One the model declined stays declined, and costs no second look.
+      if (kept && !kept.described && !kept.declined)
+        void this.describe(profileId, kept.id, input.data);
       return;
     }
 
@@ -89,11 +100,21 @@ export class Stickers {
 
   private async describe(profileId: string, id: string, data: string) {
     try {
-      const { description, tags } = await this.media.describeSticker(
+      const { keep, description, tags } = await this.media.describeSticker(
         profileId,
         data,
         AbortSignal.timeout(60_000),
       );
+
+      // Declined: only the fingerprint stays, so the image itself is not kept, and the same
+      // sticker sent again is recognised and left alone.
+      if (!keep) {
+        await this.store.db
+          .update(stickers)
+          .set({ declined: true, data: '', description: null, tags: [] })
+          .where(and(eq(stickers.profileId, profileId), eq(stickers.id, id)));
+        return;
+      }
 
       if (description || tags.length)
         await this.store.db
@@ -109,10 +130,11 @@ export class Stickers {
   }
 
   private async trim(profileId: string) {
+    // A declined fingerprint holds no image and takes no place in the collection.
     const extra = await this.store.db
       .select({ id: stickers.id })
       .from(stickers)
-      .where(eq(stickers.profileId, profileId))
+      .where(and(eq(stickers.profileId, profileId), eq(stickers.declined, false)))
       .orderBy(...orders.most_sent)
       .offset(MAX_STICKERS);
 
@@ -126,7 +148,7 @@ export class Stickers {
     const rows = await this.store.db
       .select()
       .from(stickers)
-      .where(eq(stickers.profileId, profileId))
+      .where(and(eq(stickers.profileId, profileId), eq(stickers.declined, false)))
       .orderBy(...orders.most_sent)
       .limit(MAX_STICKERS);
 
@@ -137,7 +159,9 @@ export class Stickers {
     const [row] = await this.store.db
       .select()
       .from(stickers)
-      .where(and(eq(stickers.profileId, profileId), eq(stickers.id, id)))
+      .where(
+        and(eq(stickers.profileId, profileId), eq(stickers.id, id), eq(stickers.declined, false)),
+      )
       .limit(1);
 
     if (!row) throw new GatewayError(404, 'Sticker not found');
@@ -166,11 +190,16 @@ export class Stickers {
     return toSticker(row as Row);
   }
 
+  /**
+   * Removed by the owner: kept only as its fingerprint, like one the model declined, so the same
+   * sticker sent again is not collected and described all over again.
+   */
   async forget(profileId: string, id: string): Promise<Sticker> {
     const row = await this.row(profileId, id);
 
     await this.store.db
-      .delete(stickers)
+      .update(stickers)
+      .set({ declined: true, data: '', description: null, tags: [] })
       .where(and(eq(stickers.profileId, profileId), eq(stickers.id, id)));
 
     return toSticker(row);
@@ -212,6 +241,7 @@ export class Stickers {
       .where(
         and(
           eq(stickers.profileId, profileId),
+          eq(stickers.declined, false),
           tag ? sql`${stickers.tags} @> ${JSON.stringify([tag])}::jsonb` : undefined,
           words.length ? sql`${score} > 0` : undefined,
         ),
@@ -234,6 +264,8 @@ export class Stickers {
   }
 
   tools(run: Run): ToolSet {
+    if (!run.profile.useStickers) return {};
+
     return {
       find_stickers: tool({
         description:
@@ -262,11 +294,17 @@ export class Stickers {
       }),
       send_sticker: tool({
         description:
-          'Send a sticker from your collection in this conversation, by its id from find_stickers. It goes out as a sticker on WhatsApp and Telegram.',
-        inputSchema: z.object({ stickerId: z.uuid() }),
-        execute: async ({ stickerId }, options) => {
+          'Send a sticker from your collection, by its id from find_stickers, in this conversation or in another of yours. It goes out as a sticker on WhatsApp and Telegram.',
+        inputSchema: z.object({
+          stickerId: z.uuid(),
+          sessionId: z
+            .uuid()
+            .optional()
+            .describe('Another of your conversations to send it in; this one when absent.'),
+        }),
+        execute: async ({ stickerId, sessionId }, options) => {
           const row = await this.row(run.profileId, stickerId);
-          const sent = await this.media.sendSticker(run, row.data, options.toolCallId);
+          const sent = await this.media.sendSticker(run, row.data, options.toolCallId, sessionId);
 
           await this.store.db
             .update(stickers)

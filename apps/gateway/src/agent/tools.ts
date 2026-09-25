@@ -216,7 +216,7 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
 
     send_session_message: tool({
       description:
-        'Write into another of your conversations. A WhatsApp or Telegram conversation — a person or an approved group — receives it on that channel, as a message from you; any other session gets it in its inbox. Idempotent by requestKey.',
+        'Write text into another of your conversations. A WhatsApp or Telegram conversation — a person or an approved group — receives it on that channel, as a message from you; any other session gets it in its inbox. Text only: to send a file, a sticker, an image or a voice note there, use send_file, send_sticker, generate_image or generate_speech with its sessionId. Idempotent by requestKey.',
       inputSchema: z.object({
         toSessionId: z.string().uuid(),
         text: z.string().trim().min(1).max(4000),

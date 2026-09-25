@@ -3130,6 +3130,14 @@ export interface operations {
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
                         } | null;
+                        /** @default null */
+                        sticker: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
+                        } | null;
                         /**
                          * @description Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.
                          * @default null
@@ -3319,6 +3327,14 @@ export interface operations {
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
                     } | null;
+                    /** @default null */
+                    sticker?: {
+                        /** Format: uuid */
+                        providerId: string;
+                        modelId: string;
+                        /** @enum {string} */
+                        reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
+                    } | null;
                     /**
                      * @description Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.
                      * @default null
@@ -3391,6 +3407,14 @@ export interface operations {
                         } | null;
                         /** @default null */
                         speech: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
+                        } | null;
+                        /** @default null */
+                        sticker: {
                             /** Format: uuid */
                             providerId: string;
                             modelId: string;
@@ -8406,6 +8430,8 @@ export interface operations {
                         allowWebSearch: boolean;
                         /** @default true */
                         learnFromWork: boolean;
+                        /** @default true */
+                        useStickers: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -8668,6 +8694,8 @@ export interface operations {
                         allowWebSearch: boolean;
                         /** @default true */
                         learnFromWork: boolean;
+                        /** @default true */
+                        useStickers: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -8924,6 +8952,8 @@ export interface operations {
                     allowWebSearch?: boolean;
                     /** @default true */
                     learnFromWork?: boolean;
+                    /** @default true */
+                    useStickers?: boolean;
                 };
             };
         };
@@ -9070,6 +9100,8 @@ export interface operations {
                         allowWebSearch: boolean;
                         /** @default true */
                         learnFromWork: boolean;
+                        /** @default true */
+                        useStickers: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -9334,6 +9366,8 @@ export interface operations {
                         allowWebSearch: boolean;
                         /** @default true */
                         learnFromWork: boolean;
+                        /** @default true */
+                        useStickers: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -9678,6 +9712,7 @@ export interface operations {
                     allowShell?: boolean;
                     allowWebSearch?: boolean;
                     learnFromWork?: boolean;
+                    useStickers?: boolean;
                     expectedVersion: number;
                 };
             };
@@ -9825,6 +9860,8 @@ export interface operations {
                         allowWebSearch: boolean;
                         /** @default true */
                         learnFromWork: boolean;
+                        /** @default true */
+                        useStickers: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -10219,6 +10256,8 @@ export interface operations {
                             allowWebSearch: boolean;
                             /** @default true */
                             learnFromWork: boolean;
+                            /** @default true */
+                            useStickers: boolean;
                             /** Format: uuid */
                             id: string;
                             version: number;

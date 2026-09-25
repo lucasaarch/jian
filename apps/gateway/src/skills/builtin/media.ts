@@ -56,6 +56,10 @@ on, with an optional caption. It takes one of:
   \`invoice.html\`, \`notes.txt\`, \`event.ics\`. The extension decides the type;
 - \`path\` — a file on the machine, when you have the machine tools.
 
+Add \`sessionId\` to send it in another of your conversations instead of this one — a file,
+an image or a voice note asked for here and meant for someone there. \`generate_image\` and
+\`generate_speech\` take it too.
+
 Send a file when the answer is a file: a spreadsheet, a report someone will keep or forward,
 anything too long to read comfortably in a chat. A short answer is still just a message.
 

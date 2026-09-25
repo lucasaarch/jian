@@ -104,6 +104,7 @@ export const modelRoleSchema = z.enum([
   'audio',
   'speech',
   'transcription',
+  'sticker',
 ]);
 
 export const executedModelRoles = modelRoleSchema.options;
@@ -120,6 +121,8 @@ export const modelDefaultsInputSchema = z.strictObject({
   vision: roleSelection,
   audio: roleSelection,
   speech: roleSelection,
+  // Describes and tags the stickers the agent keeps. Unset, it is the image-analysis model.
+  sticker: roleSelection,
   transcription: roleSelection.describe(
     'Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.',
   ),
@@ -190,7 +193,7 @@ export function supportsModelRole(
       !/live|native-audio|tts/.test(id) &&
       (!model.known || model.inputModalities.includes('audio'))
     );
-  if (role === 'vision')
+  if (role === 'vision' || role === 'sticker')
     return (
       !/image|tts|live|native-audio/.test(id) &&
       (!model.known || model.inputModalities.includes('image'))
