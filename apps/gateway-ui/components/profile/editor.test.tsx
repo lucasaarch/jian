@@ -18,6 +18,7 @@ const profile = {
   allowShell: false,
   allowWebSearch: false,
   learnFromWork: true,
+  useStickers: true,
   version: 3,
 } as unknown as Profile;
 
