@@ -178,6 +178,7 @@ export class Schedules {
       const run = await this.start(schedule, `schedule:${id}:manual:${key}`);
 
       await recordScheduleRun(this.store.db, {
+        createdAt: new Date(this.clock()),
         id: key,
         scheduleId: id,
         profileId,
@@ -188,6 +189,7 @@ export class Schedules {
       return run;
     } catch (error) {
       await recordScheduleRun(this.store.db, {
+        createdAt: new Date(this.clock()),
         id: key,
         scheduleId: id,
         profileId,
@@ -240,6 +242,7 @@ export class Schedules {
 
       // One entry per time it was due, however many workers reached it.
       await recordScheduleRun(this.store.db, {
+        createdAt: new Date(this.clock()),
         id: stableUuid(`schedule-run:${schedule.id}:${dueAt.toISOString()}`),
         scheduleId: schedule.id,
         profileId: schedule.profileId,
