@@ -1,10 +1,10 @@
 'use client';
 
-import { Check, Pencil, Search, Trash2 } from 'lucide-react';
+import { Check, Pencil, Power, Search, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Sticker } from '../../lib/api';
 import type { SectionProps } from '../props';
-import { Confirm, Empty, SectionHeading } from '../ui';
+import { Button, Confirm, Empty, SectionHeading } from '../ui';
 import { Select } from '../ui/select';
 
 type Order = 'most_sent' | 'most_seen' | 'newest';
@@ -136,7 +136,7 @@ function StickerTile({
  * described and tagged by what it shows, and counted each time it is sent. Removing one keeps
  * the agent from ever sending it.
  */
-export function Stickers({ profile, api }: SectionProps) {
+export function Stickers({ profile, api, mutate, busy: saving }: SectionProps) {
   const [list, setList] = useState<Sticker[]>();
   const [removing, setRemoving] = useState<Sticker>();
   const [busy, setBusy] = useState(false);
@@ -179,7 +179,32 @@ export function Stickers({ profile, api }: SectionProps) {
       <SectionHeading
         title="Stickers"
         description={`The stickers ${profile.name} can send. It keeps each one people send in approved chats, tags it by what it shows, and finds it by meaning.`}
+        action={
+          <Button
+            variant={profile.useStickers ? 'secondary' : 'primary'}
+            busy={saving}
+            onClick={() =>
+              void mutate(
+                () =>
+                  api.updateProfile(profile.id, {
+                    expectedVersion: profile.version,
+                    useStickers: !profile.useStickers,
+                  }),
+                profile.useStickers ? 'Stickers switched off.' : 'Stickers switched on.',
+              )
+            }
+          >
+            <Power size={16} />
+            {profile.useStickers ? 'Disable stickers' : 'Enable stickers'}
+          </Button>
+        }
       />
+      {!profile.useStickers && (
+        <p className="note sticker-off" role="status">
+          Stickers are off: nothing new is kept or described, and {profile.name} cannot send them.
+          The collection below stays as it is.
+        </p>
+      )}
       {list?.length ? (
         <div className="sticker-toolbar">
           <label className="search-field">
@@ -230,7 +255,7 @@ export function Stickers({ profile, api }: SectionProps) {
       {removing && (
         <Confirm
           title="Remove this sticker?"
-          description="The agent stops sending it. If someone sends it again, it comes back."
+          description="The agent stops sending it, and it is not kept again when someone sends it anew."
           busy={busy}
           close={() => setRemoving(undefined)}
           confirm={async () => {

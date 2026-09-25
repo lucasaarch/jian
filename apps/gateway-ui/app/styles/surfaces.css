@@ -245,6 +245,14 @@
   .modal-body:has(footer) {
     @apply pb-0;
   }
+  /* A dialog that is only a question and its answers has no content: the actions sit right
+     under the header, without the content's padding or a second rule. */
+  .modal-body:has(> footer:first-child) {
+    @apply pt-0;
+  }
+  .modal-body > footer:first-child {
+    @apply mt-0 border-t-0;
+  }
   .modal-body footer {
     @apply sticky bottom-0 z-10 -mx-7 mt-4 flex justify-end gap-3 border-t border-line bg-canvas px-7 pb-6 pt-5;
   }

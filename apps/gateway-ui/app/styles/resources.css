@@ -293,6 +293,9 @@
 .sticker-remove:focus-visible {
   opacity: 1;
 }
+.sticker-off {
+  margin-bottom: 20px;
+}
 
 .sticker-toolbar {
   display: grid;

@@ -63,6 +63,7 @@ const profileBase = {
   allowShell: false,
   allowWebSearch: false,
   learnFromWork: true,
+  useStickers: true,
   version: 3,
   createdAt: at(60 * 24 * 30),
   updatedAt: at(60 * 3),
@@ -104,6 +105,7 @@ export const profiles: Profile[] = [
     allowSelfManagement: true,
     allowWebSearch: true,
     learnFromWork: true,
+    useStickers: true,
   },
   {
     ...profileBase,
@@ -520,6 +522,7 @@ export const modelDefaults: ModelDefaults = {
   audio: null,
   speech: null,
   transcription: null,
+  sticker: null,
 };
 
 const builtin = (name: string, description: string, enabled = true): BuiltinSkill => ({
