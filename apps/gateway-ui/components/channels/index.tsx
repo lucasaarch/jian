@@ -2,6 +2,7 @@
 
 import { ChevronDown, Unplug } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import type { Channel, ChannelType } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionProps } from '../props';
@@ -51,12 +52,16 @@ export function Channels(props: SectionProps) {
           // Connecting WhatsApp is reading the QR: the device starts pairing right away.
           await api.connect(profile.id, channel.id);
           setPairing(channel);
+        } else if (type === 'telegram') {
+          // Jian points the bot at itself; only a refusal is worth the owner's attention, and
+          // what fixes it is the public address, not a secret to paste somewhere by hand.
+          if (channel.webhookRegistered === false)
+            toast.error(
+              `${channel.webhookError ?? 'Telegram refused the webhook.'} Set JIAN_PUBLIC_URL to the gateway's public HTTPS address, then disconnect and connect again.`,
+              { duration: 20_000 },
+            );
         } else if (!channel.webhookRegistered) {
-          setSecret(
-            `Webhook: ${webhook(channel)}\n${
-              type === 'telegram' ? 'X-Telegram-Bot-Api-Secret-Token' : 'X-Jian-Channel-Token'
-            }: ${channel.webhookToken}`,
-          );
+          setSecret(`Webhook: ${webhook(channel)}\nX-Jian-Channel-Token: ${channel.webhookToken}`);
         }
       },
       `${kinds.find((kind) => kind.type === type)?.name} connected.`,
@@ -147,9 +152,9 @@ export function Channels(props: SectionProps) {
                     )}
                     {kind.type === 'telegram' && (
                       <p className="note">
-                        Jian registers this URL with Telegram when it connects. If that fails, the
-                        secret is shown so you can call <code>setWebhook</code> yourself. To change
-                        the bot token, disconnect and connect again.
+                        Jian registers this URL with Telegram when it connects, at{' '}
+                        <code>JIAN_PUBLIC_URL</code> when it is set. To change the bot token,
+                        disconnect and connect again.
                       </p>
                     )}
                     <div className="flex flex-wrap items-center gap-3">

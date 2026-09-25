@@ -330,6 +330,29 @@ export const handlers = [
     HttpResponse.json(data.runs[0] as never, { status: 202 }),
   ),
 
+  http.get('*/v1/profiles/:profileId/stickers', ({ params }) =>
+    ok(
+      byProfile(data.stickers, String(params.profileId)).map(
+        ({ data: _data, ...sticker }) => sticker,
+      ),
+    ),
+  ),
+  http.get('*/v1/profiles/:profileId/stickers/:stickerId', ({ params }) => {
+    const sticker = data.stickers.find((item) => item.id === params.stickerId);
+
+    return sticker
+      ? ok({ ...sticker, mimeType: 'image/webp' })
+      : HttpResponse.json({}, { status: 404 });
+  }),
+  http.delete('*/v1/profiles/:profileId/stickers/:stickerId', ({ params }) => {
+    const found = data.stickers.find((item) => item.id === params.stickerId);
+
+    if (!found) return HttpResponse.json({}, { status: 404 });
+
+    const { data: _data, ...sticker } = found;
+
+    return ok(sticker);
+  }),
   http.get('*/v1/profiles/:profileId/memories', ({ params }) =>
     ok(byProfile(data.memories, String(params.profileId))),
   ),
