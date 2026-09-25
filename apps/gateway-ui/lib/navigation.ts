@@ -9,6 +9,7 @@ import {
   Plug,
   Smartphone,
   Sparkles,
+  Sticker,
 } from 'lucide-react';
 
 export type NavigationItem = {
@@ -29,6 +30,7 @@ export const navigation: NavigationItem[] = [
   { href: '/schedules', label: 'Schedules', icon: AlarmClock, group: 'workspace' },
   { href: '/memories', label: 'Memories', icon: BookOpen, group: 'capabilities' },
   { href: '/skills', label: 'Skills', icon: Sparkles, group: 'capabilities' },
+  { href: '/stickers', label: 'Stickers', icon: Sticker, group: 'capabilities' },
   { href: '/mcp', label: 'MCP servers', icon: Plug, group: 'capabilities' },
 ];
 

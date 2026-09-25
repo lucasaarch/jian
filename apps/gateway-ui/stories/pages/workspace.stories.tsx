@@ -13,6 +13,7 @@ import SessionsPage from '../../app/(workspace)/sessions/page';
 import AccessibilityPage from '../../app/(workspace)/settings/accessibility/page';
 import AppearancePage from '../../app/(workspace)/settings/appearance/page';
 import SkillsPage from '../../app/(workspace)/skills/page';
+import StickersPage from '../../app/(workspace)/stickers/page';
 import { emptyHandlers, updatedHandlers } from '../handlers';
 
 /**
@@ -44,6 +45,7 @@ export const Models = page(ModelsPage, '/models');
 export const Providers = page(ProvidersPage, '/providers');
 export const Channels = page(ChannelsPage, '/channels');
 export const Memories = page(MemoriesPage, '/memories');
+export const Stickers = page(StickersPage, '/stickers');
 export const Skills = page(SkillsPage, '/skills');
 export const Mcp = page(McpPage, '/mcp');
 export const Appearance = page(AppearancePage, '/settings/appearance');

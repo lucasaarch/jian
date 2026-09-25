@@ -31,6 +31,20 @@ export const resourceCalls = (client: Client) => ({
         params: { path: { profileId, memoryKey, linkedKey } },
       }),
     ),
+  stickers: (profileId: string) =>
+    result(client.GET('/v1/profiles/{profileId}/stickers', { params: profile(profileId) })),
+  sticker: (profileId: string, stickerId: string) =>
+    result(
+      client.GET('/v1/profiles/{profileId}/stickers/{stickerId}', {
+        params: { path: { profileId, stickerId } },
+      }),
+    ),
+  forgetSticker: (profileId: string, stickerId: string) =>
+    result(
+      client.DELETE('/v1/profiles/{profileId}/stickers/{stickerId}', {
+        params: { path: { profileId, stickerId } },
+      }),
+    ),
   schedules: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/schedules', { params: profile(profileId) })),
   createSchedule: (profileId: string, body: ScheduleInput) =>

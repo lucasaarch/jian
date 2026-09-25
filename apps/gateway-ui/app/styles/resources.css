@@ -249,3 +249,49 @@
 .usage-dot.cached {
   background: color-mix(in srgb, var(--accent) 40%, transparent);
 }
+
+/* The sticker collection: a grid of images the way a sticker picker shows them. */
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
+}
+.sticker-tile {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.sticker-image {
+  display: grid;
+  aspect-ratio: 1;
+  place-items: center;
+}
+.sticker-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.sticker-tile p {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.sticker-tile small {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.sticker-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.sticker-tile:hover .sticker-remove,
+.sticker-remove:focus-visible {
+  opacity: 1;
+}
