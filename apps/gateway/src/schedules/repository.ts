@@ -138,6 +138,8 @@ export async function recordScheduleRun(
     manual: boolean;
     runId?: string | undefined;
     error?: string | undefined;
+    /** The gateway's clock, not the database's: history ages by the same time it is due by. */
+    createdAt: Date;
   },
 ) {
   await db
@@ -164,7 +166,7 @@ export async function scheduleHistory(
         gte(scheduleRuns.createdAt, since),
       ),
     )
-    .orderBy(desc(scheduleRuns.createdAt));
+    .orderBy(desc(scheduleRuns.createdAt), desc(scheduleRuns.dueAt));
 
   return rows.map(({ entry, status, runError }) => ({
     id: entry.id,
