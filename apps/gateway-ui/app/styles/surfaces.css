@@ -457,6 +457,9 @@
   .conversation-pane > header small {
     @apply block truncate text-xs text-muted;
   }
+  .session-model {
+    @apply grid shrink-0 grid-cols-[minmax(0,14rem)_minmax(0,10rem)] gap-2;
+  }
   /* In the pane the history runs edge to edge; only the messages keep the inner margin. */
   .conversation-pane .session-history {
     @apply p-0;
@@ -1057,6 +1060,9 @@
     @apply inline-flex;
   }
   .conversation-pane > header {
-    @apply px-3;
+    @apply flex-wrap px-3;
+  }
+  .session-model {
+    @apply w-full grid-cols-2;
   }
 }

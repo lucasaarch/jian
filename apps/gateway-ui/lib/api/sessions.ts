@@ -1,6 +1,6 @@
 import { type Client, profile } from './params';
 import { result } from './result';
-import type { MediaUpload } from './types';
+import type { MediaUpload, ModelSelection } from './types';
 
 /**
  * Sessions, messages and execution history. Reading covers every conversation; writing only
@@ -31,6 +31,14 @@ export const sessionCalls = (client: Client) => ({
           requestKey: crypto.randomUUID(),
           ...(mediaIds.length ? { mediaIds } : {}),
         },
+      }),
+    ),
+  /** Null puts the conversation back on the profile's model defaults. */
+  setSessionModel: (profileId: string, sessionId: string, model: ModelSelection | null) =>
+    result(
+      client.PUT('/v1/profiles/{profileId}/sessions/{sessionId}/model', {
+        params: { path: { profileId, sessionId } },
+        body: { model },
       }),
     ),
   upload: (profileId: string, sessionId: string, file: MediaUpload) =>

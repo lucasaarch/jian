@@ -8,7 +8,7 @@ import {
   submitSchema,
 } from '@jian/contracts';
 import { type Clock, nowIso } from '../core/clock.js';
-import { assertFound, GatewayError } from '../core/errors.js';
+import { assertFound, GatewayError, NoModelAvailable } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { bindMedia, mediaMarker } from '../media/repository.js';
 import type { ProfileReader } from '../profiles/port.js';
@@ -58,14 +58,26 @@ export class Runs {
     this.fallback = fallback;
   }
 
-  /** Whether this profile already has a model for this activity, or one to fall back on. */
+  /**
+   * Whether this profile has a model for this activity that still runs. A default whose
+   * provider was removed counts as none, or it would keep the automatic choice from ever
+   * stepping in and every message would wait on a model that no longer exists.
+   */
   private async configured(
     profileId: string,
+    sessionId: string,
     activity: 'conversation' | 'channel',
   ): Promise<boolean> {
     const defaults = await readModelDefaults(this.store.db, profileId, nowIso(this.clock));
+    const session = await this.sessions.session(profileId, sessionId).catch(() => undefined);
+    const selection = session?.model ?? defaults[activity] ?? defaults.conversation;
 
-    return Boolean(defaults[activity] ?? defaults.conversation);
+    if (!selection) return false;
+
+    return this.providers.selectedModel(selection, this.store.db).then(
+      () => true,
+      () => false,
+    );
   }
 
   /**
@@ -100,9 +112,9 @@ export class Runs {
     // must not be held across a network call — so it is resolved before the transaction and
     // used only if nothing is configured by the time the transaction reads it.
     const automatic =
-      data.model || (await this.configured(profileId, activity))
+      data.model || (await this.configured(profileId, sessionId, activity))
         ? null
-        : await this.fallback?.pick();
+        : await this.fallback?.pick().catch(() => null);
 
     return this.store.transaction(profileId, async (tx) => {
       const profile = await this.profiles.profile(profileId, tx);
@@ -118,7 +130,7 @@ export class Runs {
         }
       }
 
-      await this.sessions.session(profileId, sessionId, tx);
+      const session = await this.sessions.session(profileId, sessionId, tx);
 
       await bindMedia(tx, profileId, sessionId, data.mediaIds ?? []);
 
@@ -152,24 +164,26 @@ export class Runs {
       }
 
       const defaults = await readModelDefaults(tx, profileId, nowIso(this.clock));
-      let selection =
-        data.model ?? defaults[activity] ?? defaults.conversation ?? automatic ?? null;
+      const candidates = data.model
+        ? [data.model]
+        : [session.model, defaults[activity] ?? defaults.conversation, automatic];
+      let selection: ModelSelection | null = null;
       let chosen: Awaited<ReturnType<typeof this.providers.selectedModel>> | null = null;
-      if (selection) {
+
+      for (const candidate of candidates) {
+        if (!candidate) continue;
         try {
-          chosen = await this.providers.selectedModel(selection, tx);
+          chosen = await this.providers.selectedModel(candidate, tx);
+          selection = candidate;
+          break;
         } catch (error) {
           if (data.model) throw error;
-          selection = null;
         }
       }
       // No list is invented here: which models a key can call is the provider's answer, so a
       // run needs either a model the owner chose or one picked from what a provider reports.
       if (!chosen && !profile.model.apiKeyEnv && !profile.model.providerId) {
-        throw new GatewayError(
-          409,
-          'No model is available. Configure a provider, or choose one under Model defaults.',
-        );
+        throw new NoModelAvailable();
       }
 
       // A model picked here becomes the profile's default, so the panel agrees with what just

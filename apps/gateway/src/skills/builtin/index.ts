@@ -34,7 +34,6 @@ const ALWAYS: readonly Skill[] = [
   schedules,
   skillCreator,
   media,
-  workingWithAgents,
   longRunningWork,
   managingContext,
   handlingErrors,
@@ -48,23 +47,32 @@ const ALWAYS: readonly Skill[] = [
  * have, and it would say it cannot do what the skill promised.
  */
 const SELF_MANAGED: readonly Skill[] = [managingYourself];
+const AGENTS: readonly Skill[] = [workingWithAgents];
 const SHELL: readonly Skill[] = [machineTools, codingWork];
 const WEB: readonly Skill[] = [webResearch];
 const MCP: readonly Skill[] = [mcpServers];
 const STICKERS: readonly Skill[] = [stickers];
 
 export const builtinSkillNames: ReadonlySet<string> = new Set(
-  [...ALWAYS, ...SELF_MANAGED, ...SHELL, ...WEB, ...MCP, ...STICKERS].map((skill) => skill.name),
+  [...ALWAYS, ...AGENTS, ...SELF_MANAGED, ...SHELL, ...WEB, ...MCP, ...STICKERS].map(
+    (skill) => skill.name,
+  ),
 );
 
 export function builtinSkills(
   profile: Pick<
     Profile,
-    'allowSelfManagement' | 'allowShell' | 'allowWebSearch' | 'mcpServers' | 'useStickers'
+    | 'allowSelfManagement'
+    | 'allowShell'
+    | 'allowWebSearch'
+    | 'mcpServers'
+    | 'useStickers'
+    | 'reachableByAgents'
   >,
 ): readonly Skill[] {
   return [
     ...ALWAYS,
+    ...(profile.reachableByAgents ? AGENTS : []),
     ...(profile.allowSelfManagement ? SELF_MANAGED : []),
     ...(profile.allowShell ? SHELL : []),
     ...(profile.allowWebSearch ? WEB : []),

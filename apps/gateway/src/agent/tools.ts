@@ -244,20 +244,6 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
       },
     }),
 
-    list_agents: tool({
-      description:
-        'List the other agents of this installation: their id, name and what each one does. Their instructions, memories and conversations are not readable — here or anywhere else.',
-      inputSchema: z.object({}),
-      execute: async () => services.peers.agents(run.profileId),
-    }),
-
-    ask_agent: tool({
-      description:
-        'Ask another agent of this installation and wait for its written answer. Only text crosses: they never read your memories, sessions or history, and you never read theirs. The two of you keep one shared thread. A chain of calls is bounded — you cannot ask yourself, nor an agent that already spoke in this conversation, and the depth budget is shared by everyone in the chain.',
-      inputSchema: agentCallSchema,
-      execute: async (input, { abortSignal }) => services.peers.ask(run, input, abortSignal),
-    }),
-
     list_contacts: tool({
       description:
         'The people this profile may write to on its channels: their id, name and where they are reached. Approved by the owner, never by you.',
@@ -304,6 +290,24 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
         coordination.release(run.profileId, { ...input, sessionId: run.sessionId }),
     }),
   };
+
+  if (run.profile.reachableByAgents) {
+    Object.assign(tools, {
+      list_agents: tool({
+        description:
+          'List the other agents of this installation: their id, name and what each one does. Their instructions, memories and conversations are not readable — here or anywhere else.',
+        inputSchema: z.object({}),
+        execute: async () => services.peers.agents(run.profileId),
+      }),
+
+      ask_agent: tool({
+        description:
+          'Ask another agent of this installation and wait for its written answer. Only text crosses: they never read your memories, sessions or history, and you never read theirs. The two of you keep one shared thread. A chain of calls is bounded — you cannot ask yourself, nor an agent that already spoke in this conversation, and the depth budget is shared by everyone in the chain.',
+        inputSchema: agentCallSchema,
+        execute: async (input, { abortSignal }) => services.peers.ask(run, input, abortSignal),
+      }),
+    });
+  }
 
   if (run.profile.allowShell) {
     Object.assign(
@@ -393,7 +397,8 @@ export function profileTools(services: ToolServices, run: Run): ToolSet {
  */
 export const TOOL_GROUPS = {
   schedules: {
-    summary: 'do something later or on a repetition: reminders, daily summaries, recurring checks',
+    summary:
+      'do something later or on a repetition — reminders, daily summaries, recurring checks — and list, change, pause (switch off without deleting), resume or delete them',
     tools: ['list_schedules', 'create_schedule', 'update_schedule', 'delete_schedule'],
   },
   skills: {
@@ -402,12 +407,12 @@ export const TOOL_GROUPS = {
     tools: ['create_skill', 'update_skill', 'delete_skill'],
   },
   memory: {
-    summary: 'tidy your memories: delete one, and link those recalled together',
+    summary: 'tidy your memories: delete one, and link or unlink those recalled together',
     tools: ['forget_memory', 'link_memories', 'unlink_memories'],
   },
   media: {
     summary:
-      'open attachments, send files and documents on any chat, send stickers, generate images, and reply with voice',
+      'open attachments, save them, send files and documents into any conversation, find and send stickers, generate images, and reply with voice',
     tools: [
       'analyze_media',
       'send_file',
@@ -434,7 +439,8 @@ export const TOOL_GROUPS = {
     tools: ['web_search', 'fetch_url'],
   },
   conversations: {
-    summary: 'read and write this profile’s other sessions, and search their history',
+    summary:
+      'list your other conversations, read one, search by words across all of them (what was agreed elsewhere, who asked for what), write into one, and read your inbox',
     tools: [
       'list_sessions',
       'read_session',
@@ -444,7 +450,8 @@ export const TOOL_GROUPS = {
     ],
   },
   tasks: {
-    summary: 'checkpoints, stored tool output and resource leases of long-running work',
+    summary:
+      'long-running work: checkpoints, stored tool output, resource leases, and compacting your context now instead of waiting for it to fill',
     tools: [
       'read_run_checkpoints',
       'read_artifact',
@@ -454,7 +461,8 @@ export const TOOL_GROUPS = {
     ],
   },
   contacts: {
-    summary: 'write to the people the owner approved on this profile’s channels',
+    summary:
+      'list the people the owner approved on your channels and write to one, optionally bringing their answer back here',
     tools: ['list_contacts', 'message_contact'],
   },
   self: {

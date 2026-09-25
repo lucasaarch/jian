@@ -8,7 +8,7 @@ import {
   type ingressResultSchema,
 } from '@jian/contracts';
 import type { z } from 'zod';
-import { assertFound, GatewayError } from '../core/errors.js';
+import { assertFound, GatewayError, NoModelAvailable } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { stableUuid } from '../core/ids.js';
 import type { Decisions } from '../decisions/service.js';
@@ -131,6 +131,16 @@ export function withQuote(data: IncomingMessage, mine: boolean) {
 /** Sent once to a sender the owner has not decided on yet. It must never depend on a run. */
 const APPROVAL_NOTICE =
   'This gateway does not know you yet. Its owner was asked to approve this conversation, and your message is waiting for that decision.';
+
+/**
+ * Sent when a message arrives and the profile has no model to answer with. Without it the chat
+ * looks as if the gateway never received anything, and the owner hunts in the wrong place.
+ */
+const NO_MODEL_NOTICE =
+  '⚠️ I received your message, but I cannot answer yet: no AI model is set up for me. My owner can choose one in the gateway panel, under Model defaults. Send your message again after that.';
+
+/** One notice per chat in this window, so a person who writes five times is told once. */
+const NO_MODEL_NOTICE_MS = 10 * 60_000;
 
 /** Resolves after the wait, or at once when the gateway is shutting down. */
 function pause(ms: number, signal: AbortSignal): Promise<void> {
@@ -436,6 +446,8 @@ export class Channels {
   /** Asked at most this often per contact: a picture changes rarely, and each ask is a call. */
   private static readonly AVATAR_TTL_MS = 24 * 60 * 60 * 1000;
   private readonly fetchingAvatars = new Set<string>();
+  /** When each chat was last told there is no model, by channel and chat. */
+  private readonly toldNoModel = new Map<string, number>();
 
   private picturesDueAt = 0;
   private readonly pictureRefused = new Map<string, { value: string; until: number }>();
@@ -936,18 +948,92 @@ export class Channels {
     const text =
       data.scope === 'group' ? `${data.displayName ?? data.actorId}: ${data.text}` : data.text;
 
-    const run = await this.submit(
-      channel,
-      intake.contact,
-      text,
-      data.requestKey,
-      connectionGeneration,
-      intake.decision?.turn,
-      mediaIds,
-      data.scope === 'group' ? authorOf(data) : undefined,
-    );
+    const author = data.scope === 'group' ? authorOf(data) : undefined;
+    let run: Awaited<ReturnType<typeof this.submit>>;
+
+    try {
+      run = await this.submit(
+        channel,
+        intake.contact,
+        text,
+        data.requestKey,
+        connectionGeneration,
+        intake.decision?.turn,
+        mediaIds,
+        author,
+      );
+    } catch (error) {
+      if (!(error instanceof NoModelAvailable)) throw error;
+
+      await this.withoutModel(
+        channel,
+        intake.contact,
+        text,
+        data.requestKey,
+        connectionGeneration,
+        author,
+      );
+
+      return { accepted: false, contact: 'approved' as const, silence: 'no-model' as const };
+    }
 
     return { accepted: true, runId: run.id, contact: 'approved' as const };
+  }
+
+  /**
+   * A message that cannot start a turn because the profile has no model. It is kept in the
+   * conversation, so the owner sees what arrived, and the chat is told why nothing answers.
+   * Settling it here matters as much as the notice: refused, it would stay first in the
+   * channel's queue and hold back every message behind it until a model exists.
+   */
+  private async withoutModel(
+    channel: ChannelRecord,
+    contact: ContactRecord,
+    text: string,
+    requestKey: string,
+    connectionGeneration?: number,
+    author?: { id: string; name?: string },
+  ) {
+    const sessionId = assertFound(contact.sessionId ?? null, 'Session');
+    const key = `${channel.id}\u0000${contact.chatId}`;
+    const now = Date.now();
+    const tell = now - (this.toldNoModel.get(key) ?? 0) >= NO_MODEL_NOTICE_MS;
+
+    await this.services.store.transaction(channel.profileId, async (tx) => {
+      await insertMessage(
+        tx,
+        {
+          id: stableUuid(`no-model:${channel.id}:${contact.chatId}:${requestKey}`),
+          profileId: channel.profileId,
+          sessionId,
+          role: 'user',
+          content: text,
+          ...(author ? { author } : {}),
+          createdAt: new Date(now).toISOString(),
+        },
+        true,
+      );
+      await recordEvent(tx, Date.now, channel.profileId, 'session.message', { sessionId });
+
+      if (tell && this.registry.get(channel.type).send) {
+        await insertDelivery(tx, {
+          id: randomUUID(),
+          profileId: channel.profileId,
+          channelId: channel.id,
+          chatId: contact.chatId,
+          notice: NO_MODEL_NOTICE,
+          status: 'pending',
+          createdAt: new Date(now).toISOString(),
+          updatedAt: new Date(now).toISOString(),
+          remoteMessageIds: [],
+          saidCount: 0,
+          connectionGeneration,
+        });
+      }
+    });
+
+    if (tell) this.toldNoModel.set(key, now);
+    channelLog('ingress.no_model', { channelId: channel.id });
   }
 
   /**

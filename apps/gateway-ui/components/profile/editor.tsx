@@ -158,6 +158,7 @@ export function ProfileEditor({
       shell: profile.allowShell,
       webSearch: profile.allowWebSearch,
       learn: profile.learnFromWork,
+      agents: profile.reachableByAgents,
     };
 
     for (const [name, value] of Object.entries(values)) {
@@ -194,6 +195,7 @@ export function ProfileEditor({
       allowShell: data.get('shell') === 'on',
       allowWebSearch: data.get('webSearch') === 'on',
       learnFromWork: data.get('learn') === 'on',
+      reachableByAgents: data.get('agents') === 'on',
     };
     const snapshot = JSON.stringify(patch);
 
@@ -286,6 +288,16 @@ export function ProfileEditor({
                 rows={3}
               />
             </Field>
+            <label className="check-row">
+              <input name="agents" type="checkbox" defaultChecked={profile.reachableByAgents} />
+              <span>
+                <strong>Talk with other agents</strong>
+                <small>
+                  Other profiles can find this one and ask it things, and it can ask them. Off, it
+                  leaves their list and loses contact with all of them.
+                </small>
+              </span>
+            </label>
             <label className="check-row">
               <input
                 name="selfManagement"

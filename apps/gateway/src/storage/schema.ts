@@ -58,6 +58,7 @@ export const profiles = pgTable('profiles', {
   allowWebSearch: boolean('allow_web_search').notNull().default(false),
   learnFromWork: boolean('learn_from_work').notNull().default(true),
   useStickers: boolean('use_stickers').notNull().default(true),
+  reachableByAgents: boolean('reachable_by_agents').notNull().default(true),
   version: integer('version').notNull(),
   createdAt,
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -161,6 +162,7 @@ export const sessions = pgTable(
     scope: text('scope').$type<'direct' | 'group'>(),
     summary: text('summary'),
     summarizedUpTo: timestamp('summarized_up_to', { withTimezone: true }),
+    model: jsonb('model').$type<ModelSelection>(),
     createdAt,
   },
   (table) => [

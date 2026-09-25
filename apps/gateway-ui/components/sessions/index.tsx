@@ -15,6 +15,7 @@ import { Empty, Face, Orb, TelegramLogo, WhatsAppLogo } from '../ui';
 import { plainText } from '../ui/markdown';
 import { Composer } from './composer';
 import { History } from './history';
+import { SessionModel } from './model-picker';
 import { statusOf } from './progress';
 
 /**
@@ -300,6 +301,17 @@ export function Sessions({
                   : ''}
               </small>
             </div>
+            {kindOf(active) !== 'learning' && (
+              <SessionModel
+                key={`model-${active.id}`}
+                api={api}
+                profileId={profile.id}
+                session={active}
+                data={data}
+                channel={kindOf(active) === 'whatsapp' || kindOf(active) === 'telegram'}
+                saved={() => void refresh()}
+              />
+            )}
           </header>
           <History
             key={active.id}
