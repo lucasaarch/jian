@@ -372,7 +372,7 @@
     @apply flex flex-wrap items-center gap-2;
   }
   .row-facts {
-    @apply mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted;
+    @apply mt-2 flex flex-wrap gap-x-1.5 gap-y-1 text-xs text-muted;
   }
   /* What went wrong with a row, where it cannot be missed. */
   .row-error {
@@ -381,8 +381,9 @@
   .row-error svg {
     @apply mt-px shrink-0;
   }
+  /* The separator in the text's own colour, so it reads as one line of facts, not two. */
   .row-facts > span + span::before {
-    @apply mr-3 text-line;
+    @apply mr-1.5 font-bold text-muted;
     content: "·";
   }
   .provider-alternative {
@@ -577,27 +578,6 @@
   .overview-profile .profile-avatar {
     @apply h-14 w-14 rounded-md border-0;
   }
-  .overview-metrics {
-    @apply mb-10 grid grid-cols-2 min-[1000px]:grid-cols-4;
-  }
-  .overview-metric {
-    @apply my-5 border-r border-line px-6 first:pl-0 last:border-r-0;
-  }
-  .overview-metric > span {
-    @apply flex items-center justify-between gap-2 text-xs text-muted;
-  }
-  .overview-metric strong {
-    @apply my-2 block font-display text-5xl font-medium tabular-nums;
-  }
-  .overview-metric small {
-    @apply text-[11px] text-muted;
-  }
-  .overview-metric:hover svg {
-    @apply text-accent;
-  }
-  .overview-columns {
-    @apply grid gap-9 min-[1100px]:grid-cols-[minmax(0,1fr)_280px];
-  }
   .activity-row {
     @apply flex items-start gap-3 border-b border-line py-4;
   }
@@ -607,46 +587,8 @@
   .activity-row small {
     @apply text-[10px] text-muted;
   }
-  .usage-panel {
-    @apply self-start rounded-lg bg-surface/70 p-6;
-  }
   .eyebrow {
     @apply font-mono text-[10px] uppercase tracking-[.16em] text-muted;
-  }
-  .usage-panel h2 {
-    @apply mt-6 flex items-baseline gap-2 font-display text-5xl tabular-nums;
-  }
-  .usage-panel h2 small {
-    @apply font-sans text-xs font-normal text-muted;
-  }
-  .usage-panel > p {
-    @apply mt-2 text-xs;
-  }
-  .usage-bar {
-    @apply my-7 flex h-1.5 overflow-hidden rounded bg-line;
-  }
-  .usage-bar > span:first-child,
-  .usage-dot {
-    @apply bg-accent;
-  }
-  .usage-bar > span:last-child,
-  .usage-dot.output {
-    @apply bg-muted;
-  }
-  .usage-panel dl > div {
-    @apply flex justify-between py-2 text-xs;
-  }
-  .usage-panel dt {
-    @apply flex items-center gap-2 text-muted;
-  }
-  .usage-panel dd {
-    @apply font-mono;
-  }
-  .usage-dot {
-    @apply h-1.5 w-1.5;
-  }
-  .usage-panel .usage-footnote {
-    @apply mt-6 border-t border-line pt-4 text-[11px] leading-relaxed;
   }
 }
 
@@ -693,14 +635,6 @@
   transition-duration: 0.01ms !important;
   /* biome-ignore lint/complexity/noImportantStyles: Explicit accessibility preference overrides every component. */
   scroll-behavior: auto !important;
-}
-@media (max-width: 999px) {
-  .overview-metric:nth-child(2) {
-    border-right: 0;
-  }
-  .overview-metric:nth-child(3) {
-    padding-left: 0;
-  }
 }
 @media (max-width: 760px) {
   .overview-profile h2 {
@@ -823,5 +757,52 @@
   }
   .catalog-publisher {
     @apply inline-flex items-center gap-1.5;
+  }
+  /* Servers to import: a row card each, the whole card is the choice. */
+  .import-servers {
+    @apply m-0 grid min-w-0 gap-1.5 border-0 p-0;
+  }
+  /* The same size as a field's label, which it sits under. */
+  .import-servers legend {
+    @apply mb-2 flex w-full items-center justify-between p-0 text-xs font-medium text-ink;
+  }
+  /* The corners of the select above it, so the dialog reads as one form. */
+  .import-server {
+    @apply flex w-full items-center gap-3 border border-line bg-canvas px-3.5 py-2.5 text-left transition-colors;
+    border-radius: 3px 10px 3px 3px;
+  }
+  .import-server:hover:not(:disabled) {
+    @apply border-control;
+  }
+  .import-server[aria-pressed="true"] {
+    @apply border-accent;
+    background: color-mix(in srgb, var(--accent) 6%, var(--canvas));
+  }
+  .import-server:disabled {
+    @apply cursor-not-allowed opacity-60;
+  }
+  .import-server-icon {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-md border border-line bg-surface text-ink;
+  }
+  .import-server-copy {
+    @apply grid min-w-0 flex-1 gap-0.5;
+  }
+  .import-server-copy strong {
+    @apply text-sm font-semibold text-ink;
+  }
+  .import-server-copy small {
+    @apply truncate text-xs text-muted;
+  }
+  .import-server-copy .import-server-note {
+    @apply text-accent;
+  }
+  .import-server:disabled .import-server-note {
+    @apply text-muted;
+  }
+  .import-server-check {
+    @apply grid h-5 w-5 shrink-0 place-items-center rounded-full border border-line text-on-accent;
+  }
+  .import-server[aria-pressed="true"] .import-server-check {
+    @apply border-accent bg-accent;
   }
 }

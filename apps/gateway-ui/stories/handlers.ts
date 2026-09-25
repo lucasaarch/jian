@@ -330,6 +330,18 @@ export const handlers = [
     HttpResponse.json(data.runs[0] as never, { status: 202 }),
   ),
 
+  http.post('*/v1/profiles/:profileId/mcp-servers/import', async ({ request }) => {
+    const { servers = [] } = (await request.json()) as { servers?: string[] };
+
+    return ok({
+      imported: servers,
+      skipped: [],
+      signIn: servers.filter((name) => name === 'linear'),
+    });
+  }),
+  http.get('*/v1/profiles/:profileId/stats', ({ request }) =>
+    ok(data.statsFor(Number(new URL(request.url).searchParams.get('days') ?? 30))),
+  ),
   http.get('*/v1/profiles/:profileId/stickers', ({ params }) =>
     ok(
       byProfile(data.stickers, String(params.profileId)).map(

@@ -1,8 +1,10 @@
 'use client';
 
 import { Capabilities } from '../../../components/skills/index';
-import { useSection } from '../../../lib/workspace';
+import { useSection, useWorkspace } from '../../../lib/workspace';
 
 export default function Page() {
-  return <Capabilities {...useSection()} kind="mcpServers" />;
+  const { profiles } = useWorkspace();
+
+  return <Capabilities {...useSection()} kind="mcpServers" others={profiles} />;
 }

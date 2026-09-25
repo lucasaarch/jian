@@ -31,12 +31,25 @@ export const resourceCalls = (client: Client) => ({
         params: { path: { profileId, memoryKey, linkedKey } },
       }),
     ),
+  stats: (profileId: string, days: number) =>
+    result(
+      client.GET('/v1/profiles/{profileId}/stats', {
+        params: { path: { profileId }, query: { days } },
+      }),
+    ),
   stickers: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/stickers', { params: profile(profileId) })),
   sticker: (profileId: string, stickerId: string) =>
     result(
       client.GET('/v1/profiles/{profileId}/stickers/{stickerId}', {
         params: { path: { profileId, stickerId } },
+      }),
+    ),
+  tagSticker: (profileId: string, stickerId: string, tags: string[]) =>
+    result(
+      client.PUT('/v1/profiles/{profileId}/stickers/{stickerId}/tags', {
+        params: { path: { profileId, stickerId } },
+        body: { tags },
       }),
     ),
   forgetSticker: (profileId: string, stickerId: string) =>

@@ -8,6 +8,13 @@ import { Markdown } from '../ui/markdown';
 /** What the panel calls each tool, so the owner reads an action instead of a function name. */
 export const toolLabels: Record<string, string> = {
   analyze_media: 'looking at an attachment',
+  send_file: 'sending a file',
+  save_attachment: 'saving an attachment',
+  find_stickers: 'looking for a sticker',
+  send_sticker: 'sending a sticker',
+  tag_sticker: 'tagging a sticker',
+  compact_context: 'compacting its context',
+  load_tools: 'loading tools',
   generate_image: 'drawing an image',
   generate_speech: 'recording a voice reply',
   list_speech_voices: 'choosing a voice',

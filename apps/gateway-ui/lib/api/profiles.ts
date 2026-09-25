@@ -14,6 +14,13 @@ export const profileCalls = (client: Client) => ({
     result(client.POST('/v1/profiles/{profileId}/reset', { params: profile(profileId) })),
   deleteProfile: (profileId: string) =>
     result(client.DELETE('/v1/profiles/{profileId}', { params: profile(profileId) })),
+  importMcpServers: (profileId: string, fromProfileId: string, servers: string[]) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/mcp-servers/import', {
+        params: profile(profileId),
+        body: { fromProfileId, servers },
+      }),
+    ),
   checkMcpServer: (profileId: string, name: string) =>
     result(
       client.POST('/v1/profiles/{profileId}/mcp-servers/{name}/check', {

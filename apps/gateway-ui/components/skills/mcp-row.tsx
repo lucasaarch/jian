@@ -42,14 +42,10 @@ export function McpRow({
 
   const off = server.disabledTools ?? [];
   const on = status?.reachable ? status.tools.filter((tool) => !off.includes(tool.name)).length : 0;
-  const service = serviceOf(`${address} ${server.name}`.toLowerCase());
-
   return (
     <ResourceRow
       id={`mcp-${server.name}`}
-      icon={
-        service ? <ProviderLogo kind={service} size={22} /> : <Plug size={20} strokeWidth={1.6} />
-      }
+      icon={<McpIcon server={server} />}
       name={server.name}
       badges={
         busy ? (
@@ -105,4 +101,15 @@ export function McpRow({
       </div>
     </ResourceRow>
   );
+}
+
+/** A server's mark: the logo of the service it fronts, when it is one we know, or a plug. */
+export function McpIcon({ server }: { server: McpServer }) {
+  const address =
+    server.transport === 'stdio'
+      ? [server.command, ...server.args].filter(Boolean).join(' ')
+      : (server.url ?? '');
+  const service = serviceOf(`${address} ${server.name}`.toLowerCase());
+
+  return service ? <ProviderLogo kind={service} size={22} /> : <Plug size={20} strokeWidth={1.6} />;
 }
