@@ -27,6 +27,7 @@ import { registerSessionRoutes } from './sessions/routes.js';
 import { registerSettingsRoutes } from './settings/routes.js';
 import { registerSkillRoutes } from './skills/routes.js';
 import type { Skills } from './skills/service.js';
+import { registerStickerRoutes } from './stickers/routes.js';
 import type { Store } from './storage/database.js';
 import { registerWebRoutes } from './web/routes.js';
 
@@ -103,6 +104,7 @@ export function createApp(
   registerProfileRoutes(app, options);
   registerSessionRoutes(app, { ...options, coordination });
   registerMemoryRoutes(app, options);
+  registerStickerRoutes(app, options);
   registerScheduleRoutes(app, options);
   registerSettingsRoutes(app, options);
   registerMediaRoutes(app, options);

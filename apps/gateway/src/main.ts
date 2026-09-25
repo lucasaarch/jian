@@ -119,6 +119,8 @@ const channelRegistry = new ChannelRegistry([
 ]);
 const channels = new Channels(services, outbound.fetch, channelRegistry);
 
+channels.usePublicUrl(config.data.JIAN_PUBLIC_URL);
+
 // A colleague's late answer has no incoming message to hang a delivery on; channels give it one.
 services.peers.useDeliveries(channels);
 // Nor has a run a schedule starts in a chat: its answer goes out the same way.

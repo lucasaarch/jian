@@ -124,7 +124,7 @@ An agent with the shell switch on installs under `/home/node`. Mount a `Persiste
 | `PORT` | no | `4310` | The listening port; the health check follows it. |
 | `JIAN_ROLE` | no | `all` | `all`, `api` or `worker`. |
 | `JIAN_ALLOW_PRIVATE_ORIGINS` | no | empty | Exact private origins allowed for outbound calls, for example `http://127.0.0.1:11434`. |
-| `JIAN_PUBLIC_URL` | no | — | Where a browser reaches this gateway. An MCP server that signs in with OAuth redirects the owner back to it; without it, that sign-in is unavailable. |
+| `JIAN_PUBLIC_URL` | no | — | Where the outside world reaches this gateway, over HTTPS. Telegram's webhook is registered there, rather than at whatever address the panel was opened on, and an MCP server that signs in with OAuth redirects the owner back to it; without it, that sign-in is unavailable. |
 | `POSTGRES_PASSWORD` | Compose only | — | The PostgreSQL password in `compose.yaml`; it also builds the service's `DATABASE_URL`. |
 | `JIAN_VERSION` | Compose only | `latest` | The image tag `compose.yaml` uses. |
 | `JIAN_BIND_ADDRESS` | Compose only | `127.0.0.1` | The host address the gateway port is published on. |

@@ -745,6 +745,7 @@ export const mediaAssets = pgTable(
     data: text('data').notNull(),
     bytes: integer('bytes').notNull(),
     voice: boolean('voice').notNull().default(false),
+    sticker: boolean('sticker').notNull().default(false),
     name: text('name'),
     analysis: text('analysis'),
     held: boolean('held').notNull().default(false),
@@ -754,4 +755,22 @@ export const mediaAssets = pgTable(
     uniqueIndex('media_source').on(table.profileId, table.sourceKey),
     index('media_session').on(table.profileId, table.sessionId),
   ],
+);
+
+/** The stickers an agent has seen, one row per image, whatever chat it came from. */
+export const stickers = pgTable(
+  'stickers',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    hash: text('hash').notNull(),
+    data: text('data').notNull(),
+    description: text('description'),
+    uses: integer('uses').notNull().default(0),
+    createdAt,
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  },
+  (table) => [uniqueIndex('stickers_hash').on(table.profileId, table.hash)],
 );

@@ -18,6 +18,7 @@ import { createSafeFetch } from './security/outbound.js';
 import type { Vault } from './security/vault.js';
 import { Sessions } from './sessions/service.js';
 import { Settings } from './settings/service.js';
+import { Stickers } from './stickers/service.js';
 import type { Store } from './storage/database.js';
 import { WebSearch } from './web/service.js';
 
@@ -33,6 +34,7 @@ export type Services = {
   runs: Runs;
   peers: Peers;
   learning: Learning;
+  stickers: Stickers;
   schedules: Schedules;
   settings: Settings;
   lifecycle: RunLifecycle;
@@ -65,13 +67,14 @@ export function buildServices({
   const runs = new Runs(store, profiles, sessions, providers, clock);
   const settings = new Settings(store);
   const decisions = new Decisions(store, gatewayVault, fetcher ?? createSafeFetch().fetch);
+  const media = new Media(store, providers, gatewayVault, fetcher ?? createSafeFetch().fetch);
 
   return {
     profiles,
     providers,
     sessions,
     memories,
-    media: new Media(store, providers, gatewayVault, fetcher ?? createSafeFetch().fetch),
+    media,
     web: new WebSearch(store, gatewayVault, fetcher ?? createSafeFetch().fetch),
     // Stamped into the image at build time; a gateway run from source has none.
     releases: new ReleaseNotes(store, process.env.JIAN_VERSION),
@@ -79,6 +82,7 @@ export function buildServices({
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),
     learning: new Learning({ store, profiles, sessions, runs }, clock),
+    stickers: new Stickers(store, media),
     schedules: new Schedules(store, profiles, sessions, runs, clock),
     settings,
     lifecycle: new RunLifecycle(store, runs, clock),

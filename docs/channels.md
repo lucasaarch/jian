@@ -167,6 +167,10 @@ A Telegram bot and a paired WhatsApp account show their profile's picture. The w
 
 ## Images and voice
 
+### Stickers
+
+WhatsApp does not give a paired account's saved stickers to anything outside the app, so each agent builds its own collection: every still sticker sent in a conversation the owner approved is kept once per profile and described in a few words by the image-analysis model. The agent finds them with `find_stickers` and sends one with `send_sticker`, as a sticker on WhatsApp and Telegram. A profile keeps up to 200; past that, the least sent and oldest one makes room. The owner sees them under **Stickers**, and a removed sticker is never sent again unless someone sends it anew. Animated Telegram stickers are not kept.
+
 ### Incoming audio without a paid plan
 
 Incoming audio is transcribed by the model chosen under **Model defaults › Incoming audio**. Gemini also describes sounds; a Whisper model only transcribes speech, which is what a voice note needs. Two Whisper routes cost nothing:
