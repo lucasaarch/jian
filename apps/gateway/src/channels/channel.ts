@@ -18,6 +18,11 @@ export interface OutgoingMessage {
   chatId: string;
   text: string;
   media?: InlineMedia;
+  /**
+   * Who the text may name, in a group: a channel that marks mentions turns `@Name` into one.
+   * Ids are the actors the channel gave the gateway.
+   */
+  people?: Array<{ id: string; name: string }>;
 }
 
 export interface DeliveryContext {

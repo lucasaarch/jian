@@ -49,15 +49,20 @@ async function setup(jev?: (state: { message: string }) => number) {
   const store = services.store;
   const box = new SecretBox({ activeKeyId: 'v1', keys: { v1: randomBytes(32) } });
   const devices = new Map<string, DeviceCallbacks>();
-  const sent: Array<{ channelId: string; chatId: string; text: string }> = [];
+  const sent: Array<{
+    channelId: string;
+    chatId: string;
+    text: string;
+    people?: Array<{ id: string; name: string }>;
+  }> = [];
 
   const factory: DeviceFactory = async (channelId, _sessionStore, callbacks) => {
     devices.set(channelId, callbacks);
 
     return {
       start: async () => {},
-      send: async (chatId, text) => {
-        sent.push({ channelId, chatId, text });
+      send: async (chatId, text, _signal, _media, people) => {
+        sent.push({ channelId, chatId, text, ...(people ? { people } : {}) });
 
         return `wa-sent-${sent.length}`;
       },
@@ -525,6 +530,33 @@ describe('group conversations', () => {
       expect(
         (await f.channels.deliveries(ada.profileId)).filter((item) => item.runId === run.id),
       ).toHaveLength(1);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('hands the device the people of the room, so a name the agent writes can mention them', async () => {
+    const f = await setup();
+
+    try {
+      const ada = await f.join('Ada', '5511800000001@c.us');
+
+      await f.say(owner, 'hi');
+      await f.approve(ada.profileId);
+      await f.say(guest, 'the supplier moved the delivery to Friday');
+      await f.say(owner, 'Ada, can you tell Marina it is fine?', { mentions: [ada.address] });
+      await f.reply(ada.profileId, '@Marina Friday works.');
+      await f.channels.dispatch();
+
+      const [answer] = f.sent.filter((item) => item.chatId === room);
+
+      expect(answer?.text).toBe('@Marina Friday works.');
+      expect(answer?.people).toEqual(
+        expect.arrayContaining([
+          { id: owner.address, name: owner.name },
+          { id: guest.address, name: guest.name },
+        ]),
+      );
     } finally {
       await f.close();
     }

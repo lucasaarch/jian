@@ -1506,6 +1506,7 @@ export class Channels {
         fetch: this.fetcher,
         signal: this.abort.signal,
       };
+      const people = await this.groupPeople(delivery);
 
       if (delivery.mediaId) {
         if (!this.services.media) throw new Error('Media delivery is unavailable');
@@ -1520,6 +1521,7 @@ export class Channels {
               ...(media.name ? { name: media.name } : {}),
               ...(media.sticker ? { sticker: true } : {}),
             },
+            people,
           },
           context,
         );
@@ -1539,7 +1541,10 @@ export class Channels {
           await pause(Math.min(BETWEEN_MESSAGES_MS, 200 + part.length * 8), this.abort.signal);
         }
 
-        const outcome = await adapter.send({ chatId: delivery.chatId, text: part }, context);
+        const outcome = await adapter.send(
+          { chatId: delivery.chatId, text: part, people },
+          context,
+        );
 
         remoteMessageIds.push(...outcome.remoteMessageIds);
 
@@ -1557,6 +1562,30 @@ export class Channels {
       // An unexpected adapter failure may happen after a remote write. Never retry it blindly.
       return { status: attemptedSend ? 'unknown' : 'failed', remoteMessageIds: [] };
     }
+  }
+
+  /**
+   * Everyone known to have written in the group a delivery goes to, by the name they write
+   * under: what lets the channel turn the agent's `@Name` into a real mention. A direct chat
+   * has nobody to mention.
+   */
+  private async groupPeople(delivery: DeliveryRecord) {
+    const db = this.services.store.db;
+    // A room is its own actor, so the group's contact is found by the chat twice.
+    const group = await findContactByIdentity(
+      db,
+      delivery.channelId,
+      delivery.chatId,
+      delivery.chatId,
+    );
+
+    if (group?.scope !== 'group' || !group.sessionId) return [];
+
+    const people = await sessionPeople(db, delivery.profileId, group.sessionId);
+
+    return people.flatMap((person) =>
+      person.displayName ? [{ id: person.actorId, name: person.displayName }] : [],
+    );
   }
 
   private async recoverUncertainDeliveries(): Promise<void> {
