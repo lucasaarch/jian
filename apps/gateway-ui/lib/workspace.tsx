@@ -54,6 +54,16 @@ type Workspace = {
 
 const WorkspaceContext = createContext<Workspace | undefined>(undefined);
 
+const quiet = () => () => {};
+
+/**
+ * The gateway's event stream, for a view that follows it when it is there and still works when
+ * it is not: rendered alone, as in a story, it simply does not hear anything.
+ */
+export function useEvents(): Workspace['subscribe'] {
+  return useContext(WorkspaceContext)?.subscribe ?? quiet;
+}
+
 /** Every page reads the open profile from here; none of them loads it again. */
 export function useWorkspace(): Workspace {
   const workspace = useContext(WorkspaceContext);

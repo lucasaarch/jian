@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import type { GatewayApi, Profile, ProfileData, ProfileStats } from '../../lib/api';
 import { LOCALE } from '../../lib/format';
-import { useWorkspace } from '../../lib/workspace';
+import { useEvents } from '../../lib/workspace';
 import { Avatar } from '../profile/avatar-field';
 import { CountUp, SectionHeading } from '../ui';
 import { Select } from '../ui/select';
@@ -19,7 +19,7 @@ import { ChannelCards, ModelCards, periods, Tile, ToolBars, UsageSummary } from 
  * events arrive together.
  */
 function useStats(api: GatewayApi, profileId: string, days: number) {
-  const { subscribe } = useWorkspace();
+  const subscribe = useEvents();
   const [stats, setStats] = useState<ProfileStats>();
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
