@@ -226,7 +226,7 @@ export const profileSchema = z.strictObject({
     .array(skillNameSchema)
     .max(20)
     .default([...OPT_IN_SKILLS]),
-  mcpServers: z.array(mcpSchema).max(10).default([]),
+  mcpServers: z.array(mcpSchema).default([]),
   allowSelfManagement: z.boolean().default(false),
   /**
    * Reading files, writing files and running commands on the machine the gateway runs on,
@@ -259,7 +259,7 @@ export const profilePatchSchema = profileSchema.partial().extend({
   contextPolicy: contextPolicySchema.optional(),
   skills: z.array(skillSchema).max(20).optional(),
   disabledSkills: z.array(skillNameSchema).max(20).optional(),
-  mcpServers: z.array(mcpSchema).max(10).optional(),
+  mcpServers: z.array(mcpSchema).optional(),
   allowSelfManagement: z.boolean().optional(),
   allowShell: z.boolean().optional(),
   allowWebSearch: z.boolean().optional(),
@@ -328,6 +328,23 @@ export const memoryEditSchema = z.strictObject({
 export type McpStatus = z.infer<typeof mcpStatusSchema>;
 export type Skill = z.infer<typeof skillSchema>;
 export type McpServer = z.infer<typeof mcpSchema>;
+/**
+ * Copies servers from another profile: each becomes this profile's own, with its own copy of
+ * the typed values, and changing one never changes the other. Absent `servers` copies them all.
+ */
+export const mcpImportSchema = z.strictObject({
+  fromProfileId: z.uuid(),
+  servers: z.array(z.string().regex(/^[a-z0-9_]{1,30}$/)).optional(),
+});
+
+export const mcpImportResultSchema = z.strictObject({
+  imported: z.array(z.string()),
+  // A server this profile already has under that name is left as it is.
+  skipped: z.array(z.strictObject({ name: z.string(), reason: z.string() })),
+  // A sign-in belongs to the profile that made it; these servers need one here too.
+  signIn: z.array(z.string()),
+});
+
 export type McpValue = z.infer<typeof mcpValueSchema>;
 export type Identity = z.infer<typeof identitySchema>;
 export type ContextPolicy = z.infer<typeof contextPolicySchema>;

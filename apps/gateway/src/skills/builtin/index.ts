@@ -14,6 +14,7 @@ import { memoryKeeping } from './memory-keeping.js';
 import { ownerAndContacts } from './owner-and-contacts.js';
 import { schedules } from './schedules.js';
 import { skillCreator } from './skill-creator.js';
+import { stickers } from './stickers.js';
 import { discernmentNudge } from './vendored/discernment-nudge.js';
 import { webResearch } from './web-research.js';
 import { workingWithAgents } from './working-with-agents.js';
@@ -33,6 +34,7 @@ const ALWAYS: readonly Skill[] = [
   schedules,
   skillCreator,
   media,
+  stickers,
   workingWithAgents,
   longRunningWork,
   managingContext,

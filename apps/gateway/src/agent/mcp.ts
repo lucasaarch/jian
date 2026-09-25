@@ -141,6 +141,9 @@ const brief = (entry: McpEntry) => ({
   ...(entry.description ? { description: entry.description.slice(0, 300) } : {}),
 });
 
+/** How long one server has to connect and list its tools before the turn goes on without it. */
+const MCP_CONNECT_MS = 20_000;
+
 /** Discover what each server offers now; expose a full schema only when the agent selects it. */
 export async function connectMcpTools(run: Run, tools: ToolSet, context: McpContext) {
   const mcpToolNames: string[] = [];
@@ -148,50 +151,67 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
   const selectedMcpTools = new Set<string>();
   const unavailable: Array<{ name: string; reason: string }> = [];
 
-  for (const config of run.profile.mcpServers) {
-    // A server whose token expired must not take the run with it: the agent keeps its other
-    // tools, and is told which server it cannot reach so it can say so instead of failing.
-    try {
-      const client = await connectMcp({
-        profileId: run.profileId,
-        server: config,
-        vault: context.vault as SecretReader,
-        fetcher: context.fetcher,
-        signal: context.signal,
-        ...(config.auth === 'oauth'
-          ? { authProvider: context.oauth?.(run.profileId, config.name) }
-          : {}),
-      });
-
-      context.clients.push(client);
-
-      // Everything the server offers. A long catalog costs nothing per turn: only the tools the
-      // agent has loaded are sent with a request, so a server with a hundred of them is no
-      // heavier than one with three until they are used.
-      const disabled = new Set(config.disabledTools ?? []);
-
-      for (const [name, remote] of Object.entries(await client.tools())) {
-        // Switched off by the owner: not callable, and not even findable, so the agent never
-        // plans around a tool it would be refused.
-        if (disabled.has(name)) continue;
-
-        const exposed = exposedName(config.name, name);
-
-        tools[exposed] = remote;
-        mcpToolNames.push(exposed);
-        catalog.push({
-          name: exposed,
-          server: config.name,
-          tool: name,
-          description:
-            typeof remote.description === 'string'
-              ? remote.description.replace(/\s+/g, ' ').trim()
-              : '',
+  // All at once, each on its own clock: a turn waits for the slowest server, not for the sum
+  // of them, and one that hangs is given up on without holding the others.
+  const reached = await Promise.all(
+    run.profile.mcpServers.map(async (config) => {
+      // A server whose token expired must not take the run with it: the agent keeps its other
+      // tools, and is told which server it cannot reach so it can say so instead of failing.
+      try {
+        const client = await connectMcp({
+          profileId: run.profileId,
+          server: config,
+          vault: context.vault as SecretReader,
+          fetcher: context.fetcher,
+          signal: AbortSignal.any([context.signal, AbortSignal.timeout(MCP_CONNECT_MS)]),
+          ...(config.auth === 'oauth'
+            ? { authProvider: context.oauth?.(run.profileId, config.name) }
+            : {}),
         });
+
+        context.clients.push(client);
+
+        return { config, offered: await client.tools(), failure: undefined };
+      } catch (error) {
+        context.signal.throwIfAborted();
+
+        return { config, offered: undefined, failure: connectionFailure(error) };
       }
-    } catch (error) {
-      context.signal.throwIfAborted();
-      unavailable.push({ name: config.name, reason: connectionFailure(error) });
+    }),
+  );
+
+  // Merged in the owner's order, so the catalog reads the same whichever server answered first.
+  for (const result of reached) {
+    const { config } = result;
+
+    if (!result.offered) {
+      unavailable.push({ name: config.name, reason: result.failure ?? 'unreachable' });
+      continue;
+    }
+
+    // Everything the server offers. A long catalog costs nothing per turn: only the tools the
+    // agent has loaded are sent with a request, so a server with a hundred of them is no
+    // heavier than one with three until they are used.
+    const disabled = new Set(config.disabledTools ?? []);
+
+    for (const [name, remote] of Object.entries(result.offered)) {
+      // Switched off by the owner: not callable, and not even findable, so the agent never
+      // plans around a tool it would be refused.
+      if (disabled.has(name)) continue;
+
+      const exposed = exposedName(config.name, name);
+
+      tools[exposed] = remote;
+      mcpToolNames.push(exposed);
+      catalog.push({
+        name: exposed,
+        server: config.name,
+        tool: name,
+        description:
+          typeof remote.description === 'string'
+            ? remote.description.replace(/\s+/g, ' ').trim()
+            : '',
+      });
     }
   }
 

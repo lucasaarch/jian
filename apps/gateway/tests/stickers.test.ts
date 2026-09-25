@@ -18,15 +18,21 @@ async function collection() {
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
   });
   const described: string[] = [];
-  const descriptions: Record<string, string> = {
-    [webp('laugh')]: 'A tree stump laughing so hard it cries',
-    [webp('thumbs')]: 'A cat giving a thumbs up, approving',
+  const descriptions: Record<string, { description: string; tags: string[] }> = {
+    [webp('laugh')]: {
+      description: 'A tree stump laughing so hard it cries',
+      tags: ['laughing', 'funny', 'tree'],
+    },
+    [webp('thumbs')]: {
+      description: 'A cat giving a thumbs up',
+      tags: ['approval', 'ok', 'cat'],
+    },
   };
   const stickers = new Stickers(services.store, {
     describeSticker: async (_profileId, data) => {
       described.push(data);
 
-      return descriptions[data] ?? '';
+      return descriptions[data] ?? { description: '', tags: [] };
     },
     sendSticker: (run, data, toolCallId) => services.media.sendSticker(run, data, toolCallId),
   });
@@ -36,24 +42,15 @@ async function collection() {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
-it('keeps each sticker once, describes it once, and finds it by what it shows', async () => {
+it('keeps each sticker once, counts it each time, and finds it by tag, meaning or popularity', async () => {
   const f = await collection();
+  const keep = (tag: string) =>
+    f.stickers.keep(f.profile.id, { mimeType: 'image/webp', data: webp(tag), sticker: true });
 
-  await f.stickers.keep(f.profile.id, {
-    mimeType: 'image/webp',
-    data: webp('laugh'),
-    sticker: true,
-  });
-  await f.stickers.keep(f.profile.id, {
-    mimeType: 'image/webp',
-    data: webp('laugh'),
-    sticker: true,
-  });
-  await f.stickers.keep(f.profile.id, {
-    mimeType: 'image/webp',
-    data: webp('thumbs'),
-    sticker: true,
-  });
+  await keep('laugh');
+  await keep('laugh');
+  await keep('laugh');
+  await keep('thumbs');
   // A photo is not a sticker, whatever flag it carries.
   await f.stickers.keep(f.profile.id, {
     mimeType: 'image/png',
@@ -62,14 +59,28 @@ it('keeps each sticker once, describes it once, and finds it by what it shows', 
   });
   await settle();
 
-  expect(await f.stickers.list(f.profile.id)).toHaveLength(2);
+  const kept = await f.stickers.list(f.profile.id);
+
+  expect(kept).toHaveLength(2);
   expect(f.described).toHaveLength(2);
+  expect(kept.find((sticker) => sticker.tags.includes('funny'))?.seen).toBe(3);
 
-  const [best] = await f.stickers.search(f.profile.id, 'something laughing');
+  const [byMeaning] = await f.stickers.search(f.profile.id, { query: 'something laughing' });
+  const [byTag] = await f.stickers.search(f.profile.id, { tag: 'ok' });
+  const [popular] = await f.stickers.search(f.profile.id, { order: 'most_seen' });
 
-  expect(best?.shows).toBe('A tree stump laughing so hard it cries');
+  expect(byMeaning?.shows).toBe('A tree stump laughing so hard it cries');
+  expect(byTag?.tags).toEqual(['approval', 'ok', 'cat']);
+  expect(popular?.seen).toBe(3);
+  expect(await f.stickers.search(f.profile.id, { query: 'crying baby' })).toEqual([]);
 
-  const removed = await f.stickers.forget(f.profile.id, best?.id as string);
+  const retagged = await f.stickers.tag(f.profile.id, byTag?.id as string, {
+    tags: ['Deal', 'done here'],
+  });
+
+  expect(retagged.tags).toEqual(['deal', 'done here']);
+
+  const removed = await f.stickers.forget(f.profile.id, byMeaning?.id as string);
 
   expect(removed.description).toContain('laughing');
   expect(await f.stickers.list(f.profile.id)).toHaveLength(1);
@@ -174,4 +185,16 @@ it('reads a sticker as one on WhatsApp and Telegram, and sends it back as one', 
   );
 
   expect(called.at(-1)).toBe('sendSticker');
+});
+
+it('reads the model catalogue entry, fenced, bare or as prose', async () => {
+  const { readSticker } = await import('../src/media/service.js');
+
+  expect(
+    readSticker('```json\n{"description":"A dog shrugging","tags":["Shrug","unsure","dog!"]}\n```'),
+  ).toEqual({ description: 'A dog shrugging', tags: ['shrug', 'unsure'] });
+  expect(readSticker('A dog shrugging, unsure')).toEqual({
+    description: 'A dog shrugging, unsure',
+    tags: [],
+  });
 });

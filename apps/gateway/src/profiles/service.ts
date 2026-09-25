@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { type McpServer, type Profile, profilePatchSchema, profileSchema } from '@jian/contracts';
+import {
+  type McpServer,
+  mcpImportSchema,
+  type Profile,
+  profilePatchSchema,
+  profileSchema,
+} from '@jian/contracts';
 import { and, eq, isNull } from 'drizzle-orm';
 import { mcpValueSecret } from '../agent/mcp-connect.js';
 import { type Clock, nowIso } from '../core/clock.js';
@@ -218,6 +224,78 @@ export class Profiles {
     if (!live) {
       throw new GatewayError(400, 'Provider reference is not configured on this gateway');
     }
+  }
+
+  /**
+   * Copies MCP servers from another profile into this one, each as this profile's own: the
+   * definition, and a copy of every value typed for it, so the two are configured once and then
+   * live apart. A sign-in is not copied: it belongs to the profile that made it, and one refresh
+   * token shared by two would be spent by whichever refreshed first.
+   */
+  async importMcpServers(profileId: string, input: unknown) {
+    const { fromProfileId, servers: names } = mcpImportSchema.parse(input);
+
+    if (fromProfileId === profileId) {
+      throw new GatewayError(400, 'Choose another profile to import from');
+    }
+
+    const source = await this.profile(fromProfileId);
+    const target = await this.profile(profileId);
+    const chosen = source.mcpServers.filter((server) => !names || names.includes(server.name));
+    const skipped: Array<{ name: string; reason: string }> = [];
+    const added: McpServer[] = [];
+
+    for (const server of chosen) {
+      if (target.mcpServers.some((item) => item.name === server.name)) {
+        skipped.push({
+          name: server.name,
+          reason: 'This profile already has a server with this name',
+        });
+        continue;
+      }
+
+      const copy = async (kind: 'header' | 'env', list: McpServer['headers']) =>
+        Promise.all(
+          list.map(async (value) => {
+            if (value.fromEnv) return value;
+
+            const secret = await this.vault.read(
+              fromProfileId,
+              mcpValueSecret(server.name, kind, value.name),
+            );
+
+            return { name: value.name, ...(secret ? { value: secret } : {}) };
+          }),
+        );
+
+      added.push({
+        ...server,
+        headers: await copy('header', server.headers),
+        env: await copy('env', server.env),
+      });
+    }
+
+    if (added.length) {
+      // A value not typed here is kept as stored by the update, which is how the servers this
+      // profile already has keep their credentials while the new ones bring theirs.
+      await this.updateProfile(profileId, {
+        expectedVersion: target.version,
+        mcpServers: [...target.mcpServers, ...added],
+      });
+
+      // A single bearer token from before headers existed lives at the server's own address.
+      for (const server of added) {
+        const legacy = await this.vault.read(fromProfileId, mcpSecret(server.name));
+
+        if (legacy) await this.vault.put(profileId, mcpSecret(server.name), legacy);
+      }
+    }
+
+    return {
+      imported: added.map((server) => server.name),
+      skipped,
+      signIn: added.filter((server) => server.auth === 'oauth').map((server) => server.name),
+    };
   }
 
   async updateProfile(id: string, input: unknown) {

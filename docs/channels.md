@@ -169,7 +169,9 @@ A Telegram bot and a paired WhatsApp account show their profile's picture. The w
 
 ### Stickers
 
-WhatsApp does not give a paired account's saved stickers to anything outside the app, so each agent builds its own collection: every still sticker sent in a conversation the owner approved is kept once per profile and described in a few words by the image-analysis model. The agent finds them with `find_stickers` and sends one with `send_sticker`, as a sticker on WhatsApp and Telegram. A profile keeps up to 200; past that, the least sent and oldest one makes room. The owner sees them under **Stickers**, and a removed sticker is never sent again unless someone sends it anew. Animated Telegram stickers are not kept.
+WhatsApp does not give a paired account's saved stickers to anything outside the app, so each agent builds its own collection: every still sticker sent in a conversation the owner approved is kept once per profile, and the image-analysis model describes it and gives it three to six tags — the feeling, the reaction, the subject. Each time someone sends it again it is counted, and each time the agent sends it, that is counted too.
+
+The agent searches with `find_stickers` by meaning, by exact tag, or by what it or the people it talks to send most; it sends one with `send_sticker`, as a sticker on WhatsApp and Telegram, and corrects tags with `tag_sticker`. The built-in `stickers` skill teaches when one fits. A profile keeps up to 200; past that, the least sent, least seen and oldest one makes room. The owner sees them under **Stickers**, where tags can be edited and a sticker removed; a removed sticker is never sent again unless someone sends it anew. Animated Telegram stickers are not kept.
 
 ### Incoming audio without a paid plan
 

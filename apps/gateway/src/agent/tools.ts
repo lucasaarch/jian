@@ -417,6 +417,7 @@ export const TOOL_GROUPS = {
       'generate_speech',
       'find_stickers',
       'send_sticker',
+      'tag_sticker',
     ],
   },
   files: {

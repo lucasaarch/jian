@@ -27,9 +27,12 @@ import {
   mediaRecordSchema,
   stickerImageSchema,
   stickerSchema,
+  stickerTagsSchema,
 } from './media.js';
 import {
   builtinSkillSchema,
+  mcpImportResultSchema,
+  mcpImportSchema,
   mcpStatusSchema,
   memoryEditSchema,
   memoryKeySchema,
@@ -57,11 +60,13 @@ import {
   messageRecordSchema,
   personSchema,
   profileRecordSchema,
+  profileStatsSchema,
   revisionRecordSchema,
   runRecordSchema,
   runTimelineSchema,
   sessionRecordSchema,
   sessionSummarySchema,
+  statsQuerySchema,
 } from './records.js';
 import { releasesSchema } from './releases.js';
 import {
@@ -445,6 +450,14 @@ export const operations: Operation[] = [
     response: panelSessionEndSchema,
   },
   {
+    method: 'POST',
+    path: `${profile}/mcp-servers/import`,
+    operationId: 'importMcpServers',
+    access: 'admin',
+    body: mcpImportSchema,
+    response: mcpImportResultSchema,
+  },
+  {
     // A check the owner asks for, so it runs the connection now instead of reading a cache.
     method: 'POST',
     path: `${profile}/mcp-servers/:name/check`,
@@ -743,6 +756,14 @@ export const operations: Operation[] = [
   },
   {
     method: 'GET',
+    path: `${profile}/stats`,
+    operationId: 'getProfileStats',
+    access: 'admin',
+    query: statsQuerySchema,
+    response: profileStatsSchema,
+  },
+  {
+    method: 'GET',
     path: `${profile}/stickers`,
     operationId: 'listStickers',
     access: 'admin',
@@ -755,6 +776,15 @@ export const operations: Operation[] = [
     access: 'admin',
     params: z.strictObject({ profileId: z.uuid(), stickerId: z.uuid() }),
     response: stickerImageSchema,
+  },
+  {
+    method: 'PUT',
+    path: `${profile}/stickers/:stickerId/tags`,
+    operationId: 'tagSticker',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), stickerId: z.uuid() }),
+    body: stickerTagsSchema,
+    response: stickerSchema,
   },
   {
     method: 'DELETE',

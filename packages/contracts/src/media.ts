@@ -135,13 +135,25 @@ export const mediaContentSchema = mediaRecordSchema.extend({ data: z.string() })
 export type InlineMedia = z.infer<typeof inlineMediaSchema>;
 export type MediaRecord = z.infer<typeof mediaRecordSchema>;
 
+/** A word to find a sticker by: lowercase, a feeling, a reaction or what it shows. */
+export const stickerTagSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[\p{L}\p{N}][\p{L}\p{N} -]{0,30}$/u);
+
+export const stickerTagsSchema = z.strictObject({ tags: z.array(stickerTagSchema).max(12) });
+
 /** A sticker the agent has seen and may send: what it shows, and how often it was sent. */
 export const stickerSchema = z.strictObject({
   id: z.uuid(),
   profileId: z.uuid(),
   // Written by the image-analysis model when the sticker is first kept; absent until then.
   description: z.string().optional(),
+  tags: z.array(stickerTagSchema).max(12),
+  // How often the agent sent it, and how often people in its chats did.
   uses: z.number().int().nonnegative(),
+  seen: z.number().int().nonnegative(),
   createdAt: z.iso.datetime(),
   lastUsedAt: z.iso.datetime().optional(),
 });

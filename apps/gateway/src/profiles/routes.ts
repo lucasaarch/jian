@@ -8,7 +8,7 @@ import type { ProfileAdmin } from './port.js';
 import type { Profiles } from './service.js';
 
 type ProfileRouteServices = {
-  profiles: ProfileAdmin & Pick<Profiles, 'revisions'>;
+  profiles: ProfileAdmin & Pick<Profiles, 'revisions' | 'importMcpServers'>;
   vault: Vault;
   /** Absent in a gateway with no public address configured; OAuth servers then cannot sign in. */
   mcpLogins?: McpLogins;
@@ -49,6 +49,11 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteSe
 
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/revisions', async (request) =>
     deps.profiles.revisions(request.params.profileId),
+  );
+
+  app.post<{ Params: ProfileParams }>(
+    '/v1/profiles/:profileId/mcp-servers/import',
+    async (request) => deps.profiles.importMcpServers(request.params.profileId, request.body),
   );
 
   app.post<{ Params: ProfileParams & { name: string } }>(

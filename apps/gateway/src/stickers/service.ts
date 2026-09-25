@@ -1,39 +1,61 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { type InlineMedia, type Run, type Sticker, stickerSchema } from '@jian/contracts';
+import {
+  type InlineMedia,
+  type Run,
+  type Sticker,
+  stickerSchema,
+  stickerTagSchema,
+  stickerTagsSchema,
+} from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
 import type { Store } from '../storage/database.js';
 import { stickers } from '../storage/schema.js';
 
-/** How many a profile keeps. Past it, the least sent and oldest one makes room. */
+/** How many a profile keeps. Past it, the least sent, least seen and oldest one makes room. */
 const MAX_STICKERS = 200;
 /** What one search offers the agent to choose from. */
 const OFFERED = 20;
 
 type StickerMedia = {
-  describeSticker(profileId: string, data: string, signal: AbortSignal): Promise<string>;
+  describeSticker(
+    profileId: string,
+    data: string,
+    signal: AbortSignal,
+  ): Promise<{ description: string; tags: string[] }>;
   sendSticker(run: Run, data: string, toolCallId: string): Promise<unknown>;
 };
 
 type Row = typeof stickers.$inferSelect;
+
+export type StickerOrder = 'relevance' | 'most_sent' | 'most_seen' | 'newest';
 
 const toSticker = (row: Row): Sticker =>
   stickerSchema.parse({
     id: row.id,
     profileId: row.profileId,
     ...(row.description ? { description: row.description } : {}),
+    tags: row.tags,
     uses: row.uses,
+    seen: row.seen,
     createdAt: row.createdAt.toISOString(),
     ...(row.lastUsedAt ? { lastUsedAt: row.lastUsedAt.toISOString() } : {}),
   });
 
+const orders: Record<Exclude<StickerOrder, 'relevance'>, SQL[]> = {
+  most_sent: [desc(stickers.uses), desc(stickers.seen), desc(stickers.createdAt)],
+  most_seen: [desc(stickers.seen), desc(stickers.uses), desc(stickers.createdAt)],
+  newest: [desc(stickers.createdAt)],
+};
+
 /**
  * The agent's own sticker collection, gathered from the chats it is in. WhatsApp does not give a
  * paired account's saved stickers to anything outside the app, so the collection is what people
- * sent: each image kept once, described once by the image-analysis model, and found again by
- * what it shows. The owner sees it under Stickers and removes what the agent should not use.
+ * sent: each image kept once, described and tagged once by the image-analysis model, counted
+ * each time someone sends it again, and found by what it shows. The owner sees it under
+ * Stickers and removes what the agent should not use.
  */
 export class Stickers {
   constructor(
@@ -41,7 +63,7 @@ export class Stickers {
     private readonly media: StickerMedia,
   ) {}
 
-  /** Keeps a received sticker; a new one is described in the background, never in the way. */
+  /** Keeps a received sticker, or counts it again; a new one is catalogued in the background. */
   async keep(profileId: string, input: InlineMedia): Promise<void> {
     if (input.mimeType !== 'image/webp') return;
 
@@ -49,10 +71,17 @@ export class Stickers {
     const [kept] = await this.store.db
       .insert(stickers)
       .values({ id: randomUUID(), profileId, hash, data: input.data })
-      .onConflictDoNothing()
-      .returning({ id: stickers.id });
+      .onConflictDoUpdate({
+        target: [stickers.profileId, stickers.hash],
+        set: { seen: sql`${stickers.seen} + 1` },
+      })
+      .returning({ id: stickers.id, seen: stickers.seen, described: stickers.description });
 
-    if (!kept) return;
+    if (!kept || kept.seen > 1) {
+      // Seen before, but never described — the model was down, say: this is another chance.
+      if (kept && !kept.described) void this.describe(profileId, kept.id, input.data);
+      return;
+    }
 
     await this.trim(profileId);
     void this.describe(profileId, kept.id, input.data);
@@ -60,16 +89,16 @@ export class Stickers {
 
   private async describe(profileId: string, id: string, data: string) {
     try {
-      const description = await this.media.describeSticker(
+      const { description, tags } = await this.media.describeSticker(
         profileId,
         data,
         AbortSignal.timeout(60_000),
       );
 
-      if (description)
+      if (description || tags.length)
         await this.store.db
           .update(stickers)
-          .set({ description })
+          .set({ ...(description ? { description } : {}), tags })
           .where(and(eq(stickers.profileId, profileId), eq(stickers.id, id)));
     } catch (error) {
       // Without a description it is still kept, and still offered when nothing matches better.
@@ -84,7 +113,7 @@ export class Stickers {
       .select({ id: stickers.id })
       .from(stickers)
       .where(eq(stickers.profileId, profileId))
-      .orderBy(desc(stickers.uses), desc(stickers.createdAt))
+      .orderBy(...orders.most_sent)
       .offset(MAX_STICKERS);
 
     for (const { id } of extra)
@@ -98,7 +127,7 @@ export class Stickers {
       .select()
       .from(stickers)
       .where(eq(stickers.profileId, profileId))
-      .orderBy(desc(stickers.uses), desc(stickers.createdAt))
+      .orderBy(...orders.most_sent)
       .limit(MAX_STICKERS);
 
     return rows.map(toSticker);
@@ -122,6 +151,21 @@ export class Stickers {
     return { ...toSticker(row), mimeType: 'image/webp' as const, data: row.data };
   }
 
+  /** Replaces a sticker's tags: the owner's correction, or the agent's. */
+  async tag(profileId: string, id: string, input: unknown): Promise<Sticker> {
+    const { tags } = stickerTagsSchema.parse(input);
+
+    await this.row(profileId, id);
+
+    const [row] = await this.store.db
+      .update(stickers)
+      .set({ tags: [...new Set(tags)] })
+      .where(and(eq(stickers.profileId, profileId), eq(stickers.id, id)))
+      .returning();
+
+    return toSticker(row as Row);
+  }
+
   async forget(profileId: string, id: string): Promise<Sticker> {
     const row = await this.row(profileId, id);
 
@@ -132,32 +176,60 @@ export class Stickers {
     return toSticker(row);
   }
 
-  /** The stickers whose description shares a word with the query, best matched and most sent first. */
-  async search(profileId: string, query?: string) {
-    const words = [...new Set((query ?? '').toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])].slice(
-      0,
-      8,
-    );
+  /**
+   * Stickers by what they are. A tag is an exact match and narrows; the words of a query are
+   * matched against the tags and the description, a tag counting twice. Without a query the
+   * order asked for decides, most sent by default.
+   */
+  async search(
+    profileId: string,
+    options: { query?: string | undefined; tag?: string | undefined; order?: StickerOrder },
+  ) {
+    const words = [
+      ...new Set((options.query ?? '').toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []),
+    ].slice(0, 8);
+    const tag = options.tag?.trim().toLowerCase();
     const score = words.length
       ? sql<number>`(${sql.join(
           words.map(
             (word) =>
-              sql`(case when lower(coalesce(${stickers.description}, '')) like ${`%${word}%`} then 1 else 0 end)`,
+              sql`(case when ${stickers.tags}::text ilike ${`%${word}%`} then 2 else 0 end) + (case when lower(coalesce(${stickers.description}, '')) like ${`%${word}%`} then 1 else 0 end)`,
           ),
           sql` + `,
         )})`
       : sql<number>`0`;
+    const order = options.order && options.order !== 'relevance' ? options.order : undefined;
     const rows = await this.store.db
-      .select({ id: stickers.id, description: stickers.description, uses: stickers.uses, score })
+      .select({
+        id: stickers.id,
+        description: stickers.description,
+        tags: stickers.tags,
+        uses: stickers.uses,
+        seen: stickers.seen,
+        score,
+      })
       .from(stickers)
-      .where(eq(stickers.profileId, profileId))
-      .orderBy(desc(score), desc(stickers.uses), asc(stickers.createdAt))
+      .where(
+        and(
+          eq(stickers.profileId, profileId),
+          tag ? sql`${stickers.tags} @> ${JSON.stringify([tag])}::jsonb` : undefined,
+          words.length ? sql`${score} > 0` : undefined,
+        ),
+      )
+      // A literal 0 in ORDER BY reads as a column position, so no query means no score to sort.
+      .orderBy(
+        ...(order || !words.length
+          ? orders[order ?? 'most_sent']
+          : [desc(score), ...orders.most_sent]),
+      )
       .limit(OFFERED);
 
-    return rows.map(({ id, description, uses }) => ({
+    return rows.map(({ id, description, tags, uses, seen }) => ({
       id,
       shows: description ?? 'not described yet',
+      tags,
       sent: uses,
+      seen,
     }));
   }
 
@@ -165,14 +237,27 @@ export class Stickers {
     return {
       find_stickers: tool({
         description:
-          'Find stickers in your collection, gathered from the stickers people sent you, by what they show or the reaction they carry ("laughing", "thumbs up", "facepalm"). Returns ids with a short description.',
-        inputSchema: z.object({ query: z.string().max(200).optional() }),
-        execute: async ({ query }) => {
-          const found = await this.search(run.profileId, query);
+          'Find stickers in your collection, gathered from what people sent in your chats. Search by meaning ("laughing", "approving"), by an exact tag, or list the ones you send most or the ones people send most. Returns ids, what each shows, its tags, how often you sent it and how often people did.',
+        inputSchema: z.object({
+          query: z.string().max(200).optional(),
+          tag: stickerTagSchema.optional(),
+          order: z
+            .enum(['relevance', 'most_sent', 'most_seen', 'newest'])
+            .default('relevance')
+            .describe('most_seen: what the people you talk to send most, their style.'),
+        }),
+        execute: async ({ query, tag, order }) => {
+          const found = await this.search(run.profileId, { query, tag, order });
 
           return found.length
             ? { stickers: found }
-            : { stickers: [], note: 'No stickers yet: they are kept as people send them.' };
+            : {
+                stickers: [],
+                note:
+                  query || tag
+                    ? 'Nothing matches.'
+                    : 'No stickers yet: they are kept as people send them.',
+              };
         },
       }),
       send_sticker: tool({
@@ -189,6 +274,19 @@ export class Stickers {
             .where(and(eq(stickers.profileId, run.profileId), eq(stickers.id, stickerId)));
 
           return sent;
+        },
+      }),
+      tag_sticker: tool({
+        description:
+          'Replace the tags of a sticker in your collection, when its tags miss how it is really used — "that one means we are done here". Tags are short lowercase words: the feeling, the reaction, the subject.',
+        inputSchema: z.object({
+          stickerId: z.uuid(),
+          tags: z.array(stickerTagSchema).min(1).max(12),
+        }),
+        execute: async ({ stickerId, tags }) => {
+          const tagged = await this.tag(run.profileId, stickerId, { tags });
+
+          return { stickerId, tags: tagged.tags };
         },
       }),
     };
