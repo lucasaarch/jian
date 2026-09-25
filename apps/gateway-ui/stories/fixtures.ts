@@ -583,18 +583,77 @@ export const activityCalendar: ActivityDay[] = Array.from({ length: 365 }, (_, i
   return { day: day.toISOString().slice(0, 10), runs, tokens: runs * 14_000 };
 });
 
+const latestRelease = {
+  version: '2.2.0',
+  date: '2026-09-24',
+  summary: 'Agents search the web, and the panel says what changed after an update.',
+  body: '## Web search\n\nAdd a Tavily key under **Providers** and switch on **Allow web search** on a profile.\n\n- `web_search` finds pages\n- `fetch_url` reads one as text\n\n## Releases\n\nThis dialog opens once after each update.',
+  prerelease: false,
+};
+
+/** What the gateway answers on a stable version: its own history, candidates left out. */
 export const releases = {
   version: '2.2.0',
-  notes: [] as unknown[],
-  unseen: [
+  notes: [
+    latestRelease,
     {
-      version: '2.2.0',
-      date: '2026-09-24',
-      summary: 'Agents search the web, and the panel says what changed after an update.',
-      body: '## Web search\n\nAdd a Tavily key under **Providers** and switch on **Allow web search** on a profile.\n\n- `web_search` finds pages\n- `fetch_url` reads one as text\n\n## Releases\n\nThis dialog opens once after each update.',
+      version: '2.1.0',
+      date: '2026-09-23',
+      summary: 'Precise code edits, and every channel conversation within reach.',
+      body: '### Features\n\n* **agent:** edit code precisely and reach every channel conversation\n* **web:** let an agent search the web and read public pages',
+      prerelease: false,
+    },
+    {
+      version: '2.0.0',
+      date: '2026-09-10',
+      summary: 'Profiles, channels and a panel to run them.',
+      body: '### Features\n\n* **agent:** reads what a reply answers and who sent it, on every channel\n* **panel:** each screen follows what the agent changes, without a reload\n* **channels:** a paired number shows the profile picture and follows every change to it\n\n### Bug Fixes\n\n* **groups:** a sticker sent as a reply reaches the agent instead of being taken for chatter\n* **mcp:** a slow server no longer holds the others at the start of a turn\n\n### Upgrading\n\nTwo migrations run on start. Nothing else to do.',
+      prerelease: false,
+    },
+    {
+      version: '1.4.0',
+      date: '2026-08-28',
+      summary: 'Memories linked together, and a calmer Overview.',
+      body: '### Features\n\n* **agent:** reads what a reply answers and who sent it, on every channel\n* **panel:** each screen follows what the agent changes, without a reload\n* **channels:** a paired number shows the profile picture and follows every change to it\n\n### Bug Fixes\n\n* **groups:** a sticker sent as a reply reaches the agent instead of being taken for chatter\n* **mcp:** a slow server no longer holds the others at the start of a turn\n\n### Upgrading\n\nTwo migrations run on start. Nothing else to do.',
+      prerelease: false,
+    },
+    {
+      version: '1.3.1',
+      date: '2026-08-19',
+      summary: 'A WhatsApp session that survives a restart.',
+      body: '### Features\n\n* **agent:** reads what a reply answers and who sent it, on every channel\n* **panel:** each screen follows what the agent changes, without a reload\n* **channels:** a paired number shows the profile picture and follows every change to it\n\n### Bug Fixes\n\n* **groups:** a sticker sent as a reply reaches the agent instead of being taken for chatter\n* **mcp:** a slow server no longer holds the others at the start of a turn\n\n### Upgrading\n\nTwo migrations run on start. Nothing else to do.',
+      prerelease: false,
+    },
+    {
+      version: '1.3.0',
+      date: '2026-08-12',
+      summary: 'Telegram groups, and an agent that knows who wrote what.',
+      body: '### Features\n\n* **agent:** reads what a reply answers and who sent it, on every channel\n* **panel:** each screen follows what the agent changes, without a reload\n* **channels:** a paired number shows the profile picture and follows every change to it\n\n### Bug Fixes\n\n* **groups:** a sticker sent as a reply reaches the agent instead of being taken for chatter\n* **mcp:** a slow server no longer holds the others at the start of a turn\n\n### Upgrading\n\nTwo migrations run on start. Nothing else to do.',
+      prerelease: false,
+    },
+    {
+      version: '1.2.0',
+      date: '2026-07-30',
+      summary: 'MCP servers over HTTP and by command.',
+      body: '### Features\n\n* **agent:** reads what a reply answers and who sent it, on every channel\n* **panel:** each screen follows what the agent changes, without a reload\n* **channels:** a paired number shows the profile picture and follows every change to it\n\n### Bug Fixes\n\n* **groups:** a sticker sent as a reply reaches the agent instead of being taken for chatter\n* **mcp:** a slow server no longer holds the others at the start of a turn\n\n### Upgrading\n\nTwo migrations run on start. Nothing else to do.',
+      prerelease: false,
+    },
+    {
+      version: '1.1.0',
+      date: '2026-07-15',
+      summary: 'Skills imported from GitHub.',
+      body: '### Features\n\n* **agent:** reads what a reply answers and who sent it, on every channel\n* **panel:** each screen follows what the agent changes, without a reload\n* **channels:** a paired number shows the profile picture and follows every change to it\n\n### Bug Fixes\n\n* **groups:** a sticker sent as a reply reaches the agent instead of being taken for chatter\n* **mcp:** a slow server no longer holds the others at the start of a turn\n\n### Upgrading\n\nTwo migrations run on start. Nothing else to do.',
+      prerelease: false,
+    },
+    {
+      version: '1.0.0',
+      date: '2026-07-01',
+      summary: 'The first release: one owner, many agents.',
+      body: '### Features\n\n* **agent:** reads what a reply answers and who sent it, on every channel\n* **panel:** each screen follows what the agent changes, without a reload\n* **channels:** a paired number shows the profile picture and follows every change to it\n\n### Bug Fixes\n\n* **groups:** a sticker sent as a reply reaches the agent instead of being taken for chatter\n* **mcp:** a slow server no longer holds the others at the start of a turn\n\n### Upgrading\n\nTwo migrations run on start. Nothing else to do.',
       prerelease: false,
     },
   ],
+  unseen: [latestRelease],
 };
 
 /** Three stickers the agent kept from its chats, as small WebP images. */

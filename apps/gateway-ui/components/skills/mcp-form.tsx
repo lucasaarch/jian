@@ -65,8 +65,22 @@ export function McpForm({
   });
 
   return (
-    <Modal title="MCP server" close={onClose}>
+    <Modal
+      title="MCP server"
+      close={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="mcp-form" busy={busy}>
+            Save server
+          </Button>
+        </>
+      }
+    >
       <form
+        id="mcp-form"
         method="post"
         action="/ui/"
         onSubmit={(event) => {
@@ -189,14 +203,6 @@ export function McpForm({
             {error}
           </p>
         )}
-        <footer>
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" busy={busy}>
-            Save server
-          </Button>
-        </footer>
       </form>
     </Modal>
   );

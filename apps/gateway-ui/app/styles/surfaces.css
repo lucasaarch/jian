@@ -19,7 +19,7 @@
   }
   /* Scrolls edge to edge, so the focus ring of a link is never clipped by it. */
   .sidebar-nav {
-    @apply -mx-5 min-h-0 flex-1 overflow-y-auto px-5 pb-4;
+    @apply -mx-5 min-h-0 flex-1 overflow-y-auto px-5 pb-4 pt-6;
   }
   .brand {
     @apply flex w-fit items-center gap-3 text-accent;
@@ -39,8 +39,9 @@
   .sidebar .brand {
     @apply mb-9 ml-2;
   }
+  /* Closes the sidebar's header with a rule edge to edge, as the footer opens with one. */
   .profile-selector {
-    @apply mb-7;
+    @apply -mx-5 border-b border-line px-5 pb-5;
   }
   .mini-avatar {
     @apply grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-sm bg-accent-soft text-xs font-semibold text-accent;
@@ -67,8 +68,9 @@
   .nav-group a small {
     @apply ml-auto font-mono text-[10px];
   }
+  /* The rule runs edge to edge, past the sidebar's own padding, so the footer reads apart. */
   .sidebar-footer {
-    @apply border-t border-line pt-5 text-xs text-muted;
+    @apply -mx-5 border-t border-line px-5 pt-5 text-xs text-muted;
   }
   .sidebar-footer > div {
     @apply flex items-center gap-2;
@@ -79,8 +81,15 @@
   .live-dot.offline {
     @apply bg-bad;
   }
-  .sidebar-footer button {
+  .sidebar-footer button,
+  .sidebar-github {
     @apply mt-3 flex items-center gap-2 py-1 hover:text-accent;
+  }
+  .sidebar-footer > .sidebar-github:first-child {
+    @apply mt-0;
+  }
+  .sidebar-stars {
+    @apply ml-auto flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] tabular-nums;
   }
   .workspace {
     @apply ml-60;
@@ -239,22 +248,20 @@
     @apply mt-2 text-sm;
   }
   .modal-body {
-    @apply min-h-0 flex-1 overflow-y-auto px-7 py-6;
+    @apply min-h-0 flex-1 overflow-y-auto overscroll-contain px-7 py-6;
   }
-  /* The footer ends the content, so the body leaves the bottom padding to it. */
-  .modal-body:has(footer) {
-    @apply pb-0;
+  /* An open dialog holds the page still: the wheel scrolls its content, or nothing. */
+  html:has(dialog[open]) {
+    @apply overflow-hidden;
+  }
+  /* Outside the scrolling body, so it never moves with the content. */
+  .modal-footer {
+    @apply flex shrink-0 justify-end gap-3 border-t border-line bg-canvas px-7 pb-6 pt-5;
   }
   /* A dialog that is only a question and its answers has no content: the actions sit right
-     under the header, without the content's padding or a second rule. */
-  .modal-body:has(> footer:first-child) {
-    @apply pt-0;
-  }
-  .modal-body > footer:first-child {
-    @apply mt-0 border-t-0;
-  }
-  .modal-body footer {
-    @apply sticky bottom-0 z-10 -mx-7 mt-4 flex justify-end gap-3 border-t border-line bg-canvas px-7 pb-6 pt-5;
+     under the header, without a second rule. */
+  .modal > header + .modal-footer {
+    @apply border-t-0;
   }
   .text-link {
     @apply text-accent underline-offset-2 hover:underline;

@@ -14,12 +14,18 @@ type Story = StoryObj<typeof meta>;
 
 export const Dialog: Story = {
   render: () => (
-    <Modal title="New profile" description="A name now; everything else can wait." close={fn()}>
+    <Modal
+      title="New profile"
+      description="A name now; everything else can wait."
+      close={fn()}
+      footer={
+        <>
+          <Button variant="secondary">Cancel</Button>
+          <Button>Create</Button>
+        </>
+      }
+    >
       <p>Anything a screen puts in a dialog goes here.</p>
-      <footer>
-        <Button variant="secondary">Cancel</Button>
-        <Button>Create</Button>
-      </footer>
     </Modal>
   ),
 };

@@ -1,11 +1,14 @@
 'use client';
 
-import { LogOut, Settings2, X } from 'lucide-react';
+import { LogOut, ScrollText, Star, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { gatewayApi } from '../../lib/api';
 import { currentSection, groupLabels, navigation } from '../../lib/navigation';
 import { useWorkspace } from '../../lib/workspace';
-import { Mark } from '../ui';
+import { useReleaseNotes } from '../releases/dialog';
+import { GitHubLogo, Mark } from '../ui';
 import { ProfileSwitcher } from './profile-switcher';
 
 export function Sidebar({
@@ -20,6 +23,7 @@ export function Sidebar({
   const pathname = usePathname();
   const active = currentSection(pathname);
   const { data, loading, signOut } = useWorkspace();
+  const releaseNotes = useReleaseNotes();
   // Requests waiting on the owner, shown wherever they are in the panel.
   const pending = data?.contacts.filter((contact) => contact.status === 'pending').length ?? 0;
 
@@ -41,7 +45,7 @@ export function Sidebar({
       </Link>
       <ProfileSwitcher onCreate={onCreateProfile} />
       <nav className="sidebar-nav" aria-label="Main navigation">
-        {(['workspace', 'capabilities'] as const).map((group) => (
+        {(['gateway', 'workspace', 'capabilities'] as const).map((group) => (
           <div className="nav-group" key={group}>
             <span className="nav-label">{groupLabels[group]}</span>
             {navigation
@@ -68,20 +72,61 @@ export function Sidebar({
         ))}
       </nav>
       <div className="sidebar-footer">
-        <Link
-          href="/settings/appearance"
-          className={`settings-link ${pathname.startsWith('/settings') ? 'active' : ''}`}
-          aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
-          onClick={onNavigate}
+        <GitHubLink />
+        <button
+          type="button"
+          onClick={() => {
+            onNavigate();
+            releaseNotes();
+          }}
         >
-          <Settings2 size={17} />
-          Settings
-        </Link>
+          <ScrollText size={16} />
+          Release notes
+        </button>
         <button type="button" onClick={() => void signOut()}>
           <LogOut size={16} />
           Sign out
         </button>
       </div>
     </aside>
+  );
+}
+
+const REPOSITORY = 'https://github.com/lucasaarch/jian';
+
+/** Stars in the way GitHub shows them: 1.2k past a thousand. */
+const starCount = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+
+/** Where Jian lives. The count comes through the gateway; the link works without it. */
+function GitHubLink() {
+  const [stars, setStars] = useState<number>();
+
+  useEffect(() => {
+    let active = true;
+
+    void gatewayApi()
+      .repository()
+      .then((repository) => {
+        if (active) setStars(repository.stars);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return (
+    <a className="sidebar-github" href={REPOSITORY} target="_blank" rel="noreferrer">
+      <GitHubLogo size={16} />
+      GitHub
+      {stars !== undefined && (
+        <span className="sidebar-stars">
+          <Star size={12} aria-hidden="true" />
+          {starCount.format(stars)}
+          <span className="sr-only"> stars</span>
+        </span>
+      )}
+    </a>
   );
 }

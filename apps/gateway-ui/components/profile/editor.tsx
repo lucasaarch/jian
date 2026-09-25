@@ -28,8 +28,24 @@ export function NewProfileDialog({
   const [error, setError] = useState('');
 
   return (
-    <Modal title="A new profile" description="One identity for every conversation." close={close}>
+    <Modal
+      title="A new profile"
+      description="One identity for every conversation."
+      close={close}
+      footer={
+        <>
+          <Button variant="secondary" onClick={close}>
+            Cancel
+          </Button>
+          <Button type="submit" form="new-profile-form" busy={busy}>
+            <Plus size={16} />
+            Create profile
+          </Button>
+        </>
+      }
+    >
       <form
+        id="new-profile-form"
         method="post"
         action="/ui/"
         onSubmit={async (event) => {
@@ -75,15 +91,6 @@ export function NewProfileDialog({
             {error}
           </p>
         )}
-        <footer>
-          <Button variant="secondary" onClick={close}>
-            Cancel
-          </Button>
-          <Button type="submit" busy={busy}>
-            <Plus size={16} />
-            Create profile
-          </Button>
-        </footer>
       </form>
     </Modal>
   );

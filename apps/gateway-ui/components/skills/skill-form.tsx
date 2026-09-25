@@ -17,8 +17,22 @@ export function SkillForm({
   onClose: () => void;
 }) {
   return (
-    <Modal title="Skill" close={onClose}>
+    <Modal
+      title="Skill"
+      close={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="skill-form" busy={busy}>
+            Save skill
+          </Button>
+        </>
+      }
+    >
       <form
+        id="skill-form"
         method="post"
         action="/ui/"
         onSubmit={(event) => {
@@ -60,14 +74,6 @@ export function SkillForm({
             Could not save. Check the fields, or refresh the profile.
           </p>
         )}
-        <footer>
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" busy={busy}>
-            Save skill
-          </Button>
-        </footer>
       </form>
     </Modal>
   );
