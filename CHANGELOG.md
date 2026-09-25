@@ -5,6 +5,18 @@ Every release of Jian, newest first.
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit a note there and run
      `make changelog`; editing this file is editing the copy rather than the thing. -->
 
+## 2.2.0-rc.8 — 2026-09-25
+
+The agent mentions people in WhatsApp groups, and sticker tags are no longer edited by hand.
+
+### Features
+
+* **panel:** Stickers shows each sticker's tags without an editor; the agent keeps them, and a click on one still filters by it ([e945906](https://github.com/lucasaarch/jian/commit/e9459064262d4ca7a5556f5738c64a67c4ad9fc6))
+
+### Bug Fixes
+
+* **whatsapp:** an `@Name` the agent writes in a group became plain text; it is now a mention that notifies that person, when they have written in the group under that name ([3157d0f](https://github.com/lucasaarch/jian/commit/3157d0f8e9e202983202baf2978752d1b5371f72))
+
 ## 2.2.0-rc.7 — 2026-09-25
 
 Stickers, files, images and voice sent into any conversation, stickers that should not be sent left out, and stickers you can switch off.
