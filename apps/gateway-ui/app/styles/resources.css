@@ -324,21 +324,6 @@
 .sticker-tag:hover {
   color: var(--accent);
 }
-.sticker-tag.edit {
-  display: inline-grid;
-  place-items: center;
-  padding: 3px 6px;
-}
-.sticker-tags-edit {
-  display: flex;
-  gap: 4px;
-}
-.sticker-tags-input {
-  min-width: 0;
-  flex: 1;
-  font-size: 0.75rem;
-  padding: 4px 8px;
-}
 
 /* The Overview: tiles for the headline numbers, cards for what they are made of. */
 .stat-tiles {

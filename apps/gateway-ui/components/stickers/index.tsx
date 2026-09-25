@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Pencil, Power, Search, Trash2 } from 'lucide-react';
+import { Power, Search, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Sticker } from '../../lib/api';
 import type { SectionProps } from '../props';
@@ -26,23 +26,19 @@ const sorted = (list: Sticker[], order: Order) =>
 
 const times = (count: number) => (count === 1 ? 'once' : `${count}×`);
 
-/** One sticker, drawn once it is on screen, with its tags editable in place. */
+/** One sticker, drawn once it is on screen, its tags a click away from filtering by them. */
 function StickerTile({
   sticker,
   load,
   remove,
-  retag,
   filter,
 }: {
   sticker: Sticker;
   load: (id: string) => Promise<string | undefined>;
   remove: () => void;
-  retag: (tags: string[]) => Promise<void>;
   filter: (tag: string) => void;
 }) {
   const [src, setSrc] = useState<string>();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -56,17 +52,6 @@ function StickerTile({
     };
   }, [load, sticker.id]);
 
-  const save = async () => {
-    await retag(
-      draft
-        .split(',')
-        .map((tag) => tag.trim().toLowerCase())
-        .filter(Boolean)
-        .slice(0, 12),
-    );
-    setEditing(false);
-  };
-
   return (
     <li className="sticker-tile">
       <div className="sticker-image">
@@ -74,47 +59,13 @@ function StickerTile({
         {src && <img src={src} alt={sticker.description ?? 'Sticker'} />}
       </div>
       <p>{sticker.description ?? 'Not described yet'}</p>
-      {editing ? (
-        <form
-          className="sticker-tags-edit"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void save();
-          }}
-        >
-          <input
-            className="sticker-tags-input"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="laughing, funny"
-            aria-label="Tags, separated by commas"
-            // biome-ignore lint/a11y/noAutofocus: opened by the owner to type into it.
-            autoFocus
-          />
-          <button type="submit" className="icon-button" aria-label="Save tags">
-            <Check size={15} />
+      <div className="sticker-tags">
+        {sticker.tags.map((tag) => (
+          <button type="button" key={tag} className="sticker-tag" onClick={() => filter(tag)}>
+            {tag}
           </button>
-        </form>
-      ) : (
-        <div className="sticker-tags">
-          {sticker.tags.map((tag) => (
-            <button type="button" key={tag} className="sticker-tag" onClick={() => filter(tag)}>
-              {tag}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="sticker-tag edit"
-            aria-label="Edit tags"
-            onClick={() => {
-              setDraft(sticker.tags.join(', '));
-              setEditing(true);
-            }}
-          >
-            <Pencil size={11} />
-          </button>
-        </div>
-      )}
+        ))}
+      </div>
       <small>
         Sent {sticker.uses ? times(sticker.uses) : 'never'} by the agent · {times(sticker.seen)} by
         people
@@ -234,13 +185,6 @@ export function Stickers({ profile, api, mutate, busy: saving }: SectionProps) {
               load={load}
               remove={() => setRemoving(sticker)}
               filter={setQuery}
-              retag={async (tags) => {
-                const updated = await api.tagSticker(profile.id, sticker.id, tags);
-
-                setList((current) =>
-                  current?.map((item) => (item.id === updated.id ? updated : item)),
-                );
-              }}
             />
           ))}
         </ul>
