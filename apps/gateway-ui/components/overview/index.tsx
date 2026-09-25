@@ -1,11 +1,55 @@
 'use client';
 
-import { ArrowUpRight, Settings2 } from 'lucide-react';
+import { Clock, GraduationCap, MessageSquareText, MessagesSquare, Settings2 } from 'lucide-react';
 import Link from 'next/link';
-import type { GatewayApi, Profile, ProfileData } from '../../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import type { GatewayApi, Profile, ProfileData, ProfileStats } from '../../lib/api';
+import { LOCALE } from '../../lib/format';
+import { useWorkspace } from '../../lib/workspace';
 import { Avatar } from '../profile/avatar-field';
 import { CountUp, SectionHeading } from '../ui';
+import { Select } from '../ui/select';
+import { duration } from './format';
 import { ActivityHeatmap } from './heatmap';
+import { ChannelCards, ModelCards, periods, Tile, ToolBars, UsageSummary } from './usage';
+
+/**
+ * The stats of the open profile, read again when a turn moves: a run's usage is written at the
+ * end of each step, so the numbers climb while the agent works. Reads are spaced, since several
+ * events arrive together.
+ */
+function useStats(api: GatewayApi, profileId: string, days: number) {
+  const { subscribe } = useWorkspace();
+  const [stats, setStats] = useState<ProfileStats>();
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    let active = true;
+    const read = () =>
+      api
+        .stats(profileId, days)
+        .then((value) => {
+          if (active) setStats(value);
+        })
+        .catch(() => {});
+
+    void read();
+
+    const stop = subscribe((event) => {
+      if (!event.type.startsWith('run.') && !event.type.startsWith('memory.')) return;
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => void read(), 1500);
+    });
+
+    return () => {
+      active = false;
+      stop();
+      clearTimeout(timer.current);
+    };
+  }, [api, profileId, days, subscribe]);
+
+  return stats;
+}
 
 export function Overview({
   profile,
@@ -16,17 +60,10 @@ export function Overview({
   data: ProfileData;
   api: GatewayApi;
 }) {
+  const [days, setDays] = useState(30);
+  const stats = useStats(api, profile.id, days);
   const active = data.activities.filter((run) => ['running', 'queued'].includes(run.status)).length;
-  const total = (
-    read: (usage: NonNullable<ProfileData['activities'][number]['usage']>) => number,
-  ) => data.activities.reduce((sum, run) => sum + (run.usage ? read(run.usage) : 0), 0);
 
-  const input = total((usage) => usage.inputTokens);
-  const output = total((usage) => usage.outputTokens);
-  // Served from the provider's cache: part of the input, and billed differently by every
-  // provider that reports it, so it is shown apart instead of inside one number.
-  const cached = total((usage) => usage.cachedInputTokens ?? 0);
-  const estimated = data.activities.some((run) => run.usage?.estimated);
   return (
     <>
       <SectionHeading
@@ -43,104 +80,87 @@ export function Overview({
           <Avatar name={profile.name} avatar={profile.avatar} className="profile-avatar" />
           <h2>{profile.name}</h2>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link href="/identity" className="button quiet">
-            <Settings2 size={16} />
-            Edit profile
-          </Link>
-        </div>
+        <Link href="/identity" className="button quiet">
+          <Settings2 size={16} />
+          Edit profile
+        </Link>
       </section>
-      <section className="overview-metrics" aria-label="Profile activity">
-        {[
-          {
-            label: 'Sessions',
-            value: data.sessions.length,
-            href: '/sessions',
-            detail: 'Belonging to this profile',
-          },
-          {
-            label: 'Memories',
-            value: data.memories.length,
-            href: '/memories',
-            detail: 'Knowledge it kept',
-          },
-          {
-            label: 'Runs',
-            value: data.activities.length,
-            href: '/sessions',
-            detail: 'Of the last hundred',
-          },
-          {
-            label: 'Channels',
-            value: data.channels.filter((channel) => !channel.revokedAt).length,
-            href: '/channels',
-            detail: 'Where it can be reached',
-          },
-        ].map((item) => (
-          <Link href={item.href} className="overview-metric" key={item.label}>
-            <span>
-              {item.label}
-              <ArrowUpRight size={15} />
-            </span>
-            <strong>
-              <CountUp value={item.value} />
-            </strong>
-            <small>{item.detail}</small>
-          </Link>
-        ))}
-      </section>
-      <div className="overview-columns">
-        <ActivityHeatmap profile={profile} api={api} />
-        <section className="usage-panel" aria-label="Token usage">
-          <span className="eyebrow">Usage</span>
-          <h2>
-            <CountUp value={input + output} duration={1.6} />
-            <small>tokens</small>
-          </h2>
-          <p>Counted across the last hundred runs</p>
-          <div className="usage-bar" aria-hidden="true">
-            <span style={{ width: `${input + output ? (input / (input + output)) * 100 : 0}%` }} />
-            <span style={{ width: `${input + output ? (output / (input + output)) * 100 : 0}%` }} />
+
+      {stats && (
+        <>
+          <div className="stat-tiles">
+            <Tile icon={<MessageSquareText size={18} />} label="Turns answered">
+              <CountUp value={stats.totals.turns} />
+            </Tile>
+            <Tile icon={<Clock size={18} />} label="Time worked">
+              <CountUp value={stats.totals.workedMs} format={duration} />
+            </Tile>
+            <Tile icon={<MessagesSquare size={18} />} label="Conversations">
+              <CountUp value={stats.totals.conversations} />
+            </Tile>
+            <Tile icon={<GraduationCap size={18} />} label="Skills and memories kept">
+              <CountUp value={stats.totals.skillsWritten + stats.totals.memories} />
+            </Tile>
           </div>
-          <dl>
-            <div>
-              <dt>
-                <span className="usage-dot" />
-                Input
-              </dt>
-              <dd>
-                <CountUp value={input} />
-              </dd>
-            </div>
-            <div>
-              <dt>
-                <span className="usage-dot output" />
-                Output
-              </dt>
-              <dd>
-                <CountUp value={output} />
-              </dd>
-            </div>
-            {cached > 0 && (
-              <div>
-                <dt>
-                  <span className="usage-dot cached" />
-                  Read from cache
-                </dt>
-                <dd>
-                  <CountUp value={cached} />
-                </dd>
-              </div>
-            )}
-          </dl>
-          <p className="usage-footnote">
-            {input + output
-              ? 'The context sent and the answers generated. Providers price these differently, and cached input differently again, so this is a count and not a bill.'
-              : 'Usage is recorded when a model reports it.'}
-            {estimated && ' Some runs reported nothing and were counted here instead.'}
+          <p className="stat-since">
+            Since{' '}
+            {new Date(stats.since).toLocaleDateString(LOCALE, {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })}
           </p>
-        </section>
-      </div>
+
+          <section className="stat-section" aria-labelledby="usage-heading">
+            <header>
+              <h2 id="usage-heading">Usage</h2>
+              <Select
+                value={String(days)}
+                onValueChange={(value) => setDays(Number(value))}
+                options={periods}
+                aria-label="Period"
+                className="stat-period"
+              />
+            </header>
+            <UsageSummary stats={stats} />
+          </section>
+
+          {stats.models.length > 0 && (
+            <section className="stat-section" aria-labelledby="models-heading">
+              <header>
+                <h2 id="models-heading">Models</h2>
+                <span className="stat-chip">
+                  {stats.period.turns.toLocaleString(LOCALE)}{' '}
+                  {stats.period.turns === 1 ? 'turn' : 'turns'}
+                </span>
+              </header>
+              <ModelCards stats={stats} />
+            </section>
+          )}
+
+          {stats.channels.length > 0 && (
+            <section className="stat-section" aria-labelledby="channels-heading">
+              <header>
+                <h2 id="channels-heading">Channels</h2>
+              </header>
+              <ChannelCards stats={stats} />
+            </section>
+          )}
+
+          {stats.tools.length > 0 && (
+            <section className="stat-section" aria-labelledby="tools-heading">
+              <header>
+                <h2 id="tools-heading">Tools used most</h2>
+              </header>
+              <ToolBars stats={stats} />
+            </section>
+          )}
+        </>
+      )}
+
+      <section className="stat-section" aria-label="Activity over the year">
+        <ActivityHeatmap profile={profile} api={api} />
+      </section>
     </>
   );
 }

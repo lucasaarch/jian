@@ -1,22 +1,48 @@
 'use client';
 
-import { Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { Check, Pencil, Search, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Sticker } from '../../lib/api';
 import type { SectionProps } from '../props';
 import { Confirm, Empty, SectionHeading } from '../ui';
+import { Select } from '../ui/select';
 
-/** One sticker, drawn from the collection once it is on screen. */
+type Order = 'most_sent' | 'most_seen' | 'newest';
+
+const orders: Array<{ value: Order; label: string }> = [
+  { value: 'most_sent', label: 'Most sent by the agent' },
+  { value: 'most_seen', label: 'Most sent by people' },
+  { value: 'newest', label: 'Newest' },
+];
+
+const sorted = (list: Sticker[], order: Order) =>
+  [...list].sort((a, b) =>
+    order === 'newest'
+      ? b.createdAt.localeCompare(a.createdAt)
+      : order === 'most_seen'
+        ? b.seen - a.seen || b.uses - a.uses
+        : b.uses - a.uses || b.seen - a.seen,
+  );
+
+const times = (count: number) => (count === 1 ? 'once' : `${count}×`);
+
+/** One sticker, drawn once it is on screen, with its tags editable in place. */
 function StickerTile({
   sticker,
   load,
   remove,
+  retag,
+  filter,
 }: {
   sticker: Sticker;
   load: (id: string) => Promise<string | undefined>;
   remove: () => void;
+  retag: (tags: string[]) => Promise<void>;
+  filter: (tag: string) => void;
 }) {
   const [src, setSrc] = useState<string>();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -30,6 +56,17 @@ function StickerTile({
     };
   }, [load, sticker.id]);
 
+  const save = async () => {
+    await retag(
+      draft
+        .split(',')
+        .map((tag) => tag.trim().toLowerCase())
+        .filter(Boolean)
+        .slice(0, 12),
+    );
+    setEditing(false);
+  };
+
   return (
     <li className="sticker-tile">
       <div className="sticker-image">
@@ -37,12 +74,50 @@ function StickerTile({
         {src && <img src={src} alt={sticker.description ?? 'Sticker'} />}
       </div>
       <p>{sticker.description ?? 'Not described yet'}</p>
+      {editing ? (
+        <form
+          className="sticker-tags-edit"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save();
+          }}
+        >
+          <input
+            className="sticker-tags-input"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="laughing, funny"
+            aria-label="Tags, separated by commas"
+            // biome-ignore lint/a11y/noAutofocus: opened by the owner to type into it.
+            autoFocus
+          />
+          <button type="submit" className="icon-button" aria-label="Save tags">
+            <Check size={15} />
+          </button>
+        </form>
+      ) : (
+        <div className="sticker-tags">
+          {sticker.tags.map((tag) => (
+            <button type="button" key={tag} className="sticker-tag" onClick={() => filter(tag)}>
+              {tag}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="sticker-tag edit"
+            aria-label="Edit tags"
+            onClick={() => {
+              setDraft(sticker.tags.join(', '));
+              setEditing(true);
+            }}
+          >
+            <Pencil size={11} />
+          </button>
+        </div>
+      )}
       <small>
-        {sticker.uses === 0
-          ? 'Not sent yet'
-          : sticker.uses === 1
-            ? 'Sent once'
-            : `Sent ${sticker.uses} times`}
+        Sent {sticker.uses ? times(sticker.uses) : 'never'} by the agent · {times(sticker.seen)} by
+        people
       </small>
       <button
         type="button"
@@ -57,13 +132,16 @@ function StickerTile({
 }
 
 /**
- * The stickers the agent can send: every one people sent in its approved chats, kept once and
- * described by what it shows. Removing one keeps the agent from ever sending it.
+ * The stickers the agent can send: every one people sent in its approved chats, kept once,
+ * described and tagged by what it shows, and counted each time it is sent. Removing one keeps
+ * the agent from ever sending it.
  */
 export function Stickers({ profile, api }: SectionProps) {
   const [list, setList] = useState<Sticker[]>();
   const [removing, setRemoving] = useState<Sticker>();
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState('');
+  const [order, setOrder] = useState<Order>('most_sent');
 
   const read = useCallback(
     () =>
@@ -86,23 +164,63 @@ export function Stickers({ profile, api }: SectionProps) {
     void read();
   }, [read]);
 
+  const shown = useMemo(() => {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+
+    return sorted(list ?? [], order).filter((sticker) => {
+      const text = `${sticker.description ?? ''} ${sticker.tags.join(' ')}`.toLowerCase();
+
+      return words.every((word) => text.includes(word));
+    });
+  }, [list, order, query]);
+
   return (
     <>
       <SectionHeading
         title="Stickers"
-        description={`The stickers ${profile.name} can send. It keeps each one people send in approved chats, and finds them by what they show.`}
+        description={`The stickers ${profile.name} can send. It keeps each one people send in approved chats, tags it by what it shows, and finds it by meaning.`}
       />
-      {!list ? null : list.length ? (
+      {list?.length ? (
+        <div className="sticker-toolbar">
+          <label className="search-field">
+            <Search size={16} aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search by tag or description"
+              aria-label="Search stickers"
+            />
+          </label>
+          <Select
+            value={order}
+            onValueChange={(value) => setOrder(value as Order)}
+            options={orders}
+            aria-label="Order"
+          />
+        </div>
+      ) : null}
+      {!list ? null : shown.length ? (
         <ul className="sticker-grid">
-          {list.map((sticker) => (
+          {shown.map((sticker) => (
             <StickerTile
               key={sticker.id}
               sticker={sticker}
               load={load}
               remove={() => setRemoving(sticker)}
+              filter={setQuery}
+              retag={async (tags) => {
+                const updated = await api.tagSticker(profile.id, sticker.id, tags);
+
+                setList((current) =>
+                  current?.map((item) => (item.id === updated.id ? updated : item)),
+                );
+              }}
             />
           ))}
         </ul>
+      ) : list.length ? (
+        <Empty title="Nothing found">No sticker matches that search.</Empty>
       ) : (
         <Empty title="No stickers yet">
           When someone sends a sticker in a chat you approved, it is kept here for the agent to send

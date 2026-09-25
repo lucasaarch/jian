@@ -113,7 +113,39 @@ export const profiles: Profile[] = [
     instructions: 'You are Miku. Review code with precision.',
     identity: { role: 'Code reviewer', tone: 'Precise', goals: [], boundaries: [] },
     skills: [],
-    mcpServers: [],
+    // Miku has servers Zero Two does not, to import; and one it has too, to see refused.
+    mcpServers: [
+      {
+        name: 'linear',
+        transport: 'http',
+        url: 'https://mcp.linear.app/mcp',
+        auth: 'oauth',
+        headers: [],
+        args: [],
+        env: [],
+        disabledTools: [],
+      },
+      {
+        name: 'sentry',
+        transport: 'http',
+        url: 'https://mcp.sentry.dev/mcp',
+        auth: 'headers',
+        headers: [{ name: 'Authorization' }],
+        args: [],
+        env: [],
+        disabledTools: [],
+      },
+      {
+        name: 'github',
+        transport: 'http',
+        url: 'https://api.githubcopilot.com/mcp/',
+        auth: 'headers',
+        headers: [{ name: 'Authorization' }],
+        args: [],
+        env: [],
+        disabledTools: [],
+      },
+    ],
     allowShell: true,
   },
   {
@@ -571,14 +603,143 @@ const stickerImages = {
 };
 
 export const stickers = [
-  { key: 'laugh', description: 'A face laughing so hard it cries', uses: 7 },
-  { key: 'thumbs', description: 'A thumbs up, approving', uses: 3 },
-  { key: 'facepalm', description: 'Someone facepalming at a mistake', uses: 0 },
+  {
+    key: 'laugh',
+    description: 'A face laughing so hard it cries',
+    tags: ['laughing', 'funny', 'crying'],
+    uses: 7,
+    seen: 12,
+  },
+  {
+    key: 'thumbs',
+    description: 'A thumbs up',
+    tags: ['approval', 'ok', 'agree'],
+    uses: 3,
+    seen: 4,
+  },
+  {
+    key: 'facepalm',
+    description: 'Someone facepalming at a mistake',
+    tags: ['facepalm', 'mistake', 'embarrassed'],
+    uses: 0,
+    seen: 1,
+  },
 ].map((item, index) => ({
   id: `5a1c0000-0000-4000-8000-00000000000${index + 1}`,
   profileId: ids.zero,
   description: item.description,
+  tags: item.tags,
   uses: item.uses,
+  seen: item.seen,
   createdAt: at(60 * 24 * (index + 1)),
   data: stickerImages[item.key as keyof typeof stickerImages],
 }));
+
+/** A month of a busy profile, scaled to the period the Overview asks for. */
+export const statsFor = (days: number) => {
+  const shown = Math.min(days, 90);
+  const scale = Math.min(days, 90) / 30;
+  const daily = Array.from({ length: shown }, (_, index) => {
+    const date = new Date();
+
+    date.setDate(date.getDate() - (shown - 1 - index));
+
+    return {
+      day: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
+      tokens: index % 7 === 5 ? 0 : Math.round(180_000 + ((index * 7919) % 11) * 95_000),
+    };
+  }).filter((item) => item.tokens > 0);
+
+  return {
+    since: at(60 * 24 * 41),
+    totals: {
+      turns: 1583,
+      workedMs: 139_800_000,
+      conversations: 10,
+      skillsWritten: 3,
+      memories: 6,
+    },
+    period: {
+      days,
+      from: at(60 * 24 * days),
+      turns: Math.round(412 * scale),
+      tokens: {
+        input: Math.round(9_400_000 * scale),
+        cached: Math.round(21_700_000 * scale),
+        output: Math.round(1_180_000 * scale),
+      },
+      cost: Math.round(48.37 * scale * 100) / 100,
+      unpricedTokens: Math.round(6_200_000 * scale),
+      activeDays: daily.length,
+      daily,
+    },
+    models: [
+      {
+        provider: 'anthropic',
+        modelId: 'claude-opus-4-6',
+        billing: 'metered',
+        turns: Math.round(318 * scale),
+        tokens: {
+          input: Math.round(7_900_000 * scale),
+          cached: Math.round(18_300_000 * scale),
+          output: Math.round(930_000 * scale),
+        },
+        cost: Math.round(48.37 * scale * 100) / 100,
+      },
+      {
+        provider: 'openai-codex',
+        modelId: 'gpt-5-codex',
+        billing: 'subscription',
+        turns: Math.round(94 * scale),
+        tokens: {
+          input: Math.round(1_500_000 * scale),
+          cached: Math.round(3_400_000 * scale),
+          output: Math.round(250_000 * scale),
+        },
+        cost: null,
+      },
+    ],
+    channels: [
+      {
+        channel: 'whatsapp',
+        conversations: 4,
+        turns: Math.round(201 * scale),
+        tokens: Math.round(15_800_000 * scale),
+      },
+      {
+        channel: 'gateway',
+        conversations: 1,
+        turns: Math.round(96 * scale),
+        tokens: Math.round(9_900_000 * scale),
+      },
+      {
+        channel: 'telegram',
+        conversations: 2,
+        turns: Math.round(71 * scale),
+        tokens: Math.round(4_300_000 * scale),
+      },
+      {
+        channel: 'agent',
+        conversations: 1,
+        turns: Math.round(29 * scale),
+        tokens: Math.round(1_900_000 * scale),
+      },
+      {
+        channel: 'learning',
+        conversations: 1,
+        turns: Math.round(15 * scale),
+        tokens: Math.round(380_000 * scale),
+      },
+    ],
+    tools: [
+      { name: 'web_search', calls: Math.round(212 * scale), failed: 3 },
+      { name: 'read_memories', calls: Math.round(187 * scale), failed: 0 },
+      { name: 'run_command', calls: Math.round(143 * scale), failed: 9 },
+      { name: 'send_session_message', calls: Math.round(64 * scale), failed: 1 },
+      { name: 'fetch_url', calls: Math.round(58 * scale), failed: 4 },
+      { name: 'remember', calls: Math.round(41 * scale), failed: 0 },
+      { name: 'create_schedule', calls: Math.round(12 * scale), failed: 0 },
+      { name: 'send_sticker', calls: Math.round(9 * scale), failed: 0 },
+    ],
+  };
+};

@@ -1,14 +1,16 @@
 'use client';
 
-import { BookOpen, Eye, Pencil, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, Download, Eye, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import type { Profile } from '../../lib/api';
 import type { SectionProps } from '../props';
 import { Badge, Button, Confirm, Empty, ProviderLogo, ResourceRow, SectionHeading } from '../ui';
 import { BuiltinSkills } from './built-in';
 import { SkillCatalog } from './catalog';
 import { SkillImport } from './import';
 import { McpForm } from './mcp-form';
+import { McpImport } from './mcp-import';
 import { McpRow } from './mcp-row';
 import { SkillForm } from './skill-form';
 import { SkillView } from './skill-view';
@@ -32,12 +34,20 @@ export function Capabilities({
   api,
   mutate,
   busy,
-}: Omit<SectionProps, 'data'> & { kind: 'skills' | 'mcpServers' }) {
+  others = [],
+}: Omit<SectionProps, 'data'> & {
+  kind: 'skills' | 'mcpServers';
+  /** Every profile of the installation, for importing another agent's servers. */
+  others?: Profile[];
+}) {
   const [editing, setEditing] = useState<number | 'new'>();
   const [removing, setRemoving] = useState<number>();
   const [failed, setFailed] = useState(false);
   // The skill whose instructions are open for reading.
   const [open, setOpen] = useState<string>();
+  const [importing, setImporting] = useState(false);
+  // The other agents with a server to offer; importing copies from one of them.
+  const sources = others.filter((item) => item.id !== profile.id && item.mcpServers.length > 0);
   const isSkill = kind === 'skills';
   const viewing = isSkill ? profile.skills.find((skill) => skill.name === open) : undefined;
   const items = profile[kind];
@@ -72,16 +82,24 @@ export function Capabilities({
             : 'The agent discovers the tools each server offers and loads what it needs.'
         }
         action={
-          <Button
-            onClick={() => {
-              setFailed(false);
-              setEditing('new');
-            }}
-            disabled={items.length >= (isSkill ? 20 : 10)}
-          >
-            <Plus size={16} />
-            {isSkill ? 'New skill' : 'Connect a server'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {!isSkill && sources.length > 0 && (
+              <Button variant="secondary" onClick={() => setImporting(true)}>
+                <Download size={16} />
+                Import from another agent
+              </Button>
+            )}
+            <Button
+              onClick={() => {
+                setFailed(false);
+                setEditing('new');
+              }}
+              disabled={isSkill && items.length >= 20}
+            >
+              <Plus size={16} />
+              {isSkill ? 'New skill' : 'Connect a server'}
+            </Button>
+          </div>
         }
       />
       {isSkill && <BuiltinSkills profile={profile} api={api} mutate={mutate} busy={busy} />}
@@ -189,6 +207,22 @@ export function Capabilities({
           Give the address of an MCP server. The tools come from it, and the agent loads one before
           it can call it.
         </Empty>
+      )}
+      {importing && (
+        <McpImport
+          profile={profile}
+          sources={sources}
+          close={() => setImporting(false)}
+          importServers={async (fromProfileId, servers) => {
+            let result: Awaited<ReturnType<typeof api.importMcpServers>> | undefined;
+
+            await mutate(async () => {
+              result = await api.importMcpServers(profile.id, fromProfileId, servers);
+            }, 'Servers imported.');
+
+            return result;
+          }}
+        />
       )}
       {viewing && (
         <SkillView

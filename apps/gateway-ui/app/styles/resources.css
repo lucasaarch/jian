@@ -142,7 +142,10 @@
 
 .heatmap-scroll {
   overflow-x: auto;
-  padding-bottom: 0.25rem;
+  /* Room for the table's outer spacing, which the grid below reaches into with its negative
+     margin: without it the grid is 6px wider than the box and the whole year scrolls. */
+  margin: 0 -3px;
+  padding: 0 3px 0.25rem;
 }
 
 .heatmap {
@@ -245,11 +248,6 @@
   opacity: 0.75;
 }
 
-/* Input, output and the cached part of the input: three readings of one number. */
-.usage-dot.cached {
-  background: color-mix(in srgb, var(--accent) 40%, transparent);
-}
-
 /* The sticker collection: a grid of images the way a sticker picker shows them. */
 .sticker-grid {
   display: grid;
@@ -294,4 +292,405 @@
 .sticker-tile:hover .sticker-remove,
 .sticker-remove:focus-visible {
   opacity: 1;
+}
+
+.sticker-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media (max-width: 640px) {
+  .sticker-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+.sticker-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sticker-tag {
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.sticker-tag:hover {
+  color: var(--accent);
+}
+.sticker-tag.edit {
+  display: inline-grid;
+  place-items: center;
+  padding: 3px 6px;
+}
+.sticker-tags-edit {
+  display: flex;
+  gap: 4px;
+}
+.sticker-tags-input {
+  min-width: 0;
+  flex: 1;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+}
+
+/* The Overview: tiles for the headline numbers, cards for what they are made of. */
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.stat-tile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.stat-icon {
+  display: grid;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--muted);
+}
+.stat-copy {
+  display: grid;
+  min-width: 0;
+}
+.stat-copy strong {
+  font-family: var(--font-display);
+  font-size: 1.625rem;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.stat-copy small {
+  overflow: hidden;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stat-since {
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.stat-section {
+  margin-top: 40px;
+}
+.stat-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.stat-section > header h2 {
+  font-size: 1.25rem;
+}
+.stat-period {
+  width: 190px;
+}
+.stat-section .stat-tiles {
+  margin-top: 16px;
+}
+.stat-chip {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.stat-chip.metered {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
+}
+.stat-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.stat-card {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.stat-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.stat-card h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.stat-card header p {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+.stat-card > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+.intensity-card {
+  /* The tooltip is placed against this box. */
+  position: relative;
+}
+.intensity {
+  display: grid;
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+  gap: 4px;
+}
+.intensity[data-days="7"] {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.intensity[data-days="90"] {
+  grid-template-columns: repeat(30, minmax(0, 1fr));
+}
+.intensity-legend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.intensity-legend .heatmap-day {
+  width: 10px;
+}
+.mix-bar {
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.mix-input {
+  background: var(--accent);
+}
+.mix-cached {
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.mix-output {
+  background: var(--muted);
+}
+.mix-legend {
+  display: grid;
+  gap: 8px;
+}
+.mix-legend > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.8125rem;
+}
+.mix-legend dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+.mix-legend dd {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.mix-legend dd small {
+  min-width: 2.5rem;
+  text-align: right;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+.mix-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+.stat-note {
+  margin-top: 10px;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.stat-grid.four {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.stat-row-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.stat-row-card > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.stat-row-card > header strong {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 0.875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.stat-row-card .stat-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--ink);
+}
+.stat-row-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.stat-row-card dt {
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+.stat-row-card dd {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.stat-row-card.compact p {
+  font-size: 0.8125rem;
+  color: var(--ink);
+}
+.stat-row-card.compact small {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.share-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.share-note {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+.share-bar {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.share-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+.tool-bars {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.tool-bars li {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr) 80px;
+  align-items: center;
+  gap: 16px;
+}
+.tool-bar-name {
+  display: grid;
+  min-width: 0;
+  font-size: 0.8125rem;
+  color: var(--ink);
+}
+.tool-bar-name code {
+  overflow: hidden;
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  background: transparent;
+  padding: 0;
+}
+.tool-bar-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.tool-bar-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+.tool-bar-count {
+  display: grid;
+  justify-items: end;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.tool-bar-failed {
+  font-size: 0.6875rem;
+  font-style: normal;
+  font-weight: 400;
+  color: var(--bad);
+}
+@media (max-width: 900px) {
+  .stat-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stat-cards,
+  .stat-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tool-bars li {
+    grid-template-columns: minmax(0, 1fr) 70px;
+  }
+  .tool-bar-track {
+    display: none;
+  }
 }
