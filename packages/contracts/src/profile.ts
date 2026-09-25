@@ -245,6 +245,8 @@ export const profileSchema = z.strictObject({
    * learned as a skill or a memory, in its Learning conversation.
    */
   learnFromWork: z.boolean().default(true),
+  /** Keeping the stickers people send, describing them, and sending them back. */
+  useStickers: z.boolean().default(true),
 });
 
 export const profilePatchSchema = profileSchema.partial().extend({
@@ -264,6 +266,7 @@ export const profilePatchSchema = profileSchema.partial().extend({
   allowShell: z.boolean().optional(),
   allowWebSearch: z.boolean().optional(),
   learnFromWork: z.boolean().optional(),
+  useStickers: z.boolean().optional(),
 });
 
 /**

@@ -47,7 +47,8 @@ The tools are in the \`media\` group; load it with \`load_tools\`.
 - Pick the one whose feeling matches, not the one that merely mentions the subject. If none
   fits well, send words instead.
 
-\`send_sticker\` sends it. A sticker goes alone: anything you need to say goes in a message of
+\`send_sticker\` sends it — here, or in another of your conversations with its \`sessionId\`,
+when someone here asks you to send one there. A sticker goes alone: anything you need to say goes in a message of
 its own, before it.
 
 ## Tags

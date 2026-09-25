@@ -3736,6 +3736,40 @@
                       ],
                       "additionalProperties": false
                     },
+                    "sticker": {
+                      "default": null,
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "providerId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "modelId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        },
+                        "reasoningEffort": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "minimal",
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "providerId",
+                        "modelId"
+                      ],
+                      "additionalProperties": false
+                    },
                     "transcription": {
                       "default": null,
                       "description": "Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.",
@@ -3795,6 +3829,7 @@
                     "vision",
                     "audio",
                     "speech",
+                    "sticker",
                     "transcription",
                     "id",
                     "profileId",
@@ -4243,6 +4278,40 @@
                     ],
                     "additionalProperties": false
                   },
+                  "sticker": {
+                    "default": null,
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "providerId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "modelId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      },
+                      "reasoningEffort": {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "minimal",
+                          "low",
+                          "medium",
+                          "high"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "providerId",
+                      "modelId"
+                    ],
+                    "additionalProperties": false
+                  },
                   "transcription": {
                     "default": null,
                     "description": "Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.",
@@ -4530,6 +4599,40 @@
                       ],
                       "additionalProperties": false
                     },
+                    "sticker": {
+                      "default": null,
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "providerId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "modelId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        },
+                        "reasoningEffort": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "minimal",
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "providerId",
+                        "modelId"
+                      ],
+                      "additionalProperties": false
+                    },
                     "transcription": {
                       "default": null,
                       "description": "Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.",
@@ -4589,6 +4692,7 @@
                     "vision",
                     "audio",
                     "speech",
+                    "sticker",
                     "transcription",
                     "id",
                     "profileId",
@@ -14933,6 +15037,10 @@
                       "default": true,
                       "type": "boolean"
                     },
+                    "useStickers": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -14969,6 +15077,7 @@
                     "allowShell",
                     "allowWebSearch",
                     "learnFromWork",
+                    "useStickers",
                     "id",
                     "version",
                     "createdAt",
@@ -15586,6 +15695,10 @@
                         "default": true,
                         "type": "boolean"
                       },
+                      "useStickers": {
+                        "default": true,
+                        "type": "boolean"
+                      },
                       "id": {
                         "type": "string",
                         "format": "uuid",
@@ -15622,6 +15735,7 @@
                       "allowShell",
                       "allowWebSearch",
                       "learnFromWork",
+                      "useStickers",
                       "id",
                       "version",
                       "createdAt",
@@ -16213,6 +16327,10 @@
                   "learnFromWork": {
                     "default": true,
                     "type": "boolean"
+                  },
+                  "useStickers": {
+                    "default": true,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -16645,6 +16763,10 @@
                       "default": true,
                       "type": "boolean"
                     },
+                    "useStickers": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -16681,6 +16803,7 @@
                     "allowShell",
                     "allowWebSearch",
                     "learnFromWork",
+                    "useStickers",
                     "id",
                     "version",
                     "createdAt",
@@ -17307,6 +17430,10 @@
                       "default": true,
                       "type": "boolean"
                     },
+                    "useStickers": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -17343,6 +17470,7 @@
                     "allowShell",
                     "allowWebSearch",
                     "learnFromWork",
+                    "useStickers",
                     "id",
                     "version",
                     "createdAt",
@@ -17915,6 +18043,9 @@
                   "learnFromWork": {
                     "type": "boolean"
                   },
+                  "useStickers": {
+                    "type": "boolean"
+                  },
                   "expectedVersion": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
@@ -18350,6 +18481,10 @@
                       "default": true,
                       "type": "boolean"
                     },
+                    "useStickers": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -18386,6 +18521,7 @@
                     "allowShell",
                     "allowWebSearch",
                     "learnFromWork",
+                    "useStickers",
                     "id",
                     "version",
                     "createdAt",
@@ -19469,6 +19605,10 @@
                             "default": true,
                             "type": "boolean"
                           },
+                          "useStickers": {
+                            "default": true,
+                            "type": "boolean"
+                          },
                           "id": {
                             "type": "string",
                             "format": "uuid",
@@ -19505,6 +19645,7 @@
                           "allowShell",
                           "allowWebSearch",
                           "learnFromWork",
+                          "useStickers",
                           "id",
                           "version",
                           "createdAt",

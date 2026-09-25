@@ -18,24 +18,32 @@ async function collection() {
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
   });
   const described: string[] = [];
-  const descriptions: Record<string, { description: string; tags: string[] }> = {
+  const descriptions: Record<string, { keep: boolean; description: string; tags: string[] }> = {
     [webp('laugh')]: {
+      keep: true,
       description: 'A tree stump laughing so hard it cries',
       tags: ['laughing', 'funny', 'tree'],
     },
     [webp('thumbs')]: {
+      keep: true,
       description: 'A cat giving a thumbs up',
       tags: ['approval', 'ok', 'cat'],
     },
+    [webp('explicit')]: { keep: false, description: '', tags: [] },
   };
-  const stickers = new Stickers(services.store, {
-    describeSticker: async (_profileId, data) => {
-      described.push(data);
+  const stickers = new Stickers(
+    services.store,
+    {
+      describeSticker: async (_profileId, data) => {
+        described.push(data);
 
-      return descriptions[data] ?? { description: '', tags: [] };
+        return descriptions[data] ?? { keep: true, description: '', tags: [] };
+      },
+      sendSticker: (run, data, toolCallId, sessionId) =>
+        services.media.sendSticker(run, data, toolCallId, sessionId),
     },
-    sendSticker: (run, data, toolCallId) => services.media.sendSticker(run, data, toolCallId),
-  });
+    services.profiles,
+  );
 
   return { services, profile, stickers, described };
 }
@@ -83,6 +91,12 @@ it('keeps each sticker once, counts it each time, and finds it by tag, meaning o
   const removed = await f.stickers.forget(f.profile.id, byMeaning?.id as string);
 
   expect(removed.description).toContain('laughing');
+  expect(await f.stickers.list(f.profile.id)).toHaveLength(1);
+
+  // Removed by the owner, it does not come back when someone sends it again.
+  await keep('laugh');
+  await settle();
+
   expect(await f.stickers.list(f.profile.id)).toHaveLength(1);
 });
 
@@ -192,9 +206,123 @@ it('reads the model catalogue entry, fenced, bare or as prose', async () => {
 
   expect(
     readSticker('```json\n{"description":"A dog shrugging","tags":["Shrug","unsure","dog!"]}\n```'),
-  ).toEqual({ description: 'A dog shrugging', tags: ['shrug', 'unsure'] });
-  expect(readSticker('A dog shrugging, unsure')).toEqual({
-    description: 'A dog shrugging, unsure',
+  ).toEqual({ keep: true, description: 'A dog shrugging', tags: ['shrug', 'unsure'] });
+  expect(readSticker('{"keep": false}')).toMatchObject({ keep: false });
+  // A refusal in prose is a refusal, not a description.
+  expect(readSticker("I can't catalogue this one.")).toEqual({
+    keep: false,
+    description: '',
     tags: [],
   });
+});
+
+it('sends a sticker or a file into another conversation, as itself, never as its id', async () => {
+  const f = await collection();
+  const channels = new Channels(f.services, fetch);
+  const channel = await channels.connect(f.profile.id, { type: 'api' });
+
+  await channels.receive(channel.id, {
+    type: 'api',
+    headers: { 'x-jian-channel-token': channel.webhookToken },
+    payload: { actorId: 'rowan', chatId: 'rowan', text: 'Hi', requestKey: 'hi' },
+  });
+
+  const [contact] = await channels.contacts(f.profile.id);
+  if (!contact) throw new Error('Missing contact');
+  const approved = await channels.approveContact(f.profile.id, contact.id);
+  const group = approved.sessionId as string;
+
+  // The owner asks from the gateway conversation; the sticker is for Rowan's chat.
+  const gateway = await f.services.sessions.gatewaySession(f.profile.id);
+  const run = await f.services.runs.submit(f.profile.id, gateway.id, {
+    text: 'Send Rowan a thumbs up',
+    requestKey: 'ask',
+  });
+
+  await f.stickers.keep(f.profile.id, {
+    mimeType: 'image/webp',
+    data: webp('thumbs'),
+    sticker: true,
+  });
+  const [sticker] = await f.stickers.list(f.profile.id);
+  const call = { messages: [], context: {} };
+
+  await f.stickers
+    .tools(run)
+    .send_sticker?.execute?.(
+      { stickerId: sticker?.id as string, sessionId: group },
+      { ...call, toolCallId: 'sticker' },
+    );
+
+  const sent = (await listDeliveries(f.services.store.db, f.profile.id)).find(
+    (item) => item.mediaId,
+  );
+  const media = await f.services.media.read(f.profile.id, sent?.mediaId as string);
+  const there = await f.services.sessions.messages(f.profile.id, group, 20);
+  const here = await f.services.sessions.messages(f.profile.id, gateway.id, 20);
+
+  expect(sent?.chatId).toBe('rowan');
+  expect(media).toMatchObject({ sticker: true, data: webp('thumbs') });
+  expect(there.some((message) => message.content.includes(sent?.mediaId as string))).toBe(true);
+  expect(here.some((message) => message.content.includes(sent?.mediaId as string))).toBe(false);
+
+  // A file written here, sent there; and a conversation of another profile is not found.
+  const tools = f.services.media.tools(run);
+  const file = (await tools.send_file?.execute?.(
+    { content: 'item,cost\n', name: 'budget.csv', sessionId: group },
+    { ...call, toolCallId: 'file' },
+  )) as { mediaId: string; status: string };
+
+  expect(file.status).toBe('queued for delivery');
+  expect((await f.services.media.read(f.profile.id, file.mediaId)).name).toBe('budget.csv');
+
+  const stranger = await f.services.profiles.createProfile({
+    name: 'Other',
+    instructions: 'Help.',
+    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  });
+  const theirs = await f.services.sessions.gatewaySession(stranger.id);
+
+  await expect(
+    tools.send_file?.execute?.(
+      { content: 'x', name: 'x.txt', sessionId: theirs.id },
+      { ...call, toolCallId: 'wall' },
+    ),
+  ).rejects.toThrow('no conversation with that id');
+});
+
+it('leaves out a sticker the model declines, and keeps nothing while stickers are off', async () => {
+  const f = await collection();
+  const keep = (tag: string) =>
+    f.stickers.keep(f.profile.id, { mimeType: 'image/webp', data: webp(tag), sticker: true });
+
+  await keep('explicit');
+  await settle();
+  await keep('explicit');
+  await settle();
+
+  expect(await f.stickers.list(f.profile.id)).toEqual([]);
+  expect(await f.stickers.search(f.profile.id, {})).toEqual([]);
+  // Declined once, never looked at again: the second sending cost no call.
+  expect(f.described).toEqual([webp('explicit')]);
+
+  const current = await f.services.profiles.profile(f.profile.id);
+
+  await f.services.profiles.updateProfile(f.profile.id, {
+    expectedVersion: current.version,
+    useStickers: false,
+  });
+  await keep('laugh');
+  await settle();
+
+  expect(await f.stickers.list(f.profile.id)).toEqual([]);
+  expect(f.described).toHaveLength(1);
+
+  const session = await f.services.sessions.createSession(f.profile.id, { title: 'Chat' });
+  const run = await f.services.runs.submit(f.profile.id, session.id, {
+    text: 'Hi',
+    requestKey: 'off',
+  });
+
+  expect(f.stickers.tools(run)).toEqual({});
 });

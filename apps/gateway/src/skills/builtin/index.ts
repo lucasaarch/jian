@@ -34,7 +34,6 @@ const ALWAYS: readonly Skill[] = [
   schedules,
   skillCreator,
   media,
-  stickers,
   workingWithAgents,
   longRunningWork,
   managingContext,
@@ -52,13 +51,17 @@ const SELF_MANAGED: readonly Skill[] = [managingYourself];
 const SHELL: readonly Skill[] = [machineTools, codingWork];
 const WEB: readonly Skill[] = [webResearch];
 const MCP: readonly Skill[] = [mcpServers];
+const STICKERS: readonly Skill[] = [stickers];
 
 export const builtinSkillNames: ReadonlySet<string> = new Set(
-  [...ALWAYS, ...SELF_MANAGED, ...SHELL, ...WEB, ...MCP].map((skill) => skill.name),
+  [...ALWAYS, ...SELF_MANAGED, ...SHELL, ...WEB, ...MCP, ...STICKERS].map((skill) => skill.name),
 );
 
 export function builtinSkills(
-  profile: Pick<Profile, 'allowSelfManagement' | 'allowShell' | 'allowWebSearch' | 'mcpServers'>,
+  profile: Pick<
+    Profile,
+    'allowSelfManagement' | 'allowShell' | 'allowWebSearch' | 'mcpServers' | 'useStickers'
+  >,
 ): readonly Skill[] {
   return [
     ...ALWAYS,
@@ -66,6 +69,7 @@ export function builtinSkills(
     ...(profile.allowShell ? SHELL : []),
     ...(profile.allowWebSearch ? WEB : []),
     ...(profile.mcpServers.length ? MCP : []),
+    ...(profile.useStickers ? STICKERS : []),
   ];
 }
 

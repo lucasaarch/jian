@@ -253,6 +253,13 @@
       "when": 1790838000000,
       "tag": "0035_stickers",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790842000000,
+      "tag": "0036_sticker-choices",
+      "breakpoints": true
     }
   ]
 }
