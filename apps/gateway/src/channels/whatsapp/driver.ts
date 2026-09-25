@@ -15,6 +15,7 @@ import {
   type WASocket,
 } from 'baileys';
 import { asJpeg } from '../../media/picture.js';
+import type { OutgoingMessage } from '../channel.js';
 import { MAX_DEVICE_SESSION_BYTES } from './connections.js';
 import { describeWhatsApp, readWhatsAppContent } from './media.js';
 import { quietLibsignal } from './quiet.js';
@@ -132,15 +133,22 @@ export function outgoingMedia(media: InlineMedia, text: string): AnyMessageConte
   };
 }
 
+/** Someone the agent may name in a group; `alias` is another address of theirs, such as the phone. */
+export interface Mentionable {
+  id: string;
+  name: string;
+  alias?: string;
+}
+
 /**
  * WhatsApp marks someone only when the text carries `@<number>` and the message lists their
  * address. The agent writes names, so each `@Name` of someone in the group becomes their number;
  * longer names go first, so "@Ana Paula" is never read as "@Ana". A number already written
- * stays, and marks that person too.
+ * stays, and marks that person too; their alias written by hand becomes their address.
  */
 export function withMentions(
   text: string,
-  people: Array<{ id: string; name: string }> = [],
+  people: Mentionable[] = [],
 ): { text: string; mentions: string[] } {
   const known = people
     .map((person) => ({ ...person, name: person.name.trim(), user: person.id.split('@')[0] }))
@@ -154,8 +162,12 @@ export function withMentions(
     const escaped = person.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // A name ends where a word does, so "@Ana" leaves "@Anabela" alone.
     const pattern = new RegExp(`@${escaped}(?![\\p{L}\\p{N}_])`, 'giu');
+    const alias = person.alias?.split('@')[0];
 
     written = written.replace(pattern, `@${person.user}`);
+    if (alias && alias !== person.user) {
+      written = written.replace(new RegExp(`@${alias}(?!\\d)`, 'g'), `@${person.user}`);
+    }
   }
 
   // Read after the names are replaced, so a name and a number written by hand count alike.
@@ -172,7 +184,7 @@ export function withMentions(
 const outgoing = (
   text: string,
   media: InlineMedia | undefined,
-  people: Array<{ id: string; name: string }> = [],
+  people: Mentionable[] = [],
 ): AnyMessageContent => {
   const marked = withMentions(text, people);
   const mentions = marked.mentions.length ? { mentions: marked.mentions } : {};
@@ -203,7 +215,7 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
     }
 
     let socket: WASocket | undefined;
-    const subjects = new Map<string, string | undefined>();
+    const rooms = new Map<string, { subject?: string; byLid: boolean } | undefined>();
     let closed = false;
     let dirty = false;
     let writing: Promise<void> = Promise.resolve();
@@ -348,19 +360,47 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
     };
 
     /** Asked once per room and kept in memory: a subject is a label, never an authorization. */
-    const subjectOf = async (jid: string) => {
-      if (subjects.has(jid)) {
-        return subjects.get(jid);
+    const roomOf = async (jid: string) => {
+      if (rooms.has(jid)) {
+        return rooms.get(jid);
       }
 
-      const subject = await socket
+      const room = await socket
         ?.groupMetadata(jid)
-        .then((data) => data.subject?.slice(0, 100))
+        .then((data) => ({
+          ...(data.subject ? { subject: data.subject.slice(0, 100) } : {}),
+          byLid: data.addressingMode === 'lid',
+        }))
         .catch(() => undefined);
 
-      subjects.set(jid, subject);
+      rooms.set(jid, room);
 
-      return subject;
+      return room;
+    };
+    const subjectOf = async (jid: string) => (await roomOf(jid))?.subject;
+
+    /**
+     * The gateway stores people by phone, but a room that addresses people by LID links a
+     * mention only to the LID: a phone there shows as a bare number and notifies nobody. The
+     * phone stays as an alias, so a number the agent writes by hand still marks the person.
+     */
+    const mentionable = async (jid: string, people: OutgoingMessage['people'] = []) => {
+      if (!GROUP_JID.test(jid) || !people.length) return [];
+      if (!(await roomOf(jid))?.byLid) return people;
+
+      return Promise.all(
+        people.map(async (person): Promise<Mentionable> => {
+          if (!person.id.endsWith('@c.us')) return person;
+
+          const lid = toContactJid(
+            await socket?.signalRepository.lidMapping
+              .getLIDForPN(person.id.replace(/@c\.us$/, '@s.whatsapp.net'))
+              .catch(() => null),
+          );
+
+          return lid?.endsWith('@lid') ? { ...person, id: lid, alias: person.id } : person;
+        }),
+      );
     };
 
     /**
@@ -608,6 +648,8 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           throw new Error('Device unavailable');
         }
 
+        const live = socket;
+
         const deadline = AbortSignal.any([signal, AbortSignal.timeout(DEVICE_SEND_TIMEOUT_MS)]);
         deadline.throwIfAborted();
         let abort: () => void = () => {};
@@ -618,7 +660,9 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
 
         try {
           const result = await Promise.race([
-            socket.sendMessage(jid, outgoing(text, media, GROUP_JID.test(jid) ? people : [])),
+            mentionable(jid, people).then((known) =>
+              live.sendMessage(jid, outgoing(text, media, known)),
+            ),
             interrupted,
           ]);
 

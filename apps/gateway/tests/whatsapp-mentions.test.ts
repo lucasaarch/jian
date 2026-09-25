@@ -33,3 +33,12 @@ it('marks a number the agent already wrote when it belongs to someone in the gro
     mentions: ['5571900000001@s.whatsapp.net'],
   });
 });
+
+it('marks by LID in a room that addresses people so, even when the agent wrote the phone', () => {
+  const room = [{ id: '140000000000004@lid', name: 'Hel', alias: '5571900000004@c.us' }];
+
+  expect(withMentions('@Hel and @5571900000004, check this', room)).toEqual({
+    text: '@140000000000004 and @140000000000004, check this',
+    mentions: ['140000000000004@lid'],
+  });
+});
