@@ -377,6 +377,60 @@ describe('Telegram transport', () => {
     }
   });
 
+  it('tells the chat once that no model is set up, instead of leaving it unanswered', async () => {
+    const sent: string[] = [];
+    const f = await setup(async (_url, options) => {
+      sent.push(JSON.parse(String(options?.body)).text);
+
+      return Response.json({ ok: true, result: { message_id: sent.length } });
+    });
+
+    try {
+      await f.channels.receive(f.channel.id, webhook(f.channel.webhookToken));
+      const [pending] = await f.channels.contacts(f.profile.id);
+      if (!pending) throw new Error('Contact request missing');
+      const approved = await f.channels.approveContact(f.profile.id, pending.id);
+      const [first] = await f.services.runs.activities(f.profile.id);
+      if (!first) throw new Error('Run missing');
+      await f.services.lifecycle.claim(first.id, f.profile.id, 'worker');
+      await f.services.lifecycle.finish(f.profile.id, first.id, 'worker', 'completed', 'Hi');
+
+      // The model the profile answered with is gone, and no provider is left to pick one from.
+      await f.services.profiles.updateProfile(f.profile.id, {
+        expectedVersion: f.profile.version,
+        model: { provider: 'openai', modelId: 'unconfigured' },
+      });
+
+      for (const [index, text] of ['Still there?', 'Hello??'].entries()) {
+        const response = await f.app.inject({
+          method: 'POST',
+          url: f.url,
+          headers: f.headers,
+          payload: { ...later, update_id: 300 + index, message: { ...later.message, text } },
+        });
+
+        expect(response.json()).toEqual({
+          accepted: false,
+          contact: 'approved',
+          silence: 'no-model',
+        });
+      }
+
+      await f.channels.dispatch();
+
+      expect(sent.filter((text) => text.includes('no AI model is set up'))).toHaveLength(1);
+      const history = await f.services.sessions.messages(
+        f.profile.id,
+        approved.sessionId as string,
+      );
+      expect(history.map((message) => message.content)).toEqual(
+        expect.arrayContaining(['Still there?', 'Hello??']),
+      );
+    } finally {
+      await f.app.close();
+    }
+  });
+
   it('refuses a bot token Telegram does not accept, and connects nothing', async () => {
     const services = await testServices();
     const profile = await services.profiles.createProfile({

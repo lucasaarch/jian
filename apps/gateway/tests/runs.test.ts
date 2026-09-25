@@ -160,6 +160,38 @@ it('freezes the chosen model and its context budget per run', async () => {
   ).rejects.toMatchObject({ statusCode: 409 });
 });
 
+it('runs one conversation on its own model and leaves the others on the defaults', async () => {
+  const { services, profile, session } = await setup();
+  const provider = await services.providers.createProvider({
+    name: 'Personal',
+    kind: 'openai',
+    secret: 'synthetic-api-key',
+  });
+  const own = { providerId: provider.id, modelId: 'gpt-4.1-mini', reasoningEffort: 'low' as const };
+
+  await services.providers.setModelDefaults(profile.id, {
+    conversation: { providerId: provider.id, modelId: 'gpt-4.1' },
+  });
+  await services.sessions.setModel(profile.id, session.id, { model: own });
+  const other = await services.sessions.createSession(profile.id, { title: 'Other' });
+
+  const mine = await services.runs.submit(profile.id, session.id, { text: 'A', requestKey: 'a' });
+  const theirs = await services.runs.submit(profile.id, other.id, { text: 'B', requestKey: 'b' });
+
+  expect(mine.modelSelection).toEqual(own);
+  expect(theirs.model?.modelId).toBe('gpt-4.1');
+
+  const after = await services.sessions.createSession(profile.id, { title: 'Reset' });
+
+  await services.sessions.setModel(profile.id, after.id, { model: own });
+  await services.sessions.setModel(profile.id, after.id, { model: null });
+
+  const reset = await services.runs.submit(profile.id, after.id, { text: 'C', requestKey: 'c' });
+
+  expect(reset.model?.modelId).toBe('gpt-4.1');
+  expect((await services.sessions.session(profile.id, after.id)).model).toBeUndefined();
+});
+
 it('commits one run and message for concurrent duplicate submissions', async () => {
   const { services, profile, session } = await setup();
 

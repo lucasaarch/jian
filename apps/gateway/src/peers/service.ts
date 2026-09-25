@@ -6,7 +6,7 @@ import {
   agentCallSchema,
   type Run,
 } from '@jian/contracts';
-import { ne } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import type { Clock } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -88,10 +88,12 @@ export class Peers implements PeerAgents {
    * so nothing to hide ever reaches this side.
    */
   async agents(profileId: string): Promise<AgentCard[]> {
+    if (!(await this.services.profiles.profile(profileId)).reachableByAgents) return [];
+
     return this.services.store.db
       .select({ id: profiles.id, name: profiles.name, summary: profiles.summary })
       .from(profiles)
-      .where(ne(profiles.id, profileId))
+      .where(and(ne(profiles.id, profileId), eq(profiles.reachableByAgents, true)))
       .orderBy(profiles.createdAt)
       .limit(100);
   }
@@ -100,6 +102,15 @@ export class Peers implements PeerAgents {
     const data = agentCallSchema.parse(input);
     const origin = this.address(run, data.toProfileId);
     const callee = await this.services.profiles.profile(data.toProfileId);
+
+    // Read now, not from the frozen run: switching a profile off ends calls already underway.
+    if (!(await this.services.profiles.profile(run.profileId)).reachableByAgents) {
+      throw new GatewayError(403, 'The owner switched off conversations with other agents here.');
+    }
+
+    if (!callee.reachableByAgents) {
+      throw new GatewayError(403, `${callee.name} does not take calls from other agents.`);
+    }
 
     const session = await this.services.sessions.peerSession(
       callee.id,

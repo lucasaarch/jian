@@ -7,7 +7,18 @@ import { ModelDefaults } from './model-defaults';
 // A saved choice reloads the workspace; here there is none to reload.
 vi.mock('../../lib/workspace', () => ({ useWorkspace: () => ({ refresh: async () => {} }) }));
 
-async function imageProviders(apiKey: boolean) {
+const model = (id: string, output: string[] = ['text']) => ({
+  id,
+  contextWindow: 200_000,
+  maxOutputTokens: 8192,
+  reasoningEfforts: [],
+  inputModalities: ['text'],
+  outputModalities: output,
+  known: true,
+});
+
+/** Opens one activity's dialog and its Model menu, with every provider below connected. */
+async function modelMenu(activity: string, apiKey: boolean) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   // happy-dom has no modal dialogs; the component only needs the calls to exist.
   HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) {
@@ -28,7 +39,10 @@ async function imageProviders(apiKey: boolean) {
         { id: 'codex', name: 'OpenAI', kind: 'openai', authMode: 'codex' },
         ...(apiKey ? [{ id: 'openai', name: 'OpenAI', kind: 'openai', authMode: 'api' }] : []),
       ],
-      providerModels: {},
+      providerModels: {
+        google: { models: [model('gemini-3-pro'), model('gemini-3-pro-image', ['image'])] },
+        anthropic: { models: [model('claude-sonnet-5')] },
+      },
       modelDefaults: {},
     },
     api: {},
@@ -38,19 +52,21 @@ async function imageProviders(apiKey: boolean) {
   await act(async () => root.render(<ModelDefaults {...props} />));
   // Each activity's selects live in its own dialog, opened from its card.
   const card = Array.from(element.querySelectorAll('.model-card')).find(
-    (item) => item.querySelector('h2')?.textContent === 'Image generation',
+    (item) => item.querySelector('h2')?.textContent === activity,
   );
   const configure = card?.querySelector('button');
-  if (!configure) throw new Error('Image generation card missing');
+  if (!configure) throw new Error(`${activity} card missing`);
   await act(async () => configure.click());
-  const label = Array.from(element.querySelectorAll('label')).find(
-    (item) => item.textContent === 'Provider',
-  );
+  const labels = Array.from(element.querySelectorAll('label'));
+  expect(labels.map((item) => item.textContent)).not.toContain('Provider');
+  const label = labels.find((item) => item.textContent === 'Model');
   const trigger = document.getElementById(label?.htmlFor ?? '') as HTMLButtonElement | null;
-  if (!trigger) throw new Error('Image provider selector missing');
+  if (!trigger) throw new Error('Model selector missing');
   await act(async () => trigger.click());
   return {
     element,
+    options: () =>
+      Array.from(document.querySelectorAll('[role="option"]')).map((item) => item.textContent),
     close: async () => {
       await act(async () => root.unmount());
       element.remove();
@@ -58,16 +74,22 @@ async function imageProviders(apiKey: boolean) {
   };
 }
 
-it('offers only image-capable providers and explains the missing OpenAI API key', async () => {
-  const view = await imageProviders(false);
+it('lists the models of every connected provider in one menu, each naming its provider', async () => {
+  const view = await modelMenu('Conversations', false);
   try {
-    const options = Array.from(document.querySelectorAll('[role="option"]'));
-    expect(options.map((item) => item.textContent)).toEqual([
-      'Automatic',
-      'Gemini',
-      'OpenAI · API key required',
-    ]);
-    expect(options.at(-1)?.getAttribute('aria-disabled')).toBe('true');
+    expect(view.options()).toEqual(
+      expect.arrayContaining(['Automatic', 'gemini-3-proGemini', 'claude-sonnet-5Anthropic']),
+    );
+    expect(view.options()).not.toContain('gemini-3-pro-imageGemini');
+  } finally {
+    await view.close();
+  }
+});
+
+it('offers image generation only where it works, and explains the missing OpenAI API key', async () => {
+  const view = await modelMenu('Image generation', false);
+  try {
+    expect(view.options()).toEqual(['Automatic', 'gemini-3-pro-imageGemini', 'Type an id…Gemini']);
     expect(view.element.textContent).toContain('ChatGPT login does not authorize image generation');
   } finally {
     await view.close();
@@ -75,22 +97,16 @@ it('offers only image-capable providers and explains the missing OpenAI API key'
 });
 
 it('offers the configured OpenAI API key for image generation', async () => {
-  const view = await imageProviders(true);
+  const view = await modelMenu('Image generation', true);
   try {
-    const options = Array.from(document.querySelectorAll('[role="option"]'));
-    expect(options.map((item) => item.textContent)).toEqual([
-      'Automatic',
-      'Gemini',
-      'OpenAI · API key',
-    ]);
-    expect(options.at(-1)?.getAttribute('aria-disabled')).not.toBe('true');
+    expect(view.options()).toContain('Type an id…OpenAI · API key');
   } finally {
     await view.close();
   }
 });
 
 it('shows one incoming audio setting for voice notes and audio files', async () => {
-  const view = await imageProviders(false);
+  const view = await modelMenu('Image generation', false);
   try {
     const headings = Array.from(view.element.querySelectorAll('h2')).map(
       (item) => item.textContent,

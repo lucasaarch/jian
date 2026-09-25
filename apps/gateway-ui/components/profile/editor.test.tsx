@@ -19,6 +19,7 @@ const profile = {
   allowWebSearch: false,
   learnFromWork: true,
   useStickers: true,
+  reachableByAgents: true,
   version: 3,
 } as unknown as Profile;
 

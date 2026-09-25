@@ -2,6 +2,7 @@ import {
   AGENT_SESSION_CHANNEL,
   GATEWAY_SESSION_CHANNEL,
   type Message,
+  type ModelSelection,
   type Session,
 } from '@jian/contracts';
 import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
@@ -21,6 +22,7 @@ export function toSession(row: SessionRow): Session {
     ...(row.scope ? { scope: row.scope } : {}),
     ...(row.summary ? { summary: row.summary } : {}),
     ...(row.summarizedUpTo ? { summarizedUpTo: row.summarizedUpTo.toISOString() } : {}),
+    ...(row.model ? { model: row.model } : {}),
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -48,6 +50,7 @@ export async function insertSession(db: Queryable, session: Session): Promise<vo
     scope: session.scope ?? null,
     summary: session.summary ?? null,
     summarizedUpTo: session.summarizedUpTo ? new Date(session.summarizedUpTo) : null,
+    model: session.model ?? null,
     createdAt: new Date(session.createdAt),
   });
 }
@@ -255,6 +258,21 @@ export async function renameSession(
   const [row] = await db
     .update(sessions)
     .set({ title })
+    .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)))
+    .returning();
+
+  return row ? toSession(row) : null;
+}
+
+export async function setSessionModel(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  model: ModelSelection | null,
+): Promise<Session | null> {
+  const [row] = await db
+    .update(sessions)
+    .set({ model })
     .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)))
     .returning();
 

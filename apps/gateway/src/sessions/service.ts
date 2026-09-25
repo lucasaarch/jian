@@ -5,6 +5,7 @@ import {
   LEARNING_SESSION_CHANNEL,
   type Profile,
   type Session,
+  sessionModelSchema,
   sessionRenameSchema,
   sessionSchema,
 } from '@jian/contracts';
@@ -23,6 +24,7 @@ import {
   listSessionMessages,
   listSessions,
   renameSession,
+  setSessionModel,
   writeSessionSummary,
 } from './repository.js';
 
@@ -80,6 +82,28 @@ export class Sessions {
       const session = assertFound(await renameSession(tx, profileId, sessionId, title), 'Session');
 
       await recordEvent(tx, this.clock, profileId, 'session.renamed', session);
+
+      return session;
+    });
+  }
+
+  /**
+   * The model this conversation runs on from its next turn. A turn already under way keeps the
+   * model it started with.
+   */
+  async setModel(profileId: string, sessionId: string, input: unknown) {
+    const { model } = sessionModelSchema.parse(input);
+
+    return this.store.transaction(profileId, async (tx) => {
+      const session = assertFound(
+        await setSessionModel(tx, profileId, sessionId, model),
+        'Session',
+      );
+
+      await recordEvent(tx, this.clock, profileId, 'session.model', {
+        sessionId,
+        model: model ? { providerId: model.providerId, modelId: model.modelId } : null,
+      });
 
       return session;
     });

@@ -329,6 +329,7 @@ describe('the skills every profile carries', () => {
       allowShell: true,
       allowWebSearch: true,
       useStickers: true,
+      reachableByAgents: true,
       mcpServers: [
         {
           name: 'x',

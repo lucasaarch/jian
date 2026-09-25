@@ -194,9 +194,9 @@ export const ingressResultSchema = z.strictObject({
     .optional()
     .describe('Absent when the payload carried no message to route.'),
   silence: z
-    .enum(['unaddressed', 'budget', 'reaction'])
+    .enum(['unaddressed', 'budget', 'reaction', 'no-model'])
     .optional()
-    .describe('Why an approved group message produced no run.'),
+    .describe('Why an approved message produced no run.'),
 });
 
 /**

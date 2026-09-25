@@ -334,6 +334,31 @@ describe('conversation between profiles', () => {
     }
   });
 
+  it('leaves a profile switched off out of every conversation between agents', async () => {
+    const { services, caller, callee, peers } = await pair();
+    const run = await ownerRun(services, caller, 'Ask the other one');
+
+    await services.profiles.updateProfile(callee.id, {
+      expectedVersion: callee.version,
+      reachableByAgents: false,
+    });
+
+    expect(await peers.agents(caller.id)).toEqual([]);
+    expect(await peers.agents(callee.id)).toEqual([]);
+    await expect(
+      peers.ask(run, { toProfileId: callee.id, text: 'Hello?', requestKey: 'off' }),
+    ).rejects.toThrow(/does not take calls/);
+
+    const off = await services.profiles.profile(callee.id);
+    const offRun = await ownerRun(services, off, 'Ask the other one');
+
+    expect(profileTools(services, offRun)).not.toHaveProperty('ask_agent');
+    await expect(
+      peers.ask(offRun, { toProfileId: caller.id, text: 'Hello?', requestKey: 'from-off' }),
+    ).rejects.toThrow(/switched off/);
+    expect(await runRows(services.store, callee.id)).toHaveLength(1);
+  });
+
   it('refuses to reopen a conversation an agent already closed, or to call itself', async () => {
     const { services, caller, callee, peers } = await pair();
     const run = await ownerRun(services, caller, 'Abre a conversa');

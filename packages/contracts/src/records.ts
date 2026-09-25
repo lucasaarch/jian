@@ -31,6 +31,8 @@ export const sessionRecordSchema = sessionSchema.extend({
    */
   summary: z.string().max(20_000).optional(),
   summarizedUpTo: timestamp.optional(),
+  /** Chosen for this conversation alone; absent, it runs on the profile's model defaults. */
+  model: modelSelectionSchema.optional(),
   createdAt: timestamp,
 });
 

@@ -38,6 +38,7 @@ import {
   memoryKeySchema,
   profilePatchSchema,
   profileSchema,
+  sessionModelSchema,
   sessionRenameSchema,
   sessionSchema,
   submitSchema,
@@ -591,6 +592,14 @@ export const operations: Operation[] = [
     operationId: 'renameSession',
     access: 'admin',
     body: sessionRenameSchema,
+    response: sessionRecordSchema,
+  },
+  {
+    method: 'PUT',
+    path: `${session}/model`,
+    operationId: 'setSessionModel',
+    access: 'admin',
+    body: sessionModelSchema,
     response: sessionRecordSchema,
   },
   {

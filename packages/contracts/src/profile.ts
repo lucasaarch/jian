@@ -247,6 +247,11 @@ export const profileSchema = z.strictObject({
   learnFromWork: z.boolean().default(true),
   /** Keeping the stickers people send, describing them, and sending them back. */
   useStickers: z.boolean().default(true),
+  /**
+   * Whether this profile takes part in conversations between agents. Off, the others no longer
+   * see it or reach it, and it loses them too: the wall runs both ways.
+   */
+  reachableByAgents: z.boolean().default(true),
 });
 
 export const profilePatchSchema = profileSchema.partial().extend({
@@ -267,6 +272,7 @@ export const profilePatchSchema = profileSchema.partial().extend({
   allowWebSearch: z.boolean().optional(),
   learnFromWork: z.boolean().optional(),
   useStickers: z.boolean().optional(),
+  reachableByAgents: z.boolean().optional(),
 });
 
 /**
@@ -296,6 +302,11 @@ export const sessionSchema = z.strictObject({
 
 export const sessionRenameSchema = z.strictObject({
   title: z.string().trim().min(1).max(160),
+});
+
+/** The model this conversation runs on, over the profile's defaults. Null goes back to them. */
+export const sessionModelSchema = z.strictObject({
+  model: modelSelectionSchema.nullable(),
 });
 
 export const submitSchema = z

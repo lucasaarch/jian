@@ -7,7 +7,8 @@ type ChannelEvent =
   | 'delivery.result'
   | 'delivery.peer_failed'
   | 'picture.failed'
-  | 'picture.refused';
+  | 'picture.refused'
+  | 'ingress.no_model';
 
 type Details = {
   channelId?: string;

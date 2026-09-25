@@ -64,6 +64,7 @@ const profileBase = {
   allowWebSearch: false,
   learnFromWork: true,
   useStickers: true,
+  reachableByAgents: true,
   version: 3,
   createdAt: at(60 * 24 * 30),
   updatedAt: at(60 * 3),
@@ -106,6 +107,7 @@ export const profiles: Profile[] = [
     allowWebSearch: true,
     learnFromWork: true,
     useStickers: true,
+    reachableByAgents: true,
   },
   {
     ...profileBase,

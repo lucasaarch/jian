@@ -83,6 +83,31 @@ describe('a profile with a provider but no model chosen', () => {
     expect(defaults.conversation?.modelId).toBe('claude-sonnet-4-5');
   });
 
+  it('picks again when the chosen model belongs to a provider that was removed', async () => {
+    const { services, profile } = await setup(['claude-3-haiku', 'claude-sonnet-4-5']);
+    const gone = await services.providers.createProvider({
+      name: 'Old key',
+      kind: 'openai',
+      secret: 'synthetic-old-key',
+    });
+
+    await services.providers.setModelDefaults(profile.id, {
+      conversation: { providerId: gone.id, modelId: 'gpt-4.1' },
+    });
+    await services.providers.revokeProvider(gone.id);
+
+    const session = await services.sessions.createSession(profile.id, { title: 'Stale' });
+    const run = await services.runs.submit(profile.id, session.id, {
+      text: 'Hello',
+      requestKey: 'stale',
+    });
+
+    expect(run.model?.modelId).toBe('claude-sonnet-4-5');
+    expect((await services.providers.modelDefaults(profile.id)).conversation?.modelId).toBe(
+      'claude-sonnet-4-5',
+    );
+  });
+
   it('never picks a model the catalog cannot vouch for', async () => {
     const { fallback } = await setup(['mystery-model', 'embed-v1'], {
       'embed-v1': { modalities: { input: ['text'], output: [] } },
