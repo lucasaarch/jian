@@ -41,6 +41,14 @@ const entry = z.looseObject({
     .optional()
     .catch(undefined),
   release_date: z.string().optional().catch(undefined),
+  cost: z
+    .looseObject({
+      input: z.number().optional().catch(undefined),
+      output: z.number().optional().catch(undefined),
+      cache_read: z.number().optional().catch(undefined),
+    })
+    .optional()
+    .catch(undefined),
   reasoning_options: z
     .array(
       z.looseObject({
@@ -67,6 +75,8 @@ export type CatalogEntry = {
   outputModalities: ModelCapabilities['inputModalities'];
   /** ISO date, when the catalog carries one. It is how a newer model wins over an older one. */
   releaseDate?: string;
+  /** List prices in US dollars per million tokens, when the catalog carries them. */
+  price?: { input: number; output: number; cacheRead?: number };
 };
 
 const modalities = (values: string[] | undefined): ModelCapabilities['inputModalities'] =>
@@ -93,6 +103,15 @@ function toEntry(model: z.infer<typeof entry>): CatalogEntry {
     inputModalities: modalities(model.modalities?.input),
     outputModalities: modalities(model.modalities?.output),
     ...(model.release_date ? { releaseDate: model.release_date } : {}),
+    ...(model.cost?.input !== undefined && model.cost.output !== undefined
+      ? {
+          price: {
+            input: model.cost.input,
+            output: model.cost.output,
+            ...(model.cost.cache_read !== undefined ? { cacheRead: model.cost.cache_read } : {}),
+          },
+        }
+      : {}),
   };
 }
 

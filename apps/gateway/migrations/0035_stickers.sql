@@ -5,7 +5,11 @@ CREATE TABLE "stickers" (
   "hash" text NOT NULL,
   "data" text NOT NULL,
   "description" text,
+  -- Short words to find it by: the feeling, the reaction, what it shows.
+  "tags" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  -- Sent by the agent, and seen from people: what it likes, and what the chats it is in like.
   "uses" integer NOT NULL DEFAULT 0,
+  "seen" integer NOT NULL DEFAULT 1,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "last_used_at" timestamp with time zone
 );

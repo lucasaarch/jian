@@ -68,14 +68,8 @@ Files go up to 16 MB each.
 
 ## Stickers
 
-Every sticker people send in your approved chats joins your own collection, described by what
-it shows. \`find_stickers\` searches it by meaning ("laughing", "thumbs up", "facepalm"), and
-\`send_sticker\` sends one by its id, as a real sticker, on WhatsApp and Telegram.
-
-Use one the way people do: as a reaction, in a light moment, or instead of a one-word answer —
-not in a serious conversation, not after bad news, and not in every message. A sticker goes
-alone; put anything you need to say in a message of its own. If nothing in the collection
-fits, send nothing rather than something that almost fits.
+People's stickers become your own collection, to send back as stickers. See \`stickers\` for
+when one fits and how to choose it.
 
 ## Making images and voice
 

@@ -167,6 +167,75 @@ export const activityDaySchema = z.strictObject({
   tokens: z.number().int().nonnegative(),
 });
 
+const tokenMixSchema = z.strictObject({
+  // Input read fresh, input served from the provider's cache, and output written.
+  input: z.number().int().nonnegative(),
+  cached: z.number().int().nonnegative(),
+  output: z.number().int().nonnegative(),
+});
+
+/**
+ * How the model was paid for: per token at list price, inside a subscription (a Claude token or
+ * a ChatGPT sign-in, where a token has no price), or at a price the catalog does not know.
+ */
+export const billingSchema = z.enum(['metered', 'subscription', 'unknown']);
+
+export const statsQuerySchema = z.strictObject({
+  days: z.coerce.number().int().min(1).max(3660).default(30),
+});
+
+/** What a profile has done: since it was created, and over the period asked for. */
+export const profileStatsSchema = z.strictObject({
+  since: timestamp,
+  totals: z.strictObject({
+    turns: z.number().int().nonnegative(),
+    // Time its turns took, start to finish, added up.
+    workedMs: z.number().int().nonnegative(),
+    conversations: z.number().int().nonnegative(),
+    skillsWritten: z.number().int().nonnegative(),
+    memories: z.number().int().nonnegative(),
+  }),
+  period: z.strictObject({
+    days: z.number().int().positive(),
+    from: timestamp,
+    turns: z.number().int().nonnegative(),
+    tokens: tokenMixSchema,
+    // Estimated from list prices; null when nothing in the period had a known price.
+    cost: z.number().nonnegative().nullable(),
+    // Part of the tokens used inside a subscription or at an unknown price, left out of cost.
+    unpricedTokens: z.number().int().nonnegative(),
+    activeDays: z.number().int().nonnegative(),
+    daily: z.array(z.strictObject({ day: z.string(), tokens: z.number().int().nonnegative() })),
+  }),
+  models: z.array(
+    z.strictObject({
+      provider: z.string(),
+      modelId: z.string(),
+      billing: billingSchema,
+      turns: z.number().int().nonnegative(),
+      tokens: tokenMixSchema,
+      cost: z.number().nonnegative().nullable(),
+    }),
+  ),
+  channels: z.array(
+    z.strictObject({
+      channel: z.string(),
+      conversations: z.number().int().nonnegative(),
+      turns: z.number().int().nonnegative(),
+      tokens: z.number().int().nonnegative(),
+    }),
+  ),
+  tools: z.array(
+    z.strictObject({
+      name: z.string(),
+      calls: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+    }),
+  ),
+});
+
+export type ProfileStats = z.infer<typeof profileStatsSchema>;
+
 export const revisionRecordSchema = z.strictObject({
   id: z.string(),
   profileId: uuid,

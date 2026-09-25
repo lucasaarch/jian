@@ -18,6 +18,7 @@ import { createSafeFetch } from './security/outbound.js';
 import type { Vault } from './security/vault.js';
 import { Sessions } from './sessions/service.js';
 import { Settings } from './settings/service.js';
+import { Stats } from './stats/service.js';
 import { Stickers } from './stickers/service.js';
 import type { Store } from './storage/database.js';
 import { WebSearch } from './web/service.js';
@@ -35,6 +36,7 @@ export type Services = {
   peers: Peers;
   learning: Learning;
   stickers: Stickers;
+  stats: Stats;
   schedules: Schedules;
   settings: Settings;
   lifecycle: RunLifecycle;
@@ -83,6 +85,14 @@ export function buildServices({
     peers: new Peers({ profiles, sessions, runs, store }, clock),
     learning: new Learning({ store, profiles, sessions, runs }, clock),
     stickers: new Stickers(store, media),
+    // Without a catalog nothing has a list price, and every model counts as unknown.
+    stats: new Stats(
+      store,
+      profiles,
+      settings,
+      catalog ?? { prime: async () => {}, lookup: () => undefined },
+      clock,
+    ),
     schedules: new Schedules(store, profiles, sessions, runs, clock),
     settings,
     lifecycle: new RunLifecycle(store, runs, clock),
