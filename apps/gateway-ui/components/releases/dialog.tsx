@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { type GatewayApi, gatewayApi } from '../../lib/api';
 import { date } from '../../lib/format';
 import { Button } from '../ui';
@@ -10,11 +10,23 @@ import { Modal } from '../ui/modal';
 type Releases = Awaited<ReturnType<GatewayApi['releases']>>;
 
 /**
- * Opens once after an update with what changed. Closing it is the owner saying they read it, and
- * the gateway keeps that mark, so the same notes do not open again on another browser.
+ * How the sidebar opens the notes on purpose. A context, because the dialog belongs to the
+ * shell — it opens over any page — and the link that asks for it is in the sidebar.
  */
-export function ReleaseDialog() {
+const ReleaseNotesContext = createContext<() => void>(() => {});
+
+export const useReleaseNotes = () => useContext(ReleaseNotesContext);
+
+/**
+ * Opens once after an update with what changed, and again whenever the owner asks. Closing the
+ * first is the owner saying they read it, and the gateway keeps that mark, so the same notes do
+ * not open again on another browser. Opened on purpose it is the history, every release this
+ * installation ran up to now — the gateway leaves out candidates on a stable version — and
+ * reading it again marks nothing.
+ */
+export function ReleaseNotes({ children }: { children?: ReactNode }) {
   const [releases, setReleases] = useState<Releases>();
+  const [asked, setAsked] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -32,43 +44,66 @@ export function ReleaseDialog() {
     };
   }, []);
 
-  if (!releases?.unseen.length) {
-    return null;
-  }
+  const show = useCallback(() => setAsked(true), []);
 
   const close = () => {
-    setReleases(undefined);
+    if (asked) {
+      setAsked(false);
+      return;
+    }
+
+    setReleases((state) => (state ? { ...state, unseen: [] } : state));
     void gatewayApi()
       .markReleasesSeen()
       .catch(() => {});
   };
 
-  const [latest] = releases.unseen;
+  const shown = asked ? (releases?.notes ?? []) : (releases?.unseen ?? []);
+  const open = asked || shown.length > 0;
+  const many = asked || shown.length > 1;
+  const [latest] = shown;
 
   return (
-    <Modal
-      title={`What's new in Jian ${releases.version ?? latest?.version ?? ''}`}
-      {...(latest?.summary ? { description: latest.summary } : {})}
-      close={close}
-    >
-      <div className="release-notes">
-        {releases.unseen.map((note) => (
-          <section key={note.version}>
-            {releases.unseen.length > 1 && (
-              <h2>
-                {note.version} <small>{date(note.date)}</small>
-              </h2>
-            )}
-            {releases.unseen.length > 1 && note.summary && <p>{note.summary}</p>}
-            <Markdown text={note.body} />
-          </section>
-        ))}
-      </div>
-      <footer>
-        <Button type="button" onClick={close}>
-          Got it
-        </Button>
-      </footer>
-    </Modal>
+    <ReleaseNotesContext.Provider value={show}>
+      {children}
+      {open && (
+        <Modal
+          title={
+            asked
+              ? 'Release notes'
+              : `What's new in Jian ${releases?.version ?? latest?.version ?? ''}`
+          }
+          {...(asked
+            ? {
+                description: releases?.version
+                  ? `Every release up to ${releases.version}, newest first.`
+                  : 'This build has no version, so it has no notes to show.',
+              }
+            : latest?.summary
+              ? { description: latest.summary }
+              : {})}
+          close={close}
+          footer={
+            <Button type="button" onClick={close}>
+              {asked ? 'Close' : 'Got it'}
+            </Button>
+          }
+        >
+          <div className="release-notes">
+            {shown.map((note) => (
+              <section key={note.version}>
+                {many && (
+                  <h2>
+                    {note.version} <small>{date(note.date)}</small>
+                  </h2>
+                )}
+                {many && note.summary && <p>{note.summary}</p>}
+                <Markdown text={note.body} />
+              </section>
+            ))}
+          </div>
+        </Modal>
+      )}
+    </ReleaseNotesContext.Provider>
   );
 }

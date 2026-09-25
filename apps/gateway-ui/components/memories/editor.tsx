@@ -39,8 +39,30 @@ export function MemoryEditor({
     .map((item) => ({ value: item.key, label: item.key, detail: item.content.slice(0, 80) }));
 
   return (
-    <Modal title={memory.key} description={`Version ${memory.version}`} close={close} wide>
+    <Modal
+      title={memory.key}
+      description={`Version ${memory.version}`}
+      close={close}
+      wide
+      footer={
+        <>
+          <Button type="button" variant="quiet" onClick={close}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="memory-form"
+            busy={busy}
+            disabled={!content.trim() || content.trim() === memory.content}
+          >
+            <Save size={16} />
+            Save
+          </Button>
+        </>
+      }
+    >
       <form
+        id="memory-form"
         className="grid gap-5"
         onSubmit={async (event) => {
           event.preventDefault();
@@ -89,19 +111,6 @@ export function MemoryEditor({
             <p className="note">A memory holds up to {LINK_LIMIT} links.</p>
           ) : null}
         </section>
-        <footer>
-          <Button type="button" variant="quiet" onClick={close}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            busy={busy}
-            disabled={!content.trim() || content.trim() === memory.content}
-          >
-            <Save size={16} />
-            Save
-          </Button>
-        </footer>
       </form>
     </Modal>
   );

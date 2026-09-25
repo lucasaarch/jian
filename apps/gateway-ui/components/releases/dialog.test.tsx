@@ -11,9 +11,17 @@ const note = {
   prerelease: false,
 };
 
+const older = {
+  version: '2.1.0',
+  date: '2026-09-23',
+  summary: 'Precise code edits.',
+  body: '- **agent:** edit code precisely',
+  prerelease: false,
+};
+
 vi.mock('../../lib/api', () => ({
   gatewayApi: () => ({
-    releases: async () => ({ version: '2.2.0', notes: [note], unseen: [note] }),
+    releases: async () => ({ version: '2.2.0', notes: [note, older], unseen: [note] }),
     markReleasesSeen: seen,
   }),
 }));
@@ -28,14 +36,14 @@ it('shows what changed once, as text, and marks it read on close', async () => {
     this.removeAttribute('open');
   };
 
-  const { ReleaseDialog } = await import('./dialog');
+  const { ReleaseNotes } = await import('./dialog');
   const element = document.createElement('div');
   document.body.append(element);
   const root = createRoot(element);
 
   try {
     await act(async () => {
-      root.render(<ReleaseDialog />);
+      root.render(<ReleaseNotes />);
     });
 
     expect(element.querySelector('h2')?.textContent).toBe("What's new in Jian 2.2.0");
@@ -54,6 +62,54 @@ it('shows what changed once, as text, and marks it read on close', async () => {
     });
 
     expect(seen).toHaveBeenCalledTimes(1);
+    expect(element.querySelector('dialog')).toBeNull();
+  } finally {
+    act(() => root.unmount());
+    element.remove();
+  }
+});
+
+it('opens every release on request, newest first, and marks nothing read', async () => {
+  const { ReleaseNotes, useReleaseNotes } = await import('./dialog');
+  function Open() {
+    const open = useReleaseNotes();
+
+    return (
+      <button type="button" onClick={open}>
+        Release notes
+      </button>
+    );
+  }
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  const button = (text: string) =>
+    [...element.querySelectorAll('button')].find((item) => item.textContent === text);
+
+  seen.mockClear();
+
+  try {
+    await act(async () => {
+      root.render(
+        <ReleaseNotes>
+          <Open />
+        </ReleaseNotes>,
+      );
+    });
+    // The update dialog comes first; reading it is what the history is opened after.
+    await act(async () => button('Got it')?.click());
+    seen.mockClear();
+
+    await act(async () => button('Release notes')?.click());
+
+    expect(element.querySelector('h2')?.textContent).toBe('Release notes');
+    expect(
+      [...element.querySelectorAll('.release-notes h2')].map((item) => item.textContent),
+    ).toEqual([expect.stringContaining('2.2.0'), expect.stringContaining('2.1.0')]);
+
+    await act(async () => button('Close')?.click());
+
+    expect(seen).not.toHaveBeenCalled();
     expect(element.querySelector('dialog')).toBeNull();
   } finally {
     act(() => root.unmount());

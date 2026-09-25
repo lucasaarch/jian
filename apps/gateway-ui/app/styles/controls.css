@@ -116,12 +116,6 @@
   .profile-trigger-copy strong {
     @apply block truncate text-sm font-medium;
   }
-  .sidebar-footer .settings-link {
-    @apply mb-5 flex items-center gap-2 rounded py-2 text-sm text-ink hover:text-accent;
-  }
-  .sidebar-footer .settings-link.active {
-    @apply text-accent;
-  }
   .identity-form {
     @apply w-full;
   }

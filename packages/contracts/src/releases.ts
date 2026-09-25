@@ -23,5 +23,12 @@ export const releasesSchema = z.strictObject({
   unseen: z.array(releaseNoteSchema),
 });
 
+/** Where the project lives, and its GitHub stars when GitHub could be reached. */
+export const repositorySchema = z.strictObject({
+  url: z.url(),
+  stars: z.number().int().nonnegative().optional(),
+});
+
+export type Repository = z.infer<typeof repositorySchema>;
 export type ReleaseNote = z.infer<typeof releaseNoteSchema>;
 export type Releases = z.infer<typeof releasesSchema>;

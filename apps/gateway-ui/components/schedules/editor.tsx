@@ -73,8 +73,25 @@ export function ScheduleEditor({
       description="At the time, the agent receives the instruction in the conversation you choose, and answers there."
       close={close}
       wide
+      footer={
+        <>
+          <Button type="button" variant="quiet" onClick={close}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="schedule-form"
+            busy={busy}
+            disabled={!name.trim() || !instruction.trim()}
+          >
+            <Save size={16} />
+            {schedule ? 'Save' : 'Create'}
+          </Button>
+        </>
+      }
     >
       <form
+        id="schedule-form"
         className="grid gap-5"
         onSubmit={async (event) => {
           event.preventDefault();
@@ -198,15 +215,6 @@ export function ScheduleEditor({
             </div>
           )}
         </fieldset>
-        <footer>
-          <Button type="button" variant="quiet" onClick={close}>
-            Cancel
-          </Button>
-          <Button type="submit" busy={busy} disabled={!name.trim() || !instruction.trim()}>
-            <Save size={16} />
-            {schedule ? 'Save' : 'Create'}
-          </Button>
-        </footer>
       </form>
     </Modal>
   );

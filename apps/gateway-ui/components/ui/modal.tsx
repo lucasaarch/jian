@@ -7,20 +7,24 @@ import { Field } from './field';
 
 /**
  * A native dialog: Escape and the backdrop are the browser's, so close() is the only exit.
- * The header stays and the content scrolls under it; a `footer` in the content, even inside a
- * form, sticks to the bottom, so its actions are always in reach.
+ * Only the content scrolls: the header above it and the `footer` below it stay put, so the
+ * actions are always in reach. A form's submit button in the footer names the form with `form`,
+ * since the footer sits outside it.
  */
 export function Modal({
   title,
   description,
   children,
   close,
+  footer,
   wide = false,
 }: {
   title: string;
   description?: string;
-  children: ReactNode;
+  children?: ReactNode;
   close: () => void;
+  /** The dialog's actions, kept below the scrolling content. */
+  footer?: ReactNode;
   /** Room for reading, as a document shown whole needs. */
   wide?: boolean;
 }) {
@@ -52,7 +56,8 @@ export function Modal({
           <X size={20} />
         </button>
       </header>
-      <div className="modal-body">{children}</div>
+      {children && <div className="modal-body">{children}</div>}
+      {footer && <footer className="modal-footer">{footer}</footer>}
     </dialog>
   );
 }
@@ -77,7 +82,21 @@ export function Confirm({
   const matches = !phrase || typed.trim() === phrase;
 
   return (
-    <Modal title={title} description={description} close={close}>
+    <Modal
+      title={title}
+      description={description}
+      close={close}
+      footer={
+        <>
+          <Button variant="secondary" onClick={close}>
+            Cancel
+          </Button>
+          <Button variant="danger" busy={busy} disabled={!matches} onClick={confirm}>
+            Confirm
+          </Button>
+        </>
+      }
+    >
       {phrase && (
         <Field label={`Type ${phrase} to confirm`}>
           <input
@@ -90,14 +109,6 @@ export function Confirm({
           />
         </Field>
       )}
-      <footer>
-        <Button variant="secondary" onClick={close}>
-          Cancel
-        </Button>
-        <Button variant="danger" busy={busy} disabled={!matches} onClick={confirm}>
-          Confirm
-        </Button>
-      </footer>
     </Modal>
   );
 }

@@ -150,7 +150,12 @@ export function ModelDefaults({ profile, data, api, busy }: SectionProps) {
         </div>
       </form>
       {editing && (
-        <Modal title={editing.label} description={editing.hint} close={() => setOpen(undefined)}>
+        <Modal
+          title={editing.label}
+          description={editing.hint}
+          close={() => setOpen(undefined)}
+          footer={<Button onClick={() => setOpen(undefined)}>Done</Button>}
+        >
           <RoleFields
             role={editing}
             value={values[editing.key]}
@@ -160,9 +165,6 @@ export function ModelDefaults({ profile, data, api, busy }: SectionProps) {
             busy={busy}
             change={change}
           />
-          <footer>
-            <Button onClick={() => setOpen(undefined)}>Done</Button>
-          </footer>
         </Modal>
       )}
     </>

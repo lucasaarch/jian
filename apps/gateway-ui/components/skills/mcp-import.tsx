@@ -51,8 +51,20 @@ export function McpImport({
       title="Import from another agent"
       description="Each server is copied with its credentials and becomes this agent's own. Changing it here never changes the other agent."
       close={close}
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={close}>
+            Cancel
+          </Button>
+          <Button type="submit" form="mcp-import-form" busy={busy} disabled={!chosen.size}>
+            <Download size={16} />
+            Import {chosen.size === 1 ? '1 server' : `${chosen.size} servers`}
+          </Button>
+        </>
+      }
     >
       <form
+        id="mcp-import-form"
         className="grid gap-5"
         onSubmit={async (event) => {
           event.preventDefault();
@@ -163,15 +175,6 @@ export function McpImport({
             );
           })}
         </fieldset>
-        <footer>
-          <Button type="button" variant="secondary" onClick={close}>
-            Cancel
-          </Button>
-          <Button type="submit" busy={busy} disabled={!chosen.size}>
-            <Download size={16} />
-            Import {chosen.size === 1 ? '1 server' : `${chosen.size} servers`}
-          </Button>
-        </footer>
       </form>
     </Modal>
   );

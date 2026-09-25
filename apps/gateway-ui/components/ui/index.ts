@@ -1,5 +1,5 @@
 export { AudioPlayer } from './audio-player';
-export { TelegramLogo, WhatsAppLogo } from './brands';
+export { GitHubLogo, TelegramLogo, WhatsAppLogo } from './brands';
 export { Button } from './button';
 export { CountUp } from './count-up';
 export { Face } from './face';

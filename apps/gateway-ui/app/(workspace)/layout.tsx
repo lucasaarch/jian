@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
 import { NewProfileDialog } from '../../components/profile/editor';
-import { ReleaseDialog } from '../../components/releases/dialog';
+import { ReleaseNotes } from '../../components/releases/dialog';
 import { NoticeBar } from '../../components/shell/notice';
 import { Sidebar } from '../../components/shell/sidebar';
 import { Topbar } from '../../components/shell/topbar';
@@ -107,75 +107,76 @@ function Shell({ children }: { children: ReactNode }) {
   }, [mobile]);
 
   return (
-    <div className="app-shell">
-      <a href="#main-content" className="skip-link">
-        Skip to content
-      </a>
-      <ReleaseDialog />
-      {mobile && (
-        <button
-          className="sidebar-backdrop"
-          type="button"
-          aria-label="Close navigation"
-          onClick={() => setMobile(false)}
-        />
-      )}
-      <Sidebar
-        open={mobile}
-        onNavigate={() => setMobile(false)}
-        onCreateProfile={() => {
-          setMobile(false);
-          setCreating(true);
-        }}
-      />
-      <div className="workspace" inert={mobile}>
-        <Topbar navigationOpen={mobile} onOpenNavigation={() => setMobile(true)} />
-        <main id="main-content" tabIndex={-1} className={`main-content ${fill ? 'fill' : ''}`}>
-          <NoticeBar />
-          {settings ? (
-            children
-          ) : !profiles.length ? (
-            <Empty
-              title="Bring your first agent to life"
-              action={
-                <Button onClick={() => setCreating(true)}>
-                  <Plus size={16} />
-                  Create a profile
-                </Button>
-              }
-            >
-              Start with a name and instructions. Connect your providers next.
-            </Empty>
-          ) : profile && data ? (
-            <div key={profile.id} className="page-enter">
-              {children}
-            </div>
-          ) : (
-            <div className="loading-state" role="status">
-              {loading ? (
-                <>
-                  <Orb size={64} />
-                  <span>Loading your workspace…</span>
-                </>
-              ) : (
-                <Button variant="secondary" onClick={() => void refresh()}>
-                  Try loading again
-                </Button>
-              )}
-            </div>
-          )}
-        </main>
-      </div>
-      {creating && (
-        <NewProfileDialog
-          api={gatewayApi()}
-          close={() => setCreating(false)}
-          done={(created) => {
-            adopt(created);
-            setCreating(false);
+    <ReleaseNotes>
+      <div className="app-shell">
+        <a href="#main-content" className="skip-link">
+          Skip to content
+        </a>
+        {mobile && (
+          <button
+            className="sidebar-backdrop"
+            type="button"
+            aria-label="Close navigation"
+            onClick={() => setMobile(false)}
+          />
+        )}
+        <Sidebar
+          open={mobile}
+          onNavigate={() => setMobile(false)}
+          onCreateProfile={() => {
+            setMobile(false);
+            setCreating(true);
           }}
         />
-      )}
-    </div>
+        <div className="workspace" inert={mobile}>
+          <Topbar navigationOpen={mobile} onOpenNavigation={() => setMobile(true)} />
+          <main id="main-content" tabIndex={-1} className={`main-content ${fill ? 'fill' : ''}`}>
+            <NoticeBar />
+            {settings ? (
+              children
+            ) : !profiles.length ? (
+              <Empty
+                title="Bring your first agent to life"
+                action={
+                  <Button onClick={() => setCreating(true)}>
+                    <Plus size={16} />
+                    Create a profile
+                  </Button>
+                }
+              >
+                Start with a name and instructions. Connect your providers next.
+              </Empty>
+            ) : profile && data ? (
+              <div key={profile.id} className="page-enter">
+                {children}
+              </div>
+            ) : (
+              <div className="loading-state" role="status">
+                {loading ? (
+                  <>
+                    <Orb size={64} />
+                    <span>Loading your workspace…</span>
+                  </>
+                ) : (
+                  <Button variant="secondary" onClick={() => void refresh()}>
+                    Try loading again
+                  </Button>
+                )}
+              </div>
+            )}
+          </main>
+        </div>
+        {creating && (
+          <NewProfileDialog
+            api={gatewayApi()}
+            close={() => setCreating(false)}
+            done={(created) => {
+              adopt(created);
+              setCreating(false);
+            }}
+          />
+        )}
+      </div>
+    </ReleaseNotes>
   );
 }

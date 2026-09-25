@@ -9,6 +9,7 @@ import { Peers } from './peers/service.js';
 import { Profiles } from './profiles/service.js';
 import type { ModelCatalog } from './providers/catalog-source.js';
 import { Providers } from './providers/service.js';
+import { RepositoryStars } from './releases/repository.js';
 import { ReleaseNotes } from './releases/service.js';
 import { RunLifecycle } from './runs/lifecycle.js';
 import { Runs } from './runs/service.js';
@@ -31,6 +32,7 @@ export type Services = {
   media: Media;
   web: WebSearch;
   releases: ReleaseNotes;
+  repository: RepositoryStars;
   decisions: Decisions;
   runs: Runs;
   peers: Peers;
@@ -80,6 +82,7 @@ export function buildServices({
     web: new WebSearch(store, gatewayVault, fetcher ?? createSafeFetch().fetch),
     // Stamped into the image at build time; a gateway run from source has none.
     releases: new ReleaseNotes(store, process.env.JIAN_VERSION),
+    repository: new RepositoryStars(fetcher ?? createSafeFetch().fetch),
     decisions,
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),

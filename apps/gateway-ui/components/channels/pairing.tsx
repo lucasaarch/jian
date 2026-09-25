@@ -82,6 +82,35 @@ export function Pairing({
       title="Connect WhatsApp"
       description="On your phone, open WhatsApp → Linked devices → Link a device."
       close={close}
+      footer={
+        <>
+          <Button variant="secondary" onClick={close}>
+            Close
+          </Button>
+          {connection?.status !== 'connected' && (
+            <Button
+              busy={busy}
+              onClick={async () => {
+                setBusy(true);
+                setError('');
+
+                try {
+                  setConnection(await api.connect(profileId, channel.id));
+                } catch (error) {
+                  setError(error instanceof Error ? error.message : 'The connection failed.');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <QrCode size={16} />
+              {connection?.status === 'connecting' || connection?.status === 'qr'
+                ? 'Reconectar'
+                : 'Gerar QR Code'}
+            </Button>
+          )}
+        </>
+      }
     >
       <div className="pairing-stage">
         {connection?.status === 'connected' ? (
@@ -131,33 +160,6 @@ export function Pairing({
         This pairs a device to your own WhatsApp, so keep the QR code private. Anyone who writes
         arrives as a contact request: nothing is answered before you approve it.
       </p>
-      <footer>
-        <Button variant="secondary" onClick={close}>
-          Close
-        </Button>
-        {connection?.status !== 'connected' && (
-          <Button
-            busy={busy}
-            onClick={async () => {
-              setBusy(true);
-              setError('');
-
-              try {
-                setConnection(await api.connect(profileId, channel.id));
-              } catch (error) {
-                setError(error instanceof Error ? error.message : 'The connection failed.');
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <QrCode size={16} />
-            {connection?.status === 'connecting' || connection?.status === 'qr'
-              ? 'Reconectar'
-              : 'Gerar QR Code'}
-          </Button>
-        )}
-      </footer>
     </Modal>
   );
 }

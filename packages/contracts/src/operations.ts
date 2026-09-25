@@ -69,7 +69,7 @@ import {
   sessionSummarySchema,
   statsQuerySchema,
 } from './records.js';
-import { releasesSchema } from './releases.js';
+import { releasesSchema, repositorySchema } from './releases.js';
 import {
   gatewaySettingsPatchSchema,
   gatewaySettingsSchema,
@@ -122,6 +122,13 @@ export const operations: Operation[] = [
     operationId: 'markReleasesSeen',
     access: 'admin',
     response: releasesSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/repository',
+    operationId: 'getRepository',
+    access: 'admin',
+    response: repositorySchema,
   },
   {
     method: 'GET',

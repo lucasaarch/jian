@@ -32,7 +32,6 @@ export function modelChoices(
   role: Role,
   data: ProfileData,
   configured: Provider[],
-  tools = true,
 ): SelectOption[] {
   return configured
     .filter((provider) => supportsProviderRole(provider, role))
@@ -41,7 +40,8 @@ export function modelChoices(
         .filter((model) => supportsModelRole(provider, model, role))
         .map((model) => ({
           value: choiceOf(provider.id, model.id),
-          label: modelLabel(model, tools),
+          // Only the name: an uncatalogued model is flagged once it is chosen, not in the menu.
+          label: modelLabel(model, false),
           detail: providerName(provider),
         })),
     );
@@ -91,7 +91,7 @@ export function RoleFields({
     data,
     configured,
   );
-  const choices = modelChoices(role.key, data, configured, role.tools);
+  const choices = modelChoices(role.key, data, configured);
   const current = choiceOf(value.providerId, value.modelId);
 
   return (

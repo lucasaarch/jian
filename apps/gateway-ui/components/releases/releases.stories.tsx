@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { releases } from '../../stories/fixtures';
 import { updatedHandlers } from '../../stories/handlers';
 import { Markdown } from '../ui/markdown';
-import { ReleaseDialog } from './dialog';
+import { ReleaseNotes, useReleaseNotes } from './dialog';
 
 const meta = {
   title: 'Releases',
@@ -15,7 +15,26 @@ type Story = StoryObj<typeof meta>;
 /** What opens once after an update. */
 export const WhatsNew: Story = {
   parameters: { msw: { handlers: updatedHandlers } },
-  render: () => <ReleaseDialog />,
+  render: () => <ReleaseNotes />,
+};
+
+function OpenHistory() {
+  const open = useReleaseNotes();
+
+  return (
+    <button type="button" className="button secondary m-6" onClick={open}>
+      Release notes
+    </button>
+  );
+}
+
+/** Every release up to the running one, opened from the sidebar at any time. */
+export const History: Story = {
+  render: () => (
+    <ReleaseNotes>
+      <OpenHistory />
+    </ReleaseNotes>
+  ),
 };
 
 /** The Markdown a note may use, rendered as the dialog renders it. */
