@@ -466,7 +466,13 @@ export class WhatsAppConnections {
         const local = assertFound(this.devices.get(id), 'Device');
         attempted = true;
         remoteMessageIds.push(
-          await local.device.send(message.chatId, message.text, signal, message.media),
+          await local.device.send(
+            message.chatId,
+            message.text,
+            signal,
+            message.media,
+            message.people,
+          ),
         );
         return { status: 'sent', remoteMessageIds };
       }
@@ -486,6 +492,8 @@ export class WhatsAppConnections {
             message.chatId,
             characters.slice(offset, offset + 4000).join(''),
             signal,
+            undefined,
+            message.people,
           ),
         );
       }

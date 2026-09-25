@@ -132,6 +132,58 @@ export function outgoingMedia(media: InlineMedia, text: string): AnyMessageConte
   };
 }
 
+/**
+ * WhatsApp marks someone only when the text carries `@<number>` and the message lists their
+ * address. The agent writes names, so each `@Name` of someone in the group becomes their number;
+ * longer names go first, so "@Ana Paula" is never read as "@Ana". A number already written
+ * stays, and marks that person too.
+ */
+export function withMentions(
+  text: string,
+  people: Array<{ id: string; name: string }> = [],
+): { text: string; mentions: string[] } {
+  const known = people
+    .map((person) => ({ ...person, name: person.name.trim(), user: person.id.split('@')[0] }))
+    .filter((person) => person.name && CONTACT_JID.test(person.id))
+    .sort((left, right) => right.name.length - left.name.length);
+  const mentioned = new Map<string, string>();
+  const address = (id: string) => id.replace(/@c\.us$/, '@s.whatsapp.net');
+  let written = text;
+
+  for (const person of known) {
+    const escaped = person.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // A name ends where a word does, so "@Ana" leaves "@Anabela" alone.
+    const pattern = new RegExp(`@${escaped}(?![\\p{L}\\p{N}_])`, 'giu');
+
+    written = written.replace(pattern, `@${person.user}`);
+  }
+
+  // Read after the names are replaced, so a name and a number written by hand count alike.
+  for (const person of known) {
+    if (new RegExp(`@${person.user}(?!\\d)`).test(written)) {
+      mentioned.set(person.user ?? '', address(person.id));
+    }
+  }
+
+  return { text: written, mentions: [...mentioned.values()] };
+}
+
+/** A mention needs the rewritten text and the list together; a sticker or voice note has no text. */
+const outgoing = (
+  text: string,
+  media: InlineMedia | undefined,
+  people: Array<{ id: string; name: string }> = [],
+): AnyMessageContent => {
+  const marked = withMentions(text, people);
+  const mentions = marked.mentions.length ? { mentions: marked.mentions } : {};
+
+  if (!media) return { text: marked.text, ...mentions };
+
+  const content = outgoingMedia(media, marked.text);
+
+  return 'caption' in content ? ({ ...content, ...mentions } as AnyMessageContent) : content;
+};
+
 /** The close reason travels as a Boom payload; read it structurally rather than depend on Boom. */
 const statusCodeOf = (error: unknown) =>
   (error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
@@ -549,7 +601,7 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           // A bubble nobody saw is not worth failing anything over.
         }
       },
-      send: async (chatId, text, signal, media) => {
+      send: async (chatId, text, signal, media, people) => {
         const jid = toDeviceJid(chatId);
 
         if (closed || !socket || !jid) {
@@ -566,7 +618,7 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
 
         try {
           const result = await Promise.race([
-            socket.sendMessage(jid, media ? outgoingMedia(media, text) : { text }),
+            socket.sendMessage(jid, outgoing(text, media, GROUP_JID.test(jid) ? people : [])),
             interrupted,
           ]);
 

@@ -1,7 +1,7 @@
 import type { channelConnectionSchema, InlineMedia } from '@jian/contracts';
 import type { z } from 'zod';
 import type { EncryptedSecret } from '../../security/crypto.js';
-import type { IncomingMessage } from '../channel.js';
+import type { IncomingMessage, OutgoingMessage } from '../channel.js';
 
 export type ConnectionStatus = z.infer<typeof channelConnectionSchema>['status'];
 
@@ -55,7 +55,13 @@ export interface DeviceCallbacks {
 
 export interface LinkedDevice {
   start(): Promise<void>;
-  send(chatId: string, text: string, signal: AbortSignal, media?: InlineMedia): Promise<string>;
+  send(
+    chatId: string,
+    text: string,
+    signal: AbortSignal,
+    media?: InlineMedia,
+    people?: OutgoingMessage['people'],
+  ): Promise<string>;
   /** The composing bubble. WhatsApp drops it after a few seconds, so it is re-sent, not held. */
   typing(chatId: string): Promise<void>;
   /** The small profile picture WhatsApp shows for a person or a group, when it has one. */
