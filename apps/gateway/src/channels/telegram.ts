@@ -4,12 +4,13 @@ import { fileNameOf, MAX_MEDIA_BYTES, mediaMimeOf, telegramUpdateSchema } from '
 import { z } from 'zod';
 import { asJpeg } from '../media/picture.js';
 import { readMediaBody } from '../media/providers.js';
-import type {
-  Channel,
-  DeliveryContext,
-  DeliveryOutcome,
-  IncomingMessage,
-  OutgoingMessage,
+import {
+  type Channel,
+  CredentialRefused,
+  type DeliveryContext,
+  type DeliveryOutcome,
+  type IncomingMessage,
+  type OutgoingMessage,
 } from './channel.js';
 
 const MESSAGE_CHUNK_SIZE = 4000;
@@ -34,6 +35,14 @@ type TelegramMessage = NonNullable<z.infer<typeof telegramUpdateSchema>['message
  * several sizes and names only documents; the rest take their type from the kind of message.
  */
 function fileOf(message: TelegramMessage) {
+  const sticker = message.sticker;
+  if (sticker && !sticker.is_animated && !sticker.is_video)
+    return {
+      ...sticker,
+      mimeType: 'image/webp',
+      sticker: true,
+      label: sticker.emoji ? `[Sticker ${sticker.emoji}]` : '[Sticker]',
+    } as const;
   const photo = message.photo?.at(-1);
   if (photo) return { ...photo, mimeType: 'image/jpeg', label: '[Photo]' } as const;
   if (message.voice)
@@ -72,6 +81,7 @@ function answered(quoted: Quoted) {
 
 /** How the Bot API sends each kind of file, and the form field it expects it in. */
 function sendMethodOf(media: InlineMedia) {
+  if (media.sticker) return { method: 'sendSticker', field: 'sticker' } as const;
   if (media.mimeType.startsWith('image/') && media.mimeType !== 'image/gif')
     return { method: 'sendPhoto', field: 'photo' } as const;
   if (media.mimeType === 'audio/ogg' && !media.name)
@@ -217,6 +227,7 @@ export class TelegramChannel implements Channel {
             mimeType: file.mimeType,
             data: bytes.toString('base64'),
             ...('voice' in file ? { voice: true } : {}),
+            ...('sticker' in file ? { sticker: true } : {}),
             ...('name' in file && file.name ? { name: file.name } : {}),
           },
         ],
@@ -287,13 +298,17 @@ export class TelegramChannel implements Channel {
     signal: AbortSignal,
   ): Promise<{ address: string; handle?: string } | undefined> {
     if (!BOT_TOKEN.test(credential)) {
-      return undefined;
+      throw new CredentialRefused('it is not shaped like a bot token, such as 123456:ABC-DEF…');
     }
 
     const body = await this.request('getMe', credential, undefined, { fetch, signal });
 
-    if (!body?.ok) {
+    if (!body) {
       return undefined;
+    }
+
+    if (!body.ok) {
+      throw new CredentialRefused(body.description ?? `Telegram answered ${body.error_code}`);
     }
 
     const { id, username } = body.result;
@@ -307,9 +322,9 @@ export class TelegramChannel implements Channel {
     webhook: { channelId: string; origin: string; secret: string },
     fetch: typeof globalThis.fetch,
     signal: AbortSignal,
-  ): Promise<boolean> {
+  ): Promise<{ registered: boolean; reason?: string }> {
     if (!BOT_TOKEN.test(credential)) {
-      return false;
+      return { registered: false, reason: 'the bot token is not valid' };
     }
 
     const body = await this.request(
@@ -323,7 +338,14 @@ export class TelegramChannel implements Channel {
       { fetch, signal },
     );
 
-    return body?.ok === true;
+    if (body?.ok) return { registered: true };
+
+    return {
+      registered: false,
+      reason: body
+        ? (body.description ?? `Telegram answered ${body.error_code}`)
+        : 'Telegram did not answer',
+    };
   }
 
   /**

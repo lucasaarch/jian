@@ -407,7 +407,7 @@ export const TOOL_GROUPS = {
   },
   media: {
     summary:
-      'open attachments, send files and documents on any chat, generate images, and reply with voice',
+      'open attachments, send files and documents on any chat, send stickers, generate images, and reply with voice',
     tools: [
       'analyze_media',
       'send_file',
@@ -415,6 +415,8 @@ export const TOOL_GROUPS = {
       'generate_image',
       'list_speech_voices',
       'generate_speech',
+      'find_stickers',
+      'send_sticker',
     ],
   },
   files: {

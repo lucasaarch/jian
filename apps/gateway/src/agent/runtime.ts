@@ -24,6 +24,7 @@ import { readModelDefaults } from '../providers/repository.js';
 import type { Providers } from '../providers/service.js';
 import { providerSecret } from '../providers/service.js';
 import { createSafeFetch } from '../security/outbound.js';
+import type { Stickers } from '../stickers/service.js';
 import type { WebSearch } from '../web/service.js';
 import { type CacheTtl, cacheable, cacheableInstructions } from './cache.js';
 import { availableNote, connectMcpTools, unavailableNote } from './mcp.js';
@@ -56,6 +57,7 @@ export type RuntimeServices = ToolServices & {
   media?: Pick<Media, 'prepare' | 'tools'>;
   web?: Pick<WebSearch, 'tools'>;
   learning?: Pick<Learning, 'consider'>;
+  stickers?: Pick<Stickers, 'tools'>;
 };
 
 /**
@@ -251,6 +253,7 @@ export class AgentRuntime {
           );
         }),
         ...this.services.web?.tools(run),
+        ...this.services.stickers?.tools(run),
         compact_context: tool({
           description:
             'Request a context checkpoint before continuing a long task. The gateway summarizes older turns with the configured compaction model after this tool returns, preserving recent work and the latest request. Automatic compaction remains active.',

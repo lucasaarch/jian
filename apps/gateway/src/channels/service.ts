@@ -23,8 +23,15 @@ import { issueToken, verifyToken } from '../security/tokens.js';
 import type { Vault } from '../security/vault.js';
 import type { SessionWriter } from '../sessions/port.js';
 import { insertMessage } from '../sessions/repository.js';
+import type { Stickers } from '../stickers/service.js';
 import type { Queryable, Store } from '../storage/database.js';
-import type { ChannelRequest, ChannelType, DeliveryOutcome, IncomingMessage } from './channel.js';
+import {
+  type ChannelRequest,
+  type ChannelType,
+  CredentialRefused,
+  type DeliveryOutcome,
+  type IncomingMessage,
+} from './channel.js';
 import { type ContactRecord, Contacts, type Intake } from './contacts.js';
 import { conversational } from './conversation.js';
 import { type GroupDecision, Groups } from './groups.js';
@@ -154,6 +161,7 @@ type ChannelServices = {
   store: Store;
   vault: Vault;
   media?: Media;
+  stickers?: Pick<Stickers, 'keep'>;
   decisions?: Pick<Decisions, 'ask'>;
 };
 
@@ -171,6 +179,13 @@ export class Channels {
     private readonly people = new Contacts(services),
     private readonly rooms = new Groups(services.profiles, services.decisions?.ask),
   ) {}
+
+  /** Where the outside world reaches this gateway (`JIAN_PUBLIC_URL`), for webhooks. */
+  private publicUrl?: string;
+
+  usePublicUrl(url: string | undefined) {
+    this.publicUrl = url?.replace(/\/+$/, '');
+  }
 
   start() {
     const tick = async () => {
@@ -210,14 +225,38 @@ export class Channels {
   }
 
   /** Asked once, when the channel is connected: a protocol that cannot say stays unidentified. */
+  /**
+   * Who the credential speaks as, asked before anything is stored: a protocol that refuses it
+   * is a channel that would look connected and never receive a message.
+   */
   private async identify(type: ChannelType, credential: string) {
     const adapter = this.registry.get(type);
 
+    if (!adapter.identify) return undefined;
+
+    let identity: Awaited<ReturnType<NonNullable<typeof adapter.identify>>>;
+
     try {
-      return await adapter.identify?.(credential, this.fetcher, this.abort.signal);
-    } catch {
-      return undefined;
+      identity = await adapter.identify(credential, this.fetcher, this.abort.signal);
+    } catch (error) {
+      if (error instanceof CredentialRefused) {
+        throw new GatewayError(
+          400,
+          `Telegram refused this bot token (${error.message}). Copy it again from @BotFather.`,
+        );
+      }
+
+      identity = undefined;
     }
+
+    if (!identity) {
+      throw new GatewayError(
+        502,
+        'Telegram could not be reached to check the bot token. Try again.',
+      );
+    }
+
+    return identity;
   }
 
   /** Runs after the channel is stored, so the first update Telegram pushes finds it. */
@@ -241,7 +280,7 @@ export class Channels {
         this.abort.signal,
       );
     } catch {
-      return false;
+      return { registered: false, reason: 'the request to register it failed' };
     }
   }
 
@@ -298,13 +337,27 @@ export class Channels {
       });
     });
 
-    const webhookRegistered =
-      botToken && origin ? await this.register(record, botToken, origin, issued.token) : undefined;
+    // The address the owner set for the outside world wins over the one they happen to be
+    // using: a panel opened on localhost is not an address Telegram can call.
+    const address = this.publicUrl ?? origin;
+    const webhook =
+      botToken && address
+        ? await this.register(record, botToken, address, issued.token)
+        : undefined;
 
     return {
       ...this.metadata(record),
       webhookToken: issued.token,
-      ...(webhookRegistered === undefined ? {} : { webhookRegistered }),
+      ...(webhook
+        ? {
+            webhookRegistered: webhook.registered,
+            ...(webhook.reason
+              ? {
+                  webhookError: `Telegram refused the webhook ${address}/v1/telegram/${record.id}: ${webhook.reason}`,
+                }
+              : {}),
+          }
+        : {}),
     };
   }
 
@@ -843,6 +896,15 @@ export class Channels {
         return { ...outcome, ...(decision ? { decision } : {}) };
       },
     );
+    // Every sticker from a conversation the owner approved joins the agent's collection, sent to
+    // it or not: that is how the collection grows with the people it talks to.
+    if (intake.status === 'approved' && this.services.stickers) {
+      for (const media of data.media ?? []) {
+        if (media.sticker)
+          await this.services.stickers.keep(channel.profileId, media).catch(() => undefined);
+      }
+    }
+
     if (intake.status !== 'approved') {
       return { accepted: false, contact: intake.status };
     }
@@ -1456,6 +1518,7 @@ export class Channels {
               mimeType: media.mimeType as import('@jian/contracts').InlineMedia['mimeType'],
               data: media.data,
               ...(media.name ? { name: media.name } : {}),
+              ...(media.sticker ? { sticker: true } : {}),
             },
           },
           context,

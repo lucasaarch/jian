@@ -158,6 +158,14 @@ export const telegramUpdateSchema = z.object({
       audio: telegramFileSchema.optional(),
       video: telegramFileSchema.optional(),
       video_note: telegramFileSchema.optional(),
+      // Only a still sticker is WebP; an animated or video one is kept out of the collection.
+      sticker: telegramFileSchema
+        .extend({
+          emoji: z.string().max(20).optional(),
+          is_animated: z.boolean().optional(),
+          is_video: z.boolean().optional(),
+        })
+        .optional(),
       entities: telegramEntitiesSchema,
       caption_entities: telegramEntitiesSchema,
       reply_to_message: z

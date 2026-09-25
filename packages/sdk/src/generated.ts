@@ -1022,6 +1022,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/profiles/{profileId}/stickers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["listStickers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/profiles/{profileId}/stickers/{stickerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["getSticker"];
+        put?: never;
+        post?: never;
+        /** @description Required permission: admin. */
+        delete: operations["forgetSticker"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/activities": {
         parameters: {
             query?: never;
@@ -4085,6 +4120,7 @@ export interface operations {
                         revokedAt?: string;
                         webhookToken: string;
                         webhookRegistered?: boolean;
+                        webhookError?: string;
                     };
                 };
             };
@@ -5599,6 +5635,7 @@ export interface operations {
                         mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "text/html" | "application/json" | "application/xml" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "application/vnd.openxmlformats-officedocument.presentationml.presentation" | "application/vnd.oasis.opendocument.text" | "application/vnd.oasis.opendocument.spreadsheet" | "application/vnd.oasis.opendocument.presentation" | "application/msword" | "application/vnd.ms-excel" | "application/vnd.ms-powerpoint" | "application/rtf" | "application/zip" | "video/mp4" | "video/quicktime" | "video/webm" | "application/octet-stream";
                         data: string;
                         voice?: boolean;
+                        sticker?: boolean;
                         name?: string;
                     }[];
                     displayName?: string;
@@ -5823,6 +5860,15 @@ export interface operations {
                             file_name?: string;
                             mime_type?: string;
                             file_size?: number;
+                        };
+                        sticker?: {
+                            file_id: string;
+                            file_name?: string;
+                            mime_type?: string;
+                            file_size?: number;
+                            emoji?: string;
+                            is_animated?: boolean;
+                            is_video?: boolean;
                         };
                         entities?: {
                             type: string;
@@ -10562,6 +10608,7 @@ export interface operations {
                         /** @enum {string} */
                         mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "text/html" | "application/json" | "application/xml" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "application/vnd.openxmlformats-officedocument.presentationml.presentation" | "application/vnd.oasis.opendocument.text" | "application/vnd.oasis.opendocument.spreadsheet" | "application/vnd.oasis.opendocument.presentation" | "application/msword" | "application/vnd.ms-excel" | "application/vnd.ms-powerpoint" | "application/rtf" | "application/zip" | "video/mp4" | "video/quicktime" | "video/webm" | "application/octet-stream";
                         name?: string;
+                        sticker?: boolean;
                         bytes: number;
                         /** Format: date-time */
                         createdAt: string;
@@ -11071,6 +11118,7 @@ export interface operations {
                     mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "text/html" | "application/json" | "application/xml" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "application/vnd.openxmlformats-officedocument.presentationml.presentation" | "application/vnd.oasis.opendocument.text" | "application/vnd.oasis.opendocument.spreadsheet" | "application/vnd.oasis.opendocument.presentation" | "application/msword" | "application/vnd.ms-excel" | "application/vnd.ms-powerpoint" | "application/rtf" | "application/zip" | "video/mp4" | "video/quicktime" | "video/webm" | "application/octet-stream";
                     data: string;
                     voice?: boolean;
+                    sticker?: boolean;
                     name?: string;
                 };
             };
@@ -11090,6 +11138,7 @@ export interface operations {
                         /** @enum {string} */
                         mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "audio/ogg" | "audio/mpeg" | "audio/mp4" | "audio/wav" | "audio/webm" | "audio/flac" | "application/pdf" | "text/plain" | "text/markdown" | "text/csv" | "text/html" | "application/json" | "application/xml" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "application/vnd.openxmlformats-officedocument.presentationml.presentation" | "application/vnd.oasis.opendocument.text" | "application/vnd.oasis.opendocument.spreadsheet" | "application/vnd.oasis.opendocument.presentation" | "application/msword" | "application/vnd.ms-excel" | "application/vnd.ms-powerpoint" | "application/rtf" | "application/zip" | "video/mp4" | "video/quicktime" | "video/webm" | "application/octet-stream";
                         name?: string;
+                        sticker?: boolean;
                         bytes: number;
                         /** Format: date-time */
                         createdAt: string;
@@ -13241,6 +13290,407 @@ export interface operations {
                         links?: string[];
                         /** Format: date-time */
                         updatedAt: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    listStickers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        description?: string;
+                        uses: number;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        lastUsedAt?: string;
+                    }[];
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    getSticker: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                stickerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        description?: string;
+                        uses: number;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        lastUsedAt?: string;
+                        /** @constant */
+                        mimeType: "image/webp";
+                        data: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    forgetSticker: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                stickerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        description?: string;
+                        uses: number;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        lastUsedAt?: string;
                     };
                 };
             };

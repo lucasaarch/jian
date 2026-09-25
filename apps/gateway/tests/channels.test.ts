@@ -377,6 +377,83 @@ describe('Telegram transport', () => {
     }
   });
 
+  it('refuses a bot token Telegram does not accept, and connects nothing', async () => {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({
+      name: 'P',
+      instructions: 'Help',
+      model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    });
+    let reachable = true;
+    const channels = new Channels(
+      services,
+      (async () => {
+        if (!reachable) throw new Error('network down');
+
+        return Response.json({ ok: false, error_code: 401, description: 'Unauthorized' });
+      }) as typeof fetch,
+      new ChannelRegistry([new ApiChannel(), new TelegramChannel()]),
+    );
+
+    await expect(
+      channels.connect(profile.id, { type: 'telegram', botToken: '123:wrong-token' }),
+    ).rejects.toThrow('Telegram refused this bot token (Unauthorized)');
+    await expect(
+      channels.connect(profile.id, { type: 'telegram', botToken: 'not a token' }),
+    ).rejects.toThrow('not shaped like a bot token');
+
+    reachable = false;
+    await expect(
+      channels.connect(profile.id, { type: 'telegram', botToken: '123:any-token' }),
+    ).rejects.toThrow('could not be reached');
+
+    expect(await channels.list(profile.id)).toEqual([]);
+  });
+
+  it('registers the webhook at the public address, and says why Telegram refused one', async () => {
+    const asked: string[] = [];
+    const f = await setup(async (_url, options) => {
+      const url = JSON.parse(String(options?.body)).url as string;
+
+      asked.push(url);
+
+      return url.startsWith('https://jian.example.com')
+        ? Response.json({ ok: true, result: true })
+        : Response.json({
+            ok: false,
+            error_code: 400,
+            description: 'Bad Request: bad webhook: IP address 10.0.0.2 is reserved',
+          });
+    });
+
+    try {
+      await f.channels.revoke(f.profile.id, f.channel.id);
+
+      const refused = await f.channels.connect(
+        f.profile.id,
+        { type: 'telegram', botToken: '123:synthetic-test-token' },
+        'https://10.0.0.2',
+      );
+
+      expect(refused.webhookRegistered).toBe(false);
+      expect(refused.webhookError).toContain('IP address 10.0.0.2 is reserved');
+
+      await f.channels.revoke(f.profile.id, refused.id);
+      f.channels.usePublicUrl('https://jian.example.com/');
+
+      const registered = await f.channels.connect(
+        f.profile.id,
+        { type: 'telegram', botToken: '123:synthetic-test-token' },
+        'https://10.0.0.2',
+      );
+
+      expect(registered.webhookRegistered).toBe(true);
+      expect(asked.at(-1)).toBe(`https://jian.example.com/v1/telegram/${registered.id}`);
+    } finally {
+      await f.app.close();
+    }
+  });
+
   it('releases the waiting message once when the owner approves, and blocks silently', async () => {
     const sent: string[] = [];
 

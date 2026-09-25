@@ -11,6 +11,9 @@ export interface ChannelRequest {
   payload: unknown;
 }
 
+/** The protocol itself said no to a credential: it answered, and the answer was a refusal. */
+export class CredentialRefused extends Error {}
+
 export interface OutgoingMessage {
   chatId: string;
   text: string;
@@ -68,8 +71,8 @@ export interface Channel {
 
   /**
    * What this connection speaks as on its protocol, asked once when the channel is connected.
-   * A protocol that cannot answer leaves the connection unidentified, and the messages of the
-   * installation's other agents are then read as anyone else's.
+   * Throws `CredentialRefused` when the protocol rejects the credential; undefined means it
+   * could not be asked, which is not the same thing.
    */
   identify?(
     credential: string,
@@ -78,16 +81,15 @@ export interface Channel {
   ): Promise<{ address: string; handle?: string } | undefined>;
 
   /**
-   * Points the protocol at this channel's webhook under `origin`, signed with `secret`. False
-   * means the protocol refused or never answered; the channel stays connected either way, and
-   * the owner can still register the address by hand.
+   * Points the protocol at this channel's webhook under `origin`, signed with `secret`. When it
+   * is not registered, `reason` is what the protocol said, or that it did not answer.
    */
   register?(
     credential: string,
     webhook: { channelId: string; origin: string; secret: string },
     fetch: typeof globalThis.fetch,
     signal: AbortSignal,
-  ): Promise<boolean>;
+  ): Promise<{ registered: boolean; reason?: string }>;
 
   canSend?(channelId: string): Promise<boolean>;
   // An absent sender describes an ingress-only channel; it is not a fake successful delivery.

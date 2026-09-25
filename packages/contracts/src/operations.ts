@@ -21,7 +21,13 @@ import {
   pageQuerySchema,
 } from './coordination.js';
 import { decisionsInputSchema, decisionsStatusSchema } from './decisions.js';
-import { inlineMediaSchema, mediaContentSchema, mediaRecordSchema } from './media.js';
+import {
+  inlineMediaSchema,
+  mediaContentSchema,
+  mediaRecordSchema,
+  stickerImageSchema,
+  stickerSchema,
+} from './media.js';
 import {
   builtinSkillSchema,
   mcpStatusSchema,
@@ -247,6 +253,8 @@ export const operations: Operation[] = [
       webhookToken: z.string(),
       // Present when the gateway tried to register its webhook with the protocol itself.
       webhookRegistered: z.boolean().optional(),
+      // What the protocol said when it refused the webhook, for the owner to act on.
+      webhookError: z.string().optional(),
     }),
     status: 201,
   },
@@ -732,6 +740,29 @@ export const operations: Operation[] = [
       linkedKey: memoryKeySchema,
     }),
     response: memoryRecordSchema,
+  },
+  {
+    method: 'GET',
+    path: `${profile}/stickers`,
+    operationId: 'listStickers',
+    access: 'admin',
+    response: z.array(stickerSchema),
+  },
+  {
+    method: 'GET',
+    path: `${profile}/stickers/:stickerId`,
+    operationId: 'getSticker',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), stickerId: z.uuid() }),
+    response: stickerImageSchema,
+  },
+  {
+    method: 'DELETE',
+    path: `${profile}/stickers/:stickerId`,
+    operationId: 'forgetSticker',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), stickerId: z.uuid() }),
+    response: stickerSchema,
   },
   {
     method: 'GET',
