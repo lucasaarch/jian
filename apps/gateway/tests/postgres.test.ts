@@ -49,6 +49,62 @@ afterAll(async () => {
 });
 
 describe('PostgreSQL durability', () => {
+  it('keeps conversation subagents scoped and delivers one handoff after concurrent spawn retries', async () => {
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { title: 'Subagents' });
+    const other = await services.sessions.createSession(profile.id, { title: 'Other' });
+    const parent = await services.runs.submit(profile.id, session.id, {
+      text: 'Verify the release.',
+      requestKey: 'parent-subagent',
+    });
+    const assignment = {
+      role: 'execute',
+      name: 'Verifier',
+      identity: 'Verify the release.',
+      brief: 'Check the release.',
+    };
+    const children = await Promise.all(
+      Array.from({ length: 2 }, () =>
+        services.work.spawnInConversation(parent, assignment, 'spawn-verifier'),
+      ),
+    );
+    expect(new Set(children.map((child) => child.runId)).size).toBe(1);
+    const child = children[0];
+    if (!child) throw new Error('Subagent missing');
+
+    const reopenedStore = new PostgresStore(connectionString);
+    try {
+      const reopened = buildServices({
+        store: reopenedStore,
+        vault: new Vault(reopenedStore, box),
+        gatewayVault: new GatewayVault(reopenedStore, box),
+      });
+      expect(await reopened.work.conversationSubagents(profile.id, session.id)).toMatchObject([
+        { runId: child.runId, parentRunId: parent.id, status: 'queued' },
+      ]);
+      expect(await reopened.work.conversationSubagents(profile.id, other.id)).toEqual([]);
+      expect(await reopened.work.list(profile.id)).toEqual([]);
+    } finally {
+      await reopenedStore.close();
+    }
+
+    await services.lifecycle.claim(child.runId, profile.id, 'subagent-lease');
+    await services.lifecycle.finish(
+      profile.id,
+      child.runId,
+      'subagent-lease',
+      'completed',
+      'Release verified.',
+    );
+    await services.work.reportWorker(profile.id, child.runId);
+    await services.work.reportWorker(profile.id, child.runId);
+    expect(
+      (await services.sessions.messages(profile.id, session.id)).filter((message) =>
+        message.content.includes('Subagent "Verifier"'),
+      ),
+    ).toHaveLength(1);
+  });
+
   it('serializes concurrent submissions and persists state across connections', async () => {
     const profile = await services.profiles.createProfile(input);
     const session = await services.sessions.createSession(profile.id, { title: 'One' });

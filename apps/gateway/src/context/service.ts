@@ -42,6 +42,7 @@ export class Contexts {
   }
 
   async context(run: Run): ReturnType<ContextSource['context']> {
+    const worker = run.subagent;
     const words = [...new Set(run.input.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])].slice(
       0,
       12,
@@ -53,16 +54,16 @@ export class Contexts {
     // talks to on its channels, and the turns since the record of what was compacted away.
     // `buildContext` is what decides how much of each survives.
     const [matched, activities, gateway, conversations, history] = await Promise.all([
-      searchMemories(this.store.db, run.profileId, words, 100),
-      this.runs.activities(run.profileId),
-      findGatewaySession(this.store.db, run.profileId),
-      listConversations(this.store.db, run.profileId),
+      worker ? [] : searchMemories(this.store.db, run.profileId, words, 100),
+      worker ? [] : this.runs.activities(run.profileId),
+      worker ? null : findGatewaySession(this.store.db, run.profileId),
+      worker ? [] : listConversations(this.store.db, run.profileId),
       this.sessions.uncompactedMessages(run.profileId, run.sessionId, session.summarizedThroughId),
     ]);
 
     // One step out from what matched: the memories linked to it, which the request may not
     // mention at all.
-    const memories = await withLinks(this.store.db, run.profileId, matched);
+    const memories = worker ? [] : await withLinks(this.store.db, run.profileId, matched);
     const matchedKeys = new Set(memories.map((memory) => memory.key));
     const linked = await findMemories(
       this.store.db,
@@ -77,7 +78,7 @@ export class Contexts {
     )?.content;
     // A look back reads its own brief and loads no skill; judging it would only cost a call.
     const judged =
-      this.judge && session.channel !== LEARNING_SESSION_CHANNEL
+      this.judge && !worker && session.channel !== LEARNING_SESSION_CHANNEL
         ? await judgeTurn(this.judge, {
             request: run.input,
             ...(before ? { before } : {}),
@@ -118,7 +119,6 @@ export class Contexts {
     );
     const earlier = currentIndex < 0 ? history : history.slice(0, currentIndex);
     const previous = earlier.at(-1);
-    const worker = run.subagent;
     let workerGuidance: string | undefined;
     if (worker) {
       const home = await workspaceOf(run.profileId, run.id);
@@ -129,7 +129,10 @@ export class Contexts {
         `You are ${JSON.stringify(worker.name)}, an ephemeral ${worker.role} worker for one task.`,
         `Identity and working approach: ${worker.identity}`,
         `Your workspace is ${home}. ${repositories.length ? `Your repository worktrees are ${repositories.join(', ')}.` : 'Clone repositories under this workspace when needed.'} Paths from other workers' reports are not accessible to you. For review, fetch the committed branch or PR into your own worktree; do not open another worker's directory. If changes exist only in that worker's uncommitted files, report the missing handoff instead of attempting to bypass isolation.`,
-        'Work only on the assigned task. You inherit this profile’s memories, conversations, skills, MCP servers and tools, but do not create tasks or spawn another worker. Use list_tasks to read the current version and update_task to report progress. Before your final report, mark verified work done, or hand off to review when independent review is needed; leave the exact blocker in the task if incomplete. Your final response is a factual report, not a message to the owner.',
+        run.workItemId
+          ? 'Work only on the assigned legacy task. Its card is archived and read-only. Report verified outcomes and exact blockers in your final response.'
+          : 'Work only on the assignment in your opening message. Your parent conversation is not in this context; use the brief and available tools. Do not create tasks or spawn another subagent. Report verified outcomes and exact blockers in your final response.',
+        'Your final response is a factual report to the principal agent, not a message to the owner.',
       ].join('\n\n');
     }
     const result = {

@@ -1,12 +1,10 @@
 import {
   agentCallSchema,
+  conversationSubagentInputSchema,
   decisionUseSchema,
   memoryKeySchema,
   memorySchema,
   type Run,
-  spawnSubagentSchema,
-  workInputSchema,
-  workPatchSchema,
 } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
@@ -88,7 +86,7 @@ export type ToolServices = {
   schedules?: Pick<Schedules, 'list' | 'create' | 'update' | 'remove'>;
   settings?: { timeZone(): Promise<string> };
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
-  work?: Pick<Work, 'list' | 'createWithExecutor' | 'update' | 'spawn' | 'executions'>;
+  work?: Pick<Work, 'list' | 'spawnInConversation' | 'executions'>;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove'>;
 };
 
@@ -138,8 +136,7 @@ export function profileTools(
     ...(services.work
       ? {
           list_tasks: tool({
-            description:
-              'Read your durable work board across conversations. These are commitments you maintain, not live runs or timed schedules.',
+            description: 'Read archived task cards from the previous work board.',
             inputSchema: z.object({}),
             execute: async () => {
               const items = await services.work?.list(run.profileId);
@@ -148,30 +145,12 @@ export function profileTools(
           }),
           ...(!run.subagent
             ? {
-                create_task: tool({
-                  description:
-                    'Create a durable task and start its executor. First check for an existing task. Include the objective, source links/IDs, known state, acceptance criteria, and exact remaining actions in the description. For code work, list absolute Git repository roots in repositories; each worker gets its own detached worktree from committed HEAD. Do not repeat the executor’s work yourself.',
-                  inputSchema: workInputSchema,
-                  execute: async (input, options) =>
-                    services.work?.createWithExecutor(run, input, options.toolCallId),
-                }),
-              }
-            : {}),
-          update_task: tool({
-            description:
-              'Move a task or leave a progress/handoff note. Use the version from list_tasks; stale updates conflict. Commit and push code before marking done: worker workspaces are removed after all workers finish. Move to review only when independent review is needed; otherwise mark verified work done before your final report.',
-            inputSchema: z.object({ id: z.uuid(), ...workPatchSchema.shape }),
-            execute: async ({ id, ...patch }) =>
-              services.work?.update(run.profileId, id, patch, run),
-          }),
-          ...(!run.subagent
-            ? {
                 spawn_subagent: tool({
                   description:
-                    'Start an anonymous, isolated task worker with its own identity and brief. It is a queued run, not an agent profile. An executor moves to review when independent review is needed, or marks verified work done directly. This returns immediately; inspect task workers later.',
-                  inputSchema: spawnSubagentSchema,
+                    'Start an isolated subagent in this conversation for a scoped assignment. Give it the objective and necessary context in the brief, and media IDs for needed images; it does not inherit this conversation. The call returns when queued, and the result is delivered here when it finishes.',
+                  inputSchema: conversationSubagentInputSchema,
                   execute: async (input, options) =>
-                    services.work?.spawn(run, input, options.toolCallId),
+                    services.work?.spawnInConversation(run, input, options.toolCallId),
                 }),
                 list_task_subagents: tool({
                   description: 'Read the runs and outcomes of workers assigned to a task.',
@@ -650,11 +629,10 @@ export const TOOL_GROUPS = {
   },
   tasks: {
     summary:
-      'record and update durable tasks, read checkpoints and stored output, manage resource leases, or compact context',
+      'delegate subagents, read archived tasks, inspect checkpoints and output, manage resource leases, or compact context',
     tools: [
-      'create_task',
-      'update_task',
       'spawn_subagent',
+      'list_tasks',
       'list_task_subagents',
       'read_run_checkpoints',
       'read_artifact',

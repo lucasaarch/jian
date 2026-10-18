@@ -9,6 +9,12 @@ export function registerWorkRoutes(app: FastifyInstance, deps: { work: Work }) {
     deps.work.list(request.params.profileId),
   );
 
+  app.get<{ Params: ProfileParams & { sessionId: string } }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/subagents',
+    async (request) =>
+      deps.work.conversationSubagents(request.params.profileId, request.params.sessionId),
+  );
+
   app.get<{ Params: WorkParams }>('/v1/profiles/:profileId/work/:workId/history', async (request) =>
     deps.work.history(request.params.profileId, request.params.workId),
   );

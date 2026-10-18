@@ -43,6 +43,76 @@ it('centers a spinner while a conversation is loading', async () => {
   }
 });
 
+it('shows a conversation subagent and its private transcript beside the parent turn', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  let completed = false;
+  let childReads = 0;
+  const api = {
+    messages: async (_profileId: string, sessionId: string) => {
+      if (sessionId === 'child-session') childReads++;
+      return [
+        {
+          id: sessionId === 'parent-session' ? 'parent-message' : 'child-message',
+          profileId: 'profile',
+          sessionId,
+          runId: sessionId === 'parent-session' ? 'parent-run' : 'child-run',
+          role:
+            sessionId === 'parent-session' || !completed
+              ? ('user' as const)
+              : ('assistant' as const),
+          content:
+            sessionId === 'parent-session' || !completed ? 'Check the build.' : 'Build passed.',
+          createdAt: '2026-09-22T00:00:00Z',
+        },
+      ];
+    },
+    activities: async () => [],
+    conversationSubagents: async () => [
+      {
+        runId: 'child-run',
+        parentRunId: 'parent-run',
+        sessionId: 'child-session',
+        name: 'Verifier',
+        role: 'execute' as const,
+        status: completed ? ('completed' as const) : ('running' as const),
+        input: 'Check the build.',
+        ...(completed ? { output: 'Build passed.' } : {}),
+        createdAt: '2026-09-22T00:00:00Z',
+        updatedAt: '2026-09-22T00:01:00Z',
+      },
+    ],
+    timeline: async () => [],
+  };
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  try {
+    await act(async () =>
+      root.render(<History api={api} profileId="profile" sessionId="parent-session" />),
+    );
+    const activity = element.querySelector<HTMLElement>('.subagent-activity');
+    const button = activity?.querySelector<HTMLButtonElement>('button');
+    expect(button?.textContent).toContain('Verifier');
+    expect(button?.textContent).toContain('Running');
+    expect(childReads).toBe(0);
+    await act(async () => button?.click());
+    expect(childReads).toBe(1);
+    expect(button?.getAttribute('aria-expanded')).toBe('true');
+    expect(activity?.textContent).toContain('Check the build.');
+    completed = true;
+    await act(async () =>
+      root.render(
+        <History api={api} profileId="profile" sessionId="parent-session" revision={1} />,
+      ),
+    );
+    expect(button?.textContent).toContain('Completed');
+    expect(activity?.textContent).toContain('Build passed.');
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+
 it('shows a new run failure when the open session was previously completed', async () => {
   vi.useFakeTimers();
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });

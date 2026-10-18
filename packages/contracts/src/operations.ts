@@ -86,7 +86,12 @@ import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } fr
 import { catalogQuerySchema, catalogSchema, skillImportSchema } from './skills.js';
 import { sshKeyCreateSchema, sshKeySchema } from './ssh.js';
 import { webSearchInputSchema, webSearchStatusSchema } from './web.js';
-import { workExecutionSchema, workHistorySchema, workItemSchema } from './work.js';
+import {
+  conversationSubagentSchema,
+  workExecutionSchema,
+  workHistorySchema,
+  workItemSchema,
+} from './work.js';
 
 /**
  * `access` is the whole authorization model: the host token opens everything marked `admin`,
@@ -147,6 +152,14 @@ export const operations: Operation[] = [
     operationId: 'listWork',
     access: 'admin',
     response: z.array(workItemSchema),
+  },
+  {
+    method: 'GET',
+    path: `${profile}/sessions/:sessionId/subagents`,
+    operationId: 'listConversationSubagents',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), sessionId: z.uuid() }),
+    response: z.array(conversationSubagentSchema),
   },
   {
     method: 'GET',

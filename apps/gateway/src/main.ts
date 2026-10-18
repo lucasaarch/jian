@@ -160,7 +160,7 @@ channels.usePublicUrl(config.data.JIAN_PUBLIC_URL);
 services.peers.useDeliveries(channels);
 // Nor has a run a schedule starts in a chat: its answer goes out the same way.
 services.schedules.useDeliveries(channels);
-// A completed task worker wakes its principal in the source chat, including its channel.
+// A completed subagent wakes its principal in the source chat, including its channel.
 services.work.useDeliveries(channels);
 
 /**

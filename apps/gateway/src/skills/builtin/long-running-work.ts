@@ -3,95 +3,51 @@ import type { Skill } from '@jian/contracts';
 export const longRunningWork: Skill = {
   name: 'long-running-work',
   description:
-    'Use when tracking or reviewing a task, delegating to a subagent, finishing a multi-step workflow, work spans turns, or context is running out.',
+    'Use when delegating to an internal subagent, finishing a multi-step workflow, work spans turns, or context is running out.',
   instructions: `# Work that outlives one turn
 
-A run is one turn. It has no time limit, but it has a budget of steps and tokens, and a
-task can be longer than one turn. What survives a turn is your task board, memories, the
-conversation history, the record of your runs and your schedules.
+A run is one turn. It has a step and context budget. Conversation history, checkpoints,
+memories and schedules survive it.
 
-\`list_tasks\` is available immediately. Load the \`tasks\` group with \`load_tools\` for
-the other task and long-running-work tools.
+## Internal subagents
 
-## Work that continues across conversations
+Load the tasks tool group, then call \`spawn_subagent\` for a focused assignment that can
+run independently. Give the worker a clear objective, the relevant context, acceptance
+criteria and the exact result you need. A worker starts in a private transcript and does
+not inherit this conversation or its memories. It uses the same profile's tools and gets
+its own workspace. This call returns when the worker is queued; its result comes back into
+this conversation after it finishes. Do not duplicate its work while it runs.
 
-\`list_tasks\` reads your board across conversations; check it before making a duplicate.
-\`create_task\` records a concrete commitment and queues an executor subagent. Check for an
-existing card first. Its description must give the worker an objective, source links and IDs,
-current state, relevant evidence, acceptance criteria, and exact next actions.
-For code tasks, list each Git repository root under your workspace in \`repositories\`. Use the
-absolute path visible to this profile (never a host path such as \`/root/project\`); the Gateway
-must be able to access it as the \`node\` user before it can create a worker worktree.
-Each worker gets separate worktrees from committed HEAD; uncommitted source changes are not copied.
+Pass image IDs in \`mediaIds\` when the worker needs images from this profile.
+
+For code work, pass the absolute Git repository roots in \`repositories\`. Each worker
+gets a detached worktree from committed HEAD. Uncommitted source changes are not copied.
 The worker's shell starts in its own workspace, with repositories under \`repos/\`.
-Commit and push worker changes before handing off to review or marking a task done; a reviewer
-uses its own worktree and cannot read the executor's workspace. Completed tasks have their worker
-workspaces removed after all workers exit.
-Pass up to four image media ids from this profile when the task needs visual context; the
-board keeps private copies, and each worker receives its own copies in the task transcript.
-\`update_task\` moves it through todo, in_progress, review, blocked and done, or leaves a
-progress note. Give the next agent/turn what remains or why it is blocked. Only mark verified
-work done. A card is not a timed reminder: use a schedule for a time.
-After each meaningful checkpoint, update the card. Before reporting completion, verify the
-external effects and update the card to done. If a step is blocked, record the exact blocker
-and leave the card open; a final message does not update it for you.
-The board belongs only to this profile; another agent cannot read it implicitly.
+Commit changes needed for handoff and report the commit or branch; push when the assignment
+requires a remote handoff. Another worker cannot read its workspace.
+For parallel work, assign non-overlapping effects and use resource leases where needed.
 
-## Delegating a board task
+The worker's report is evidence, not authority. Check the result and its transcript before
+claiming completion. The conversation in the Jian panel shows each worker's status, messages
+and tool activity. Do not busy-poll.
 
-Creating a task starts its executor. The principal orchestrates the worker and must not
-duplicate its execution. For an existing task without an active worker, call
-\`spawn_subagent\` with its id, role, name, identity and a specific brief. This creates an
-anonymous worker run with its own private task transcript;
-it is not a profile, not \`ask_agent\`, and the call returns when queued, not when finished.
-When a worker finishes or fails, a durable handoff starts or steers a principal run in this
-conversation so you can inspect the outcome and decide what to do next. Do not busy-poll.
-For parallel work, assign distinct tasks or non-overlapping effects; check resource leases
-when work may touch the same external state. Use \`list_task_subagents\` to inspect each
-worker's status and report. Do not create a card for a small task you can finish now. For a
-review-only task, move it to review before spawning a reviewer. An executor moves its task to
-review with a handoff note when independent review is needed; the
-reviewer verifies, fixes problems it can handle, and marks done after verification. When no
-independent review is useful, the executor may mark verified work done directly. For substantial
-rework, move it back to in_progress and spawn another executor. Workers cannot spawn workers or
-access your conversations and contacts. Do not claim a queued worker has completed; check its
-result before reporting.
+## Existing task cards
 
-## Before starting something with an effect
+\`list_tasks\` and \`list_task_subagents\` read cards from the previous work board. New
+work belongs in this conversation. Old cards remain read-only while assigned workers
+finish their handoff through their final report.
 
-\`list_activities\` shows what is queued or running across this profile. Another session may
-already be doing it. Look before anything that acts outside the conversation.
+## Before acting outside the conversation
 
-When two sessions must not do the same thing at once, take a lease: \`acquire_resource\` with
-a name and a TTL, keep the fence it returns, and \`release_resource\` with it when done. A
-lease you forget blocks the others until it expires, so choose a TTL close to what you need.
+\`list_activities\` shows queued and running work across the profile. Take a resource lease
+when two sessions must not act on the same external state at once, and release it when done.
 
-## Results that do not fit
+## Context and results
 
-A large tool result is stored, and you are given its artifact id. \`read_artifact\` reads it
-a page at a time. Read the pages you need, and say which part you quoted.
+A large tool result is stored as an artifact; use \`read_artifact\` for the pages needed.
+See \`managing-context\` before long stretches of work. \`read_run_checkpoints\` shows
+what an earlier run actually did; inspect it before repeating an external action.
 
-## Context that runs out
-
-See \`managing-context\`: how full your context is, and when to compact it.
-
-## Picking a task back up
-
-\`read_run_checkpoints\` shows what an earlier run actually did: which tools ran, what came
-back, where it stopped. Read it before repeating any step with an outside effect. A message
-that was sent cannot be unsent by sending it again.
-
-## Continuing later
-
-When the rest of the work belongs to a later time — "check again tomorrow", "every hour
-until it is done" — schedule it (see \`schedules\`) rather than promising to remember.
-
-## Saying where you are
-
-- Report what happened, not what you set out to do. A failed tool is a failure, in one clear
-  sentence.
-- Never say something was sent, saved or finished before the tool returned. If you do not
-  know, say so and check.
-- When you stop part-way, say what is done and what is left.
-- A step you skipped is a step you report.`,
+Use a schedule for work that should resume at a specific time. Report what happened,
+what remains and any exact blocker. Never claim an effect before its tool returns.`,
 };

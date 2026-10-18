@@ -23,8 +23,8 @@ type CheckpointRow = typeof checkpoints.$inferSelect;
 /** Queued and running hold the session and count against the profile's cap; nothing else does. */
 const activeStatuses: Run['status'][] = ['queued', 'running'];
 
-/** Terminal task workers still waiting for an atomic handoff to their principal. */
-export async function listUnreportedTaskWorkers(db: Queryable, limit: number) {
+/** Terminal subagents still waiting for an atomic handoff to their principal. */
+export async function listUnreportedSubagents(db: Queryable, limit: number) {
   return db
     .select({ id: runs.id, profileId: runs.profileId })
     .from(runs)

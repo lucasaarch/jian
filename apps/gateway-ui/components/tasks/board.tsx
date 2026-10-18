@@ -20,13 +20,13 @@ import { Button, Empty, SectionHeading, Spinner } from '../ui';
 import { useDialogMotion } from '../ui/dialog-motion';
 import { Markdown } from '../ui/markdown';
 
-const columns = [
-  { status: 'todo', label: 'To do' },
-  { status: 'in_progress', label: 'In progress' },
-  { status: 'review', label: 'In review' },
-  { status: 'blocked', label: 'Blocked' },
-  { status: 'done', label: 'Done' },
-] as const;
+const statusLabels: Record<WorkItem['status'], string> = {
+  todo: 'To do',
+  in_progress: 'In progress',
+  review: 'In review',
+  blocked: 'Blocked',
+  done: 'Done',
+};
 
 export function WorkBoard({ profile, api }: SectionProps) {
   const subscribe = useEvents();
@@ -59,8 +59,8 @@ export function WorkBoard({ profile, api }: SectionProps) {
     <div className="work-page">
       <div className="work-page-heading">
         <SectionHeading
-          title="Work"
-          description="Your agent's commitments across chats. Cards never start work on their own."
+          title="Work archive"
+          description="Past task cards and worker transcripts. New subagents appear in their conversations."
         />
       </div>
       {error && (
@@ -77,45 +77,29 @@ export function WorkBoard({ profile, api }: SectionProps) {
           <Spinner size={32} />
         </div>
       ) : items.length === 0 ? (
-        <Empty title="No work yet">
-          Ask your agent to track work that should continue beyond this conversation.
+        <Empty title="No archived work">
+          Subagents appear in the conversation that started them.
         </Empty>
       ) : (
         <div className="work-board-scroll">
-          <section className="work-board" aria-label="Agent work board">
-            {columns.map((column) => {
-              const cards = items.filter((item) => item.status === column.status);
-              return (
-                <section
-                  className="work-column"
-                  data-status={column.status}
-                  aria-label={column.label}
-                  key={column.status}
-                >
-                  <header>
-                    <h2>
-                      <span className="work-status-dot" aria-hidden="true" />
-                      {column.label}
-                    </h2>
-                    <span className="work-column-count">{cards.length}</span>
-                  </header>
-                  <div className="work-column-cards">
-                    {cards.map((item) => (
-                      <button
-                        type="button"
-                        className="work-card"
-                        key={item.id}
-                        onClick={() => setSelected(item)}
-                      >
-                        <strong>{item.title}</strong>
-                        <span className="work-card-description">{item.description}</span>
-                        {item.note && <small className="work-card-note">{item.note}</small>}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
+          <section className="work-archive-list" aria-label="Archived work">
+            {items.map((item) => (
+              <button
+                type="button"
+                className="work-card"
+                data-status={item.status}
+                key={item.id}
+                onClick={() => setSelected(item)}
+              >
+                <span className="work-card-status">
+                  <span className="work-status-dot" aria-hidden="true" />
+                  {statusLabels[item.status]}
+                </span>
+                <strong>{item.title}</strong>
+                <span className="work-card-description">{item.description}</span>
+                {item.note && <small className="work-card-note">{item.note}</small>}
+              </button>
+            ))}
           </section>
         </div>
       )}
@@ -228,7 +212,7 @@ function WorkDetail({
           <div className="work-detail-summary">
             <span className="work-detail-status" data-status={item.status}>
               <span className="work-status-dot" aria-hidden="true" />
-              {columns.find((column) => column.status === item.status)?.label}
+              {statusLabels[item.status]}
             </span>
             <time dateTime={item.updatedAt}>
               Updated {new Date(item.updatedAt).toLocaleString()}
@@ -325,7 +309,7 @@ function WorkDetail({
                           content: [
                             activity.entry.type === 'work.created'
                               ? 'Task created'
-                              : `Moved to ${columns.find((column) => column.status === activity.entry.status)?.label}`,
+                              : `Moved to ${statusLabels[activity.entry.status]}`,
                             activity.entry.note,
                           ]
                             .filter(Boolean)

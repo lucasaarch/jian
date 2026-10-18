@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { tool } from 'ai';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { insertMessage } from '../src/sessions/repository.js';
 import { mockModel } from './helpers/model.js';
@@ -1515,6 +1517,62 @@ it('lets the agent request compaction before reaching the automatic threshold', 
   await new AgentRuntime(services, () => model).execute(profile.id, run.id);
   expect(summaries).toBe(1);
   expect((await services.runs.run(profile.id, run.id)).status).toBe('completed');
+});
+
+it('compacts again when a tool result exceeds the window soon after a checkpoint', async () => {
+  const { services, profile, run } = await fixture(
+    { inputTokens: 32000, outputTokens: 4096, toolResultTokens: 32000, maxSteps: 6 },
+    true,
+  );
+  if (!services.web) throw new Error('Web tools unavailable');
+  services.web.tools = () => ({
+    large_result: tool({
+      description: 'Return a large synthetic result.',
+      inputSchema: z.object({}),
+      execute: async () => 'x'.repeat(30000),
+    }),
+  });
+  let step = 0;
+  let summaries = 0;
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (!options.tools?.length) {
+        summaries++;
+        return answer(
+          JSON.stringify(options.prompt).includes('x'.repeat(1000))
+            ? 'Checkpoint: large result inspected.'
+            : 'Checkpoint: continue the request.',
+        );
+      }
+      if (step === 3) {
+        expect(JSON.stringify(options.prompt)).not.toContain('x'.repeat(1000));
+        expect(JSON.stringify(options.prompt)).toContain('Checkpoint: large result inspected.');
+        expect(JSON.stringify(options.prompt)).toContain('Remember the deployment time');
+        return answer('Finished after the second checkpoint.');
+      }
+      const toolName = ['load_tools', 'compact_context', 'large_result'][step++] ?? '';
+      return {
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: `call-${step}`,
+            toolName,
+            input: toolName === 'load_tools' ? JSON.stringify({ groups: ['tasks'] }) : '{}',
+          },
+        ],
+        finishReason: { unified: 'tool-calls' as const, raw: 'tool-calls' },
+        usage,
+        warnings: [],
+      };
+    },
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  expect(summaries).toBeGreaterThanOrEqual(2);
+  expect((await services.runs.run(profile.id, run.id)).output).toBe(
+    'Finished after the second checkpoint.',
+  );
 });
 
 it('persists a cursor only through earlier messages covered by compaction', async () => {

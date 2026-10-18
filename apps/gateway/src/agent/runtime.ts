@@ -619,8 +619,9 @@ export class AgentRuntime {
           }
           if (
             compactionRequested ||
-            (stepNumber - lastCompactionAttempt >= 4 &&
-              needsCompaction(before, policy.inputTokens - policy.outputTokens))
+            (needsCompaction(before, policy.inputTokens - policy.outputTokens) &&
+              (stepNumber - lastCompactionAttempt >= 4 ||
+                before > policy.inputTokens - policy.outputTokens))
           ) {
             compactionRequested = false;
             lastCompactionAttempt = stepNumber;
@@ -662,6 +663,7 @@ export class AgentRuntime {
                 ...summaryConfig,
                 messages,
                 currentStartIndex,
+                includeCurrent: before > policy.inputTokens - policy.outputTokens,
                 previous: session.summary,
                 providerOptions: reasoningProviderOptions(
                   summaryConfig,

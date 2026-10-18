@@ -234,7 +234,7 @@ export class Media {
       const session = await findSession(tx, profileId, sessionId);
       if (!session) throw new GatewayError(404, 'Session not found');
       if (session.channel === TASK_SESSION_CHANNEL) {
-        throw new GatewayError(403, 'Task worker sessions are read-only');
+        throw new GatewayError(403, 'Subagent sessions are read-only');
       }
 
       const [waiting] = await tx

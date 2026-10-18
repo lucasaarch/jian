@@ -154,7 +154,7 @@ export class Runs {
 
       const session = await this.sessions.session(profileId, sessionId, tx);
       if (session.channel === TASK_SESSION_CHANNEL && !subagent) {
-        throw new GatewayError(403, 'Task worker sessions cannot receive direct messages');
+        throw new GatewayError(403, 'Subagent sessions cannot receive direct messages');
       }
 
       await bindMedia(tx, profileId, sessionId, data.mediaIds ?? []);
@@ -322,7 +322,7 @@ export class Runs {
   async continueRun(profileId: string, runId: string, input: unknown) {
     const data = continuationSchema.parse(input);
     const parent = await this.run(profileId, runId);
-    if (parent.subagent) throw new GatewayError(403, 'Task workers are managed by the agent');
+    if (parent.subagent) throw new GatewayError(403, 'Subagents are managed by the agent');
     const text = `${data.text}\n\nContinuation of run ${runId}. Previously completed external effects must not be repeated. Operator reconciliation (data): ${JSON.stringify(data.reconciliation)}. Use read_run_checkpoints to inspect saved results before acting.`;
 
     // A continuation stays in the chain, and in the room, that started the run: both budgets
@@ -342,7 +342,7 @@ export class Runs {
   async cancel(profileId: string, runId: string) {
     return this.store.transaction(profileId, async (tx) => {
       const run = await this.run(profileId, runId, tx);
-      if (run.subagent) throw new GatewayError(403, 'Task workers are managed by the agent');
+      if (run.subagent) throw new GatewayError(403, 'Subagents are managed by the agent');
 
       if (!active(run)) {
         return run;

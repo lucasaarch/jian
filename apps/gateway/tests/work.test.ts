@@ -3,12 +3,14 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
+import { AgentRuntime } from '../src/agent/runtime.js';
 import { profileTools } from '../src/agent/tools.js';
 import { prepareWorkerWorkspace } from '../src/agent/worker-workspace.js';
 import { workspaceOf } from '../src/agent/workspace.js';
 import { createApp } from '../src/app.js';
 import { findMedia } from '../src/media/repository.js';
-import { listUnreportedTaskWorkers } from '../src/runs/repository.js';
+import { listUnreportedSubagents } from '../src/runs/repository.js';
+import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
 const token = 'synthetic-test-token-at-least-32-characters';
@@ -108,16 +110,12 @@ it('keeps durable work scoped to one profile, editable across runs, and versione
   expect(await services.work.list(first.id)).toEqual([]);
   const tools = profileTools(services, run);
   const call = { toolCallId: 'work', messages: [], context: {} };
-  const created = (await tools.create_task?.execute?.(
+  expect(tools).not.toHaveProperty('create_task');
+  const created = await services.work.createWithExecutor(
+    run,
     { title: 'Prepare release', description: 'Verify the build and report the result.' },
-    call,
-  )) as {
-    id: string;
-    version: number;
-    sourceSessionId: string;
-    status: string;
-    worker: { runId: string; status: string };
-  };
+    call.toolCallId,
+  );
 
   expect(created).toMatchObject({ sourceSessionId: chat.id, status: 'todo', version: 1 });
   expect(created.worker.status).toBe('queued');
@@ -144,9 +142,13 @@ it('keeps durable work scoped to one profile, editable across runs, and versione
     });
     expect(manual.statusCode).toBe(404);
 
-    const agentUpdate = await tools.update_task?.execute?.(
-      { id: created.id, status: 'in_progress', note: 'Checks started.', expectedVersion: 1 },
-      call,
+    const legacyWorker = await services.runs.run(first.id, created.worker.runId);
+    expect(profileTools(services, legacyWorker)).not.toHaveProperty('update_task');
+    const agentUpdate = await services.work.update(
+      first.id,
+      created.id,
+      { status: 'in_progress', note: 'Checks started.', expectedVersion: 1 },
+      legacyWorker,
     );
     expect(agentUpdate).toMatchObject({ status: 'in_progress', version: 2, updatedBy: 'agent' });
     await expect(
@@ -241,7 +243,7 @@ it('spawns isolated, idempotent task workers and allows verified direct completi
   ).toBe(false);
   const worker = await services.runs.run(profile.id, first.runId);
   const workerTools = profileTools(services, worker);
-  expect(Object.keys(workerTools)).toContain('update_task');
+  expect(workerTools).not.toHaveProperty('update_task');
   expect(workerTools).toHaveProperty('ask_agent');
   expect(workerTools).toHaveProperty('list_sessions');
   expect(workerTools).toHaveProperty('remember');
@@ -263,7 +265,7 @@ it('spawns isolated, idempotent task workers and allows verified direct completi
     `Your repository worktrees are ${join(await workspaceOf(profile.id, first.runId), 'repos/1/project')}`,
   );
   expect(context.system).toContain("Paths from other workers' reports are not accessible");
-  expect(context.system).toContain('Coordinate the release.');
+  expect(context.system).not.toContain('Coordinate the release.');
   await expect(
     services.runs.submit(profile.id, first.sessionId, { text: 'Intrude', requestKey: 'direct' }),
   ).rejects.toMatchObject({ statusCode: 403 });
@@ -287,13 +289,13 @@ it('spawns isolated, idempotent task workers and allows verified direct completi
   const owner = 'test-worker-lease';
   await services.lifecycle.claim(first.runId, profile.id, owner);
   await services.lifecycle.finish(profile.id, first.runId, owner, 'completed', 'Tests passed.');
-  expect(await listUnreportedTaskWorkers(services.store.db, 10)).toContainEqual({
+  expect(await listUnreportedSubagents(services.store.db, 10)).toContainEqual({
     id: first.runId,
     profileId: profile.id,
   });
   await services.work.reportWorker(profile.id, first.runId);
   await services.work.reportWorker(profile.id, first.runId);
-  expect(await listUnreportedTaskWorkers(services.store.db, 10)).toEqual([]);
+  expect(await listUnreportedSubagents(services.store.db, 10)).toEqual([]);
   expect(
     (await services.sessions.messages(profile.id, chat.id)).filter((message) =>
       message.content.includes(`Task worker "Verifier"`),
@@ -363,5 +365,162 @@ it('spawns isolated, idempotent task workers and allows verified direct completi
     expect(response.json()).toHaveLength(2);
   } finally {
     await app.close();
+  }
+});
+
+it('runs a scoped subagent in its parent conversation and delivers one durable handoff', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile({
+    name: 'Coordinator',
+    instructions: 'Help the owner.',
+    identity: { role: 'Persistent coordinator' },
+    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  });
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const other = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const parent = await services.runs.submit(profile.id, session.id, {
+    text: 'Research the release.',
+    requestKey: 'parent',
+  });
+  const image = await services.media.upload(profile.id, session.id, {
+    mimeType: 'image/png',
+    data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=',
+  });
+  await services.memories.remember(profile.id, {
+    key: 'release',
+    content: 'Private deployment history.',
+    expectedVersion: 0,
+  });
+  const tools = profileTools(services, parent);
+  const assignment = {
+    role: 'execute' as const,
+    name: 'Researcher',
+    identity: 'Inspect the release evidence.',
+    brief: 'Find the release status and report the exact source.',
+    mediaIds: [image.id],
+  };
+  const call = { toolCallId: 'spawn-one', messages: [], context: {} };
+  const child = await tools.spawn_subagent?.execute?.(assignment, call);
+  expect(child).toMatchObject({ name: 'Researcher', status: 'queued' });
+  if (!child) throw new Error('Subagent was not created');
+  expect((await tools.spawn_subagent?.execute?.(assignment, call))?.runId).toBe(child.runId);
+  await expect(
+    services.work.spawnInConversation(
+      parent,
+      { ...assignment, brief: 'Different task.' },
+      'spawn-one',
+    ),
+  ).rejects.toMatchObject({ statusCode: 409 });
+  expect(await services.work.list(profile.id)).toEqual([]);
+  expect(await services.work.conversationSubagents(profile.id, other.id)).toEqual([]);
+  expect(await services.work.conversationSubagents(profile.id, session.id)).toMatchObject([
+    { runId: child.runId, parentRunId: parent.id, name: 'Researcher' },
+  ]);
+  const worker = await services.runs.run(profile.id, child.runId);
+  expect(worker.input).not.toContain(image.id);
+  const copiedImage = worker.input.match(/\[Attached media: ([a-f0-9-]+)\]/)?.[1];
+  expect(copiedImage).toBeDefined();
+  expect((await findMedia(services.store.db, profile.id, copiedImage ?? '')).mimeType).toBe(
+    'image/png',
+  );
+  const context = await services.contexts.context(worker);
+  expect(context.messages.at(-1)?.content).toContain(assignment.brief);
+  expect(context.system).not.toContain('Private deployment history.');
+  expect(context.system).not.toContain('Research the release.');
+  expect(context.system).not.toContain('Persistent coordinator');
+  expect(context.system).not.toContain('Relevant shared memories');
+  expect(context.system).not.toContain('Current activities');
+  expect(profileTools(services, worker)).not.toHaveProperty('spawn_subagent');
+  await expect(
+    services.work.spawnInConversation(worker, assignment, 'nested'),
+  ).rejects.toMatchObject({
+    statusCode: 403,
+  });
+  await services.lifecycle.claim(child.runId, profile.id, 'child-lease');
+  await services.lifecycle.finish(profile.id, child.runId, 'child-lease', 'completed', 'Released.');
+  await services.work.reportWorker(profile.id, child.runId);
+  await services.work.reportWorker(profile.id, child.runId);
+  expect(
+    (await services.sessions.messages(profile.id, session.id)).filter((message) =>
+      message.content.includes('Subagent "Researcher"'),
+    ),
+  ).toHaveLength(1);
+  const app = createApp({ ...services, token, logger: false });
+  try {
+    const visible = await app.inject({
+      url: `/v1/profiles/${profile.id}/sessions/${session.id}/subagents`,
+      headers,
+    });
+    expect(visible.statusCode).toBe(200);
+    expect(visible.json()).toMatchObject([{ runId: child.runId, status: 'completed' }]);
+    const isolated = await app.inject({
+      url: `/v1/profiles/${profile.id}/sessions/${other.id}/subagents`,
+      headers,
+    });
+    expect(isolated.json()).toEqual([]);
+  } finally {
+    await app.close();
+  }
+});
+
+it('executes a conversation subagent through the agent loop and retains its transcript', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'jian-conversation-worker-')));
+  const previous = process.env.JIAN_WORKSPACES;
+  process.env.JIAN_WORKSPACES = root;
+  try {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({
+      name: 'Coordinator',
+      instructions: 'Help the owner.',
+      model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    });
+    const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const parent = await services.runs.submit(profile.id, session.id, {
+      text: 'Check the release.',
+      requestKey: 'parent',
+    });
+    const child = await services.work.spawnInConversation(
+      parent,
+      {
+        role: 'execute',
+        name: 'Verifier',
+        identity: 'Verify the release.',
+        brief: 'Run the release check.',
+      },
+      'spawn',
+    );
+    const model = mockModel({
+      doGenerate: async () => ({
+        content: [{ type: 'text' as const, text: 'Release check passed.' }],
+        finishReason: { unified: 'stop' as const, raw: 'stop' },
+        usage: {
+          inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 5, text: 5, reasoning: 0 },
+        },
+        warnings: [],
+      }),
+    });
+
+    await new AgentRuntime(services, () => model).execute(profile.id, child.runId);
+    const finished = await services.runs.run(profile.id, child.runId);
+    expect(finished).toMatchObject({ status: 'completed', output: 'Release check passed.' });
+    expect(await services.sessions.messages(profile.id, child.sessionId)).toMatchObject([
+      { role: 'user', content: 'Run the release check.' },
+      { role: 'assistant', content: 'Release check passed.' },
+    ]);
+    expect(await listUnreportedSubagents(services.store.db, 10)).toContainEqual({
+      profileId: profile.id,
+      id: child.runId,
+    });
+    await services.work.reportWorker(profile.id, child.runId);
+    expect(
+      (await services.sessions.messages(profile.id, session.id)).some((message) =>
+        message.content.includes('Release check passed.'),
+      ),
+    ).toBe(true);
+  } finally {
+    if (previous === undefined) delete process.env.JIAN_WORKSPACES;
+    else process.env.JIAN_WORKSPACES = previous;
+    rmSync(root, { recursive: true, force: true });
   }
 });

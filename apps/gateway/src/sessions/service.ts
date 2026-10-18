@@ -96,7 +96,7 @@ export class Sessions {
 
     return this.store.transaction(profileId, async (tx) => {
       if ((await this.session(profileId, sessionId, tx)).channel === TASK_SESSION_CHANNEL) {
-        throw new GatewayError(403, 'Task worker sessions are read-only');
+        throw new GatewayError(403, 'Subagent sessions are read-only');
       }
       const session = assertFound(await renameSession(tx, profileId, sessionId, title), 'Session');
 
@@ -115,7 +115,7 @@ export class Sessions {
 
     return this.store.transaction(profileId, async (tx) => {
       if ((await this.session(profileId, sessionId, tx)).channel === TASK_SESSION_CHANNEL) {
-        throw new GatewayError(403, 'Task worker sessions are read-only');
+        throw new GatewayError(403, 'Subagent sessions are read-only');
       }
       const session = assertFound(
         await setSessionModel(tx, profileId, sessionId, model),
