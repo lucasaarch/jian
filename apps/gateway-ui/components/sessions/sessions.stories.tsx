@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
-import type { Run } from '../../lib/api';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import type { GatewayApi, Run } from '../../lib/api';
 import { useWorkspace } from '../../lib/workspace';
 import * as fixtures from '../../stories/fixtures';
 import { ids } from '../../stories/fixtures';
@@ -65,6 +66,77 @@ export const Empty = open(ids.emptyChat);
 
 export const Conversation: Story = {
   render: () => <History api={sectionProps().api} profileId={ids.zero} sessionId={ids.theoChat} />,
+};
+
+/** A completed internal worker stays attached to the turn that requested its work. */
+export const Subagents: Story = {
+  render: () => {
+    const parentSessionId = ids.reportChat;
+    const childSessionId = 'd3cb02e5-9927-4b82-8437-9bd5a9b1696f';
+    const parentRunId = 'b63bd0ee-d31b-4b56-bbd9-777a0b3679aa';
+    const childRunId = '5305f7e5-915f-42c6-a328-2784fb4fcf8a';
+    const now = new Date().toISOString();
+    const api = {
+      activities: async () => [],
+      messages: async (_profileId: string, sessionId: string) =>
+        sessionId === parentSessionId
+          ? [
+              {
+                id: 'a06d75cb-2a4e-41d8-a00d-41e850de408d',
+                profileId: ids.zero,
+                sessionId: parentSessionId,
+                runId: parentRunId,
+                role: 'user' as const,
+                content: 'Check the release before it goes out.',
+                createdAt: now,
+              },
+            ]
+          : [
+              {
+                id: 'f78dd32d-349a-46a3-b9d5-99e9ec6a6920',
+                profileId: ids.zero,
+                sessionId: childSessionId,
+                runId: childRunId,
+                role: 'user' as const,
+                content: 'Run the release checks and report the outcome.',
+                createdAt: now,
+              },
+              {
+                id: '8d751c2b-b069-44cc-9780-650e96a067ca',
+                profileId: ids.zero,
+                sessionId: childSessionId,
+                runId: childRunId,
+                role: 'assistant' as const,
+                content: 'All release checks passed.',
+                createdAt: now,
+              },
+            ],
+      timeline: async () => [],
+      conversationSubagents: async () => [
+        {
+          runId: childRunId,
+          parentRunId,
+          sessionId: childSessionId,
+          role: 'execute' as const,
+          name: 'Release verifier',
+          status: 'completed' as const,
+          input: 'Run the release checks and report the outcome.',
+          output: 'All release checks passed.',
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+    } satisfies Pick<GatewayApi, 'activities' | 'messages' | 'timeline' | 'conversationSubagents'>;
+    return <History api={api} profileId={ids.zero} sessionId={parentSessionId} />;
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const button = (await canvas.findByText('Release verifier')).closest('button');
+    if (!button) throw new Error('Subagent control missing');
+    await userEvent.click(button);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await waitFor(() => expect(canvas.getByText('All release checks passed.')).toBeVisible());
+  },
 };
 
 const live = fixtures.runs[0] as Run;

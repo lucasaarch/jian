@@ -51,6 +51,7 @@ const decisions = (configured: boolean) => ({
 });
 
 export const handlers = [
+  http.get('*/v1/profiles/:profileId/sessions/:sessionId/subagents', () => ok([])),
   http.get('*/v1/profiles/:profileId/work', ({ params }) =>
     ok(byProfile(data.work, String(params.profileId))),
   ),

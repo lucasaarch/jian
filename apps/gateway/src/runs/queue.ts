@@ -3,7 +3,7 @@ import type { AgentRuntime } from '../agent/runtime.js';
 import type { Store } from '../storage/database.js';
 import type { Work } from '../tasks/service.js';
 import type { RunRecovery } from './port.js';
-import { listQueuedRuns, listUnreportedTaskWorkers } from './repository.js';
+import { listQueuedRuns, listUnreportedSubagents } from './repository.js';
 
 const queueName = 'jian-agent-runs';
 
@@ -51,11 +51,11 @@ export class RunQueue {
   private async dispatch() {
     await this.services.lifecycle.recover();
 
-    for (const worker of await listUnreportedTaskWorkers(this.services.store.db, 100)) {
+    for (const worker of await listUnreportedSubagents(this.services.store.db, 100)) {
       if (this.stopped) return;
       await this.services.work
         .reportWorker(worker.profileId, worker.id)
-        .catch(() => this.report(`jian: task worker ${worker.id} handoff failed; will retry`));
+        .catch(() => this.report(`jian: subagent ${worker.id} handoff failed; will retry`));
     }
 
     if (Date.now() - this.lastCleanup >= 60_000) {

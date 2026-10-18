@@ -18,6 +18,7 @@ export async function compactPrompt(input: {
   modelId: string;
   messages: ModelMessage[];
   currentStartIndex?: number;
+  includeCurrent?: boolean;
   previous?: string;
   providerOptions?: Record<string, Record<string, JSONValue>>;
   policy: { inputTokens: number; outputTokens: number };
@@ -33,7 +34,7 @@ export async function compactPrompt(input: {
     return contains;
   });
   const keepFrom =
-    input.currentStartIndex !== undefined && currentBlock === 0
+    input.includeCurrent || (input.currentStartIndex !== undefined && currentBlock === 0)
       ? blocks.length
       : Math.max(currentBlock < 0 ? 0 : currentBlock, blocks.length - 2);
   const older = blocks.slice(0, keepFrom).flat();

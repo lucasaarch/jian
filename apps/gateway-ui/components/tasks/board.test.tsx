@@ -96,7 +96,7 @@ it('shows agent work and its read-only activity', async () => {
     ),
   );
 
-  expect(element.querySelector('[aria-label="In review"] .work-card')?.textContent).toContain(
+  expect(element.querySelector('[aria-label="Archived work"] .work-card')?.textContent).toContain(
     'Review release',
   );
   await act(async () => element.querySelector<HTMLButtonElement>('.work-card')?.click());
@@ -122,7 +122,7 @@ it('shows agent work and its read-only activity', async () => {
   );
   await act(async () => new Promise((resolve) => setTimeout(resolve, 320)));
   expect(element.querySelector('dialog.work-detail-page')).toBeNull();
-  expect(element.querySelector('.work-board')).not.toBeNull();
+  expect(element.querySelector('.work-archive-list')).not.toBeNull();
   await act(async () => root.unmount());
   element.remove();
 });

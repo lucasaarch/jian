@@ -1,4 +1,3 @@
-/* Only the board scrolls sideways; columns never collapse or get clipped by the page. */
 .work-page {
   display: flex;
   flex-direction: column;
@@ -19,64 +18,37 @@
 .work-board-scroll {
   width: 100%;
   flex: 1;
-  min-width: 0;
   min-height: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
+  overflow-y: auto;
   padding: 0 40px 24px;
 }
-.work-board {
+.work-archive-list {
   display: grid;
-  grid-template-columns: repeat(5, minmax(240px, 1fr));
   gap: 1px;
   margin-top: 24px;
-  height: calc(100% - 24px);
-  width: max(100%, 1200px);
+  max-width: 800px;
   border: 1px solid var(--line);
   background: var(--line);
 }
-.work-column {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  --column-fill: color-mix(in srgb, var(--status-dot) 7%, var(--surface));
-  background: var(--column-fill);
-}
-.work-column,
+.work-card,
 .work-detail-status {
   --status-dot: #8b9199;
 }
-.work-column[data-status="in_progress"],
+.work-card[data-status="in_progress"],
 .work-detail-status[data-status="in_progress"] {
   --status-dot: #73b9ff;
 }
-.work-column[data-status="review"],
+.work-card[data-status="review"],
 .work-detail-status[data-status="review"] {
   --status-dot: #e9c36c;
 }
-.work-column[data-status="blocked"],
+.work-card[data-status="blocked"],
 .work-detail-status[data-status="blocked"] {
   --status-dot: #f0847b;
 }
-.work-column[data-status="done"],
+.work-card[data-status="done"],
 .work-detail-status[data-status="done"] {
   --status-dot: #7bcca2;
-}
-.work-column > header {
-  display: flex;
-  justify-content: space-between;
-  padding: 14px;
-  border-top: 2px solid var(--status-dot);
-  border-bottom: 1px solid var(--line);
-}
-.work-column h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.75rem;
-  font-weight: 600;
 }
 .work-status-dot {
   width: 7px;
@@ -85,30 +57,23 @@
   border-radius: 50%;
   background: var(--status-dot);
 }
-.work-column-count {
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-.work-column-cards {
-  display: grid;
-  align-content: start;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  background: var(--column-fill);
-}
 .work-card {
   display: grid;
   width: 100%;
   gap: 8px;
   padding: 14px;
-  border-bottom: 1px solid var(--line);
-  background: var(--column-fill);
+  background: var(--surface);
   text-align: left;
 }
 .work-card:hover {
-  background: color-mix(in srgb, var(--status-dot) 16%, var(--surface));
+  background: color-mix(in srgb, var(--status-dot) 8%, var(--surface));
+}
+.work-card-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 .work-card strong {
   font-size: 0.8125rem;

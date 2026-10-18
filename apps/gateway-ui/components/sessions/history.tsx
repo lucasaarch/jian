@@ -11,6 +11,8 @@ import { RunProgress } from './progress';
 import { running, statusLabels } from './status';
 import { ToolTimeline } from './timeline';
 
+type Subagent = Awaited<ReturnType<GatewayApi['conversationSubagents']>>[number];
+
 export function History({
   api,
   profileId,
@@ -21,7 +23,7 @@ export function History({
   group = false,
 }: {
   api: Pick<GatewayApi, 'messages' | 'activities'> &
-    Partial<Pick<GatewayApi, 'media' | 'people' | 'timeline' | 'run'>>;
+    Partial<Pick<GatewayApi, 'media' | 'people' | 'timeline' | 'run' | 'conversationSubagents'>>;
   profileId: string;
   sessionId: string;
   initialRun?: Run;
@@ -37,6 +39,7 @@ export function History({
   // In an agent conversation this profile started, the other agent's runs and their tools.
   const [callTools, setCallTools] = useState(new Map<string, ToolStep[]>());
   const [callRun, setCallRun] = useState<Run>();
+  const [subagents, setSubagents] = useState<Subagent[]>([]);
   // Bumped by an event about this conversation, so it reads again the moment something happens.
   const [heard, setHeard] = useState(0);
   const { subscribe } = useWorkspace();
@@ -44,8 +47,15 @@ export function History({
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const stop = subscribe((event) => {
-      if (!event.type.startsWith('run.') && !event.type.startsWith('session.')) return;
-      const about = (event.data as { sessionId?: string } | undefined)?.sessionId;
+      if (
+        !event.type.startsWith('run.') &&
+        !event.type.startsWith('session.') &&
+        event.type !== 'conversation.subagent.spawned'
+      )
+        return;
+      const about =
+        (event.data as { sessionId?: string; parentSessionId?: string } | undefined)?.sessionId ??
+        (event.data as { parentSessionId?: string } | undefined)?.parentSessionId;
 
       if (about && about !== sessionId) return;
       // Several events arrive together as a turn moves; one read covers them all.
@@ -75,11 +85,12 @@ export function History({
     let stopped = false;
     const read = async () => {
       try {
-        const [history, activities, members, timeline] = await Promise.all([
+        const [history, activities, members, timeline, children] = await Promise.all([
           api.messages(profileId, sessionId),
           api.activities(profileId),
           group && api.people ? api.people(profileId, sessionId) : [],
           api.timeline ? api.timeline(profileId, sessionId).catch(() => undefined) : undefined,
+          api.conversationSubagents?.(profileId, sessionId) ?? [],
         ]);
         // The other agent's tools are read where it worked: its own session, in its profile.
         const places = [
@@ -105,6 +116,7 @@ export function History({
         }
         if (timeline) setTools(new Map(timeline.map((item) => [item.runId, item.steps])));
         setMessages(history);
+        setSubagents(children);
         setPeople(new Map(members.map((person) => [person.id, person])));
         setRun(
           activities
@@ -125,6 +137,12 @@ export function History({
       stopped = true;
     };
   }, [api, profileId, sessionId, retry, revision, group, heard]);
+
+  useEffect(() => {
+    if (!subagents.some((child) => child.status === 'queued' || child.status === 'running')) return;
+    const timer = setInterval(() => setHeard((value) => value + 1), 1500);
+    return () => clearInterval(timer);
+  }, [subagents]);
 
   // The last question this profile carried to another agent, while its answer has not come back.
   const lastCall = messages
@@ -248,6 +266,18 @@ export function History({
                       <ToolTimeline steps={unansweredSteps} />
                     </div>
                   )}
+                  {message.runId &&
+                    messages[index + 1]?.runId !== message.runId &&
+                    subagents
+                      .filter((child) => child.parentRunId === message.runId)
+                      .map((child) => (
+                        <SubagentEntry
+                          api={api}
+                          profileId={profileId}
+                          run={child}
+                          key={child.runId}
+                        />
+                      ))}
                 </Fragment>
               );
             })
@@ -298,5 +328,83 @@ export function History({
         </div>
       )}
     </div>
+  );
+}
+
+function SubagentEntry({
+  api,
+  profileId,
+  run,
+}: {
+  api: Pick<GatewayApi, 'messages'> & Partial<Pick<GatewayApi, 'media' | 'timeline'>>;
+  profileId: string;
+  run: Subagent;
+}) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<Awaited<ReturnType<GatewayApi['messages']>>>();
+  const [steps, setSteps] = useState<ToolStep[]>([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    let stopped = false;
+    const read = async () => {
+      try {
+        const [history, timeline] = await Promise.all([
+          api.messages(profileId, run.sessionId),
+          api.timeline?.(profileId, run.sessionId).catch(() => []) ?? [],
+        ]);
+        if (stopped) return;
+        setMessages(history);
+        setSteps(timeline.find((item) => item.runId === run.runId)?.steps ?? []);
+        setError('');
+      } catch (failure) {
+        if (!stopped)
+          setError(
+            failure instanceof Error ? failure.message : 'Could not load subagent activity.',
+          );
+      }
+    };
+    void read();
+    const active = run.status === 'queued' || run.status === 'running';
+    const timer = active ? setInterval(() => void read(), 1500) : undefined;
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [api, profileId, run.runId, run.sessionId, run.status, open]);
+
+  return (
+    <section className="subagent-activity">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={`subagent-${run.runId}`}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <strong>{run.name}</strong>
+        <span>{statusLabels[run.status]}</span>
+      </button>
+      <div className="subagent-transcript" id={`subagent-${run.runId}`} hidden={!open}>
+        {!messages && !error && <Spinner size={20} />}
+        {error && <p className="text-bad">{error}</p>}
+        {steps.length > 0 && <ToolTimeline steps={steps} live={run.status === 'running'} />}
+        {messages?.map((entry) => (
+          <ChatMessage key={entry.id} message={entry} group={false} people={new Map()} opensRun>
+            {api.media && (
+              <MessageMedia
+                api={{ media: api.media }}
+                profileId={profileId}
+                content={entry.content}
+              />
+            )}
+          </ChatMessage>
+        ))}
+        {!messages?.some((entry) => entry.role === 'assistant') && run.output && (
+          <p className="whitespace-pre-wrap text-sm">{run.output}</p>
+        )}
+        {run.error && <p className="text-bad">{run.error}</p>}
+      </div>
+    </section>
   );
 }

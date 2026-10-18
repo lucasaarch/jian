@@ -3,11 +3,11 @@ import type { GatewayApi, WorkItem } from '../../lib/api';
 import { sectionProps } from '../../stories/section';
 import { WorkBoard } from './board';
 
-const meta = { title: 'Sections/Work' } satisfies Meta;
+const meta = { title: 'Sections/Work archive' } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Dashboard: Story = {
+export const ArchivedCards: Story = {
   render: () => {
     const props = sectionProps();
     const now = new Date().toISOString();

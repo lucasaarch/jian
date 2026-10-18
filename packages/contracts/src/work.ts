@@ -12,6 +12,11 @@ export const spawnSubagentSchema = z.strictObject({
   brief: z.string().trim().min(1).max(3000),
 });
 
+export const conversationSubagentInputSchema = spawnSubagentSchema.omit({ taskId: true }).extend({
+  mediaIds: z.array(z.uuid()).max(4).optional(),
+  repositories: z.array(z.string().trim().min(1).max(4096)).max(4).optional(),
+});
+
 export const subagentSchema = spawnSubagentSchema
   .pick({ role: true, name: true, identity: true })
   .extend({
@@ -36,6 +41,10 @@ export const workExecutionSchema = z.array(
     updatedAt: z.iso.datetime(),
   }),
 );
+
+export const conversationSubagentSchema = workExecutionSchema.element.extend({
+  parentRunId: z.uuid(),
+});
 
 export const workInputSchema = z.strictObject({
   title: z.string().trim().min(1).max(160),

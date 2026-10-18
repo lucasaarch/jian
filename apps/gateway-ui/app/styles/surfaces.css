@@ -938,6 +938,21 @@
   .chat-line.pending .chat-text.muted {
     @apply text-sm text-muted;
   }
+  .subagent-activity {
+    @apply mb-5 max-w-xl rounded-xl border border-line bg-surface px-4 py-3;
+  }
+  .subagent-activity > button {
+    @apply flex w-full cursor-pointer items-center justify-between gap-3 text-left text-sm text-ink;
+  }
+  .subagent-activity > button span {
+    @apply text-xs text-muted;
+  }
+  .subagent-transcript {
+    @apply mt-4 border-t border-line pt-4;
+  }
+  .subagent-transcript .chat-line {
+    @apply mb-3;
+  }
   /* The tools behind an answer: a summary line that opens a vertical timeline, a mark per
      tool on a thread that joins them. */
   .tool-timeline {
