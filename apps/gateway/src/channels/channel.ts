@@ -23,6 +23,11 @@ export interface OutgoingMessage {
    * Ids are the actors the channel gave the gateway.
    */
   people?: Array<{ id: string; name: string }>;
+  /**
+   * Native poll when the channel supports it (Telegram today). Text remains for clients that
+   * do not; adapters that understand polls prefer this over sending only the text.
+   */
+  poll?: { question: string; options: string[] };
 }
 
 export interface DeliveryContext {

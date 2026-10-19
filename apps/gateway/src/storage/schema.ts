@@ -10,6 +10,7 @@ import type {
   ProviderCredential,
   ReasoningEffort,
   RunProgress,
+  RunQuestion,
   SessionObjective,
   Skill,
   Subagent,
@@ -191,6 +192,7 @@ export const sessions = pgTable(
 export const runStatus = pgEnum('run_status', [
   'queued',
   'running',
+  'waiting',
   'completed',
   'failed',
   'interrupted',
@@ -229,6 +231,8 @@ export const runs = pgTable(
     // Set when the agent that asked stopped waiting: the answer is carried into that session
     // as a turn of its own instead of being lost with the caller's run.
     relayTo: uuid('relay_to').references(() => sessions.id, { onDelete: 'set null' }),
+    // Owner question that parked this run; present only while status is waiting.
+    question: jsonb('question').$type<RunQuestion>(),
     // What the person said while this run was already going. Read and cleared between steps.
     steer: text('steer'),
     leaseOwner: text('lease_owner'),
