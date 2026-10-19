@@ -111,6 +111,7 @@ export const modelRoleSchema = z.enum([
   'vision',
   'audio',
   'speech',
+  'voice',
   'transcription',
   'sticker',
 ]);
@@ -121,6 +122,7 @@ export const optionalModelRoles: ReadonlySet<ModelRole> = new Set([
   'vision',
   'audio',
   'speech',
+  'voice',
   'sticker',
 ]);
 
@@ -142,6 +144,7 @@ export const modelDefaultsInputSchema = z.strictObject({
   speech: optionalRoleSelection,
   // Describes and tags the stickers the agent keeps. Unset, it is the image-analysis model.
   sticker: optionalRoleSelection,
+  voice: optionalRoleSelection.describe('Real-time voice model used by calls.'),
   transcription: roleSelection.describe(
     'Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.',
   ),
@@ -168,6 +171,8 @@ export function supportsProviderRole(
   provider: Pick<ProviderRecord, 'kind' | 'authMode'>,
   role: ModelRole,
 ): boolean {
+  if (role === 'voice')
+    return provider.authMode !== 'codex' && ['openai', 'google'].includes(provider.kind);
   if (['image', 'speech'].includes(role))
     return provider.authMode !== 'codex' && ['openai', 'google'].includes(provider.kind);
   if (['transcription', 'audio'].includes(role))
@@ -186,6 +191,12 @@ export function supportsModelRole(
 ): boolean {
   if (!supportsProviderRole(provider, role)) return false;
   const id = model.id.toLowerCase();
+  if (role === 'voice')
+    return (
+      provider.authMode !== 'codex' &&
+      ((provider.kind === 'openai' && /^(gpt-live|gpt-realtime)/.test(id)) ||
+        (provider.kind === 'google' && /gemini-.*live/.test(id)))
+    );
   if (role === 'image')
     return (
       provider.authMode !== 'codex' &&

@@ -130,6 +130,13 @@ export const roles = [
     runtime: true,
     tools: false,
   },
+  {
+    key: 'voice',
+    label: 'Voice calls',
+    hint: 'Real-time voice model for calls. Requests that need tools are handled by the conversation model.',
+    runtime: true,
+    tools: false,
+  },
 ] as const;
 
 export type Role = (typeof roles)[number]['key'];
