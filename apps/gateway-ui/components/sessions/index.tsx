@@ -363,6 +363,10 @@ export function Sessions({
               name={profile.name}
               upload={(file) => api.upload(profile.id, active.id, file)}
               send={(text, mediaIds) => api.send(profile.id, active.id, text, mediaIds)}
+              createVoiceToken={() => api.createVoiceToken(profile.id)}
+              summarizeVoiceTranscript={(transcript) =>
+                api.summarizeVoiceTranscript(profile.id, transcript)
+              }
               onSent={() => {
                 setSent((value) => value + 1);
                 void refresh();

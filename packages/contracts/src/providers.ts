@@ -156,6 +156,18 @@ export const modelDefaultsRecordSchema = modelDefaultsInputSchema.extend({
   updatedAt: z.iso.datetime(),
 });
 
+export const voiceTokenSchema = z.strictObject({
+  token: z.string().min(1),
+  model: z.string().min(1),
+  expiresAt: z.iso.datetime().optional(),
+});
+
+export const voiceTranscriptSchema = z.strictObject({
+  transcript: z.string().trim().min(1).max(20_000),
+});
+
+export const voiceSummarySchema = z.strictObject({ summary: z.string().min(1).max(1200) });
+
 export type ProviderCredential = z.infer<typeof providerCredentialSchema>;
 export type ProviderRecord = z.infer<typeof providerRecordSchema>;
 export type ProviderModel = z.infer<typeof providerModelSchema>;
