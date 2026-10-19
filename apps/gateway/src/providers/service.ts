@@ -249,7 +249,20 @@ export class Providers {
         },
       }),
     });
-    if (!response.ok) throw new GatewayError(502, 'Gemini could not issue a temporary voice token');
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 1000);
+      let message = detail;
+      try {
+        const error = (JSON.parse(detail) as { error?: { message?: unknown } }).error?.message;
+        if (typeof error === 'string') message = error;
+      } catch {
+        // Keep a bounded upstream response when it is not JSON.
+      }
+      throw new GatewayError(
+        502,
+        `Gemini could not issue a temporary voice token (HTTP ${response.status})${message ? `: ${message}` : ''}`,
+      );
+    }
     const payload = (await response.json()) as { name?: unknown; expireTime?: unknown };
     if (typeof payload.name !== 'string' || !payload.name) {
       throw new GatewayError(502, 'Gemini returned an invalid temporary voice token');
