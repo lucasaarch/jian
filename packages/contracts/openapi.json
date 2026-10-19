@@ -5742,6 +5742,55 @@
                         }
                       ]
                     },
+                    "voice": {
+                      "default": "disabled",
+                      "description": "Real-time voice model used by calls.",
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "providerId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "modelId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 160
+                                },
+                                "reasoningEffort": {
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh",
+                                    "max"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "providerId",
+                                "modelId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "string",
+                              "const": "disabled"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "transcription": {
                       "default": null,
                       "description": "Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.",
@@ -5804,6 +5853,7 @@
                     "audio",
                     "speech",
                     "sticker",
+                    "voice",
                     "transcription",
                     "id",
                     "profileId",
@@ -6362,6 +6412,55 @@
                       }
                     ]
                   },
+                  "voice": {
+                    "default": "disabled",
+                    "description": "Real-time voice model used by calls.",
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "providerId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "modelId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              },
+                              "reasoningEffort": {
+                                "type": "string",
+                                "enum": [
+                                  "none",
+                                  "minimal",
+                                  "low",
+                                  "medium",
+                                  "high",
+                                  "xhigh",
+                                  "max"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "providerId",
+                              "modelId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "string",
+                            "const": "disabled"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "transcription": {
                     "default": null,
                     "description": "Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.",
@@ -6761,6 +6860,55 @@
                         }
                       ]
                     },
+                    "voice": {
+                      "default": "disabled",
+                      "description": "Real-time voice model used by calls.",
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "providerId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "modelId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 160
+                                },
+                                "reasoningEffort": {
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh",
+                                    "max"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "providerId",
+                                "modelId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "string",
+                              "const": "disabled"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "transcription": {
                       "default": null,
                       "description": "Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.",
@@ -6823,6 +6971,7 @@
                     "audio",
                     "speech",
                     "sticker",
+                    "voice",
                     "transcription",
                     "id",
                     "profileId",

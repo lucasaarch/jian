@@ -4106,6 +4106,17 @@ export interface operations {
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
                         } | "disabled") | null;
                         /**
+                         * @description Real-time voice model used by calls.
+                         * @default disabled
+                         */
+                        voice: ({
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        } | "disabled") | null;
+                        /**
                          * @description Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.
                          * @default null
                          */
@@ -4303,6 +4314,17 @@ export interface operations {
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
                     } | "disabled") | null;
                     /**
+                     * @description Real-time voice model used by calls.
+                     * @default disabled
+                     */
+                    voice?: ({
+                        /** Format: uuid */
+                        providerId: string;
+                        modelId: string;
+                        /** @enum {string} */
+                        reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                    } | "disabled") | null;
+                    /**
                      * @description Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.
                      * @default null
                      */
@@ -4382,6 +4404,17 @@ export interface operations {
                         } | "disabled") | null;
                         /** @default disabled */
                         sticker: ({
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        } | "disabled") | null;
+                        /**
+                         * @description Real-time voice model used by calls.
+                         * @default disabled
+                         */
+                        voice: ({
                             /** Format: uuid */
                             providerId: string;
                             modelId: string;
