@@ -57,7 +57,12 @@ export function Composer({
   name: string;
   upload: (file: MediaUpload) => Promise<{ id: string }>;
   send: (text: string, mediaIds: string[]) => Promise<unknown>;
-  createVoiceToken: () => Promise<{ token: string; model: string; provider: 'google' | 'openai' }>;
+  createVoiceToken: () => Promise<{
+    token: string;
+    model: string;
+    provider: 'google' | 'openai';
+    voiceName?: string;
+  }>;
   summarizeVoiceTranscript: (transcript: string) => Promise<{ summary: string }>;
   onSent: () => void;
   placeholder?: string;
@@ -97,14 +102,19 @@ export function Composer({
     setLiveBusy(true);
     try {
       setError('');
-      const { token, model, provider } = await createVoiceToken();
+      const { token, model, provider, voiceName } = await createVoiceToken();
       liveLabel.current = provider === 'openai' ? 'OpenAI Live' : 'Gemini Live';
       liveTranscript.current = [];
       liveStartedAt.current = Date.now();
-      liveSession.current = await connectLiveVoice(token, model, (text) => {
-        const room = 20_000 - liveTranscript.current.join(' ').length;
-        if (room > 0) liveTranscript.current.push(text.slice(0, room));
-      });
+      liveSession.current = await connectLiveVoice(
+        token,
+        model,
+        (text) => {
+          const room = 20_000 - liveTranscript.current.join(' ').length;
+          if (room > 0) liveTranscript.current.push(text.slice(0, room));
+        },
+        voiceName,
+      );
       setLive(true);
     } catch (failure) {
       liveSession.current?.close();

@@ -16,6 +16,7 @@ export async function connectLiveVoice(
   token: string,
   model: string,
   onTranscript: (text: string) => void = () => {},
+  voiceName?: string,
 ) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const context = new AudioContext();
@@ -54,7 +55,12 @@ export async function connectLiveVoice(
           JSON.stringify({
             setup: {
               model: model.startsWith('models/') ? model : `models/${model}`,
-              generationConfig: { responseModalities: ['AUDIO'] },
+              generationConfig: {
+                responseModalities: ['AUDIO'],
+                ...(voiceName
+                  ? { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } }
+                  : {}),
+              },
               inputAudioTranscription: {},
               outputAudioTranscription: {},
             },

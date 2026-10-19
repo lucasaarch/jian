@@ -140,6 +140,7 @@ export async function readModelDefaults(
                 providerId: row.providerId,
                 modelId: row.modelId,
                 ...(row.reasoningEffort ? { reasoningEffort: row.reasoningEffort } : {}),
+                ...(row.voiceName ? { voiceName: row.voiceName } : {}),
               }
             : null;
   }
@@ -185,6 +186,7 @@ export async function writeModelDefaults(
       modelId: selection === 'disabled' ? 'disabled' : (selection?.modelId ?? null),
       reasoningEffort:
         selection && selection !== 'disabled' ? (selection.reasoningEffort ?? null) : null,
+      voiceName: selection && selection !== 'disabled' ? (selection.voiceName ?? null) : null,
       updatedAt: at,
     };
   });

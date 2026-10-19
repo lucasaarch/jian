@@ -209,6 +209,62 @@ it('offers live voice models only for API-key providers, not ChatGPT OAuth', asy
   }
 });
 
+it('offers Gemini voices under the selected model and saves the chosen voice', async () => {
+  const setModelDefaults = vi.fn().mockResolvedValue({});
+  const view = await modelMenu('Voice calls', true, {}, setModelDefaults);
+  try {
+    const modelOption = Array.from(document.querySelectorAll('[role="option"]')).find((item) =>
+      item.textContent?.includes('gemini-3.8-live'),
+    ) as HTMLElement;
+    await act(async () => modelOption.click());
+
+    const voiceLabel = Array.from(view.card.querySelectorAll('label')).find(
+      (item) => item.textContent === 'Voice',
+    );
+    const trigger = document.getElementById(voiceLabel?.htmlFor ?? '') as HTMLButtonElement | null;
+    if (!trigger) throw new Error('Voice selector missing');
+    await act(async () => trigger.click());
+    expect(view.options()).toContain('Leda');
+    expect(view.options()).toContain('Zubenelgenubi');
+    const voiceOption = Array.from(document.querySelectorAll('[role="option"]')).find(
+      (item) => item.textContent === 'Aoede',
+    ) as HTMLElement;
+    await act(async () => voiceOption.click());
+    await act(async () => {
+      view.element
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(setModelDefaults).toHaveBeenCalledWith(
+      'profile',
+      expect.objectContaining({ voice: expect.objectContaining({ voiceName: 'Aoede' }) }),
+    );
+  } finally {
+    await view.close();
+  }
+});
+
+it('offers Iris GPT Live voices for OpenAI models', async () => {
+  const view = await modelMenu('Voice calls', true);
+  try {
+    const modelOption = Array.from(document.querySelectorAll('[role="option"]')).find((item) =>
+      item.textContent?.includes('gpt-live-1OpenAI · API key'),
+    ) as HTMLElement;
+    await act(async () => modelOption.click());
+    const voiceLabel = Array.from(view.card.querySelectorAll('label')).find(
+      (item) => item.textContent === 'Voice',
+    );
+    const trigger = document.getElementById(voiceLabel?.htmlFor ?? '') as HTMLButtonElement | null;
+    if (!trigger) throw new Error('Voice selector missing');
+    await act(async () => trigger.click());
+    expect(view.options()).toContain('marin');
+    expect(view.options()).toContain('willow');
+    expect(view.options()).not.toContain('Aoede');
+  } finally {
+    await view.close();
+  }
+});
+
 it('shows one incoming audio setting for voice notes and audio files', async () => {
   const view = await modelMenu('Image generation', false);
   try {
