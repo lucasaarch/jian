@@ -261,7 +261,27 @@ it('issues one Gemini Live token restricted to the configured voice model', asyn
       },
     },
   });
-  expect(token).toMatchObject({ token: 'ephemeral-only', model: 'gemini-3.8-live' });
+  expect(token).toMatchObject({
+    token: 'ephemeral-only',
+    model: 'gemini-3.8-live',
+    provider: 'google',
+  });
+});
+
+it('refuses OpenAI Live tokens until the browser path ships', async () => {
+  const f = await mediaFixture();
+  const provider = await f.services.providers.createProvider({
+    name: 'OpenAI voice',
+    kind: 'openai',
+    secret: 'synthetic-openai-key-1234567890',
+  });
+  await f.services.providers.setModelDefaults(f.profile.id, {
+    voice: { providerId: provider.id, modelId: 'gpt-live-1' },
+  });
+  await expect(f.services.providers.createVoiceToken(f.profile.id)).rejects.toMatchObject({
+    statusCode: 409,
+    message: expect.stringMatching(/OpenAI Live voice calls are not available yet/i),
+  });
 });
 
 it('holds an incoming image until approval and keeps it isolated to its profile', async () => {

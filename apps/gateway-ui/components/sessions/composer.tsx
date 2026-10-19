@@ -1,6 +1,17 @@
 'use client';
 
-import { ArrowUp, FileText, LoaderCircle, Mic, Plus, Square, Trash2, X } from 'lucide-react';
+import {
+  ArrowUp,
+  FileText,
+  LoaderCircle,
+  Mic,
+  Phone,
+  PhoneOff,
+  Plus,
+  Square,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { MediaUpload } from '../../lib/api';
 import {
@@ -46,40 +57,48 @@ export function Composer({
   name: string;
   upload: (file: MediaUpload) => Promise<{ id: string }>;
   send: (text: string, mediaIds: string[]) => Promise<unknown>;
-  createVoiceToken: () => Promise<{ token: string; model: string }>;
+  createVoiceToken: () => Promise<{ token: string; model: string; provider: 'google' | 'openai' }>;
   summarizeVoiceTranscript: (transcript: string) => Promise<{ summary: string }>;
   onSent: () => void;
   placeholder?: string;
 }) {
   const [live, setLive] = useState(false);
+  const [liveBusy, setLiveBusy] = useState(false);
   const liveSession = useRef<{ close: () => void } | undefined>(undefined);
   // Interim/final text is held only in memory for the later summary step; never uploaded here.
   const liveTranscript = useRef<string[]>([]);
   const liveStartedAt = useRef(0);
+  const liveLabel = useRef('Gemini Live');
 
   const toggleLive = async () => {
+    if (liveBusy) return;
     if (liveSession.current) {
       liveSession.current.close();
       liveSession.current = undefined;
       setLive(false);
+      setLiveBusy(true);
       try {
         const transcript = liveTranscript.current.join(' ').slice(0, 20_000);
         liveTranscript.current = [];
         if (!transcript.trim()) return;
         const { summary } = await summarizeVoiceTranscript(transcript);
         const duration = Math.max(1, Math.round((Date.now() - liveStartedAt.current) / 1000));
-        await send(`[Voice call · ${clock(duration)} · Gemini Live]\n${summary}`, []);
+        await send(`[Voice call · ${clock(duration)} · ${liveLabel.current}]\n${summary}`, []);
         onSent();
       } catch (failure) {
         setError(
           failure instanceof Error ? failure.message : 'Could not save the voice-call summary.',
         );
+      } finally {
+        setLiveBusy(false);
       }
       return;
     }
+    setLiveBusy(true);
     try {
       setError('');
-      const { token, model } = await createVoiceToken();
+      const { token, model, provider } = await createVoiceToken();
+      liveLabel.current = provider === 'openai' ? 'OpenAI Live' : 'Gemini Live';
       liveTranscript.current = [];
       liveStartedAt.current = Date.now();
       liveSession.current = await connectLiveVoice(token, model, (text) => {
@@ -92,6 +111,8 @@ export function Composer({
       liveSession.current = undefined;
       liveTranscript.current = [];
       setError(failure instanceof Error ? failure.message : 'Could not start the voice call.');
+    } finally {
+      setLiveBusy(false);
     }
   };
 
@@ -373,9 +394,15 @@ export function Composer({
             type="button"
             className={`composer-tool ${live ? 'recording' : ''}`}
             aria-label={live ? 'End voice call' : 'Start voice call'}
+            title={
+              live
+                ? 'End voice call'
+                : 'Start a Live voice call (needs a Gemini Live model under Voice calls)'
+            }
+            disabled={liveBusy}
             onClick={() => void toggleLive()}
           >
-            {live ? <Square size={14} fill="currentColor" /> : <Mic size={18} />}
+            {live ? <PhoneOff size={16} /> : <Phone size={16} />}
           </button>
           <span className="grow" />
           {recorder.recording ? (
