@@ -39,6 +39,7 @@ import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
 import { ACTION_KINDS, actionGuard, guardTools, mcpActionKind } from './guard.js';
 import { availableNote, connectMcpTools, unavailableNote } from './mcp.js';
+import { mcpClientDisconnected } from './mcp-errors.js';
 import { Narrator } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
@@ -426,9 +427,14 @@ export class AgentRuntime {
                 }
 
                 // Only a tool that could change external state has an uncertain outcome when
-                // it does not answer. A declared read-only MCP tool may fail without stopping
-                // the turn; the agent needs its actual error to choose another way forward.
-                if (mcpToolNames.includes(name) && mcpActionKind(definition)) {
+                // a call was written and never answered. A declared read-only tool, or a client
+                // that was already dead before send (reconnect already tried in connectMcpTools),
+                // fails as a normal tool error so the agent can continue without interrupting.
+                if (
+                  mcpToolNames.includes(name) &&
+                  mcpActionKind(definition) &&
+                  !mcpClientDisconnected(error)
+                ) {
                   const failure = reason(error, secrets);
                   await this.services.lifecycle
                     .checkpoint(profileId, runId, owner, {

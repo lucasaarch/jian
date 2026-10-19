@@ -67,7 +67,13 @@ export type McpConnection = {
   server: McpServer;
   vault: SecretReader;
   fetcher: typeof globalThis.fetch;
+  /** Bounds connect and initialize only — must not kill a stdio child that already answered. */
   signal: AbortSignal;
+  /**
+   * Lifetime of a stdio child. Defaults to `signal`. Callers that pass a connect timeout on
+   * `signal` must set this to the run abort alone, or the timeout ends the server mid-turn.
+   */
+  lifetime?: AbortSignal;
   env?: NodeJS.ProcessEnv;
   /** Present only for a server the owner signed in to; the SDK drives the whole exchange. */
   authProvider?: Parameters<typeof createMCPClient>[0]['transport'] extends infer T
@@ -88,7 +94,7 @@ export async function connectMcp(connection: McpConnection): Promise<MCPClient> 
         command: server.command as string,
         args: server.args,
         env: await collect(profileId, server, 'env', server.env, vault, env),
-        signal,
+        signal: connection.lifetime ?? signal,
       }),
       initializationOptions: { signal, timeout: 15_000 },
       maxRetries: 0,
