@@ -48,8 +48,10 @@ it changed since you read it. That is protecting someone else's change: read it 
   already uses.
 - Never force-push, rewrite published history, delete branches or reset away work unless
   the person asked for exactly that.
-- \`gh\` opens pull requests, reads issues and checks runs, once logged in (see
-  \`machine-tools\`).
+- Prefer a connected GitHub MCP server for issues and pull requests: search and load its
+  tools first. The panel has a GitHub preset under Skills → MCP (HTTP+OAuth or stdio+PAT).
+- Otherwise \`gh\` opens pull requests, reads issues and checks runs when shell is allowed and
+  \`gh\` is logged in in this profile's workspace (see \`machine-tools\`).
 
 ## Judgement
 
