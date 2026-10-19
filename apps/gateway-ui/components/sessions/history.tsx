@@ -8,7 +8,7 @@ import { useFollowBottom } from './follow-bottom';
 import { MessageMedia } from './media';
 import { authored, ChatMessage } from './message';
 import { RunProgress } from './progress';
-import { running, statusLabels } from './status';
+import { running, statusLabels, waiting } from './status';
 import { ToolTimeline } from './timeline';
 
 type Subagent = Awaited<ReturnType<GatewayApi['conversationSubagents']>>[number];
@@ -21,9 +21,15 @@ export function History({
   revision = 0,
   empty = 'Messages arriving through the channel show up here.',
   group = false,
+  onAnswered,
 }: {
   api: Pick<GatewayApi, 'messages' | 'activities'> &
-    Partial<Pick<GatewayApi, 'media' | 'people' | 'timeline' | 'run' | 'conversationSubagents'>>;
+    Partial<
+      Pick<
+        GatewayApi,
+        'media' | 'people' | 'timeline' | 'run' | 'conversationSubagents' | 'answerRun'
+      >
+    >;
   profileId: string;
   sessionId: string;
   initialRun?: Run;
@@ -32,6 +38,7 @@ export function History({
   empty?: string;
   /** A room: the other side is several people, each shown with their face and name. */
   group?: boolean;
+  onAnswered?: () => void;
 }) {
   const [messages, setMessages] = useState<Awaited<ReturnType<GatewayApi['messages']>>>([]);
   const [people, setPeople] = useState(new Map<string, Person>());
@@ -42,6 +49,7 @@ export function History({
   const [subagents, setSubagents] = useState<Subagent[]>([]);
   // Bumped by an event about this conversation, so it reads again the moment something happens.
   const [heard, setHeard] = useState(0);
+  const [answering, setAnswering] = useState(false);
   const { subscribe } = useWorkspace();
 
   useEffect(() => {
@@ -316,6 +324,33 @@ export function History({
           >
             Try again
           </Button>
+        </div>
+      )}
+      {run && waiting(run) && run.question && (
+        <div className="run-status run-waiting" role="status">
+          <Badge tone="accent">{statusLabels.waiting}</Badge>
+          <p>{run.question.prompt}</p>
+          {run.question.choices && api.answerRun && (
+            <div className="run-waiting-choices">
+              {run.question.choices.map((choice) => (
+                <Button
+                  key={choice}
+                  variant="secondary"
+                  disabled={answering}
+                  onClick={() => {
+                    setAnswering(true);
+                    void api
+                      .answerRun?.(profileId, run.id, choice)
+                      .then(() => onAnswered?.())
+                      .catch(() => undefined)
+                      .finally(() => setAnswering(false));
+                  }}
+                >
+                  {choice}
+                </Button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {/* The dots already say the agent is working; the bar speaks only when a turn went wrong. */}

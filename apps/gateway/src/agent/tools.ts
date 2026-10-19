@@ -29,6 +29,7 @@ import type { Stats } from '../stats/service.js';
 import type { Store } from '../storage/database.js';
 import { artifacts, checkpoints } from '../storage/schema.js';
 import type { Work } from '../tasks/service.js';
+import { AskUserPause } from './ask-user.js';
 import { artifactPage } from './results.js';
 import { shellTools } from './shell.js';
 
@@ -125,7 +126,8 @@ export function profileTools(
     }),
 
     list_activities: tool({
-      description: 'Read the actual queued/running tasks across this profile’s sessions.',
+      description:
+        'Read the actual queued, running, and waiting tasks across this profile’s sessions.',
       inputSchema: z.object({}),
       execute: async () =>
         (await services.runs.activities(run.profileId)).map((r) => ({
@@ -134,6 +136,7 @@ export function profileTools(
           status: r.status,
           input: r.input.slice(0, 500),
           updatedAt: r.updatedAt,
+          ...(r.question ? { question: r.question } : {}),
         })),
     }),
 
@@ -217,6 +220,28 @@ export function profileTools(
         return session.objective;
       },
     }),
+
+    ...(!run.subagent
+      ? {
+          ask_user: tool({
+            description:
+              'Ask the owner a required question and pause this run until they answer. Prefer this over finishing the turn or block_session_objective when you need a concrete choice or fact to continue. Optional choices become buttons in the panel and a reply keyboard on Telegram.',
+            inputSchema: z.object({
+              prompt: z.string().trim().min(1).max(2000),
+              choices: z.array(z.string().trim().min(1).max(100)).min(2).max(12).optional(),
+            }),
+            execute: async ({
+              prompt,
+              choices,
+            }: {
+              prompt: string;
+              choices?: string[];
+            }): Promise<{ paused: true }> => {
+              throw new AskUserPause({ prompt, ...(choices?.length ? { choices } : {}) });
+            },
+          }),
+        }
+      : {}),
 
     ...(services.work && !run.subagent
       ? {
