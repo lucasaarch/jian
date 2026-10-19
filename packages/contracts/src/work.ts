@@ -1,23 +1,17 @@
 import { z } from 'zod';
 
-export const workStatusSchema = z.enum(['todo', 'in_progress', 'review', 'blocked', 'done']);
-
 export const subagentRoleSchema = z.enum(['execute', 'review']);
 
-export const spawnSubagentSchema = z.strictObject({
-  taskId: z.uuid(),
+export const conversationSubagentInputSchema = z.strictObject({
   role: subagentRoleSchema,
   name: z.string().trim().min(1).max(80),
   identity: z.string().trim().min(1).max(4000),
   brief: z.string().trim().min(1).max(3000),
-});
-
-export const conversationSubagentInputSchema = spawnSubagentSchema.omit({ taskId: true }).extend({
   mediaIds: z.array(z.uuid()).max(4).optional(),
   repositories: z.array(z.string().trim().min(1).max(4096)).max(4).optional(),
 });
 
-export const subagentSchema = spawnSubagentSchema
+export const subagentSchema = conversationSubagentInputSchema
   .pick({ role: true, name: true, identity: true })
   .extend({
     parentRunId: z.uuid(),
@@ -27,64 +21,16 @@ export const subagentSchema = spawnSubagentSchema
   });
 export type Subagent = z.infer<typeof subagentSchema>;
 
-export const workExecutionSchema = z.array(
-  z.strictObject({
-    runId: z.uuid(),
-    sessionId: z.uuid(),
-    role: subagentRoleSchema,
-    name: z.string(),
-    status: z.enum(['queued', 'running', 'completed', 'failed', 'interrupted', 'cancelled']),
-    input: z.string(),
-    output: z.string().optional(),
-    error: z.string().optional(),
-    createdAt: z.iso.datetime(),
-    updatedAt: z.iso.datetime(),
-  }),
-);
-
-export const conversationSubagentSchema = workExecutionSchema.element.extend({
+export const conversationSubagentSchema = z.strictObject({
+  runId: z.uuid(),
+  sessionId: z.uuid(),
   parentRunId: z.uuid(),
-});
-
-export const workInputSchema = z.strictObject({
-  title: z.string().trim().min(1).max(160),
-  description: z.string().trim().min(1).max(4000),
-  mediaIds: z.array(z.uuid()).max(4).optional(),
-  repositories: z.array(z.string().trim().min(1).max(4096)).max(4).optional(),
-});
-
-export const workPatchSchema = z
-  .strictObject({
-    status: workStatusSchema.optional(),
-    note: z.string().trim().max(2000).optional(),
-    expectedVersion: z.number().int().positive(),
-  })
-  .refine((patch) => patch.status !== undefined || patch.note !== undefined, {
-    message: 'Change the status or note',
-  });
-
-export const workItemSchema = workInputSchema.extend({
-  mediaIds: z.array(z.uuid()),
-  repositories: z.array(z.string()),
-  id: z.uuid(),
-  profileId: z.uuid(),
-  sourceSessionId: z.uuid().nullable(),
-  status: workStatusSchema,
-  note: z.string(),
-  version: z.number().int().positive(),
-  updatedBy: z.enum(['agent', 'owner']),
+  role: subagentRoleSchema,
+  name: z.string(),
+  status: z.enum(['queued', 'running', 'completed', 'failed', 'interrupted', 'cancelled']),
+  input: z.string(),
+  output: z.string().optional(),
+  error: z.string().optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
-
-export type WorkItem = z.infer<typeof workItemSchema>;
-
-export const workHistorySchema = z.array(
-  z.strictObject({
-    id: z.number().int().positive(),
-    type: z.enum(['work.created', 'work.updated']),
-    status: workStatusSchema,
-    note: z.string(),
-    createdAt: z.iso.datetime(),
-  }),
-);

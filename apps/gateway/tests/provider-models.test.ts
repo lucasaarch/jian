@@ -202,6 +202,31 @@ it('keeps model discovery admin-only and never echoes the key behind it', async 
   expect(missing.statusCode).toBe(404);
 });
 
+it('lists xAI models with a Bearer key against the OpenAI-shaped endpoint', async () => {
+  const services = await testServices();
+  const provider = await services.providers.createProvider({
+    name: 'xAI',
+    kind: 'xai',
+    secret: 'xai_synthetic',
+  });
+
+  const called: string[] = [];
+  const models = new ProviderModels(
+    { providers: services.providers, vault: services.gatewayVault },
+    (async (input, init) => {
+      called.push(String(input));
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer xai_synthetic');
+      return listing('grok-4', 'grok-3-mini');
+    }) as typeof globalThis.fetch,
+  );
+
+  const list = await models.list(provider.id);
+
+  expect(called[0]).toBe('https://api.x.ai/v1/models');
+  expect(list.models.map((model) => model.id)).toEqual(['grok-3-mini', 'grok-4']);
+  expect(list.stale).toBe(false);
+});
+
 it('takes the router listing as the whole truth about a model', async () => {
   const services = await testServices();
   const _profile = await services.profiles.createProfile({ name: 'Atlas', instructions: 'Help.' });

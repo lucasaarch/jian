@@ -122,7 +122,6 @@ export const runRecordSchema = z.strictObject({
   id: uuid,
   profileId: uuid,
   sessionId: uuid,
-  workItemId: uuid.optional(),
   subagent: subagentSchema.optional(),
   requestKey: z.string(),
   input: z.string(),

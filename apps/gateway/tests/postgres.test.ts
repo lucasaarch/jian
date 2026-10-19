@@ -83,7 +83,6 @@ describe('PostgreSQL durability', () => {
         { runId: child.runId, parentRunId: parent.id, status: 'queued' },
       ]);
       expect(await reopened.work.conversationSubagents(profile.id, other.id)).toEqual([]);
-      expect(await reopened.work.list(profile.id)).toEqual([]);
     } finally {
       await reopenedStore.close();
     }
