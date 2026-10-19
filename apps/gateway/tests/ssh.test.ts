@@ -45,3 +45,24 @@ it('uses workspace SSH files even when Git SSH is explicitly selected', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+it('offers Jian-managed keys under .ssh/jian for git SSH', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jian-ssh-managed-'));
+  try {
+    const bin = join(root, 'bin');
+    mkdirSync(bin);
+    copyFileSync(fileURLToPath(new URL('../ssh.sh', import.meta.url)), join(bin, 'ssh'));
+    chmodSync(join(bin, 'ssh'), 0o755);
+    const home = join(root, 'workspace');
+    const managed = join(home, '.ssh/jian/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    mkdirSync(managed, { recursive: true, mode: 0o700 });
+    writeFileSync(join(managed, 'id_ed25519'), '-----BEGIN OPENSSH PRIVATE KEY-----\nsynthetic\n');
+    const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` };
+    const config = execFileSync('ssh', ['-G', 'github.com'], { env, encoding: 'utf8' });
+    expect(config).toContain(`identityfile ${join(managed, 'id_ed25519')}\n`);
+    expect(config).toContain(`userknownhostsfile ${join(home, '.ssh/known_hosts')}\n`);
+    expect(config).toContain('identitiesonly yes\n');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
