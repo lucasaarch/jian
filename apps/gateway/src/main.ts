@@ -164,6 +164,7 @@ services.schedules.useDeliveries(channels);
 services.work.useDeliveries(channels);
 // An open session objective queues the next slice the same way after a completed turn.
 services.objectives.useDeliveries(channels);
+services.subscriptions.useDeliveries(channels);
 
 /**
  * How often due schedules are looked for, in milliseconds. A schedule set for 08:00 starts

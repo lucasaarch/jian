@@ -31,6 +31,7 @@ import { registerSshRoutes } from './ssh/routes.js';
 import { registerStatsRoutes } from './stats/routes.js';
 import { registerStickerRoutes } from './stickers/routes.js';
 import type { Store } from './storage/database.js';
+import { registerSubscriptionRoutes } from './subscriptions/routes.js';
 import { registerWorkRoutes } from './tasks/routes.js';
 import { registerWebRoutes } from './web/routes.js';
 
@@ -119,6 +120,7 @@ export function createApp(
   registerStickerRoutes(app, options);
   registerStatsRoutes(app, options);
   registerScheduleRoutes(app, options);
+  registerSubscriptionRoutes(app, options);
   registerWorkRoutes(app, options);
   registerSettingsRoutes(app, options);
   registerMediaRoutes(app, options);
