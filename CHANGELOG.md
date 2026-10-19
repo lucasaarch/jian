@@ -4,6 +4,19 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 0.6.0-rc.3 — 2026-10-19
+
+Keep multi-step work running with durable session objectives and automatic turn continuation.
+
+### Agent loop
+
+* **Session objectives:** each conversation can carry a durable objective (`open`, `blocked`, `done`, or `cancelled`) that survives across turns. The owner can set or close it with `/objective …`, `/done`, or `/objective cancel`, or via `PUT /v1/profiles/{profileId}/sessions/{sessionId}/objective`. Substantial owner and channel messages seed an objective when none is open. The agent can set, complete, block, or cancel it with tools, and the current objective is injected into the prompt.
+* **Automatic continuation:** while an objective stays `open`, a completed principal turn queues the next slice instead of waiting for the owner to say continue. Progress lines remain commentary. The agent calls `complete_session_objective` when the work is finished, or `block_session_objective` when it needs the owner. After 25 automatic continuations the gateway pauses as `blocked`.
+
+### Upgrading
+
+Apply migration `0049_session-objective` (adds `sessions.objective`). Existing conversations start with no objective. This is a prerelease and does not move the `latest` image tag.
+
 ## 0.6.0-rc.2 — 2026-10-19
 
 Add xAI/Grok as a model provider and remove the Work archive.
