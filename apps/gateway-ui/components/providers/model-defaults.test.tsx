@@ -38,9 +38,15 @@ async function modelMenu(
         ...(apiKey ? [{ id: 'openai', name: 'OpenAI', kind: 'openai', authMode: 'api' }] : []),
       ],
       providerModels: {
-        google: { models: [model('gemini-3-pro'), model('gemini-3-pro-image', ['image'])] },
+        google: {
+          models: [
+            model('gemini-3-pro'),
+            model('gemini-3-pro-image', ['image']),
+            model('gemini-3.8-live', ['audio']),
+          ],
+        },
         anthropic: { models: [model('claude-sonnet-5')] },
-        openai: { models: [model('gpt-image-1', ['image'])] },
+        openai: { models: [model('gpt-image-1', ['image']), model('gpt-live-1', ['audio'])] },
       },
       modelDefaults,
     },
@@ -98,7 +104,7 @@ it('keeps a saved channel override visible until changing the shared default upd
     setModelDefaults,
   );
   try {
-    expect(view.element.querySelectorAll('.model-card')).toHaveLength(7);
+    expect(view.element.querySelectorAll('.model-card')).toHaveLength(8);
     expect(view.card.textContent).toContain('A separate channel default is saved');
     const option = Array.from(document.querySelectorAll('[role="option"]')).find((item) =>
       item.textContent?.includes('claude-sonnet-5'),
@@ -187,6 +193,17 @@ it('keeps a saved model visible when the provider no longer lists it', async () 
   try {
     expect(view.options()).toContain('gpt-6-solOpenAI · ChatGPT · not offered for this activity');
     expect(view.card.querySelector('input[placeholder="Model id"]')).toBeNull();
+  } finally {
+    await view.close();
+  }
+});
+
+it('offers live voice models only for API-key providers, not ChatGPT OAuth', async () => {
+  const view = await modelMenu('Voice calls', true);
+  try {
+    expect(view.options()).toContain('gemini-3.8-liveGemini');
+    expect(view.options()).toContain('gpt-live-1OpenAI · API key');
+    expect(view.options()).not.toContain('gpt-live-1OpenAI · ChatGPT');
   } finally {
     await view.close();
   }

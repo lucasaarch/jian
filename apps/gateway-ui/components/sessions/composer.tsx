@@ -12,6 +12,7 @@ import {
 } from '../../lib/attachments';
 import { useRecorder } from '../../lib/recorder';
 import { AudioPlayer } from '../ui';
+import { connectLiveVoice } from './live-voice';
 import { size } from './media';
 
 type Attachment = {
@@ -37,15 +38,63 @@ export function Composer({
   name,
   upload,
   send,
+  createVoiceToken,
+  summarizeVoiceTranscript,
   onSent,
   placeholder,
 }: {
   name: string;
   upload: (file: MediaUpload) => Promise<{ id: string }>;
   send: (text: string, mediaIds: string[]) => Promise<unknown>;
+  createVoiceToken: () => Promise<{ token: string; model: string }>;
+  summarizeVoiceTranscript: (transcript: string) => Promise<{ summary: string }>;
   onSent: () => void;
   placeholder?: string;
 }) {
+  const [live, setLive] = useState(false);
+  const liveSession = useRef<{ close: () => void } | undefined>(undefined);
+  // Interim/final text is held only in memory for the later summary step; never uploaded here.
+  const liveTranscript = useRef<string[]>([]);
+  const liveStartedAt = useRef(0);
+
+  const toggleLive = async () => {
+    if (liveSession.current) {
+      liveSession.current.close();
+      liveSession.current = undefined;
+      setLive(false);
+      try {
+        const transcript = liveTranscript.current.join(' ').slice(0, 20_000);
+        liveTranscript.current = [];
+        if (!transcript.trim()) return;
+        const { summary } = await summarizeVoiceTranscript(transcript);
+        const duration = Math.max(1, Math.round((Date.now() - liveStartedAt.current) / 1000));
+        await send(`[Voice call · ${clock(duration)} · Gemini Live]\n${summary}`, []);
+        onSent();
+      } catch (failure) {
+        setError(
+          failure instanceof Error ? failure.message : 'Could not save the voice-call summary.',
+        );
+      }
+      return;
+    }
+    try {
+      setError('');
+      const { token, model } = await createVoiceToken();
+      liveTranscript.current = [];
+      liveStartedAt.current = Date.now();
+      liveSession.current = await connectLiveVoice(token, model, (text) => {
+        const room = 20_000 - liveTranscript.current.join(' ').length;
+        if (room > 0) liveTranscript.current.push(text.slice(0, room));
+      });
+      setLive(true);
+    } catch (failure) {
+      liveSession.current?.close();
+      liveSession.current = undefined;
+      liveTranscript.current = [];
+      setError(failure instanceof Error ? failure.message : 'Could not start the voice call.');
+    }
+  };
+
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [sending, setSending] = useState(false);
@@ -54,6 +103,8 @@ export function Composer({
   const picker = useRef<HTMLInputElement>(null);
   const recorder = useRecorder();
   const pastes = useRef(0);
+
+  useEffect(() => () => liveSession.current?.close(), []);
 
   // Local previews hold memory until released; the last ones go with the composer.
   const previews = useRef(new Set<string>());
@@ -318,6 +369,14 @@ export function Composer({
               />
             </>
           )}
+          <button
+            type="button"
+            className={`composer-tool ${live ? 'recording' : ''}`}
+            aria-label={live ? 'End voice call' : 'Start voice call'}
+            onClick={() => void toggleLive()}
+          >
+            {live ? <Square size={14} fill="currentColor" /> : <Mic size={18} />}
+          </button>
           <span className="grow" />
           {recorder.recording ? (
             <button
