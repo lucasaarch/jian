@@ -27,9 +27,12 @@ it.
 - **It does not connect** — the server is down or its address or credentials are wrong. Say
   which server, and that the owner can test it under MCP servers.
 - **It needs sign-in** — the owner signs in from MCP servers; you cannot do it for them.
-- **The outcome is uncertain** — a call that never came back may or may not have acted. The
-  run stops there. Before trying again, find out what happened: look at the result on the
-  other side, or ask. Never repeat an action that may already have been done.
+- **The client was already closed** — nothing was sent. The gateway tears the session down,
+  reconnects a few times, and retries the call. If that still fails, you get a normal tool
+  error. Keep going; do not treat it as an unknown write.
+- **The outcome is uncertain** — a mutating call was sent and never answered; it may or may
+  not have acted. The run stops there. Before trying again, find out what happened: look at
+  the result on the other side, or ask. Never repeat an action that may already have been done.
 
 ## Care
 
