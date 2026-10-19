@@ -227,6 +227,43 @@ async function mediaFixture(catalog?: ModelCatalog) {
   return { services, profile, channels, incoming };
 }
 
+it('issues one Gemini Live token restricted to the configured voice model', async () => {
+  const f = await mediaFixture();
+  const provider = await f.services.providers.createProvider({
+    name: 'Google voice',
+    kind: 'google',
+    secret: 'synthetic-google-key',
+  });
+  await f.services.providers.setModelDefaults(f.profile.id, {
+    voice: { providerId: provider.id, modelId: 'gemini-3.8-live' },
+  });
+  let headers: Headers | undefined;
+  let body: Record<string, unknown> | undefined;
+  const token = await f.services.providers.createVoiceToken(f.profile.id, async (input, init) => {
+    expect(String(input)).toBe('https://generativelanguage.googleapis.com/v1beta/auth_tokens');
+    headers = new Headers(init?.headers);
+    body = JSON.parse(String(init?.body));
+    return Response.json({
+      name: 'ephemeral-only',
+      expireTime: new Date(Date.now() + 60_000).toISOString(),
+    });
+  });
+
+  expect(headers?.get('x-goog-api-key')).toBe('synthetic-google-key');
+  expect(body).toMatchObject({
+    uses: 1,
+    liveConnectConstraints: {
+      model: 'models/gemini-3.8-live',
+      config: {
+        responseModalities: ['AUDIO'],
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
+      },
+    },
+  });
+  expect(token).toMatchObject({ token: 'ephemeral-only', model: 'gemini-3.8-live' });
+});
+
 it('holds an incoming image until approval and keeps it isolated to its profile', async () => {
   const f = await mediaFixture();
   await f.incoming('[Media attachment]', 'image', [{ mimeType: 'image/png', data: png }]);
