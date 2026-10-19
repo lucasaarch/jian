@@ -4,6 +4,22 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 0.6.0-rc.2 — 2026-10-19
+
+Add xAI/Grok as a model provider and remove the Work archive.
+
+### Providers
+
+* **xAI / Grok:** configure xAI under **Providers** with an API key, or set `XAI_API_KEY` in the gateway environment. Model listing uses `https://api.x.ai/v1/models`; chat runs through the OpenAI-compatible path at that base URL.
+
+### Panel and work
+
+* **Work archive removed:** the read-only task board, `/work` HTTP routes, and `list_tasks` / `list_task_subagents` tools are gone. Conversation subagents remain the way to run scoped work, with the same private session, panel transcript and durable handoff.
+
+### Upgrading
+
+Apply migrations `0047_xai-provider` and `0048_drop-work-items`. The latter drops `work_items` and `runs.work_item_id`; existing task cards are not kept. Clients that still called `GET /v1/profiles/{profileId}/work*` must stop. This is a prerelease and does not move the `latest` image tag.
+
 ## 0.6.0-rc.1 — 2026-10-18
 
 Run subagents inside conversations and compact oversized agent turns sooner.
