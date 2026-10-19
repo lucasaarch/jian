@@ -14,6 +14,7 @@ import type {
   SessionObjective,
   Skill,
   Subagent,
+  Subscription,
   Usage,
 } from '@jian/contracts';
 import { sql } from 'drizzle-orm';
@@ -348,6 +349,59 @@ export const schedules = pgTable(
     index('schedules_profile').on(table.profileId, table.createdAt),
     index('schedules_due').on(table.nextRunAt).where(sql`${table.enabled}`),
     check('schedules_timing', sql`(${table.at} IS NULL) <> (${table.cron} IS NULL)`),
+  ],
+);
+
+/**
+ * An event the agent (or owner) asked to wake on — GitHub CI/merge in this MVP. The webhook
+ * secret is stored only as a hash; the clear value is shown once on create.
+ */
+export const subscriptions = pgTable(
+  'subscriptions',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    instruction: text('instruction').notNull(),
+    source: text('source').$type<Subscription['source']>().notNull(),
+    filter: jsonb('filter').$type<Subscription['filter']>().notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    createdBy: text('created_by').$type<'owner' | 'agent'>().notNull(),
+    secretHash: text('secret_hash').notNull(),
+    lastWakeAt: timestamp('last_wake_at', { withTimezone: true }),
+    lastRunId: uuid('last_run_id'),
+    lastError: text('last_error'),
+    createdAt,
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('subscriptions_profile').on(table.profileId, table.createdAt)],
+);
+
+/** One webhook delivery that matched (or failed to wake) a subscription. */
+export const subscriptionDeliveries = pgTable(
+  'subscription_deliveries',
+  {
+    id: uuid('id').primaryKey(),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => subscriptions.id, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    deliveryKey: text('delivery_key').notNull(),
+    event: text('event').notNull(),
+    runId: uuid('run_id'),
+    error: text('error'),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex('subscription_deliveries_key').on(table.subscriptionId, table.deliveryKey),
+    index('subscription_deliveries_subscription').on(table.subscriptionId, table.createdAt.desc()),
   ],
 );
 
