@@ -101,6 +101,7 @@ export const modelSelectionSchema = z.strictObject({
   providerId: z.uuid(),
   modelId: z.string().trim().min(1).max(160),
   reasoningEffort: reasoningEffortSchema.optional(),
+  voiceName: z.string().trim().min(1).max(40).optional(),
 });
 
 export const modelRoleSchema = z.enum([
@@ -161,6 +162,7 @@ export const voiceTokenSchema = z.strictObject({
   model: z.string().min(1),
   /** Which Live backend minted the ephemeral token. The browser dials that vendor directly. */
   provider: z.enum(['google', 'openai']),
+  voiceName: z.string().min(1).max(40).optional(),
   expiresAt: z.iso.datetime().optional(),
 });
 
