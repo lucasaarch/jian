@@ -55,8 +55,11 @@ the image. Install what the task needs, not what might be handy, and say what yo
 ## Logins and keys
 
 - \`gh\` needs a token: \`gh auth login --with-token\` with one the owner gives you, or
-  \`GH_TOKEN\` in the command's environment.
-- SSH keys go in \`~/.ssh\` with mode \`600\`.
+  \`GH_TOKEN\` in the command's environment. Prefer the profile’s SSH key for \`git push\`
+  when \`gh\` is not logged in.
+- SSH keys: create them with the SSH key tools (\`ssh-keys\` skill), not \`ssh-keygen\`. The
+  gateway points \`git\` at those identities and seeds GitHub’s host keys in
+  \`~/.ssh/known_hosts\`.
 - Git needs \`git config --global user.name\` and \`user.email\` before a commit.
 
 All of them persist in your workspace, and no other profile can read them. Never print a token, a password or a private key

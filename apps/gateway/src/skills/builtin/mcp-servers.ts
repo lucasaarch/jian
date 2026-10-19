@@ -30,9 +30,13 @@ it.
 - **The client was already closed** — nothing was sent. The gateway tears the session down,
   reconnects a few times, and retries the call. If that still fails, you get a normal tool
   error. Keep going; do not treat it as an unknown write.
-- **The outcome is uncertain** — a mutating call was sent and never answered; it may or may
-  not have acted. The run stops there. Before trying again, find out what happened: look at
-  the result on the other side, or ask. Never repeat an action that may already have been done.
+- **The server refused the call** — validation errors, HTTP 4xx, permission denied with a
+  response body. That is a normal tool error. Fix the arguments or tell the owner; do not
+  treat it as an unknown write and do not stop the whole task.
+- **The outcome is uncertain** — a mutating call was sent and never answered (drop after
+  send, timeout with no response); it may or may not have acted. The run stops there. Before
+  trying again, find out what happened: look at the result on the other side, or ask. Never
+  repeat an action that may already have been done.
 
 ## Care
 

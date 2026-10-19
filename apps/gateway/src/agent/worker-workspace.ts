@@ -1,14 +1,14 @@
 import { execFile } from 'node:child_process';
-import { copyFile, lstat, mkdir, open, readdir, realpath, rm, stat } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, realpath, rm, stat } from 'node:fs/promises';
 import { basename, join, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { Run } from '@jian/contracts';
+import { buildGitSshCommand, prepareProfileSshAccess } from '../ssh/git-ssh.js';
 import { commandEnvironment } from './shell.js';
 import { confined, workerWorkspacePath, workspaceOf } from './workspace.js';
 
 const execute = promisify(execFile);
 const inside = (path: string, root: string) => path === root || path.startsWith(`${root}${sep}`);
-const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const missing = async (path: string) =>
   lstat(path).catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') return undefined;
@@ -28,46 +28,51 @@ export type WorkerGitAccess = {
   ghConfigDir?: string;
 };
 
-async function sharedSsh(home: string, profileHome: string, access: WorkerGitAccess) {
-  const ssh = join(profileHome, '.ssh');
-  const entry = await missing(ssh);
-  if (!entry) return;
-  if (!entry.isDirectory() || !inside(await realpath(ssh), profileHome)) {
-    throw new Error('Profile SSH directory must stay inside its workspace');
-  }
+/** Seed known_hosts and wire GIT_SSH_COMMAND for the profile's own shell (not a worker). */
+export async function prepareProfileGitAccess(profileId: string): Promise<WorkerGitAccess> {
+  const home = await workspaceOf(profileId);
+  const ssh = await prepareProfileSshAccess(home);
+  const access: WorkerGitAccess = {
+    readOnly: [],
+    writable: [],
+    sshCommand: ssh.sshCommand,
+  };
+  const config = join(home, '.config');
+  await directory(config);
+  access.ghConfigDir = join(config, 'gh');
+  access.writable.push(config);
+  return access;
+}
 
+async function sharedSsh(home: string, profileHome: string, access: WorkerGitAccess) {
+  const ssh = await prepareProfileSshAccess(profileHome);
   const workerSsh = join(home, '.ssh');
   await directory(workerSsh);
-  const knownHosts = join(ssh, 'known_hosts');
-  if ((await missing(knownHosts))?.isFile() && !(await missing(join(workerSsh, 'known_hosts')))) {
-    await copyFile(knownHosts, join(workerSsh, 'known_hosts'));
+  const workerKnownHosts = join(workerSsh, 'known_hosts');
+  // Copy the seeded profile known_hosts so the worker prefers its own file under Landlock.
+  if (!(await missing(workerKnownHosts))) {
+    await copyFile(ssh.knownHosts, workerKnownHosts);
   }
-  const keys: string[] = [];
-  for (const entry of await readdir(ssh, { withFileTypes: true })) {
-    if (!entry.isFile()) continue;
-    const path = join(ssh, entry.name);
-    const handle = await open(path, 'r');
-    try {
-      const header = Buffer.alloc(80);
-      const { bytesRead } = await handle.read(header, 0, header.length, 0);
-      if (/^-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/.test(header.toString('utf8', 0, bytesRead))) {
-        keys.push(path);
-      }
-    } finally {
-      await handle.close();
+
+  const configPath =
+    ssh.sshDir && (await missing(join(ssh.sshDir, 'config')))?.isFile()
+      ? join(ssh.sshDir, 'config')
+      : undefined;
+
+  // known_hosts is copied into the worker home; only grant the profile .ssh when git must
+  // read identities or an ssh config that still live there.
+  if (ssh.sshDir && (ssh.identities.length > 0 || configPath)) {
+    if (!inside(await realpath(ssh.sshDir), profileHome)) {
+      throw new Error('Profile SSH directory must stay inside its workspace');
     }
+    access.readOnly.push(ssh.sshDir);
   }
-  access.readOnly.push(ssh);
-  const config = join(ssh, 'config');
-  access.sshCommand = [
-    '/usr/bin/ssh',
-    ...((await missing(config))?.isFile() ? ['-F', config] : []),
-    '-o',
-    `UserKnownHostsFile=${join(workerSsh, 'known_hosts')}`,
-    ...keys.flatMap((key) => ['-i', key]),
-  ]
-    .map(quote)
-    .join(' ');
+
+  access.sshCommand = buildGitSshCommand({
+    knownHosts: workerKnownHosts,
+    identities: ssh.identities,
+    configPath,
+  });
 }
 
 /** Prepare committed source trees without giving a worker write access to another worktree. */

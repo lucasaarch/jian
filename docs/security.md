@@ -12,7 +12,7 @@ Profiles speak to each other by exchanging text, and only text: discovery shows 
 
 Vendor credentials belong to the installation rather than to a profile, and live in a vault of their own. Deleting a profile takes its own secrets with it and leaves the shared credentials alone.
 
-A profile with the shell switch on works in a workspace of its own, `/home/node/workspaces/<profile id>` in the image (`JIAN_WORKSPACES` moves the parent). It is the profile's `HOME` and `TMPDIR`, so its repositories, SSH keys and Git and `gh` logins are its own.
+A profile with the shell switch on works in a workspace of its own, `/home/node/workspaces/<profile id>` in the image (`JIAN_WORKSPACES` moves the parent). It is the profile's `HOME` and `TMPDIR`, so its repositories, SSH keys and Git and `gh` logins are its own. Profile SSH keys created in the panel live under `.ssh/jian/<id>/`; the gateway seeds GitHub's published host keys into `.ssh/known_hosts` and points `git` at those identities (`GIT_SSH_COMMAND` / the image `ssh` wrapper), so `git push` over SSH does not need `gh auth` or a one-off host-key fix.
 
 Each command runs under `jian-sandbox`, a small helper built into the image that confines it with [Landlock](https://docs.kernel.org/userspace-api/landlock.html) before it starts: it may write only in its workspace, read only its workspace and the system's directories (`/usr`, `/etc`, `/opt`, `/proc`, `/sys` and the libraries), and nothing else — not another profile's workspace, not the gateway's files. Landlock also refuses it the private files of any process outside the sandbox, so `/proc/<gateway>/environ` stays closed, and on Linux 6.12 and later it cannot signal those processes or reach their abstract Unix sockets. Landlock needs no privilege, no capability and no user namespace, so it works in a container with `no-new-privileges` and the runtime's default seccomp profile, on Kubernetes and on a PaaS. It is the kernel's restriction: the command and everything it starts inherit it and cannot lift it.
 
@@ -61,7 +61,7 @@ An expired lease interrupts a run; it does not restart tools on its own. Continu
 
 Resource leases coordinate sessions of the same profile and hand out an increasing fence number. An external resource is protected from a stale holder only if it validates that number too; a lease does not intercept every MCP call on its own.
 
-A remote call that never came back leaves an effect nobody can account for: the run stops, no further tool starts, and the owner reconciles before continuing. A server that answers and reports a failure is a different thing — it says what happened, so the agent is told and carries on.
+A remote call that never came back leaves an effect nobody can account for: the run stops, no further tool starts, and the owner reconciles before continuing. A server that answers and reports a failure — including an HTTP 4xx validation error — is a different thing: it says what happened, so the agent is told and carries on.
 
 A delivery with no confirmation is recorded as `unknown` and is never resent on its own. An abandoned send is marked uncertain after ten minutes. Check the destination before resending by hand. Cancelling a run does not undo what already happened.
 

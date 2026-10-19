@@ -11,6 +11,7 @@ import type { SshKey, SshKeyCreate } from '@jian/contracts';
 import { workspaceOf } from '../agent/workspace.js';
 import { assertFound } from '../core/errors.js';
 import type { Profiles } from '../profiles/service.js';
+import { ensureTrustedKnownHosts } from './known-hosts.js';
 
 const directory = (home: string) => join(home, '.ssh', 'jian');
 const metadata = (home: string, id: string) => join(directory(home), id, 'metadata.json');
@@ -71,6 +72,8 @@ export class SshKeys {
     const home = await workspaceOf(profileId);
     await mkdir(directory(home), { recursive: true, mode: 0o700 });
     await chmod(directory(home), 0o700);
+    // GitHub (and other published hosts) land here so git push never stalls on host-key prompts.
+    await ensureTrustedKnownHosts(home);
     return home;
   }
 

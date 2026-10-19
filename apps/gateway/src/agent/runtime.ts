@@ -39,14 +39,14 @@ import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
 import { ACTION_KINDS, actionGuard, guardTools, mcpActionKind } from './guard.js';
 import { availableNote, connectMcpTools, unavailableNote } from './mcp.js';
-import { mcpClientDisconnected } from './mcp-errors.js';
+import { mcpOutcomeUncertain } from './mcp-errors.js';
 import { Narrator } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
 import { deferTools, profileTools, type ToolServices } from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
 import { markSteering, outsideContent } from './untrusted.js';
-import { prepareWorkerWorkspace } from './worker-workspace.js';
+import { prepareProfileGitAccess, prepareWorkerWorkspace } from './worker-workspace.js';
 
 /**
  * How long a model call or a tool may go without a sign of life before the turn is given up.
@@ -255,7 +255,9 @@ export class AgentRuntime {
         LEARNING_SESSION_CHANNEL;
       const gitAccess = run.subagent
         ? await prepareWorkerWorkspace(run)
-        : { readOnly: [], writable: [] };
+        : run.profile.allowShell
+          ? await prepareProfileGitAccess(run.profileId)
+          : { readOnly: [], writable: [] };
       const tools: ToolSet = {
         ...profileTools(this.services, run, gitAccess),
         ...this.services.media?.tools(run, async (usage) => {
@@ -426,14 +428,13 @@ export class AgentRuntime {
                   throw error;
                 }
 
-                // Only a tool that could change external state has an uncertain outcome when
-                // a call was written and never answered. A declared read-only tool, or a client
-                // that was already dead before send (reconnect already tried in connectMcpTools),
-                // fails as a normal tool error so the agent can continue without interrupting.
+                // Only a mutating call whose effect may have applied with no answer interrupts.
+                // Clear API refusals (4xx validation, JSON-RPC errors) and pre-send disconnects
+                // (reconnect already tried in connectMcpTools) are normal tool errors.
                 if (
                   mcpToolNames.includes(name) &&
                   mcpActionKind(definition) &&
-                  !mcpClientDisconnected(error)
+                  mcpOutcomeUncertain(error)
                 ) {
                   const failure = reason(error, secrets);
                   await this.services.lifecycle
