@@ -155,10 +155,12 @@ recorded separately. Jian does not impose a cumulative token cap per run; use pr
 spending caps for cost control.
 
 Skills advertise short descriptions and load their instructions through `load_skill`. MCP
-runs over HTTP with an explicit allowlist of tools. A remote catalogue is discovered on
-connection and searched with `search_mcp_tools`; schemas reach the prompt only after
-`load_mcp_tools`. Large results become paginated artifacts, capped at 1 MB per result.
-MCP over stdio, MCP OAuth and arbitrary code execution are out of scope for now.
+runs over HTTP or stdio. A remote catalogue is discovered on connection and searched with
+`search_mcp_tools`; schemas reach the prompt only after `load_mcp_tools`. Large results
+become paginated artifacts, capped at 1 MB per result. HTTP MCP supports header auth and
+OAuth (OAuth needs `JIAN_PUBLIC_URL`). The panel includes a GitHub MCP preset (HTTP+OAuth
+or stdio+PAT). With `allowShell`, the agent can also use `gh` once authenticated in the
+profile workspace — see `docs/gateway-ui.md` and `docs/deploy.md`.
 
 ## Verification
 
