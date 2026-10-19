@@ -5,6 +5,7 @@ import { useState } from 'react';
 import type { McpServer, McpValue } from '../../lib/api';
 import { Button, Field, Modal, StackedFields } from '../ui';
 import { Select } from '../ui/select';
+import { mcpPresets } from './mcp-presets';
 
 type Draft = {
   name: string;
@@ -57,12 +58,20 @@ export function McpForm({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftOf(server));
+  const [presetId, setPresetId] = useState('');
   const change = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
 
   const values = (kind: 'headers' | 'env') => ({
     list: draft[kind],
     set: (list: McpValue[]) => change({ [kind]: list } as Partial<Draft>),
   });
+
+  const applyPreset = (id: string) => {
+    setPresetId(id);
+    const preset = mcpPresets.find((item) => item.id === id);
+    if (!preset) return;
+    setDraft(draftOf(preset.server));
+  };
 
   return (
     <Modal
@@ -106,6 +115,32 @@ export function McpForm({
           } as McpServer);
         }}
       >
+        {!server && (
+          <Field
+            label="Start from"
+            hint={
+              mcpPresets.find((item) => item.id === presetId)?.hint ??
+              'Or leave blank and fill in below.'
+            }
+          >
+            <Select
+              value={presetId || 'custom'}
+              disabled={busy}
+              onValueChange={(value) => {
+                if (value === 'custom') {
+                  setPresetId('');
+                  setDraft(draftOf());
+                  return;
+                }
+                applyPreset(value);
+              }}
+              options={[
+                { value: 'custom', label: 'Custom server' },
+                ...mcpPresets.map((item) => ({ value: item.id, label: item.label })),
+              ]}
+            />
+          </Field>
+        )}
         <Field label="Name" hint="Lowercase letters, digits and underscore.">
           <input
             name="name"
