@@ -55,6 +55,9 @@ import {
   providerInputSchema,
   providerModelListSchema,
   providerRecordSchema,
+  voiceSummarySchema,
+  voiceTokenSchema,
+  voiceTranscriptSchema,
 } from './providers.js';
 import {
   activityDaySchema,
@@ -288,6 +291,21 @@ export const operations: Operation[] = [
     access: 'admin',
     body: modelDefaultsInputSchema,
     response: modelDefaultsRecordSchema,
+  },
+  {
+    method: 'POST',
+    path: `${profile}/voice/token`,
+    operationId: 'createVoiceToken',
+    access: 'admin',
+    response: voiceTokenSchema,
+  },
+  {
+    method: 'POST',
+    path: `${profile}/voice/summary`,
+    operationId: 'summarizeVoiceTranscript',
+    access: 'admin',
+    body: voiceTranscriptSchema,
+    response: voiceSummarySchema,
   },
   {
     method: 'GET',

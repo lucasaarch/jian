@@ -1,6 +1,6 @@
 'use client';
 
-import { AlarmClock, GraduationCap } from 'lucide-react';
+import { AlarmClock, GraduationCap, Mic } from 'lucide-react';
 import type { Message, Person } from '../../lib/api';
 import { Face } from '../ui';
 import { Markdown } from '../ui/markdown';
@@ -135,6 +135,23 @@ export function ChatMessage({
   // The brief of a look back is the gateway's, written for the agent: only its first line, which
   // says what is being looked back on, is for the owner.
   const learning = message.role === 'user' ? /^\[Learning\] ([^\n]*)/.exec(message.content) : null;
+  const voiceCall =
+    message.role === 'user' ? /^\[Voice call · ([^\]]+)\]\n([\s\S]*)$/.exec(message.content) : null;
+
+  if (voiceCall) {
+    return (
+      <article className="chat-line scheduled">
+        <span className="scheduled-label">
+          <Mic size={13} />
+          Voice call · {voiceCall[1]}
+        </span>
+        <div className="chat-text markdown">
+          <Markdown text={voiceCall[2] ?? ''} breaks />
+        </div>
+        {children}
+      </article>
+    );
+  }
 
   if (learning) {
     return (

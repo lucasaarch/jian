@@ -8,7 +8,15 @@ import type { Providers } from './service.js';
 
 type ProviderRouteServices = {
   providers: ProviderAdmin &
-    Pick<Providers, 'createProvider' | 'revokeProvider' | 'modelDefaults' | 'setModelDefaults'>;
+    Pick<
+      Providers,
+      | 'createProvider'
+      | 'revokeProvider'
+      | 'modelDefaults'
+      | 'setModelDefaults'
+      | 'createVoiceToken'
+      | 'summarizeVoiceTranscript'
+    >;
   codexLogin?: CodexLogin;
   providerModels?: Pick<ProviderModels, 'list'>;
 };
@@ -55,5 +63,13 @@ export function registerProviderRoutes(app: FastifyInstance, deps: ProviderRoute
 
   app.put<{ Params: ProfileParams }>('/v1/profiles/:profileId/model-defaults', async (request) =>
     deps.providers.setModelDefaults(request.params.profileId, request.body),
+  );
+
+  app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/voice/token', async (request) =>
+    deps.providers.createVoiceToken(request.params.profileId),
+  );
+
+  app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/voice/summary', async (request) =>
+    deps.providers.summarizeVoiceTranscript(request.params.profileId, request.body),
   );
 }

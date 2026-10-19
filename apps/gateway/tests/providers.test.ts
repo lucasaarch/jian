@@ -1,4 +1,4 @@
-import { modelSchema } from '@jian/contracts';
+import { modelSchema, supportsModelRole, supportsProviderRole } from '@jian/contracts';
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { cacheable, cacheableInstructions } from '../src/agent/cache.js';
@@ -9,6 +9,30 @@ import {
 } from '../src/providers/claude-subscription.js';
 import { reasoningProviderOptions, takesAdaptiveThinking } from '../src/providers/effort.js';
 import { resolveModel } from '../src/providers/models.js';
+
+describe('live voice model eligibility', () => {
+  const liveModel = (id: string) => ({
+    id,
+    inputModalities: ['audio'] as 'audio'[],
+    outputModalities: ['audio'] as 'audio'[],
+    known: true,
+  });
+
+  it('offers Gemini Live and OpenAI Live API models, never ChatGPT OAuth', () => {
+    expect(supportsProviderRole({ kind: 'google' }, 'voice')).toBe(true);
+    expect(supportsModelRole({ kind: 'google' }, liveModel('gemini-3.8-live'), 'voice')).toBe(true);
+    expect(supportsModelRole({ kind: 'google' }, liveModel('gemini-4-argon'), 'voice')).toBe(false);
+    expect(
+      supportsModelRole({ kind: 'openai', authMode: 'codex' }, liveModel('gpt-live-1'), 'voice'),
+    ).toBe(false);
+    expect(
+      supportsModelRole({ kind: 'openai', authMode: 'api' }, liveModel('gpt-live-1'), 'voice'),
+    ).toBe(true);
+    expect(
+      supportsModelRole({ kind: 'openai', authMode: 'api' }, liveModel('gpt-6-astra'), 'voice'),
+    ).toBe(false);
+  });
+});
 
 describe('providers', () => {
   it.each(['openai', 'anthropic', 'google', 'openai-compatible'] as const)(

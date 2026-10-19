@@ -523,6 +523,7 @@ export const modelDefaults: ModelDefaults = {
   vision: 'disabled',
   audio: 'disabled',
   speech: 'disabled',
+  voice: 'disabled',
   transcription: null,
   sticker: 'disabled',
 };
