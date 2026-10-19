@@ -1,4 +1,10 @@
-import { GROUP_AGENT_TURN_LIMIT, type Memory, type Message, type Run } from '@jian/contracts';
+import {
+  GROUP_AGENT_TURN_LIMIT,
+  type Memory,
+  type Message,
+  type Run,
+  type SessionObjective,
+} from '@jian/contracts';
 import { gatewayTimeZone } from '../core/time-zone.js';
 import { availableSkills } from '../skills/builtin/index.js';
 import { tokenCounter } from './budget.js';
@@ -16,6 +22,8 @@ export interface ContextSources {
   history: Message[];
   /** What the turns before this history held, once they stopped fitting in a request. */
   summary?: string;
+  /** Durable work this conversation is finishing across turns. */
+  objective?: SessionObjective;
   /** For memories judged on their meaning, the probability that each helps with this turn. */
   relevance?: Record<string, number>;
   /** A skill judged to fit this turn, named to the agent as a hint. */
@@ -228,6 +236,13 @@ export function buildContext(
       ? [
           `Relevant shared memories: ${JSON.stringify(relevant)}`,
           `Current activities: ${JSON.stringify(activities)}`,
+        ]
+      : []),
+    ...(!worker && sources.objective
+      ? [
+          sources.objective.status === 'open'
+            ? `Session objective (open — keep working with tools until complete_session_objective, or block_session_objective if you need the owner): ${JSON.stringify(sources.objective)}`
+            : `Session objective: ${JSON.stringify(sources.objective)}`,
         ]
       : []),
     // Without this an agent reached on Telegram does not know its WhatsApp exists, and says it

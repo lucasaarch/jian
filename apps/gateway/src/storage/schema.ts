@@ -10,6 +10,7 @@ import type {
   ProviderCredential,
   ReasoningEffort,
   RunProgress,
+  SessionObjective,
   Skill,
   Subagent,
   Usage,
@@ -174,6 +175,8 @@ export const sessions = pgTable(
       .$type<'lite' | 'full' | 'ultra' | 'off'>()
       .notNull()
       .default('off'),
+    // Absent until the owner or agent sets what this conversation is working toward.
+    objective: jsonb('objective').$type<SessionObjective>(),
     createdAt,
   },
   (table) => [

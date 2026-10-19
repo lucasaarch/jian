@@ -21,6 +21,7 @@ import type { ProfileAdmin } from '../profiles/port.js';
 import type { RunExecution, RunReader } from '../runs/port.js';
 import type { Schedules } from '../schedules/service.js';
 import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions/port.js';
+import type { Sessions } from '../sessions/service.js';
 import { findSkill } from '../skills/builtin/index.js';
 import { skillTools } from '../skills/tools.js';
 import type { SshKeys } from '../ssh/service.js';
@@ -76,7 +77,10 @@ const jevInputSchema = z.object({
 export type ToolServices = {
   profiles: ProfileAdmin;
   memories: MemoryWriter;
-  sessions: SessionReader & SessionNamer & SessionSummarizer;
+  sessions: SessionReader &
+    SessionNamer &
+    SessionSummarizer &
+    Partial<Pick<Sessions, 'setObjective' | 'writeObjective'>>;
   runs: RunReader;
   peers: PeerAgents;
   lifecycle: RunExecution;
@@ -131,6 +135,87 @@ export function profileTools(
           input: r.input.slice(0, 500),
           updatedAt: r.updatedAt,
         })),
+    }),
+
+    set_session_objective: tool({
+      description:
+        'Set or replace the durable objective for this conversation. Use when the owner asks for multi-step work and no open objective fits, or when the goal clearly changed. The gateway keeps running turns while the objective stays open.',
+      inputSchema: z.object({
+        text: z.string().trim().min(1).max(2000),
+      }),
+      execute: async ({ text }) => {
+        if (!services.sessions.setObjective) {
+          throw new GatewayError(500, 'Session objectives are unavailable');
+        }
+        const session = await services.sessions.setObjective(run.profileId, run.sessionId, {
+          text,
+          status: 'open',
+        });
+        return session.objective;
+      },
+    }),
+
+    complete_session_objective: tool({
+      description:
+        'Mark the session objective done. Call only when the objective is fully satisfied — not after a partial slice.',
+      inputSchema: z.object({
+        note: z.string().trim().min(1).max(500).optional(),
+      }),
+      execute: async ({ note }) => {
+        if (!services.sessions.setObjective) {
+          throw new GatewayError(500, 'Session objectives are unavailable');
+        }
+        const current = await services.sessions.session(run.profileId, run.sessionId);
+        if (!current.objective?.text)
+          throw new GatewayError(400, 'No session objective to complete');
+        const session = await services.sessions.setObjective(run.profileId, run.sessionId, {
+          text: current.objective.text,
+          status: 'done',
+          ...(note ? { note } : {}),
+        });
+        return session.objective;
+      },
+    }),
+
+    block_session_objective: tool({
+      description:
+        'Pause the open objective because you need the owner’s input. The gateway will not auto-continue until they reply.',
+      inputSchema: z.object({
+        note: z.string().trim().min(1).max(500),
+      }),
+      execute: async ({ note }) => {
+        if (!services.sessions.setObjective) {
+          throw new GatewayError(500, 'Session objectives are unavailable');
+        }
+        const current = await services.sessions.session(run.profileId, run.sessionId);
+        if (!current.objective?.text) throw new GatewayError(400, 'No session objective to block');
+        const session = await services.sessions.setObjective(run.profileId, run.sessionId, {
+          text: current.objective.text,
+          status: 'blocked',
+          note,
+        });
+        return session.objective;
+      },
+    }),
+
+    cancel_session_objective: tool({
+      description: 'Cancel the session objective when the owner abandons the work.',
+      inputSchema: z.object({
+        note: z.string().trim().min(1).max(500).optional(),
+      }),
+      execute: async ({ note }) => {
+        if (!services.sessions.setObjective) {
+          throw new GatewayError(500, 'Session objectives are unavailable');
+        }
+        const current = await services.sessions.session(run.profileId, run.sessionId);
+        if (!current.objective?.text) throw new GatewayError(400, 'No session objective to cancel');
+        const session = await services.sessions.setObjective(run.profileId, run.sessionId, {
+          text: current.objective.text,
+          status: 'cancelled',
+          ...(note ? { note } : {}),
+        });
+        return session.objective;
+      },
     }),
 
     ...(services.work && !run.subagent

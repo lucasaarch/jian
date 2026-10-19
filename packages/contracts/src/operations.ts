@@ -43,6 +43,7 @@ import {
   profilePatchSchema,
   profileSchema,
   sessionModelSchema,
+  sessionObjectiveInputSchema,
   sessionRenameSchema,
   sessionSchema,
   submitSchema,
@@ -655,6 +656,14 @@ export const operations: Operation[] = [
     operationId: 'setSessionModel',
     access: 'admin',
     body: sessionModelSchema,
+    response: sessionRecordSchema,
+  },
+  {
+    method: 'PUT',
+    path: `${session}/objective`,
+    operationId: 'setSessionObjective',
+    access: 'admin',
+    body: sessionObjectiveInputSchema,
     response: sessionRecordSchema,
   },
   {
