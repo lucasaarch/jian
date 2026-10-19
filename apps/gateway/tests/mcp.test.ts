@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { MCPClient } from '@ai-sdk/mcp';
+import type { Run } from '@jian/contracts';
+import type { ToolSet } from 'ai';
 import { expect, it } from 'vitest';
+import { mcpActionKind } from '../src/agent/guard.js';
+import { connectMcpTools } from '../src/agent/mcp.js';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { createSafeFetch } from '../src/security/outbound.js';
 import { mockModel } from './helpers/model.js';
@@ -481,3 +489,296 @@ it.each(['disconnect', 'isError', 'readOnlyError'])(
     }
   },
 );
+
+it('reconnects after a closed MCP client instead of treating the call as uncertain', async () => {
+  let toolCalls = 0;
+
+  const server = createServer(async (req, res) => {
+    if (req.method !== 'POST') {
+      res.writeHead(405).end();
+      return;
+    }
+
+    let body = '';
+
+    for await (const chunk of req) {
+      body += chunk;
+    }
+
+    const message = JSON.parse(body);
+
+    if (message.id === undefined) {
+      res.writeHead(202).end();
+      return;
+    }
+
+    if (message.method === 'tools/call') {
+      toolCalls++;
+      res.writeHead(200, { 'Content-Type': 'application/json' }).end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: message.id,
+          result: { content: [{ type: 'text', text: `ok-${toolCalls}` }] },
+        }),
+      );
+      return;
+    }
+
+    const result =
+      message.method === 'initialize'
+        ? {
+            protocolVersion: '2025-03-26',
+            capabilities: { tools: {} },
+            serverInfo: { name: 'github', version: '1' },
+          }
+        : message.method === 'tools/list'
+          ? {
+              tools: [
+                {
+                  name: 'list_commits',
+                  description: 'List commits',
+                  annotations: { readOnlyHint: true },
+                  inputSchema: { type: 'object', properties: {} },
+                },
+                {
+                  name: 'mutate',
+                  description: 'External mutation',
+                  inputSchema: { type: 'object', properties: {} },
+                },
+              ],
+            }
+          : undefined;
+
+    res
+      .writeHead(200, { 'Content-Type': 'application/json' })
+      .end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }));
+  });
+
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const outbound = createSafeFetch({ allowPrivateOrigins: [origin] });
+  const tools: ToolSet = {};
+  const clients: MCPClient[] = [];
+  const run = {
+    profileId: 'p',
+    profile: {
+      mcpServers: [{ name: 'github', url: `${origin}/mcp` }],
+    },
+  } as unknown as Run;
+
+  try {
+    const { mcpToolNames } = await connectMcpTools(run, tools, {
+      vault: undefined,
+      secrets: new Set(),
+      clients,
+      fetcher: outbound.fetch,
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    const listName = mcpToolNames.find((name) => name.includes('list_commits'));
+    const mutateName = mcpToolNames.find((name) => name.includes('mutate'));
+    assert.ok(listName);
+    assert.ok(mutateName);
+    expect(mcpActionKind(tools[listName])).toBeUndefined();
+    expect(mcpActionKind(tools[mutateName])).toBe('service');
+
+    await clients[0]?.close();
+
+    const listed = await tools[listName]?.execute?.(
+      {},
+      {
+        toolCallId: 'list-1',
+        messages: [],
+      },
+    );
+    expect(listed).toMatchObject({ content: [{ type: 'text', text: 'ok-1' }] });
+
+    const mutated = await tools[mutateName]?.execute?.(
+      {},
+      {
+        toolCallId: 'mutate-1',
+        messages: [],
+      },
+    );
+    expect(mutated).toMatchObject({ content: [{ type: 'text', text: 'ok-2' }] });
+    expect(toolCalls).toBe(2);
+    expect(clients).toHaveLength(1);
+  } finally {
+    await Promise.all(clients.map((client) => client.close()));
+    await outbound.close();
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+it('does not interrupt the run when a mutating MCP tool hits a closed client', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'jian-mcp-closed-'));
+  const script = join(directory, 'server.mjs');
+  const once = join(directory, 'exited-once');
+
+  writeFileSync(
+    script,
+    `import { existsSync, writeFileSync } from 'node:fs';
+let buffer = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  buffer += chunk;
+  for (;;) {
+    const end = buffer.indexOf('\\n');
+    if (end < 0) return;
+    const line = buffer.slice(0, end).trim();
+    buffer = buffer.slice(end + 1);
+    if (!line) continue;
+    const message = JSON.parse(line);
+    if (message.id === undefined) continue;
+    if (message.method === 'initialize') {
+      process.stdout.write(JSON.stringify({
+        jsonrpc: '2.0', id: message.id,
+        result: {
+          protocolVersion: '2025-03-26',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'brief', version: '1' },
+        },
+      }) + '\\n');
+      continue;
+    }
+    if (message.method === 'tools/list') {
+      process.stdout.write(JSON.stringify({
+        jsonrpc: '2.0', id: message.id,
+        result: {
+          tools: [{
+            name: 'mutate',
+            description: 'External mutation',
+            inputSchema: { type: 'object', properties: {} },
+          }],
+        },
+      }) + '\\n');
+      // First process dies after listing so the tool call finds a closed client.
+      // The reconnect spawn stays up to answer tools/call.
+      const once = process.env.JIAN_EXIT_ONCE;
+      if (once && !existsSync(once)) {
+        writeFileSync(once, '1');
+        setImmediate(() => process.exit(0));
+      }
+      continue;
+    }
+    if (message.method === 'tools/call') {
+      process.stdout.write(JSON.stringify({
+        jsonrpc: '2.0', id: message.id,
+        result: { content: [{ type: 'text', text: 'mutated' }] },
+      }) + '\\n');
+      continue;
+    }
+    process.stdout.write(JSON.stringify({
+      jsonrpc: '2.0', id: message.id,
+      error: { code: -32601, message: 'unknown' },
+    }) + '\\n');
+  }
+});
+`,
+  );
+
+  const services = await testServices();
+  const profile = await services.profiles.createProfile({
+    name: 'Closed client',
+    instructions: 'Help.',
+    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    mcpServers: [
+      {
+        name: 'effects',
+        transport: 'stdio',
+        command: process.execPath,
+        args: [script],
+        env: [{ name: 'JIAN_EXIT_ONCE', value: once }],
+      },
+    ],
+  });
+  const session = await services.sessions.createSession(profile.id, { title: 'Closed' });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Do it',
+    requestKey: 'closed-client',
+  });
+
+  const usage = {
+    inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 1, text: 1, reasoning: 0 },
+  };
+
+  let calls = 0;
+  let remoteName = '';
+
+  const model = mockModel({
+    doGenerate: async (options) => {
+      calls++;
+
+      if (calls === 1) {
+        const selector = options.tools
+          ?.filter((item) => item.type === 'function')
+          .find((item) => item.name === 'load_mcp_tools');
+
+        assert.ok(selector);
+        remoteName = selector.description?.match(/mcp__effects_mutate_[a-f0-9]{8}/)?.[0] ?? '';
+        assert.ok(remoteName);
+
+        return {
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'select',
+              toolName: 'load_mcp_tools',
+              input: JSON.stringify({ names: [remoteName] }),
+            },
+          ],
+          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+          usage,
+          warnings: [],
+        };
+      }
+
+      if (calls === 2) {
+        return {
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'mutate-1',
+              toolName: remoteName,
+              input: '{}',
+            },
+          ],
+          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+          usage,
+          warnings: [],
+        };
+      }
+
+      return {
+        content: [{ type: 'text', text: 'The mutation finished after reconnect.' }],
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage,
+        warnings: [],
+      };
+    },
+  });
+
+  await new AgentRuntime(services, () => model, { vault: services.vault }).execute(
+    profile.id,
+    run.id,
+  );
+
+  const finished = await services.runs.run(profile.id, run.id);
+
+  expect(finished.status).toBe('completed');
+  expect(finished.error).toBeUndefined();
+  expect(calls).toBeGreaterThan(2);
+  expect(
+    (await services.lifecycle.checkpoints(profile.id, run.id)).some((checkpoint) => {
+      const data = checkpoint.data as { phase?: string };
+
+      return data.phase === 'tool-uncertain';
+    }),
+  ).toBe(false);
+});

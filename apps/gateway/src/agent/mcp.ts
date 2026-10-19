@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { MCPClient } from '@ai-sdk/mcp';
-import type { Run } from '@jian/contracts';
+import type { McpServer, Run } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { connectMcp, type SecretReader } from './mcp-connect.js';
+import { mcpClientDisconnected } from './mcp-errors.js';
 import type { McpOAuthProviders } from './types.js';
 
 interface McpContext {
@@ -143,6 +144,152 @@ const brief = (entry: McpEntry) => ({
 
 /** How long one server has to connect and list its tools before the turn goes on without it. */
 const MCP_CONNECT_MS = 20_000;
+/** How many times a dead client may be torn down and reopened for one tool call. */
+const MCP_RECONNECT_ATTEMPTS = 2;
+
+/** One open client and the tools it last listed — replaced together when the transport dies. */
+type LiveServer = {
+  config: McpServer;
+  client: MCPClient;
+  offered: ToolSet;
+  /** Shared so concurrent closed-client failures reopen the server once, not once per tool. */
+  reconnecting?: Promise<void>;
+};
+
+async function openServer(
+  run: Run,
+  config: McpServer,
+  context: McpContext,
+): Promise<{ live: LiveServer; failure?: undefined } | { live?: undefined; failure: string }> {
+  try {
+    const client = await connectMcp({
+      profileId: run.profileId,
+      server: config,
+      vault: context.vault as SecretReader,
+      fetcher: context.fetcher,
+      // Bounded only for this open. Stdio children follow the run signal alone so a connect
+      // timeout cannot kill a server that already listed its tools.
+      signal: AbortSignal.any([context.signal, AbortSignal.timeout(MCP_CONNECT_MS)]),
+      lifetime: context.signal,
+      ...(config.auth === 'oauth'
+        ? { authProvider: context.oauth?.(run.profileId, config.name) }
+        : {}),
+    });
+
+    return { live: { config, client, offered: await client.tools() } };
+  } catch (error) {
+    context.signal.throwIfAborted();
+
+    return { failure: connectionFailure(error) };
+  }
+}
+
+async function reconnectServer(
+  live: LiveServer,
+  run: Run,
+  context: McpContext,
+  cause: unknown,
+): Promise<void> {
+  if (!live.reconnecting) {
+    live.reconnecting = (async () => {
+      const previous = live.client;
+      const reopened = await openServer(run, live.config, context);
+
+      if (!reopened.live) {
+        // Keep the disconnect as cause so the runtime still knows nothing was sent.
+        throw new Error(
+          `MCP server ${live.config.name} closed before the call, and reconnect failed: ${reopened.failure}`,
+          { cause },
+        );
+      }
+
+      const index = context.clients.indexOf(previous);
+
+      if (index >= 0) {
+        context.clients[index] = reopened.live.client;
+      } else {
+        context.clients.push(reopened.live.client);
+      }
+
+      await previous.close().catch(() => {});
+      live.client = reopened.live.client;
+      live.offered = reopened.live.offered;
+    })().finally(() => {
+      live.reconnecting = undefined;
+    });
+  }
+
+  await live.reconnecting;
+}
+
+/**
+ * Tears down and recreates the MCP session when a call finds the client already dead. The
+ * request never left, so a fresh client is safe. After the bounded reconnects are spent, the
+ * failure is returned to the agent as a normal tool error — never as an uncertain interrupt.
+ */
+function withClosedClientRetry(
+  live: LiveServer,
+  serverTool: string,
+  remote: ToolSet[string],
+  run: Run,
+  context: McpContext,
+): ToolSet[string] {
+  if (!remote.execute) {
+    return remote;
+  }
+
+  const call = async (
+    input: unknown,
+    options: Parameters<NonNullable<typeof remote.execute>>[1],
+  ) => {
+    const execute = live.offered[serverTool]?.execute;
+
+    if (!execute) {
+      throw new Error(`MCP server ${live.config.name} no longer offers ${serverTool}`);
+    }
+
+    return execute(input, options);
+  };
+
+  return {
+    ...remote,
+    execute: async (input, options) => {
+      let lastError: unknown;
+
+      for (let attempt = 0; attempt <= MCP_RECONNECT_ATTEMPTS; attempt++) {
+        try {
+          return await call(input, options);
+        } catch (error) {
+          lastError = error;
+
+          if (!mcpClientDisconnected(error) || context.signal.aborted) {
+            throw error;
+          }
+
+          if (attempt === MCP_RECONNECT_ATTEMPTS) {
+            break;
+          }
+
+          console.warn(
+            `jian: MCP server ${live.config.name} disconnected before send; reconnecting (${attempt + 1}/${MCP_RECONNECT_ATTEMPTS})`,
+          );
+
+          try {
+            await reconnectServer(live, run, context, error);
+          } catch (reconnectError) {
+            throw reconnectError instanceof Error
+              ? reconnectError
+              : new Error(String(reconnectError), { cause: error });
+          }
+        }
+      }
+
+      throw lastError instanceof Error
+        ? lastError
+        : new Error(String(lastError), { cause: lastError });
+    },
+  };
+}
 
 /** Discover what each server offers now; expose a full schema only when the agent selects it. */
 export async function connectMcpTools(run: Run, tools: ToolSet, context: McpContext) {
@@ -154,54 +301,39 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
   // All at once, each on its own clock: a turn waits for the slowest server, not for the sum
   // of them, and one that hangs is given up on without holding the others.
   const reached = await Promise.all(
-    run.profile.mcpServers.map(async (config) => {
-      // A server whose token expired must not take the run with it: the agent keeps its other
-      // tools, and is told which server it cannot reach so it can say so instead of failing.
-      try {
-        const client = await connectMcp({
-          profileId: run.profileId,
-          server: config,
-          vault: context.vault as SecretReader,
-          fetcher: context.fetcher,
-          signal: AbortSignal.any([context.signal, AbortSignal.timeout(MCP_CONNECT_MS)]),
-          ...(config.auth === 'oauth'
-            ? { authProvider: context.oauth?.(run.profileId, config.name) }
-            : {}),
-        });
-
-        context.clients.push(client);
-
-        return { config, offered: await client.tools(), failure: undefined };
-      } catch (error) {
-        context.signal.throwIfAborted();
-
-        return { config, offered: undefined, failure: connectionFailure(error) };
-      }
-    }),
+    run.profile.mcpServers.map(async (config) => openServer(run, config, context)),
   );
 
   // Merged in the owner's order, so the catalog reads the same whichever server answered first.
-  for (const result of reached) {
-    const { config } = result;
+  for (let index = 0; index < reached.length; index++) {
+    const result = reached[index];
+    const config = run.profile.mcpServers[index];
 
-    if (!result.offered) {
-      unavailable.push({ name: config.name, reason: result.failure ?? 'unreachable' });
+    if (!config) {
       continue;
     }
+
+    if (!result?.live) {
+      unavailable.push({ name: config.name, reason: result?.failure ?? 'unreachable' });
+      continue;
+    }
+
+    const { live } = result;
+    context.clients.push(live.client);
 
     // Everything the server offers. A long catalog costs nothing per turn: only the tools the
     // agent has loaded are sent with a request, so a server with a hundred of them is no
     // heavier than one with three until they are used.
     const disabled = new Set(config.disabledTools ?? []);
 
-    for (const [name, remote] of Object.entries(result.offered)) {
+    for (const [name, remote] of Object.entries(live.offered)) {
       // Switched off by the owner: not callable, and not even findable, so the agent never
       // plans around a tool it would be refused.
       if (disabled.has(name)) continue;
 
       const exposed = exposedName(config.name, name);
 
-      tools[exposed] = remote;
+      tools[exposed] = withClosedClientRetry(live, name, remote, run, context);
       mcpToolNames.push(exposed);
       catalog.push({
         name: exposed,
