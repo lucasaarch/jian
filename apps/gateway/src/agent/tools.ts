@@ -28,6 +28,7 @@ import type { SshKeys } from '../ssh/service.js';
 import type { Stats } from '../stats/service.js';
 import type { Store } from '../storage/database.js';
 import { artifacts, checkpoints } from '../storage/schema.js';
+import type { Subscriptions } from '../subscriptions/service.js';
 import type { Work } from '../tasks/service.js';
 import { AskUserPause } from './ask-user.js';
 import { artifactPage } from './results.js';
@@ -89,6 +90,7 @@ export type ToolServices = {
   store: Store;
   decisions?: Pick<Decisions, 'ask' | 'judge'>;
   schedules?: Pick<Schedules, 'list' | 'create' | 'update' | 'remove'>;
+  subscriptions?: Pick<Subscriptions, 'list' | 'create' | 'update' | 'remove'>;
   settings?: { timeZone(): Promise<string> };
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
   work?: Pick<Work, 'spawnInConversation'>;
@@ -318,6 +320,8 @@ export function profileTools(
           services.settings ? services.settings.timeZone() : Promise.resolve(gatewayTimeZone()),
         )
       : {}),
+
+    ...(services.subscriptions ? subscriptionTools(services.subscriptions, run) : {}),
 
     forget_memory: tool({
       description:
@@ -672,6 +676,16 @@ export const TOOL_GROUPS = {
       'do something later or on a repetition — reminders, daily summaries, recurring checks — and list, change, pause (switch off without deleting), resume or delete them',
     tools: ['list_schedules', 'create_schedule', 'update_schedule', 'delete_schedule'],
   },
+  subscriptions: {
+    summary:
+      'listen for external events such as GitHub CI finishing or a pull request merging, and wake this conversation when they fire',
+    tools: [
+      'list_subscriptions',
+      'create_subscription',
+      'update_subscription',
+      'delete_subscription',
+    ],
+  },
   skills: {
     summary:
       'write, rewrite and remove your own skills: routines you follow the same way each time',
@@ -865,6 +879,80 @@ function scheduleTools(
       description: 'Delete a schedule for good. To pause one instead, switch it off.',
       inputSchema: z.object({ id: z.string().uuid() }),
       execute: async ({ id }) => schedules.remove(run.profileId, id),
+    }),
+  };
+}
+
+function subscriptionTools(subscriptions: NonNullable<ToolServices['subscriptions']>, run: Run) {
+  return {
+    list_subscriptions: tool({
+      description:
+        'List this profile’s event subscriptions: what they listen for, which conversation they wake, and whether they are on.',
+      inputSchema: z.object({}),
+      execute: async () => subscriptions.list(run.profileId),
+    }),
+    create_subscription: tool({
+      description:
+        'Listen for a GitHub event (CI check suite completed, or pull request closed/merged) and start a turn in a conversation when it fires. Returns a webhookSecret once — configure that secret on the GitHub repo webhook pointing at POST /v1/hooks/github/:id.',
+      inputSchema: z.object({
+        name: z.string().min(1).max(80),
+        instruction: z.string().min(1).max(4000),
+        sessionId: z.string().uuid().optional(),
+        owner: z.string().min(1).max(100),
+        repo: z.string().min(1).max(100),
+        events: z
+          .array(z.enum(['check_suite.completed', 'pull_request.closed']))
+          .min(1)
+          .max(8),
+        enabled: z.boolean().optional(),
+      }),
+      execute: async ({ sessionId, owner, repo, events, enabled, ...rest }) =>
+        subscriptions.create(
+          run.profileId,
+          {
+            ...rest,
+            sessionId: sessionId ?? run.sessionId,
+            source: 'github',
+            filter: { owner, repo, events },
+            enabled: enabled ?? true,
+          },
+          'agent',
+        ),
+    }),
+    update_subscription: tool({
+      description: 'Change a subscription’s name, instruction, filter, session, or enabled flag.',
+      inputSchema: z.object({
+        id: z.string().uuid(),
+        name: z.string().min(1).max(80).optional(),
+        instruction: z.string().min(1).max(4000).optional(),
+        sessionId: z.string().uuid().optional(),
+        owner: z.string().min(1).max(100).optional(),
+        repo: z.string().min(1).max(100).optional(),
+        events: z
+          .array(z.enum(['check_suite.completed', 'pull_request.closed']))
+          .min(1)
+          .max(8)
+          .optional(),
+        enabled: z.boolean().optional(),
+      }),
+      execute: async ({ id, owner, repo, events, ...patch }) => {
+        const touchingFilter = owner !== undefined || repo !== undefined || events !== undefined;
+        if (touchingFilter) {
+          if (!owner || !repo || !events?.length) {
+            throw new GatewayError(400, 'A filter patch needs owner, repo and events together');
+          }
+          return subscriptions.update(run.profileId, id, {
+            ...patch,
+            filter: { owner, repo, events },
+          });
+        }
+        return subscriptions.update(run.profileId, id, patch);
+      },
+    }),
+    delete_subscription: tool({
+      description: 'Delete an event subscription. To pause one instead, switch it off.',
+      inputSchema: z.object({ id: z.string().uuid() }),
+      execute: async ({ id }) => subscriptions.remove(run.profileId, id),
     }),
   };
 }

@@ -87,6 +87,12 @@ import {
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
 import { catalogQuerySchema, catalogSchema, skillImportSchema } from './skills.js';
 import { sshKeyCreateSchema, sshKeySchema } from './ssh.js';
+import {
+  subscriptionDeliverySchema,
+  subscriptionInputSchema,
+  subscriptionPatchSchema,
+  subscriptionRecordSchema,
+} from './subscriptions.js';
 import { webSearchInputSchema, webSearchStatusSchema } from './web.js';
 import { conversationSubagentSchema } from './work.js';
 
@@ -762,6 +768,60 @@ export const operations: Operation[] = [
     access: 'admin',
     params: z.strictObject({ profileId: z.uuid(), scheduleId: z.uuid() }),
     response: z.array(scheduleRunSchema),
+  },
+  {
+    method: 'GET',
+    path: `${profile}/subscriptions`,
+    operationId: 'listSubscriptions',
+    access: 'admin',
+    response: z.array(subscriptionRecordSchema),
+  },
+  {
+    method: 'POST',
+    path: `${profile}/subscriptions`,
+    operationId: 'createSubscription',
+    access: 'admin',
+    body: subscriptionInputSchema,
+    response: subscriptionRecordSchema,
+    status: 201,
+  },
+  {
+    method: 'PATCH',
+    path: `${profile}/subscriptions/:subscriptionId`,
+    operationId: 'updateSubscription',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), subscriptionId: z.uuid() }),
+    body: subscriptionPatchSchema,
+    response: subscriptionRecordSchema,
+  },
+  {
+    method: 'DELETE',
+    path: `${profile}/subscriptions/:subscriptionId`,
+    operationId: 'deleteSubscription',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), subscriptionId: z.uuid() }),
+    response: subscriptionRecordSchema,
+  },
+  {
+    method: 'GET',
+    path: `${profile}/subscriptions/:subscriptionId/deliveries`,
+    operationId: 'listSubscriptionDeliveries',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), subscriptionId: z.uuid() }),
+    response: z.array(subscriptionDeliverySchema),
+  },
+  {
+    method: 'POST',
+    path: '/v1/hooks/github/:subscriptionId',
+    operationId: 'githubSubscriptionWebhook',
+    access: 'webhook',
+    params: z.strictObject({ subscriptionId: z.uuid() }),
+    // Body is the raw GitHub payload; verification uses X-Hub-Signature-256.
+    body: z.record(z.string(), z.unknown()),
+    response: z.strictObject({
+      accepted: z.boolean(),
+      runId: z.uuid().optional(),
+    }),
   },
   {
     method: 'GET',
