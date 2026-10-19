@@ -586,22 +586,18 @@ it('reconnects after a closed MCP client instead of treating the call as uncerta
 
     await clients[0]?.close();
 
-    const listed = await tools[listName]?.execute?.(
-      {},
-      {
-        toolCallId: 'list-1',
-        messages: [],
-      },
-    );
+    // Dynamic MCP tools infer an empty input as `never`; the wire schema accepts {}.
+    type Call = (
+      input: Record<string, never>,
+      options: { toolCallId: string; messages: [] },
+    ) => Promise<unknown>;
+    const list = tools[listName]?.execute as Call | undefined;
+    const mutate = tools[mutateName]?.execute as Call | undefined;
+
+    const listed = await list?.({}, { toolCallId: 'list-1', messages: [] });
     expect(listed).toMatchObject({ content: [{ type: 'text', text: 'ok-1' }] });
 
-    const mutated = await tools[mutateName]?.execute?.(
-      {},
-      {
-        toolCallId: 'mutate-1',
-        messages: [],
-      },
-    );
+    const mutated = await mutate?.({}, { toolCallId: 'mutate-1', messages: [] });
     expect(mutated).toMatchObject({ content: [{ type: 'text', text: 'ok-2' }] });
     expect(toolCalls).toBe(2);
     expect(clients).toHaveLength(1);
