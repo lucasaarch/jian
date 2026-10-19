@@ -28,6 +28,10 @@ it('creates, lists and removes a profile SSH key without returning the private k
   const home = await workspaceOf(profile.id);
   const privateKey = join(home, '.ssh', 'jian', created.id, 'id_ed25519');
   expect(existsSync(privateKey)).toBe(true);
+  expect(existsSync(join(home, '.ssh', 'known_hosts'))).toBe(true);
+  expect(readFileSync(join(home, '.ssh', 'known_hosts'), 'utf8')).toContain(
+    'github.com ssh-ed25519',
+  );
   expect(readFileSync(privateKey, 'utf8')).toContain('BEGIN OPENSSH PRIVATE KEY');
   expect(
     execFileSync('/usr/bin/ssh-keygen', ['-y', '-f', privateKey], { encoding: 'utf8' }).trim(),

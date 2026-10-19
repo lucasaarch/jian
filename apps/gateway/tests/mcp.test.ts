@@ -261,7 +261,7 @@ it.each([false, true])(
   },
 );
 
-it.each(['disconnect', 'isError', 'readOnlyError'])(
+it.each(['disconnect', 'isError', 'readOnlyError', 'validationError'])(
   'stops on an unknowable remote outcome and carries on from a refused one (%s)',
   async (failure) => {
     let effects = 0;
@@ -300,6 +300,18 @@ it.each(['disconnect', 'isError', 'readOnlyError'])(
               error: {
                 code: -32602,
                 message: 'header mismatch: missing Mcp-Param-owner header for parameter "owner"',
+              },
+            }),
+          );
+        } else if (failure === 'validationError') {
+          // Mutating tool: server answered with a definitive API rejection (GitHub 422-style).
+          res.writeHead(200, { 'Content-Type': 'application/json' }).end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: message.id,
+              error: {
+                code: -32602,
+                message: 'Validation Failed: Invalid value for "milestone": -1 — HTTP 422',
               },
             }),
           );
@@ -468,6 +480,25 @@ it.each(['disconnect', 'isError', 'readOnlyError'])(
               );
             }),
           ).toBe(true);
+        }
+        if (failure === 'validationError') {
+          expect(
+            (await services.lifecycle.checkpoints(profile.id, run.id)).some((checkpoint) => {
+              const data = checkpoint.data as { phase?: string; reason?: string };
+
+              return (
+                data.phase === 'tool-failed' &&
+                data.reason?.includes('422') &&
+                data.reason?.includes('milestone')
+              );
+            }),
+          ).toBe(true);
+          expect(
+            (await services.lifecycle.checkpoints(profile.id, run.id)).some((checkpoint) => {
+              const data = checkpoint.data as { phase?: string };
+              return data.phase === 'tool-uncertain';
+            }),
+          ).toBe(false);
         }
       }
 
