@@ -86,7 +86,7 @@ export type ToolServices = {
   schedules?: Pick<Schedules, 'list' | 'create' | 'update' | 'remove'>;
   settings?: { timeZone(): Promise<string> };
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
-  work?: Pick<Work, 'list' | 'spawnInConversation' | 'executions'>;
+  work?: Pick<Work, 'spawnInConversation'>;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove'>;
 };
 
@@ -133,32 +133,15 @@ export function profileTools(
         })),
     }),
 
-    ...(services.work
+    ...(services.work && !run.subagent
       ? {
-          list_tasks: tool({
-            description: 'Read archived task cards from the previous work board.',
-            inputSchema: z.object({}),
-            execute: async () => {
-              const items = await services.work?.list(run.profileId);
-              return run.subagent ? items?.filter((item) => item.id === run.workItemId) : items;
-            },
+          spawn_subagent: tool({
+            description:
+              'Start an isolated subagent in this conversation for a scoped assignment. Give it the objective and necessary context in the brief, and media IDs for needed images; it does not inherit this conversation. The call returns when queued, and the result is delivered here when it finishes.',
+            inputSchema: conversationSubagentInputSchema,
+            execute: async (input, options) =>
+              services.work?.spawnInConversation(run, input, options.toolCallId),
           }),
-          ...(!run.subagent
-            ? {
-                spawn_subagent: tool({
-                  description:
-                    'Start an isolated subagent in this conversation for a scoped assignment. Give it the objective and necessary context in the brief, and media IDs for needed images; it does not inherit this conversation. The call returns when queued, and the result is delivered here when it finishes.',
-                  inputSchema: conversationSubagentInputSchema,
-                  execute: async (input, options) =>
-                    services.work?.spawnInConversation(run, input, options.toolCallId),
-                }),
-                list_task_subagents: tool({
-                  description: 'Read the runs and outcomes of workers assigned to a task.',
-                  inputSchema: z.object({ taskId: z.uuid() }),
-                  execute: async ({ taskId }) => services.work?.executions(run.profileId, taskId),
-                }),
-              }
-            : {}),
         }
       : {}),
 
@@ -629,11 +612,9 @@ export const TOOL_GROUPS = {
   },
   tasks: {
     summary:
-      'delegate subagents, read archived tasks, inspect checkpoints and output, manage resource leases, or compact context',
+      'delegate subagents, inspect checkpoints and output, manage resource leases, or compact context',
     tools: [
       'spawn_subagent',
-      'list_tasks',
-      'list_task_subagents',
       'read_run_checkpoints',
       'read_artifact',
       'acquire_resource',

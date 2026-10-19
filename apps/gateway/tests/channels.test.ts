@@ -938,7 +938,7 @@ describe('when Telegram refuses for flood control', () => {
   });
 });
 
-it('delivers a task worker handoff to the Telegram chat once', async () => {
+it('delivers a conversation subagent handoff to the Telegram chat once', async () => {
   const sent: string[] = [];
   const f = await setup(async (url, options) => {
     if (String(url).includes('sendMessage')) {
@@ -955,15 +955,9 @@ it('delivers a task worker handoff to the Telegram chat once', async () => {
 
     const [principal] = await f.services.runs.activities(f.profile.id);
     if (!principal) throw new Error('Principal run missing');
-    const task = await f.services.work.create(
-      f.profile.id,
-      { title: 'Review PR', description: 'Inspect the diff and report.' },
-      principal.sessionId,
-    );
-    const worker = await f.services.work.spawn(
+    const worker = await f.services.work.spawnInConversation(
       principal,
       {
-        taskId: task.id,
         role: 'execute',
         name: 'Reviewer',
         identity: 'Review code.',

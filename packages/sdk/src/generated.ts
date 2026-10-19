@@ -35,23 +35,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/work": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Required permission: admin. */
-        get: operations["listWork"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/profiles/{profileId}/sessions/{sessionId}/subagents": {
         parameters: {
             query?: never;
@@ -61,40 +44,6 @@ export interface paths {
         };
         /** @description Required permission: admin. */
         get: operations["listConversationSubagents"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/profiles/{profileId}/work/{workId}/history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Required permission: admin. */
-        get: operations["getWorkHistory"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/profiles/{profileId}/work/{workId}/executions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Required permission: admin. */
-        get: operations["listWorkExecutions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1733,148 +1682,6 @@ export interface operations {
             };
         };
     };
-    listWork: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                profileId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        title: string;
-                        description: string;
-                        mediaIds: string[];
-                        repositories: string[];
-                        /** Format: uuid */
-                        id: string;
-                        /** Format: uuid */
-                        profileId: string;
-                        /** Format: uuid */
-                        sourceSessionId: string | null;
-                        /** @enum {string} */
-                        status: "todo" | "in_progress" | "review" | "blocked" | "done";
-                        note: string;
-                        version: number;
-                        /** @enum {string} */
-                        updatedBy: "agent" | "owner";
-                        /** Format: date-time */
-                        createdAt: string;
-                        /** Format: date-time */
-                        updatedAt: string;
-                    }[];
-                };
-            };
-            /** @description Error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-        };
-    };
     listConversationSubagents: {
         parameters: {
             query?: never;
@@ -1898,278 +1705,8 @@ export interface operations {
                         runId: string;
                         /** Format: uuid */
                         sessionId: string;
-                        /** @enum {string} */
-                        role: "execute" | "review";
-                        name: string;
-                        /** @enum {string} */
-                        status: "queued" | "running" | "completed" | "failed" | "interrupted" | "cancelled";
-                        input: string;
-                        output?: string;
-                        error?: string;
-                        /** Format: date-time */
-                        createdAt: string;
-                        /** Format: date-time */
-                        updatedAt: string;
                         /** Format: uuid */
                         parentRunId: string;
-                    }[];
-                };
-            };
-            /** @description Error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-        };
-    };
-    getWorkHistory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                profileId: string;
-                workId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        id: number;
-                        /** @enum {string} */
-                        type: "work.created" | "work.updated";
-                        /** @enum {string} */
-                        status: "todo" | "in_progress" | "review" | "blocked" | "done";
-                        note: string;
-                        /** Format: date-time */
-                        createdAt: string;
-                    }[];
-                };
-            };
-            /** @description Error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-        };
-    };
-    listWorkExecutions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                profileId: string;
-                workId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** Format: uuid */
-                        runId: string;
-                        /** Format: uuid */
-                        sessionId: string;
                         /** @enum {string} */
                         role: "execute" | "review";
                         name: string;
@@ -3943,7 +3480,7 @@ export interface operations {
                     "application/json": {
                         name: string;
                         /** @enum {string} */
-                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "openai-compatible";
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "openai-compatible";
                         /** @enum {string} */
                         credential?: "key" | "subscription";
                         /** Format: uri */
@@ -4073,7 +3610,7 @@ export interface operations {
                 "application/json": {
                     name: string;
                     /** @enum {string} */
-                    kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "openai-compatible";
+                    kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "openai-compatible";
                     secret?: string;
                     /** @enum {string} */
                     credential?: "key" | "subscription";
@@ -4092,7 +3629,7 @@ export interface operations {
                     "application/json": {
                         name: string;
                         /** @enum {string} */
-                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "openai-compatible";
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "openai-compatible";
                         /** @enum {string} */
                         credential?: "key" | "subscription";
                         /** Format: uri */
@@ -4368,7 +3905,7 @@ export interface operations {
                     "application/json": {
                         name: string;
                         /** @enum {string} */
-                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "openai-compatible";
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "openai-compatible";
                         /** @enum {string} */
                         credential?: "key" | "subscription";
                         /** Format: uri */
@@ -5259,8 +4796,6 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         sessionId: string;
-                        /** Format: uuid */
-                        workItemId?: string;
                         subagent?: {
                             /** @enum {string} */
                             role: "execute" | "review";
@@ -12760,8 +12295,6 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         sessionId: string;
-                        /** Format: uuid */
-                        workItemId?: string;
                         subagent?: {
                             /** @enum {string} */
                             role: "execute" | "review";
@@ -14387,8 +13920,6 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         sessionId: string;
-                        /** Format: uuid */
-                        workItemId?: string;
                         subagent?: {
                             /** @enum {string} */
                             role: "execute" | "review";
@@ -16159,8 +15690,6 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         sessionId: string;
-                        /** Format: uuid */
-                        workItemId?: string;
                         subagent?: {
                             /** @enum {string} */
                             role: "execute" | "review";
@@ -16392,8 +15921,6 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         sessionId: string;
-                        /** Format: uuid */
-                        workItemId?: string;
                         subagent?: {
                             /** @enum {string} */
                             role: "execute" | "review";
@@ -16625,8 +16152,6 @@ export interface operations {
                         profileId: string;
                         /** Format: uuid */
                         sessionId: string;
-                        /** Format: uuid */
-                        workItemId?: string;
                         subagent?: {
                             /** @enum {string} */
                             role: "execute" | "review";
