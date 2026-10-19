@@ -235,7 +235,12 @@ it('issues one Gemini Live token restricted to the configured voice model', asyn
     secret: 'synthetic-google-key',
   });
   await f.services.providers.setModelDefaults(f.profile.id, {
-    voice: { providerId: provider.id, modelId: 'gemini-3.8-live' },
+    voice: { providerId: provider.id, modelId: 'gemini-3.8-live', voiceName: 'Aoede' },
+  });
+  expect((await f.services.providers.modelDefaults(f.profile.id)).voice).toEqual({
+    providerId: provider.id,
+    modelId: 'gemini-3.8-live',
+    voiceName: 'Aoede',
   });
   let headers: Headers | undefined;
   let body: Record<string, unknown> | undefined;
@@ -252,19 +257,22 @@ it('issues one Gemini Live token restricted to the configured voice model', asyn
   expect(headers?.get('x-goog-api-key')).toBe('synthetic-google-key');
   expect(body).toMatchObject({
     uses: 1,
-    liveConnectConstraints: {
+    bidiGenerateContentSetup: {
       model: 'models/gemini-3.8-live',
-      config: {
+      generationConfig: {
         responseModalities: ['AUDIO'],
-        inputAudioTranscription: {},
-        outputAudioTranscription: {},
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Aoede' } } },
       },
+      inputAudioTranscription: {},
+      outputAudioTranscription: {},
     },
   });
+  expect(body).not.toHaveProperty('liveConnectConstraints');
   expect(token).toMatchObject({
     token: 'ephemeral-only',
     model: 'gemini-3.8-live',
     provider: 'google',
+    voiceName: 'Aoede',
   });
 });
 

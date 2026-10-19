@@ -229,6 +229,7 @@ export class Providers {
         : undefined;
     if (!apiKey) throw new GatewayError(409, 'Google API key is not configured');
 
+    const voiceName = selection.voiceName || 'Leda';
     const now = this.clock();
     const response = await fetcher('https://generativelanguage.googleapis.com/v1beta/auth_tokens', {
       method: 'POST',
@@ -237,15 +238,18 @@ export class Providers {
         uses: 1,
         expireTime: new Date(now + 5 * 60_000).toISOString(),
         newSessionExpireTime: new Date(now + 60_000).toISOString(),
-        liveConnectConstraints: {
+        bidiGenerateContentSetup: {
           model: selection.modelId.startsWith('models/')
             ? selection.modelId
             : `models/${selection.modelId}`,
-          config: {
+          generationConfig: {
             responseModalities: ['AUDIO'],
-            inputAudioTranscription: {},
-            outputAudioTranscription: {},
+            speechConfig: {
+              voiceConfig: { prebuiltVoiceConfig: { voiceName } },
+            },
           },
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
         },
       }),
     });
@@ -271,6 +275,7 @@ export class Providers {
       token: payload.name,
       model: selection.modelId,
       provider: 'google' as const,
+      voiceName,
       ...(typeof payload.expireTime === 'string' ? { expiresAt: payload.expireTime } : {}),
     };
   }
