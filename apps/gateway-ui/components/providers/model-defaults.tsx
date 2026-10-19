@@ -25,6 +25,7 @@ function initial(selection: ModelSelection | 'disabled' | null): RoleValue {
     providerId: selection.providerId,
     modelId: selection.modelId,
     reasoningEffort: selection.reasoningEffort ?? '',
+    voiceName: selection.voiceName,
     disabled: false,
   };
 }
@@ -37,6 +38,7 @@ function toSelection(value: RoleValue): ModelSelection | 'disabled' | null {
     providerId: value.providerId,
     modelId: value.modelId.trim(),
     ...(value.reasoningEffort ? { reasoningEffort: value.reasoningEffort as ReasoningEffort } : {}),
+    ...(value.voiceName ? { voiceName: value.voiceName } : {}),
   };
 }
 
