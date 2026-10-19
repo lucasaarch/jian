@@ -4,6 +4,24 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 0.6.0-rc.4 — 2026-10-19
+
+Mid-run owner questions, objective UI, GitHub MCP presets, and GitHub event subscriptions.
+
+### Agent loop
+
+* **Mid-run questions:** the agent can call `ask_user` with a prompt and optional choices. The run parks as `waiting` (not `completed`), so an open objective does not auto-continue until the owner answers. Answering from the panel or the same channel session resumes with a durable `ask-answer:` run; Telegram sends a one-time reply keyboard when choices are present.
+* **Objective in the panel:** the conversation header shows the current session objective status and text (and a blocked note when the agent is waiting on the owner).
+
+### GitHub
+
+* **MCP presets:** the MCP form offers GitHub starters — remote HTTP + OAuth (`https://api.githubcopilot.com/mcp/`) and local stdio + PAT (`@modelcontextprotocol/server-github`). Getting-started and the coding-work skill point at GitHub MCP before shell `gh`.
+* **Event subscriptions:** the agent can create profile-scoped subscriptions that listen for GitHub CI completion or pull-request merge/close. Matching webhooks (HMAC-verified) wake the chosen conversation with the subscription instruction. Tools: `list_subscriptions`, `create_subscription`, `update_subscription`, `delete_subscription`.
+
+### Upgrading
+
+Apply migrations `0050_run-waiting` (adds run status `waiting` and `runs.question`) and `0051_subscriptions` (adds `subscriptions` and `subscription_deliveries`). This is a prerelease and does not move the `latest` image tag.
+
 ## 0.6.0-rc.3 — 2026-10-19
 
 Keep multi-step work running with durable session objectives and automatic turn continuation.
