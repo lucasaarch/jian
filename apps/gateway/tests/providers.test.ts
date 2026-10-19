@@ -9,6 +9,7 @@ import {
 } from '../src/providers/claude-subscription.js';
 import { reasoningProviderOptions, takesAdaptiveThinking } from '../src/providers/effort.js';
 import { resolveModel } from '../src/providers/models.js';
+import { VOICE_SUMMARY_SYSTEM } from '../src/providers/service.js';
 
 describe('live voice model eligibility', () => {
   const liveModel = (id: string) => ({
@@ -31,6 +32,11 @@ describe('live voice model eligibility', () => {
     expect(
       supportsModelRole({ kind: 'openai', authMode: 'api' }, liveModel('gpt-6-astra'), 'voice'),
     ).toBe(false);
+  });
+
+  it('summarizes voice-call history in English product text', () => {
+    expect(VOICE_SUMMARY_SYSTEM).toMatch(/in English/i);
+    expect(VOICE_SUMMARY_SYSTEM).not.toMatch(/Portuguese|português/i);
   });
 });
 

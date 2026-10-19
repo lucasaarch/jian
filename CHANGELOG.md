@@ -4,6 +4,24 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 0.6.0-rc.5 — 2026-10-19
+
+Gemini Live voice calls in the panel, and MCP reconnect on closed clients.
+
+### Voice calls
+
+* **Gemini Live in the gateway conversation:** choose a Gemini Live model under Model defaults › Voice calls, then use the phone control in the composer. The gateway mints a short-lived Gemini token; the browser streams microphone audio and plays the reply. On hang-up, an English summary is written into the session history.
+* **Model defaults:** Voice calls lists Gemini Live and OpenAI `gpt-live` / `gpt-realtime` models for API-key providers (not ChatGPT OAuth). Starting a call still requires Gemini Live; OpenAI Live sessions are not wired yet and return a clear conflict if selected.
+* **Composer:** the phone control starts or ends a Live call; the microphone control remains the voice-note recorder.
+
+### MCP
+
+* **Reconnect on closed clients:** pre-send MCP transport deaths (closed client, disconnected SSE, stopped stdio) recreate the session with bounded retries and return a normal tool error instead of aborting the run as an uncertain outcome. Mid-flight mutating disconnects that may have applied still interrupt.
+
+### Upgrading
+
+No new migrations. This is a prerelease and does not move the `latest` image tag.
+
 ## 0.6.0-rc.4 — 2026-10-19
 
 Mid-run owner questions, objective UI, GitHub MCP presets, and GitHub event subscriptions.

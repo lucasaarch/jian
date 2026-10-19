@@ -133,7 +133,7 @@ export const roles = [
   {
     key: 'voice',
     label: 'Voice calls',
-    hint: 'Real-time voice model for calls. Requests that need tools are handled by the conversation model.',
+    hint: 'Gemini Live calls work in the gateway conversation today. OpenAI gpt-live / gpt-realtime models appear for API-key providers and can be saved, but starting a call still needs Gemini Live until the OpenAI path ships. ChatGPT OAuth is not offered. Tool-using turns stay on the conversation model.',
     runtime: true,
     tools: false,
   },
