@@ -112,6 +112,7 @@ export class Contexts {
       ],
       history: await this.historyWithTools(run, history, session.summary),
       ...(session.summary ? { summary: session.summary } : {}),
+      ...(session.objective ? { objective: session.objective } : {}),
     });
 
     const currentIndex = history.findIndex(

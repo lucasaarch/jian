@@ -311,6 +311,31 @@ export const sessionModelSchema = z.strictObject({
   model: modelSelectionSchema.nullable(),
 });
 
+/**
+ * What this conversation is working toward until it is done, blocked on the owner, or cancelled.
+ * Survives across turns; the agent loop keeps going while status is `open`.
+ */
+export const sessionObjectiveSchema = z.strictObject({
+  text: z.string().trim().min(1).max(2000),
+  status: z.enum(['open', 'blocked', 'done', 'cancelled']),
+  updatedAt: z.iso.datetime(),
+  /** Auto-follow-up runs since the last human or explicit tool status change. */
+  continuations: z.number().int().nonnegative().max(100).default(0),
+  /** Why it is blocked, or a short completion note. */
+  note: z.string().trim().min(1).max(500).optional(),
+});
+
+/** Owner or panel write: set a new open objective, or mark the current one done/cancelled. */
+export const sessionObjectiveInputSchema = z
+  .strictObject({
+    text: z.string().trim().min(1).max(2000).optional(),
+    status: z.enum(['open', 'blocked', 'done', 'cancelled']).optional(),
+    note: z.string().trim().min(1).max(500).optional(),
+  })
+  .refine((input) => Boolean(input.text) || Boolean(input.status), {
+    message: 'An objective write needs text or a status',
+  });
+
 export const submitSchema = z
   .strictObject({
     mediaIds: z.array(z.uuid()).max(MAX_MESSAGE_MEDIA).optional(),
@@ -344,6 +369,7 @@ export const memoryEditSchema = z.strictObject({
 export type McpStatus = z.infer<typeof mcpStatusSchema>;
 export type Skill = z.infer<typeof skillSchema>;
 export type McpServer = z.infer<typeof mcpSchema>;
+export type SessionObjective = z.infer<typeof sessionObjectiveSchema>;
 /**
  * Copies servers from another profile: each becomes this profile's own, with its own copy of
  * the typed values, and changing one never changes the other. Absent `servers` copies them all.

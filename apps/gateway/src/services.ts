@@ -18,6 +18,7 @@ import { Schedules } from './schedules/service.js';
 import type { GatewayVault } from './security/gateway-vault.js';
 import { createSafeFetch } from './security/outbound.js';
 import type { Vault } from './security/vault.js';
+import { ObjectiveContinuation } from './sessions/continuation.js';
 import { Sessions } from './sessions/service.js';
 import { Settings } from './settings/service.js';
 import { SshKeys } from './ssh/service.js';
@@ -49,6 +50,7 @@ export type Services = {
   contexts: Contexts;
   errands: Errands;
   work: Work;
+  objectives: ObjectiveContinuation;
   vault: Vault;
   gatewayVault: GatewayVault;
   sshKeys: SshKeys;
@@ -129,6 +131,7 @@ export function buildServices({
     contexts: new Contexts(store, runs, sessions, settings, decisions.judge),
     errands: new Errands(store, clock),
     work: new Work(store, sessions, runs, clock),
+    objectives: new ObjectiveContinuation(store, sessions, runs, clock),
     vault,
     gatewayVault,
     sshKeys: new SshKeys(profiles),

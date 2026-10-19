@@ -5,7 +5,9 @@ import {
   LEARNING_SESSION_CHANNEL,
   type Profile,
   type Session,
+  type SessionObjective,
   sessionModelSchema,
+  sessionObjectiveInputSchema,
   sessionRenameSchema,
   sessionSchema,
   TASK_SESSION_CHANNEL,
@@ -15,6 +17,7 @@ import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
+import { objectiveAt } from './objective.js';
 import {
   findOwnSession,
   findPeerSession,
@@ -27,6 +30,7 @@ import {
   listUncompactedMessages,
   renameSession,
   setSessionModel,
+  setSessionObjective,
   writeSessionSummary,
 } from './repository.js';
 
@@ -129,6 +133,60 @@ export class Sessions {
 
       return session;
     });
+  }
+
+  /**
+   * Sets or closes the durable objective for this conversation. Used by the panel, owner
+   * commands, and the agent's objective tools.
+   */
+  async setObjective(
+    profileId: string,
+    sessionId: string,
+    input: unknown,
+    transaction?: Queryable,
+  ) {
+    const data = sessionObjectiveInputSchema.parse(input);
+    const write = async (tx: Queryable) => {
+      const current = await this.session(profileId, sessionId, tx);
+      if (current.channel === TASK_SESSION_CHANNEL) {
+        throw new GatewayError(403, 'Subagent sessions are read-only');
+      }
+      const at = nowIso(this.clock);
+      const status = data.status ?? 'open';
+      const text = data.text ?? current.objective?.text;
+      if (!text) throw new GatewayError(400, 'An objective needs text');
+      const objective = objectiveAt(text, status, at, {
+        continuations: status === 'open' && data.text ? 0 : (current.objective?.continuations ?? 0),
+        ...(data.note ? { note: data.note } : {}),
+      });
+      const session = assertFound(
+        await setSessionObjective(tx, profileId, sessionId, objective),
+        'Session',
+      );
+      await recordEvent(tx, this.clock, profileId, 'session.objective', {
+        sessionId,
+        status: objective.status,
+        text: objective.text.slice(0, 200),
+      });
+      return session;
+    };
+    return transaction ? write(transaction) : this.store.transaction(profileId, write);
+  }
+
+  /** Agent/tool helper: write a fully formed objective row. */
+  async writeObjective(
+    profileId: string,
+    sessionId: string,
+    objective: SessionObjective,
+    transaction?: Queryable,
+  ) {
+    const write = async (tx: Queryable) => {
+      if ((await this.session(profileId, sessionId, tx)).channel === TASK_SESSION_CHANNEL) {
+        throw new GatewayError(403, 'Subagent sessions are read-only');
+      }
+      return assertFound(await setSessionObjective(tx, profileId, sessionId, objective), 'Session');
+    };
+    return transaction ? write(transaction) : this.store.transaction(profileId, write);
   }
 
   /** Used by the agent after the first exchange; a session already named is left alone. */

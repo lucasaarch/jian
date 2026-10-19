@@ -4,6 +4,7 @@ import {
   type Message,
   type ModelSelection,
   type Session,
+  type SessionObjective,
   TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
 import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
@@ -25,6 +26,7 @@ export function toSession(row: SessionRow): Session {
     ...(row.summarizedUpTo ? { summarizedUpTo: row.summarizedUpTo.toISOString() } : {}),
     ...(row.summarizedThroughId ? { summarizedThroughId: row.summarizedThroughId } : {}),
     ...(row.model ? { model: row.model } : {}),
+    ...(row.objective ? { objective: row.objective } : {}),
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -54,6 +56,7 @@ export async function insertSession(db: Queryable, session: Session): Promise<vo
     summarizedUpTo: session.summarizedUpTo ? new Date(session.summarizedUpTo) : null,
     summarizedThroughId: session.summarizedThroughId ?? null,
     model: session.model ?? null,
+    objective: session.objective ?? null,
     createdAt: new Date(session.createdAt),
   });
 }
@@ -390,6 +393,21 @@ export async function setSessionModel(
   const [row] = await db
     .update(sessions)
     .set({ model })
+    .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)))
+    .returning();
+
+  return row ? toSession(row) : null;
+}
+
+export async function setSessionObjective(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  objective: SessionObjective | null,
+): Promise<Session | null> {
+  const [row] = await db
+    .update(sessions)
+    .set({ objective })
     .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)))
     .returning();
 

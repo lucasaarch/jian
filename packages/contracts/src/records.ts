@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import { groupTurnSchema } from './channels.js';
 import { agentCallOriginSchema } from './peers.js';
-import { contextPolicySchema, modelSchema, profileSchema, sessionSchema } from './profile.js';
+import {
+  contextPolicySchema,
+  modelSchema,
+  profileSchema,
+  sessionObjectiveSchema,
+  sessionSchema,
+} from './profile.js';
 import { modelSelectionSchema } from './providers.js';
 import { subagentSchema } from './work.js';
 
@@ -35,6 +41,11 @@ export const sessionRecordSchema = sessionSchema.extend({
   summarizedThroughId: uuid.optional(),
   /** Chosen for this conversation alone; absent, it runs on the profile's model defaults. */
   model: modelSelectionSchema.optional(),
+  /**
+   * Durable work the agent should finish across turns. Absent when nothing is in progress.
+   * While `open`, the gateway queues follow-up runs after a completed slice.
+   */
+  objective: sessionObjectiveSchema.optional(),
   createdAt: timestamp,
 });
 

@@ -6,8 +6,19 @@ export const longRunningWork: Skill = {
     'Use when delegating to an internal subagent, finishing a multi-step workflow, work spans turns, or context is running out.',
   instructions: `# Work that outlives one turn
 
-A run is one turn. It has a step and context budget. Conversation history, checkpoints,
-memories and schedules survive it.
+A run is one turn with a step and context budget. Conversation history, checkpoints,
+memories, schedules and the session objective survive it. While a session objective is
+open, the gateway starts the next turn for you after each completed slice — do not stop
+and wait for the owner to say continue.
+
+## Session objective
+
+When the owner asks for multi-step work, set or update it with \`set_session_objective\`
+if none fits. Keep calling tools until the objective is done. Progress lines are
+commentary, not a reason to end. Call \`complete_session_objective\` only when the work
+is fully satisfied, \`block_session_objective\` when you need the owner's input, or
+\`cancel_session_objective\` when they abandon it. The owner can also send
+\`/objective …\`, \`/done\`, or \`/objective cancel\`.
 
 ## Internal subagents
 
@@ -42,6 +53,6 @@ A large tool result is stored as an artifact; use \`read_artifact\` for the page
 See \`managing-context\` before long stretches of work. \`read_run_checkpoints\` shows
 what an earlier run actually did; inspect it before repeating an external action.
 
-Use a schedule for work that should resume at a specific time. Report what happened,
-what remains and any exact blocker. Never claim an effect before its tool returns.`,
+Use a schedule for work that should resume at a specific time. Never claim an effect before
+its tool returns.`,
 };
