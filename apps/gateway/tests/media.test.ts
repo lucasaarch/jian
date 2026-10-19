@@ -252,15 +252,14 @@ it('issues one Gemini Live token restricted to the configured voice model', asyn
   expect(headers?.get('x-goog-api-key')).toBe('synthetic-google-key');
   expect(body).toMatchObject({
     uses: 1,
-    liveConnectConstraints: {
+    bidiGenerateContentSetup: {
       model: 'models/gemini-3.8-live',
-      config: {
-        responseModalities: ['AUDIO'],
-        inputAudioTranscription: {},
-        outputAudioTranscription: {},
-      },
+      generationConfig: { responseModalities: ['AUDIO'] },
+      inputAudioTranscription: {},
+      outputAudioTranscription: {},
     },
   });
+  expect(body).not.toHaveProperty('liveConnectConstraints');
   expect(token).toMatchObject({
     token: 'ephemeral-only',
     model: 'gemini-3.8-live',
