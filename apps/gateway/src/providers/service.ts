@@ -237,15 +237,13 @@ export class Providers {
         uses: 1,
         expireTime: new Date(now + 5 * 60_000).toISOString(),
         newSessionExpireTime: new Date(now + 60_000).toISOString(),
-        liveConnectConstraints: {
+        bidiGenerateContentSetup: {
           model: selection.modelId.startsWith('models/')
             ? selection.modelId
             : `models/${selection.modelId}`,
-          config: {
-            responseModalities: ['AUDIO'],
-            inputAudioTranscription: {},
-            outputAudioTranscription: {},
-          },
+          generationConfig: { responseModalities: ['AUDIO'] },
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
         },
       }),
     });
