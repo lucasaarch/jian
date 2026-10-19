@@ -22,6 +22,7 @@ export const mcpPresets: {
       headers: [],
       args: [],
       env: [],
+      disabledTools: [],
     },
   },
   {
@@ -36,6 +37,7 @@ export const mcpPresets: {
       command: 'npx',
       args: ['-y', '@modelcontextprotocol/server-github'],
       env: [{ name: 'GITHUB_PERSONAL_ACCESS_TOKEN', value: '' }],
+      disabledTools: [],
     },
   },
 ];
