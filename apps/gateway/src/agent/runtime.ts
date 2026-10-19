@@ -24,6 +24,7 @@ import { readModelDefaults } from '../providers/repository.js';
 import type { Providers } from '../providers/service.js';
 import { providerSecret } from '../providers/service.js';
 import { createSafeFetch } from '../security/outbound.js';
+import type { ObjectiveContinuation } from '../sessions/continuation.js';
 import {
   type CavemanMode,
   cavemanMode,
@@ -68,6 +69,7 @@ export type RuntimeServices = ToolServices & {
   web?: Pick<WebSearch, 'tools'>;
   learning?: Pick<Learning, 'consider'>;
   stickers?: Pick<Stickers, 'tools'>;
+  objectives?: Pick<ObjectiveContinuation, 'continueAfter'>;
 };
 
 /**
@@ -887,6 +889,17 @@ export class AgentRuntime {
 
       // Addressed only when the agent that asked gave up waiting; otherwise it already has it.
       await this.services.peers.deliverLate(profileId, runId).catch(() => {});
+
+      // Open objectives must not wait for the owner to say continue after a partial slice.
+      if (!learning) {
+        await this.services.objectives
+          ?.continueAfter(run)
+          .catch((error) =>
+            console.error(
+              `jian: run ${runId} could not continue its objective — ${describe(error)}`,
+            ),
+          );
+      }
 
       if (!learning) {
         await this.services.learning

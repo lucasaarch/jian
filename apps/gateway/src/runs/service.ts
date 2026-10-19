@@ -5,6 +5,7 @@ import {
   type Message,
   type ModelSelection,
   type Run,
+  type Session,
   submitSchema,
   TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
@@ -16,6 +17,12 @@ import type { ProfileReader } from '../profiles/port.js';
 import type { ModelFallback } from '../providers/fallback.js';
 import type { ProviderSelection } from '../providers/port.js';
 import { readModelDefaults, writeModelDefaults } from '../providers/repository.js';
+import {
+  type ObjectiveCommand,
+  objectiveAt,
+  parseObjectiveCommand,
+  shouldSeedObjective,
+} from '../sessions/objective.js';
 import type { SessionReader } from '../sessions/port.js';
 import {
   insertMessage,
@@ -23,6 +30,7 @@ import {
   parsePonytailMode,
   setCavemanMode,
   setPonytailMode,
+  setSessionObjective,
 } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
 import type { SubmitOptions } from './port.js';
@@ -114,6 +122,10 @@ export class Runs {
       options.ownerMessage && !parsed.mediaIds?.length ? parsePonytailMode(parsed.text) : undefined;
     const cavemanChange =
       options.ownerMessage && !parsed.mediaIds?.length ? parseCavemanMode(parsed.text) : undefined;
+    const objectiveCommand =
+      options.ownerMessage && !parsed.mediaIds?.length
+        ? parseObjectiveCommand(parsed.text)
+        : undefined;
     const data = {
       ...parsed,
       text: [parsed.text, ...(parsed.mediaIds ?? []).map(mediaMarker)].filter(Boolean).join('\n'),
@@ -177,6 +189,15 @@ export class Runs {
 
         if (modeChange) await setPonytailMode(tx, profileId, sessionId, modeChange);
         if (cavemanChange) await setCavemanMode(tx, profileId, sessionId, cavemanChange);
+        await this.applyObjectiveOnSubmit(
+          tx,
+          profileId,
+          sessionId,
+          session,
+          data.text,
+          objectiveCommand,
+          Boolean(options.ownerMessage) || activity === 'channel',
+        );
 
         await appendSteer(tx, inFlight.id, data.text);
 
@@ -264,6 +285,15 @@ export class Runs {
       await insertMessage(tx, message);
       if (modeChange) await setPonytailMode(tx, profileId, sessionId, modeChange);
       if (cavemanChange) await setCavemanMode(tx, profileId, sessionId, cavemanChange);
+      await this.applyObjectiveOnSubmit(
+        tx,
+        profileId,
+        sessionId,
+        session,
+        data.text,
+        objectiveCommand,
+        Boolean(options.ownerMessage) || activity === 'channel',
+      );
 
       await recordEvent(
         tx,
@@ -352,5 +382,79 @@ export class Runs {
 
       return final;
     });
+  }
+
+  /**
+   * Owner commands and auto-seed keep the session objective aligned with what the person asked.
+   * Panel owner messages and channel messages seed; synthetic follow-ups do not.
+   */
+  private async applyObjectiveOnSubmit(
+    tx: Queryable,
+    profileId: string,
+    sessionId: string,
+    session: Session,
+    text: string,
+    command: ObjectiveCommand | undefined,
+    fromPerson: boolean,
+  ) {
+    if (session.channel === TASK_SESSION_CHANNEL) return;
+    const at = nowIso(this.clock);
+    const current = session.objective;
+
+    if (command?.action === 'set') {
+      await setSessionObjective(
+        tx,
+        profileId,
+        sessionId,
+        objectiveAt(command.text, 'open', at, { continuations: 0 }),
+      );
+      return;
+    }
+    if (command?.action === 'done') {
+      if (!current?.text) return;
+      await setSessionObjective(
+        tx,
+        profileId,
+        sessionId,
+        objectiveAt(current.text, 'done', at, { continuations: current.continuations }),
+      );
+      return;
+    }
+    if (command?.action === 'cancel') {
+      if (!current?.text) return;
+      await setSessionObjective(
+        tx,
+        profileId,
+        sessionId,
+        objectiveAt(current.text, 'cancelled', at, { continuations: current.continuations }),
+      );
+      return;
+    }
+
+    if (!fromPerson) return;
+
+    if (current?.status === 'blocked') {
+      await setSessionObjective(
+        tx,
+        profileId,
+        sessionId,
+        objectiveAt(shouldSeedObjective(text) ? text : current.text, 'open', at, {
+          continuations: 0,
+        }),
+      );
+      return;
+    }
+
+    if (
+      (!current || current.status === 'done' || current.status === 'cancelled') &&
+      shouldSeedObjective(text)
+    ) {
+      await setSessionObjective(
+        tx,
+        profileId,
+        sessionId,
+        objectiveAt(text, 'open', at, { continuations: 0 }),
+      );
+    }
   }
 }
