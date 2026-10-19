@@ -14,24 +14,10 @@ export const resourceCalls = (client: Client) => ({
         params: { path: { profileId, keyId } },
       }),
     ),
-  work: (profileId: string) =>
-    result(client.GET('/v1/profiles/{profileId}/work', { params: profile(profileId) })),
   conversationSubagents: (profileId: string, sessionId: string) =>
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/subagents', {
         params: { path: { profileId, sessionId } },
-      }),
-    ),
-  workHistory: (profileId: string, workId: string) =>
-    result(
-      client.GET('/v1/profiles/{profileId}/work/{workId}/history', {
-        params: { path: { profileId, workId } },
-      }),
-    ),
-  workExecutions: (profileId: string, workId: string) =>
-    result(
-      client.GET('/v1/profiles/{profileId}/work/{workId}/executions', {
-        params: { path: { profileId, workId } },
       }),
     ),
   memories: (profileId: string) =>

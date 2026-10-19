@@ -31,12 +31,6 @@ The worker's report is evidence, not authority. Check the result and its transcr
 claiming completion. The conversation in the Jian panel shows each worker's status, messages
 and tool activity. Do not busy-poll.
 
-## Existing task cards
-
-\`list_tasks\` and \`list_task_subagents\` read cards from the previous work board. New
-work belongs in this conversation. Old cards remain read-only while assigned workers
-finish their handoff through their final report.
-
 ## Before acting outside the conversation
 
 \`list_activities\` shows queued and running work across the profile. Take a resource lease

@@ -66,10 +66,10 @@ Every administrative call needs `Authorization: Bearer <JIAN_API_TOKEN>`, includ
 [`packages/contracts/openapi.json`](../packages/contracts/openapi.json).
 
 1. Create a profile with `POST /v1/profiles`, passing `name` and `instructions`.
-2. Configure `ANTHROPIC_API_KEY` or `ANTHROPIC_API_TOKEN`, `GEMINI_API_TOKEN`, or
-   `OPENAI_API_KEY` in the gateway environment, or enter a key on the Providers screen.
-   OpenAI also accepts a ChatGPT/Codex login there. No provider registration or model
-   allowlist is required.
+2. Configure `ANTHROPIC_API_KEY` or `ANTHROPIC_API_TOKEN`, `GEMINI_API_TOKEN`,
+   `OPENAI_API_KEY`, or `XAI_API_KEY` in the gateway environment, or enter a key on the
+   Providers screen. OpenAI also accepts a ChatGPT/Codex login there. No provider
+   registration or model allowlist is required.
 3. Read what that account can call with
    `GET /v1/profiles/{profileId}/providers/{providerId}/models`, then pick a model per
    role with `PUT /v1/profiles/{profileId}/model-defaults`. `conversation` is what a run
@@ -81,18 +81,19 @@ Every administrative call needs `Authorization: Bearer <JIAN_API_TOKEN>`, includ
 The host token is the only API credential and it opens the whole installation. Keep it on
 the host and on devices you trust; there are no scoped client keys.
 
-The Providers screen has fixed Anthropic, Gemini and OpenAI settings. It detects
-`ANTHROPIC_API_KEY`, `ANTHROPIC_API_TOKEN`, `GEMINI_API_TOKEN` and `OPENAI_API_KEY`
-from the gateway environment without exposing their values. OpenAI also supports
-ChatGPT/Codex device-code login. Existing profile records with `model`, `apiKeyEnv` or
-`openai-compatible` remain compatible. The context policy still bounds history and memory.
+The Providers screen has fixed Anthropic, Gemini, OpenAI and xAI settings. It detects
+`ANTHROPIC_API_KEY`, `ANTHROPIC_API_TOKEN`, `GEMINI_API_TOKEN`, `OPENAI_API_KEY` and
+`XAI_API_KEY` from the gateway environment without exposing their values. OpenAI also
+supports ChatGPT/Codex device-code login. Existing profile records with `model`,
+`apiKeyEnv` or `openai-compatible` remain compatible. The context policy still bounds
+history and memory.
 
 Which models a connection offers comes from the provider: the gateway calls
-`/v1/models` (OpenAI), `/v1/models` (Anthropic) and `/v1beta/models` (Gemini) with the
-stored key, through the same guarded outbound client as every other provider call,
-and caches each answer for a minute. A provider that does not answer is reported with
-`stale: true` alongside the last list it did return — the saved providers and model
-defaults are never touched, and no list is ever substituted from this repository.
+`/v1/models` (OpenAI, Anthropic, xAI) and `/v1beta/models` (Gemini) with the stored key,
+through the same guarded outbound client as every other provider call, and caches each
+answer for a minute. A provider that does not answer is reported with `stale: true`
+alongside the last list it did return — the saved providers and model defaults are never
+touched, and no list is ever substituted from this repository.
 
 What each model can do is not in those answers. Context window, output ceiling, accepted
 reasoning efforts and input modalities come from the versioned table in

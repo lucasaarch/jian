@@ -113,6 +113,37 @@ it('adds Groq with a key, a server with an address, and routes both through the 
   expect(supportsModelRole(whisper, model('Systran/faster-whisper-small'), 'audio')).toBe(true);
 });
 
+it('adds xAI with a key and routes Grok through the OpenAI API at xAI', async () => {
+  const services = await testServices();
+
+  await expect(services.providers.createProvider({ name: 'xAI', kind: 'xai' })).rejects.toThrow(
+    'API key',
+  );
+
+  const xai = await services.providers.createProvider({
+    name: 'xAI',
+    kind: 'xai',
+    secret: 'xai_synthetic',
+  });
+
+  const viaXai = await services.providers.selectedModel(
+    { providerId: xai.id, modelId: 'grok-4' },
+    services.store.db,
+  );
+
+  expect(viaXai.config).toMatchObject({
+    provider: 'openai-compatible',
+    baseURL: 'https://api.x.ai/v1',
+    providerId: xai.id,
+    modelId: 'grok-4',
+  });
+
+  const model = (id: string) => ({ id, inputModalities: [], outputModalities: [], known: false });
+
+  expect(supportsModelRole(xai, model('grok-4'), 'conversation')).toBe(true);
+  expect(supportsModelRole(xai, model('grok-4'), 'audio')).toBe(false);
+});
+
 it('says what the provider refused, with its key masked', async () => {
   const client = new MediaProviders(
     async () =>

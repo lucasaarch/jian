@@ -20,7 +20,7 @@ import { GATEWAY_SCOPE, type GatewayVault } from '../security/gateway-vault.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { profiles } from '../storage/schema.js';
 import { modelCapabilities } from './capabilities.js';
-import { environmentProvider, GROQ_BASE_URL, providerKinds } from './catalog.js';
+import { environmentProvider, GROQ_BASE_URL, providerKinds, XAI_BASE_URL } from './catalog.js';
 import type { ModelCatalog } from './catalog-source.js';
 import { anthropicCredential } from './claude-subscription.js';
 import {
@@ -286,11 +286,18 @@ export class Providers {
     // Ceilings, not targets: a large context window must not inflate routine memory/history.
     return {
       config: {
-        // Groq and a server the owner runs both speak the OpenAI API at their own address.
-        ...(provider.kind === 'groq' || provider.kind === 'openai-compatible'
+        // Groq, xAI and a server the owner runs all speak the OpenAI API at their own address.
+        ...(provider.kind === 'groq' ||
+        provider.kind === 'xai' ||
+        provider.kind === 'openai-compatible'
           ? {
               provider: 'openai-compatible' as const,
-              baseURL: provider.kind === 'groq' ? GROQ_BASE_URL : (provider.baseURL ?? ''),
+              baseURL:
+                provider.kind === 'groq'
+                  ? GROQ_BASE_URL
+                  : provider.kind === 'xai'
+                    ? XAI_BASE_URL
+                    : (provider.baseURL ?? ''),
             }
           : {
               provider: provider.authMode === 'codex' ? ('openai-codex' as const) : provider.kind,

@@ -18,7 +18,6 @@ export type SubmitOptions = {
   group?: GroupTurn;
   /** Who wrote the message, when the conversation is a room with several people in it. */
   author?: { id: string; name?: string };
-  workItemId?: string;
   subagent?: Subagent;
   transaction?: Queryable;
 };

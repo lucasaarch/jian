@@ -9,7 +9,7 @@ import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
 import { bareModelId, modelCapabilities } from './capabilities.js';
-import { GROQ_BASE_URL, type ProviderKind } from './catalog.js';
+import { GROQ_BASE_URL, type ProviderKind, XAI_BASE_URL } from './catalog.js';
 import type { ModelCatalog } from './catalog-source.js';
 import {
   anthropicCredential,
@@ -27,6 +27,7 @@ const endpoints: Record<Exclude<ProviderKind, 'openai-compatible'>, string> = {
   google: 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000',
   openrouter: 'https://openrouter.ai/api/v1/models',
   groq: `${GROQ_BASE_URL}/models`,
+  xai: `${XAI_BASE_URL}/models`,
 };
 
 /** A server the owner runs lists its models where the OpenAI API does, under its address. */
@@ -267,6 +268,7 @@ export class ProviderModels {
       provider.kind === 'openai' ||
       provider.kind === 'openrouter' ||
       provider.kind === 'groq' ||
+      provider.kind === 'xai' ||
       (provider.kind === 'openai-compatible' && Boolean(key)) ||
       (provider.kind === 'anthropic' &&
         anthropicCredential(provider.credential, provider.apiKeyEnv, key) === 'subscription');

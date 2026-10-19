@@ -39,6 +39,13 @@ export const providers = [
     variables: 'GROQ_API_KEY',
   },
   {
+    kind: 'xai',
+    name: 'xAI',
+    description: 'Grok models from xAI.',
+    symbol: 'X',
+    variables: 'XAI_API_KEY',
+  },
+  {
     kind: 'openai-compatible',
     name: 'OpenAI-compatible server',
     description: 'A server you run that speaks the OpenAI API, such as a local Whisper.',

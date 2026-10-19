@@ -11,7 +11,6 @@ import ProvidersPage from '../../app/(workspace)/providers/page';
 import SessionsPage from '../../app/(workspace)/sessions/page';
 import SkillsPage from '../../app/(workspace)/skills/page';
 import SshKeysPage from '../../app/(workspace)/ssh-keys/page';
-import WorkPage from '../../app/(workspace)/tasks/page';
 import { emptyHandlers, outdatedHandlers, updatedHandlers } from '../handlers';
 
 /**
@@ -37,7 +36,6 @@ const page = (Page: ComponentType, pathname: string): Story => ({
 
 export const Overview = page(OverviewPage, '/');
 export const Chats = page(SessionsPage, '/sessions');
-export const Work = page(WorkPage, '/tasks');
 export const Identity = page(IdentityPage, '/identity');
 export const Models = page(ModelsPage, '/models');
 export const Providers = page(ProvidersPage, '/providers');

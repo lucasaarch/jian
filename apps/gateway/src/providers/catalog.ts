@@ -30,6 +30,11 @@ export const providerCatalog = {
     name: 'Groq',
     env: ['GROQ_API_KEY'],
   },
+  // Grok models behind the OpenAI API at xAI's address.
+  xai: {
+    name: 'xAI',
+    env: ['XAI_API_KEY'],
+  },
   // A server the owner points at — a local Whisper, for one. It has an address, not a vendor,
   // so the environment has no key to offer for it.
   'openai-compatible': {
@@ -40,6 +45,7 @@ export const providerCatalog = {
 
 /** Where the OpenAI API of a vendor that speaks it lives. */
 export const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
+export const XAI_BASE_URL = 'https://api.x.ai/v1';
 
 export type ProviderKind = keyof typeof providerCatalog;
 

@@ -108,15 +108,7 @@ export class Runs {
   }
 
   async submit(profileId: string, sessionId: string, input: unknown, options: SubmitOptions = {}) {
-    const {
-      continuationOf,
-      activity = 'conversation',
-      call,
-      group,
-      author,
-      workItemId,
-      subagent,
-    } = options;
+    const { continuationOf, activity = 'conversation', call, group, author, subagent } = options;
     const parsed = submitSchema.parse(input);
     const modeChange =
       options.ownerMessage && !parsed.mediaIds?.length ? parsePonytailMode(parsed.text) : undefined;
@@ -235,7 +227,6 @@ export class Runs {
         id: randomUUID(),
         profileId,
         sessionId,
-        ...(workItemId ? { workItemId } : {}),
         ...(subagent ? { subagent } : {}),
         requestKey: data.requestKey,
         input: data.text,
