@@ -67,12 +67,15 @@ describe('the policy the panel is served with', () => {
     expect(policy).toContain("object-src 'self' blob:");
   });
 
-  it('lets videos and voice notes play from the data addresses the panel builds', async () => {
+  it('allows Gemini Live WebSocket connections without opening other remote origins', async () => {
     const { app } = await serve('window.__jian = 1');
 
     const response = await app.inject({ method: 'GET', url: '/ui/' });
+    const policy = String(response.headers['content-security-policy']);
 
-    expect(String(response.headers['content-security-policy'])).toContain("media-src 'self' data:");
+    expect(policy).toContain("connect-src 'self' wss://generativelanguage.googleapis.com");
+    expect(policy).not.toContain('wss://example.com');
+    expect(policy).toContain("media-src 'self' data:");
   });
 
   it('follows a rebuild under a running gateway instead of blocking the new page', async () => {
