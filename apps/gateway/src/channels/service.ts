@@ -1338,6 +1338,7 @@ export class Channels {
       let commentary: string[] = [];
       // What the room received from the agent itself, not a failure notice the gateway wrote.
       let spoken = Boolean(delivery.notice);
+      let poll: { question: string; options: string[] } | undefined;
 
       if (delivery.runId) {
         const run = await this.services.runs.run(delivery.profileId, delivery.runId);
@@ -1354,14 +1355,26 @@ export class Channels {
           continue;
         }
 
-        // The reason the gateway stored is already redacted and one line: saying it here is what
-        // lets someone on a phone understand what went wrong without the gateway's log.
-        text =
-          run.output ??
-          (run.error
-            ? `⚠️ I could not finish this.\n\n${run.error}`
-            : '⚠️ I could not finish this, and no reason was recorded.');
-        spoken = run.output !== undefined;
+        if (run.status === 'waiting') {
+          // Flush earlier commentary, then send the question once and close this delivery.
+          // The resume run gets its own delivery after the owner answers.
+          await this.saySoFar(delivery, commentary);
+          text = run.output ?? run.question?.prompt ?? '';
+          spoken = Boolean(text);
+          if (run.question?.choices?.length) {
+            poll = { question: run.question.prompt, options: run.question.choices };
+          }
+          if (!text) continue;
+        } else {
+          // The reason the gateway stored is already redacted and one line: saying it here is what
+          // lets someone on a phone understand what went wrong without the gateway's log.
+          text =
+            run.output ??
+            (run.error
+              ? `⚠️ I could not finish this.\n\n${run.error}`
+              : '⚠️ I could not finish this, and no reason was recorded.');
+          spoken = run.output !== undefined;
+        }
       }
 
       const channel = await findChannel(this.services.store.db, delivery.channelId);
@@ -1391,7 +1404,7 @@ export class Channels {
         continue;
       }
 
-      const outcome = await this.deliver(delivery, text);
+      const outcome = await this.deliver(delivery, text, poll);
 
       await this.services.store.transaction(delivery.profileId, async (tx) => {
         const current = assertFound(await findDelivery(tx, delivery.id), 'Delivery');
@@ -1560,7 +1573,11 @@ export class Channels {
     });
   }
 
-  private async deliver(delivery: DeliveryRecord, text: string): Promise<DeliveryOutcome> {
+  private async deliver(
+    delivery: DeliveryRecord,
+    text: string,
+    poll?: { question: string; options: string[] },
+  ): Promise<DeliveryOutcome> {
     let attemptedSend = false;
 
     try {
@@ -1634,7 +1651,13 @@ export class Channels {
         }
 
         const outcome = await adapter.send(
-          { chatId: delivery.chatId, text: part, people },
+          {
+            chatId: delivery.chatId,
+            text: part,
+            people,
+            // Attach choices only on the first chunk so Telegram shows one reply keyboard.
+            ...(index === 0 && poll ? { poll } : {}),
+          },
           context,
         );
 

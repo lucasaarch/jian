@@ -281,6 +281,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/profiles/{profileId}/runs/{runId}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["answerRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/channels": {
         parameters: {
             query?: never;
@@ -4827,7 +4844,7 @@ export interface operations {
                         requestKey: string;
                         input: string;
                         /** @enum {string} */
-                        status: "queued" | "running" | "completed" | "failed" | "interrupted" | "cancelled";
+                        status: "queued" | "running" | "waiting" | "completed" | "failed" | "interrupted" | "cancelled";
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -4915,6 +4932,260 @@ export interface operations {
                         commentary?: string[];
                         /** Format: uuid */
                         relayTo?: string;
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            /** Format: date-time */
+                            askedAt: string;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    answerRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    text: string;
+                    requestKey?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        /** Format: uuid */
+                        sessionId: string;
+                        subagent?: {
+                            /** @enum {string} */
+                            role: "execute" | "review";
+                            name: string;
+                            identity: string;
+                            /** Format: uuid */
+                            parentRunId: string;
+                            spawnKey: string;
+                            inputHash: string;
+                            repositories?: string[];
+                        };
+                        requestKey: string;
+                        input: string;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "waiting" | "completed" | "failed" | "interrupted" | "cancelled";
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        error?: string;
+                        output?: string;
+                        usage?: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            /** @default 0 */
+                            cachedInputTokens: number;
+                            /** @default false */
+                            estimated: boolean;
+                            steps: number;
+                        };
+                        /** Format: uuid */
+                        continuationOf?: string;
+                        model?: {
+                            /** @enum {string} */
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            modelId: string;
+                            apiKeyEnv?: string;
+                            /** Format: uuid */
+                            providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
+                            /** Format: uri */
+                            baseURL?: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        };
+                        modelSelection?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        };
+                        contextPolicy?: {
+                            /** @default 32000 */
+                            inputTokens: number;
+                            /** @default 4096 */
+                            outputTokens: number;
+                            /** @default 1500 */
+                            memoryTokens: number;
+                            /** @default 6000 */
+                            historyTokens: number;
+                            /** @default 1500 */
+                            toolResultTokens: number;
+                            /** @default 500 */
+                            maxSteps: number;
+                            maxRunTokens?: number;
+                        };
+                        call?: {
+                            /** Format: uuid */
+                            fromProfileId: string;
+                            fromName: string;
+                            /** Format: uuid */
+                            fromRunId: string;
+                            /** Format: uuid */
+                            fromSessionId?: string;
+                            depth: number;
+                            chain: string[];
+                        };
+                        group?: {
+                            chatId: string;
+                            name?: string;
+                            fromName: string;
+                            fromAgent: boolean;
+                            turns: number;
+                            /** @default [] */
+                            agents: string[];
+                        };
+                        progress?: {
+                            /** @enum {string} */
+                            phase: "thinking" | "tool" | "writing";
+                            tool?: string;
+                            /** @default  */
+                            text: string;
+                            /** @default 0 */
+                            steps: number;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        };
+                        commentary?: string[];
+                        /** Format: uuid */
+                        relayTo?: string;
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            /** Format: date-time */
+                            askedAt: string;
+                        };
                     };
                 };
             };
@@ -12533,7 +12804,7 @@ export interface operations {
                         requestKey: string;
                         input: string;
                         /** @enum {string} */
-                        status: "queued" | "running" | "completed" | "failed" | "interrupted" | "cancelled";
+                        status: "queued" | "running" | "waiting" | "completed" | "failed" | "interrupted" | "cancelled";
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -12621,6 +12892,14 @@ export interface operations {
                         commentary?: string[];
                         /** Format: uuid */
                         relayTo?: string;
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            /** Format: date-time */
+                            askedAt: string;
+                        };
                     };
                 };
             };
@@ -14158,7 +14437,7 @@ export interface operations {
                         requestKey: string;
                         input: string;
                         /** @enum {string} */
-                        status: "queued" | "running" | "completed" | "failed" | "interrupted" | "cancelled";
+                        status: "queued" | "running" | "waiting" | "completed" | "failed" | "interrupted" | "cancelled";
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -14246,6 +14525,14 @@ export interface operations {
                         commentary?: string[];
                         /** Format: uuid */
                         relayTo?: string;
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            /** Format: date-time */
+                            askedAt: string;
+                        };
                     };
                 };
             };
@@ -15928,7 +16215,7 @@ export interface operations {
                         requestKey: string;
                         input: string;
                         /** @enum {string} */
-                        status: "queued" | "running" | "completed" | "failed" | "interrupted" | "cancelled";
+                        status: "queued" | "running" | "waiting" | "completed" | "failed" | "interrupted" | "cancelled";
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -16016,6 +16303,14 @@ export interface operations {
                         commentary?: string[];
                         /** Format: uuid */
                         relayTo?: string;
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            /** Format: date-time */
+                            askedAt: string;
+                        };
                     }[];
                 };
             };
@@ -16159,7 +16454,7 @@ export interface operations {
                         requestKey: string;
                         input: string;
                         /** @enum {string} */
-                        status: "queued" | "running" | "completed" | "failed" | "interrupted" | "cancelled";
+                        status: "queued" | "running" | "waiting" | "completed" | "failed" | "interrupted" | "cancelled";
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -16247,6 +16542,14 @@ export interface operations {
                         commentary?: string[];
                         /** Format: uuid */
                         relayTo?: string;
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            /** Format: date-time */
+                            askedAt: string;
+                        };
                     };
                 };
             };
@@ -16390,7 +16693,7 @@ export interface operations {
                         requestKey: string;
                         input: string;
                         /** @enum {string} */
-                        status: "queued" | "running" | "completed" | "failed" | "interrupted" | "cancelled";
+                        status: "queued" | "running" | "waiting" | "completed" | "failed" | "interrupted" | "cancelled";
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -16478,6 +16781,14 @@ export interface operations {
                         commentary?: string[];
                         /** Format: uuid */
                         relayTo?: string;
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            /** Format: date-time */
+                            askedAt: string;
+                        };
                     };
                 };
             };

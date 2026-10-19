@@ -356,11 +356,22 @@ export function Sessions({
               .filter((run) => run.sessionId === active.id)
               .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
               .at(-1)}
+            onAnswered={() => {
+              setSent((value) => value + 1);
+              void refresh();
+            }}
           />
           {isGateway(active) && (
             <Composer
               key={`composer-${active.id}`}
               name={profile.name}
+              placeholder={
+                data.activities.some(
+                  (run) => run.sessionId === active.id && run.status === 'waiting',
+                )
+                  ? 'Answer to continue…'
+                  : undefined
+              }
               upload={(file) => api.upload(profile.id, active.id, file)}
               send={(text, mediaIds) => api.send(profile.id, active.id, text, mediaIds)}
               onSent={() => {

@@ -129,6 +129,24 @@ export const runProgressSchema = z.strictObject({
   updatedAt: timestamp,
 });
 
+/**
+ * A structured owner question that parked this run as `waiting`. Cleared when the run leaves
+ * that status. Choices are optional; when present, channels prefer native polls and the panel
+ * shows buttons.
+ */
+export const runQuestionSchema = z.strictObject({
+  id: uuid,
+  prompt: z.string().trim().min(1).max(2000),
+  choices: z.array(z.string().trim().min(1).max(100)).min(2).max(12).optional(),
+  askedAt: timestamp,
+});
+
+/** Owner answer to a waiting run's question. */
+export const runAnswerSchema = z.strictObject({
+  text: z.string().trim().min(1).max(8_000),
+  requestKey: z.string().min(1).max(120).optional(),
+});
+
 export const runRecordSchema = z.strictObject({
   id: uuid,
   profileId: uuid,
@@ -136,7 +154,15 @@ export const runRecordSchema = z.strictObject({
   subagent: subagentSchema.optional(),
   requestKey: z.string(),
   input: z.string(),
-  status: z.enum(['queued', 'running', 'completed', 'failed', 'interrupted', 'cancelled']),
+  status: z.enum([
+    'queued',
+    'running',
+    'waiting',
+    'completed',
+    'failed',
+    'interrupted',
+    'cancelled',
+  ]),
   createdAt: timestamp,
   updatedAt: timestamp,
   error: z.string().optional(),
@@ -159,6 +185,8 @@ export const runRecordSchema = z.strictObject({
   commentary: z.array(z.string().max(4000)).max(20).optional(),
   /** Set when the agent that asked stopped waiting: where its late answer is to be carried. */
   relayTo: uuid.optional(),
+  /** Present while status is `waiting`: the owner question that parked this run. */
+  question: runQuestionSchema.optional(),
 });
 
 /**
@@ -297,6 +325,10 @@ export type Person = z.infer<typeof personSchema>;
 export type Memory = z.infer<typeof memoryRecordSchema>;
 
 export type RunProgress = z.infer<typeof runProgressSchema>;
+
+export type RunQuestion = z.infer<typeof runQuestionSchema>;
+
+export type RunAnswer = z.infer<typeof runAnswerSchema>;
 
 export type Run = z.infer<typeof runRecordSchema> & {
   profile: Profile;

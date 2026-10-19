@@ -38,11 +38,13 @@ export function Composer({
   upload,
   send,
   onSent,
+  placeholder,
 }: {
   name: string;
   upload: (file: MediaUpload) => Promise<{ id: string }>;
   send: (text: string, mediaIds: string[]) => Promise<unknown>;
   onSent: () => void;
+  placeholder?: string;
 }) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -246,7 +248,7 @@ export function Composer({
         ) : (
           <textarea
             aria-label={`Message to ${name}`}
-            placeholder={`Message ${name}`}
+            placeholder={placeholder ?? `Message ${name}`}
             rows={1}
             maxLength={8000}
             value={text}

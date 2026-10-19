@@ -5,10 +5,12 @@ import {
   type Message,
   type ModelSelection,
   type Run,
+  runAnswerSchema,
   type Session,
   submitSchema,
   TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
+import { resumePrompt } from '../agent/ask-user.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError, NoModelAvailable } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -41,6 +43,7 @@ import {
   findActiveSessionRun,
   findRun,
   findRunByRequestKey,
+  findWaitingSessionRun,
   insertRun,
   listActiveRuns,
   listRecentRuns,
@@ -53,7 +56,15 @@ const ACTIVE_RUN_LIMIT = 32;
 
 const active = (run: Run) => run.status === 'running' || run.status === 'queued';
 
+const cancellable = (run: Run) => active(run) || run.status === 'waiting';
+
+type RunDeliveries = {
+  deliverRun(profileId: string, sessionId: string, runId: string): Promise<void>;
+};
+
 export class Runs {
+  private deliveries?: RunDeliveries;
+
   constructor(
     private readonly store: Store,
     private readonly profiles: ProfileReader,
@@ -71,6 +82,11 @@ export class Runs {
 
   useFallback(fallback: Pick<ModelFallback, 'pick'>): void {
     this.fallback = fallback;
+  }
+
+  /** Channel sessions need a delivery hung on resume runs that did not arrive through ingress. */
+  useDeliveries(deliveries: RunDeliveries): void {
+    this.deliveries = deliveries;
   }
 
   /**
@@ -167,6 +183,38 @@ export class Runs {
 
       if (duplicate) {
         return this.sameRequest(duplicate, data.text, data.model);
+      }
+
+      const waiting = await findWaitingSessionRun(tx, profileId, sessionId);
+
+      // Answering a mid-run question resumes work; it is not a steer and not a bare "continue".
+      if (waiting?.question) {
+        const resumeKey = `ask-answer:${waiting.id}`;
+        const answered = await findRunByRequestKey(tx, profileId, sessionId, resumeKey);
+        if (answered) return this.sameRequest(answered, data.text, data.model);
+
+        if (modeChange) await setPonytailMode(tx, profileId, sessionId, modeChange);
+        if (cavemanChange) await setCavemanMode(tx, profileId, sessionId, cavemanChange);
+        await this.applyObjectiveOnSubmit(
+          tx,
+          profileId,
+          sessionId,
+          session,
+          data.text,
+          objectiveCommand,
+          Boolean(options.ownerMessage) || activity === 'channel',
+        );
+        return this.resumeWaiting(
+          tx,
+          profileId,
+          session,
+          waiting,
+          data.text,
+          resumeKey,
+          data.mediaIds,
+          author,
+          activity,
+        );
       }
 
       const inFlight = await findActiveSessionRun(tx, profileId, sessionId);
@@ -360,12 +408,57 @@ export class Runs {
     );
   }
 
+  /**
+   * Explicit answer to a waiting run. Session submit also answers when a waiting run is open;
+   * this path names the run so the panel can target it.
+   */
+  async answerRun(profileId: string, runId: string, input: unknown) {
+    const data = runAnswerSchema.parse(input);
+    const waiting = await this.run(profileId, runId);
+    if (waiting.status !== 'waiting' || !waiting.question) {
+      throw new GatewayError(409, 'That run is not waiting for an answer');
+    }
+    if (waiting.subagent) throw new GatewayError(403, 'Subagents are managed by the agent');
+
+    const session = await this.sessions.session(profileId, waiting.sessionId);
+    const resume = await this.store.transaction(profileId, async (tx) => {
+      const requestKey = data.requestKey ?? `ask-answer:${waiting.id}`;
+      const duplicate = await findRunByRequestKey(tx, profileId, waiting.sessionId, requestKey);
+      if (duplicate) return this.sameRequest(duplicate, data.text);
+
+      const fresh = await findRun(tx, profileId, runId);
+      if (fresh?.status !== 'waiting' || !fresh.question) {
+        throw new GatewayError(409, 'That run is not waiting for an answer');
+      }
+
+      return this.resumeWaiting(
+        tx,
+        profileId,
+        session,
+        fresh,
+        data.text,
+        requestKey,
+        undefined,
+        undefined,
+        session.channel === 'gateway' || session.channel === 'learning'
+          ? 'conversation'
+          : 'channel',
+      );
+    });
+
+    if (session.channel !== 'gateway' && session.channel !== 'learning') {
+      await this.deliveries?.deliverRun(profileId, resume.sessionId, resume.id);
+    }
+
+    return resume;
+  }
+
   async cancel(profileId: string, runId: string) {
     return this.store.transaction(profileId, async (tx) => {
       const run = await this.run(profileId, runId, tx);
       if (run.subagent) throw new GatewayError(403, 'Subagents are managed by the agent');
 
-      if (!active(run)) {
+      if (!cancellable(run)) {
         return run;
       }
 
@@ -375,6 +468,7 @@ export class Runs {
         updatedAt: nowIso(this.clock),
         leaseOwner: undefined,
         leaseUntil: undefined,
+        question: undefined,
       };
 
       await updateRun(tx, final);
@@ -382,6 +476,126 @@ export class Runs {
 
       return final;
     });
+  }
+
+  /**
+   * Closes the waiting run and queues a resume turn whose input carries question + answer.
+   * Must run inside the caller's profile transaction.
+   */
+  private async resumeWaiting(
+    tx: Queryable,
+    profileId: string,
+    session: Session,
+    waiting: Run,
+    answer: string,
+    requestKey: string,
+    mediaIds: string[] | undefined,
+    author: Message['author'] | undefined,
+    activity: 'conversation' | 'channel',
+  ): Promise<Run> {
+    const question = waiting.question;
+    if (!question) throw new GatewayError(409, 'That run is not waiting for an answer');
+
+    const closed: Run = {
+      ...waiting,
+      status: 'completed',
+      updatedAt: nowIso(this.clock),
+      question: undefined,
+      // Keep the question text as the parked run's output; delivery already sent it.
+      output: waiting.output,
+    };
+    await updateRun(tx, closed);
+    await recordEvent(tx, this.clock, profileId, 'run.answered', { answer }, waiting.id);
+
+    await insertMessage(tx, {
+      id: randomUUID(),
+      profileId,
+      sessionId: waiting.sessionId,
+      runId: waiting.id,
+      role: 'user',
+      content: answer,
+      ...(author ? { author } : {}),
+      createdAt: nowIso(this.clock),
+    });
+
+    // Nested submit would open another transaction; build the resume run here instead.
+    // Model fallback was resolved before the outer transaction when possible; here reuse the
+    // waiting run's frozen model so the resume stays on the same choice.
+    const profile = waiting.profile;
+    const defaults = await readModelDefaults(tx, profileId, nowIso(this.clock));
+    const candidates = [
+      waiting.modelSelection,
+      session.model,
+      defaults[activity] ?? defaults.conversation,
+    ];
+    let selection: ModelSelection | null = null;
+    let chosen: Awaited<ReturnType<typeof this.providers.selectedModel>> | null = null;
+
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      try {
+        chosen = await this.providers.selectedModel(candidate, tx);
+        selection = candidate;
+        break;
+      } catch {
+        // try next
+      }
+    }
+    if (!chosen && waiting.model && waiting.contextPolicy) {
+      chosen = { config: waiting.model, policy: waiting.contextPolicy };
+      selection = waiting.modelSelection ?? null;
+    }
+    if (!chosen && !profile.model.apiKeyEnv && !profile.model.providerId) {
+      throw new NoModelAvailable();
+    }
+
+    if ((await countActiveRuns(tx, profileId)) >= ACTIVE_RUN_LIMIT) {
+      throw new GatewayError(429, 'Profile run limit reached');
+    }
+
+    const text = resumePrompt(question, answer);
+    const run: Run = {
+      id: randomUUID(),
+      profileId,
+      sessionId: waiting.sessionId,
+      requestKey,
+      input: text,
+      profile,
+      ...(chosen ? { model: chosen.config, contextPolicy: chosen.policy } : {}),
+      ...(selection ? { modelSelection: selection } : {}),
+      ...(waiting.call ? { call: waiting.call } : {}),
+      ...(waiting.group ? { group: waiting.group } : {}),
+      status: 'queued',
+      continuationOf: waiting.id,
+      createdAt: nowIso(this.clock),
+      updatedAt: nowIso(this.clock),
+    };
+
+    const collided = await insertRun(tx, run);
+    if (collided) return this.sameRequest(collided, text);
+
+    await bindMedia(tx, profileId, waiting.sessionId, mediaIds ?? [], run.id);
+
+    await insertMessage(tx, {
+      id: randomUUID(),
+      profileId,
+      sessionId: waiting.sessionId,
+      runId: run.id,
+      role: 'user',
+      content: text,
+      createdAt: nowIso(this.clock),
+    });
+
+    await recordEvent(
+      tx,
+      this.clock,
+      profileId,
+      'run.queued',
+      { sessionId: waiting.sessionId, input: text, resumedFrom: waiting.id },
+      run.id,
+    );
+
+    return run;
   }
 
   /**

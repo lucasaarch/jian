@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Checkpoint, Message, Run, RunProgress } from '@jian/contracts';
+import type { Checkpoint, Message, Run, RunProgress, RunQuestion } from '@jian/contracts';
+import { formatQuestionText } from '../agent/ask-user.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -178,6 +179,47 @@ export class RunLifecycle {
     });
   }
 
+  /**
+   * Parks the run on an owner question. The lease is released so recover() cannot interrupt
+   * parked work. The question is written once to commentary and history for the panel and
+   * channels; delivery treats `waiting` as the moment to send it and close that delivery.
+   */
+  async wait(profileId: string, runId: string, owner: string, question: RunQuestion) {
+    return this.store.transaction(profileId, async (tx) => {
+      const run = await this.runs.run(profileId, runId, tx);
+
+      assertOwned(run, owner, this.clock);
+
+      const text = formatQuestionText(question);
+      const waiting: Run = {
+        ...run,
+        status: 'waiting',
+        question,
+        output: text,
+        updatedAt: nowIso(this.clock),
+        leaseOwner: undefined,
+        leaseUntil: undefined,
+        progress: undefined,
+      };
+
+      await updateRun(tx, waiting);
+
+      await insertMessage(tx, {
+        id: randomUUID(),
+        profileId,
+        sessionId: run.sessionId,
+        runId,
+        role: 'assistant',
+        content: text,
+        createdAt: nowIso(this.clock),
+      });
+
+      await recordEvent(tx, this.clock, profileId, 'run.waiting', { question }, runId);
+
+      return waiting;
+    });
+  }
+
   async finish(
     profileId: string,
     runId: string,
@@ -198,6 +240,7 @@ export class RunLifecycle {
         leaseUntil: undefined,
         // The answer is the message now; a half-written preview must not outlive the run.
         progress: undefined,
+        question: undefined,
         ...(status === 'completed' ? { output: content } : { error: content }),
       };
 

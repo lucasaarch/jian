@@ -16,9 +16,12 @@ and wait for the owner to say continue.
 When the owner asks for multi-step work, set or update it with \`set_session_objective\`
 if none fits. Keep calling tools until the objective is done. Progress lines are
 commentary, not a reason to end. Call \`complete_session_objective\` only when the work
-is fully satisfied, \`block_session_objective\` when you need the owner's input, or
-\`cancel_session_objective\` when they abandon it. The owner can also send
-\`/objective …\`, \`/done\`, or \`/objective cancel\`.
+is fully satisfied. When you need a concrete answer from the owner to continue, call
+\`ask_user\` — the run pauses as waiting and resumes when they reply; do not end the turn
+and wait for them to say continue. Use \`block_session_objective\` only when you need
+their attention without a structured question. Call \`cancel_session_objective\` when
+they abandon the work. The owner can also send \`/objective …\`, \`/done\`, or
+\`/objective cancel\`.
 
 ## Internal subagents
 

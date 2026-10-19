@@ -351,6 +351,13 @@
       "when": 1790894000000,
       "tag": "0049_session-objective",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790898000000,
+      "tag": "0050_run-waiting",
+      "breakpoints": true
     }
   ]
 }

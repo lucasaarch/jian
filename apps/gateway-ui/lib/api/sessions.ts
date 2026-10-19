@@ -66,6 +66,13 @@ export const sessionCalls = (client: Client) => ({
         params: { path: { profileId, runId } },
       }),
     ),
+  answerRun: (profileId: string, runId: string, text: string) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/runs/{runId}/answer', {
+        params: { path: { profileId, runId } },
+        body: { text, requestKey: crypto.randomUUID() },
+      }),
+    ),
   activityCalendar: (profileId: string, zone: string) =>
     result(
       client.GET('/v1/profiles/{profileId}/activity', {
