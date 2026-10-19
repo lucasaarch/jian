@@ -268,6 +268,35 @@ it('issues one Gemini Live token restricted to the configured voice model', asyn
   });
 });
 
+it('preserves Gemini token issuance error status and message for diagnosis', async () => {
+  const f = await mediaFixture();
+  const provider = await f.services.providers.createProvider({
+    name: 'Google voice',
+    kind: 'google',
+    secret: 'synthetic-google-key',
+  });
+  await f.services.providers.setModelDefaults(f.profile.id, {
+    voice: { providerId: provider.id, modelId: 'gemini-3.8-live' },
+  });
+
+  await expect(
+    f.services.providers.createVoiceToken(f.profile.id, async () =>
+      Response.json(
+        {
+          error: {
+            code: 403,
+            message: 'API key does not have permission',
+            status: 'PERMISSION_DENIED',
+          },
+        },
+        { status: 403 },
+      ),
+    ),
+  ).rejects.toThrow(
+    'Gemini could not issue a temporary voice token (HTTP 403): API key does not have permission',
+  );
+});
+
 it('refuses OpenAI Live tokens until the browser path ships', async () => {
   const f = await mediaFixture();
   const provider = await f.services.providers.createProvider({
