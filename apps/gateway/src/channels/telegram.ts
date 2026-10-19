@@ -513,6 +513,28 @@ export class TelegramChannel implements Channel {
       }
     }
 
+    // With choices, send the prompt once plus a one-time reply keyboard — a tap lands as
+    // ordinary text and can answer a waiting run. Native poll votes omit the chat id.
+    if (message.poll?.options.length) {
+      const body = await this.request(
+        'sendMessage',
+        token,
+        {
+          chat_id: message.chatId,
+          text: message.poll.question.slice(0, MESSAGE_CHUNK_SIZE),
+          reply_markup: {
+            keyboard: message.poll.options.map((option) => [{ text: option }]),
+            one_time_keyboard: true,
+            resize_keyboard: true,
+          },
+        },
+        { fetch: context.fetch, signal: context.signal, channelId: context.channelId },
+      );
+      if (body?.ok) return { status: 'sent', remoteMessageIds: [body.result.message_id] };
+      if (refused(body)) return { status: 'pending', remoteMessageIds: [] };
+      return { status: body ? 'failed' : 'unknown', remoteMessageIds: [] };
+    }
+
     for (let offset = 0; offset < message.text.length; offset += MESSAGE_CHUNK_SIZE) {
       const body = await this.request(
         'sendMessage',

@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { fitPrompt, promptTokens, tokenCounter } from '../context/budget.js';
 import { compactPrompt, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
+import { nowIso } from '../core/clock.js';
 import type { Learning } from '../learning/service.js';
 import type { Media } from '../media/service.js';
 import { anthropicCredential, withClaudeCodeIdentity } from '../providers/claude-subscription.js';
@@ -34,6 +35,7 @@ import {
 import { findSkill } from '../skills/builtin/index.js';
 import type { Stickers } from '../stickers/service.js';
 import type { WebSearch } from '../web/service.js';
+import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
 import { ACTION_KINDS, actionGuard, guardTools, mcpActionKind } from './guard.js';
 import { availableNote, connectMcpTools, unavailableNote } from './mcp.js';
@@ -192,6 +194,7 @@ export class AgentRuntime {
     const secrets = new Set<string>();
     let externalUncertain = false;
     let externalUncertainDetail: string | undefined;
+    let askUser: { prompt: string; choices?: string[] } | undefined;
     let lastCompactionAttempt = -4;
     let compactionRequested = false;
 
@@ -416,6 +419,12 @@ export class AgentRuntime {
                   ? await markSteering(judge, result, signal)
                   : result;
               } catch (error) {
+                if (error instanceof AskUserPause) {
+                  askUser = error.question;
+                  controller.abort();
+                  throw error;
+                }
+
                 // Only a tool that could change external state has an uncertain outcome when
                 // it does not answer. A declared read-only MCP tool may fail without stopping
                 // the turn; the agent needs its actual error to choose another way forward.
@@ -837,6 +846,13 @@ export class AgentRuntime {
 
       await progress.flush();
 
+      if (askUser) {
+        const question = buildRunQuestion(askUser, nowIso(Date.now));
+        await this.services.lifecycle.wait(profileId, runId, owner, question);
+        await this.nameConversation(run, secrets);
+        return;
+      }
+
       if (streamError) {
         throw streamError;
       }
@@ -914,6 +930,25 @@ export class AgentRuntime {
 
       await this.nameConversation(run, secrets);
     } catch (error) {
+      if (askUser || error instanceof AskUserPause) {
+        const pause = askUser ?? (error instanceof AskUserPause ? error.question : undefined);
+        if (pause) {
+          const current = await this.services.runs.run(profileId, runId).catch(() => null);
+          if (current?.status === 'running' && current.leaseOwner === owner) {
+            const question = buildRunQuestion(pause, nowIso(Date.now));
+            await this.services.lifecycle
+              .wait(profileId, runId, owner, question)
+              .catch((waitError: unknown) =>
+                console.error(
+                  `jian: run ${runId} could not wait for an answer — ${redactText(describe(waitError), secrets)}`,
+                ),
+              );
+            await this.nameConversation(run, secrets).catch(() => {});
+          }
+          return;
+        }
+      }
+
       // The stored message stays generic because a provider error can echo a key back. The
       // operator still needs the cause, so it goes to the log with the known secrets removed.
       console.error(`jian: run ${runId} failed — ${redactText(describe(error), secrets)}`);

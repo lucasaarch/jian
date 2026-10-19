@@ -164,6 +164,9 @@ services.schedules.useDeliveries(channels);
 services.work.useDeliveries(channels);
 // An open session objective queues the next slice the same way after a completed turn.
 services.objectives.useDeliveries(channels);
+// Answering a mid-run question from the panel resumes a channel run the same way.
+services.runs.useDeliveries(channels);
+// A matching GitHub webhook wakes the subscribed session the same way.
 services.subscriptions.useDeliveries(channels);
 
 /**

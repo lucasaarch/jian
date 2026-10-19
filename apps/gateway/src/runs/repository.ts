@@ -23,6 +23,9 @@ type CheckpointRow = typeof checkpoints.$inferSelect;
 /** Queued and running hold the session and count against the profile's cap; nothing else does. */
 const activeStatuses: Run['status'][] = ['queued', 'running'];
 
+/** What the agent lists as under way, including mid-run questions parked on the owner. */
+const openStatuses: Run['status'][] = ['queued', 'running', 'waiting'];
+
 /** Terminal subagents still waiting for an atomic handoff to their principal. */
 export async function listUnreportedSubagents(db: Queryable, limit: number) {
   return db
@@ -66,6 +69,7 @@ function toRun(row: RunRow, document: Profile): Run {
     ...(row.progress ? { progress: row.progress } : {}),
     ...(row.commentary?.length ? { commentary: row.commentary } : {}),
     ...(row.relayTo ? { relayTo: row.relayTo } : {}),
+    ...(row.question ? { question: row.question } : {}),
     ...(row.leaseOwner === null ? {} : { leaseOwner: row.leaseOwner }),
     ...(row.leaseUntil === null ? {} : { leaseUntil: row.leaseUntil }),
     createdAt: row.createdAt.toISOString(),
@@ -96,6 +100,7 @@ function toRow(run: Run): typeof runs.$inferInsert {
     progress: run.progress ?? null,
     commentary: run.commentary ?? null,
     relayTo: run.relayTo ?? null,
+    question: run.question ?? null,
     leaseOwner: run.leaseOwner ?? null,
     leaseUntil: run.leaseUntil ?? null,
     createdAt: new Date(run.createdAt),
@@ -295,6 +300,22 @@ export async function findActiveSessionRun(
   return row ? toRun(row.run, row.document) : null;
 }
 
+/** A parked mid-run question holds the session until the owner answers. */
+export async function findWaitingSessionRun(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+): Promise<Run | null> {
+  const [row] = await hydrated(db)
+    .where(
+      and(eq(runs.profileId, profileId), eq(runs.sessionId, sessionId), eq(runs.status, 'waiting')),
+    )
+    .orderBy(desc(runs.createdAt))
+    .limit(1);
+
+  return row ? toRun(row.run, row.document) : null;
+}
+
 /** What the profile owes work on right now; the cap is a count, not a page of rows. */
 export async function countActiveRuns(db: Queryable, profileId: string): Promise<number> {
   const [row] = await db
@@ -311,7 +332,7 @@ export async function listActiveRuns(
   limit: number,
 ): Promise<Run[]> {
   const rows = await hydrated(db)
-    .where(and(eq(runs.profileId, profileId), inArray(runs.status, activeStatuses)))
+    .where(and(eq(runs.profileId, profileId), inArray(runs.status, openStatuses)))
     .orderBy(asc(runs.createdAt))
     .limit(limit);
 

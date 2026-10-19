@@ -485,6 +485,15 @@
   .conversation-pane > header small {
     @apply block truncate text-xs text-muted;
   }
+  .session-objective {
+    @apply mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted;
+  }
+  .session-objective > span {
+    @apply min-w-0 truncate text-ink;
+  }
+  .session-objective-note {
+    @apply w-full truncate text-muted;
+  }
   .session-model {
     @apply grid shrink-0 grid-cols-[minmax(0,14rem)_minmax(0,10rem)] gap-2;
   }
@@ -1107,6 +1116,15 @@
   }
   .run-status {
     @apply flex flex-wrap items-center gap-3 py-3 text-muted;
+  }
+  .run-waiting {
+    @apply flex-col items-stretch gap-2 rounded-lg border border-accent/30 bg-accent/5 px-3;
+  }
+  .run-waiting p {
+    @apply m-0 text-sm text-ink;
+  }
+  .run-waiting-choices {
+    @apply flex flex-wrap gap-2;
   }
 }
 

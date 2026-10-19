@@ -4,6 +4,7 @@ import type {
   GroupTurn,
   Run,
   RunProgress,
+  RunQuestion,
   Subagent,
 } from '@jian/contracts';
 import type { Queryable } from '../storage/database.js';
@@ -65,6 +66,7 @@ export interface RunExecution {
     status: 'completed' | 'failed' | 'interrupted',
     content: string,
   ): Promise<Run>;
+  wait(profileId: string, runId: string, owner: string, question: RunQuestion): Promise<Run>;
 }
 
 export interface RunRecovery {

@@ -19,12 +19,26 @@ import type { Contact, Profile, Run, Session } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
 import { useWorkspace } from '../../lib/workspace';
 import type { SectionProps } from '../props';
-import { Empty, Face, Orb, TelegramLogo, WhatsAppLogo } from '../ui';
+import { Badge, Empty, Face, Orb, TelegramLogo, WhatsAppLogo } from '../ui';
 import { plainText } from '../ui/markdown';
 import { Composer } from './composer';
 import { History } from './history';
 import { SessionModel } from './model-picker';
 import { statusOf } from './progress';
+
+const objectiveTone = {
+  open: 'good',
+  blocked: 'warn',
+  done: 'neutral',
+  cancelled: 'neutral',
+} as const;
+
+const objectiveLabel = {
+  open: 'Objective open',
+  blocked: 'Objective blocked',
+  done: 'Objective done',
+  cancelled: 'Objective cancelled',
+} as const;
 
 /**
  * The kinds of conversation a profile has, besides the gateway one pinned above them, and last
@@ -308,6 +322,23 @@ export function Sessions({
                   ? ` · ${activeContact.actorId}`
                   : ''}
               </small>
+              {active.objective && (
+                <p className="session-objective">
+                  <Badge tone={objectiveTone[active.objective.status]} dot={false}>
+                    {objectiveLabel[active.objective.status]}
+                  </Badge>
+                  <span title={active.objective.text}>
+                    {active.objective.text.length > 120
+                      ? `${active.objective.text.slice(0, 117)}…`
+                      : active.objective.text}
+                  </span>
+                  {active.objective.status === 'blocked' && active.objective.note ? (
+                    <span className="session-objective-note" title={active.objective.note}>
+                      {active.objective.note}
+                    </span>
+                  ) : null}
+                </p>
+              )}
             </div>
             {kindOf(active) !== 'learning' && (
               <>
@@ -356,11 +387,22 @@ export function Sessions({
               .filter((run) => run.sessionId === active.id)
               .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
               .at(-1)}
+            onAnswered={() => {
+              setSent((value) => value + 1);
+              void refresh();
+            }}
           />
           {isGateway(active) && (
             <Composer
               key={`composer-${active.id}`}
               name={profile.name}
+              placeholder={
+                data.activities.some(
+                  (run) => run.sessionId === active.id && run.status === 'waiting',
+                )
+                  ? 'Answer to continue…'
+                  : undefined
+              }
               upload={(file) => api.upload(profile.id, active.id, file)}
               send={(text, mediaIds) => api.send(profile.id, active.id, text, mediaIds)}
               onSent={() => {
