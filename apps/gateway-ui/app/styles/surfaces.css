@@ -485,6 +485,15 @@
   .conversation-pane > header small {
     @apply block truncate text-xs text-muted;
   }
+  .session-objective {
+    @apply mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted;
+  }
+  .session-objective > span {
+    @apply min-w-0 truncate text-ink;
+  }
+  .session-objective-note {
+    @apply w-full truncate text-muted;
+  }
   .session-model {
     @apply grid shrink-0 grid-cols-[minmax(0,14rem)_minmax(0,10rem)] gap-2;
   }
