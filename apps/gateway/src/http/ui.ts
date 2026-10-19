@@ -18,7 +18,7 @@ const DIRECTIVES = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self'",
+  "connect-src 'self' wss://generativelanguage.googleapis.com",
   // Videos and voice notes play from data addresses the panel builds from an attachment it
   // already fetched through the API; the default allows none, so they never started.
   "media-src 'self' data:",
