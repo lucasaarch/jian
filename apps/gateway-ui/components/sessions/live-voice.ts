@@ -1,5 +1,16 @@
 'use client';
 
+/** Decode a Gemini Live WebSocket frame; the server may send JSON text or a Blob. */
+async function frameText(data: MessageEvent['data']): Promise<string> {
+  if (typeof data === 'string') return data;
+  if (data instanceof Blob) return data.text();
+  if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
+  if (ArrayBuffer.isView(data)) {
+    return new TextDecoder().decode(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+  }
+  return String(data);
+}
+
 /** Direct browser-to-Gemini Live audio. Only the short-lived, single-use token reaches the browser. */
 export async function connectLiveVoice(
   token: string,
@@ -8,10 +19,13 @@ export async function connectLiveVoice(
 ) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const context = new AudioContext();
+  // Schedule playback before any model audio arrives; the message handler closes over this binding.
+  let playbackAt = context.currentTime;
   const socket = new WebSocket(
     `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?access_token=${encodeURIComponent(token)}`,
   );
   const source = context.createMediaStreamSource(stream);
+  // ScriptProcessor is deprecated but widely available; AudioWorklet needs a separate module URL.
   const processor = context.createScriptProcessor(2048, 1, 1);
   const silence = context.createGain();
   silence.gain.value = 0;
@@ -19,7 +33,20 @@ export async function connectLiveVoice(
   processor.connect(silence);
   silence.connect(context.destination);
 
+  const tearDown = () => {
+    processor.onaudioprocess = null;
+    processor.disconnect();
+    source.disconnect();
+    silence.disconnect();
+    for (const track of stream.getTracks()) track.stop();
+    if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+      socket.close();
+    }
+    void context.close();
+  };
+
   const ready = new Promise<void>((resolve, reject) => {
+    let opened = false;
     socket.addEventListener(
       'open',
       () => {
@@ -37,15 +64,30 @@ export async function connectLiveVoice(
       { once: true },
     );
     socket.addEventListener('message', async (event) => {
-      const data = JSON.parse(String(event.data));
-      if (data.setupComplete) resolve();
+      let data: {
+        setupComplete?: unknown;
+        serverContent?: {
+          inputTranscription?: { text?: unknown };
+          outputTranscription?: { text?: unknown };
+          modelTurn?: { parts?: Array<{ inlineData?: { data?: unknown } }> };
+        };
+      };
+      try {
+        data = JSON.parse(await frameText(event.data));
+      } catch {
+        return;
+      }
+      if (data.setupComplete && !opened) {
+        opened = true;
+        resolve();
+      }
       const transcript =
         data.serverContent?.inputTranscription?.text ??
         data.serverContent?.outputTranscription?.text;
       if (typeof transcript === 'string' && transcript) onTranscript(transcript);
       for (const part of data.serverContent?.modelTurn?.parts ?? []) {
         const encoded = part.inlineData?.data;
-        if (!encoded) continue;
+        if (typeof encoded !== 'string' || !encoded) continue;
         const bytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
         const pcm = new Int16Array(
           bytes.buffer,
@@ -63,23 +105,28 @@ export async function connectLiveVoice(
         playbackAt += buffer.duration;
       }
     });
-    socket.addEventListener('error', () => reject(new Error('Gemini Live connection failed')), {
-      once: true,
-    });
+    socket.addEventListener(
+      'error',
+      () => {
+        if (!opened) reject(new Error('Gemini Live connection failed'));
+      },
+      { once: true },
+    );
+    socket.addEventListener(
+      'close',
+      () => {
+        if (!opened) reject(new Error('Gemini Live connection closed'));
+      },
+      { once: true },
+    );
   });
   try {
     await ready;
   } catch (error) {
-    processor.disconnect();
-    source.disconnect();
-    silence.disconnect();
-    for (const track of stream.getTracks()) track.stop();
-    socket.close();
-    void context.close();
+    tearDown();
     throw error;
   }
 
-  let playbackAt = context.currentTime;
   processor.onaudioprocess = (event) => {
     if (socket.readyState !== WebSocket.OPEN) return;
     const input = event.inputBuffer.getChannelData(0);
@@ -100,14 +147,5 @@ export async function connectLiveVoice(
     );
   };
 
-  return {
-    close() {
-      processor.disconnect();
-      source.disconnect();
-      silence.disconnect();
-      for (const track of stream.getTracks()) track.stop();
-      socket.close();
-      void context.close();
-    },
-  };
+  return { close: tearDown };
 }

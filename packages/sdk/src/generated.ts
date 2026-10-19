@@ -4700,6 +4700,8 @@ export interface operations {
                     "application/json": {
                         token: string;
                         model: string;
+                        /** @enum {string} */
+                        provider: "google" | "openai";
                         /** Format: date-time */
                         expiresAt?: string;
                     };

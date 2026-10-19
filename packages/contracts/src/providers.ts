@@ -159,6 +159,8 @@ export const modelDefaultsRecordSchema = modelDefaultsInputSchema.extend({
 export const voiceTokenSchema = z.strictObject({
   token: z.string().min(1),
   model: z.string().min(1),
+  /** Which Live backend minted the ephemeral token. The browser dials that vendor directly. */
+  provider: z.enum(['google', 'openai']),
   expiresAt: z.iso.datetime().optional(),
 });
 

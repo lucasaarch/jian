@@ -441,6 +441,20 @@ export const handlers = [
   ),
   http.get('*/v1/profiles/:profileId/model-defaults', () => ok(data.modelDefaults)),
   http.put('*/v1/profiles/:profileId/model-defaults', () => ok(data.modelDefaults)),
+  http.post('*/v1/profiles/:profileId/voice/token', () =>
+    HttpResponse.json(
+      {
+        error: 'Choose a Gemini Live model under Model defaults › Voice calls first',
+      },
+      { status: 409 },
+    ),
+  ),
+  http.post('*/v1/profiles/:profileId/voice/summary', async ({ request }) => {
+    const body = (await request.json()) as { transcript?: string };
+    return ok({
+      summary: (body.transcript ?? 'Voice call').slice(0, 120),
+    });
+  }),
 
   http.get('*/v1/profiles/:profileId/built-in-skills', () => ok(data.builtinSkills)),
   http.get('*/v1/profiles/:profileId/skill-catalog', () =>

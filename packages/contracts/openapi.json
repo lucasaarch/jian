@@ -7193,6 +7193,13 @@
                       "type": "string",
                       "minLength": 1
                     },
+                    "provider": {
+                      "type": "string",
+                      "enum": [
+                        "google",
+                        "openai"
+                      ]
+                    },
                     "expiresAt": {
                       "type": "string",
                       "format": "date-time",
@@ -7201,7 +7208,8 @@
                   },
                   "required": [
                     "token",
-                    "model"
+                    "model",
+                    "provider"
                   ],
                   "additionalProperties": false
                 }
