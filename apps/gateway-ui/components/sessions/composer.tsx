@@ -50,7 +50,6 @@ export function Composer({
   upload,
   send,
   createVoiceToken,
-  summarizeVoiceTranscript,
   onSent,
   placeholder,
 }: {
@@ -63,38 +62,45 @@ export function Composer({
     provider: 'google' | 'openai';
     voiceName?: string;
   }>;
-  summarizeVoiceTranscript: (transcript: string) => Promise<{ summary: string }>;
   onSent: () => void;
   placeholder?: string;
 }) {
   const [live, setLive] = useState(false);
   const [liveBusy, setLiveBusy] = useState(false);
+  const liveBusyRef = useRef(false);
   const liveSession = useRef<{ close: () => void } | undefined>(undefined);
-  // Interim/final text is held only in memory for the later summary step; never uploaded here.
+  // Transcript stays local during the Live call and is submitted through the normal run on hang-up.
   const liveTranscript = useRef<string[]>([]);
   const liveStartedAt = useRef(0);
   const liveLabel = useRef('Gemini Live');
 
   const toggleLive = async () => {
-    if (liveBusy) return;
+    if (liveBusy || liveBusyRef.current) return;
+    liveBusyRef.current = true;
     if (liveSession.current) {
       liveSession.current.close();
       liveSession.current = undefined;
       setLive(false);
       setLiveBusy(true);
       try {
-        const transcript = liveTranscript.current.join(' ').slice(0, 20_000);
+        // Leave room for the call label within the gateway's 8,000-character message limit.
+        const transcript = liveTranscript.current.join(' ').slice(0, 7_500);
         liveTranscript.current = [];
         if (!transcript.trim()) return;
-        const { summary } = await summarizeVoiceTranscript(transcript);
         const duration = Math.max(1, Math.round((Date.now() - liveStartedAt.current) / 1000));
-        await send(`[Voice call · ${clock(duration)} · ${liveLabel.current}]\n${summary}`, []);
+        // Submit the verbatim transcript as a normal owner message so the usual Jian runtime,
+        // identity, conversation context, skills and tools handle it. Do not call a provider
+        // directly here: that bypasses runtime behavior and can surface provider 401s as panel auth.
+        await send(`[Voice call · ${clock(duration)} · ${liveLabel.current}]\n${transcript}`, []);
         onSent();
       } catch (failure) {
         setError(
-          failure instanceof Error ? failure.message : 'Could not save the voice-call summary.',
+          failure instanceof Error
+            ? failure.message
+            : 'Could not submit the voice-call transcript.',
         );
       } finally {
+        liveBusyRef.current = false;
         setLiveBusy(false);
       }
       return;
@@ -109,8 +115,10 @@ export function Composer({
       liveSession.current = await connectLiveVoice(
         token,
         model,
-        (text) => {
-          const room = 20_000 - liveTranscript.current.join(' ').length;
+        (text, speaker) => {
+          // Only the owner's speech becomes a user message; do not re-submit Gemini's reply as owner input.
+          if (speaker !== 'user') return;
+          const room = 7_500 - liveTranscript.current.join(' ').length;
           if (room > 0) liveTranscript.current.push(text.slice(0, room));
         },
         voiceName,
@@ -122,6 +130,7 @@ export function Composer({
       liveTranscript.current = [];
       setError(failure instanceof Error ? failure.message : 'Could not start the voice call.');
     } finally {
+      liveBusyRef.current = false;
       setLiveBusy(false);
     }
   };

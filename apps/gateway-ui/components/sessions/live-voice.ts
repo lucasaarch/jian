@@ -20,7 +20,7 @@ export function liveVoiceUrl(token: string): string {
 export async function connectLiveVoice(
   token: string,
   model: string,
-  onTranscript: (text: string) => void = () => {},
+  onTranscript: (text: string, speaker: 'user' | 'assistant') => void = () => {},
   voiceName?: string,
 ) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -90,10 +90,14 @@ export async function connectLiveVoice(
         opened = true;
         resolve();
       }
-      const transcript =
-        data.serverContent?.inputTranscription?.text ??
-        data.serverContent?.outputTranscription?.text;
-      if (typeof transcript === 'string' && transcript) onTranscript(transcript);
+      const inputTranscript = data.serverContent?.inputTranscription?.text;
+      if (typeof inputTranscript === 'string' && inputTranscript) {
+        onTranscript(inputTranscript, 'user');
+      }
+      const outputTranscript = data.serverContent?.outputTranscription?.text;
+      if (typeof outputTranscript === 'string' && outputTranscript) {
+        onTranscript(outputTranscript, 'assistant');
+      }
       for (const part of data.serverContent?.modelTurn?.parts ?? []) {
         const encoded = part.inlineData?.data;
         if (typeof encoded !== 'string' || !encoded) continue;
