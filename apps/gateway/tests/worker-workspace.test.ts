@@ -16,7 +16,7 @@ import { afterAll, expect, it } from 'vitest';
 import { fileTools } from '../src/agent/files.js';
 import { shellTools } from '../src/agent/shell.js';
 import { prepareWorkerWorkspace, removeWorkerWorkspace } from '../src/agent/worker-workspace.js';
-import { sandboxAbi, workspaceOf } from '../src/agent/workspace.js';
+import { sandboxAbi, workerWorkspacePath, workspaceOf } from '../src/agent/workspace.js';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'jian-worker-')));
 const previous = process.env.JIAN_WORKSPACES;
@@ -39,10 +39,13 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-it('gives two workers separate committed trees and preserves a worker tree on retry', async () => {
+it('gives subagents the same profile workspace as the principal, not a separate worktree', async () => {
   const home = await workspaceOf(profileId);
   const source = join(home, 'project');
+  const sibling = join(home, 'sibling');
   mkdirSync(source);
+  mkdirSync(sibling);
+  writeFileSync(join(sibling, 'notes.txt'), 'shared');
   git(source, 'init', '-q');
   writeFileSync(join(source, 'file.txt'), 'committed');
   git(source, 'add', 'file.txt');
@@ -60,70 +63,47 @@ it('gives two workers separate committed trees and preserves a worker tree on re
   const firstId = '22222222-2222-4222-8222-222222222222';
   const secondId = '33333333-3333-4333-8333-333333333333';
   const first = worker(firstId, [source]);
-  const second = worker(secondId, [source]);
+  const second = worker(secondId, [source, sibling]);
   const gitAccess = await prepareWorkerWorkspace(first);
-  expect(gitAccess.readOnly).toHaveLength(1);
-  expect(gitAccess.writable).toHaveLength(3);
   expect(gitAccess.ghConfigDir).toBe(join(home, '.config', 'gh'));
+  expect(gitAccess.readOnly).toEqual([]);
   await prepareWorkerWorkspace(second);
-  const firstTree = join(await workspaceOf(profileId, firstId), 'repos/1/project');
-  const secondTree = join(await workspaceOf(profileId, secondId), 'repos/1/project');
-  expect(readFileSync(join(firstTree, 'file.txt'), 'utf8')).toBe('committed');
-  expect(readFileSync(join(secondTree, 'file.txt'), 'utf8')).toBe('committed');
 
-  const firstTools = fileTools(profileId, firstId);
-  await call(firstTools.read_file, { path: join(firstTree, 'file.txt'), offset: 1, limit: 10 });
-  await call(firstTools.write_file, { path: join(firstTree, 'file.txt'), content: 'worker edit' });
-  expect(readFileSync(join(secondTree, 'file.txt'), 'utf8')).toBe('committed');
-  expect(readFileSync(join(source, 'file.txt'), 'utf8')).toBe('committed');
-  await expect(
-    call(firstTools.write_file, { path: join(secondTree, 'file.txt'), content: 'escape' }),
-  ).rejects.toThrow('belongs to another subagent');
-  await expect(
-    call(firstTools.write_file, { path: join(source, 'file.txt'), content: 'escape' }),
-  ).rejects.toThrow('outside your workspace');
-  await prepareWorkerWorkspace(first);
-  expect(readFileSync(join(firstTree, 'file.txt'), 'utf8')).toBe('worker edit');
+  // Same HOME for every worker id — no _workers/<run> directory is created.
+  expect(await workspaceOf(profileId)).toBe(home);
+  expect(existsSync(workerWorkspacePath(profileId, firstId))).toBe(false);
+  expect(existsSync(join(home, 'repos'))).toBe(false);
 
-  const shell = shellTools(profileId, firstId, gitAccess).run_command;
+  const tools = fileTools(profileId);
+  await call(tools.read_file, { path: join(source, 'file.txt'), offset: 1, limit: 10 });
+  await call(tools.write_file, { path: join(source, 'file.txt'), content: 'worker edit' });
+  expect(readFileSync(join(source, 'file.txt'), 'utf8')).toBe('worker edit');
+  await call(tools.read_file, { path: join(sibling, 'notes.txt'), offset: 1, limit: 10 });
+  expect(
+    (await call(tools.list_directory, {
+      path: home,
+    })) as { entries: Array<{ name: string }> },
+  ).toMatchObject({
+    entries: expect.arrayContaining([
+      expect.objectContaining({ name: 'project' }),
+      expect.objectContaining({ name: 'sibling' }),
+    ]),
+  });
+
+  const shell = shellTools(profileId, gitAccess).run_command;
   expect(await call(shell, { command: 'pwd', timeoutMs: 10_000 })).toMatchObject({
     exitCode: 0,
-    stdout: `${await workspaceOf(profileId, firstId)}\n`,
+    stdout: `${home}\n`,
   });
   expect(
-    await call(shell, { command: `git -C '${firstTree}' status --porcelain`, timeoutMs: 10_000 }),
+    await call(shell, { command: `git -C '${source}' status --porcelain`, timeoutMs: 10_000 }),
   ).toMatchObject({ exitCode: 0, stdout: ' M file.txt\n' });
-  expect(
-    await call(shell, {
-      command: `git -C '${firstTree}' add file.txt && git -C '${firstTree}' -c user.name=Test -c user.email=test@example.invalid commit -qm worker`,
-      timeoutMs: 10_000,
-    }),
-  ).toMatchObject({ exitCode: 0 });
-  expect(git(source, 'log', '-1', '--format=%s')).toBe('start');
-  expect(git(firstTree, 'log', '-1', '--format=%s')).toBe('worker');
-  if ((await sandboxAbi()) > 0) {
-    expect(
-      await call(shell, {
-        command: `git -C '${firstTree}' config --local worker.escape true`,
-        timeoutMs: 10_000,
-      }),
-    ).not.toMatchObject({ exitCode: 0 });
-    expect(
-      await call(shell, { command: `cat '${join(source, 'file.txt')}'`, timeoutMs: 10_000 }),
-    ).not.toMatchObject({ exitCode: 0 });
-    expect(
-      await call(shell, {
-        command: `echo escape > '${join(secondTree, 'planted.txt')}'`,
-        timeoutMs: 10_000,
-      }),
-    ).not.toMatchObject({ exitCode: 0 });
-  }
 
   writeFileSync(join(source, 'dirty.txt'), 'uncommitted');
-  await expect(
-    prepareWorkerWorkspace(worker('44444444-4444-4444-8444-444444444444', [source])),
-  ).rejects.toThrow('uncommitted changes');
+  // Uncommitted source changes are fine: Jian no longer prepares a detached worktree.
+  await prepareWorkerWorkspace(worker('44444444-4444-4444-8444-444444444444', [source]));
   rmSync(join(source, 'dirty.txt'));
+
   await expect(
     prepareWorkerWorkspace(worker('55555555-5555-4555-8555-555555555555', [root])),
   ).rejects.toThrow('inside this agent');
@@ -134,25 +114,16 @@ it('gives two workers separate committed trees and preserves a worker tree on re
     prepareWorkerWorkspace(worker('66666666-6666-4666-8666-666666666666', [linked])),
   ).rejects.toThrow('inside this agent');
 
-  const linkedTargetId = '77777777-7777-4777-8777-777777777777';
-  const linkedTargetHome = await workspaceOf(profileId, linkedTargetId);
-  mkdirSync(join(linkedTargetHome, 'repos/1'), { recursive: true });
-  symlinkSync(source, join(linkedTargetHome, 'repos/1/project'));
-  await expect(prepareWorkerWorkspace(worker(linkedTargetId, [source]))).rejects.toThrow(
-    'not its expected worktree',
-  );
-
-  writeFileSync(join(firstTree, 'uncommitted.txt'), 'worker scratch');
+  // Legacy cleanup still removes old isolated worker homes if present.
+  const legacy = workerWorkspacePath(profileId, firstId);
+  mkdirSync(join(legacy, 'repos', '1'), { recursive: true });
+  writeFileSync(join(legacy, 'scratch.txt'), 'old');
   await removeWorkerWorkspace(profileId, firstId, [source]);
-  expect(existsSync(firstTree)).toBe(false);
-  expect(existsSync(secondTree)).toBe(true);
-  expect(git(source, 'worktree', 'list', '--porcelain')).not.toContain(firstTree);
-  await removeWorkerWorkspace(profileId, firstId, [source]);
-  await removeWorkerWorkspace(profileId, secondId, [source]);
-  expect(existsSync(secondTree)).toBe(false);
+  expect(existsSync(legacy)).toBe(false);
+  expect(existsSync(source)).toBe(true);
 });
 
-it('lets Git SSH use the profile key read-only without copying it into the worker home', async () => {
+it('lets Git SSH use the profile key from the shared workspace', async () => {
   const owner = '88888888-8888-4888-8888-888888888888';
   const home = await workspaceOf(owner);
   const ssh = join(home, '.ssh');
@@ -162,11 +133,8 @@ it('lets Git SSH use the profile key read-only without copying it into the worke
   writeFileSync(join(ssh, 'known_hosts'), 'bitbucket.org synthetic-host-key\n');
   const runId = '99999999-9999-4999-8999-999999999999';
   const access = await prepareWorkerWorkspace(worker(runId, [], owner));
-  const workerHome = await workspaceOf(owner, runId);
-  expect(access.readOnly).toContain(ssh);
-  expect(existsSync(join(workerHome, '.ssh/id_ed25519'))).toBe(false);
-  expect(readFileSync(join(workerHome, '.ssh/known_hosts'), 'utf8')).toContain('bitbucket.org');
-  const shell = shellTools(owner, runId, access).run_command;
+  expect(existsSync(workerWorkspacePath(owner, runId))).toBe(false);
+  const shell = shellTools(owner, access).run_command;
   const config = (await call(shell, {
     command: 'eval "$GIT_SSH_COMMAND -G bitbucket.org"',
     timeoutMs: 10_000,
@@ -181,15 +149,14 @@ it('lets Git SSH use the profile key read-only without copying it into the worke
     }),
   ).toMatchObject({ exitCode: 0, stdout: 'git@bitbucket.org:vxcaselabs/vx-erp.git\n' });
   if ((await sandboxAbi()) > 0) {
+    // Profile isolation still holds: another profile's home is not writable.
+    const other = await workspaceOf(profileId);
     expect(
       await call(shell, {
-        command: `printf corrupted > '${join(ssh, 'id_ed25519')}'`,
+        command: `printf corrupted > '${join(other, 'planted.txt')}'`,
         timeoutMs: 10_000,
       }),
     ).not.toMatchObject({ exitCode: 0 });
   }
   expect(readFileSync(join(ssh, 'id_ed25519'), 'utf8')).toContain('synthetic');
-  await removeWorkerWorkspace(owner, runId, []);
-  expect(existsSync(workerHome)).toBe(false);
-  expect(existsSync(join(ssh, 'id_ed25519'))).toBe(true);
 });

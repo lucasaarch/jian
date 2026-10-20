@@ -102,7 +102,6 @@ function clip(text: string, limit: number): string {
 
 export function shellTools(
   profileId: string,
-  workerId?: string,
   gitAccess: {
     readOnly: string[];
     writable: string[];
@@ -130,8 +129,8 @@ export function shellTools(
             stderr: 'SSH keys must be managed with the SSH key tools, not ssh-keygen.',
           };
         }
-        const home = await workspaceOf(profileId, workerId);
-        const directory = cwd ? await confine(profileId, cwd, 'read', workerId) : home;
+        const home = await workspaceOf(profileId);
+        const directory = cwd ? await confine(profileId, cwd, 'read') : home;
         const shell = await confined(home, '/bin/sh', ['-c', command], gitAccess);
 
         return new Promise((resolvePromise) => {
@@ -165,6 +164,6 @@ export function shellTools(
       },
     }),
 
-    ...fileTools(profileId, workerId),
+    ...fileTools(profileId),
   };
 }
