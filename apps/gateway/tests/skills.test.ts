@@ -301,6 +301,7 @@ describe('the skills every profile carries', () => {
       'coding-work',
       'web-research',
       'mcp-servers',
+      'github-mcp',
       'machine-tools',
       'ponytail',
       'ponytail-review',

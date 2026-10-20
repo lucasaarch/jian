@@ -4,6 +4,7 @@ import { activity } from './activity.js';
 import { channelReplies } from './channel-replies.js';
 import { codingWork } from './coding-work.js';
 import { conversations } from './conversations.js';
+import { githubMcp } from './github-mcp.js';
 import { handlingErrors } from './handling-errors.js';
 import { jevJudgment } from './jev-judgment.js';
 import { jianConfiguration } from './jian-configuration.js';
@@ -63,7 +64,7 @@ const SELF_MANAGED: readonly Skill[] = [managingYourself];
 const AGENTS: readonly Skill[] = [workingWithAgents];
 const SHELL: readonly Skill[] = [machineTools, codingWork, ...ponytailSkills];
 const WEB: readonly Skill[] = [webResearch];
-const MCP: readonly Skill[] = [mcpServers];
+const MCP: readonly Skill[] = [mcpServers, githubMcp];
 const STICKERS: readonly Skill[] = [stickers];
 
 export const builtinSkillNames: ReadonlySet<string> = new Set(
