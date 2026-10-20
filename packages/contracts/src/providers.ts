@@ -166,6 +166,8 @@ export const voiceTokenSchema = z.strictObject({
   expiresAt: z.iso.datetime().optional(),
 });
 
+export const voiceTokenInputSchema = z.strictObject({ sessionId: z.uuid().optional() });
+
 export const voiceTranscriptSchema = z.strictObject({
   transcript: z.string().trim().min(1).max(20_000),
 });

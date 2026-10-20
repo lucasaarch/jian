@@ -56,6 +56,7 @@ import {
   providerModelListSchema,
   providerRecordSchema,
   voiceSummarySchema,
+  voiceTokenInputSchema,
   voiceTokenSchema,
   voiceTranscriptSchema,
 } from './providers.js';
@@ -297,6 +298,7 @@ export const operations: Operation[] = [
     path: `${profile}/voice/token`,
     operationId: 'createVoiceToken',
     access: 'admin',
+    body: voiceTokenInputSchema,
     response: voiceTokenSchema,
   },
   {

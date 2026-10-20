@@ -41,6 +41,7 @@ describe('voice call hand-off', () => {
       root.render(
         createElement(Composer, {
           name: 'Mia',
+          sessionId: '00000000-0000-4000-8000-000000000001',
           upload: vi.fn(),
           send,
           createVoiceToken: async () => ({
@@ -48,6 +49,7 @@ describe('voice call hand-off', () => {
             model: 'gemini-live',
             provider: 'google' as const,
           }),
+          executeVoiceTool: async () => ({ ok: true }),
           onSent,
         }),
       );
