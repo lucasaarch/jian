@@ -18,10 +18,49 @@ async function readStdin() {
   return value;
 }
 
+async function readSecret(prompt) {
+  if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== 'function') {
+    throw new Error('Secret prompt requires an interactive terminal; use --token-stdin instead');
+  }
+  process.stdout.write(prompt);
+  process.stdin.setRawMode(true);
+  process.stdin.setEncoding('utf8');
+  process.stdin.resume();
+  return await new Promise((resolve, reject) => {
+    let value = '';
+    const finish = (error) => {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+      process.stdin.off('data', onData);
+      process.stdout.write('\\n');
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const onData = (chunk) => {
+      for (const char of chunk) {
+        if (char === '\\u0003') return finish(new Error('Installation cancelled'));
+        if (char === '\\r' || char === '\\n') return finish();
+        if (char === '\\u007f' || char === '\\b') value = value.slice(0, -1);
+        else value += char;
+      }
+    };
+    process.stdin.on('data', onData);
+  });
+}
+
+function runChecked(command, commandArgs, message) {
+  const result = spawnSync(command, commandArgs, { stdio: 'inherit', windowsHide: true });
+  if (result.status !== 0) throw new Error(message);
+}
+
 async function install() {
   const gateway = option('--gateway');
   const machineId = option('--machine');
-  const token = args.includes('--token-stdin') ? await readStdin() : undefined;
+  const token = args.includes('--token-stdin')
+    ? await readStdin()
+    : args.includes('--token-prompt')
+      ? await readSecret('Worker token (input hidden): ')
+      : undefined;
   let gatewayUrl;
   try {
     gatewayUrl = new URL(gateway);
@@ -38,7 +77,7 @@ async function install() {
     !token?.trim()
   ) {
     throw new Error(
-      'Usage: jian-remote.mjs install --gateway https://... --machine UUID --token-stdin',
+      'Usage: jian-remote.mjs install --gateway https://... --machine UUID (--token-prompt | --token-stdin)',
     );
   }
   const config = {
@@ -47,9 +86,27 @@ async function install() {
     token: token.trim(),
   };
   await mkdir(dirname(configPath), { recursive: true, mode: 0o700 });
-  await chmod(dirname(configPath), 0o700);
+  if (process.platform === 'win32') {
+    const account = process.env.USERNAME;
+    if (!account) throw new Error('Could not identify the current Windows user');
+    runChecked(
+      'icacls.exe',
+      [dirname(configPath), '/inheritance:r', '/grant:r', `${account}:(OI)(CI)F`],
+      'Could not restrict permissions on the Jian Remote config directory',
+    );
+  } else {
+    await chmod(dirname(configPath), 0o700);
+  }
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-  await chmod(configPath, 0o600);
+  if (process.platform === 'win32') {
+    runChecked(
+      'icacls.exe',
+      [configPath, '/inheritance:r', '/grant:r', `${process.env.USERNAME}:F`],
+      'Could not restrict permissions on the Jian Remote config file',
+    );
+  } else {
+    await chmod(configPath, 0o600);
+  }
   const script = fileURLToPath(import.meta.url);
   if (process.platform === 'darwin') {
     const launchAgents = join(homedir(), 'Library', 'LaunchAgents');
@@ -80,6 +137,31 @@ async function install() {
         throw new Error('Could not install/start Jian Remote with systemd --user');
     }
     console.log('Installed and started the per-user systemd service.');
+  } else if (process.platform === 'win32') {
+    const action = `"${process.execPath}" "${script}" run`;
+    runChecked(
+      'schtasks.exe',
+      [
+        '/Create',
+        '/SC',
+        'ONLOGON',
+        '/TN',
+        'Jian Remote',
+        '/TR',
+        action,
+        '/F',
+        '/RL',
+        'LIMITED',
+        '/IT',
+      ],
+      'Could not install the Jian Remote logon task with Task Scheduler',
+    );
+    runChecked(
+      'schtasks.exe',
+      ['/Run', '/TN', 'Jian Remote'],
+      'Could not start the Jian Remote scheduled task',
+    );
+    console.log('Installed and started the per-user Windows logon task.');
   } else {
     console.log(
       `Saved credentials to ${configPath}; service auto-install is unsupported on ${process.platform}. Run: node ${script} run`,
@@ -94,7 +176,12 @@ function cappedAppend(current, chunk, cap = 50_000) {
 
 async function execute(task) {
   return await new Promise((resolveResult) => {
-    const child = spawn('/bin/sh', ['-lc', task.command], {
+    const command = process.platform === 'win32' ? 'powershell.exe' : '/bin/sh';
+    const commandArgs =
+      process.platform === 'win32'
+        ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', task.command]
+        : ['-lc', task.command];
+    const child = spawn(command, commandArgs, {
       cwd: task.cwd || homedir(),
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -105,7 +192,16 @@ async function execute(task) {
     const timeout = setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
-      setTimeout(() => child.kill('SIGKILL'), 2000).unref();
+      setTimeout(() => {
+        if (process.platform === 'win32' && child.pid) {
+          spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+            stdio: 'ignore',
+            windowsHide: true,
+          });
+        } else {
+          child.kill('SIGKILL');
+        }
+      }, 2000).unref();
     }, task.timeoutMs);
     child.stdout.on('data', (chunk) => {
       stdout = cappedAppend(stdout, chunk);
@@ -181,7 +277,7 @@ try {
   else if (args[0] === 'run') await run();
   else
     console.log(
-      'Jian Remote worker\n  install --gateway HTTPS_URL --machine UUID --token-stdin\n  run',
+      'Jian Remote worker\n  install --gateway HTTPS_URL --machine UUID (--token-prompt | --token-stdin)\n  run',
     );
 } catch (error) {
   console.error(error.message);

@@ -55,6 +55,9 @@ export type DecisionsStatus = JsonResponse<'getDecisions', 200>;
 export type DecisionsSettingsPatch = RequestBody<'updateDecisionsSettings'>;
 export type SshKey = JsonResponse<'listSshKeys', 200>[number];
 export type NewSshKey = RequestBody<'createSshKey'>;
+export type RemoteMachine = JsonResponse<'listRemoteMachines', 200>[number];
+export type NewRemoteMachine = RequestBody<'createRemoteMachine'>;
+export type CreatedRemoteMachine = JsonResponse<'createRemoteMachine', 201>;
 
 /** The open profile's whole screenful. Every section reads its slice from here. */
 export type ProfileData = {
