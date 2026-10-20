@@ -246,8 +246,12 @@
   .danger-zone p {
     @apply mt-1 max-w-prose text-sm text-ink;
   }
+  /*
+   * Override the UA dialog { overflow: auto } so Selects/pickers that portal into the dialog
+   * can paint past the footer. Scrolling stays on .modal-body.
+   */
   .modal {
-    @apply m-auto w-[min(600px,calc(100vw-32px))] max-h-[calc(100dvh-48px)] overflow-hidden rounded-sm border border-line bg-canvas p-0 text-ink;
+    @apply m-auto w-[min(600px,calc(100vw-32px))] max-h-[calc(100dvh-48px)] overflow-visible rounded-sm border border-line bg-canvas p-0 text-ink;
   }
   .modal[open] {
     @apply flex flex-col;
@@ -260,7 +264,7 @@
     backdrop-filter: blur(4px);
   }
   .modal > header {
-    @apply flex shrink-0 items-start justify-between gap-5 border-b border-line px-7 pb-5 pt-7;
+    @apply flex shrink-0 items-start justify-between gap-5 rounded-t-sm border-b border-line px-7 pb-5 pt-7;
   }
   .modal header h2 {
     @apply text-3xl;
@@ -277,7 +281,7 @@
   }
   /* Outside the scrolling body, so it never moves with the content. */
   .modal-footer {
-    @apply flex shrink-0 justify-end gap-3 border-t border-line bg-canvas px-7 pb-6 pt-5;
+    @apply flex shrink-0 justify-end gap-3 rounded-b-sm border-t border-line bg-canvas px-7 pb-6 pt-5;
   }
   /* A dialog that is only a question and its answers has no content: the actions sit right
      under the header, without a second rule. */

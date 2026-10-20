@@ -42,8 +42,9 @@
   [data-popup-open] > .select-chevron {
     transform: rotate(180deg);
   }
+  /* Above the modal footer when the list paints past the dialog body. */
   .select-positioner {
-    @apply z-50 max-w-[calc(100vw-32px)];
+    @apply z-[60] max-w-[calc(100vw-32px)];
   }
   .select-popup {
     @apply min-w-52 overflow-hidden rounded-sm border border-line bg-surface text-sm text-ink;
