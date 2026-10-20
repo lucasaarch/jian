@@ -258,6 +258,7 @@ it('issues one Gemini Live token restricted to the configured voice model', asyn
   expect(body).toMatchObject({
     uses: 1,
     bidiGenerateContentSetup: {
+      systemInstruction: { parts: [{ text: expect.stringContaining('Help.') }] },
       model: 'models/gemini-3.8-live',
       generationConfig: {
         responseModalities: ['AUDIO'],
