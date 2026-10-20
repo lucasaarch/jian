@@ -211,6 +211,7 @@ export function guardTools(
 /** The gateway's own tools that act outside the conversation, by where they land. */
 export const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
   run_command: 'machine',
+  run_remote_command: 'machine',
   write_file: 'machine',
   edit_file: 'machine',
   send_file: 'message',

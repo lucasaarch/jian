@@ -12,6 +12,7 @@ import { Providers } from './providers/service.js';
 import { SubscriptionUsageReader } from './providers/subscription-usage.js';
 import { RepositoryStars } from './releases/repository.js';
 import { ReleaseNotes } from './releases/service.js';
+import { Remote } from './remote/service.js';
 import { RunLifecycle } from './runs/lifecycle.js';
 import { Runs } from './runs/service.js';
 import { Schedules } from './schedules/service.js';
@@ -56,6 +57,7 @@ export type Services = {
   vault: Vault;
   gatewayVault: GatewayVault;
   sshKeys: SshKeys;
+  remote: Remote;
 };
 
 /** One wiring point: every area gets the same store, vault and clock. */
@@ -147,6 +149,7 @@ export function buildServices({
     vault,
     gatewayVault,
     sshKeys: new SshKeys(profiles),
+    remote: new Remote(store, clock),
   };
 
   return services;
