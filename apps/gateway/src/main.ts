@@ -123,6 +123,7 @@ const services = {
   store,
 };
 const codexLogin = new CodexLogin(services, gatewayVault);
+services.providers.useCodexLogin(codexLogin);
 services.media.useCodexLogin(codexLogin);
 services.subscriptionUsage.useCodexLogin(codexLogin);
 

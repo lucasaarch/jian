@@ -1,9 +1,75 @@
+import { profileSchema } from '@jian/contracts';
 import { generateText, streamText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createCodexModel } from '../src/providers/codex/model.js';
+import { Providers } from '../src/providers/service.js';
 
 describe('ChatGPT Codex model adapter', () => {
+  it('uses the refreshed OAuth token when summarizing a voice transcript', async () => {
+    const providerId = '00000000-0000-4000-8000-000000000001';
+    const profile = profileSchema.parse({
+      name: 'Test',
+      instructions: 'Help the owner.',
+      model: { provider: 'openai-codex', modelId: 'gpt-5.6-terra', providerId },
+    });
+    const store = {
+      db: { select: () => ({ from: () => ({ where: async () => [] }) }) },
+    };
+    let authorization = '';
+    const fetcher: typeof fetch = async (_input, init) => {
+      authorization = new Headers(init?.headers).get('authorization') ?? '';
+      const item = {
+        id: 'msg_summary',
+        type: 'message',
+        role: 'assistant',
+        status: 'completed',
+        content: [
+          { type: 'output_text', text: 'The owner requested a follow-up.', annotations: [] },
+        ],
+      };
+      const response = {
+        id: 'resp_summary',
+        object: 'response',
+        created_at: 1,
+        model: 'gpt-5.6-terra',
+        status: 'completed',
+        output: [],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      };
+      const events = [
+        { type: 'response.output_item.done', output_index: 0, item },
+        { type: 'response.completed', response },
+      ];
+      return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''), {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    };
+    const providers = new Providers(
+      store as never,
+      { profile: async () => profile as never },
+      { read: async () => undefined } as never,
+      Date.now,
+      undefined,
+      fetcher,
+    );
+    providers.modelDefaults = async () => ({ conversation: null }) as never;
+    providers.useCodexLogin({
+      accessToken: async (id) => {
+        expect(id).toBe(providerId);
+        return 'refreshed-oauth-access-token';
+      },
+    });
+
+    await expect(
+      providers.summarizeVoiceTranscript('profile-test', {
+        transcript: 'Please follow up tomorrow.',
+      }),
+    ).resolves.toEqual({ summary: 'The owner requested a follow-up.' });
+    expect(authorization).toBe('Bearer refreshed-oauth-access-token');
+  });
+
   it('keeps Jian instructions and returns a Responses result', async () => {
     let request: Record<string, unknown> = {};
     let headers = new Headers();

@@ -1,3 +1,4 @@
+import { voiceTokenInputSchema } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import { GatewayError } from '../core/errors.js';
 import type { ProfileParams } from '../http/params.js';
@@ -19,6 +20,7 @@ type ProviderRouteServices = {
     >;
   codexLogin?: CodexLogin;
   providerModels?: Pick<ProviderModels, 'list'>;
+  sessions: { session(profileId: string, sessionId: string): Promise<unknown> };
 };
 
 export function registerProviderRoutes(app: FastifyInstance, deps: ProviderRouteServices): void {
@@ -65,9 +67,11 @@ export function registerProviderRoutes(app: FastifyInstance, deps: ProviderRoute
     deps.providers.setModelDefaults(request.params.profileId, request.body),
   );
 
-  app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/voice/token', async (request) =>
-    deps.providers.createVoiceToken(request.params.profileId),
-  );
+  app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/voice/token', async (request) => {
+    const { sessionId } = voiceTokenInputSchema.parse(request.body ?? {});
+    if (sessionId) await deps.sessions.session(request.params.profileId, sessionId);
+    return deps.providers.createVoiceToken(request.params.profileId, fetch, sessionId);
+  });
 
   app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/voice/summary', async (request) =>
     deps.providers.summarizeVoiceTranscript(request.params.profileId, request.body),

@@ -1,5 +1,30 @@
 'use client';
 
+type LiveFunctionCall = { id?: unknown; name?: unknown; args?: unknown };
+
+export async function liveVoiceToolResponses(
+  calls: LiveFunctionCall[],
+  execute: (name: string, args: unknown) => Promise<unknown>,
+) {
+  const responses = [];
+  let delegated = false;
+  for (const [index, call] of calls.entries()) {
+    const name = typeof call.name === 'string' ? call.name : '';
+    const id = typeof call.id === 'string' ? call.id : '';
+    try {
+      if (!id || !name || index >= 4) throw new Error('Invalid tool call');
+      if (name === 'delegate_to_jian') {
+        if (delegated) throw new Error('Only one task may be delegated at a time');
+        delegated = true;
+      }
+      responses.push({ id, name, response: { result: await execute(name, call.args) } });
+    } catch {
+      responses.push({ id, name, response: { error: 'Tool call was rejected or failed.' } });
+    }
+  }
+  return responses;
+}
+
 /** Decode a Gemini Live WebSocket frame; the server may send JSON text or a Blob. */
 async function frameText(data: MessageEvent['data']): Promise<string> {
   if (typeof data === 'string') return data;
@@ -20,8 +45,11 @@ export function liveVoiceUrl(token: string): string {
 export async function connectLiveVoice(
   token: string,
   model: string,
-  onTranscript: (text: string) => void = () => {},
+  onTranscript: (text: string, speaker: 'user' | 'assistant') => void = () => {},
   voiceName?: string,
+  onToolCall: (name: string, args: unknown) => Promise<unknown> = async () => ({
+    error: 'Tool unavailable',
+  }),
 ) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const context = new AudioContext();
@@ -80,6 +108,7 @@ export async function connectLiveVoice(
           outputTranscription?: { text?: unknown };
           modelTurn?: { parts?: Array<{ inlineData?: { data?: unknown } }> };
         };
+        toolCall?: { functionCalls?: Array<{ id?: unknown; name?: unknown; args?: unknown }> };
       };
       try {
         data = JSON.parse(await frameText(event.data));
@@ -90,10 +119,21 @@ export async function connectLiveVoice(
         opened = true;
         resolve();
       }
-      const transcript =
-        data.serverContent?.inputTranscription?.text ??
-        data.serverContent?.outputTranscription?.text;
-      if (typeof transcript === 'string' && transcript) onTranscript(transcript);
+      const functionCalls = data.toolCall?.functionCalls;
+      if (functionCalls?.length) {
+        const functionResponses = await liveVoiceToolResponses(functionCalls, onToolCall);
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ toolResponse: { functionResponses } }));
+        }
+      }
+      const inputTranscript = data.serverContent?.inputTranscription?.text;
+      if (typeof inputTranscript === 'string' && inputTranscript) {
+        onTranscript(inputTranscript, 'user');
+      }
+      const outputTranscript = data.serverContent?.outputTranscription?.text;
+      if (typeof outputTranscript === 'string' && outputTranscript) {
+        onTranscript(outputTranscript, 'assistant');
+      }
       for (const part of data.serverContent?.modelTurn?.parts ?? []) {
         const encoded = part.inlineData?.data;
         if (typeof encoded !== 'string' || !encoded) continue;

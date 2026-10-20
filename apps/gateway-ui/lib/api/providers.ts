@@ -17,8 +17,13 @@ export const providerCalls = (client: Client) => ({
   codexLogin: () => result(client.GET('/v1/providers/openai/oauth')),
   modelDefaults: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/model-defaults', { params: profile(profileId) })),
-  createVoiceToken: (profileId: string) =>
-    result(client.POST('/v1/profiles/{profileId}/voice/token', { params: profile(profileId) })),
+  createVoiceToken: (profileId: string, sessionId: string) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/voice/token', {
+        params: profile(profileId),
+        body: { sessionId },
+      }),
+    ),
   summarizeVoiceTranscript: (profileId: string, transcript: string) =>
     result(
       client.POST('/v1/profiles/{profileId}/voice/summary', {

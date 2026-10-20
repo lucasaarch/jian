@@ -244,20 +244,40 @@ it('issues one Gemini Live token restricted to the configured voice model', asyn
   });
   let headers: Headers | undefined;
   let body: Record<string, unknown> | undefined;
-  const token = await f.services.providers.createVoiceToken(f.profile.id, async (input, init) => {
-    expect(String(input)).toBe('https://generativelanguage.googleapis.com/v1beta/auth_tokens');
-    headers = new Headers(init?.headers);
-    body = JSON.parse(String(init?.body));
-    return Response.json({
-      name: 'ephemeral-only',
-      expireTime: new Date(Date.now() + 60_000).toISOString(),
-    });
+  f.services.providers.useSessionReader({
+    messages: async () =>
+      [{ role: 'user', content: 'Earlier request: remember my preference.' }] as never,
   });
+  const sessionId = '00000000-0000-4000-8000-000000000001';
+  const token = await f.services.providers.createVoiceToken(
+    f.profile.id,
+    async (input, init) => {
+      expect(String(input)).toBe('https://generativelanguage.googleapis.com/v1beta/auth_tokens');
+      headers = new Headers(init?.headers);
+      body = JSON.parse(String(init?.body));
+      return Response.json({
+        name: 'ephemeral-only',
+        expireTime: new Date(Date.now() + 60_000).toISOString(),
+      });
+    },
+    sessionId,
+  );
 
   expect(headers?.get('x-goog-api-key')).toBe('synthetic-google-key');
   expect(body).toMatchObject({
     uses: 1,
     bidiGenerateContentSetup: {
+      systemInstruction: {
+        parts: [{ text: expect.stringContaining('Earlier request: remember my preference.') }],
+      },
+      tools: [
+        {
+          functionDeclarations: expect.arrayContaining([
+            expect.objectContaining({ name: 'delegate_to_jian' }),
+            expect.objectContaining({ name: 'read_recent_conversation' }),
+          ]),
+        },
+      ],
       model: 'models/gemini-3.8-live',
       generationConfig: {
         responseModalities: ['AUDIO'],
