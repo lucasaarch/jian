@@ -750,10 +750,12 @@ export class Media {
     // A retry after a crash between storing and sharing finishes the sharing, once.
     if (existing) return this.share(run, existing.id, existing.id, undefined, target);
     const { config, key } = await this.selection(run.profileId, kind);
-    const selectedVoice =
+    const speechDefault =
       kind === 'speech' && voice === undefined
-        ? (await this.providers.modelDefaults(run.profileId)).speech?.voiceName
-        : voice;
+        ? (await this.providers.modelDefaults(run.profileId)).speech
+        : undefined;
+    const selectedVoice =
+      speechDefault && speechDefault !== 'disabled' ? speechDefault.voiceName : voice;
     const deadline = AbortSignal.any([
       signal ?? new AbortController().signal,
       AbortSignal.timeout(180_000),
