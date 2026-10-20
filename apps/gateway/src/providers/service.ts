@@ -25,6 +25,7 @@ import { modelCapabilities } from './capabilities.js';
 import { environmentProvider, GROQ_BASE_URL, providerKinds, XAI_BASE_URL } from './catalog.js';
 import type { ModelCatalog } from './catalog-source.js';
 import { anthropicCredential } from './claude-subscription.js';
+import type { CodexLogin } from './codex/login.js';
 import { resolveModel } from './models.js';
 import {
   findProvider,
@@ -48,6 +49,12 @@ export const VOICE_SUMMARY_SYSTEM =
 export type ContextPolicy = NonNullable<Run['contextPolicy']>;
 
 export class Providers {
+  private codexLogin?: Pick<CodexLogin, 'accessToken'>;
+
+  useCodexLogin(login: Pick<CodexLogin, 'accessToken'>) {
+    this.codexLogin = login;
+  }
+
   constructor(
     private readonly store: Store,
     // Credentials need no profile; the model each profile chooses with them does.
@@ -179,11 +186,14 @@ export class Providers {
     const profile = await this.profiles.profile(profileId);
     const chosen = selection ? await this.selectedModel(selection, this.store.db) : undefined;
     const config = chosen?.config ?? profile.model;
-    const key = config.apiKeyEnv
-      ? process.env[config.apiKeyEnv]
-      : config.providerId
-        ? await this.vault.read(providerSecret(config.providerId))
-        : undefined;
+    const key =
+      config.provider === 'openai-codex' && config.providerId
+        ? await this.codexLogin?.accessToken(config.providerId)
+        : config.apiKeyEnv
+          ? process.env[config.apiKeyEnv]
+          : config.providerId
+            ? await this.vault.read(providerSecret(config.providerId))
+            : undefined;
     const model = await resolveModel(config, process.env, undefined, key);
     const result = await generateText({
       model,
