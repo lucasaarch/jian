@@ -3,48 +3,51 @@
 import { Check, Copy, Monitor, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type { GatewayApi } from '../../lib/api';
+import { Avatar } from '../profile/avatar-field';
 import { Badge, Button, Confirm, Empty, Field, Modal, ResourceRow, SectionHeading } from '../ui';
+import { Select } from '../ui/select';
 
 type Props = { api: GatewayApi };
 type Machine = Awaited<ReturnType<GatewayApi['remoteMachines']>>[number];
 type Profile = Awaited<ReturnType<GatewayApi['profiles']>>[number];
 
-function toggleId(selected: string[], id: string, on: boolean) {
-  return on ? [...selected, id] : selected.filter((item) => item !== id);
-}
-
+/** Same agent picker as MCP import, with multiselect for who may run commands. */
 function ProfileAllowList({
   profiles,
   selected,
   onChange,
   empty,
+  id,
+  'aria-describedby': describedBy,
 }: {
   profiles: Profile[];
   selected: string[];
   onChange: (next: string[]) => void;
   empty: string;
+  id?: string;
+  'aria-describedby'?: string;
 }) {
   if (profiles.length === 0) {
     return <p className="note text-muted">{empty}</p>;
   }
 
   return (
-    <fieldset className="profile-allow-list">
-      <legend className="sr-only">Authorized profiles</legend>
-      {profiles.map((profile) => (
-        <label key={profile.id} className="check-row">
-          <input
-            type="checkbox"
-            checked={selected.includes(profile.id)}
-            onChange={(event) => onChange(toggleId(selected, profile.id, event.target.checked))}
-          />
-          <span>
-            <strong>{profile.name}</strong>
-            <small>{profile.id}</small>
-          </span>
-        </label>
-      ))}
-    </fieldset>
+    <Select
+      id={id}
+      aria-describedby={describedBy}
+      // When Field supplies `id`, its label is the accessible name; otherwise say what this is.
+      aria-label={id ? undefined : 'Authorized agents'}
+      multiple
+      value={selected}
+      onValueChange={onChange}
+      placeholder="No agents authorized"
+      searchThreshold={5}
+      options={profiles.map((item) => ({
+        value: item.id,
+        label: item.name,
+        icon: <Avatar name={item.name} avatar={item.avatar} className="mini-avatar" />,
+      }))}
+    />
   );
 }
 
@@ -279,18 +282,19 @@ export function RemoteMachines({ api }: Props) {
                 }
               >
                 <div className="connection-form">
-                  <p className="note">
-                    Only checked profiles may run shell commands on this computer. The default is
-                    none.
-                  </p>
-                  <ProfileAllowList
-                    profiles={profiles}
-                    selected={authorized}
-                    onChange={(next) =>
-                      setAccess((current) => ({ ...current, [machine.id]: next }))
-                    }
-                    empty="Create a profile before granting access."
-                  />
+                  <Field
+                    label="Agents allowed to execute commands"
+                    hint="Only these agents may run shell commands on this computer. Leave empty for none."
+                  >
+                    <ProfileAllowList
+                      profiles={profiles}
+                      selected={authorized}
+                      onChange={(next) =>
+                        setAccess((current) => ({ ...current, [machine.id]: next }))
+                      }
+                      empty="Create an agent before granting access."
+                    />
+                  </Field>
                   <div className="remote-access-actions">
                     <Button
                       type="button"
@@ -312,7 +316,7 @@ export function RemoteMachines({ api }: Props) {
       {creating && (
         <Modal
           title="Add a machine"
-          description="Name the computer, then choose which profiles may run commands on it."
+          description="Name the computer, then choose which agents may run commands on it."
           close={() => setCreating(false)}
           footer={
             <>
@@ -343,16 +347,17 @@ export function RemoteMachines({ api }: Props) {
                 placeholder="e.g. Lucas's Windows PC"
               />
             </Field>
-            <fieldset className="profile-allow-fieldset">
-              <legend>Profiles allowed to execute commands</legend>
+            <Field
+              label="Agents allowed to execute commands"
+              hint="Leave empty to create the machine with no access. You can change this later."
+            >
               <ProfileAllowList
                 profiles={profiles}
                 selected={allowed}
                 onChange={setAllowed}
-                empty="No profiles yet. You can still create the machine and grant access later."
+                empty="No agents yet. You can still create the machine and grant access later."
               />
-              <small>Leave every profile unchecked to create a machine with no access.</small>
-            </fieldset>
+            </Field>
           </form>
         </Modal>
       )}

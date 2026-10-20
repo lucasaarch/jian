@@ -27,7 +27,7 @@ export const Empty: Story = {
   render: () => <RemoteMachines api={gatewayApi()} />,
 };
 
-/** Add-machine modal with the profile allow-list open. */
+/** Add-machine modal with the multiselect agent picker. */
 export const AddMachine: Story = {
   render: () => <RemoteMachines api={gatewayApi()} />,
   play: async ({ canvasElement }) => {
@@ -39,6 +39,8 @@ export const AddMachine: Story = {
     await waitFor(() =>
       expect(canvas.getByRole('heading', { name: 'Add a machine' })).toBeVisible(),
     );
+    await userEvent.click(canvas.getByLabelText('Agents allowed to execute commands'));
+    await waitFor(() => expect(canvas.getByRole('option', { name: /Zero Two/i })).toBeVisible());
   },
 };
 
@@ -53,8 +55,10 @@ export const CreatedToken: Story = {
     await userEvent.click(canvas.getByRole('button', { name: /Add machine/i }));
     await waitFor(() => expect(canvas.getByLabelText('Machine name')).toBeVisible());
     await userEvent.type(canvas.getByLabelText('Machine name'), 'Demo laptop');
-    const zeroTwo = canvas.getByText('Zero Two');
-    await userEvent.click(zeroTwo);
+    await userEvent.click(canvas.getByLabelText('Agents allowed to execute commands'));
+    await waitFor(() => expect(canvas.getByRole('option', { name: /Zero Two/i })).toBeVisible());
+    await userEvent.click(canvas.getByRole('option', { name: /Zero Two/i }));
+    await userEvent.keyboard('{Escape}');
     await userEvent.click(canvas.getByRole('button', { name: 'Create machine' }));
     await waitFor(() =>
       expect(canvas.getByRole('heading', { name: 'Demo laptop created' })).toBeVisible(),
