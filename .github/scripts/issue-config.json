@@ -1,9 +1,7 @@
 {
   "enabled": true,
   "publishEnabled": true,
-  "repositories": [
-    "lucasaarch/jian"
-  ],
+  "repositories": ["lucasaarch/jian"],
   "model": "gemini-3.5-flash-lite",
   "targetLanguage": "en",
   "apiVersion": "2026-03-10",
