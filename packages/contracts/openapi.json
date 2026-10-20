@@ -30959,6 +30959,11 @@
                         "type": "string",
                         "maxLength": 2000
                       },
+                      "expiresAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
@@ -30980,6 +30985,7 @@
                       "filter",
                       "enabled",
                       "createdBy",
+                      "expiresAt",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -31264,6 +31270,11 @@
                   "enabled": {
                     "default": true,
                     "type": "boolean"
+                  },
+                  "durationSeconds": {
+                    "type": "integer",
+                    "minimum": 300,
+                    "maximum": 604800
                   }
                 },
                 "required": [
@@ -31424,6 +31435,11 @@
                       "type": "string",
                       "maxLength": 2000
                     },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -31445,6 +31461,7 @@
                     "filter",
                     "enabled",
                     "createdBy",
+                    "expiresAt",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -31733,6 +31750,11 @@
                   },
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "durationSeconds": {
+                    "type": "integer",
+                    "minimum": 300,
+                    "maximum": 604800
                   }
                 },
                 "additionalProperties": false
@@ -31886,6 +31908,11 @@
                       "type": "string",
                       "maxLength": 2000
                     },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -31907,6 +31934,7 @@
                     "filter",
                     "enabled",
                     "createdBy",
+                    "expiresAt",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -32264,6 +32292,11 @@
                       "type": "string",
                       "maxLength": 2000
                     },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -32285,6 +32318,7 @@
                     "filter",
                     "enabled",
                     "createdBy",
+                    "expiresAt",
                     "createdAt",
                     "updatedAt"
                   ],

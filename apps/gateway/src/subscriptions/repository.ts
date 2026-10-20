@@ -22,6 +22,7 @@ export function toSubscription(row: Row): Subscription {
     ...(row.lastWakeAt ? { lastWakeAt: row.lastWakeAt.toISOString() } : {}),
     ...(row.lastRunId ? { lastRunId: row.lastRunId } : {}),
     ...(row.lastError ? { lastError: row.lastError } : {}),
+    expiresAt: row.expiresAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -44,6 +45,7 @@ function toRow(subscription: Subscription, secretHash: string): typeof subscript
     lastWakeAt: subscription.lastWakeAt ? new Date(subscription.lastWakeAt) : null,
     lastRunId: subscription.lastRunId ?? null,
     lastError: subscription.lastError ?? null,
+    expiresAt: new Date(subscription.expiresAt),
     createdAt: new Date(subscription.createdAt),
     updatedAt: new Date(subscription.updatedAt),
   };

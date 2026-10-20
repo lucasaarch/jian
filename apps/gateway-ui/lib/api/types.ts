@@ -47,6 +47,7 @@ export type ScheduleInput = RequestBody<'createSchedule'>;
 export type SchedulePatch = RequestBody<'updateSchedule'>;
 export type Schedule = JsonResponse<'listSchedules', 200>[number];
 export type ScheduleRun = JsonResponse<'listScheduleRuns', 200>[number];
+export type Subscription = JsonResponse<'listSubscriptions', 200>[number];
 export type ProfilePatch = RequestBody<'updateProfile'>;
 export type NewChannel = RequestBody<'createChannel'>;
 export type NewProvider = RequestBody<'createProvider'>;

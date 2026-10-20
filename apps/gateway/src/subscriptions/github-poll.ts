@@ -199,23 +199,32 @@ export function observationsEqual(
 
 /**
  * Keeps a completed check snapshot for the same head when GitHub briefly returns empty or
- * in-progress runs. Overwriting that memory made the next green poll look like a new wake.
+ * in-progress runs. Also refuses to replace a known PR snapshot with an empty/error poll —
+ * wiping that memory made the next good poll look like a fresh transition and re-woke the
+ * agent every interval.
  */
 export function stabilizeObservation(
   previous: SubscriptionObservation | undefined,
   next: SubscriptionObservation,
 ): SubscriptionObservation {
   const raw = canonicalizeObservation(next);
+  const prior = canonicalizeObservation(previous);
+
+  // Failed or empty fetch: keep what we already know rather than erasing the latch.
+  if (!raw.pullState && !raw.headSha && (prior.pullState || prior.headSha)) {
+    return prior;
+  }
+
   if (
-    previous?.checksCompleted &&
-    previous.headSha &&
-    previous.headSha === raw.headSha &&
+    prior.checksCompleted &&
+    prior.headSha &&
+    prior.headSha === raw.headSha &&
     !raw.checksCompleted
   ) {
     return canonicalizeObservation({
       ...raw,
       checksCompleted: true,
-      ...(previous.checkConclusion ? { checkConclusion: previous.checkConclusion } : {}),
+      ...(prior.checkConclusion ? { checkConclusion: prior.checkConclusion } : {}),
     });
   }
   return raw;

@@ -393,6 +393,13 @@
       "when": 1792530000000,
       "tag": "0055_deliveries-one-per-run",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1792533600000,
+      "tag": "0056_subscription-expiry",
+      "breakpoints": true
     }
   ]
 }

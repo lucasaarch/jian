@@ -904,13 +904,13 @@ function subscriptionTools(subscriptions: NonNullable<ToolServices['subscription
   return {
     list_subscriptions: tool({
       description:
-        'List this profile’s event subscriptions: what they listen for, which conversation they wake, and whether they are on.',
+        'List this profile’s event subscriptions: what they listen for, which conversation they wake, whether they are on, next poll, and when they expire.',
       inputSchema: z.object({}),
       execute: async () => subscriptions.list(run.profileId),
     }),
     create_subscription: tool({
       description:
-        'Watch a GitHub pull request for CI finishing or the PR closing/merging. The gateway polls GitHub on an interval and wakes this conversation only when that state changes (not every tick) — no webhook setup required. Keep or open a session objective so the wake continues the work. Optionally returns a webhookSecret if you later want a faster path.',
+        'Watch a GitHub pull request for CI finishing or the PR closing/merging. The gateway polls GitHub on an interval and wakes this conversation only when that state changes (not every tick) — no webhook setup required. Listeners expire (default 1 hour; set durationSeconds for 30 minutes / 1 hour / 1 day). Keep or open a session objective so the wake continues the work. Optionally returns a webhookSecret if you later want a faster path.',
       inputSchema: z.object({
         name: z.string().min(1).max(80),
         instruction: z.string().min(1).max(4000),
@@ -935,6 +935,15 @@ function subscriptionTools(subscriptions: NonNullable<ToolServices['subscription
           .max(3600)
           .optional()
           .describe('Seconds between polls. Default 30.'),
+        durationSeconds: z
+          .number()
+          .int()
+          .min(300)
+          .max(604_800)
+          .optional()
+          .describe(
+            'How long to keep watching from now. Default 3600 (1 hour). Examples: 1800 (30 minutes), 86400 (1 day).',
+          ),
         events: z
           .array(z.enum(['check_suite.completed', 'pull_request.closed']))
           .min(1)
@@ -949,6 +958,7 @@ function subscriptionTools(subscriptions: NonNullable<ToolServices['subscription
         pullNumber,
         checkName,
         pollIntervalSeconds,
+        durationSeconds,
         enabled,
         ...rest
       }) =>
@@ -966,13 +976,15 @@ function subscriptionTools(subscriptions: NonNullable<ToolServices['subscription
               ...(checkName ? { checkName } : {}),
               ...(pollIntervalSeconds !== undefined ? { pollIntervalSeconds } : {}),
             },
+            ...(durationSeconds !== undefined ? { durationSeconds } : {}),
             enabled: enabled ?? true,
           },
           'agent',
         ),
     }),
     update_subscription: tool({
-      description: 'Change a subscription’s name, instruction, filter, session, or enabled flag.',
+      description:
+        'Change a subscription’s name, instruction, filter, session, enabled flag, or duration (extends expiresAt from now).',
       inputSchema: z.object({
         id: z.string().uuid(),
         name: z.string().min(1).max(80).optional(),
@@ -983,6 +995,13 @@ function subscriptionTools(subscriptions: NonNullable<ToolServices['subscription
         pullNumber: z.number().int().positive().optional(),
         checkName: z.string().min(1).max(200).optional(),
         pollIntervalSeconds: z.number().int().min(15).max(3600).optional(),
+        durationSeconds: z
+          .number()
+          .int()
+          .min(300)
+          .max(604_800)
+          .optional()
+          .describe('Reset how long to keep watching from now (e.g. 1800, 3600, 86400).'),
         events: z
           .array(z.enum(['check_suite.completed', 'pull_request.closed']))
           .min(1)
