@@ -158,8 +158,9 @@ Skills advertise short descriptions and load their instructions through `load_sk
 runs over HTTP or stdio. A remote catalogue is discovered on connection and searched with
 `search_mcp_tools`; schemas reach the prompt only after `load_mcp_tools`. Large results
 become paginated artifacts, capped at 1 MB per result. HTTP MCP supports header auth and
-OAuth (OAuth needs `JIAN_PUBLIC_URL`). The panel includes a GitHub MCP preset (HTTP+OAuth
-or stdio+PAT). With `allowShell`, the agent can also use `gh` once authenticated in the
+OAuth (OAuth needs `JIAN_PUBLIC_URL`). The panel includes GitHub MCP presets: HTTP+OAuth
+(preferred), Docker+PAT (`ghcr.io/github/github-mcp-server`), and an archived npx+PAT
+fallback. With `allowShell`, the agent can also use `gh` once authenticated in the
 profile workspace — see `docs/gateway-ui.md` and `docs/deploy.md`.
 
 ## Verification

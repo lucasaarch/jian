@@ -304,14 +304,21 @@ it.each(['disconnect', 'isError', 'readOnlyError', 'validationError'])(
             }),
           );
         } else if (failure === 'validationError') {
-          // Mutating tool: server answered with a definitive API rejection (GitHub 422-style).
+          // Mutating tool: server answered with a definitive API rejection (GitHub 422-style),
+          // including the errors[] body agents need to correct the call.
+          const details = {
+            message: 'Validation Failed',
+            documentation_url: 'https://docs.github.com/rest/issues/issues#create-an-issue',
+            errors: [{ resource: 'Issue', field: 'milestone', code: 'invalid', value: '-1' }],
+          };
           res.writeHead(200, { 'Content-Type': 'application/json' }).end(
             JSON.stringify({
               jsonrpc: '2.0',
               id: message.id,
               error: {
                 code: -32602,
-                message: 'Validation Failed: Invalid value for "milestone": -1 — HTTP 422',
+                message: `Validation Failed: Invalid value for "milestone": -1 — HTTP 422\nDetails: ${JSON.stringify(details)}`,
+                data: details,
               },
             }),
           );
@@ -489,7 +496,10 @@ it.each(['disconnect', 'isError', 'readOnlyError', 'validationError'])(
               return (
                 data.phase === 'tool-failed' &&
                 data.reason?.includes('422') &&
-                data.reason?.includes('milestone')
+                data.reason?.includes('milestone') &&
+                data.reason?.includes('"field":"milestone"') &&
+                data.reason?.includes('"value":"-1"') &&
+                data.reason?.includes('documentation_url')
               );
             }),
           ).toBe(true);

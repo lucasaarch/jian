@@ -13,7 +13,7 @@ export const mcpPresets: {
   {
     id: 'github-http',
     label: 'GitHub (HTTP + OAuth)',
-    hint: 'Official remote MCP. After save, use Test the connection to sign in. Needs JIAN_PUBLIC_URL.',
+    hint: 'Official remote MCP. After save, use Test the connection to sign in. Needs JIAN_PUBLIC_URL. Best validation error detail.',
     server: {
       name: 'github',
       transport: 'http',
@@ -26,9 +26,31 @@ export const mcpPresets: {
     },
   },
   {
+    id: 'github-stdio-docker',
+    label: 'GitHub (Docker + PAT)',
+    hint: 'Official ghcr.io/github/github-mcp-server. Set GITHUB_PERSONAL_ACCESS_TOKEN. Surfaces full 422 validation fields.',
+    server: {
+      name: 'github',
+      transport: 'stdio',
+      auth: 'none',
+      headers: [],
+      command: 'docker',
+      args: [
+        'run',
+        '-i',
+        '--rm',
+        '-e',
+        'GITHUB_PERSONAL_ACCESS_TOKEN',
+        'ghcr.io/github/github-mcp-server',
+      ],
+      env: [{ name: 'GITHUB_PERSONAL_ACCESS_TOKEN', value: '' }],
+      disabledTools: [],
+    },
+  },
+  {
     id: 'github-stdio',
-    label: 'GitHub (stdio + PAT)',
-    hint: 'Runs @modelcontextprotocol/server-github on this machine. Set GITHUB_PERSONAL_ACCESS_TOKEN.',
+    label: 'GitHub (npx + PAT, archived)',
+    hint: 'Deprecated @modelcontextprotocol/server-github. create_issue may return only "Validation Failed" without errors[]. Prefer HTTP+OAuth or Docker+PAT.',
     server: {
       name: 'github',
       transport: 'stdio',
