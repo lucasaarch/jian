@@ -920,7 +920,7 @@ function subscriptionTools(subscriptions: NonNullable<ToolServices['subscription
     }),
     create_subscription: tool({
       description:
-        'Watch a GitHub pull request for CI finishing or the PR closing/merging. The gateway polls GitHub on an interval and wakes this conversation when the state changes — no webhook setup required. Keep or open a session objective so the wake continues the work. Optionally returns a webhookSecret if you later want a faster path.',
+        'Watch a GitHub pull request for CI finishing or the PR closing/merging. The gateway polls GitHub on an interval and wakes this conversation only when that state changes (not every tick) — no webhook setup required. Keep or open a session objective so the wake continues the work. Optionally returns a webhookSecret if you later want a faster path.',
       inputSchema: z.object({
         name: z.string().min(1).max(80),
         instruction: z.string().min(1).max(4000),
