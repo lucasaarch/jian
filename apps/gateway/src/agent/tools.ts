@@ -678,7 +678,7 @@ export const TOOL_GROUPS = {
   },
   subscriptions: {
     summary:
-      'listen for external events such as GitHub CI finishing or a pull request merging, and wake this conversation when they fire',
+      'listen for GitHub CI finishing or a pull request merging by polling for state changes (optional webhook), and wake this conversation when they fire',
     tools: [
       'list_subscriptions',
       'create_subscription',
@@ -824,7 +824,7 @@ function scheduleTools(
       .string()
       .optional()
       .describe(
-        `A single time, ISO 8601 with its offset, e.g. 2026-10-02T15:00:00-03:00. Exclusive with cron.`,
+        'A single time: ISO 8601 with offset (2026-10-02T15:00:00-03:00 or …Z), ISO without offset (treated as UTC), or a relative delay (+30s, +5m, +1h, +2d). Exclusive with cron.',
       ),
     cron: z
       .string()
@@ -893,27 +893,62 @@ function subscriptionTools(subscriptions: NonNullable<ToolServices['subscription
     }),
     create_subscription: tool({
       description:
-        'Listen for a GitHub event (CI check suite completed, or pull request closed/merged) and start a turn in a conversation when it fires. Returns a webhookSecret once — configure that secret on the GitHub repo webhook pointing at POST /v1/hooks/github/:id.',
+        'Watch a GitHub pull request for CI finishing or the PR closing/merging. The gateway polls GitHub on an interval and wakes this conversation when the state changes — no webhook setup required. Keep or open a session objective so the wake continues the work. Optionally returns a webhookSecret if you later want a faster path.',
       inputSchema: z.object({
         name: z.string().min(1).max(80),
         instruction: z.string().min(1).max(4000),
         sessionId: z.string().uuid().optional(),
         owner: z.string().min(1).max(100),
         repo: z.string().min(1).max(100),
+        pullNumber: z
+          .number()
+          .int()
+          .positive()
+          .describe('Pull request number to watch (required for polling CI or merge state).'),
+        checkName: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe('Optional check run name filter, e.g. "Check".'),
+        pollIntervalSeconds: z
+          .number()
+          .int()
+          .min(15)
+          .max(3600)
+          .optional()
+          .describe('Seconds between polls. Default 30.'),
         events: z
           .array(z.enum(['check_suite.completed', 'pull_request.closed']))
           .min(1)
           .max(8),
         enabled: z.boolean().optional(),
       }),
-      execute: async ({ sessionId, owner, repo, events, enabled, ...rest }) =>
+      execute: async ({
+        sessionId,
+        owner,
+        repo,
+        events,
+        pullNumber,
+        checkName,
+        pollIntervalSeconds,
+        enabled,
+        ...rest
+      }) =>
         subscriptions.create(
           run.profileId,
           {
             ...rest,
             sessionId: sessionId ?? run.sessionId,
             source: 'github',
-            filter: { owner, repo, events },
+            filter: {
+              owner,
+              repo,
+              events,
+              pullNumber,
+              ...(checkName ? { checkName } : {}),
+              ...(pollIntervalSeconds !== undefined ? { pollIntervalSeconds } : {}),
+            },
             enabled: enabled ?? true,
           },
           'agent',
@@ -928,6 +963,9 @@ function subscriptionTools(subscriptions: NonNullable<ToolServices['subscription
         sessionId: z.string().uuid().optional(),
         owner: z.string().min(1).max(100).optional(),
         repo: z.string().min(1).max(100).optional(),
+        pullNumber: z.number().int().positive().optional(),
+        checkName: z.string().min(1).max(200).optional(),
+        pollIntervalSeconds: z.number().int().min(15).max(3600).optional(),
         events: z
           .array(z.enum(['check_suite.completed', 'pull_request.closed']))
           .min(1)
@@ -935,15 +973,37 @@ function subscriptionTools(subscriptions: NonNullable<ToolServices['subscription
           .optional(),
         enabled: z.boolean().optional(),
       }),
-      execute: async ({ id, owner, repo, events, ...patch }) => {
-        const touchingFilter = owner !== undefined || repo !== undefined || events !== undefined;
+      execute: async ({
+        id,
+        owner,
+        repo,
+        events,
+        pullNumber,
+        checkName,
+        pollIntervalSeconds,
+        ...patch
+      }) => {
+        const touchingFilter =
+          owner !== undefined ||
+          repo !== undefined ||
+          events !== undefined ||
+          pullNumber !== undefined ||
+          checkName !== undefined ||
+          pollIntervalSeconds !== undefined;
         if (touchingFilter) {
           if (!owner || !repo || !events?.length) {
             throw new GatewayError(400, 'A filter patch needs owner, repo and events together');
           }
           return subscriptions.update(run.profileId, id, {
             ...patch,
-            filter: { owner, repo, events },
+            filter: {
+              owner,
+              repo,
+              events,
+              ...(pullNumber !== undefined ? { pullNumber } : {}),
+              ...(checkName !== undefined ? { checkName } : {}),
+              ...(pollIntervalSeconds !== undefined ? { pollIntervalSeconds } : {}),
+            },
           });
         }
         return subscriptions.update(run.profileId, id, patch);

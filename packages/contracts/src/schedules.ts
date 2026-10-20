@@ -27,6 +27,47 @@ export const cronSchema = z
   .trim()
   .regex(/^(\S+\s+){4}\S+$/, 'A cron expression has five fields: minute hour day month weekday');
 
+/**
+ * Turns agent-friendly times into ISO-8601 with an offset before Zod validates.
+ * Accepts bare local ISO (treated as UTC), space separators, `+0000` offsets, and relative
+ * delays (`+30s`, `+5m`, `+1h`, `+2d`) from now — models often omit the offset otherwise.
+ */
+export function coerceScheduleAt(value: unknown, nowMs: number = Date.now()): unknown {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const relative = /^\+(\d+)([smhd])$/i.exec(trimmed);
+  if (relative) {
+    const amount = Number(relative[1]);
+    const unit = relative[2]?.toLowerCase();
+    const ms =
+      unit === 's'
+        ? amount * 1_000
+        : unit === 'm'
+          ? amount * 60_000
+          : unit === 'h'
+            ? amount * 3_600_000
+            : unit === 'd'
+              ? amount * 86_400_000
+              : undefined;
+    if (ms !== undefined) return new Date(nowMs + ms).toISOString();
+  }
+
+  let next = trimmed.replace(/^(\d{4}-\d{2}-\d{2})[ ]+/, '$1T');
+  // Compact offsets such as +0000 → +00:00 (Zod requires the colon).
+  next = next.replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(next)) next = `${next}:00`;
+  // No zone: treat as UTC so `2026-10-20T15:00:00` matches what agents commonly send.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(next)) next = `${next}Z`;
+  return next;
+}
+
+const scheduleAtSchema = z.preprocess(
+  (value) => coerceScheduleAt(value),
+  z.iso.datetime({ offset: true }).optional(),
+);
+
 const scheduleFields = {
   name: z.string().trim().min(1).max(80),
   /** What the agent is asked to do when the time comes, as if the owner wrote it then. */
@@ -34,7 +75,7 @@ const scheduleFields = {
   /** The conversation the agent runs in and answers: a chat, a group, the gateway. */
   sessionId: z.uuid(),
   /** A single time; exclusive with `cron`. */
-  at: z.iso.datetime({ offset: true }).optional(),
+  at: scheduleAtSchema,
   /** A repeating time; exclusive with `at`. */
   cron: z.preprocess(
     (value) => (typeof value === 'string' && !value.trim() ? undefined : value),

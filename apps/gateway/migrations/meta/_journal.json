@@ -372,6 +372,13 @@
       "when": 1790905600000,
       "tag": "0052_model-default-voice",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1790909200000,
+      "tag": "0053_subscription-polling",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,13 @@ import { z } from 'zod';
 /** How many event subscriptions one profile may keep. */
 export const SUBSCRIPTION_LIMIT = 50;
 
+/** Default gap between GitHub polls, in seconds. */
+export const SUBSCRIPTION_DEFAULT_POLL_SECONDS = 30;
+/** Shortest gap the gateway will poll a subscription, in seconds. */
+export const SUBSCRIPTION_MIN_POLL_SECONDS = 15;
+/** Longest gap the gateway will poll a subscription, in seconds. */
+export const SUBSCRIPTION_MAX_POLL_SECONDS = 3_600;
+
 export const subscriptionSourceSchema = z.enum(['github']);
 
 /**
@@ -28,6 +35,20 @@ export const githubSubscriptionFilterSchema = z.strictObject({
     .max(100)
     .regex(/^[A-Za-z0-9_.-]+$/),
   events: z.array(githubSubscriptionEventSchema).min(1).max(8),
+  /**
+   * Pull request to watch. Polling needs this to check CI or merge state; without it the
+   * subscription still accepts an optional webhook but will not poll usefully.
+   */
+  pullNumber: z.number().int().positive().max(1_000_000).optional(),
+  /** When set, only this check run name counts as the CI event (e.g. "Check"). */
+  checkName: z.string().trim().min(1).max(200).optional(),
+  /** How often the gateway polls GitHub for a state change. */
+  pollIntervalSeconds: z
+    .number()
+    .int()
+    .min(SUBSCRIPTION_MIN_POLL_SECONDS)
+    .max(SUBSCRIPTION_MAX_POLL_SECONDS)
+    .default(SUBSCRIPTION_DEFAULT_POLL_SECONDS),
 });
 
 const subscriptionFields = {
@@ -50,6 +71,15 @@ export const subscriptionPatchSchema = z.strictObject({
   enabled: z.boolean().optional(),
 });
 
+/** Last GitHub state the poller saw, used to detect transitions. */
+export const subscriptionObservationSchema = z.strictObject({
+  pullState: z.enum(['open', 'closed']).optional(),
+  merged: z.boolean().optional(),
+  headSha: z.string().optional(),
+  checksCompleted: z.boolean().optional(),
+  checkConclusion: z.string().optional(),
+});
+
 export const subscriptionRecordSchema = z.strictObject({
   id: z.uuid(),
   profileId: z.uuid(),
@@ -60,8 +90,11 @@ export const subscriptionRecordSchema = z.strictObject({
   filter: githubSubscriptionFilterSchema,
   enabled: z.boolean(),
   createdBy: z.enum(['owner', 'agent']),
-  /** Present once on create: webhook secret for GitHub. Never stored or returned again. */
+  /** Present once on create: optional webhook secret for GitHub. Never stored or returned again. */
   webhookSecret: z.string().min(1).max(200).optional(),
+  /** When the gateway will next poll GitHub (absent while switched off). */
+  nextPollAt: z.iso.datetime().optional(),
+  lastObservation: subscriptionObservationSchema.optional(),
   lastWakeAt: z.iso.datetime().optional(),
   lastRunId: z.uuid().optional(),
   lastError: z.string().max(2000).optional(),
@@ -84,3 +117,4 @@ export type Subscription = z.infer<typeof subscriptionRecordSchema>;
 export type SubscriptionInput = z.infer<typeof subscriptionInputSchema>;
 export type SubscriptionPatch = z.infer<typeof subscriptionPatchSchema>;
 export type SubscriptionDelivery = z.infer<typeof subscriptionDeliverySchema>;
+export type SubscriptionObservation = z.infer<typeof subscriptionObservationSchema>;
