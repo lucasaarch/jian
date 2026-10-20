@@ -396,6 +396,7 @@ export function Sessions({
             <Composer
               key={`composer-${active.id}`}
               name={profile.name}
+              sessionId={active.id}
               placeholder={
                 data.activities.some(
                   (run) => run.sessionId === active.id && run.status === 'waiting',
@@ -405,7 +406,47 @@ export function Sessions({
               }
               upload={(file) => api.upload(profile.id, active.id, file)}
               send={(text, mediaIds) => api.send(profile.id, active.id, text, mediaIds)}
-              createVoiceToken={() => api.createVoiceToken(profile.id)}
+              createVoiceToken={(sessionId) => api.createVoiceToken(profile.id, sessionId)}
+              executeVoiceTool={async (name, args) => {
+                if (name === 'read_recent_conversation') {
+                  if (args && typeof args === 'object' && Object.keys(args).length) {
+                    throw new Error('Invalid arguments');
+                  }
+                  const messages = await api.messages(profile.id, active.id);
+                  return messages.slice(-20).map(({ role, content }) => ({
+                    role,
+                    content: content.slice(0, 1200),
+                  }));
+                }
+                if (name !== 'delegate_to_jian' || !args || typeof args !== 'object') {
+                  throw new Error('Unsupported voice tool');
+                }
+                const task = (args as { task?: unknown }).task;
+                if (
+                  typeof task !== 'string' ||
+                  !task.trim() ||
+                  task.length > 4000 ||
+                  Object.keys(args).some((key) => key !== 'task')
+                ) {
+                  throw new Error('Invalid task');
+                }
+                const submitted = await api.send(
+                  profile.id,
+                  active.id,
+                  `[Live voice task]\n${task.trim()}`,
+                );
+                for (let attempt = 0; attempt < 120; attempt++) {
+                  const run = await api.run(profile.id, submitted.id);
+                  if (run.status === 'completed')
+                    return (run.output ?? 'Task completed.').slice(0, 6000);
+                  if (['failed', 'cancelled', 'interrupted'].includes(run.status))
+                    return run.error ?? `Task ${run.status}.`;
+                  if (run.status === 'waiting')
+                    return 'Jian needs the owner to answer a question in the conversation.';
+                  await new Promise((resolve) => setTimeout(resolve, 1000));
+                }
+                return 'Jian is still working; check the conversation for its result.';
+              }}
               onSent={() => {
                 setSent((value) => value + 1);
                 void refresh();

@@ -79,6 +79,7 @@ export function buildServices({
   const profiles = new Profiles(store, vault, clock);
   const providers = new Providers(store, profiles, gatewayVault, clock, catalog);
   const sessions = new Sessions(store, profiles, clock);
+  providers.useSessionReader(sessions);
   const memories = new Memories(store, profiles, sessions, clock);
   const runs = new Runs(store, profiles, sessions, providers, clock);
   const settings = new Settings(store, timeZone);

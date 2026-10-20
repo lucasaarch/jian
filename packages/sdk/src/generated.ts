@@ -4719,7 +4719,14 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    sessionId?: string;
+                };
+            };
+        };
         responses: {
             /** @description Success */
             200: {
