@@ -332,6 +332,22 @@
   .secret-value {
     @apply font-mono text-xs;
   }
+  /* Remote Control: one-time token / install copy blocks. */
+  .remote-access-actions {
+    @apply mt-4 flex justify-end;
+  }
+  .remote-created {
+    @apply flex flex-col gap-4;
+  }
+  .copy-block {
+    @apply min-w-0;
+  }
+  .copy-block-head {
+    @apply mb-2 flex items-center justify-between gap-3 text-xs font-medium;
+  }
+  .copy-block .secret-value {
+    @apply w-full resize-y rounded-sm border border-control bg-surface px-3 py-2.5 text-ink;
+  }
   .notice {
     @apply mb-6 flex items-start gap-3 rounded-sm border border-control bg-surface px-5 py-4 text-sm text-ink;
   }
