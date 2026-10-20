@@ -81,6 +81,16 @@ import {
 } from './records.js';
 import { releasesSchema, repositorySchema } from './releases.js';
 import {
+  remoteMachineAccessSchema,
+  remoteMachineCreatedSchema,
+  remoteMachineCreateSchema,
+  remoteMachineDeleteSchema,
+  remoteMachineSchema,
+  remoteResultSchema,
+  remoteWorkerPollSchema,
+  remoteWorkerResultSchema,
+} from './remote.js';
+import {
   gatewaySettingsPatchSchema,
   gatewaySettingsSchema,
   scheduleInputSchema,
@@ -127,6 +137,56 @@ export const cursorSchema = z.strictObject({
 });
 
 export const operations: Operation[] = [
+  {
+    method: 'GET',
+    path: '/v1/remote/machines',
+    operationId: 'listRemoteMachines',
+    access: 'admin',
+    response: z.array(remoteMachineSchema),
+  },
+  {
+    method: 'POST',
+    path: '/v1/remote/machines',
+    operationId: 'createRemoteMachine',
+    access: 'admin',
+    body: remoteMachineCreateSchema,
+    response: remoteMachineCreatedSchema,
+    status: 201,
+  },
+  {
+    method: 'PATCH',
+    path: '/v1/remote/machines/:machineId/access',
+    operationId: 'setRemoteMachineAccess',
+    access: 'admin',
+    params: z.strictObject({ machineId: z.uuid() }),
+    body: remoteMachineAccessSchema,
+    response: remoteMachineSchema,
+  },
+  {
+    method: 'DELETE',
+    path: '/v1/remote/machines/:machineId',
+    operationId: 'deleteRemoteMachine',
+    access: 'admin',
+    params: z.strictObject({ machineId: z.uuid() }),
+    response: remoteMachineDeleteSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/remote/worker/:machineId/tasks/next',
+    operationId: 'pollRemoteTask',
+    access: 'webhook',
+    params: z.strictObject({ machineId: z.uuid() }),
+    response: remoteWorkerPollSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/remote/worker/:machineId/tasks/:taskId/result',
+    operationId: 'completeRemoteTask',
+    access: 'webhook',
+    params: z.strictObject({ machineId: z.uuid(), taskId: z.uuid() }),
+    body: remoteResultSchema,
+    response: remoteWorkerResultSchema,
+  },
   {
     method: 'GET',
     path: `${profile}/ssh-keys`,

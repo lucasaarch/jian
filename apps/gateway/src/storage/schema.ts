@@ -95,11 +95,39 @@ export const providerKind = pgEnum('provider_kind', [
   'openai-compatible',
 ]);
 
-/**
- * A vendor credential belongs to the installation, not to a profile. There is one owner, and
- * signing in to the same vendor once per agent is work nobody would do twice. Which model an
- * agent uses stays its own choice, in `model_defaults`.
- */
+/** A connected computer is shared across profiles; access is granted per profile, default empty. */
+export const remoteMachines = pgTable('remote_machines', {
+  id: uuid('id').primaryKey(),
+  name: text('name').notNull(),
+  platform: text('platform').notNull(),
+  tokenHash: text('token_hash').notNull(),
+  allowedProfileIds: jsonb('allowed_profile_ids').$type<string[]>().notNull().default([]),
+  createdAt,
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+});
+
+export const remoteTasks = pgTable(
+  'remote_tasks',
+  {
+    id: uuid('id').primaryKey(),
+    machineId: uuid('machine_id')
+      .notNull()
+      .references(() => remoteMachines.id, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    command: text('command').notNull(),
+    cwd: text('cwd'),
+    timeoutMs: integer('timeout_ms').notNull(),
+    status: text('status').$type<'queued' | 'running' | 'completed' | 'failed'>().notNull(),
+    result: jsonb('result'),
+    createdAt,
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('remote_tasks_pending').on(table.machineId, table.status, table.createdAt)],
+);
+
+/** Installation-wide provider credentials are shared by profiles. */
 export const providers = pgTable(
   'providers',
   {
