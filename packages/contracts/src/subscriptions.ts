@@ -10,6 +10,16 @@ export const SUBSCRIPTION_MIN_POLL_SECONDS = 15;
 /** Longest gap the gateway will poll a subscription, in seconds. */
 export const SUBSCRIPTION_MAX_POLL_SECONDS = 3_600;
 
+/**
+ * How long a listener stays on when the agent omits a duration. One hour covers a typical
+ * CI wait without leaving an infinite watch after the owner walks away.
+ */
+export const SUBSCRIPTION_DEFAULT_TTL_SECONDS = 3_600;
+/** Shortest TTL the agent may set, in seconds (five minutes). */
+export const SUBSCRIPTION_MIN_TTL_SECONDS = 300;
+/** Longest TTL the agent may set, in seconds (seven days). */
+export const SUBSCRIPTION_MAX_TTL_SECONDS = 7 * 24 * 3_600;
+
 export const subscriptionSourceSchema = z.enum(['github']);
 
 /**
@@ -59,6 +69,16 @@ const subscriptionFields = {
   source: subscriptionSourceSchema,
   filter: githubSubscriptionFilterSchema,
   enabled: z.boolean().default(true),
+  /**
+   * How long this listener stays active from create/update. Omit for the default (1 hour).
+   * Common values: 1800 (30 minutes), 3600 (1 hour), 86400 (1 day).
+   */
+  durationSeconds: z
+    .number()
+    .int()
+    .min(SUBSCRIPTION_MIN_TTL_SECONDS)
+    .max(SUBSCRIPTION_MAX_TTL_SECONDS)
+    .optional(),
 };
 
 export const subscriptionInputSchema = z.strictObject(subscriptionFields);
@@ -69,6 +89,7 @@ export const subscriptionPatchSchema = z.strictObject({
   sessionId: subscriptionFields.sessionId.optional(),
   filter: subscriptionFields.filter.optional(),
   enabled: z.boolean().optional(),
+  durationSeconds: subscriptionFields.durationSeconds,
 });
 
 /** Last GitHub state the poller saw, used to detect transitions. */
@@ -92,12 +113,14 @@ export const subscriptionRecordSchema = z.strictObject({
   createdBy: z.enum(['owner', 'agent']),
   /** Present once on create: optional webhook secret for GitHub. Never stored or returned again. */
   webhookSecret: z.string().min(1).max(200).optional(),
-  /** When the gateway will next poll GitHub (absent while switched off). */
+  /** When the gateway will next poll GitHub (absent while switched off or expired). */
   nextPollAt: z.iso.datetime().optional(),
   lastObservation: subscriptionObservationSchema.optional(),
   lastWakeAt: z.iso.datetime().optional(),
   lastRunId: z.uuid().optional(),
   lastError: z.string().max(2000).optional(),
+  /** When this listener stops polling. Always set on create; extend via durationSeconds. */
+  expiresAt: z.iso.datetime(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });

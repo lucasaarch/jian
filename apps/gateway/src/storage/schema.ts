@@ -407,6 +407,7 @@ export const subscriptions = pgTable(
     lastWakeAt: timestamp('last_wake_at', { withTimezone: true }),
     lastRunId: uuid('last_run_id'),
     lastError: text('last_error'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt,
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

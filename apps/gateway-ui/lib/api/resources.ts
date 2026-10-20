@@ -65,6 +65,8 @@ export const resourceCalls = (client: Client) => ({
         params: { path: { profileId }, query: { days } },
       }),
     ),
+  subscriptions: (profileId: string) =>
+    result(client.GET('/v1/profiles/{profileId}/subscriptions', { params: profile(profileId) })),
   schedules: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/schedules', { params: profile(profileId) })),
   createSchedule: (profileId: string, body: ScheduleInput) =>

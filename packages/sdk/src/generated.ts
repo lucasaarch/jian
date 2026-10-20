@@ -15522,6 +15522,8 @@ export interface operations {
                         lastRunId?: string;
                         lastError?: string;
                         /** Format: date-time */
+                        expiresAt: string;
+                        /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
                         updatedAt: string;
@@ -15658,6 +15660,7 @@ export interface operations {
                     };
                     /** @default true */
                     enabled?: boolean;
+                    durationSeconds?: number;
                 };
             };
         };
@@ -15707,6 +15710,8 @@ export interface operations {
                         /** Format: uuid */
                         lastRunId?: string;
                         lastError?: string;
+                        /** Format: date-time */
+                        expiresAt: string;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -15873,6 +15878,8 @@ export interface operations {
                         lastRunId?: string;
                         lastError?: string;
                         /** Format: date-time */
+                        expiresAt: string;
+                        /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
                         updatedAt: string;
@@ -16007,6 +16014,7 @@ export interface operations {
                         pollIntervalSeconds?: number;
                     };
                     enabled?: boolean;
+                    durationSeconds?: number;
                 };
             };
         };
@@ -16056,6 +16064,8 @@ export interface operations {
                         /** Format: uuid */
                         lastRunId?: string;
                         lastError?: string;
+                        /** Format: date-time */
+                        expiresAt: string;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
