@@ -1102,6 +1102,47 @@ it('sends what the agent says on its way to a tool, once, while the run is still
   }
 });
 
+it('does not resend a flushed commentary paragraph when the final restates it', async () => {
+  const sent: string[] = [];
+
+  const f = await setup(async (url, options) => {
+    if (String(url).includes('sendMessage')) {
+      sent.push(JSON.parse(String(options?.body)).text);
+    }
+
+    return Response.json({ ok: true, result: { message_id: 5 } });
+  });
+
+  try {
+    await f.channels.receive(f.channel.id, webhook(f.channel.webhookToken));
+
+    const [pending] = await f.channels.contacts(f.profile.id);
+    if (!pending) throw new Error('Contact request missing');
+
+    await f.channels.approveContact(f.profile.id, pending.id);
+
+    const runId = (await f.services.runs.activities(f.profile.id))[0]?.id as string;
+
+    await f.services.lifecycle.claim(runId, f.profile.id, 'worker');
+    await f.services.lifecycle.say(f.profile.id, runId, 'worker', 'Opening the board now.');
+    await f.channels.dispatch();
+    await f.services.lifecycle.finish(
+      f.profile.id,
+      runId,
+      'worker',
+      'completed',
+      'Opening the board now.\n\nTwelve open.',
+    );
+    await f.channels.dispatch();
+    await f.channels.dispatch();
+
+    expect(sent.filter((text) => text === 'Opening the board now.')).toHaveLength(1);
+    expect(sent.at(-1)).toBe('Twelve open.');
+  } finally {
+    await f.app.close();
+  }
+});
+
 describe('agents in the same Telegram group', () => {
   it('hears what another agent answered, though Telegram never shows a bot to a bot', async () => {
     const services = await testServices();
