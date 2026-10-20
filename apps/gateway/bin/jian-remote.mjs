@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -231,6 +232,34 @@ async function execute(task) {
   });
 }
 
+async function updateIfNeeded(base, headers) {
+  const script = fileURLToPath(import.meta.url);
+  const local = await readFile(script);
+  const etag = `"${createHash('sha256').update(local).digest('hex')}"`;
+  const response = await fetch(`${base}/update`, {
+    headers: { ...headers, 'if-none-match': etag },
+    redirect: 'error',
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (response.status === 304) return false;
+  if (!response.ok) throw new Error(`worker update check failed: HTTP ${response.status}`);
+  const updated = Buffer.from(await response.arrayBuffer());
+  if (!updated.length || updated.length > 1_000_000) throw new Error('Invalid worker update size');
+  const temp = `${script}.${process.pid}.tmp`;
+  await writeFile(temp, updated, { mode: 0o700 });
+  await rename(temp, script);
+  console.log('Worker updated; restarting to apply it.');
+  if (process.platform === 'win32') {
+    const child = spawn(process.execPath, [script, 'run'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    child.unref();
+  }
+  process.exit(0);
+}
+
 async function run() {
   const config = JSON.parse(await readFile(configPath, 'utf8'));
   const headers = {
@@ -239,14 +268,25 @@ async function run() {
   };
   const base = `${config.gateway}/v1/remote/worker/${config.machineId}`;
   console.log(`Connected to Jian Remote at ${config.gateway}`);
+  let failures = 0;
+  let nextUpdateCheck = 0;
+  const delay = async (attempt) => {
+    const ceiling = Math.min(60_000, 1000 * 2 ** Math.min(attempt, 6));
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, Math.random() * ceiling));
+  };
   while (true) {
     try {
+      if (Date.now() >= nextUpdateCheck) {
+        await updateIfNeeded(base, headers);
+        nextUpdateCheck = Date.now() + 5 * 60_000;
+      }
       const response = await fetch(`${base}/tasks/next`, {
         headers,
         redirect: 'error',
         signal: AbortSignal.timeout(30_000),
       });
       if (!response.ok) throw new Error(`poll failed: HTTP ${response.status}`);
+      failures = 0;
       const { task } = await response.json();
       if (!task) {
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
@@ -267,12 +307,12 @@ async function run() {
           break;
         } catch (error) {
           console.error(error.message);
-          await new Promise((resolveDelay) => setTimeout(resolveDelay, 2000));
+          await delay(++failures);
         }
       }
     } catch (error) {
       console.error(error.message);
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 3000));
+      await delay(++failures);
     }
   }
 }

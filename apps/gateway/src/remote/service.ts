@@ -226,6 +226,10 @@ export class Remote {
     };
   }
 
+  async workerUpdateAuthorized(machineId: string, authorization: string) {
+    await this.authenticate(machineId, authorization);
+  }
+
   async complete(machineId: string, taskId: string, authorization: string, input: unknown) {
     await this.authenticate(machineId, authorization);
     const result = remoteResultSchema.parse(input);
