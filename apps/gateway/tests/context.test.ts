@@ -3,7 +3,7 @@ import type { Message } from '@jian/contracts';
 import { tool } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { fitPrompt, promptTokens, tokenCounter } from '../src/context/budget.js';
+import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../src/context/budget.js';
 import { buildContext } from '../src/context/build.js';
 import { compactPrompt, needsCompaction } from '../src/context/compaction.js';
 import { toolHistoryByRun } from '../src/context/tool-history.js';
@@ -171,7 +171,11 @@ describe('context', () => {
     expect(full.messages.at(-1)?.content).toContain('What did Alice say?');
 
     await services.sessions.summarize(profile.id, session.id, 'Legacy checkpoint', stamp);
-    expect((await services.contexts.context(first)).messages[0]?.content).toContain('group turn 0');
+    // Timestamp-only checkpoints (pre message-id cursor) must not reload the covered turns.
+    const legacy = await services.contexts.context(first);
+    expect(legacy.system).toContain('Legacy checkpoint');
+    expect(legacy.messages[0]?.content).not.toContain('group turn 0');
+    expect(legacy.messages.at(-1)?.content).toContain('What did Alice say?');
 
     await services.sessions.summarize(
       profile.id,
@@ -274,6 +278,20 @@ describe('context', () => {
         tools: {},
       }),
     ).toThrow('Context budget exceeded');
+
+    const truncated = truncatePrompt({
+      provider: 'anthropic',
+      modelId: 'test',
+      policy: { inputTokens: 4096, outputTokens: 256 },
+      instructions: 'Answer carefully.',
+      messages,
+      tools: {},
+      currentStartIndex: 2,
+    });
+    expect(truncated).toBeDefined();
+    expect(truncated?.droppedBlocks).toBeGreaterThan(0);
+    expect(JSON.stringify(truncated?.messages)).toContain('current question');
+    expect(JSON.stringify(truncated?.messages)).not.toContain('old'.repeat(20));
   });
 
   it('fails if the mandatory current turn and tool schemas cannot fit with output reserved', () => {

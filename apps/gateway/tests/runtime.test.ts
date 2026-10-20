@@ -985,6 +985,44 @@ it('reports a safe context-budget error when required prompt content cannot fit'
   expect(finished.error).not.toContain('credential');
 });
 
+it('truncates older turns when compaction cannot free the context budget', async () => {
+  const { services, profile, session, run } = await fixture({
+    inputTokens: 16000,
+    outputTokens: 1024,
+    maxSteps: 4,
+  });
+  for (let index = 0; index < 6; index++) {
+    await insertMessage(services.store.db, {
+      id: randomUUID(),
+      profileId: profile.id,
+      sessionId: session.id,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      content: `turn-${index} ${'history '.repeat(800)}`,
+      createdAt: new Date(Date.parse('2026-09-29T09:00:00.000Z') + index * 1000).toISOString(),
+    });
+  }
+  let answered = false;
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (!options.tools?.length) throw new Error('compaction model unavailable');
+      answered = true;
+      expect(JSON.stringify(options.prompt)).toContain(run.input);
+      expect(JSON.stringify(options.prompt)).not.toContain('turn-0');
+      return answer('Answered after dropping older turns.');
+    },
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const finished = await services.runs.run(profile.id, run.id);
+  expect(answered).toBe(true);
+  expect(finished.status).toBe('completed');
+  expect(finished.output).toBe('Answered after dropping older turns.');
+  expect(JSON.stringify(await services.lifecycle.checkpoints(profile.id, run.id))).toContain(
+    'context-truncated',
+  );
+});
+
 it('does not mark a local validation failure as an uncertain external effect', async () => {
   const { services, profile, run } = await fixture();
   let calls = 0;

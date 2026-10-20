@@ -272,6 +272,8 @@ export async function listUncompactedMessages(
   db: Queryable,
   sessionId: string,
   afterId?: string,
+  /** Pre-cursor installations only stored a timestamp; used when `afterId` is missing. */
+  afterAt?: string,
 ): Promise<Message[]> {
   const [cursor] = afterId
     ? await db
@@ -291,7 +293,9 @@ export async function listUncompactedMessages(
               gt(messages.createdAt, cursor.createdAt),
               and(eq(messages.createdAt, cursor.createdAt), gt(messages.id, cursor.id)),
             )
-          : undefined,
+          : afterAt
+            ? gt(messages.createdAt, new Date(afterAt))
+            : undefined,
       ),
     )
     .orderBy(messages.createdAt, messages.id);

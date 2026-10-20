@@ -57,7 +57,15 @@ export class Contexts {
       worker ? [] : this.runs.activities(run.profileId),
       worker ? null : findGatewaySession(this.store.db, run.profileId),
       worker ? [] : listConversations(this.store.db, run.profileId),
-      this.sessions.uncompactedMessages(run.profileId, run.sessionId, session.summarizedThroughId),
+      this.sessions.uncompactedMessages(
+        run.profileId,
+        run.sessionId,
+        session.summarizedThroughId,
+        // Older checkpoints stored only a timestamp. After continuous-context stopped capping
+        // history at 40 turns, a missing through_id reloads the covered transcript beside the
+        // summary and blows the model window on long upgraded sessions.
+        session.summarizedThroughId ? undefined : session.summarizedUpTo,
+      ),
     ]);
 
     // One step out from what matched: the memories linked to it, which the request may not

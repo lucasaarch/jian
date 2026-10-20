@@ -35,10 +35,15 @@ function message(status: number, detail: Detail | undefined): string {
   }
 
   if (status === 409) {
-    return (
-      conflicts[detail?.error ?? ''] ??
-      'Something changed, or the session is busy. Refresh and try again.'
-    );
+    const error = detail?.error ?? '';
+    if (conflicts[error]) return conflicts[error];
+    if (error.startsWith('This model cannot run ')) {
+      return `${error}. Clear or replace that activity's model, then try again.`;
+    }
+    if (error === 'Selected provider or model is unavailable') {
+      return 'That provider or model is no longer available. Choose another under Model defaults.';
+    }
+    return 'Something changed, or the session is busy. Refresh and try again.';
   }
 
   if (status === 429) {
