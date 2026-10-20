@@ -7,9 +7,21 @@ allowBuilds:
   fsevents: false
   msw: false
   protobufjs: false
+overrides:
+  source-map-js: '>=1.2.2'
+  # baileys declares ^11.12.3 — stay on the patched 11.x line
+  music-metadata: '11.16.1'
+  sharp: '>=0.35.5'
+  # drizzle-kit still pulls @esbuild-kit → esbuild@0.18.x (GHSA-67mh-4wv8-2f99)
+  'esbuild@<=0.24.2': '0.25.12'
 minimumReleaseAgeExclude:
   - '@ai-sdk/gateway@4.0.88'
   - '@ai-sdk/mcp@2.0.55'
   - '@ai-sdk/openai@4.0.72'
   - ai@7.0.108
   - pg-boss@12.33.4
+  # Security patches below the default minimum release age window
+  - next@16.3.8
+  - sharp@0.35.5
+  - source-map-js@1.2.2
+  - music-metadata@11.16.1
