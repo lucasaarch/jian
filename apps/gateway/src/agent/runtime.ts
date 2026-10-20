@@ -890,9 +890,12 @@ export class AgentRuntime {
         throw new Error('External tool outcome is uncertain');
       }
 
-      // Whatever the narrator has not already sent. The paragraphs before it are messages of
-      // this conversation already, so repeating them here would show them twice.
-      let answer = narrator.rest || (await result.text);
+      // Whatever the narrator has not already sent. Once a paragraph left as commentary,
+      // falling back to the model's full `text` would replay it on the channel.
+      let answer = narrator.rest;
+      if (!answer.trim() && !narrator.released) {
+        answer = await result.text;
+      }
       const finishReason = await result.finishReason;
 
       // A loop that runs out of steps has done the work and simply never wrote it down.
@@ -904,17 +907,23 @@ export class AgentRuntime {
       // A provider can return stop with reasoning but no text. Recover only the report;
       // replaying the loop could repeat writes that already succeeded.
       if (exhausted || !answer.trim()) {
-        answer = await this.closingWords(
-          model,
-          instructions,
-          [...lastMessages, ...((await result.steps).at(-1)?.response.messages ?? [])],
-          config,
-          account,
-          policy,
-          signal,
-        );
-        if (!answer.trim() && exhausted) {
-          answer = `Work saved in the checkpoints for run ${runId}. The turn reached its limit before a final report could be written. Resume from the saved results; do not repeat completed actions.`;
+        // Only reuse commentary when this final step itself flushed via a trailing blank line.
+        // Pre-tool lines must not become the answer — recover with closingWords instead.
+        if (!exhausted && narrator.finishedAsCommentary && narrator.lastSaid) {
+          answer = narrator.lastSaid;
+        } else {
+          answer = await this.closingWords(
+            model,
+            instructions,
+            [...lastMessages, ...((await result.steps).at(-1)?.response.messages ?? [])],
+            config,
+            account,
+            policy,
+            signal,
+          );
+          if (!answer.trim() && exhausted) {
+            answer = `Work saved in the checkpoints for run ${runId}. The turn reached its limit before a final report could be written. Resume from the saved results; do not repeat completed actions.`;
+          }
         }
       }
 

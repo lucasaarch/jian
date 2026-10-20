@@ -1293,7 +1293,7 @@
                   },
                   "stdout": {
                     "type": "string",
-                    "maxLength": 50000
+                    "maxLength": 400000
                   },
                   "stderr": {
                     "type": "string",

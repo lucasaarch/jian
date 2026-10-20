@@ -32,6 +32,7 @@ import { artifacts, checkpoints } from '../storage/schema.js';
 import type { Subscriptions } from '../subscriptions/service.js';
 import type { Work } from '../tasks/service.js';
 import { AskUserPause } from './ask-user.js';
+import { remoteTools } from './remote-tools.js';
 import { artifactPage } from './results.js';
 import { shellTools } from './shell.js';
 
@@ -587,29 +588,7 @@ export function profileTools(
   if (run.profile.allowShell) {
     Object.assign(tools, shellTools(run.profileId, gitAccess));
     if (services.remote) {
-      tools.list_remote_machines = tool({
-        description:
-          'List remote computers explicitly authorized for this agent. Commands run on those computers automatically, with the logged-in local user’s permissions.',
-        inputSchema: z.object({}),
-        execute: async () => services.remote?.listForProfile(run.profileId),
-      });
-      tools.run_remote_command = tool({
-        description:
-          'Run an arbitrary shell command on a remote computer explicitly authorized for this agent. This executes automatically on the computer with the local user’s privileges. List machines first and never claim success unless the result confirms it.',
-        inputSchema: z.object({
-          machineId: z.uuid(),
-          command: z.string().min(1).max(8000),
-          cwd: z.string().min(1).max(4096).optional(),
-          timeoutMs: z.number().int().min(1000).max(120000).default(30000),
-        }),
-        execute: async ({ machineId, command, cwd, timeoutMs }, { abortSignal }) =>
-          services.remote?.execute(
-            run.profileId,
-            machineId,
-            { command, cwd, timeoutMs },
-            abortSignal,
-          ),
-      });
+      Object.assign(tools, remoteTools(run, services.remote, services.store));
     }
   }
 
@@ -745,6 +724,17 @@ export const TOOL_GROUPS = {
   shell: {
     summary: 'run commands on the machine this gateway runs on',
     tools: ['run_command'],
+  },
+  remote: {
+    summary:
+      'list Remote Control machines, run commands there, take screenshots, and pull or push files',
+    tools: [
+      'list_remote_machines',
+      'run_remote_command',
+      'take_remote_screenshot',
+      'pull_remote_file',
+      'push_remote_file',
+    ],
   },
   web: {
     summary: 'search the web and read public pages',

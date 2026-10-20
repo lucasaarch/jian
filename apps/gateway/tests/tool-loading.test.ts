@@ -52,6 +52,7 @@ describe('tool loading', () => {
     for (const name of [
       ...TOOL_GROUPS.shell.tools,
       ...TOOL_GROUPS.files.tools,
+      ...TOOL_GROUPS.remote.tools,
       ...TOOL_GROUPS.activity.tools,
     ]) {
       expect(gated.has(name)).toBe(true);
@@ -64,6 +65,7 @@ describe('tool loading', () => {
     deferTools(tools, new Set());
 
     expect(tools.load_tools?.description).not.toContain('shell:');
+    expect(tools.load_tools?.description).not.toContain('remote:');
     expect(tools.load_tools?.description).toContain('contacts:');
   });
 
@@ -78,5 +80,10 @@ describe('tool loading', () => {
 
     expect(loaded.has('run_command')).toBe(true);
     expect(loaded.has('read_file')).toBe(false);
+    expect(loaded.has('run_remote_command')).toBe(false);
+
+    await load({ groups: ['remote'] }, { toolCallId: 'c2', messages: [] });
+    expect(loaded.has('run_remote_command')).toBe(true);
+    expect(loaded.has('take_remote_screenshot')).toBe(true);
   });
 });

@@ -35,8 +35,9 @@ export const remoteTaskSchema = z.strictObject({
 export const remoteResultSchema = z.strictObject({
   taskId: z.uuid(),
   exitCode: z.number().int().nullable(),
-  stdout: z.string().max(50000),
-  stderr: z.string().max(50000),
+  // Room for a compressed screenshot or a small file as base64 through the worker channel.
+  stdout: z.string().max(400_000),
+  stderr: z.string().max(50_000),
   timedOut: z.boolean().default(false),
 });
 

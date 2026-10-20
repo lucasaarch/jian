@@ -247,17 +247,22 @@ export class RunLifecycle {
       await updateRun(tx, final);
 
       if (status === 'completed') {
-        const message: Message = {
-          id: randomUUID(),
-          profileId,
-          sessionId: run.sessionId,
-          runId,
-          role: 'assistant',
-          content,
-          createdAt: nowIso(this.clock),
-        };
+        // Commentary already wrote this paragraph into history when a trailing blank line
+        // released it early; inserting again would show the same line twice in the panel.
+        const alreadySaid = run.commentary?.at(-1) === content;
+        if (!alreadySaid) {
+          const message: Message = {
+            id: randomUUID(),
+            profileId,
+            sessionId: run.sessionId,
+            runId,
+            role: 'assistant',
+            content,
+            createdAt: nowIso(this.clock),
+          };
 
-        await insertMessage(tx, message);
+          await insertMessage(tx, message);
+        }
       }
 
       await recordEvent(

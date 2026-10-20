@@ -1404,7 +1404,12 @@ export class Channels {
         continue;
       }
 
-      const outcome = await this.deliver(delivery, text, poll);
+      // Final output that was already flushed as the last commentary paragraph (trailing blank
+      // line in the stream) must not be sent again — that is the same-timestamp duplicate.
+      const alreadySaid = Boolean(text) && commentary.at(-1) === text;
+      const outcome = alreadySaid
+        ? { status: 'sent' as const, remoteMessageIds: [] as string[] }
+        : await this.deliver(delivery, text, poll);
 
       await this.services.store.transaction(delivery.profileId, async (tx) => {
         const current = assertFound(await findDelivery(tx, delivery.id), 'Delivery');
