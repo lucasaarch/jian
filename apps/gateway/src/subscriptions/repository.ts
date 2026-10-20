@@ -1,5 +1,5 @@
-import type { Subscription, SubscriptionDelivery } from '@jian/contracts';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import type { Subscription, SubscriptionDelivery, SubscriptionObservation } from '@jian/contracts';
+import { and, asc, desc, eq, isNotNull, lte } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { subscriptionDeliveries, subscriptions } from '../storage/schema.js';
 
@@ -17,6 +17,8 @@ export function toSubscription(row: Row): Subscription {
     filter: row.filter,
     enabled: row.enabled,
     createdBy: row.createdBy,
+    ...(row.nextPollAt ? { nextPollAt: row.nextPollAt.toISOString() } : {}),
+    ...(row.lastObservation ? { lastObservation: row.lastObservation } : {}),
     ...(row.lastWakeAt ? { lastWakeAt: row.lastWakeAt.toISOString() } : {}),
     ...(row.lastRunId ? { lastRunId: row.lastRunId } : {}),
     ...(row.lastError ? { lastError: row.lastError } : {}),
@@ -37,6 +39,8 @@ function toRow(subscription: Subscription, secretHash: string): typeof subscript
     enabled: subscription.enabled,
     createdBy: subscription.createdBy,
     secretHash,
+    nextPollAt: subscription.nextPollAt ? new Date(subscription.nextPollAt) : null,
+    lastObservation: (subscription.lastObservation as SubscriptionObservation | undefined) ?? null,
     lastWakeAt: subscription.lastWakeAt ? new Date(subscription.lastWakeAt) : null,
     lastRunId: subscription.lastRunId ?? null,
     lastError: subscription.lastError ?? null,
@@ -79,6 +83,23 @@ export async function findSubscription(db: Queryable, profileId: string, id: str
 export async function findSubscriptionById(db: Queryable, id: string) {
   const [row] = await db.select().from(subscriptions).where(eq(subscriptions.id, id)).limit(1);
   return row ?? null;
+}
+
+/** Enabled subscriptions whose next poll time has come. */
+export async function dueSubscriptions(db: Queryable, now: Date) {
+  const rows = await db
+    .select()
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.enabled, true),
+        isNotNull(subscriptions.nextPollAt),
+        lte(subscriptions.nextPollAt, now),
+      ),
+    )
+    .orderBy(asc(subscriptions.nextPollAt))
+    .limit(50);
+  return rows.map(toSubscription);
 }
 
 export async function insertSubscription(

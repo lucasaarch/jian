@@ -25,6 +25,7 @@ import { buildServices } from './services.js';
 import { Skills } from './skills/service.js';
 import { type StartupStage, startupFailure } from './startup.js';
 import { PostgresStore } from './storage/postgres.js';
+import { profileGithubTokenSource } from './subscriptions/github-token.js';
 
 const config = z
   .object({
@@ -167,12 +168,14 @@ services.work.useDeliveries(channels);
 services.objectives.useDeliveries(channels);
 // Answering a mid-run question from the panel resumes a channel run the same way.
 services.runs.useDeliveries(channels);
-// A matching GitHub webhook wakes the subscribed session the same way.
+// A matching GitHub event (poll or optional webhook) wakes the subscribed session the same way.
 services.subscriptions.useDeliveries(channels);
+services.subscriptions.useGithub(outbound.fetch, profileGithubTokenSource());
 
 /**
- * How often due schedules are looked for, in milliseconds. A schedule set for 08:00 starts
- * within this much of it; every worker looks, and a schedule starts once however many do.
+ * How often due schedules and Listening polls are looked for, in milliseconds. A schedule set
+ * for 08:00 starts within this much of it; every worker looks, and a schedule starts once
+ * however many do. Subscriptions poll GitHub on their own interval, checked on this tick.
  */
 const SCHEDULE_TICK_MS = 15_000;
 let scheduleTimer: ReturnType<typeof setInterval> | undefined;
@@ -253,6 +256,9 @@ try {
       void services.schedules
         .fireDue()
         .catch(() => console.error('jian: schedules could not be started; will retry'));
+      void services.subscriptions
+        .pollDue()
+        .catch(() => console.error('jian: subscription poll failed; will retry'));
     }, SCHEDULE_TICK_MS);
     scheduleTimer.unref();
   }

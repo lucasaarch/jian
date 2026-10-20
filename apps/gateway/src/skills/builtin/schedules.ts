@@ -20,8 +20,9 @@ The tools are in the \`schedules\` group; load it with \`load_tools\`: \`list_sc
   remembers nothing of this conversation. Say what to do, for whom, in what form, and
   anything it depends on. "Remind Lucas to call the dentist about moving Thursday's
   appointment" works; "remind him about that" does not.
-- **when** — either \`at\`, one time, as ISO 8601 with its offset
-  (\`2026-10-02T15:00:00-03:00\`), or \`cron\`, a repetition in five fields: minute hour
+- **when** — either \`at\`, one time — ISO 8601 with offset (\`2026-10-02T15:00:00-03:00\`
+  or with \`Z\`), ISO without offset (treated as UTC), or a relative delay (\`+30s\`,
+  \`+5m\`, \`+1h\`, \`+2d\`) — or \`cron\`, a repetition in five fields: minute hour
   day-of-month month day-of-week.
   - \`0 8 * * *\` every day at 08:00
   - \`30 9 * * 1-5\` weekdays at 09:30

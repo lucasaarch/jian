@@ -58,8 +58,8 @@ A large tool result is stored as an artifact; use \`read_artifact\` for the page
 See \`managing-context\` before long stretches of work. \`read_run_checkpoints\` shows
 what an earlier run actually did; inspect it before repeating an external action.
 
-Use a schedule for work that should resume at a specific time. Use a subscription to wake
-when an external event fires (GitHub CI finished, pull request merged) — the agent owns
-create/update/delete. Keep or open a session objective so the wake continues the work.
-Never claim an effect before its tool returns.`,
+Use a schedule for work that should resume at a specific time. Use a subscription to watch
+GitHub (CI finished, pull request merged): the gateway polls for state changes — no webhook
+setup required. The agent owns create/update/delete. Keep or open a session objective so the
+wake continues the work. Never claim an effect before its tool returns.`,
 };
