@@ -11,6 +11,11 @@ async function frameText(data: MessageEvent['data']): Promise<string> {
   return String(data);
 }
 
+/** Gemini requires the constrained WebSocket endpoint for ephemeral tokens. */
+export function liveVoiceUrl(token: string): string {
+  return `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(token)}`;
+}
+
 /** Direct browser-to-Gemini Live audio. Only the short-lived, single-use token reaches the browser. */
 export async function connectLiveVoice(
   token: string,
@@ -22,9 +27,7 @@ export async function connectLiveVoice(
   const context = new AudioContext();
   // Schedule playback before any model audio arrives; the message handler closes over this binding.
   let playbackAt = context.currentTime;
-  const socket = new WebSocket(
-    `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?access_token=${encodeURIComponent(token)}`,
-  );
+  const socket = new WebSocket(liveVoiceUrl(token));
   const source = context.createMediaStreamSource(stream);
   // ScriptProcessor is deprecated but widely available; AudioWorklet needs a separate module URL.
   const processor = context.createScriptProcessor(2048, 1, 1);
