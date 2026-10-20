@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import {
+  canonicalizeObservation,
   detectPollWake,
   observationsEqual,
   observationToStore,
@@ -60,6 +61,12 @@ it('latches a completed check snapshot when GitHub briefly returns incomplete ru
   expect(flickered.checksCompleted).toBe(true);
   expect(flickered.checkConclusion).toBe('success');
   expect(observationsEqual(openGreen, flickered)).toBe(true);
+});
+
+it('keeps the prior snapshot when a poll returns empty (fetch error)', () => {
+  const kept = stabilizeObservation(openGreen, {});
+  expect(kept).toEqual(canonicalizeObservation(openGreen));
+  expect(detectPollWake({ filter: { ...filter }, lastObservation: openGreen }, {})).toBeUndefined();
 });
 
 it('does not wake when the snapshot is unchanged', () => {

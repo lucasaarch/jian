@@ -514,6 +514,21 @@
   .session-objective-note {
     @apply w-full truncate text-muted;
   }
+  .session-listeners {
+    @apply mt-1.5 flex list-none flex-col gap-1 p-0 text-xs text-muted;
+  }
+  .session-listeners > li {
+    @apply flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1;
+  }
+  .session-listener-name {
+    @apply font-medium text-ink;
+  }
+  .session-listener-target {
+    @apply min-w-0 truncate;
+  }
+  .session-listener-meta {
+    @apply flex flex-wrap gap-x-2 text-muted;
+  }
   .session-model {
     @apply grid shrink-0 grid-cols-[minmax(0,14rem)_minmax(0,10rem)] gap-2;
   }

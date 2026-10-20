@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
   type Run,
+  SUBSCRIPTION_DEFAULT_TTL_SECONDS,
   SUBSCRIPTION_LIMIT,
   type Subscription,
   subscriptionInputSchema,
@@ -34,6 +35,15 @@ import {
   replaceSubscription,
   toSubscription,
 } from './repository.js';
+
+function expiresAtFromDuration(clock: Clock, durationSeconds: number | undefined): string {
+  const seconds = durationSeconds ?? SUBSCRIPTION_DEFAULT_TTL_SECONDS;
+  return new Date(clock() + seconds * 1_000).toISOString();
+}
+
+function isExpired(subscription: Pick<Subscription, 'expiresAt'>, now: Date): boolean {
+  return Date.parse(subscription.expiresAt) <= now.getTime();
+}
 
 type RunSubmitter = {
   submit(profileId: string, sessionId: string, input: unknown): Promise<Run>;
@@ -138,6 +148,7 @@ export class Subscriptions {
         createdBy,
         // Poll immediately so a brand-new watcher does not wait a full interval.
         ...(data.enabled ? { nextPollAt: now } : {}),
+        expiresAt: expiresAtFromDuration(this.clock, data.durationSeconds),
         createdAt: now,
         updatedAt: now,
       };
@@ -165,6 +176,10 @@ export class Subscriptions {
 
       const enabled = data.enabled ?? current.enabled;
       const { nextPollAt: previousPoll, ...kept } = current;
+      const now = new Date(this.clock());
+      // Re-enable or an explicit duration resets the TTL; otherwise keep the existing deadline.
+      const renewTtl =
+        data.durationSeconds !== undefined || (data.enabled === true && isExpired(current, now));
       const next: Subscription = {
         ...kept,
         ...(data.name ? { name: data.name } : {}),
@@ -172,6 +187,7 @@ export class Subscriptions {
         ...(data.sessionId ? { sessionId: data.sessionId } : {}),
         filter: data.filter ?? current.filter,
         enabled,
+        ...(renewTtl ? { expiresAt: expiresAtFromDuration(this.clock, data.durationSeconds) } : {}),
         ...(enabled
           ? {
               // Re-enable or first poll schedule: check soon. Otherwise keep the existing cadence.
@@ -204,7 +220,7 @@ export class Subscriptions {
   /**
    * Polls every due subscription against GitHub. Wakes only when the watched snapshot changes
    * in a meaningful way (CI conclusion, PR merge/close). Unchanged polls advance nextPollAt
-   * only — no run submit, no channel delivery.
+   * only — no run submit, no channel delivery. Expired listeners switch off silently.
    */
   async pollDue() {
     const now = new Date(this.clock());
@@ -212,6 +228,26 @@ export class Subscriptions {
     for (const subscription of await dueSubscriptions(this.store.db, now)) {
       const row = await findSubscriptionById(this.store.db, subscription.id);
       if (!row?.enabled) continue;
+
+      if (isExpired(subscription, now)) {
+        const { nextPollAt: _drop, ...kept } = subscription;
+        await this.store.transaction(subscription.profileId, async (tx) => {
+          await replaceSubscription(
+            tx,
+            {
+              ...kept,
+              enabled: false,
+              lastError: 'Listening expired.',
+              updatedAt: nowIso(this.clock),
+            },
+            row.secretHash,
+          );
+          await recordEvent(tx, this.clock, subscription.profileId, 'subscription.expired', {
+            id: subscription.id,
+          });
+        });
+        continue;
+      }
 
       const token = await this.tokens?.tokenFor(subscription.profileId);
       const { observation, error } = await observeGithub(subscription.filter, this.fetcher, token);
@@ -233,9 +269,15 @@ export class Subscriptions {
         continue;
       }
 
-      const snapshot = observationToStore(subscription.lastObservation, observation);
+      // On fetch error keep the prior snapshot — an empty {} must not unlock another wake.
+      const snapshot = error
+        ? observationToStore(subscription.lastObservation, {
+            ...subscription.lastObservation,
+            ...observation,
+          })
+        : observationToStore(subscription.lastObservation, observation);
       const unchanged = observationsEqual(subscription.lastObservation, snapshot);
-      const wake = error || unchanged ? undefined : detectPollWake(subscription, observation);
+      const wake = error || unchanged ? undefined : detectPollWake(subscription, snapshot);
 
       if (!wake) {
         await replaceSubscription(
@@ -350,6 +392,7 @@ export class Subscriptions {
     const row = await findSubscriptionById(this.store.db, subscriptionId);
     if (!row) return { accepted: false };
     if (!row.enabled) return { accepted: false };
+    if (isExpired(toSubscription(row), new Date(this.clock()))) return { accepted: false };
 
     const secret = await this.vault.read(row.profileId, subscriptionSecret(subscriptionId));
     if (!secret) throw new GatewayError(401, 'Webhook secret is missing');

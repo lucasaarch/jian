@@ -325,3 +325,162 @@ it('isolates subscriptions between profiles', async () => {
   });
   expect(await services.subscriptions.list(a.id)).toHaveLength(1);
 });
+
+it('defaults a one-hour TTL and expires without waking', async () => {
+  let now = Date.parse('2026-10-20T20:00:00.000Z');
+  const services = await testServices(() => now);
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+
+  services.subscriptions.useGithub(async (inputUrl) => {
+    const url = String(inputUrl);
+    if (url.includes('/pulls/53')) {
+      return Response.json({
+        state: 'open',
+        merged: false,
+        head: { sha: 'cafe0001' },
+      });
+    }
+    if (url.includes('/check-runs')) {
+      return Response.json({
+        check_runs: [{ name: 'Check', status: 'in_progress', conclusion: null }],
+      });
+    }
+    return new Response('not found', { status: 404 });
+  });
+
+  const created = await services.subscriptions.create(
+    profile.id,
+    {
+      name: 'PR 53 Check',
+      instruction: 'CI finished.',
+      sessionId: session.id,
+      source: 'github',
+      filter: {
+        owner: 'lucasaarch',
+        repo: 'jian',
+        events: ['check_suite.completed'],
+        pullNumber: 53,
+        checkName: 'Check',
+        pollIntervalSeconds: 15,
+      },
+      enabled: true,
+    },
+    'agent',
+  );
+
+  expect(created.expiresAt).toBe('2026-10-20T21:00:00.000Z');
+
+  const hour = await services.subscriptions.create(
+    profile.id,
+    {
+      name: 'Day watch',
+      instruction: 'Merged.',
+      sessionId: session.id,
+      source: 'github',
+      filter: {
+        owner: 'lucasaarch',
+        repo: 'jian',
+        events: ['pull_request.closed'],
+        pullNumber: 53,
+        pollIntervalSeconds: 30,
+      },
+      durationSeconds: 86_400,
+      enabled: true,
+    },
+    'agent',
+  );
+  expect(hour.expiresAt).toBe('2026-10-21T20:00:00.000Z');
+
+  await services.subscriptions.pollDue();
+  now = Date.parse('2026-10-20T21:00:01.000Z');
+  await services.subscriptions.pollDue();
+
+  const after = (await services.subscriptions.list(profile.id)).find(
+    (item) => item.id === created.id,
+  );
+  expect(after?.enabled).toBe(false);
+  expect(after?.nextPollAt).toBeUndefined();
+  expect(after?.lastError).toBe('Listening expired.');
+  expect(
+    (await services.runs.recent(profile.id)).filter((item) =>
+      item.requestKey.startsWith(`subscription:${created.id}:`),
+    ),
+  ).toHaveLength(0);
+});
+
+it('does not re-wake after a failed GitHub poll wiped nothing', async () => {
+  let now = Date.parse('2026-10-20T20:13:00.000Z');
+  const services = await testServices(() => now);
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+
+  let mode: 'pending' | 'green' | 'fail' = 'pending';
+  services.subscriptions.useGithub(async (inputUrl) => {
+    const url = String(inputUrl);
+    if (mode === 'fail') return new Response('boom', { status: 500 });
+    if (url.includes('/pulls/53')) {
+      return Response.json({
+        state: 'open',
+        merged: false,
+        head: { sha: 'beef0002' },
+      });
+    }
+    if (url.includes('/check-runs')) {
+      return Response.json({
+        check_runs: [
+          {
+            name: 'Check',
+            status: mode === 'green' ? 'completed' : 'in_progress',
+            conclusion: mode === 'green' ? 'success' : null,
+          },
+        ],
+      });
+    }
+    return new Response('not found', { status: 404 });
+  });
+
+  const created = await services.subscriptions.create(
+    profile.id,
+    {
+      name: 'PR 53',
+      instruction: 'Continue when CI finishes.',
+      sessionId: session.id,
+      source: 'github',
+      filter: {
+        owner: 'lucasaarch',
+        repo: 'jian',
+        events: ['check_suite.completed'],
+        pullNumber: 53,
+        checkName: 'Check',
+        pollIntervalSeconds: 15,
+      },
+      durationSeconds: 1_800,
+      enabled: true,
+    },
+    'agent',
+  );
+
+  await services.subscriptions.pollDue();
+  now += 15_000;
+  mode = 'green';
+  await services.subscriptions.pollDue();
+  now += 15_000;
+  mode = 'fail';
+  await services.subscriptions.pollDue();
+  now += 15_000;
+  mode = 'green';
+  await services.subscriptions.pollDue();
+  now += 15_000;
+  await services.subscriptions.pollDue();
+
+  const wakes = (await services.runs.recent(profile.id)).filter((item) =>
+    item.requestKey.startsWith(`subscription:${created.id}:`),
+  );
+  expect(wakes).toHaveLength(1);
+
+  const after = (await services.subscriptions.list(profile.id))[0];
+  expect(after?.lastObservation?.checksCompleted).toBe(true);
+  expect(after?.lastObservation?.checkConclusion).toBe('success');
+  expect(after?.expiresAt).toBe('2026-10-20T20:43:00.000Z');
+});

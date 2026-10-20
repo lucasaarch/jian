@@ -23,6 +23,7 @@ import { Badge, Empty, Face, Orb, TelegramLogo, WhatsAppLogo } from '../ui';
 import { plainText } from '../ui/markdown';
 import { Composer } from './composer';
 import { History } from './history';
+import { SessionListeners } from './listeners';
 import { SessionModel } from './model-picker';
 import { statusOf } from './progress';
 
@@ -339,6 +340,7 @@ export function Sessions({
                   ) : null}
                 </p>
               )}
+              <SessionListeners api={api} profileId={profile.id} sessionId={active.id} />
             </div>
             {kindOf(active) !== 'learning' && (
               <>
