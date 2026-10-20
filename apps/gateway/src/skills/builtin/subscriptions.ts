@@ -7,10 +7,10 @@ export const subscriptions: Skill = {
   instructions: `# Listening for GitHub events
 
 A subscription is an instruction, a conversation, and a GitHub filter. The gateway **polls**
-GitHub on an interval (default every 30 seconds) and, when the watched state changes, gives
-you the instruction as a new turn in that conversation. Keep or open a session objective so
-the wake continues the work. Do **not** pause the objective for webhook configuration —
-polling is enough.
+GitHub on an interval (default every 30 seconds) and wakes this conversation **only when the
+watched state changes** (CI conclusion, PR merged/closed) — not on every poll tick. Unchanged
+polls stay silent. Keep or open a session objective so the wake continues the work. Do **not**
+pause the objective for webhook configuration — polling is enough.
 
 The tools are in the \`subscriptions\` group; load it with \`load_tools\`:
 \`list_subscriptions\`, \`create_subscription\`, \`update_subscription\`, \`delete_subscription\`.

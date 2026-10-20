@@ -166,28 +166,111 @@ export async function observeGithub(
   };
 }
 
-/** True when the previous observation already counted checks as finished for this head. */
-function checksAlreadyDone(
-  previous: SubscriptionObservation | undefined,
-  next: SubscriptionObservation,
+/** Canonical form so optional fields and `false` vs omitted compare equal. */
+export function canonicalizeObservation(
+  observation: SubscriptionObservation | undefined,
+): SubscriptionObservation {
+  if (!observation) return {};
+  return {
+    ...(observation.pullState ? { pullState: observation.pullState } : {}),
+    ...(observation.merged !== undefined ? { merged: observation.merged } : {}),
+    ...(observation.headSha ? { headSha: observation.headSha } : {}),
+    ...(observation.checksCompleted !== undefined
+      ? { checksCompleted: observation.checksCompleted }
+      : {}),
+    ...(observation.checkConclusion ? { checkConclusion: observation.checkConclusion } : {}),
+  };
+}
+
+export function observationsEqual(
+  left: SubscriptionObservation | undefined,
+  right: SubscriptionObservation | undefined,
 ): boolean {
-  return Boolean(
-    previous?.checksCompleted &&
-      previous.headSha === next.headSha &&
-      previous.checkConclusion === next.checkConclusion,
+  const a = canonicalizeObservation(left);
+  const b = canonicalizeObservation(right);
+  return (
+    a.pullState === b.pullState &&
+    a.merged === b.merged &&
+    a.headSha === b.headSha &&
+    Boolean(a.checksCompleted) === Boolean(b.checksCompleted) &&
+    (a.checkConclusion ?? undefined) === (b.checkConclusion ?? undefined)
   );
 }
 
 /**
- * Compares the last observation to the latest poll and returns a wake when an enabled event
- * has just become true (CI finished, or the pull request closed).
+ * Keeps a completed check snapshot for the same head when GitHub briefly returns empty or
+ * in-progress runs. Overwriting that memory made the next green poll look like a new wake.
+ */
+export function stabilizeObservation(
+  previous: SubscriptionObservation | undefined,
+  next: SubscriptionObservation,
+): SubscriptionObservation {
+  const raw = canonicalizeObservation(next);
+  if (
+    previous?.checksCompleted &&
+    previous.headSha &&
+    previous.headSha === raw.headSha &&
+    !raw.checksCompleted
+  ) {
+    return canonicalizeObservation({
+      ...raw,
+      checksCompleted: true,
+      ...(previous.checkConclusion ? { checkConclusion: previous.checkConclusion } : {}),
+    });
+  }
+  return raw;
+}
+
+function checkLabel(observation: SubscriptionObservation | undefined): string {
+  if (!observation?.checksCompleted) return 'pending';
+  return observation.checkConclusion ?? 'completed';
+}
+
+function pullLabel(observation: SubscriptionObservation | undefined): string {
+  if (observation?.pullState === 'closed') {
+    return observation.merged ? 'merged' : 'closed';
+  }
+  if (observation?.pullState === 'open') return 'open';
+  return 'unknown';
+}
+
+function deltaLines(
+  previous: SubscriptionObservation | undefined,
+  next: SubscriptionObservation,
+): string[] {
+  const lines: string[] = [];
+  const prevPull = pullLabel(previous);
+  const nextPull = pullLabel(next);
+  if (prevPull !== nextPull) {
+    lines.push(`Changed: pull ${prevPull} → ${nextPull}`);
+  }
+  const prevCheck = checkLabel(previous);
+  const nextCheck = checkLabel(next);
+  if (prevCheck !== nextCheck) {
+    lines.push(`Changed: checks ${prevCheck} → ${nextCheck}`);
+  }
+  if (previous?.headSha && next.headSha && previous.headSha !== next.headSha) {
+    lines.push(`Changed: head ${previous.headSha.slice(0, 7)} → ${next.headSha.slice(0, 7)}`);
+  }
+  return lines;
+}
+
+/**
+ * Compares the last stored snapshot to the latest poll. Returns a wake only for meaningful
+ * transitions (CI pending→terminal, conclusion change, open→merged/closed). Unchanged
+ * snapshots — including steady open + green while waiting for merge — stay silent.
  */
 export function detectPollWake(
   subscription: Pick<Subscription, 'filter' | 'lastObservation'>,
-  next: SubscriptionObservation,
+  nextRaw: SubscriptionObservation,
 ): PollWake | undefined {
   const { filter, lastObservation: previous } = subscription;
+  const next = stabilizeObservation(previous, nextRaw);
   const pull = filter.pullNumber ?? 0;
+
+  if (observationsEqual(previous, next)) {
+    return undefined;
+  }
 
   if (
     filter.events.includes('pull_request.closed') &&
@@ -197,7 +280,11 @@ export function detectPollWake(
     return {
       event: 'pull_request.closed',
       deliveryKey: `poll:pull_request.closed:${pull}:${next.merged ? 'merged' : 'closed'}`,
-      summary: [`Pull request: #${pull}`, `State: closed${next.merged ? ' (merged)' : ''}`],
+      summary: [
+        `Pull request: #${pull}`,
+        `State: closed${next.merged ? ' (merged)' : ''}`,
+        ...deltaLines(previous, next),
+      ],
       observation: next,
     };
   }
@@ -206,7 +293,11 @@ export function detectPollWake(
     filter.events.includes('check_suite.completed') &&
     next.checksCompleted &&
     next.headSha &&
-    !checksAlreadyDone(previous, next)
+    !(
+      previous?.checksCompleted &&
+      previous.headSha === next.headSha &&
+      previous.checkConclusion === next.checkConclusion
+    )
   ) {
     const conclusion = next.checkConclusion ?? 'unknown';
     return {
@@ -217,10 +308,21 @@ export function detectPollWake(
         `Head: ${next.headSha}`,
         `Check conclusion: ${conclusion}`,
         ...(filter.checkName ? [`Check name filter: ${filter.checkName}`] : []),
+        ...deltaLines(previous, next),
       ],
       observation: next,
     };
   }
 
+  // Non-wake changes (e.g. still pending, or open+green already recorded) still update storage
+  // via observation on the returned undefined path — callers should persist `next` themselves.
   return undefined;
+}
+
+/** Snapshot to store after a poll: stabilized so incomplete flicker cannot erase a completion. */
+export function observationToStore(
+  previous: SubscriptionObservation | undefined,
+  nextRaw: SubscriptionObservation,
+): SubscriptionObservation {
+  return stabilizeObservation(previous, nextRaw);
 }

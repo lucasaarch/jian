@@ -85,12 +85,102 @@ it('polls GitHub and wakes once when checks complete', async () => {
   expect(wakes).toHaveLength(1);
   expect(wakes[0]?.input).toContain('CI finished');
   expect(wakes[0]?.input).toContain('Check conclusion: success');
+  expect(wakes[0]?.input).toContain('Changed: checks pending → success');
 
   const after = (await services.subscriptions.list(profile.id))[0];
   expect(after?.lastWakeAt).toBeDefined();
   expect(after?.lastRunId).toBe(wakes[0]?.id);
   expect(after?.lastObservation?.checksCompleted).toBe(true);
   expect(urls.some((url) => url.includes('/pulls/38'))).toBe(true);
+});
+
+it('keeps unchanged polls silent and does not spam while open and green', async () => {
+  let now = Date.parse('2026-10-20T16:53:00.000Z');
+  const services = await testServices(() => now);
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+
+  let checkStatus: 'in_progress' | 'completed' = 'in_progress';
+  let emptyChecks = false;
+  services.subscriptions.useGithub(async (inputUrl) => {
+    const url = String(inputUrl);
+    if (url.includes('/pulls/47')) {
+      return Response.json({
+        state: 'open',
+        merged: false,
+        head: { sha: 'deadbeef01' },
+      });
+    }
+    if (url.includes('/check-runs')) {
+      if (emptyChecks) return Response.json({ check_runs: [] });
+      return Response.json({
+        check_runs: [
+          {
+            name: 'Check',
+            status: checkStatus,
+            conclusion: checkStatus === 'completed' ? 'success' : null,
+          },
+        ],
+      });
+    }
+    return new Response('not found', { status: 404 });
+  });
+
+  const created = await services.subscriptions.create(
+    profile.id,
+    {
+      name: 'PR 47 Check',
+      instruction: 'Tell me when CI finishes; do not merge without authorization.',
+      sessionId: session.id,
+      source: 'github',
+      filter: {
+        owner: 'lucasaarch',
+        repo: 'jian',
+        events: ['check_suite.completed', 'pull_request.closed'],
+        pullNumber: 47,
+        checkName: 'Check',
+        pollIntervalSeconds: 20,
+      },
+      enabled: true,
+    },
+    'agent',
+  );
+
+  // Steady pending: several ticks must not submit a run.
+  for (let i = 0; i < 3; i += 1) {
+    await services.subscriptions.pollDue();
+    now += 20_000;
+  }
+  expect(
+    (await services.runs.recent(profile.id)).filter((item) =>
+      item.requestKey.startsWith(`subscription:${created.id}:`),
+    ),
+  ).toHaveLength(0);
+
+  checkStatus = 'completed';
+  await services.subscriptions.pollDue();
+  now += 20_000;
+
+  // After green: empty check-runs flicker + repeated green polls must not wake again.
+  emptyChecks = true;
+  await services.subscriptions.pollDue();
+  now += 20_000;
+  emptyChecks = false;
+  for (let i = 0; i < 4; i += 1) {
+    await services.subscriptions.pollDue();
+    now += 20_000;
+  }
+
+  const wakes = (await services.runs.recent(profile.id)).filter((item) =>
+    item.requestKey.startsWith(`subscription:${created.id}:`),
+  );
+  expect(wakes).toHaveLength(1);
+  expect(wakes[0]?.input).toContain('Changed: checks pending → success');
+
+  const after = (await services.subscriptions.list(profile.id))[0];
+  expect(after?.lastObservation?.checksCompleted).toBe(true);
+  expect(after?.lastObservation?.checkConclusion).toBe('success');
+  expect(after?.lastObservation?.pullState).toBe('open');
 });
 
 it('creates a GitHub subscription and wakes once per delivery', async () => {

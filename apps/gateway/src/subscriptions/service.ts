@@ -16,6 +16,8 @@ import type { Store } from '../storage/database.js';
 import {
   detectPollWake,
   type GithubTokenSource,
+  observationsEqual,
+  observationToStore,
   observeGithub,
   pollIntervalMs,
 } from './github-poll.js';
@@ -200,9 +202,9 @@ export class Subscriptions {
   }
 
   /**
-   * Polls every due subscription against GitHub. On a matching state change, wakes the session
-   * the same way a webhook would. A missing pullNumber or GitHub error is recorded and retried
-   * on the next interval — Listening does not wait for an operator to configure a webhook.
+   * Polls every due subscription against GitHub. Wakes only when the watched snapshot changes
+   * in a meaningful way (CI conclusion, PR merge/close). Unchanged polls advance nextPollAt
+   * only — no run submit, no channel delivery.
    */
   async pollDue() {
     const now = new Date(this.clock());
@@ -231,7 +233,9 @@ export class Subscriptions {
         continue;
       }
 
-      const wake = error ? undefined : detectPollWake(subscription, observation);
+      const snapshot = observationToStore(subscription.lastObservation, observation);
+      const unchanged = observationsEqual(subscription.lastObservation, snapshot);
+      const wake = error || unchanged ? undefined : detectPollWake(subscription, observation);
 
       if (!wake) {
         await replaceSubscription(
@@ -239,7 +243,9 @@ export class Subscriptions {
           {
             ...subscription,
             nextPollAt,
-            lastObservation: observation,
+            // Persist the stabilized snapshot so a brief empty check-runs response cannot erase
+            // a completion we already recorded for this head.
+            lastObservation: snapshot,
             ...(error ? { lastError: error.slice(0, 2000) } : { lastError: undefined }),
             updatedAt: nowIso(this.clock),
           },
@@ -248,7 +254,7 @@ export class Subscriptions {
         continue;
       }
 
-      await this.wakeFromPoll(subscription, row.secretHash, wake, nextPollAt, observation, error);
+      await this.wakeFromPoll(subscription, row.secretHash, wake, nextPollAt, snapshot, error);
     }
   }
 
