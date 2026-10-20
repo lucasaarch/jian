@@ -67,6 +67,27 @@ export const SelectMenu: Story = {
   },
 };
 
+export const SelectMultiple: Story = {
+  render: function Render() {
+    const [value, setValue] = useState<string[]>(['medium']);
+
+    return (
+      <div className="max-w-xs">
+        <Field label="Agents" hint="Pick one or more.">
+          <Select
+            multiple
+            value={value}
+            onValueChange={setValue}
+            options={efforts}
+            placeholder="No agents"
+            aria-label="Agents"
+          />
+        </Field>
+      </div>
+    );
+  },
+};
+
 export const Stacked: Story = {
   render: () => (
     <div className="max-w-xl">

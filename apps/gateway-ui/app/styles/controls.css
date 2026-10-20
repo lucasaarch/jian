@@ -24,6 +24,18 @@
   .select-value .select-option-copy small {
     @apply hidden;
   }
+  .select-value-stack {
+    @apply flex shrink-0 items-center;
+  }
+  .select-value-stack-item {
+    @apply relative inline-flex;
+  }
+  .select-value-stack-item + .select-value-stack-item {
+    margin-left: -0.4rem;
+  }
+  .select-value-stack-item .mini-avatar {
+    @apply ring-2 ring-surface;
+  }
   .select-chevron {
     @apply text-muted transition-transform;
   }

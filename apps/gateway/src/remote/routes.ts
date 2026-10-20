@@ -1,7 +1,25 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import type { Remote } from './service.js';
 
+/** Shipped next to the gateway package so a machine can download it without cloning Jian. */
+const workerScript = fileURLToPath(new URL('../../bin/jian-remote.mjs', import.meta.url));
+
 export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remote }): void {
+  // Public: the panel's install one-liner curls this before it has a worker token.
+  app.get('/jian-remote.mjs', { config: { publicUiAsset: true } }, async (_request, reply) => {
+    if (!existsSync(workerScript)) {
+      return reply.code(404).send({ error: 'Worker script not found' });
+    }
+
+    return reply
+      .type('text/javascript; charset=utf-8')
+      .header('Content-Disposition', 'attachment; filename="jian-remote.mjs"')
+      .header('Cache-Control', 'no-cache')
+      .send(readFileSync(workerScript));
+  });
+
   app.get('/v1/remote/machines', async () => deps.remote.list());
 
   app.post('/v1/remote/machines', async (request, reply) =>
