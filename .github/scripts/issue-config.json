@@ -1,0 +1,91 @@
+{
+  "enabled": true,
+  "publishEnabled": true,
+  "repositories": [
+    "lucasaarch/jian"
+  ],
+  "model": "gemini-3.5-flash-lite",
+  "targetLanguage": "en",
+  "apiVersion": "2026-03-10",
+  "types": [
+    {
+      "id": 1,
+      "name": "Task"
+    },
+    {
+      "id": 2,
+      "name": "Bug"
+    },
+    {
+      "id": 3,
+      "name": "Feature"
+    }
+  ],
+  "priority": {
+    "id": 1,
+    "name": "Priority",
+    "type": "single_select",
+    "options": [
+      {
+        "id": 1,
+        "name": "Urgent"
+      },
+      {
+        "id": 2,
+        "name": "High"
+      },
+      {
+        "id": 3,
+        "name": "Medium"
+      },
+      {
+        "id": 4,
+        "name": "Low"
+      }
+    ]
+  },
+  "labels": [
+    "bug",
+    "enhancement",
+    "documentation",
+    "question",
+    "accessibility",
+    "dependencies",
+    "area: gateway",
+    "area: gateway-ui",
+    "area: providers",
+    "area: sessions",
+    "area: runtime",
+    "area: contracts",
+    "area: sdk",
+    "area: memory",
+    "area: channels",
+    "area: security",
+    "area: voice",
+    "area: integrations",
+    "area: ci",
+    "area: docs"
+  ],
+  "metadataConfidence": 0.85,
+  "duplicateConfidence": 0.9,
+  "maxLabels": 3,
+  "maxDuplicates": 3,
+  "maxCandidates": 10,
+  "maxPrimaryBytes": 4096,
+  "maxCandidateBytes": 400,
+  "maxInputBytes": 32768,
+  "maxInputTokens": 8000,
+  "maxOutputTokens": 2048,
+  "maxOutputBytes": 16384,
+  "maxCommentCharacters": 6000,
+  "generationTimeoutSeconds": 60,
+  "countTimeoutSeconds": 30,
+  "generationAttempts": 1,
+  "githubReadAttempts": 3,
+  "maxHourlyGenerations": 10,
+  "maxMonthlyGenerations": 100,
+  "monthlyGoalUSD": 5,
+  "inputUSDPerMillionTokens": 0.3,
+  "outputUSDPerMillionTokens": 2.5,
+  "artifactRetentionDays": 1
+}
