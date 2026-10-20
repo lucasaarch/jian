@@ -750,12 +750,25 @@ export class Media {
     // A retry after a crash between storing and sharing finishes the sharing, once.
     if (existing) return this.share(run, existing.id, existing.id, undefined, target);
     const { config, key } = await this.selection(run.profileId, kind);
+    const selectedVoice =
+      kind === 'speech' && voice === undefined
+        ? (await this.providers.modelDefaults(run.profileId)).speech?.voiceName
+        : voice;
     const deadline = AbortSignal.any([
       signal ?? new AbortController().signal,
       AbortSignal.timeout(180_000),
     ]);
     const generated = inlineMediaSchema.parse(
-      await this.client.generate(kind, config, key, prompt, voice, deadline, account, instructions),
+      await this.client.generate(
+        kind,
+        config,
+        key,
+        prompt,
+        selectedVoice,
+        deadline,
+        account,
+        instructions,
+      ),
     );
     const media = kind === 'speech' ? await voiceNote(generated, deadline) : generated;
     const bytes = Buffer.from(media.data, 'base64').length;

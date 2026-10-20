@@ -122,9 +122,18 @@ const gptLiveVoices = [
   'willow',
 ];
 
-function voiceOptions(provider: string): SelectOption[] {
-  const voices =
-    provider === 'google' ? geminiLiveVoices : provider === 'openai' ? gptLiveVoices : [];
+function voiceOptions(provider: string, speech = false): SelectOption[] {
+  const voices = speech
+    ? provider === 'google'
+      ? geminiLiveVoices
+      : provider === 'openai'
+        ? ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer']
+        : []
+    : provider === 'google'
+      ? geminiLiveVoices
+      : provider === 'openai'
+        ? gptLiveVoices
+        : [];
   return [
     { value: '', label: 'Default voice' },
     ...voices.map((voice) => ({ value: voice, label: voice })),
@@ -215,16 +224,21 @@ export function RoleFields({
             does not authorize image generation.
           </p>
         )}
-        {role.key === 'voice' && !value.disabled && provider && value.modelId && (
-          <Field label="Voice">
-            <Select
-              value={value.voiceName ?? ''}
-              disabled={busy}
-              onValueChange={(voiceName) => change(role.key, { voiceName: voiceName || undefined })}
-              options={voiceOptions(provider.kind)}
-            />
-          </Field>
-        )}
+        {(role.key === 'voice' || role.key === 'speech') &&
+          !value.disabled &&
+          provider &&
+          value.modelId && (
+            <Field label="Voice">
+              <Select
+                value={value.voiceName ?? ''}
+                disabled={busy}
+                onValueChange={(voiceName) =>
+                  change(role.key, { voiceName: voiceName || undefined })
+                }
+                options={voiceOptions(provider.kind, role.key === 'speech')}
+              />
+            </Field>
+          )}
         {role.tools && !value.disabled && (
           <Field label="Effort">
             <Select
