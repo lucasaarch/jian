@@ -139,9 +139,10 @@ export function Select(props: Props) {
     </>
   );
   const changeOpen = (next: boolean) => {
-    // Inside a native dialog or the mobile sidebar, so focus and Escape stay in their
-    // boundary — and positioned `fixed`, because an absolute popup in a box that scrolls
-    // grows that box and reflows the form underneath it.
+    // Portal into the dialog/aside (not document.body): a modal dialog's top layer would
+    // hide a body portal. The dialog itself must not use overflow:hidden, or this popup
+    // is clipped — scrolling stays on .modal-body. Position fixed so a scrolling body
+    // does not grow when the list opens.
     if (next) setContainer(trigger.current?.closest<HTMLElement>('dialog, aside') ?? null);
     setOpen(next);
   };
@@ -179,6 +180,9 @@ export function Select(props: Props) {
               sideOffset={6}
               align="start"
               positionMethod="fixed"
+              // Viewport only: clipping-ancestors would cap height to the dialog and clip
+              // the list under the footer even when the dialog itself does not overflow:hidden.
+              collisionBoundary={[]}
             >
               <Combobox.Popup className="select-popup" aria-label={aria['aria-label'] ?? 'Options'}>
                 <div className="select-search">
@@ -228,6 +232,7 @@ export function Select(props: Props) {
             sideOffset={6}
             align="start"
             positionMethod="fixed"
+            collisionBoundary={[]}
           >
             <Combobox.Popup className="select-popup" aria-label={aria['aria-label'] ?? 'Options'}>
               <div className="select-search">
@@ -279,6 +284,7 @@ export function Select(props: Props) {
             align="start"
             alignItemWithTrigger={false}
             positionMethod="fixed"
+            collisionBoundary={[]}
           >
             <BaseSelect.Popup className="select-popup">
               <BaseSelect.List className="select-list">
@@ -323,6 +329,7 @@ export function Select(props: Props) {
           align="start"
           alignItemWithTrigger={false}
           positionMethod="fixed"
+          collisionBoundary={[]}
         >
           <BaseSelect.Popup className="select-popup">
             <BaseSelect.List className="select-list">
