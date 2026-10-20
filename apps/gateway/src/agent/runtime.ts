@@ -907,9 +907,9 @@ export class AgentRuntime {
       // A provider can return stop with reasoning but no text. Recover only the report;
       // replaying the loop could repeat writes that already succeeded.
       if (exhausted || !answer.trim()) {
-        // A trailing blank line already released the last words as commentary — reuse them
-        // for the run record instead of inventing a second closing line.
-        if (!exhausted && narrator.released && narrator.lastSaid) {
+        // Only reuse commentary when this final step itself flushed via a trailing blank line.
+        // Pre-tool lines must not become the answer — recover with closingWords instead.
+        if (!exhausted && narrator.finishedAsCommentary && narrator.lastSaid) {
           answer = narrator.lastSaid;
         } else {
           answer = await this.closingWords(

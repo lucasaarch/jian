@@ -79,8 +79,21 @@ describe('what a run reports while it runs', () => {
 
     expect(released).toEqual(['Done on the remote.']);
     expect(narrator.released).toBe(true);
+    expect(narrator.finishedAsCommentary).toBe(true);
     expect(narrator.rest).toBe('');
     expect(narrator.lastSaid).toBe('Done on the remote.');
+  });
+
+  it('does not treat pre-tool commentary as a finished answer', async () => {
+    const narrator = new Narrator(async () => {});
+
+    await narrator.delta('Found it.');
+    await narrator.endStep(true);
+
+    expect(narrator.released).toBe(true);
+    expect(narrator.finishedAsCommentary).toBe(false);
+    expect(narrator.rest).toBe('');
+    expect(narrator.lastSaid).toBe('Found it.');
   });
 
   it('never ends a run because a report failed', async () => {

@@ -15,6 +15,11 @@ export class Narrator {
   /** True once any paragraph left this buffer for the channel — rest must not fall back to full text. */
   private releasedAny = false;
   private lastReleased = '';
+  /**
+   * Paragraphs released by a blank line in the current model step. Cleared when a tool step ends
+   * so pre-tool commentary is not mistaken for a finished answer.
+   */
+  private releasedThisStep = false;
 
   constructor(private readonly release: (text: string) => Promise<void>) {}
 
@@ -34,6 +39,7 @@ export class Narrator {
 
       if (paragraph) {
         this.releasedAny = true;
+        this.releasedThisStep = true;
         this.lastReleased = paragraph;
         await this.release(paragraph);
       }
@@ -53,6 +59,8 @@ export class Narrator {
     const tail = this.buffer.trim();
 
     this.buffer = '';
+    // Next step starts clean: earlier commentary is not the final answer.
+    this.releasedThisStep = false;
 
     if (tail) {
       this.releasedAny = true;
@@ -77,6 +85,14 @@ export class Narrator {
    */
   get released(): boolean {
     return this.releasedAny;
+  }
+
+  /**
+   * The final step ended on a blank line that already flushed its last paragraph as commentary.
+   * Distinct from pre-tool lines, which must not become the run's answer.
+   */
+  get finishedAsCommentary(): boolean {
+    return this.releasedThisStep && !this.buffer.trim();
   }
 
   /** Last paragraph sent as commentary; used when a trailing blank line emptied `rest`. */
