@@ -33,11 +33,35 @@ through a secure channel. Do not paste the token into a shell command or commit 
 
 ## Install the worker
 
-Install Node.js 24+ on the Mac. Obtain `apps/gateway/remote/jian-remote.mjs` from the same Jian
-release as the gateway, then run the installer from its containing directory. It reads the
-worker token from standard input, stores it in `~/.config/jian-remote/config.json` with
-owner-only permissions, and registers a per-user LaunchAgent that starts on login. Linux uses a
-per-user systemd service; other platforms can run the `run` command manually.
+Install Node.js 24+ on the Mac, Linux host, or Windows computer. Obtain
+`apps/gateway/remote/jian-remote.mjs` from the same Jian release as the gateway, then run the
+installer from its containing directory. It reads the worker token from a hidden interactive
+prompt (`--token-prompt`) or standard input (`--token-stdin`), stores it with owner-only
+permissions, and installs a per-user LaunchAgent on macOS, a systemd service on Linux, or a
+Task Scheduler logon task on Windows. The Windows task runs only in the current user's session.
+
+For Windows, open PowerShell in the directory containing the script:
+
+```powershell
+node .\\jian-remote.mjs install --gateway https://gateway.example --machine MACHINE_UUID --token-prompt
+```
+
+The worker executes Windows commands with PowerShell. The Windows credential directory and file
+ACLs are restricted to the current account. To uninstall, delete the `Jian Remote` task in Task
+Scheduler and remove `%USERPROFILE%\\.config\\jian-remote`.
+
+On macOS/Linux, standard input avoids putting the token in shell history:
+
+```sh
+read -r -s -p 'Worker token: ' JIAN_REMOTE_TOKEN
+printf '\\n'
+printf '%s' "$JIAN_REMOTE_TOKEN" | node ./jian-remote.mjs install \\
+  --gateway https://gateway.example --machine MACHINE_UUID --token-stdin
+unset JIAN_REMOTE_TOKEN
+```
+
+The installer retains the existing per-user LaunchAgent or systemd setup; unsupported platforms
+can run the `run` command manually.
 
 ```sh
 read -r -s -p 'Worker token: ' JIAN_REMOTE_TOKEN
@@ -47,9 +71,8 @@ printf '%s' "$JIAN_REMOTE_TOKEN" | node ./jian-remote.mjs install \
 unset JIAN_REMOTE_TOKEN
 ```
 
-Keep the worker script at its installed path: the OS service starts that file. The worker uses
-`/bin/sh -lc`, inherits the local user's environment, and returns at most 50 KB each of stdout
-and stderr. Do not authorize profiles that should not have access to those local privileges.
+Keep the worker script at its installed path: the OS service starts that file. The worker uses `/bin/sh -lc` on macOS/Linux and PowerShell on Windows, inherits the local user's
+environment, and returns at most 50 KB each of stdout and stderr. Do not authorize profiles that should not have access to those local privileges.
 
 ## Agent use and revocation
 
