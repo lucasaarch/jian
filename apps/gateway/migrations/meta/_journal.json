@@ -379,6 +379,13 @@
       "when": 1790909200000,
       "tag": "0053_subscription-polling",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1792524246511,
+      "tag": "0054_remote_machines",
+      "breakpoints": true
     }
   ]
 }
