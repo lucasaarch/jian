@@ -659,6 +659,10 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
         });
 
         try {
+          // The deadline only rejects this wait. Baileys cannot cancel an in-flight send, so a
+          // timeout is recorded as uncertain upstream and must not tear the linked device down —
+          // that used to mark the connection broken and invite a later reconnect path to look
+          // like a second delivery of the same words.
           const result = await Promise.race([
             mentionable(jid, people).then((known) =>
               live.sendMessage(jid, outgoing(text, media, known)),
@@ -677,10 +681,17 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           );
 
           return result.key.id;
-        } catch {
-          // Closing the socket prevents later sends; the caller records this effect as uncertain.
-          void failed();
-          throw new Error('WhatsApp send was not confirmed');
+        } catch (error) {
+          if (closed || !socket) {
+            throw new Error('WhatsApp send was not confirmed');
+          }
+
+          // A hard socket failure still ends the device; a missed ack alone does not.
+          if (!deadline.aborted) {
+            void failed();
+          }
+
+          throw error instanceof Error ? error : new Error('WhatsApp send was not confirmed');
         } finally {
           deadline.removeEventListener('abort', abort);
         }
