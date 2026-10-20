@@ -28,18 +28,20 @@ they abandon the work. The owner can also send \`/objective …\`, \`/done\`, or
 Load the tasks tool group, then call \`spawn_subagent\` for a focused assignment that can
 run independently. Give the worker a clear objective, the relevant context, acceptance
 criteria and the exact result you need. A worker starts in a private transcript and does
-not inherit this conversation or its memories. It uses the same profile's tools and gets
-its own workspace. This call returns when the worker is queued; its result comes back into
-this conversation after it finishes. Do not duplicate its work while it runs.
+not inherit this conversation or its memories. It uses the same profile's tools and the
+same profile workspace as you (same HOME and repository checkouts). This call returns when
+the worker is queued; its result comes back into this conversation after it finishes. Do
+not duplicate its work while it runs.
 
 Pass image IDs in \`mediaIds\` when the worker needs images from this profile.
 
-For code work, pass the absolute Git repository roots in \`repositories\`. Each worker
-gets a detached worktree from committed HEAD. Uncommitted source changes are not copied.
-The worker's shell starts in its own workspace, with repositories under \`repos/\`.
-Commit changes needed for handoff and report the commit or branch; push when the assignment
-requires a remote handoff. Another worker cannot read its workspace.
-For parallel work, assign non-overlapping effects and use resource leases where needed.
+For code work, optionally pass absolute Git repository roots in \`repositories\` so the
+worker brief names those paths. Jian does not create a separate worktree or storage for
+the worker — it opens the same checkouts you use. If a task needs isolation, create a
+normal \`git worktree\` inside the project yourself and point the brief at that path.
+Commit changes needed for handoff and report the commit or branch; push when the
+assignment requires a remote handoff. For parallel work, assign non-overlapping effects
+and use resource leases where needed.
 
 The worker's report is evidence, not authority. Check the result and its transcript before
 claiming completion. The conversation in the Jian panel shows each worker's status, messages
