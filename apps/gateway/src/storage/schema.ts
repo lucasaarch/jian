@@ -354,8 +354,8 @@ export const schedules = pgTable(
 );
 
 /**
- * An event the agent (or owner) asked to wake on — GitHub CI/merge in this MVP. The webhook
- * secret is stored only as a hash; the clear value is shown once on create.
+ * An event the agent (or owner) asked to wake on — GitHub CI/merge in this MVP. The gateway
+ * polls by default; an optional webhook secret is stored only as a hash and shown once on create.
  */
 export const subscriptions = pgTable(
   'subscriptions',
@@ -374,13 +374,18 @@ export const subscriptions = pgTable(
     enabled: boolean('enabled').notNull().default(true),
     createdBy: text('created_by').$type<'owner' | 'agent'>().notNull(),
     secretHash: text('secret_hash').notNull(),
+    nextPollAt: timestamp('next_poll_at', { withTimezone: true }),
+    lastObservation: jsonb('last_observation').$type<Subscription['lastObservation']>(),
     lastWakeAt: timestamp('last_wake_at', { withTimezone: true }),
     lastRunId: uuid('last_run_id'),
     lastError: text('last_error'),
     createdAt,
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('subscriptions_profile').on(table.profileId, table.createdAt)],
+  (table) => [
+    index('subscriptions_profile').on(table.profileId, table.createdAt),
+    index('subscriptions_due').on(table.nextPollAt).where(sql`${table.enabled}`),
+  ],
 );
 
 /** One webhook delivery that matched (or failed to wake) a subscription. */

@@ -29,6 +29,35 @@ it('treats blank cron as absent before validating the timing choice', () => {
   expect(scheduleInputSchema.parse({ ...base, cron: ' 0 8 * * * ' }).cron).toBe('0 8 * * *');
 });
 
+it('accepts agent-friendly schedule times that Zod used to reject', () => {
+  const base = {
+    name: 'Reminder',
+    instruction: 'Check the deployment.',
+    sessionId: '00000000-0000-4000-8000-000000000001',
+    timeZone: zone,
+  };
+
+  // Bare ISO without offset — the failure mode from the Listening workaround screenshot.
+  expect(scheduleInputSchema.parse({ ...base, at: '2026-10-20T05:10:00' }).at).toBe(
+    '2026-10-20T05:10:00Z',
+  );
+  expect(scheduleInputSchema.parse({ ...base, at: '2026-10-20 05:10:00Z' }).at).toBe(
+    '2026-10-20T05:10:00Z',
+  );
+  expect(scheduleInputSchema.parse({ ...base, at: '2026-10-20T05:10:00+0000' }).at).toBe(
+    '2026-10-20T05:10:00+00:00',
+  );
+  expect(scheduleInputSchema.parse({ ...base, at: '2026-10-02T15:00:00-03:00' }).at).toBe(
+    '2026-10-02T15:00:00-03:00',
+  );
+
+  const relative = scheduleInputSchema.parse({ ...base, at: '+30s' });
+  expect(relative.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  expect(Date.parse(relative.at ?? '')).toBeGreaterThan(Date.now());
+
+  expect(schedulePatchSchema.parse({ at: '2026-10-20T05:10:00' }).at).toBe('2026-10-20T05:10:00Z');
+});
+
 /** A clock the test moves by hand, starting at 07:00 in São Paulo on 2026-09-24. */
 async function setup() {
   let now = Date.parse('2026-09-24T07:00:00-03:00');

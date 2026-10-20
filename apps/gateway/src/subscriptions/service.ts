@@ -14,7 +14,14 @@ import type { Vault } from '../security/vault.js';
 import type { SessionReader } from '../sessions/port.js';
 import type { Store } from '../storage/database.js';
 import {
+  detectPollWake,
+  type GithubTokenSource,
+  observeGithub,
+  pollIntervalMs,
+} from './github-poll.js';
+import {
   deleteSubscription,
+  dueSubscriptions,
   findDeliveryByKey,
   findSubscription,
   findSubscriptionById,
@@ -73,6 +80,8 @@ function githubRepo(payload: Record<string, unknown>): { owner: string; repo: st
 
 export class Subscriptions {
   private wakeDelivery?: Deliveries;
+  private fetcher: typeof fetch;
+  private tokens?: GithubTokenSource;
 
   constructor(
     private readonly store: Store,
@@ -81,10 +90,20 @@ export class Subscriptions {
     private readonly runs: RunSubmitter,
     private readonly vault: Vault,
     private readonly clock: Clock = Date.now,
-  ) {}
+    fetcher: typeof fetch = fetch,
+    tokens?: GithubTokenSource,
+  ) {
+    this.fetcher = fetcher;
+    this.tokens = tokens;
+  }
 
   useDeliveries(channel: Deliveries) {
     this.wakeDelivery = channel;
+  }
+
+  useGithub(fetcher: typeof fetch, tokens?: GithubTokenSource) {
+    this.fetcher = fetcher;
+    this.tokens = tokens;
   }
 
   async list(profileId: string) {
@@ -115,6 +134,8 @@ export class Subscriptions {
         filter: data.filter,
         enabled: data.enabled,
         createdBy,
+        // Poll immediately so a brand-new watcher does not wait a full interval.
+        ...(data.enabled ? { nextPollAt: now } : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -125,6 +146,7 @@ export class Subscriptions {
         id: subscription.id,
       });
 
+      // Webhook secret is optional acceleration; polling is the default path.
       return { ...subscription, webhookSecret: secret };
     });
   }
@@ -139,10 +161,22 @@ export class Subscriptions {
       const row = await findSubscriptionById(tx, id);
       if (!row) throw new GatewayError(404, 'Subscription not found');
 
+      const enabled = data.enabled ?? current.enabled;
+      const { nextPollAt: previousPoll, ...kept } = current;
       const next: Subscription = {
-        ...current,
-        ...data,
+        ...kept,
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.instruction ? { instruction: data.instruction } : {}),
+        ...(data.sessionId ? { sessionId: data.sessionId } : {}),
         filter: data.filter ?? current.filter,
+        enabled,
+        ...(enabled
+          ? {
+              // Re-enable or first poll schedule: check soon. Otherwise keep the existing cadence.
+              nextPollAt:
+                data.enabled === true || !previousPoll ? nowIso(this.clock) : previousPoll,
+            }
+          : {}),
         updatedAt: nowIso(this.clock),
       };
       await replaceSubscription(tx, next, row.secretHash);
@@ -163,6 +197,141 @@ export class Subscriptions {
   async history(profileId: string, id: string) {
     await assertFound(await findSubscription(this.store.db, profileId, id), 'Subscription');
     return listDeliveries(this.store.db, profileId, id);
+  }
+
+  /**
+   * Polls every due subscription against GitHub. On a matching state change, wakes the session
+   * the same way a webhook would. A missing pullNumber or GitHub error is recorded and retried
+   * on the next interval — Listening does not wait for an operator to configure a webhook.
+   */
+  async pollDue() {
+    const now = new Date(this.clock());
+
+    for (const subscription of await dueSubscriptions(this.store.db, now)) {
+      const row = await findSubscriptionById(this.store.db, subscription.id);
+      if (!row?.enabled) continue;
+
+      const token = await this.tokens?.tokenFor(subscription.profileId);
+      const { observation, error } = await observeGithub(subscription.filter, this.fetcher, token);
+      const nextPollAt = new Date(
+        now.getTime() + pollIntervalMs(subscription.filter),
+      ).toISOString();
+
+      if (error && !subscription.filter.pullNumber) {
+        await replaceSubscription(
+          this.store.db,
+          {
+            ...subscription,
+            nextPollAt,
+            lastError: error.slice(0, 2000),
+            updatedAt: nowIso(this.clock),
+          },
+          row.secretHash,
+        );
+        continue;
+      }
+
+      const wake = error ? undefined : detectPollWake(subscription, observation);
+
+      if (!wake) {
+        await replaceSubscription(
+          this.store.db,
+          {
+            ...subscription,
+            nextPollAt,
+            lastObservation: observation,
+            ...(error ? { lastError: error.slice(0, 2000) } : { lastError: undefined }),
+            updatedAt: nowIso(this.clock),
+          },
+          row.secretHash,
+        );
+        continue;
+      }
+
+      await this.wakeFromPoll(subscription, row.secretHash, wake, nextPollAt, observation, error);
+    }
+  }
+
+  private async wakeFromPoll(
+    subscription: Subscription,
+    secretHash: string,
+    wake: NonNullable<ReturnType<typeof detectPollWake>>,
+    nextPollAt: string,
+    observation: Subscription['lastObservation'],
+    observeError: string | undefined,
+  ) {
+    const existing = await findDeliveryByKey(this.store.db, subscription.id, wake.deliveryKey);
+    if (existing?.runId) {
+      await replaceSubscription(
+        this.store.db,
+        {
+          ...subscription,
+          nextPollAt,
+          lastObservation: wake.observation,
+          lastError: undefined,
+          updatedAt: nowIso(this.clock),
+        },
+        secretHash,
+      );
+      return;
+    }
+
+    const text = [
+      subscription.instruction,
+      '',
+      `GitHub event: ${wake.event}`,
+      `Repository: ${subscription.filter.owner}/${subscription.filter.repo}`,
+      ...wake.summary,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    try {
+      const run = await this.runs.submit(subscription.profileId, subscription.sessionId, {
+        text,
+        requestKey: `subscription:${subscription.id}:${wake.deliveryKey}`,
+      });
+
+      await this.store.transaction(subscription.profileId, async (tx) => {
+        await insertDelivery(tx, {
+          id: randomUUID(),
+          subscriptionId: subscription.id,
+          profileId: subscription.profileId,
+          deliveryKey: wake.deliveryKey,
+          event: wake.event,
+          runId: run.id,
+          createdAt: nowIso(this.clock),
+        });
+        await replaceSubscription(
+          tx,
+          {
+            ...subscription,
+            nextPollAt,
+            lastObservation: wake.observation,
+            lastWakeAt: nowIso(this.clock),
+            lastRunId: run.id,
+            lastError: undefined,
+            updatedAt: nowIso(this.clock),
+          },
+          secretHash,
+        );
+      });
+
+      await this.wakeDelivery?.deliverRun(subscription.profileId, subscription.sessionId, run.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Wake failed';
+      await replaceSubscription(
+        this.store.db,
+        {
+          ...subscription,
+          nextPollAt,
+          lastObservation: observation,
+          lastError: (observeError ?? message).slice(0, 2000),
+          updatedAt: nowIso(this.clock),
+        },
+        secretHash,
+      );
+    }
   }
 
   /** GitHub webhook ingress: HMAC verify, match filter, wake the session once per delivery. */

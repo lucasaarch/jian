@@ -14620,11 +14620,25 @@ export interface operations {
                             owner: string;
                             repo: string;
                             events: ("check_suite.completed" | "pull_request.closed")[];
+                            pullNumber?: number;
+                            checkName?: string;
+                            /** @default 30 */
+                            pollIntervalSeconds: number;
                         };
                         enabled: boolean;
                         /** @enum {string} */
                         createdBy: "owner" | "agent";
                         webhookSecret?: string;
+                        /** Format: date-time */
+                        nextPollAt?: string;
+                        lastObservation?: {
+                            /** @enum {string} */
+                            pullState?: "open" | "closed";
+                            merged?: boolean;
+                            headSha?: string;
+                            checksCompleted?: boolean;
+                            checkConclusion?: string;
+                        };
                         /** Format: date-time */
                         lastWakeAt?: string;
                         /** Format: uuid */
@@ -14760,6 +14774,10 @@ export interface operations {
                         owner: string;
                         repo: string;
                         events: ("check_suite.completed" | "pull_request.closed")[];
+                        pullNumber?: number;
+                        checkName?: string;
+                        /** @default 30 */
+                        pollIntervalSeconds?: number;
                     };
                     /** @default true */
                     enabled?: boolean;
@@ -14788,11 +14806,25 @@ export interface operations {
                             owner: string;
                             repo: string;
                             events: ("check_suite.completed" | "pull_request.closed")[];
+                            pullNumber?: number;
+                            checkName?: string;
+                            /** @default 30 */
+                            pollIntervalSeconds: number;
                         };
                         enabled: boolean;
                         /** @enum {string} */
                         createdBy: "owner" | "agent";
                         webhookSecret?: string;
+                        /** Format: date-time */
+                        nextPollAt?: string;
+                        lastObservation?: {
+                            /** @enum {string} */
+                            pullState?: "open" | "closed";
+                            merged?: boolean;
+                            headSha?: string;
+                            checksCompleted?: boolean;
+                            checkConclusion?: string;
+                        };
                         /** Format: date-time */
                         lastWakeAt?: string;
                         /** Format: uuid */
@@ -14939,11 +14971,25 @@ export interface operations {
                             owner: string;
                             repo: string;
                             events: ("check_suite.completed" | "pull_request.closed")[];
+                            pullNumber?: number;
+                            checkName?: string;
+                            /** @default 30 */
+                            pollIntervalSeconds: number;
                         };
                         enabled: boolean;
                         /** @enum {string} */
                         createdBy: "owner" | "agent";
                         webhookSecret?: string;
+                        /** Format: date-time */
+                        nextPollAt?: string;
+                        lastObservation?: {
+                            /** @enum {string} */
+                            pullState?: "open" | "closed";
+                            merged?: boolean;
+                            headSha?: string;
+                            checksCompleted?: boolean;
+                            checkConclusion?: string;
+                        };
                         /** Format: date-time */
                         lastWakeAt?: string;
                         /** Format: uuid */
@@ -15078,6 +15124,10 @@ export interface operations {
                         owner: string;
                         repo: string;
                         events: ("check_suite.completed" | "pull_request.closed")[];
+                        pullNumber?: number;
+                        checkName?: string;
+                        /** @default 30 */
+                        pollIntervalSeconds?: number;
                     };
                     enabled?: boolean;
                 };
@@ -15105,11 +15155,25 @@ export interface operations {
                             owner: string;
                             repo: string;
                             events: ("check_suite.completed" | "pull_request.closed")[];
+                            pullNumber?: number;
+                            checkName?: string;
+                            /** @default 30 */
+                            pollIntervalSeconds: number;
                         };
                         enabled: boolean;
                         /** @enum {string} */
                         createdBy: "owner" | "agent";
                         webhookSecret?: string;
+                        /** Format: date-time */
+                        nextPollAt?: string;
+                        lastObservation?: {
+                            /** @enum {string} */
+                            pullState?: "open" | "closed";
+                            merged?: boolean;
+                            headSha?: string;
+                            checksCompleted?: boolean;
+                            checkConclusion?: string;
+                        };
                         /** Format: date-time */
                         lastWakeAt?: string;
                         /** Format: uuid */

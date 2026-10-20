@@ -8,6 +8,91 @@ const input = {
   model: { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
 };
 
+it('polls GitHub and wakes once when checks complete', async () => {
+  let now = Date.parse('2026-10-20T05:00:00.000Z');
+  const services = await testServices(() => now);
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+
+  const urls: string[] = [];
+  let checkStatus: 'in_progress' | 'completed' = 'in_progress';
+  services.subscriptions.useGithub(async (inputUrl) => {
+    const url = String(inputUrl);
+    urls.push(url);
+    if (url.includes('/pulls/38')) {
+      return Response.json({
+        state: 'open',
+        merged: false,
+        head: { sha: 'abc123def' },
+      });
+    }
+    if (url.includes('/check-runs')) {
+      return Response.json({
+        check_runs: [
+          {
+            name: 'Check',
+            status: checkStatus,
+            conclusion: checkStatus === 'completed' ? 'success' : null,
+          },
+        ],
+      });
+    }
+    return new Response('not found', { status: 404 });
+  });
+
+  const created = await services.subscriptions.create(
+    profile.id,
+    {
+      name: 'PR 38 Check',
+      instruction: 'CI finished — continue the objective.',
+      sessionId: session.id,
+      source: 'github',
+      filter: {
+        owner: 'lucasaarch',
+        repo: 'jian',
+        events: ['check_suite.completed'],
+        pullNumber: 38,
+        checkName: 'Check',
+        pollIntervalSeconds: 30,
+      },
+      enabled: true,
+    },
+    'agent',
+  );
+
+  expect(created.nextPollAt).toBe('2026-10-20T05:00:00.000Z');
+  expect(created.createdBy).toBe('agent');
+
+  await services.subscriptions.pollDue();
+  expect(
+    (await services.runs.recent(profile.id)).filter((item) =>
+      item.requestKey.startsWith(`subscription:${created.id}:`),
+    ),
+  ).toHaveLength(0);
+
+  const pending = (await services.subscriptions.list(profile.id))[0];
+  expect(pending?.lastObservation?.checksCompleted).toBe(false);
+  expect(pending?.nextPollAt).toBe('2026-10-20T05:00:30.000Z');
+
+  checkStatus = 'completed';
+  now = Date.parse('2026-10-20T05:00:30.000Z');
+  await services.subscriptions.pollDue();
+  await services.subscriptions.pollDue();
+
+  const wakes = (await services.runs.recent(profile.id)).filter((item) =>
+    item.requestKey.startsWith(`subscription:${created.id}:`),
+  );
+  expect(wakes).toHaveLength(1);
+  expect(wakes[0]?.input).toContain('CI finished');
+  expect(wakes[0]?.input).toContain('Check conclusion: success');
+
+  const after = (await services.subscriptions.list(profile.id))[0];
+  expect(after?.lastWakeAt).toBeDefined();
+  expect(after?.lastRunId).toBe(wakes[0]?.id);
+  expect(after?.lastObservation?.checksCompleted).toBe(true);
+  expect(urls.some((url) => url.includes('/pulls/38'))).toBe(true);
+});
+
 it('creates a GitHub subscription and wakes once per delivery', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);
@@ -31,6 +116,7 @@ it('creates a GitHub subscription and wakes once per delivery', async () => {
   );
 
   expect(created.webhookSecret).toMatch(/^[0-9a-f]{64}$/);
+  expect(created.nextPollAt).toBeDefined();
   expect(await services.subscriptions.list(profile.id)).toHaveLength(1);
 
   const payload = {
