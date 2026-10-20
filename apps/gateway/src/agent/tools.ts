@@ -249,7 +249,7 @@ export function profileTools(
       ? {
           spawn_subagent: tool({
             description:
-              'Start an isolated subagent in this conversation for a scoped assignment. Give it the objective and necessary context in the brief, and media IDs for needed images; it does not inherit this conversation. The call returns when queued, and the result is delivered here when it finishes.',
+              'Start a scoped subagent in this conversation for a focused assignment. Give it the objective and necessary context in the brief, and media IDs for needed images; it does not inherit this conversation. It uses the same profile workspace as you (same HOME and checkouts). The call returns when queued, and the result is delivered here when it finishes.',
             inputSchema: conversationSubagentInputSchema,
             execute: async (input, options) =>
               services.work?.spawnInConversation(run, input, options.toolCallId),
@@ -583,7 +583,7 @@ export function profileTools(
   }
 
   if (run.profile.allowShell) {
-    Object.assign(tools, shellTools(run.profileId, run.subagent ? run.id : undefined, gitAccess));
+    Object.assign(tools, shellTools(run.profileId, gitAccess));
   }
 
   // Writing its own skills is part of every agent's work, not of managing itself: what it

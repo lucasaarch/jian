@@ -158,8 +158,6 @@ export class Work {
         .set({ subagentReportedAt: new Date(this.clock()) })
         .where(and(eq(runs.profileId, profileId), eq(runs.id, runId)));
     });
-    // shortcut: direct worker workspaces may hold the only ref to a detached commit;
-    // add cleanup after a durable artifact handoff exists.
   }
 
   async spawnInConversation(parent: Run, input: unknown, spawnKey: string) {

@@ -1,4 +1,3 @@
-import { basename, join } from 'node:path';
 import { LEARNING_SESSION_CHANNEL, type Run } from '@jian/contracts';
 import { workspaceOf } from '../agent/workspace.js';
 import { listConversations } from '../channels/repository.js';
@@ -122,14 +121,12 @@ export class Contexts {
     const previous = earlier.at(-1);
     let workerGuidance: string | undefined;
     if (worker) {
-      const home = await workspaceOf(run.profileId, run.id);
-      const repositories = (worker.repositories ?? []).map((source, index) =>
-        join(home, 'repos', String(index + 1), basename(source)),
-      );
+      const home = await workspaceOf(run.profileId);
+      const repositories = worker.repositories ?? [];
       workerGuidance = [
         `You are ${JSON.stringify(worker.name)}, an ephemeral ${worker.role} worker for one task.`,
         `Identity and working approach: ${worker.identity}`,
-        `Your workspace is ${home}. ${repositories.length ? `Your repository worktrees are ${repositories.join(', ')}.` : 'Clone repositories under this workspace when needed.'} Paths from other workers' reports are not accessible to you. For review, fetch the committed branch or PR into your own worktree; do not open another worker's directory. If changes exist only in that worker's uncommitted files, report the missing handoff instead of attempting to bypass isolation.`,
+        `Your workspace is ${home} — the same profile workspace as the principal agent (same HOME, cwd roots and repository checkouts). ${repositories.length ? `Named repository roots for this assignment: ${repositories.join(', ')}.` : 'Use repositories under this workspace as needed.'} Other profiles' workspaces remain unreachable. If this assignment needs a separate checkout, create a normal git worktree inside the project yourself; Jian does not give you an isolated workspace.`,
         'Work only on the assignment in your opening message. Your parent conversation is not in this context; use the brief and available tools. Do not create tasks or spawn another subagent. Report verified outcomes and exact blockers in your final response.',
         'Your final response is a factual report to the principal agent, not a message to the owner.',
       ].join('\n\n');
