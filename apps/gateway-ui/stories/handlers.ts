@@ -511,6 +511,51 @@ export const handlers = [
 
   http.post('*/v1/panel/session', () => new HttpResponse(null, { status: 204 })),
   http.delete('*/v1/panel/session', () => new HttpResponse(null, { status: 204 })),
+
+  http.get('*/v1/remote/machines', () =>
+    ok([
+      {
+        id: 'a1b2c3d4-1111-4111-8111-111111111111',
+        name: "Lucas's Windows PC",
+        platform: 'win32-x64',
+        online: true,
+        allowedProfileIds: data.profiles[0] ? [data.profiles[0].id] : [],
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'a1b2c3d4-2222-4222-8222-222222222222',
+        name: 'Studio Mac mini',
+        platform: 'darwin-arm64',
+        online: false,
+        allowedProfileIds: [],
+        createdAt: new Date().toISOString(),
+      },
+    ]),
+  ),
+  http.post('*/v1/remote/machines', async ({ request }) => {
+    const body = (await request.json()) as { name: string; allowedProfileIds?: string[] };
+    return ok({
+      id: 'a1b2c3d4-3333-4333-8333-333333333333',
+      name: body.name,
+      platform: 'unknown',
+      online: false,
+      allowedProfileIds: body.allowedProfileIds ?? [],
+      createdAt: new Date().toISOString(),
+      token: 'story-remote-worker-token-abcdefghijklmnopqrstuvwxyz012345',
+    });
+  }),
+  http.patch('*/v1/remote/machines/:machineId/access', async ({ params, request }) => {
+    const body = (await request.json()) as { allowedProfileIds: string[] };
+    return ok({
+      id: params.machineId,
+      name: 'Machine',
+      platform: 'unknown',
+      online: false,
+      allowedProfileIds: body.allowedProfileIds,
+      createdAt: new Date().toISOString(),
+    });
+  }),
+  http.delete('*/v1/remote/machines/:machineId', ({ params }) => ok({ id: params.machineId })),
 ];
 
 /** The same gateway with nothing in it yet: a first run. */
@@ -524,6 +569,7 @@ export const emptyHandlers = [
   http.get('*/v1/groups', () => ok([])),
   http.get('*/v1/providers', () => ok([])),
   http.get('*/v1/profiles/:profileId/activity', () => ok([])),
+  http.get('*/v1/remote/machines', () => ok([])),
   ...handlers,
 ];
 

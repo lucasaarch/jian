@@ -56,11 +56,16 @@ function runChecked(command, commandArgs, message) {
 async function install() {
   const gateway = option('--gateway');
   const machineId = option('--machine');
-  const token = args.includes('--token-stdin')
-    ? await readStdin()
-    : args.includes('--token-prompt')
-      ? await readSecret('Worker token (input hidden): ')
-      : undefined;
+  // Prefer an explicit --token for one-liner installs from the panel; stdin/prompt keep
+  // the token out of shell history when someone installs by hand.
+  const inlineToken = option('--token');
+  const token = inlineToken
+    ? inlineToken
+    : args.includes('--token-stdin')
+      ? await readStdin()
+      : args.includes('--token-prompt')
+        ? await readSecret('Worker token (input hidden): ')
+        : undefined;
   let gatewayUrl;
   try {
     gatewayUrl = new URL(gateway);
@@ -77,7 +82,7 @@ async function install() {
     !token?.trim()
   ) {
     throw new Error(
-      'Usage: jian-remote.mjs install --gateway https://... --machine UUID (--token-prompt | --token-stdin)',
+      'Usage: jian-remote.mjs install --gateway https://... --machine UUID (--token VALUE | --token-prompt | --token-stdin)',
     );
   }
   const config = {
@@ -277,7 +282,7 @@ try {
   else if (args[0] === 'run') await run();
   else
     console.log(
-      'Jian Remote worker\n  install --gateway HTTPS_URL --machine UUID (--token-prompt | --token-stdin)\n  run',
+      'Jian Remote worker\n  install --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)\n  run',
     );
 } catch (error) {
   console.error(error.message);

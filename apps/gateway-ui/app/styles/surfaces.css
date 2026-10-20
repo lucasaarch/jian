@@ -332,6 +332,40 @@
   .secret-value {
     @apply font-mono text-xs;
   }
+  /* Remote Control: allow-list rows and one-time token / install copy blocks. */
+  .profile-allow-fieldset {
+    @apply mb-5 min-w-0;
+  }
+  .profile-allow-fieldset > legend {
+    @apply mb-2 text-xs font-medium;
+  }
+  .profile-allow-fieldset > small {
+    @apply mt-2 block text-xs leading-relaxed text-muted;
+  }
+  .profile-allow-list {
+    @apply rounded-sm border border-line bg-surface px-3;
+  }
+  .profile-allow-list .check-row {
+    @apply border-b border-line last:border-b-0;
+  }
+  .profile-allow-list .check-row small {
+    @apply break-all font-mono;
+  }
+  .remote-access-actions {
+    @apply mt-4 flex justify-end;
+  }
+  .remote-created {
+    @apply flex flex-col gap-4;
+  }
+  .copy-block {
+    @apply min-w-0;
+  }
+  .copy-block-head {
+    @apply mb-2 flex items-center justify-between gap-3 text-xs font-medium;
+  }
+  .copy-block .secret-value {
+    @apply w-full resize-y rounded-sm border border-control bg-surface px-3 py-2.5 text-ink;
+  }
   .notice {
     @apply mb-6 flex items-start gap-3 rounded-sm border border-control bg-surface px-5 py-4 text-sm text-ink;
   }

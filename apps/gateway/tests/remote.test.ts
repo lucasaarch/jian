@@ -46,6 +46,24 @@ it('shares machines per profile and executes an authorized worker task', async (
   ]);
 });
 
+it('serves the worker script without authentication so install one-liners can download it', async () => {
+  const services = await testServices();
+  const app = createApp({
+    ...services,
+    token: 'host-admin-token-for-test-1234567890-verysecret',
+    logger: false,
+  });
+  try {
+    const response = await app.inject({ url: '/jian-remote.mjs' });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toMatch(/javascript/);
+    expect(response.body).toContain('Jian Remote worker');
+    expect(response.body).toContain('--token');
+  } finally {
+    await app.close();
+  }
+});
+
 it('authenticates the worker API with its machine token, not the gateway admin token', async () => {
   const services = await testServices();
   const created = await services.remote.create({ name: 'Worker test' });
