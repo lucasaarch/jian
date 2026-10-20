@@ -328,6 +328,104 @@ describe('WhatsApp linked device', () => {
       await f.app.close();
     }
   });
+
+  it('does not resend commentary that the final answer restates', async () => {
+    const f = await setup();
+
+    try {
+      await f.whatsapp.connect(f.profile.id, f.binding.id);
+      await f.whatsapp.tick(f.receive);
+      await f.devices[0]?.callbacks.ready('account');
+      await f.devices[0]?.callbacks.message(message);
+      await f.whatsapp.tick(f.receive);
+      await f.approve();
+      const [run] = await f.services.runs.activities(f.profile.id);
+      if (!run) throw new Error('Run missing');
+
+      await f.services.lifecycle.claim(run.id, f.profile.id, 'worker');
+      await f.services.lifecycle.say(f.profile.id, run.id, 'worker', 'Opening the board now.');
+      await Promise.all([f.channels.dispatch(), f.channels.dispatch()]);
+
+      // Final restates the flushed line, then adds the answer — WhatsApp must not get the
+      // opening twice (once as commentary, once as the first bubble of the joined final).
+      await f.services.lifecycle.finish(
+        f.profile.id,
+        run.id,
+        'worker',
+        'completed',
+        'Opening the board now.\n\nTwelve open.',
+      );
+      await f.channels.dispatch();
+      await f.channels.dispatch();
+
+      expect(
+        f.sent.map((item) => item.text).filter((text) => !text.includes('does not know you yet')),
+      ).toEqual(['Opening the board now.', 'Twelve open.']);
+    } finally {
+      await f.whatsapp.stop();
+      await f.app.close();
+    }
+  });
+
+  it('skips a final WhatsApp send when a trailing blank line already flushed it', async () => {
+    const f = await setup();
+
+    try {
+      await f.whatsapp.connect(f.profile.id, f.binding.id);
+      await f.whatsapp.tick(f.receive);
+      await f.devices[0]?.callbacks.ready('account');
+      await f.devices[0]?.callbacks.message(message);
+      await f.whatsapp.tick(f.receive);
+      await f.approve();
+      const [run] = await f.services.runs.activities(f.profile.id);
+      if (!run) throw new Error('Run missing');
+
+      await f.services.lifecycle.claim(run.id, f.profile.id, 'worker');
+      await f.services.lifecycle.say(f.profile.id, run.id, 'worker', 'Done on the remote.');
+      await f.services.lifecycle.finish(
+        f.profile.id,
+        run.id,
+        'worker',
+        'completed',
+        'Done on the remote.',
+      );
+      await f.channels.dispatch();
+      await f.channels.dispatch();
+
+      expect(f.sent.filter((item) => item.text === 'Done on the remote.')).toHaveLength(1);
+    } finally {
+      await f.whatsapp.stop();
+      await f.app.close();
+    }
+  });
+
+  it('queues only one delivery row when deliverRun races for the same run', async () => {
+    const f = await setup();
+
+    try {
+      await f.whatsapp.connect(f.profile.id, f.binding.id);
+      await f.whatsapp.tick(f.receive);
+      await f.devices[0]?.callbacks.ready('account');
+      await f.devices[0]?.callbacks.message(message);
+      await f.whatsapp.tick(f.receive);
+      const contact = await f.approve();
+      const [run] = await f.services.runs.activities(f.profile.id);
+      if (!run || !contact.sessionId) throw new Error('Run missing');
+
+      // Ingress already inserted one row keyed by the run; a late deliverRun must not add another.
+      await Promise.all([
+        f.channels.deliverRun(f.profile.id, contact.sessionId, run.id),
+        f.channels.deliverRun(f.profile.id, contact.sessionId, run.id),
+      ]);
+
+      expect(
+        (await f.channels.deliveries(f.profile.id)).filter((item) => item.runId === run.id),
+      ).toHaveLength(1);
+    } finally {
+      await f.whatsapp.stop();
+      await f.app.close();
+    }
+  });
 });
 
 describe('deleting a profile with a live WhatsApp connection', () => {

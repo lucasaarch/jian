@@ -36,6 +36,7 @@ import { type ContactRecord, Contacts, type Intake } from './contacts.js';
 import { conversational } from './conversation.js';
 import { type GroupDecision, Groups } from './groups.js';
 import { channelLog } from './logging.js';
+import { remainingOutbound } from './outbound.js';
 import {
   findPerson,
   type PersonRecord,
@@ -1284,38 +1285,43 @@ export class Channels {
     runId: string,
     transaction?: Store['db'],
   ): Promise<void> {
-    const db = transaction ?? this.services.store.db;
-    const contact = await findContactBySession(db, profileId, sessionId);
+    const contact = await findContactBySession(
+      transaction ?? this.services.store.db,
+      profileId,
+      sessionId,
+    );
 
     if (contact?.status !== 'approved') {
       return;
     }
 
-    // A run already on its way out needs no second exit. A late answer that arrived while the
-    // conversation was busy joins the turn in flight instead of starting one, and a second
-    // delivery against that turn would replay every message it had already sent.
-    if (await hasDelivery(db, runId)) {
-      return;
-    }
+    const queue = async (tx: Store['db']) => {
+      // Under the profile lock: two callers must not each insert a pending row for the same run,
+      // or dispatch would send the final answer twice on the channel.
+      if (await hasDelivery(tx, runId)) {
+        return;
+      }
 
-    const connection = await findConnection(db, contact.channelId);
-    const now = new Date().toISOString();
+      const connection = await findConnection(tx, contact.channelId);
+      const now = new Date().toISOString();
 
-    const delivery = {
-      id: randomUUID(),
-      profileId,
-      channelId: contact.channelId,
-      runId,
-      chatId: contact.chatId,
-      status: 'pending' as const,
-      createdAt: now,
-      updatedAt: now,
-      remoteMessageIds: [],
-      saidCount: 0,
-      ...(connection ? { connectionGeneration: connection.generation } : {}),
+      await insertDelivery(tx, {
+        id: randomUUID(),
+        profileId,
+        channelId: contact.channelId,
+        runId,
+        chatId: contact.chatId,
+        status: 'pending',
+        createdAt: now,
+        updatedAt: now,
+        remoteMessageIds: [],
+        saidCount: 0,
+        ...(connection ? { connectionGeneration: connection.generation } : {}),
+      });
     };
-    if (transaction) await insertDelivery(transaction, delivery);
-    else await this.services.store.transaction(profileId, (tx) => insertDelivery(tx, delivery));
+
+    if (transaction) await queue(transaction);
+    else await this.services.store.transaction(profileId, queue);
   }
 
   async deliveries(profileId: string) {
@@ -1404,12 +1410,15 @@ export class Channels {
         continue;
       }
 
-      // Final output that was already flushed as the last commentary paragraph (trailing blank
-      // line in the stream) must not be sent again — that is the same-timestamp duplicate.
-      const alreadySaid = Boolean(text) && commentary.at(-1) === text;
-      const outcome = alreadySaid
-        ? { status: 'sent' as const, remoteMessageIds: [] as string[] }
-        : await this.deliver(delivery, text, poll);
+      // Commentary already on the phone must not leave again as the "answer". Exact last-line
+      // match covers a trailing blank line; stripping leading flushed paragraphs covers a final
+      // that restates earlier lines (WhatsApp would otherwise show the same bubble twice).
+      // A media-only delivery has no text left on purpose — it still has to go out.
+      const outbound = remainingOutbound(text, commentary);
+      const outcome =
+        !outbound && !delivery.mediaId
+          ? { status: 'sent' as const, remoteMessageIds: [] as string[] }
+          : await this.deliver(delivery, outbound ?? '', poll);
 
       await this.services.store.transaction(delivery.profileId, async (tx) => {
         const current = assertFound(await findDelivery(tx, delivery.id), 'Delivery');
@@ -1433,8 +1442,8 @@ export class Channels {
 
       if (outcome.status === 'sent' && channel && spoken) {
         // The paragraphs said while working went out first; the other agents read the turn
-        // whole, as the room did. What they missed is logged, not retried: the room has it.
-        const turn = [...commentary, text].filter(Boolean).join('\n\n');
+        // whole, as the room did — without restating lines that were only kept for the panel.
+        const turn = [...commentary, ...(outbound ? [outbound] : [])].filter(Boolean).join('\n\n');
 
         await this.showToOtherAgents(channel, delivery, turn).catch(() =>
           channelLog('delivery.peer_failed', {

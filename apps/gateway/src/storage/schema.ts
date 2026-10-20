@@ -785,6 +785,8 @@ export const deliveries = pgTable(
   (table) => [
     index('deliveries_recent').on(table.profileId, table.createdAt.desc()),
     index('deliveries_phase').on(table.channelId, table.status, table.createdAt),
+    // Notices and media shares may omit a run; a run answer may only have one outbound row.
+    uniqueIndex('deliveries_one_per_run').on(table.runId).where(sql`${table.runId} is not null`),
   ],
 );
 
