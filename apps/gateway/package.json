@@ -54,7 +54,8 @@
   },
   "files": [
     "dist",
-    "migrations"
+    "migrations",
+    "remote"
   ],
   "license": "Apache-2.0"
 }

@@ -19,6 +19,7 @@ import type { CodexLogin } from './providers/codex/login.js';
 import type { ProviderModels } from './providers/discovery.js';
 import { registerProviderRoutes } from './providers/routes.js';
 import { registerReleaseRoutes } from './releases/routes.js';
+import { registerRemoteRoutes } from './remote/routes.js';
 import { registerRunRoutes } from './runs/routes.js';
 import { registerScheduleRoutes } from './schedules/routes.js';
 import { registerSecurityRoutes } from './security/routes.js';
@@ -113,6 +114,7 @@ export function createApp(
   registerMetaRoutes(app);
   registerSecurityRoutes(app, options);
   registerSshRoutes(app, options);
+  registerRemoteRoutes(app, options);
   registerSkillRoutes(app, options);
   registerProfileRoutes(app, options);
   registerSessionRoutes(app, { ...options, coordination });

@@ -79,8 +79,8 @@ reload on `http://localhost:3000/ui/`.
 
 [Getting started](docs/getting-started.md) walks through creating the first profile and
 sending the first message. See also [architecture](docs/architecture.md),
-[deploying](docs/deploy.md), [security](docs/security.md), [channels](docs/channels.md)
-and [the web panel](docs/gateway-ui.md).
+[deploying](docs/deploy.md), [security](docs/security.md), [channels](docs/channels.md),
+[the web panel](docs/gateway-ui.md) and [Jian Remote](docs/remote.md).
 
 ## Status
 

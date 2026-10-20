@@ -18,6 +18,7 @@ import { sameSubject } from '../memories/duplicates.js';
 import type { MemoryWriter } from '../memories/port.js';
 import type { PeerAgents } from '../peers/port.js';
 import type { ProfileAdmin } from '../profiles/port.js';
+import type { Remote } from '../remote/service.js';
 import type { RunExecution, RunReader } from '../runs/port.js';
 import type { Schedules } from '../schedules/service.js';
 import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions/port.js';
@@ -95,6 +96,7 @@ export type ToolServices = {
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
   work?: Pick<Work, 'spawnInConversation'>;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove'>;
+  remote?: Pick<Remote, 'listForProfile' | 'execute'>;
 };
 
 export function profileTools(
@@ -584,6 +586,31 @@ export function profileTools(
 
   if (run.profile.allowShell) {
     Object.assign(tools, shellTools(run.profileId, gitAccess));
+    if (services.remote) {
+      tools.list_remote_machines = tool({
+        description:
+          'List remote computers explicitly authorized for this agent. Commands run on those computers automatically, with the logged-in local user’s permissions.',
+        inputSchema: z.object({}),
+        execute: async () => services.remote?.listForProfile(run.profileId),
+      });
+      tools.run_remote_command = tool({
+        description:
+          'Run an arbitrary shell command on a remote computer explicitly authorized for this agent. This executes automatically on the computer with the local user’s privileges. List machines first and never claim success unless the result confirms it.',
+        inputSchema: z.object({
+          machineId: z.uuid(),
+          command: z.string().min(1).max(8000),
+          cwd: z.string().min(1).max(4096).optional(),
+          timeoutMs: z.number().int().min(1000).max(120000).default(30000),
+        }),
+        execute: async ({ machineId, command, cwd, timeoutMs }, { abortSignal }) =>
+          services.remote?.execute(
+            run.profileId,
+            machineId,
+            { command, cwd, timeoutMs },
+            abortSignal,
+          ),
+      });
+    }
   }
 
   // Writing its own skills is part of every agent's work, not of managing itself: what it
