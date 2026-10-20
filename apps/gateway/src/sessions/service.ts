@@ -372,9 +372,14 @@ export class Sessions {
     return listSessionMessages(this.store.db, sessionId, limit, after);
   }
 
-  async uncompactedMessages(profileId: string, sessionId: string, afterId?: string) {
+  async uncompactedMessages(
+    profileId: string,
+    sessionId: string,
+    afterId?: string,
+    afterAt?: string,
+  ) {
     await this.session(profileId, sessionId);
-    return listUncompactedMessages(this.store.db, sessionId, afterId);
+    return listUncompactedMessages(this.store.db, sessionId, afterId, afterAt);
   }
 
   /**

@@ -10,7 +10,12 @@ export interface SessionReader {
     limit?: number,
     after?: string,
   ): Promise<Message[]>;
-  uncompactedMessages(profileId: string, sessionId: string, afterId?: string): Promise<Message[]>;
+  uncompactedMessages(
+    profileId: string,
+    sessionId: string,
+    afterId?: string,
+    afterAt?: string,
+  ): Promise<Message[]>;
 }
 
 /** Naming is the agent's one write to a session, and only while it has no name. */

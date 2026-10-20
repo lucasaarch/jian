@@ -12,7 +12,7 @@ import {
   tool,
 } from 'ai';
 import { z } from 'zod';
-import { fitPrompt, promptTokens, tokenCounter } from '../context/budget.js';
+import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../context/budget.js';
 import { compactPrompt, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
 import { nowIso } from '../core/clock.js';
@@ -727,14 +727,40 @@ export class AgentRuntime {
             }
           }
 
-          const fitted = fitPrompt({
-            provider: config.provider,
-            modelId: config.modelId,
-            policy,
-            instructions: codingInstructions,
-            messages,
-            tools: activeTools,
-          });
+          let fitted: ReturnType<typeof fitPrompt>;
+          try {
+            fitted = fitPrompt({
+              provider: config.provider,
+              modelId: config.modelId,
+              policy,
+              instructions: codingInstructions,
+              messages,
+              tools: activeTools,
+            });
+          } catch (error) {
+            signal.throwIfAborted();
+            // When compaction cannot shrink the window, drop oldest turns so the current request
+            // can still run. Originals stay stored in the database and the panel.
+            const truncated = truncatePrompt({
+              provider: config.provider,
+              modelId: config.modelId,
+              policy,
+              instructions: codingInstructions,
+              messages,
+              tools: activeTools,
+              currentStartIndex,
+            });
+            if (!truncated) throw error;
+            await this.services.lifecycle.checkpoint(profileId, runId, owner, {
+              phase: 'context-truncated',
+              droppedBlocks: truncated.droppedBlocks,
+              beforeTokens: before,
+              afterTokens: truncated.tokens,
+            });
+            messages = truncated.messages;
+            currentStartIndex = messages.findLastIndex((message) => message.role === 'user');
+            fitted = truncated;
+          }
 
           preparedInputTokens = fitted.tokens;
           preparedPrompt = {
