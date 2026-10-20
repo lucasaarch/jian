@@ -1,10 +1,11 @@
-# Jian Remote
+# Remote Control
 
-Jian Remote connects a Mac (or Linux host) to the gateway with an outbound HTTPS polling
-connection. It does not open a port or expose SSH. Profiles must be explicitly authorized for
-a machine; the default is no profiles. An authorized profile can execute arbitrary shell
-commands automatically as the local user, with that user's filesystem and process permissions.
-Only enable it for agents and machines you trust. This is not a sandbox.
+Remote Control connects a Windows, Mac, or Linux computer to the gateway with an outbound
+HTTPS polling connection. It does not open a port or expose SSH. Profiles must be explicitly
+authorized for a machine; the default is no profiles. An authorized profile can execute
+arbitrary shell commands automatically as the local user, with that user's filesystem and
+process permissions, plus screenshot and file transfer tools. Only enable it for agents and
+machines you trust. This is not a sandbox.
 
 ## Add a machine
 
@@ -60,15 +61,31 @@ The worker executes Windows commands with PowerShell. The Windows credential dir
 ACLs are restricted to the current account. To uninstall, delete the `Jian Remote` task in Task
 Scheduler and remove `%USERPROFILE%\\.config\\jian-remote`.
 
-Keep the worker script at its installed path: the OS service starts that file. The worker uses `/bin/sh -lc` on macOS/Linux and PowerShell on Windows, inherits the local user's
-environment, and returns at most 50 KB each of stdout and stderr. Do not authorize profiles that should not have access to those local privileges.
+Keep the worker script at its installed path: the OS service starts that file. The worker uses
+`/bin/sh -lc` on macOS/Linux and PowerShell on Windows, inherits the local user's environment,
+and returns at most about 400 KB of stdout (enough for a compressed screenshot or a small file
+as base64) and 50 KB of stderr. Do not authorize profiles that should not have access to those
+local privileges.
+
+### Starts again after reboot
+
+Yes — when that user signs in. The installer registers:
+
+- **Windows:** Task Scheduler task `Jian Remote` with trigger `ONLOGON` (interactive, limited).
+- **macOS:** LaunchAgent `com.jian.remote` (`RunAtLoad` + `KeepAlive`).
+- **Linux:** `systemd --user` unit `jian-remote.service` enabled for the user session.
+
+Until the user logs in (or the user systemd session is lingering), the machine stays Offline in
+the panel. The Remote Control page polls Online/Offline every few seconds while it is open.
 
 ## Agent use and revocation
 
-The agent receives `list_remote_machines` and `run_remote_command` only when its profile has
-`allowShell` enabled. The former returns only machines explicitly authorized for that profile;
-the latter checks that authorization again before queuing each command. Results include exit
-code, output, and timeout status. A machine must be online to accept work.
+The agent receives the `remote` tool group only when its profile has `allowShell` enabled:
+`list_remote_machines`, `run_remote_command`, `take_remote_screenshot`, `pull_remote_file`, and
+`push_remote_file`. Listing returns only machines explicitly authorized for that profile;
+each action checks that authorization again. Results include exit code, output, and timeout
+status. A machine must be online to accept work. The built-in `remote-control` skill describes
+when to use each tool.
 
 To revoke a profile, replace `allowedProfileIds` using the access endpoint above. To disconnect
 and invalidate the machine token, delete the machine:

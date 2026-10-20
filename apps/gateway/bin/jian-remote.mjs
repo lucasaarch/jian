@@ -175,7 +175,7 @@ async function install() {
   console.log(`Credentials are stored with owner-only permissions in ${configPath}.`);
 }
 
-function cappedAppend(current, chunk, cap = 50_000) {
+function cappedAppend(current, chunk, cap = 400_000) {
   return (current + chunk.toString('utf8')).slice(0, cap);
 }
 

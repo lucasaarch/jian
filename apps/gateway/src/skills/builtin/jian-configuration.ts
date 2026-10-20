@@ -19,6 +19,8 @@ do not imply you can change an owner-only setting yourself.
   new stickers, but existing stickers remain available to send.
 - Channels: WhatsApp, Telegram, contact approvals and groups.
 - Chats: conversation history and per-chat model and effort selection.
+- Remote Control: connect computers, authorize agents, and install the per-user worker that
+  starts again on login after a reboot.
 - Schedules, Memories, Skills and MCP servers: their respective resources. MCP servers also
   offers connection tests and sign-in.
 

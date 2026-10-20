@@ -117,30 +117,46 @@ export function RemoteMachines({ api }: Props) {
   const [removing, setRemoving] = useState<Machine>();
   const [gatewayOrigin, setGatewayOrigin] = useState('https://YOUR-JIAN-GATEWAY');
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [nextMachines, nextProfiles] = await Promise.all([
-        api.remoteMachines(),
-        api.profiles(),
-      ]);
-      setMachines(nextMachines);
-      setProfiles(nextProfiles);
-      setAccess(
-        Object.fromEntries(nextMachines.map((machine) => [machine.id, machine.allowedProfileIds])),
-      );
-      setError('');
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not load remote machines.');
-    } finally {
-      setLoading(false);
-    }
-  }, [api]);
+  const refresh = useCallback(
+    async (opts?: { quiet?: boolean }) => {
+      if (!opts?.quiet) setLoading(true);
+      try {
+        const [nextMachines, nextProfiles] = await Promise.all([
+          api.remoteMachines(),
+          api.profiles(),
+        ]);
+        setMachines(nextMachines);
+        setProfiles(nextProfiles);
+        setAccess(
+          Object.fromEntries(
+            nextMachines.map((machine) => [machine.id, machine.allowedProfileIds]),
+          ),
+        );
+        setError('');
+      } catch (cause) {
+        // Quiet polls keep the last good list; only surface errors on an explicit load.
+        if (!opts?.quiet) {
+          setError(cause instanceof Error ? cause.message : 'Could not load remote machines.');
+        }
+      } finally {
+        if (!opts?.quiet) setLoading(false);
+      }
+    },
+    [api],
+  );
 
   useEffect(() => {
     setGatewayOrigin(window.location.origin);
     void refresh();
   }, [refresh]);
+
+  // Worker presence is polled by the gateway; refresh Online/Offline without a manual reload.
+  // Faster while the install modal is open (someone is connecting a machine right now).
+  useEffect(() => {
+    const ms = created ? 2000 : 5000;
+    const timer = window.setInterval(() => void refresh({ quiet: true }), ms);
+    return () => window.clearInterval(timer);
+  }, [created, refresh]);
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
@@ -388,7 +404,10 @@ export function RemoteMachines({ api }: Props) {
             <p className="note">
               Needs Node.js 24+ on the computer. The command includes the worker token — run it
               once, then clear shell history if you share that terminal. The gateway must be
-              reachable over HTTPS from the computer.
+              reachable over HTTPS from the computer. After install, the worker starts on login
+              (Windows Task Scheduler ONLOGON, macOS LaunchAgent, or Linux systemd --user), so a
+              reboot brings it back when that user signs in. This list refreshes Online status every
+              few seconds while the page is open.
             </p>
           </div>
         </Modal>

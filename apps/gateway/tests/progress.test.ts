@@ -69,6 +69,20 @@ describe('what a run reports while it runs', () => {
     expect(written.at(-1)).toMatchObject({ phase: 'writing', text: 'The new commit is green.' });
   });
 
+  it('remembers that a trailing blank line already released the answer', async () => {
+    const released: string[] = [];
+    const narrator = new Narrator(async (text) => {
+      released.push(text);
+    });
+
+    await narrator.delta('Done on the remote.\n\n');
+
+    expect(released).toEqual(['Done on the remote.']);
+    expect(narrator.released).toBe(true);
+    expect(narrator.rest).toBe('');
+    expect(narrator.lastSaid).toBe('Done on the remote.');
+  });
+
   it('never ends a run because a report failed', async () => {
     const failing = new ProgressReporter(async () => {
       throw new Error('database is gone');

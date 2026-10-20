@@ -12,6 +12,9 @@
  */
 export class Narrator {
   private buffer = '';
+  /** True once any paragraph left this buffer for the channel — rest must not fall back to full text. */
+  private releasedAny = false;
+  private lastReleased = '';
 
   constructor(private readonly release: (text: string) => Promise<void>) {}
 
@@ -30,6 +33,8 @@ export class Narrator {
       this.buffer = this.buffer.slice(split + 2);
 
       if (paragraph) {
+        this.releasedAny = true;
+        this.lastReleased = paragraph;
         await this.release(paragraph);
       }
     }
@@ -50,6 +55,8 @@ export class Narrator {
     this.buffer = '';
 
     if (tail) {
+      this.releasedAny = true;
+      this.lastReleased = tail;
       await this.release(tail);
     }
   }
@@ -62,5 +69,18 @@ export class Narrator {
   /** What has not been released: the run's answer. */
   get rest(): string {
     return this.buffer.trim();
+  }
+
+  /**
+   * Whether any paragraph already went out as commentary. When true, an empty `rest` means the
+   * whole answer was already said — falling back to the model's full `text` would duplicate it.
+   */
+  get released(): boolean {
+    return this.releasedAny;
+  }
+
+  /** Last paragraph sent as commentary; used when a trailing blank line emptied `rest`. */
+  get lastSaid(): string {
+    return this.lastReleased;
   }
 }

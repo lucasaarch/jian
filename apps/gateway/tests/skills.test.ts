@@ -303,6 +303,7 @@ describe('the skills every profile carries', () => {
       'mcp-servers',
       'github-mcp',
       'machine-tools',
+      'remote-control',
       'ponytail',
       'ponytail-review',
       'ponytail-audit',
@@ -428,7 +429,9 @@ describe('the skills every profile carries', () => {
     });
 
     expect(availableSkills(plain).map((skill) => skill.name)).not.toContain('machine-tools');
+    expect(availableSkills(plain).map((skill) => skill.name)).not.toContain('remote-control');
     expect(availableSkills(shell).map((skill) => skill.name)).toContain('machine-tools');
+    expect(availableSkills(shell).map((skill) => skill.name)).toContain('remote-control');
   });
 
   it('loads a built-in body through the same tool as an imported one', async () => {
