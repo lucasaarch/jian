@@ -157,3 +157,67 @@ export function fitPrompt(input: {
     breakdown: { system: systemTokens, tools: toolTokens, messages: tokens - fixedTokens },
   };
 }
+
+/**
+ * Last resort when compaction cannot shrink the request: drop the oldest turn blocks until the
+ * prompt fits, keeping the latest user turn. The dropped turns remain in the database and the
+ * panel.
+ */
+export function truncatePrompt(input: {
+  provider: string;
+  modelId: string;
+  policy: { inputTokens: number; outputTokens: number };
+  instructions: string;
+  messages: readonly ModelMessage[];
+  tools: ToolSet;
+  currentStartIndex?: number;
+}):
+  | {
+      instructions: string;
+      messages: ModelMessage[];
+      tokens: number;
+      breakdown: { system: number; tools: number; messages: number };
+      droppedBlocks: number;
+    }
+  | undefined {
+  const blocks = blocksOf(input.messages);
+  if (blocks.length <= 1) return undefined;
+
+  let keepFrom = 0;
+  const currentStart = input.currentStartIndex;
+  const currentBlock =
+    currentStart === undefined
+      ? blocks.length - 1
+      : (() => {
+          let seen = 0;
+          const index = blocks.findIndex((block) => {
+            const contains = seen + block.length > currentStart;
+            seen += block.length;
+            return contains;
+          });
+          return index < 0 ? blocks.length - 1 : index;
+        })();
+
+  while (keepFrom < currentBlock) {
+    keepFrom++;
+    try {
+      const fitted = fitPrompt({
+        ...input,
+        messages: blocks.slice(keepFrom).flat(),
+      });
+      return { ...fitted, droppedBlocks: keepFrom };
+    } catch {
+      // Keep dropping older blocks until the current turn fits or nothing remains to drop.
+    }
+  }
+
+  try {
+    const fitted = fitPrompt({
+      ...input,
+      messages: blocks.slice(currentBlock).flat(),
+    });
+    return { ...fitted, droppedBlocks: currentBlock };
+  } catch {
+    return undefined;
+  }
+}

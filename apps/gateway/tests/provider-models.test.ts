@@ -279,6 +279,73 @@ it('takes the router listing as the whole truth about a model', async () => {
   expect(plain?.reasoningEfforts).toEqual([]);
 });
 
+it('lets the owner change one model default while a stored role is no longer offered', async () => {
+  const catalog = testCatalog({
+    'claude-sonnet-4-5': {
+      limit: { context: 200_000, output: 64_000 },
+      modalities: { input: ['text'], output: ['text'] },
+      reasoning_options: [{ type: 'effort', values: ['low', 'high'] }],
+    },
+  });
+  const { services, profile, provider } = await setup(
+    async () => listing('claude-sonnet-4-5'),
+    catalog,
+  );
+  const { writeModelDefaults } = await import('../src/providers/repository.js');
+  const selection = { providerId: provider.id, modelId: 'claude-sonnet-4-5' as const };
+
+  // Plant a vision choice that today's catalog rejects for image analysis.
+  await writeModelDefaults(
+    services.store.db,
+    profile.id,
+    {
+      conversation: selection,
+      channel: selection,
+      compaction: null,
+      image: 'disabled',
+      vision: selection,
+      audio: 'disabled',
+      speech: 'disabled',
+      voice: 'disabled',
+      transcription: null,
+      sticker: 'disabled',
+    },
+    new Date(),
+  );
+
+  const saved = await services.providers.setModelDefaults(profile.id, {
+    conversation: { ...selection, reasoningEffort: 'high' },
+    channel: selection,
+    compaction: null,
+    image: 'disabled',
+    vision: selection,
+    audio: 'disabled',
+    speech: 'disabled',
+    voice: 'disabled',
+    sticker: 'disabled',
+  });
+  expect(saved.conversation?.reasoningEffort).toBe('high');
+  expect(saved.vision).toEqual(selection);
+
+  // A change to the stale role still has to pass today's checks.
+  await expect(
+    services.providers.setModelDefaults(profile.id, {
+      conversation: { ...selection, reasoningEffort: 'high' },
+      channel: selection,
+      compaction: null,
+      image: 'disabled',
+      vision: { ...selection, reasoningEffort: 'low' },
+      audio: 'disabled',
+      speech: 'disabled',
+      voice: 'disabled',
+      sticker: 'disabled',
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 409,
+    message: expect.stringContaining('This model cannot run vision'),
+  });
+});
+
 it('reads a catalog that carries a malformed entry among the good ones', async () => {
   const services = await testServices();
   const _profile = await services.profiles.createProfile({ name: 'Atlas', instructions: 'Help.' });
