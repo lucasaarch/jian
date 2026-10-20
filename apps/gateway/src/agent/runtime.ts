@@ -43,6 +43,7 @@ import { mcpOutcomeUncertain } from './mcp-errors.js';
 import { Narrator } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
+import { reason, toolFailure } from './tool-failure.js';
 import { deferTools, profileTools, type ToolServices } from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
 import { markSteering, outsideContent } from './untrusted.js';
@@ -54,13 +55,6 @@ import { prepareProfileGitAccess, prepareWorkerWorkspace } from './worker-worksp
  * fires on something that hung, not on work that takes its time.
  */
 const STALLED_AFTER_MS = 5 * 60_000;
-
-/**
- * Keys and tokens by their look — OpenAI and Anthropic, Google, Groq, GitHub — and whatever
- * follows a bearer or an `api_key=`: an error can quote a credential this run never held.
- */
-const CREDENTIAL_SHAPES =
-  /\b(sk-[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{30,}|gsk_[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{20,})\b|\bBearer\s+\S+|\b(?:cookie|set-cookie|headers)\s*[:=][^\r\n]+|\b(api[_-]?key|token|secret|password|authorization)(["']?\s*[:=]\s*["']?)[^\s"',;&]+/gi;
 
 export type { RuntimeOptions } from './types.js';
 
@@ -1020,76 +1014,6 @@ function causes(error: unknown): Error[] {
   }
 
   return chain;
-}
-
-/** One line, redacted against this run's credentials, short enough for a chat bubble. */
-function reason(error: unknown, secrets: Set<string>): string {
-  const text = error instanceof Error ? error.message : String(error);
-
-  // Credentials this run did not hold can still appear in an error; their shapes are masked too.
-  return redactText(text, secrets)
-    .replace(CREDENTIAL_SHAPES, (match, _key, name?: string, joint?: string) =>
-      name
-        ? `${name}${joint}[REDACTED]`
-        : /^bearer/i.test(match)
-          ? 'Bearer [REDACTED]'
-          : '[REDACTED]',
-    )
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 300);
-}
-
-function toolFailure(error: unknown, secrets: Set<string>): string {
-  const fields = new Set([
-    'message',
-    'name',
-    'error',
-    'origin',
-    'code',
-    'format',
-    'path',
-    'issues',
-    'details',
-    'errors',
-    'expected',
-    'received',
-    'minimum',
-    'maximum',
-    'validation',
-  ]);
-  const sanitize = (value: unknown, depth = 0): unknown => {
-    if (typeof value === 'string') return reason(value, secrets).slice(0, 200);
-    if (typeof value === 'number' || typeof value === 'boolean') return value;
-    if (depth >= 4) return undefined;
-    if (Array.isArray(value)) return value.slice(0, 6).map((item) => sanitize(item, depth + 1));
-    if (!value || typeof value !== 'object') return undefined;
-
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([key]) => fields.has(key))
-        .slice(0, 12)
-        .map(([key, item]) => [key, sanitize(item, depth + 1)])
-        .filter(([, item]) => item !== undefined),
-    );
-  };
-  const source = error instanceof Error ? { ...error, message: error.message } : error;
-  const structured = sanitize(source);
-
-  if (structured && typeof structured === 'object' && Object.keys(structured).length) {
-    const encoded = JSON.stringify(structured);
-    if (encoded.length <= 4_000) return encoded;
-
-    const { message, origin, code, format, path, issues } = structured as Record<string, unknown>;
-    const summary = { message, origin, code, format, path };
-    const concise = JSON.stringify({
-      ...summary,
-      issues: Array.isArray(issues) ? issues.slice(0, 1) : undefined,
-    });
-    return concise.length <= 4_000 ? concise : JSON.stringify(summary);
-  }
-
-  return reason(error, secrets) || 'no reason given. Inspect saved steps before retrying.';
 }
 
 /**

@@ -50,6 +50,7 @@ it changed since you read it. That is protecting someone else's change: read it 
   the person asked for exactly that.
 - Prefer a connected GitHub MCP server for issues and pull requests: search and load its
   tools first. The panel has a GitHub preset under Skills → MCP (HTTP+OAuth or stdio+PAT).
+  Load \`github-mcp\` before create/update issue or PR calls (milestones, labels, common 422s).
 - Otherwise \`gh\` opens pull requests, reads issues and checks runs when shell is allowed and
   \`gh\` is logged in in this profile's workspace (see \`machine-tools\`).
 
