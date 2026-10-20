@@ -69,6 +69,33 @@ describe('what a run reports while it runs', () => {
     expect(written.at(-1)).toMatchObject({ phase: 'writing', text: 'The new commit is green.' });
   });
 
+  it('remembers that a trailing blank line already released the answer', async () => {
+    const released: string[] = [];
+    const narrator = new Narrator(async (text) => {
+      released.push(text);
+    });
+
+    await narrator.delta('Done on the remote.\n\n');
+
+    expect(released).toEqual(['Done on the remote.']);
+    expect(narrator.released).toBe(true);
+    expect(narrator.finishedAsCommentary).toBe(true);
+    expect(narrator.rest).toBe('');
+    expect(narrator.lastSaid).toBe('Done on the remote.');
+  });
+
+  it('does not treat pre-tool commentary as a finished answer', async () => {
+    const narrator = new Narrator(async () => {});
+
+    await narrator.delta('Found it.');
+    await narrator.endStep(true);
+
+    expect(narrator.released).toBe(true);
+    expect(narrator.finishedAsCommentary).toBe(false);
+    expect(narrator.rest).toBe('');
+    expect(narrator.lastSaid).toBe('Found it.');
+  });
+
   it('never ends a run because a report failed', async () => {
     const failing = new ProgressReporter(async () => {
       throw new Error('database is gone');

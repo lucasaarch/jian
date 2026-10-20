@@ -16,6 +16,7 @@ import { mcpServers } from './mcp-servers.js';
 import { media } from './media.js';
 import { memoryKeeping } from './memory-keeping.js';
 import { ownerAndContacts } from './owner-and-contacts.js';
+import { remoteControl } from './remote-control.js';
 import { schedules } from './schedules.js';
 import { skillCreator } from './skill-creator.js';
 import { sshKeys } from './ssh-keys.js';
@@ -62,7 +63,7 @@ const ALWAYS: readonly Skill[] = [
  */
 const SELF_MANAGED: readonly Skill[] = [managingYourself];
 const AGENTS: readonly Skill[] = [workingWithAgents];
-const SHELL: readonly Skill[] = [machineTools, codingWork, ...ponytailSkills];
+const SHELL: readonly Skill[] = [machineTools, codingWork, remoteControl, ...ponytailSkills];
 const WEB: readonly Skill[] = [webResearch];
 const MCP: readonly Skill[] = [mcpServers, githubMcp];
 const STICKERS: readonly Skill[] = [stickers];
