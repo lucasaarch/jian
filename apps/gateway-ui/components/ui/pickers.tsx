@@ -140,6 +140,7 @@ export function TimePicker({
           sideOffset={6}
           align="start"
           positionMethod="fixed"
+          collisionBoundary={[]}
         >
           <Popover.Popup className="picker-popup" initialFocus={chosen}>
             <TimeColumns value={value} onChange={onChange} chosenHour={chosen} />
@@ -222,6 +223,7 @@ export function DateTimePicker({
           sideOffset={6}
           align="start"
           positionMethod="fixed"
+          collisionBoundary={[]}
         >
           <Popover.Popup className="picker-popup calendar-popup" initialFocus={chosen}>
             <div className="calendar">
