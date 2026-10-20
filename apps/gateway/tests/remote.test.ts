@@ -64,6 +64,34 @@ it('serves the worker script without authentication so install one-liners can do
   }
 });
 
+it('serves automatic worker updates only to the matching authenticated machine', async () => {
+  const services = await testServices();
+  const created = await services.remote.create({ name: 'Updater' });
+  const app = createApp({
+    ...services,
+    token: 'host-admin-token-for-test-1234567890-verysecret',
+    logger: false,
+  });
+  try {
+    const denied = await app.inject({ url: `/v1/remote/worker/${created.id}/update` });
+    expect(denied.statusCode).toBe(401);
+    const accepted = await app.inject({
+      url: `/v1/remote/worker/${created.id}/update`,
+      headers: { authorization: `Bearer ${created.token}` },
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.headers.etag).toMatch(/^"[a-f0-9]{64}"$/);
+    expect(accepted.body).toContain('updateIfNeeded');
+    const unchanged = await app.inject({
+      url: `/v1/remote/worker/${created.id}/update`,
+      headers: { authorization: `Bearer ${created.token}`, 'if-none-match': accepted.headers.etag },
+    });
+    expect(unchanged.statusCode).toBe(304);
+  } finally {
+    await app.close();
+  }
+});
+
 it('authenticates the worker API with its machine token, not the gateway admin token', async () => {
   const services = await testServices();
   const created = await services.remote.create({ name: 'Worker test' });

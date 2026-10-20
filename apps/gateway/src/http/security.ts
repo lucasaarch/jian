@@ -5,6 +5,12 @@ import { ZodError } from 'zod';
 import { GatewayError } from '../core/errors.js';
 import { authorizesPanel } from '../security/panel-session.js';
 
+declare module 'fastify' {
+  interface FastifyContextConfig {
+    workerAuth?: boolean;
+  }
+}
+
 /**
  * The host token is the only API credential: it opens the whole installation. Unknown routes
  * require it, public routes carry their own proof, and webhook adapters authenticate the
@@ -16,6 +22,7 @@ export function configureSecurity(app: FastifyInstance, options: { token: string
     if (request.routeOptions.config.publicUiAsset && ['GET', 'HEAD'].includes(request.method)) {
       return;
     }
+    if (request.routeOptions.config.workerAuth) return;
 
     const operation = operations.find(
       (item) => item.path === request.routeOptions.url && item.method === request.method,

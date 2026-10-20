@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
@@ -8,6 +9,28 @@ const workerScript = fileURLToPath(new URL('../../bin/jian-remote.mjs', import.m
 
 export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remote }): void {
   // Public: the panel's install one-liner curls this before it has a worker token.
+  app.get<{ Params: { machineId: string } }>(
+    '/v1/remote/worker/:machineId/update',
+    { config: { workerAuth: true } },
+    async (request, reply) => {
+      await deps.remote.workerUpdateAuthorized(
+        request.params.machineId,
+        request.headers.authorization ?? '',
+      );
+      if (!existsSync(workerScript))
+        return reply.code(404).send({ error: 'Worker script not found' });
+      const script = readFileSync(workerScript);
+      const etag = `"${createHash('sha256').update(script).digest('hex')}"`;
+      if (request.headers['if-none-match'] === etag)
+        return reply.code(304).header('ETag', etag).send();
+      return reply
+        .type('text/javascript; charset=utf-8')
+        .header('ETag', etag)
+        .header('Cache-Control', 'no-cache')
+        .send(script);
+    },
+  );
+
   app.get('/jian-remote.mjs', { config: { publicUiAsset: true } }, async (_request, reply) => {
     if (!existsSync(workerScript)) {
       return reply.code(404).send({ error: 'Worker script not found' });
