@@ -188,7 +188,7 @@ export class Remote {
   async poll(machineId: string, authorization: string, reportedPlatform: string | undefined) {
     const machine = await this.authenticate(machineId, authorization);
     const platform =
-      reportedPlatform && /^(darwin|linux)-(arm64|x64)$/.test(reportedPlatform)
+      reportedPlatform && /^(darwin|linux|win32)-(arm64|x64)$/.test(reportedPlatform)
         ? reportedPlatform
         : machine.platform;
     await this.store.db

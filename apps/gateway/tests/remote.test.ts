@@ -40,6 +40,10 @@ it('shares machines per profile and executes an authorized worker task', async (
   await expect(services.remote.poll(created.id, 'Bearer invalid', undefined)).rejects.toMatchObject(
     { statusCode: 401 },
   );
+  await services.remote.poll(created.id, `Bearer ${created.token}`, 'win32-x64');
+  await expect(services.remote.list()).resolves.toMatchObject([
+    { id: created.id, platform: 'win32-x64' },
+  ]);
 });
 
 it('authenticates the worker API with its machine token, not the gateway admin token', async () => {

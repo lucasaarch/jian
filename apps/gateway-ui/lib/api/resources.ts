@@ -14,6 +14,18 @@ export const resourceCalls = (client: Client) => ({
         params: { path: { profileId, keyId } },
       }),
     ),
+  remoteMachines: () => result(client.GET('/v1/remote/machines')),
+  createRemoteMachine: (body: { name: string; allowedProfileIds: string[] }) =>
+    result(client.POST('/v1/remote/machines', { body })),
+  setRemoteMachineAccess: (machineId: string, allowedProfileIds: string[]) =>
+    result(
+      client.PATCH('/v1/remote/machines/{machineId}/access', {
+        params: { path: { machineId } },
+        body: { allowedProfileIds },
+      }),
+    ),
+  deleteRemoteMachine: (machineId: string) =>
+    result(client.DELETE('/v1/remote/machines/{machineId}', { params: { path: { machineId } } })),
   conversationSubagents: (profileId: string, sessionId: string) =>
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/subagents', {
