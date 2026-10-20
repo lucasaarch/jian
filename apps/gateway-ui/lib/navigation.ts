@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   MessageSquare,
+  Monitor,
   Plug,
   Smartphone,
   Sparkles,
@@ -25,6 +26,7 @@ export type NavigationItem = {
  */
 export const navigation: NavigationItem[] = [
   { href: '/providers', label: 'Providers', icon: Plug, group: 'global' },
+  { href: '/remote', label: 'Jian Remote', icon: Monitor, group: 'global' },
   { href: '/', label: 'Overview', icon: LayoutDashboard, group: 'agent' },
   { href: '/identity', label: 'Identity', icon: Fingerprint, group: 'agent' },
   { href: '/ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'agent' },
