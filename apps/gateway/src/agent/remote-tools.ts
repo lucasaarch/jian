@@ -7,8 +7,13 @@ import type { Remote } from '../remote/service.js';
 import type { Store } from '../storage/database.js';
 import { mediaAssets } from '../storage/schema.js';
 
-/** Soft ceiling for a remote screenshot or file pull through the worker’s stdout channel. */
-const REMOTE_PAYLOAD_CHARS = 400_000;
+/**
+ * Soft ceiling for a remote screenshot or file pull through the worker’s stdout channel.
+ * Matches packages/contracts remoteResultSchema stdout max and the worker STDOUT_CAP.
+ * Prefer compressing/scaling captures so they fit — truncating base64 mid-stream yields a
+ * corrupt JPEG (often a grey lower half) that still “looks like” an image.
+ */
+export const REMOTE_PAYLOAD_CHARS = 400_000;
 
 function platformOf(machine: { platform: string }) {
   const value = machine.platform.toLowerCase();
@@ -17,27 +22,102 @@ function platformOf(machine: { platform: string }) {
   return 'linux' as const;
 }
 
-function screenshotCommand(platform: 'windows' | 'macos' | 'linux') {
+/** JPEG SOI…EOI — truncated channel payloads usually lack EOI and decode as grey garbage. */
+export function isCompleteJpeg(bytes: Buffer): boolean {
+  return (
+    bytes.length >= 4 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[bytes.length - 2] === 0xff &&
+    bytes[bytes.length - 1] === 0xd9
+  );
+}
+
+export function validateScreenshotBase64(
+  raw: string,
+  maxChars = REMOTE_PAYLOAD_CHARS,
+): { ok: true; bytes: Buffer; base64: string } | { ok: false; error: string } {
+  const base64 = raw.replace(/\s+/g, '');
+  if (!base64) return { ok: false, error: 'Screenshot produced no image data.' };
+  if (base64.length > maxChars) {
+    return {
+      ok: false,
+      error:
+        'Screenshot is too large for the worker channel; the capture should have been scaled down. Retry or lower display scale.',
+    };
+  }
+  let bytes: Buffer;
+  try {
+    bytes = Buffer.from(base64, 'base64');
+  } catch {
+    return { ok: false, error: 'Screenshot output was not valid base64.' };
+  }
+  if (bytes.length < 4) {
+    return { ok: false, error: 'Screenshot was empty.' };
+  }
+  // Truncated stdout cuts base64 mid-stream → incomplete JPEG (grey lower half in WhatsApp etc.).
+  if (!isCompleteJpeg(bytes)) {
+    return {
+      ok: false,
+      error:
+        'Screenshot looks truncated or corrupt (incomplete JPEG). The worker channel likely cut the payload — retry; captures are compressed to fit.',
+    };
+  }
+  return { ok: true, bytes, base64 };
+}
+
+/**
+ * Platform shell that captures, then scales/recompresses so base64 fits the worker channel.
+ * Exported for unit tests — do not call from agents directly.
+ */
+export function screenshotCommand(platform: 'windows' | 'macos' | 'linux') {
   if (platform === 'windows') {
-    // JPEG to keep the base64 under the worker stdout ceiling on a typical desktop.
+    // Scale longest side to 1920 and JPEG quality 50 so Retina/4K frames stay under the cap.
     return [
       'Add-Type -AssemblyName System.Windows.Forms,System.Drawing;',
       '$bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds;',
       '$bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height;',
       '$graphics = [System.Drawing.Graphics]::FromImage($bitmap);',
       '$graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size);',
+      '$maxW = 1920;',
+      'if ($bitmap.Width -gt $maxW -or $bitmap.Height -gt $maxW) {',
+      '  $scale = [Math]::Min($maxW / $bitmap.Width, $maxW / $bitmap.Height);',
+      '  $w = [int]([Math]::Max(1, $bitmap.Width * $scale));',
+      '  $h = [int]([Math]::Max(1, $bitmap.Height * $scale));',
+      '  $scaled = New-Object System.Drawing.Bitmap $w, $h;',
+      '  $g2 = [System.Drawing.Graphics]::FromImage($scaled);',
+      '  $g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic;',
+      '  $g2.DrawImage($bitmap, 0, 0, $w, $h);',
+      '  $bitmap.Dispose(); $graphics.Dispose(); $g2.Dispose();',
+      '  $bitmap = $scaled;',
+      '}',
       '$stream = New-Object System.IO.MemoryStream;',
       '$encoder = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() |',
       '  Where-Object { $_.MimeType -eq "image/jpeg" };',
       '$quality = New-Object System.Drawing.Imaging.EncoderParameters 1;',
-      '$quality.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), 55L;',
+      '$quality.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), 50L;',
       '$bitmap.Save($stream, $encoder, $quality);',
+      'if ($stream.Length -gt 280000) {',
+      '  $stream.SetLength(0);',
+      '  $quality.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), 35L;',
+      '  $bitmap.Save($stream, $encoder, $quality);',
+      '}',
       '[Convert]::ToBase64String($stream.ToArray())',
     ].join(' ');
   }
 
   if (platform === 'macos') {
-    return 'tmp=$(mktemp /tmp/jian-shot.XXXXXX.jpg); screencapture -x -t jpg "$tmp" && base64 < "$tmp"; rm -f "$tmp"';
+    // screencapture alone on Retina often exceeds ~300 KB binary; sips shrinks before base64.
+    return [
+      'tmp=$(mktemp /tmp/jian-shot.XXXXXX.jpg);',
+      'screencapture -x -t jpg "$tmp" || { rm -f "$tmp"; exit 1; };',
+      'sips -Z 1920 -s format jpeg -s formatOptions 50 "$tmp" >/dev/null 2>&1 || true;',
+      'size=$(wc -c < "$tmp" | tr -d " ");',
+      'if [ "$size" -gt 280000 ]; then sips -Z 1440 -s format jpeg -s formatOptions 40 "$tmp" >/dev/null 2>&1 || true; fi;',
+      'size=$(wc -c < "$tmp" | tr -d " ");',
+      'if [ "$size" -gt 280000 ]; then sips -Z 1280 -s format jpeg -s formatOptions 35 "$tmp" >/dev/null 2>&1 || true; fi;',
+      'base64 < "$tmp"; rm -f "$tmp"',
+    ].join(' ');
   }
 
   return [
@@ -46,6 +126,13 @@ function screenshotCommand(platform: 'windows' | 'macos' | 'linux') {
     'elif command -v import >/dev/null; then import -window root "$tmp";',
     'elif command -v grim >/dev/null; then grim "$tmp";',
     'else echo "No screenshot tool (gnome-screenshot, import, or grim)" >&2; exit 1; fi;',
+    'if command -v magick >/dev/null; then magick "$tmp" -resize "1920x1920>" -quality 50 "$tmp";',
+    'elif command -v convert >/dev/null; then convert "$tmp" -resize "1920x1920>" -quality 50 "$tmp";',
+    'elif command -v ffmpeg >/dev/null; then out="$tmp.out.jpg"; ffmpeg -y -i "$tmp" -vf scale=1920:-2 -q:v 5 "$out" && mv "$out" "$tmp";',
+    'fi;',
+    'size=$(wc -c < "$tmp" | tr -d " ");',
+    'if [ "$size" -gt 280000 ] && command -v convert >/dev/null; then convert "$tmp" -resize "1280x1280>" -quality 35 "$tmp"; fi;',
+    'if [ "$size" -gt 280000 ] && command -v magick >/dev/null; then magick "$tmp" -resize "1280x1280>" -quality 35 "$tmp"; fi;',
     'base64 < "$tmp"; rm -f "$tmp"',
   ].join(' ');
 }
@@ -130,30 +217,9 @@ export function remoteTools(
           };
         }
 
-        const base64 = result.stdout.replace(/\s+/g, '');
-        if (!base64 || base64.length > REMOTE_PAYLOAD_CHARS) {
-          return {
-            ok: false,
-            error:
-              base64.length > REMOTE_PAYLOAD_CHARS
-                ? 'Screenshot is too large for the worker channel; lower display scale or ask the owner.'
-                : 'Screenshot produced no image data.',
-            stderr: result.stderr,
-          };
-        }
-
-        let bytes: Buffer;
-        try {
-          bytes = Buffer.from(base64, 'base64');
-        } catch {
-          return {
-            ok: false,
-            error: 'Screenshot output was not valid base64.',
-            stderr: result.stderr,
-          };
-        }
-        if (bytes.length < 32) {
-          return { ok: false, error: 'Screenshot was empty.', stderr: result.stderr };
+        const checked = validateScreenshotBase64(result.stdout, REMOTE_PAYLOAD_CHARS);
+        if (!checked.ok) {
+          return { ok: false, error: checked.error, stderr: result.stderr };
         }
 
         const mediaId = randomUUID();
@@ -166,15 +232,15 @@ export function remoteTools(
           sourceKey: `remote-shot:${mediaId}`,
           mimeType: 'image/jpeg',
           name,
-          data: base64,
-          bytes: bytes.length,
+          data: checked.base64,
+          bytes: checked.bytes.length,
         });
 
         return {
           ok: true,
           mediaId,
           name,
-          bytes: bytes.length,
+          bytes: checked.bytes.length,
           machineId,
           machineName: machine.name,
           hint: 'Send it in this chat with send_file using this mediaId.',
