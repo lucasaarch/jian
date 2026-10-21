@@ -20,8 +20,18 @@ const HELPER_NAME = 'computer-helper';
 const UI_STATE_CACHE_MS = 5_000;
 export const MAC_UI_STATES = Object.freeze(['unlocked', 'locked', 'display_asleep', 'unknown']);
 
-const LOCKED_COMPUTER_MESSAGE =
-  'Mac is locked — unlock the screen to use Computer Use. Shell and file tools may still work while the worker is online.';
+const LOCKED_INPUT_MESSAGE =
+  'Mac is locked — unlock the screen before click, type, key, scroll, or drag. Screenshot may still work (lock screen only). Shell and file tools may still work while the worker is online.';
+
+const LOCKED_SCREENSHOT_NOTE =
+  'Note: Mac session is locked — this image is the lock screen (or black if the display stayed asleep), not desktop apps behind the lock.';
+
+/** Actions that only observe or tear down; safe to attempt while locked after waking the display. */
+export const LOCKED_ALLOWED_ACTIONS = new Set(['screenshot', 'wait', 'end_session']);
+
+export function computerActionAllowedWhileLocked(action) {
+  return LOCKED_ALLOWED_ACTIONS.has(action);
+}
 
 let cachedUiState = { at: 0, state: 'unknown' };
 let workerIdleCaffeinate = null;
@@ -386,14 +396,14 @@ export class MacComputerSession {
       };
     }
 
-    const uiBlocked = assertComputerUiAllowed();
-    if (uiBlocked) {
+    const uiGate = prepareComputerUi(action);
+    if (uiGate.blocked) {
       return {
         exitCode: 1,
         stdout: '',
-        stderr: uiBlocked,
+        stderr: uiGate.blocked,
         timedOut: false,
-        computer: { ok: false, error: uiBlocked },
+        computer: { ok: false, error: uiGate.blocked },
       };
     }
 
@@ -407,10 +417,11 @@ export class MacComputerSession {
         heightPx: shot.heightPx,
       };
       this.bumpIdle();
+      const stderr = uiGate.sessionLocked ? LOCKED_SCREENSHOT_NOTE : '';
       return {
         exitCode: 0,
         stdout: shot.base64,
-        stderr: '',
+        stderr,
         timedOut: false,
         computer: {
           ok: true,
@@ -661,15 +672,23 @@ export function wakeMacDisplay(seconds = 3) {
 }
 
 /**
- * Before GUI actions: wake a sleeping display; refuse clearly when the session is locked.
- * Returns null when Computer Use may proceed, or an English error string.
+ * Wake the display when locked or asleep (lock often coincides with display sleep; capture
+ * needs the panel on). Allow screenshot while locked; block synthetic input.
  */
-export function assertComputerUiAllowed() {
+export function prepareComputerUi(action) {
   let state = probeMacUiState({ force: true });
-  if (state === 'display_asleep' || state === 'unknown') {
+  if (state === 'display_asleep' || state === 'locked' || state === 'unknown') {
     wakeMacDisplay(3);
     state = probeMacUiState({ force: true });
   }
-  if (state === 'locked') return LOCKED_COMPUTER_MESSAGE;
-  return null;
+  const sessionLocked = state === 'locked';
+  if (sessionLocked && !LOCKED_ALLOWED_ACTIONS.has(action)) {
+    return { blocked: LOCKED_INPUT_MESSAGE, sessionLocked: true, state };
+  }
+  return { blocked: null, sessionLocked, state };
+}
+
+/** @deprecated Prefer prepareComputerUi(action). Kept for tests that only care about input block. */
+export function assertComputerUiAllowed(action = 'left_click') {
+  return prepareComputerUi(action).blocked;
 }

@@ -210,10 +210,15 @@ export function remoteTools(
         const machine = machines.find((item) => item.id === input.machineId);
         if (!machine) throw new GatewayError(403, 'That remote machine is not authorized');
         if (!machine.online) throw new GatewayError(503, 'Remote machine is offline');
-        if (machine.uiState === 'locked') {
+        if (
+          machine.uiState === 'locked' &&
+          input.action !== 'screenshot' &&
+          input.action !== 'wait' &&
+          input.action !== 'end_session'
+        ) {
           throw new GatewayError(
             409,
-            'Mac is locked — unlock the screen to use Computer Use. Shell and file tools may still work while the worker is online.',
+            'Mac is locked — unlock the screen before click, type, key, scroll, or drag. Screenshot may still work (lock screen only). Shell and file tools may still work while the worker is online.',
           );
         }
 

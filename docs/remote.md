@@ -313,7 +313,7 @@ desktop is unlocked. The panel and `list_remote_machines` also expose `uiState`:
 | --- | --- | --- | --- |
 | `unlocked` | Session unlocked, display up | Yes | Yes |
 | `display_asleep` | Display off/asleep, not password-locked | Yes | Worker wakes the display when a session starts |
-| `locked` | Password lock / loginwindow | Yes while online | Clear error — unlock the Mac first |
+| `locked` | Password lock / loginwindow | Yes while online | **Screenshot** may work after waking the display (lock UI only). Click / type / key / scroll / drag need unlock. Desktop apps behind the lock are not visible. |
 | `unknown` | Probe unavailable | Yes while online | Best-effort; may fail with a normal tool error |
 
 A locked Mac that still looks **Offline** is usually an old LaunchAgent without
@@ -322,10 +322,12 @@ A locked Mac that still looks **Offline** is usually an old LaunchAgent without
 re-install) so launchd rewrites the plist, then check `~/.config/jian-remote/worker.log`.
 
 While a computer-use session is open the worker holds `caffeinate` assertions so idle
-display sleep is less likely to interrupt it. That does **not** unlock a password lock, and
-it does not claim ChatGPT/Codex-style “locked Computer Use” (those products use a separate
-macOS authorization plugin). Lid-closed clamshell sleep still takes the machine truly
-offline until it wakes.
+display sleep is less likely to interrupt it. A locked Mac often also has the display
+asleep; the worker runs `caffeinate -u` before a screenshot so capture is not confused
+with “lock blocks Screen Recording.” You may get the lock screen image (or black if wake
+failed) — not Finder/Chrome behind loginwindow. That is an OS limit, not ChatGPT-style
+“locked Computer Use” (those products use a separate macOS authorization plugin).
+Lid-closed clamshell sleep still takes the machine truly offline until it wakes.
 
 #### Optional Apple signing secrets (Publish)
 

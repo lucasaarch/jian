@@ -38,8 +38,9 @@ succeeded unless the tool result confirms it (exit code, stdout, or \`ok: true\`
 
 1. \`list_remote_machines\` and pick an **online** machine the owner named (or confirm which
    one if several). Offline means the worker is not polling — say so; do not invent success.
-   \`uiState: locked\` means the Mac is locked but still online: use shell/files if needed,
-   tell the owner to unlock for Computer Use — do not call that offline.
+   \`uiState: locked\` means the Mac is locked but still online: shell/files still work;
+   \`screenshot\` may return the lock screen after the worker wakes the display; click/type
+   need the owner to unlock — do not call that offline.
    Computer use needs capability \`computer-macos-v1\`, \`computer-linux-v1\`, or
    \`computer-windows-v1\` (updated Jian Remote on that OS).
 2. Say one short line before a slow or visible action ("Opening Calculator on Mark.").
@@ -66,9 +67,10 @@ signs in. Until then the machine stays offline in the panel.
   System Settings. Linux needs an X11 session with \`xdotool\` and \`ffmpeg\`. Windows needs an
   interactive desktop session. If a tool result says permissions or tools are missing, tell
   the owner — do not invent shell workarounds that bypass Jian’s app identity.
-- A **locked** Mac (password lock / loginwindow) stays online when the worker is polling;
-  Computer Use needs the owner to unlock. Display sleep alone is woken when a session
-  starts. Lid-closed system sleep is true offline until the Mac wakes.
+- A **locked** Mac (password lock / loginwindow) stays online when the worker is polling.
+  Screenshot may capture the lock UI (not apps behind it); click/type/key/scroll/drag need
+  unlock. Display sleep alone is woken when a session starts. Lid-closed system sleep is
+  true offline until the Mac wakes.
 - Never print the worker token or stored credentials into the chat.
 `,
 };
