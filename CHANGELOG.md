@@ -4,6 +4,27 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 0.8.0 — 2026-10-21
+
+Anthropic-style Remote Control computer use on macOS with a Jian overlay cursor, replacement of take_remote_screenshot by remote_computer, and always-on workspace shell (allowShell neutralized).
+
+### Remote Control
+
+* **Computer use (macOS):** agents authorized for a machine can drive the **primary display** with Anthropic-style actions via `remote_computer` — `screenshot`, clicks, `mouse_move`, `type`, `key`, `scroll`, `left_click_drag`, `wait`, and `end_session`. Coordinates are pixels in the scaled JPEG (`widthPx` × `heightPx`), using the same compress ladder as before (longest side ≤ 1920, ~280 KB binary). Typed worker jobs use `kind: 'computer'`; workers advertise capability `computer-macos-v1`. See `docs/remote.md`.
+* **Jian overlay cursor:** while a computer-use session is open, a branded cream/ink wing pointer is visible on the Mac (not a generic red dot). After idle it stays visible but very translucent; `end_session` removes it entirely. Synthetic input and the overlay run under **Jian Remote.app** TCC (Screen Recording + Accessibility).
+* **`take_remote_screenshot` removed:** screenshots go through `remote_computer` with `action: "screenshot"` (returns `mediaId` plus geometry). Builtin `remote-control` skill updated accordingly.
+* **Machine ACL only:** remote shell and computer use are gated by each machine’s `allowedProfileIds`, not by the profile `allowShell` flag.
+
+### Profiles and shell
+
+* **`allowShell` neutralized:** workspace-confined shell and file tools (and the related builtin skills) are always available. The panel checkbox **Allow the terminal and files** is gone. The API field remains for older clients but is ignored for enforcement and defaults to true; existing profiles are set true by migration. Remote Control stays on machine access lists.
+
+### Upgrading
+
+Requires database migration `0057_remote-computer-use` (task `kind` / `payload`, machine `capabilities`, `allow_shell` default). After releasing, publish `@jian-ai/remote-control@0.8.0` and have macOS workers `update` so they ship the computer helper and advertise `computer-macos-v1`. Agents and prompts that called `take_remote_screenshot` must switch to `remote_computer`.
+
+Stable installations can use the `latest` image tag or pin `0.8.0`.
+
 ## 0.7.2 — 2026-10-21
 
 Jian Remote.app macOS Login Items identity, clearer install CLI success output, screenshot channel fit so Retina captures are no longer truncated grey JPEGs, and session objectives no longer auto-seed from casual chat.
