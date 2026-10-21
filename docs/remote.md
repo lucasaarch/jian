@@ -144,13 +144,13 @@ Keep the worker script at its installed path: the OS service starts that file. T
 and returns at most about 400 KB of stdout and 50 KB of stderr. Oversized results are truncated
 before upload so the worker does not stick offline on HTTP 413.
 
-**Screenshots:** `take_remote_screenshot` captures JPEG, then **scales and recompresses** on the
-machine (longest side ≤ 1920, quality stepped down until the binary is under ~280 KB) so base64
-fits the channel. Cutting base64 mid-stream used to decode as a corrupt image (often a solid
-grey lower half). The gateway rejects incomplete JPEGs instead of storing them. File pull/push
-still need to stay under the same ~300 KB binary budget; larger files need an owner-arranged
-transfer via `run_remote_command`. Do not authorize profiles that should not have access to
-those local privileges.
+**Screenshots:** `remote_computer` with `action: screenshot` captures the **primary** display as
+JPEG, then **scales and recompresses** on the machine (longest side ≤ 1920, quality stepped down
+until the binary is under ~280 KB) so base64 fits the channel. Cutting base64 mid-stream used to
+decode as a corrupt image (often a solid grey lower half). The gateway rejects incomplete JPEGs
+instead of storing them. File pull/push still need to stay under the same ~300 KB binary budget;
+larger files need an owner-arranged transfer via `run_remote_command`. Do not authorize profiles
+that should not have access to those local privileges.
 
 ### Starts again after reboot
 
@@ -216,12 +216,25 @@ launchctl kickstart -k "gui/$(id -u)/com.jian.remote"
 
 ## Agent use and revocation
 
-The agent receives the `remote` tool group only when its profile has `allowShell` enabled:
-`list_remote_machines`, `run_remote_command`, `take_remote_screenshot`, `pull_remote_file`, and
-`push_remote_file`. Listing returns only machines explicitly authorized for that profile;
-each action checks that authorization again. Results include exit code, output, and timeout
-status. A machine must be online to accept work. The built-in `remote-control` skill describes
+The agent always receives the `remote` tool group when Remote Control is configured on the
+gateway: `list_remote_machines`, `run_remote_command`, `remote_computer`, `pull_remote_file`,
+and `push_remote_file`. Listing returns only machines explicitly authorized for that profile;
+each action checks that authorization again. **Machine ACL is the only gate** for remote shell
+and computer use — not the deprecated profile `allowShell` flag (workspace shell on the gateway
+is always available and confined to the profile workspace). Results include exit code, output,
+and timeout status. A machine must be online to accept work. Computer use additionally needs
+worker capability `computer-macos-v1` (macOS). The built-in `remote-control` skill describes
 when to use each tool.
+
+### Computer use (macOS)
+
+`remote_computer` drives the **primary display** with Anthropic-style actions (`screenshot`,
+clicks, move, type, key, scroll, drag, wait, `end_session`). Coordinates are pixels in the
+scaled JPEG the tool returns (`widthPx` × `heightPx`), matching the same compress ladder as
+before (longest side ≤ 1920, ~280 KB binary). The worker shows a **Jian overlay** pointer
+(cream/ink wing mark) while a session is open; after ~30s idle it stays visible but very
+translucent; `end_session` removes it. Grant **Screen Recording** and **Accessibility** to
+**Jian Remote** in System Settings.
 
 To revoke a profile, replace `allowedProfileIds` using the access endpoint above. To disconnect
 and invalidate the machine token, delete the machine:

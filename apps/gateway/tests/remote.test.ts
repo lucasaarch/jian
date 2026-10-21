@@ -21,7 +21,7 @@ it('shares machines per profile and executes an authorized worker task', async (
     polled = await services.remote.poll(created.id, `Bearer ${created.token}`, 'darwin-arm64');
     if (!polled.task) await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  expect(polled.task).toMatchObject({ command: 'printf hello' });
+  expect(polled.task).toMatchObject({ kind: 'shell', command: 'printf hello' });
   if (!polled.task) throw new Error('Worker did not receive the task');
   const taskId = polled.task.id;
   await services.remote.complete(created.id, taskId, `Bearer ${created.token}`, {
@@ -179,6 +179,51 @@ it('authenticates the worker API with its machine token, not the gateway admin t
   } finally {
     await app.close();
   }
+});
+
+it('queues computer-use tasks when the worker advertises computer-macos-v1', async () => {
+  const services = await testServices();
+  const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+  const created = await services.remote.create({ name: 'MacBook', allowedProfileIds: [owner.id] });
+
+  await services.remote.poll(
+    created.id,
+    `Bearer ${created.token}`,
+    'darwin-arm64',
+    'computer-macos-v1',
+  );
+  const listed = await services.remote.listForProfile(owner.id);
+  expect(listed[0]?.capabilities).toContain('computer-macos-v1');
+
+  const pending = services.remote.executeComputer(owner.id, created.id, {
+    action: 'mouse_move',
+    coordinate: [10, 20],
+  });
+  let polled: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
+  for (let attempt = 0; attempt < 20 && !polled.task; attempt++) {
+    polled = await services.remote.poll(
+      created.id,
+      `Bearer ${created.token}`,
+      'darwin-arm64',
+      'computer-macos-v1',
+    );
+    if (!polled.task) await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  expect(polled.task).toMatchObject({
+    kind: 'computer',
+    computer: { action: 'mouse_move', coordinate: [10, 20] },
+  });
+  if (!polled.task) throw new Error('Worker did not receive the computer task');
+  const taskId = polled.task.id;
+  await services.remote.complete(created.id, taskId, `Bearer ${created.token}`, {
+    taskId,
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+    timedOut: false,
+    computer: { ok: true },
+  });
+  await expect(pending).resolves.toMatchObject({ taskId, exitCode: 0, computer: { ok: true } });
 });
 
 it('accepts a large remote result that previously hit the default 256 KiB body limit', async () => {

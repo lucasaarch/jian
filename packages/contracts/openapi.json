@@ -51,6 +51,13 @@
                         "type": "string",
                         "format": "date-time",
                         "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      "capabilities": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
@@ -59,7 +66,8 @@
                       "platform",
                       "online",
                       "allowedProfileIds",
-                      "createdAt"
+                      "createdAt",
+                      "capabilities"
                     ],
                     "additionalProperties": false
                   }
@@ -315,6 +323,13 @@
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
+                    "capabilities": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "token": {
                       "type": "string",
                       "minLength": 32
@@ -327,6 +342,7 @@
                     "online",
                     "allowedProfileIds",
                     "createdAt",
+                    "capabilities",
                     "token"
                   ],
                   "additionalProperties": false
@@ -588,6 +604,13 @@
                       "type": "string",
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "capabilities": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -596,7 +619,8 @@
                     "platform",
                     "online",
                     "allowedProfileIds",
-                    "createdAt"
+                    "createdAt",
+                    "capabilities"
                   ],
                   "additionalProperties": false
                 }
@@ -833,6 +857,13 @@
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
+                    "capabilities": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "token": {
                       "type": "string",
                       "minLength": 32
@@ -845,6 +876,7 @@
                     "online",
                     "allowedProfileIds",
                     "createdAt",
+                    "capabilities",
                     "token"
                   ],
                   "additionalProperties": false
@@ -1283,8 +1315,19 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "kind": {
+                          "default": "shell",
+                          "type": "string",
+                          "enum": [
+                            "shell",
+                            "computer"
+                          ]
+                        },
                         "command": {
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "cwd": {
                           "type": [
@@ -1296,10 +1339,101 @@
                           "type": "integer",
                           "minimum": -9007199254740991,
                           "maximum": 9007199254740991
+                        },
+                        "computer": {
+                          "type": "object",
+                          "properties": {
+                            "action": {
+                              "type": "string",
+                              "enum": [
+                                "screenshot",
+                                "left_click",
+                                "right_click",
+                                "double_click",
+                                "mouse_move",
+                                "type",
+                                "key",
+                                "scroll",
+                                "left_click_drag",
+                                "wait",
+                                "end_session"
+                              ]
+                            },
+                            "coordinate": {
+                              "type": "array",
+                              "items": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              ],
+                              "additionalItems": false,
+                              "minItems": 2,
+                              "maxItems": 2
+                            },
+                            "startCoordinate": {
+                              "type": "array",
+                              "items": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              ],
+                              "additionalItems": false,
+                              "minItems": 2,
+                              "maxItems": 2
+                            },
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4000
+                            },
+                            "key": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100
+                            },
+                            "scrollDirection": {
+                              "type": "string",
+                              "enum": [
+                                "up",
+                                "down",
+                                "left",
+                                "right"
+                              ]
+                            },
+                            "scrollAmount": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 20
+                            },
+                            "duration": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 5
+                            }
+                          },
+                          "required": [
+                            "action"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "id",
+                        "kind",
                         "command",
                         "cwd",
                         "timeoutMs"
@@ -1551,6 +1685,50 @@
                   "timedOut": {
                     "default": false,
                     "type": "boolean"
+                  },
+                  "computer": {
+                    "type": "object",
+                    "properties": {
+                      "ok": {
+                        "type": "boolean"
+                      },
+                      "widthPx": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "heightPx": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "scale": {
+                        "type": "object",
+                        "properties": {
+                          "imageToPointX": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "imageToPointY": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "imageToPointX",
+                          "imageToPointY"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "error": {
+                        "type": "string",
+                        "maxLength": 2000
+                      }
+                    },
+                    "required": [
+                      "ok"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -20530,7 +20708,7 @@
                       "type": "boolean"
                     },
                     "allowShell": {
-                      "default": false,
+                      "default": true,
                       "type": "boolean"
                     },
                     "allowWebSearch": {
@@ -21192,7 +21370,7 @@
                         "type": "boolean"
                       },
                       "allowShell": {
-                        "default": false,
+                        "default": true,
                         "type": "boolean"
                       },
                       "allowWebSearch": {
@@ -21830,7 +22008,7 @@
                     "type": "boolean"
                   },
                   "allowShell": {
-                    "default": false,
+                    "default": true,
                     "type": "boolean"
                   },
                   "allowWebSearch": {
@@ -22268,7 +22446,7 @@
                       "type": "boolean"
                     },
                     "allowShell": {
-                      "default": false,
+                      "default": true,
                       "type": "boolean"
                     },
                     "allowWebSearch": {
@@ -22939,7 +23117,7 @@
                       "type": "boolean"
                     },
                     "allowShell": {
-                      "default": false,
+                      "default": true,
                       "type": "boolean"
                     },
                     "allowWebSearch": {
@@ -23998,7 +24176,7 @@
                       "type": "boolean"
                     },
                     "allowShell": {
-                      "default": false,
+                      "default": true,
                       "type": "boolean"
                     },
                     "allowWebSearch": {
@@ -25126,7 +25304,7 @@
                             "type": "boolean"
                           },
                           "allowShell": {
-                            "default": false,
+                            "default": true,
                             "type": "boolean"
                           },
                           "allowWebSearch": {

@@ -249,9 +249,7 @@ export class AgentRuntime {
         LEARNING_SESSION_CHANNEL;
       const gitAccess = run.subagent
         ? await prepareWorkerWorkspace(run)
-        : run.profile.allowShell
-          ? await prepareProfileGitAccess(run.profileId)
-          : { readOnly: [], writable: [] };
+        : await prepareProfileGitAccess(run.profileId);
       const tools: ToolSet = {
         ...profileTools(this.services, run, gitAccess),
         ...this.services.media?.tools(run, async (usage) => {

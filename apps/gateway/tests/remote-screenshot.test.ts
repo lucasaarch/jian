@@ -6,9 +6,10 @@ import {
 } from '../src/agent/remote-tools.js';
 
 describe('remote screenshot payload', () => {
-  it('macos capture command resizes and recompresses before base64', () => {
+  it('macos capture command pins primary display and recompresses before base64', () => {
     const command = screenshotCommand('macos');
     expect(command).toContain('screencapture');
+    expect(command).toContain('-D 1');
     expect(command).toContain('sips');
     expect(command).toMatch(/formatOptions|quality/i);
     expect(command).toContain('base64');

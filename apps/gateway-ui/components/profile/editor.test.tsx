@@ -94,12 +94,12 @@ it('saves once typing pauses, each save sending the version the last one returne
 
 it('saves a switch at once, and never an empty name', async () => {
   const { element, saves, type, wait } = await render();
-  const shell = element.querySelector<HTMLInputElement>('[name="shell"]');
+  const webSearch = element.querySelector<HTMLInputElement>('[name="webSearch"]');
 
-  await act(async () => shell?.click());
+  await act(async () => webSearch?.click());
   await wait(10);
   expect(saves).toHaveLength(1);
-  expect(saves[0]).toMatchObject({ allowShell: true });
+  expect(saves[0]).toMatchObject({ allowWebSearch: true });
 
   await type('name', '');
   await wait(1000);

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { chmod, copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const configDir = join(homedir(), '.config', 'jian-remote');
@@ -256,6 +256,7 @@ export function cappedAppend(current, chunk, cap = STDOUT_CAP) {
 export function fitResult(result, budget = RESULT_BODY_BUDGET) {
   let stdout = result.stdout ?? '';
   let stderr = result.stderr ?? '';
+  const computer = result.computer;
   const pack = () =>
     JSON.stringify({
       taskId: result.taskId,
@@ -263,10 +264,14 @@ export function fitResult(result, budget = RESULT_BODY_BUDGET) {
       stdout,
       stderr,
       timedOut: Boolean(result.timedOut),
+      ...(computer ? { computer } : {}),
     });
   let body = pack();
   if (Buffer.byteLength(body) <= budget) {
-    return { result: { ...result, stdout, stderr, timedOut: Boolean(result.timedOut) }, body };
+    return {
+      result: { ...result, stdout, stderr, timedOut: Boolean(result.timedOut), computer },
+      body,
+    };
   }
 
   const note = '\n… truncated to fit the gateway size limit';
@@ -481,6 +486,22 @@ async function materializeWorkerScript(sourceBytes) {
     if (source !== installedScript) await copyFile(source, installedScript);
   }
   if (process.platform !== 'win32') await chmod(installedScript, 0o700);
+  // Companion modules + macOS helper source (computer use). Best-effort beside the worker.
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const computerSrc = join(here, 'computer-macos.mjs');
+    const computerDest = join(configDir, 'computer-macos.mjs');
+    if (existsSync(computerSrc) && computerSrc !== computerDest) {
+      await copyFile(computerSrc, computerDest);
+      if (process.platform !== 'win32') await chmod(computerDest, 0o700);
+    }
+    if (process.platform === 'darwin') {
+      const { materializeComputerHelperSources } = await import('./computer-macos.mjs');
+      await materializeComputerHelperSources(configDir);
+    }
+  } catch {
+    // Install still succeeds; computer-use probe will explain if the helper is missing.
+  }
   return installedScript;
 }
 
@@ -731,7 +752,7 @@ async function update() {
   printSuccess('Updated Jian Remote', facts);
 }
 
-async function execute(task) {
+async function executeShell(task) {
   return await new Promise((resolveResult) => {
     const command = process.platform === 'win32' ? 'powershell.exe' : '/bin/sh';
     const commandArgs =
@@ -791,6 +812,24 @@ async function execute(task) {
       resolveResult({ taskId: task.id, exitCode: code, stdout, stderr, timedOut });
     });
   });
+}
+
+async function execute(task) {
+  if (task.kind === 'computer') {
+    if (process.platform !== 'darwin') {
+      return {
+        taskId: task.id,
+        exitCode: 1,
+        stdout: '',
+        stderr: 'Computer use is supported on macOS Jian Remote only.',
+        timedOut: false,
+        computer: { ok: false, error: 'Computer use is supported on macOS Jian Remote only.' },
+      };
+    }
+    const { executeComputerTask } = await import('./computer-macos.mjs');
+    return executeComputerTask(task);
+  }
+  return executeShell(task);
 }
 
 async function updateIfNeeded(base, headers) {
@@ -900,16 +939,26 @@ async function postResult(base, headers, result) {
 
 async function run() {
   const config = await loadConfig();
+  const capabilities = [];
+  if (process.platform === 'darwin') {
+    try {
+      const { probeComputerCapability, COMPUTER_CAPABILITY } = await import('./computer-macos.mjs');
+      if (await probeComputerCapability()) capabilities.push(COMPUTER_CAPABILITY);
+    } catch {
+      // Computer use unavailable until helper builds; shell tasks still work.
+    }
+  }
   const headers = {
     authorization: `Bearer ${config.token}`,
     'x-jian-platform': `${process.platform}-${process.arch}`,
     'x-jian-remote-version': PACKAGE_VERSION,
+    ...(capabilities.length ? { 'x-jian-remote-capabilities': capabilities.join(',') } : {}),
   };
   const base = `${config.gateway}/v1/remote/worker/${config.machineId}`;
   // Fail fast before the poll loop so an incompatible build does not look "online then stuck".
   const gatewayVersion = await assertCompatibleWithGateway(config.gateway);
   console.log(
-    `Connected to Jian Remote at ${config.gateway} (worker ${PACKAGE_VERSION}${gatewayVersion ? `, gateway ${gatewayVersion}` : ''})`,
+    `Connected to Jian Remote at ${config.gateway} (worker ${PACKAGE_VERSION}${gatewayVersion ? `, gateway ${gatewayVersion}` : ''}${capabilities.length ? `, capabilities ${capabilities.join(',')}` : ''})`,
   );
   let failures = 0;
   let nextUpdateCheck = 0;
