@@ -32,22 +32,6 @@ export function parseObjectiveCommand(text: string): ObjectiveCommand | undefine
   return { action: 'set', text: sanitizeObjectiveText(body) };
 }
 
-/** Short chat noise must not become a durable objective. */
-const ACK =
-  /^(ok|okay|yes|no|thanks|thank you|continua|continue|go on|sim|n[aã]o|nao|please|pls)\.?$/iu;
-
-/**
- * Whether a fresh user message should seed an objective when none is open.
- * Mode and objective commands are handled separately.
- */
-export function shouldSeedObjective(text: string): boolean {
-  const trimmed = text.trim();
-  if (trimmed.length < 40) return false;
-  if (ACK.test(trimmed)) return false;
-  if (parseObjectiveCommand(trimmed)) return false;
-  return true;
-}
-
 /**
  * Lines that look like shell/login noise or stack frames, not a durable goal.
  * Includes `user@host ~ % …` prompts and piped curl/bash install one-liners.

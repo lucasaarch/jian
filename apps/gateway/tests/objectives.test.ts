@@ -8,7 +8,6 @@ import {
   objectiveContinuePrompt,
   parseObjectiveCommand,
   sanitizeObjectiveText,
-  shouldSeedObjective,
 } from '../src/sessions/objective.js';
 import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
@@ -53,16 +52,6 @@ describe('objective commands', () => {
     expect(parseObjectiveCommand('/objective cancel')).toEqual({ action: 'cancel' });
     expect(parseObjectiveCommand('/cancel objective')).toEqual({ action: 'cancel' });
     expect(parseObjectiveCommand('/ponytail')).toBeUndefined();
-  });
-
-  it('seeds only substantial requests', () => {
-    expect(shouldSeedObjective('ok')).toBe(false);
-    expect(shouldSeedObjective('Continua')).toBe(false);
-    expect(
-      shouldSeedObjective(
-        'Clone github.com/lucasaarch/jian over SSH and set up the local development stack',
-      ),
-    ).toBe(true);
   });
 });
 
@@ -135,7 +124,35 @@ it('persists an owner objective across turns and completes explicitly', async ()
   });
 });
 
-it('auto-seeds from a substantial channel message and cancels via the API', async () => {
+it('does not auto-seed an objective from casual or task-shaped chat', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const panel = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const channel = await services.sessions.createSession(profile.id, { channel: 'whatsapp' });
+
+  const casual =
+    'que pena, gostaria de ver uma continuação daquele cliffhanger da série que paramos ontem à noite';
+  await services.runs.submit(
+    profile.id,
+    panel.id,
+    { text: casual, requestKey: 'casual-panel' },
+    { ownerMessage: true },
+  );
+  expect((await services.sessions.session(profile.id, panel.id)).objective ?? null).toBeNull();
+
+  await services.runs.submit(
+    profile.id,
+    channel.id,
+    {
+      text: 'Clone the Jian repository over SSH and prepare a development branch for the voice work',
+      requestKey: 'task-shaped-channel',
+    },
+    { activity: 'channel' },
+  );
+  expect((await services.sessions.session(profile.id, channel.id)).objective ?? null).toBeNull();
+});
+
+it('sets an objective from an explicit channel /objective command and cancels via the API', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);
   const session = await services.sessions.createSession(profile.id, { channel: 'whatsapp' });
@@ -144,19 +161,47 @@ it('auto-seeds from a substantial channel message and cancels via the API', asyn
     profile.id,
     session.id,
     {
-      text: 'Clone the Jian repository over SSH and prepare a development branch for the voice work',
-      requestKey: 'seed',
+      text: '/objective Clone the Jian repository over SSH and prepare a development branch',
+      requestKey: 'explicit-objective',
     },
     { activity: 'channel' },
   );
 
-  expect((await services.sessions.session(profile.id, session.id)).objective?.status).toBe('open');
+  expect((await services.sessions.session(profile.id, session.id)).objective).toMatchObject({
+    status: 'open',
+    text: 'Clone the Jian repository over SSH and prepare a development branch',
+  });
 
   const updated = await services.sessions.setObjective(profile.id, session.id, {
     status: 'cancelled',
     note: 'Owner changed plans',
   });
   expect(updated.objective).toMatchObject({ status: 'cancelled', note: 'Owner changed plans' });
+});
+
+it('keeps an open objective text when the owner chats again', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  await services.sessions.setObjective(profile.id, session.id, {
+    text: 'Ship the approved voice-call feature',
+    status: 'open',
+  });
+
+  await services.runs.submit(
+    profile.id,
+    session.id,
+    {
+      text: 'que pena, gostaria de ver uma continuação daquele cliffhanger da série',
+      requestKey: 'chat-while-open',
+    },
+    { ownerMessage: true },
+  );
+
+  expect((await services.sessions.session(profile.id, session.id)).objective).toMatchObject({
+    status: 'open',
+    text: 'Ship the approved voice-call feature',
+  });
 });
 
 it('keeps queuing follow-up runs until the objective is completed', async () => {
@@ -346,10 +391,16 @@ it('blocks on the owner and reopens when they reply', async () => {
   await services.runs.submit(
     profile.id,
     session.id,
-    { text: 'Use Gemini Live', requestKey: 'reply' },
+    {
+      text: 'que pena, gostaria de ver uma continuação — ainda estou pensando no provedor',
+      requestKey: 'reply',
+    },
     { ownerMessage: true },
   );
-  expect((await services.sessions.session(profile.id, session.id)).objective?.status).toBe('open');
+  expect((await services.sessions.session(profile.id, session.id)).objective).toMatchObject({
+    status: 'open',
+    text: 'Choose a Live API provider',
+  });
 });
 
 it('isolates objectives between profiles', async () => {
