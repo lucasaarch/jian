@@ -4,6 +4,24 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 0.8.2 — 2026-10-21
+
+Computer Use polish — geometric white pointer with blue glow, save/restore so agent clicks do not steal the user mouse, smooth overlay motion, latency tweaks, and Linux/Windows computer-use capabilities.
+
+### Remote Control
+
+* **Overlay cursor:** geometric white sharp pointer with a soft brand-blue glow (replaces the cream/ink wing). Idle still fades to very translucent; `end_session` removes it. See `docs/remote.md`.
+* **Don’t steal the user mouse:** clicks, drags, and scrolls save the system cursor, hide it briefly while injecting at the target, then restore. `mouse_move` updates the Jian overlay only. Same policy on macOS, Linux, and Windows.
+* **Smooth motion:** the overlay ease-out interpolates between positions (capped ~110 ms) instead of teleporting; clicks use a single `clickAt` helper round-trip.
+* **Latency:** screenshot compress starts at longest side ≤ 1600 (skips a wasteful full-res pass); skips redundant session setup; slightly tighter default `wait` and helper sleeps. Observe→act unchanged.
+* **Linux and Windows computer use:** workers advertise `computer-linux-v1` (X11 + `xdotool` + `ffmpeg` + Python overlay) or `computer-windows-v1` (SendInput + WinForms overlay). Gateway accepts those alongside `computer-macos-v1`. Pure Wayland without XWayland/`xdotool` is not advertised yet. Publish still builds only the macOS universal `computer-helper`; Linux/Windows helpers ship as source scripts in the npm package.
+
+### Upgrading
+
+No new database migrations. After releasing, promote the staged `@jian-ai/remote-control@0.8.2` on npm, then run `npx @jian-ai/remote-control@0.8.2 update` (or `@latest`) on each worker so the new overlay/helpers and capability strings are picked up. Linux workers need `DISPLAY`, `xdotool`, `ffmpeg`, and `python3`; Windows needs an interactive desktop session.
+
+Stable installations can use the `latest` image tag or pin `0.8.2`.
+
 ## 0.8.1 — 2026-10-21
 
 Publish ships a prebuilt universal macOS computer-helper in the npm package so Computer Use works without Xcode Command Line Tools on the worker Mac.
