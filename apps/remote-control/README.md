@@ -29,6 +29,16 @@ npx @jian-ai/remote-control@latest update
 Reads `~/.config/jian-remote` (no token, machine id, or gateway flags), installs a compatible
 build, and restarts the worker service.
 
+## Version and service control
+
+```sh
+jian-remote version          # also --version / -V
+jian-remote stop | start | restart
+```
+
+`start` / `restart` stop any previous worker before launching one process (LaunchAgent,
+systemd --user, or Task Scheduler).
+
 ## Configure
 
 Change the stored gateway URL and/or worker token without a full reinstall (restarts the
@@ -41,7 +51,9 @@ jian-remote configure --gateway https://gateway.example --token WORKER_TOKEN
 
 ## Compatibility
 
-Worker and gateway must share the same major.minor. See [docs/remote.md](../../docs/remote.md).
+Connected workers self-update to the gateway’s release (gateway `/update` script, npm
+fallback) including major.minor skew, then restart the OS service. Manual `install` /
+`update` still gate on `/health`. See [docs/remote.md](../../docs/remote.md).
 
 Requires Node.js 24+. Computer Use works on macOS, Linux (X11 + `xdotool`/`ffmpeg`), and
 Windows. Published builds include a prebuilt macOS `computer-helper` (no Xcode on the worker
