@@ -674,6 +674,32 @@ private func handleCommand(_ object: [String: Any]) {
   case "ping":
     writeOk()
 
+  case "sessionStatus":
+    var locked = false
+    if let raw = CGSessionCopyCurrentDictionary() {
+      let dict = raw as NSDictionary
+      if let number = dict["CGSSessionScreenIsLocked"] as? NSNumber {
+        locked = number.boolValue
+      } else if let flag = dict["CGSSessionScreenIsLocked"] as? Bool {
+        locked = flag
+      }
+    }
+    let displayAsleep = CGDisplayIsAsleep(CGMainDisplayID())
+    let state: String
+    if locked {
+      state = "locked"
+    } else if displayAsleep {
+      state = "display_asleep"
+    } else {
+      state = "unlocked"
+    }
+    writeResponse([
+      "ok": true,
+      "state": state,
+      "locked": locked,
+      "displayAsleep": displayAsleep,
+    ])
+
   case "geometry":
     writeResponse(geometryResponse())
 
@@ -830,7 +856,43 @@ private final class StdinReader {
   }
 }
 
+// MARK: - Session status (one-shot, no AppKit run loop)
+
+/// Reports lock / display-asleep without starting the overlay. Used by the Node worker poll
+/// so a locked Mac stays "online" with an explicit uiState instead of looking dead.
+private func printSessionStatusAndExit() -> Never {
+  var locked = false
+  if let raw = CGSessionCopyCurrentDictionary() {
+    let dict = raw as NSDictionary
+    if let number = dict["CGSSessionScreenIsLocked"] as? NSNumber {
+      locked = number.boolValue
+    } else if let flag = dict["CGSSessionScreenIsLocked"] as? Bool {
+      locked = flag
+    }
+  }
+  let displayAsleep = CGDisplayIsAsleep(CGMainDisplayID())
+  let state: String
+  if locked {
+    state = "locked"
+  } else if displayAsleep {
+    state = "display_asleep"
+  } else {
+    state = "unlocked"
+  }
+  writeResponse([
+    "ok": true,
+    "state": state,
+    "locked": locked,
+    "displayAsleep": displayAsleep,
+  ])
+  exit(0)
+}
+
 private let stdinReader = StdinReader()
+
+if CommandLine.arguments.contains("--session-status") {
+  printSessionStatusAndExit()
+}
 
 autoreleasepool {
   let app = NSApplication.shared

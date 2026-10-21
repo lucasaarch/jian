@@ -28,6 +28,9 @@ function machineSupportsComputer(machine: { capabilities: string[] | null }): bo
   return (machine.capabilities ?? []).some((cap) => COMPUTER_CAPABILITIES.has(cap));
 }
 
+const UI_STATES = new Set(['unlocked', 'locked', 'display_asleep', 'unknown'] as const);
+type RemoteUiState = 'unlocked' | 'locked' | 'display_asleep' | 'unknown';
+
 function parseCapabilities(header: string | undefined): string[] {
   if (!header?.trim()) return [];
   return [
@@ -38,6 +41,12 @@ function parseCapabilities(header: string | undefined): string[] {
         .filter(Boolean),
     ),
   ].slice(0, 20);
+}
+
+function parseUiState(header: string | undefined): RemoteUiState {
+  const value = header?.trim().toLowerCase();
+  if (value && UI_STATES.has(value as RemoteUiState)) return value as RemoteUiState;
+  return 'unknown';
 }
 
 function publicMachine(
@@ -51,6 +60,7 @@ function publicMachine(
   allowedProfileIds: string[];
   createdAt: string;
   capabilities: string[];
+  uiState: RemoteUiState;
 } {
   return {
     id: machine.id,
@@ -60,6 +70,7 @@ function publicMachine(
     allowedProfileIds: machine.allowedProfileIds,
     createdAt: machine.createdAt.toISOString(),
     capabilities: machine.capabilities ?? [],
+    uiState: parseUiState(machine.uiState),
   };
 }
 
@@ -102,6 +113,7 @@ export class Remote {
       allowedProfileIds: data.allowedProfileIds,
       createdAt: createdAt.toISOString(),
       capabilities: [] as string[],
+      uiState: 'unknown' as const,
       token,
     };
   }
@@ -177,6 +189,13 @@ export class Remote {
     const machine = await this.machineForProfile(profileId, machineId);
     if (!present(machine.lastSeenAt, this.clock())) {
       throw new GatewayError(503, 'Remote machine is offline');
+    }
+    if (parseUiState(machine.uiState) === 'locked') {
+      // Keep the machine online for shell; only Computer Use is blocked by the lock screen.
+      throw new GatewayError(
+        409,
+        'Mac is locked — unlock the screen to use Computer Use. Shell and file tools may still work.',
+      );
     }
     if (!machineSupportsComputer(machine)) {
       throw new GatewayError(
@@ -303,6 +322,7 @@ export class Remote {
     authorization: string,
     reportedPlatform?: string | undefined,
     capabilitiesHeader?: string | undefined,
+    uiStateHeader?: string | undefined,
   ) {
     const machine = await this.authenticate(machineId, authorization);
     const platform =
@@ -310,12 +330,14 @@ export class Remote {
         ? reportedPlatform
         : machine.platform;
     const capabilities = parseCapabilities(capabilitiesHeader);
+    const uiState = parseUiState(uiStateHeader);
     await this.store.db
       .update(remoteMachines)
       .set({
         lastSeenAt: new Date(this.clock()),
         platform,
         capabilities,
+        uiState,
       })
       .where(eq(remoteMachines.id, machineId));
     if (!machine.allowedProfileIds.length) return { task: null };

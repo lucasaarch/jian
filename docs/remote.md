@@ -208,11 +208,15 @@ launchctl kickstart -k "gui/$(id -u)/com.jian.remote"
 
 1. Confirm the computer can reach the gateway over HTTPS.
 2. Run `npx @jian-ai/remote-control@latest update` (or restart the local service). Re-running
-   install is only needed if the config was deleted.
+   install is only needed if the config was deleted. On macOS, `update` also refreshes the
+   LaunchAgent (`ProcessType=Interactive`) so App Nap does not freeze the poller when the
+   screen is locked.
 3. Read `~/.config/jian-remote/worker.log`. An incompatible-version error means the worker’s
    major.minor does not match the gateway — run `update` against the gateway’s version.
    Repeated `HTTP 502`/`503` means the gateway is up and down — the worker backs off and
    reconnects. Oversized results are truncated so the worker does not stick offline on HTTP 413.
+4. If the panel shows **Online** plus **Locked**, the worker is fine — unlock the Mac for
+   Computer Use; shell may still run.
 
 ## Agent use and revocation
 
@@ -253,6 +257,29 @@ source checkout on a Mac, `macos/build-helper.sh` (or `swiftc` on first use) bui
 binary when Command Line Tools are present. Developer ID signing and notarization of the macOS
 helper are optional Publish steps when repository secrets are configured (see below); full
 Developer ID + notarization of **Jian Remote.app** remains a separate follow-up.
+
+### Online vs locked vs asleep (macOS)
+
+**Online** means the worker is still polling the gateway (HTTPS `tasks/next`), not that the
+desktop is unlocked. The panel and `list_remote_machines` also expose `uiState`:
+
+| `uiState` | Meaning | Shell / files | Computer Use |
+| --- | --- | --- | --- |
+| `unlocked` | Session unlocked, display up | Yes | Yes |
+| `display_asleep` | Display off/asleep, not password-locked | Yes | Worker wakes the display when a session starts |
+| `locked` | Password lock / loginwindow | Yes while online | Clear error — unlock the Mac first |
+| `unknown` | Probe unavailable | Yes while online | Best-effort; may fail with a normal tool error |
+
+A locked Mac that still looks **Offline** is usually an old LaunchAgent without
+`ProcessType=Interactive` (App Nap freezing the Node poll loop) or true system sleep
+(lid closed without power policy). Run `npx @jian-ai/remote-control@latest update` (or
+re-install) so launchd rewrites the plist, then check `~/.config/jian-remote/worker.log`.
+
+While a computer-use session is open the worker holds `caffeinate` assertions so idle
+display sleep is less likely to interrupt it. That does **not** unlock a password lock, and
+it does not claim ChatGPT/Codex-style “locked Computer Use” (those products use a separate
+macOS authorization plugin). Lid-closed clamshell sleep still takes the machine truly
+offline until it wakes.
 
 #### Optional Apple signing secrets (Publish)
 

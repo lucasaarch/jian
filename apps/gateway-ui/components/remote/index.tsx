@@ -319,6 +319,16 @@ export function RemoteMachines({ api }: Props) {
                     <Badge tone={machine.online ? 'good' : 'neutral'}>
                       {machine.online ? 'Online' : 'Offline'}
                     </Badge>
+                    {machine.online && machine.uiState === 'locked' && (
+                      <Badge tone="warn" dot={false}>
+                        Locked
+                      </Badge>
+                    )}
+                    {machine.online && machine.uiState === 'display_asleep' && (
+                      <Badge tone="neutral" dot={false}>
+                        Display asleep
+                      </Badge>
+                    )}
                     {machine.platform !== 'unknown' && (
                       <Badge tone="neutral" dot={false}>
                         {machine.platform}
