@@ -3,7 +3,7 @@ import type { Clock } from '../core/clock.js';
 import { nowIso } from '../core/clock.js';
 import type { Runs } from '../runs/service.js';
 import type { Store } from '../storage/database.js';
-import { MAX_OBJECTIVE_CONTINUATIONS, objectiveAt } from './objective.js';
+import { MAX_OBJECTIVE_CONTINUATIONS, objectiveAt, objectiveContinuePrompt } from './objective.js';
 import { setSessionObjective } from './repository.js';
 import type { Sessions } from './service.js';
 
@@ -67,14 +67,8 @@ export class ObjectiveContinuation {
         run.sessionId,
         {
           requestKey: `objective-continue:${run.id}`,
-          text: [
-            'Continue the open session objective. Do not wait for the owner to say continue.',
-            `Objective: ${objective.text}`,
-            'Take the next concrete steps with tools.',
-            'Call complete_session_objective when the objective is fully satisfied,',
-            'or block_session_objective when you need the owner’s input.',
-            'Progress lines are commentary, not a reason to stop.',
-          ].join(' '),
+          // Summary only — never re-inject a stored shell dump or stack as the wake text.
+          text: objectiveContinuePrompt(objective.text),
         },
         { transaction: tx },
       );

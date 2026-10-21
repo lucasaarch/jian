@@ -17,7 +17,7 @@ import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
-import { objectiveAt } from './objective.js';
+import { objectiveAt, sanitizeObjectiveText } from './objective.js';
 import {
   findOwnSession,
   findPeerSession,
@@ -145,7 +145,18 @@ export class Sessions {
     input: unknown,
     transaction?: Queryable,
   ) {
-    const data = sessionObjectiveInputSchema.parse(input);
+    // Truncate/sanitize before schema parse so a long paste becomes a short goal, not a 400.
+    const prepared =
+      input &&
+      typeof input === 'object' &&
+      'text' in input &&
+      typeof (input as { text?: unknown }).text === 'string'
+        ? {
+            ...(input as Record<string, unknown>),
+            text: sanitizeObjectiveText((input as { text: string }).text),
+          }
+        : input;
+    const data = sessionObjectiveInputSchema.parse(prepared);
     const write = async (tx: Queryable) => {
       const current = await this.session(profileId, sessionId, tx);
       if (current.channel === TASK_SESSION_CHANNEL) {

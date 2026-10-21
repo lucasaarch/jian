@@ -10,9 +10,18 @@ import {
 import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { messages, sessions } from '../storage/schema.js';
+import { sanitizeObjectiveText } from './objective.js';
 
 type SessionRow = typeof sessions.$inferSelect;
 type MessageRow = typeof messages.$inferSelect;
+
+/** Soft-heal oversized or dump-shaped goals written before the cap existed. */
+function readObjective(objective: SessionObjective): SessionObjective {
+  return {
+    ...objective,
+    text: sanitizeObjectiveText(objective.text),
+  };
+}
 
 export function toSession(row: SessionRow): Session {
   return {
@@ -26,7 +35,7 @@ export function toSession(row: SessionRow): Session {
     ...(row.summarizedUpTo ? { summarizedUpTo: row.summarizedUpTo.toISOString() } : {}),
     ...(row.summarizedThroughId ? { summarizedThroughId: row.summarizedThroughId } : {}),
     ...(row.model ? { model: row.model } : {}),
-    ...(row.objective ? { objective: row.objective } : {}),
+    ...(row.objective ? { objective: readObjective(row.objective) } : {}),
     createdAt: row.createdAt.toISOString(),
   };
 }
