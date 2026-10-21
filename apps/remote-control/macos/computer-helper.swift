@@ -871,7 +871,8 @@ private func printSessionStatusAndExit() -> Never {
       locked = flag
     }
   }
-  let displayAsleep = CGDisplayIsAsleep(CGMainDisplayID())
+  // CGDisplayIsAsleep returns boolean_t (Int32); Swift will not coerce it in `if`.
+  let displayAsleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
   let state: String
   if locked {
     state = "locked"
