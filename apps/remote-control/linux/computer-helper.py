@@ -3,7 +3,7 @@
 Jian Remote Control — Linux computer-use helper (X11).
 
 Newline-delimited JSON on stdin → JSON lines on stdout (same cmds as macOS helper).
-Overlay: override-redirect window with geometric white pointer + soft blue glow.
+Overlay: override-redirect window with white pointer + #2880F8 stroke/glow (parity with macOS sprite).
 Input: xdotool when available (save/restore cursor around clicks so the user's
 pointer is not left at the Jian position). Wayland: best-effort; overlay may be
 unavailable — input still works when ydotool/wtype/xdotool can reach the session.
@@ -279,13 +279,14 @@ class Overlay:
         cmap = X11.XDefaultColormap(self.dpy, self.screen)
         white = XColor()
         exact = XColor()
-        if X11.XAllocNamedColor(self.dpy, cmap, b"#FAFAF8", byref(white), byref(exact)):
+        if X11.XAllocNamedColor(self.dpy, cmap, b"#FFFFFF", byref(white), byref(exact)):
             X11.XSetForeground(self.dpy, self.gc, white.pixel)
         glow = XColor()
-        if X11.XAllocNamedColor(self.dpy, cmap, b"#3A7AD6", byref(glow), byref(exact)):
+        # Match macOS ship sprite stroke #2880F8 (geometric stand-in; bitmap is macOS-only).
+        if X11.XAllocNamedColor(self.dpy, cmap, b"#2880F8", byref(glow), byref(exact)):
             X11.XSetForeground(self.dpy, self.gc_glow, glow.pixel)
         ink = XColor()
-        if X11.XAllocNamedColor(self.dpy, cmap, b"#171716", byref(ink), byref(exact)):
+        if X11.XAllocNamedColor(self.dpy, cmap, b"#2880F8", byref(ink), byref(exact)):
             X11.XSetForeground(self.dpy, self.gc_ink, ink.pixel)
         self.available = True
         return True

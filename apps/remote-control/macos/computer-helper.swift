@@ -5,8 +5,9 @@
   Protocol: newline-delimited JSON on stdin → newline-delimited JSON on stdout (flush each).
   Errors go to stderr in English only.
 
-  Pointer UX (Lucas / v0.8.2 polish):
-  - Geometric white arrow (anathema-white style) with a soft brand-blue glow underneath.
+  Pointer UX (Lucas / v0.8.3):
+  - Bitmap sprite: white fill + thick #2880F8 stroke + soft blue glow (embedded PNG).
+    Prefer sprite over live CGPath so AA/glow match the approved preview.
   - Agent actions save the user’s cursor, hide it briefly, drive HID at the target, then
     restore — so clicks do not leave the physical mouse stranded at the Jian position.
   - Overlay tip animates (ease-out) between positions; system cursor is not the visible UX.
@@ -79,18 +80,151 @@ private func intValue(_ object: [String: Any], _ key: String) -> Int? {
   return nil
 }
 
-// MARK: - Colors (Jian + geometric white pointer)
+// MARK: - Pointer sprite (embedded PNG)
 
-private let jianInk = NSColor(srgbRed: 0x17 / 255, green: 0x17 / 255, blue: 0x16 / 255, alpha: 1)
-/// Soft brand blue under the pointer — visible, not neon.
-private let jianGlow = NSColor(srgbRed: 0x3A / 255, green: 0x7A / 255, blue: 0xD6 / 255, alpha: 1)
-private let pointerWhite = NSColor(srgbRed: 0xFA / 255, green: 0xFA / 255, blue: 0xF8 / 255, alpha: 1)
+/// Soft click-ripple blue (matches ship stroke #2880F8).
+private let jianGlow = NSColor(srgbRed: 0x28 / 255, green: 0x80 / 255, blue: 0xF8 / 255, alpha: 1)
 
 private let sessionAlpha: CGFloat = 0.94
 private let idleAlpha: CGFloat = 0.18
-private let pointerSize: CGFloat = 36
-/// Tip of the geometric arrow (hotspot) near the view's top-left.
-private let hotspot = CGPoint(x: 2, y: 2)
+/// Padded sprite canvas (40 pt blade + 10 pt glow pad each side).
+private let pointerSize: CGFloat = 60
+/// Tip hotspot in the padded 60 pt view (content tip was (2,2) in the 40 pt box).
+private let hotspot = CGPoint(x: 12, y: 12)
+
+/// Ship asset `macos/jian-pointer.png` (@3x master) as base64 — single-file helper stays
+/// reliable when only the binary is copied into Application Support (no sidecar PNG).
+private let jianPointerPngBase64 =
+  "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"
+
+private let jianPointerImage: NSImage? = {
+  guard let data = Data(base64Encoded: jianPointerPngBase64, options: .ignoreUnknownCharacters)
+  else {
+    fputs("computer-helper: embedded pointer PNG base64 decode failed\n", stderr)
+    fflush(stderr)
+    return nil
+  }
+  return NSImage(data: data)
+}()
 
 // MARK: - Overlay view
 
@@ -106,7 +240,7 @@ private final class JianPointerView: NSView {
     guard let ctx = NSGraphicsContext.current?.cgContext else { return }
 
     if rippleVisible {
-      let maxRadius = pointerSize * 0.9
+      let maxRadius = pointerSize * 0.55
       let radius = 3 + maxRadius * rippleProgress
       let alpha = max(0, 1 - rippleProgress)
       ctx.saveGState()
@@ -121,52 +255,25 @@ private final class JianPointerView: NSView {
       ctx.restoreGState()
     }
 
-    let path = Self.arrowPath(in: bounds)
-
-    // Soft blue glow under the white blade (brand cue without neon spam).
-    ctx.saveGState()
-    ctx.setShadow(
-      offset: CGSize(width: 0, height: 2),
-      blur: 10,
-      color: jianGlow.withAlphaComponent(0.55).cgColor
-    )
-    jianGlow.withAlphaComponent(0.35).setFill()
-    path.fill()
-    ctx.restoreGState()
-
-    ctx.saveGState()
-    ctx.setShadow(
-      offset: CGSize(width: 0.5, height: 1.2),
-      blur: 2.5,
-      color: NSColor.black.withAlphaComponent(0.22).cgColor
-    )
-    let fillAlpha = 1 - fillPulse * 0.28
-    pointerWhite.withAlphaComponent(fillAlpha).setFill()
-    path.fill()
-    ctx.restoreGState()
-
-    jianInk.withAlphaComponent(0.85).setStroke()
-    path.lineWidth = 1.15
-    path.lineJoinStyle = .miter
-    path.lineCapStyle = .butt
-    path.miterLimit = 8
-    path.stroke()
-  }
-
-  /// Sharp geometric pointer (anathema-white style): tip → shaft → barb.
-  private static func arrowPath(in bounds: NSRect) -> NSBezierPath {
-    let s = min(bounds.width, bounds.height)
-    let path = NSBezierPath()
-    // Coordinates in view space (flipped Y): tip near top-left hotspot.
-    path.move(to: CGPoint(x: s * 0.06, y: s * 0.06))
-    path.line(to: CGPoint(x: s * 0.06, y: s * 0.72))
-    path.line(to: CGPoint(x: s * 0.28, y: s * 0.55))
-    path.line(to: CGPoint(x: s * 0.42, y: s * 0.88))
-    path.line(to: CGPoint(x: s * 0.55, y: s * 0.82))
-    path.line(to: CGPoint(x: s * 0.36, y: s * 0.48))
-    path.line(to: CGPoint(x: s * 0.62, y: s * 0.48))
-    path.close()
-    return path
+    // Bitmap blade (white + #2880F8 stroke + baked glow). Pulse alpha on click flash.
+    let alpha = 1 - fillPulse * 0.28
+    if let image = jianPointerImage {
+      image.draw(
+        in: bounds,
+        from: .zero,
+        operation: .sourceOver,
+        fraction: alpha,
+        respectFlipped: true,
+        hints: nil
+      )
+    } else {
+      // Last-resort fallback if decode failed — still a visible tip, not ink/cream geometry.
+      jianGlow.withAlphaComponent(0.9 * alpha).setFill()
+      let tip = NSBezierPath(
+        ovalIn: CGRect(x: hotspot.x - 3, y: hotspot.y - 3, width: 6, height: 6)
+      )
+      tip.fill()
+    }
   }
 
   func flashClick(duration: TimeInterval = 0.16) {

@@ -178,9 +178,13 @@ ACLs are restricted to the current account. To uninstall, delete the `Jian Remot
 Scheduler and remove `%USERPROFILE%\\.config\\jian-remote`.
 
 Keep the worker script at its installed path: the OS service starts that file. The worker uses
-`/bin/sh -lc` on macOS/Linux and PowerShell on Windows, inherits the local user's environment,
-and returns at most about 400 KB of stdout and 50 KB of stderr. Oversized results are truncated
-before upload so the worker does not stick offline on HTTP 413.
+absolute `/bin/sh -lc` on macOS/Linux (or `/bin/bash` / `/usr/bin/sh` if needed) and PowerShell
+on Windows, inherits a sane `PATH`/`HOME` from the LaunchAgent (or the user session), and returns
+at most about 400 KB of stdout and 50 KB of stderr. If `run_remote_command` passes a **cwd** that
+does not exist on that computer, the worker falls back to the user’s home directory and notes it
+in stderr — Node otherwise reports the misleading `spawn /bin/sh ENOENT` when only the cwd is
+missing. Oversized results are truncated before upload so the worker does not stick offline on
+HTTP 413.
 
 **Screenshots:** `remote_computer` with `action: screenshot` captures the **primary** display as
 JPEG, then **scales and recompresses** on the machine (longest side ≤ 1920, quality stepped down

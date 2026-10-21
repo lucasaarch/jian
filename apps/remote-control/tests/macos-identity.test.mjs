@@ -32,6 +32,8 @@ test('LaunchAgent points at the app binary and associates the bundle id', () => 
       '/Users/lucas/Library/Application Support/Jian Remote/Jian Remote.app/Contents/MacOS/Jian Remote',
     script: '/Users/lucas/.config/jian-remote/jian-remote.mjs',
     logPath: '/Users/lucas/.config/jian-remote/worker.log',
+    home: '/Users/lucas',
+    tmpDir: '/tmp',
   });
   assert.match(xml, /<key>Label<\/key>\s*<string>com\.jian\.remote<\/string>/);
   assert.match(
@@ -49,6 +51,8 @@ test('LaunchAgent points at the app binary and associates the bundle id', () => 
     xml,
     /<key>PATH<\/key>\s*<string>\/usr\/local\/bin:\/opt\/homebrew\/bin:\/usr\/bin:\/bin/,
   );
+  assert.match(xml, /<key>HOME<\/key>\s*<string>\/Users\/lucas<\/string>/);
+  assert.match(xml, /<key>WorkingDirectory<\/key>\s*<string>\/Users\/lucas<\/string>/);
   assert.match(xml, /<key>ThrottleInterval<\/key>\s*<integer>10<\/integer>/);
   assert.match(xml, /<key>KeepAlive<\/key>\s*<true\/>/);
 });

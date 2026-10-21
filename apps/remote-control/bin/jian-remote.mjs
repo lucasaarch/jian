@@ -7,6 +7,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { chmod, copyFile, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
@@ -173,12 +174,15 @@ export function buildLaunchAgentPlist({
   logPath,
   pathEnv = LAUNCH_AGENT_PATH,
   throttleIntervalSec = LAUNCH_AGENT_THROTTLE_INTERVAL_SEC,
+  home = homedir(),
+  tmpDir = process.env.TMPDIR || '/tmp',
 }) {
   // ProcessType=Interactive opts the worker out of App Nap. Without it, macOS can freeze the
   // Node poll loop while the screen is locked or idle; lastSeenAt ages out and the gateway
   // shows Offline even though the process is still "running".
-  // Explicit PATH: launchd gives app-identity Node an empty environment; without /bin on PATH,
-  // child tools and some spawn lookups fail even when the worker uses absolute shell paths.
+  // Explicit PATH + HOME: launchd + the Jian Remote.app Node copy otherwise inherit a sparse
+  // env. Missing HOME makes os.homedir() / shell cwd wrong; without /bin on PATH, child tools
+  // fail. Invalid cwd surfaces as the misleading "spawn /bin/sh ENOENT" from libuv.
   // ThrottleInterval: after an update exit, KeepAlive must not immediately fight a CLI restart.
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -192,9 +196,12 @@ export function buildLaunchAgentPlist({
 <string>${xmlEscape(script)}</string>
 <string>run</string>
 </array>
+<key>WorkingDirectory</key><string>${xmlEscape(home)}</string>
 <key>EnvironmentVariables</key>
 <dict>
 <key>PATH</key><string>${xmlEscape(pathEnv)}</string>
+<key>HOME</key><string>${xmlEscape(home)}</string>
+<key>TMPDIR</key><string>${xmlEscape(tmpDir)}</string>
 </dict>
 <key>ProcessType</key><string>Interactive</string>
 <key>RunAtLoad</key><true/>
@@ -1088,38 +1095,120 @@ export function shellCommandForPlatform(platform = process.platform) {
   if (platform === 'win32') return 'powershell.exe';
   if (existsSync('/bin/sh')) return '/bin/sh';
   if (existsSync('/bin/bash')) return '/bin/bash';
+  if (existsSync('/usr/bin/sh')) return '/usr/bin/sh';
   return '/bin/sh';
 }
 
-function workerChildEnv() {
-  const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
-  const current = process.env[pathKey] ?? process.env.PATH ?? '';
-  const prefix = process.platform === 'win32' ? '' : LAUNCH_AGENT_PATH;
-  const merged = prefix ? `${prefix}${current ? `:${current}` : ''}` : current || LAUNCH_AGENT_PATH;
-  return { ...process.env, [pathKey]: merged, PATH: merged };
+/**
+ * Resolve the working directory for a remote shell task.
+ * libuv reports a missing cwd as `spawn /bin/sh ENOENT` even when the shell exists — Computer
+ * Use kept working (no cwd) while run_remote_command failed. Fall back to $HOME when the
+ * requested path is missing or not a directory, and surface an English note in stderr.
+ */
+export function resolveShellCwd(
+  requested,
+  { home = homedir(), exists = existsSync, stat = statSync } = {},
+) {
+  const fallbackCandidates = [home, process.env.TMPDIR, '/tmp', '/'].filter(Boolean);
+  const fallback =
+    fallbackCandidates.find((path) => {
+      try {
+        return exists(path) && stat(path).isDirectory();
+      } catch {
+        return false;
+      }
+    }) || '/';
+
+  if (requested == null || requested === '') {
+    return { cwd: fallback, note: undefined, usedFallback: false };
+  }
+  const target = String(requested).trim();
+  if (!target) {
+    return { cwd: fallback, note: undefined, usedFallback: false };
+  }
+  try {
+    if (!exists(target)) {
+      return {
+        cwd: fallback,
+        note: `Requested cwd ${target} does not exist on this computer; using ${fallback}.`,
+        usedFallback: true,
+      };
+    }
+    if (!stat(target).isDirectory()) {
+      return {
+        cwd: fallback,
+        note: `Requested cwd ${target} is not a directory; using ${fallback}.`,
+        usedFallback: true,
+      };
+    }
+    return { cwd: target, note: undefined, usedFallback: false };
+  } catch {
+    return {
+      cwd: fallback,
+      note: `Requested cwd ${target} is not usable; using ${fallback}.`,
+      usedFallback: true,
+    };
+  }
 }
 
-async function executeShell(task) {
-  return await new Promise((resolveResult) => {
-    const command = shellCommandForPlatform();
+/** Env for shell / helper children: always a usable PATH and HOME. */
+export function workerChildEnv(baseEnv = process.env) {
+  const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
+  const current = baseEnv[pathKey] ?? baseEnv.PATH ?? '';
+  const prefix = process.platform === 'win32' ? '' : LAUNCH_AGENT_PATH;
+  const merged = prefix ? `${prefix}${current ? `:${current}` : ''}` : current || LAUNCH_AGENT_PATH;
+  const home = baseEnv.HOME || baseEnv.USERPROFILE || homedir();
+  return {
+    ...baseEnv,
+    [pathKey]: merged,
+    PATH: merged,
+    HOME: home,
+    ...(process.platform === 'win32' ? { USERPROFILE: home } : {}),
+  };
+}
+
+/**
+ * Explain spawn failures. Node’s `spawn /bin/sh ENOENT` usually means the **cwd** was missing,
+ * not that /bin/sh vanished — rewrite so operators and agents can act on it.
+ */
+export function formatShellSpawnError(error, { shell, cwd } = {}) {
+  const code = error && typeof error === 'object' ? error.code : undefined;
+  const message = error instanceof Error ? error.message : String(error);
+  if (code === 'ENOENT' || /\bENOENT\b/.test(message)) {
+    const shellMissing = shell && !existsSync(shell);
+    if (shellMissing) {
+      return `Could not find the shell executable ${shell}. Install a POSIX shell or reinstall Jian Remote.`;
+    }
+    return `Could not start the remote shell (${shell || '/bin/sh'}) with cwd ${cwd || '(unknown)'}: the working directory is missing or not usable (Node reports this as spawn ENOENT even when the shell exists).`;
+  }
+  return message;
+}
+
+/**
+ * Run a remote shell task. Exported for behavior tests (cwd fallback, absolute shell, PATH).
+ */
+export function executeShellTask(task, { spawnImpl = spawn, platform = process.platform } = {}) {
+  return new Promise((resolveResult) => {
+    const shell = shellCommandForPlatform(platform);
+    const resolved = resolveShellCwd(task.cwd);
     const commandArgs =
-      process.platform === 'win32'
+      platform === 'win32'
         ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', task.command]
         : ['-lc', task.command];
-    const child = spawn(command, commandArgs, {
-      cwd: task.cwd || homedir(),
+    const child = spawnImpl(shell, commandArgs, {
+      cwd: resolved.cwd,
       env: workerChildEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
-    let stderr = '';
+    let stderr = resolved.note ? `${resolved.note}\n` : '';
     let stdoutSeen = 0;
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
       setTimeout(() => {
-        if (process.platform === 'win32' && child.pid) {
+        if (platform === 'win32' && child.pid) {
           spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
             stdio: 'ignore',
             windowsHide: true,
@@ -1129,11 +1218,11 @@ async function executeShell(task) {
         }
       }, 2000).unref();
     }, task.timeoutMs);
-    child.stdout.on('data', (chunk) => {
+    child.stdout?.on('data', (chunk) => {
       stdoutSeen += chunk.toString('utf8').length;
       stdout = cappedAppend(stdout, chunk, STDOUT_CAP);
     });
-    child.stderr.on('data', (chunk) => {
+    child.stderr?.on('data', (chunk) => {
       stderr = cappedAppend(stderr, chunk, STDERR_CAP);
     });
     child.on('error', (error) => {
@@ -1142,13 +1231,16 @@ async function executeShell(task) {
         taskId: task.id,
         exitCode: null,
         stdout,
-        stderr: cappedAppend(stderr, error.message, STDERR_CAP),
+        stderr: cappedAppend(
+          stderr,
+          formatShellSpawnError(error, { shell, cwd: resolved.cwd }),
+          STDERR_CAP,
+        ),
         timedOut,
       });
     });
     child.on('close', (code) => {
       clearTimeout(timeout);
-      // Mark silent stdout cuts so screenshot tools can reject grey/truncated JPEGs.
       if (stdoutSeen > STDOUT_CAP) {
         stderr = cappedAppend(
           stderr,
@@ -1159,6 +1251,10 @@ async function executeShell(task) {
       resolveResult({ taskId: task.id, exitCode: code, stdout, stderr, timedOut });
     });
   });
+}
+
+async function executeShell(task) {
+  return executeShellTask(task);
 }
 
 async function execute(task) {
