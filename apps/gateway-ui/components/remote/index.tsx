@@ -111,10 +111,16 @@ export function RemoteMachines({ api }: Props) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [allowed, setAllowed] = useState<string[]>([]);
-  const [created, setCreated] = useState<{ id: string; name: string; token: string } | null>(null);
+  const [reveal, setReveal] = useState<{
+    id: string;
+    name: string;
+    token: string;
+    kind: 'created' | 'rotated';
+  } | null>(null);
   const [access, setAccess] = useState<Record<string, string[]>>({});
   const [openId, setOpenId] = useState<string>();
   const [removing, setRemoving] = useState<Machine>();
+  const [rotating, setRotating] = useState<Machine>();
   const [gatewayOrigin, setGatewayOrigin] = useState('https://YOUR-JIAN-GATEWAY');
   /** npm dist-tag or exact version matching this gateway release when known. */
   const [packageTag, setPackageTag] = useState('latest');
@@ -165,12 +171,12 @@ export function RemoteMachines({ api }: Props) {
   }, [api, refresh]);
 
   // Worker presence is polled by the gateway; refresh Online/Offline without a manual reload.
-  // Faster while the install modal is open (someone is connecting a machine right now).
+  // Faster while the install/rotate modal is open (someone is connecting a machine right now).
   useEffect(() => {
-    const ms = created ? 2000 : 5000;
+    const ms = reveal ? 2000 : 5000;
     const timer = window.setInterval(() => void refresh({ quiet: true }), ms);
     return () => window.clearInterval(timer);
-  }, [created, refresh]);
+  }, [reveal, refresh]);
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
@@ -182,7 +188,7 @@ export function RemoteMachines({ api }: Props) {
         name: label,
         allowedProfileIds: allowed,
       });
-      setCreated({ id: response.id, name: label, token: response.token });
+      setReveal({ id: response.id, name: label, token: response.token, kind: 'created' });
       setName('');
       setAllowed([]);
       setCreating(false);
@@ -207,6 +213,26 @@ export function RemoteMachines({ api }: Props) {
     }
   }
 
+  async function rotateCredentials(machine: Machine) {
+    setBusy(true);
+    setError('');
+    try {
+      const response = await api.rotateRemoteMachineCredentials(machine.id);
+      setRotating(undefined);
+      setReveal({
+        id: response.id,
+        name: response.name,
+        token: response.token,
+        kind: 'rotated',
+      });
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not rotate credentials.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove(machine: Machine) {
     setBusy(true);
     setError('');
@@ -223,14 +249,17 @@ export function RemoteMachines({ api }: Props) {
   }
 
   const packageRef = `@jian-ai/remote-control@${packageTag}`;
-  const installFlags = created
-    ? `install --gateway '${gatewayOrigin}' --machine '${created.id}' --token '${created.token}'`
+  const installFlags = reveal
+    ? `install --gateway '${gatewayOrigin}' --machine '${reveal.id}' --token '${reveal.token}'`
+    : '';
+  const configureFlags = reveal
+    ? `configure --gateway '${gatewayOrigin}' --token '${reveal.token}'`
     : '';
   // Same npm one-liner on every OS once Node.js 24+ is installed.
-  const npxInstall = created ? `npx --yes ${packageRef} ${installFlags}` : '';
-  const globalInstall = created
-    ? `npm install -g ${packageRef} && jian-remote ${installFlags}`
-    : '';
+  const npxInstall = reveal ? `npx --yes ${packageRef} ${installFlags}` : '';
+  const globalInstall = reveal ? `npm install -g ${packageRef} && jian-remote ${installFlags}` : '';
+  const npxConfigure = reveal ? `npx --yes ${packageRef} ${configureFlags}` : '';
+  const globalConfigure = reveal ? `jian-remote ${configureFlags}` : '';
   const updateCommand = `npx --yes ${packageRef} update`;
 
   return (
@@ -338,6 +367,14 @@ export function RemoteMachines({ api }: Props) {
                     >
                       Save access
                     </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => setRotating(machine)}
+                    >
+                      Rotate credentials
+                    </Button>
                   </div>
                 </div>
               </ResourceRow>
@@ -395,47 +432,81 @@ export function RemoteMachines({ api }: Props) {
         </Modal>
       )}
 
-      {created && (
+      {reveal && (
         <Modal
-          title={`${created.name} created`}
-          description="Run one of these installers on the computer. Each installs @jian-ai/remote-control from npm and connects it. The token is shown only once."
-          close={() => setCreated(null)}
-          footer={<Button onClick={() => setCreated(null)}>Done</Button>}
+          title={
+            reveal.kind === 'rotated'
+              ? `Credentials rotated for ${reveal.name}`
+              : `${reveal.name} created`
+          }
+          description={
+            reveal.kind === 'rotated'
+              ? 'The previous worker token no longer works. Run configure on the computer (or install if it was never set up). The new token is shown only once.'
+              : 'Run one of these installers on the computer. Each installs @jian-ai/remote-control from npm and connects it. The token is shown only once.'
+          }
+          close={() => setReveal(null)}
+          footer={<Button onClick={() => setReveal(null)}>Done</Button>}
         >
           <div className="remote-created">
-            <CopyBlock
-              label="Any OS (npx)"
-              value={npxInstall}
-              ariaLabel="Copy npx install command"
-            />
-            <CopyBlock
-              label="Global install"
-              value={globalInstall}
-              ariaLabel="Copy global npm install command"
-            />
-            <CopyBlock
-              label="Later: update worker"
-              value={updateCommand}
-              ariaLabel="Copy update command"
-            />
+            {reveal.kind === 'rotated' ? (
+              <>
+                <CopyBlock
+                  label="Already installed (npx configure)"
+                  value={npxConfigure}
+                  ariaLabel="Copy npx configure command"
+                />
+                <CopyBlock
+                  label="Already installed (jian-remote configure)"
+                  value={globalConfigure}
+                  ariaLabel="Copy jian-remote configure command"
+                />
+                <CopyBlock
+                  label="Fresh install (npx)"
+                  value={npxInstall}
+                  ariaLabel="Copy npx install command"
+                />
+              </>
+            ) : (
+              <>
+                <CopyBlock
+                  label="Any OS (npx)"
+                  value={npxInstall}
+                  ariaLabel="Copy npx install command"
+                />
+                <CopyBlock
+                  label="Global install"
+                  value={globalInstall}
+                  ariaLabel="Copy global npm install command"
+                />
+                <CopyBlock
+                  label="Later: update worker"
+                  value={updateCommand}
+                  ariaLabel="Copy update command"
+                />
+              </>
+            )}
             <CopyBlock
               label="Worker token only"
-              value={created.token}
+              value={reveal.token}
               ariaLabel="Copy worker token"
             />
             <p className="note">
-              Needs Node.js 24+ on the computer. The install command includes the worker token — run
-              it once, then clear shell history if you share that terminal. Later upgrades use
-              update (reads ~/.config/jian-remote; no token again) and must share the gateway’s
-              major.minor version. The gateway must be reachable over HTTPS from the computer. After
-              install, the worker starts on login (Windows Task Scheduler ONLOGON, macOS
-              LaunchAgent, or Linux systemd --user), so a reboot brings it back when that user signs
-              in. If Online stays red, run update, restart the local service, or check
-              ~/.config/jian-remote/worker.log. This list refreshes Online status every few seconds
-              while the page is open.
+              {reveal.kind === 'rotated'
+                ? 'Needs Node.js 24+ on the computer. Prefer configure when the worker is already installed — it rewrites ~/.config/jian-remote and restarts the service without wiping the LaunchAgent. The command includes the new token; clear shell history if you share that terminal. The old token stops working immediately.'
+                : 'Needs Node.js 24+ on the computer. The install command includes the worker token — run it once, then clear shell history if you share that terminal. Later upgrades use update (reads ~/.config/jian-remote; no token again) and must share the gateway’s major.minor version. To change only the token or gateway URL later, use configure or Rotate credentials in this panel. The gateway must be reachable over HTTPS from the computer. After install, the worker starts on login (Windows Task Scheduler ONLOGON, macOS LaunchAgent, or Linux systemd --user), so a reboot brings it back when that user signs in. If Online stays red, run update, restart the local service, or check ~/.config/jian-remote/worker.log. This list refreshes Online status every few seconds while the page is open.'}
             </p>
           </div>
         </Modal>
+      )}
+
+      {rotating && (
+        <Confirm
+          title={`Rotate credentials for ${rotating.name}?`}
+          description="Issues a new worker token and invalidates the current one. The machine stays registered; run configure on that computer with the new token."
+          busy={busy}
+          close={() => setRotating(undefined)}
+          confirm={() => void rotateCredentials(rotating)}
+        />
       )}
 
       {removing && (

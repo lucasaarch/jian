@@ -338,7 +338,7 @@
   }
   /* Remote Control: one-time token / install copy blocks. */
   .remote-access-actions {
-    @apply mt-4 flex justify-end;
+    @apply mt-4 flex flex-wrap justify-end gap-2;
   }
   .remote-created {
     @apply flex flex-col gap-4;

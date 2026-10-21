@@ -78,3 +78,35 @@ export const CreatedToken: Story = {
     expect(update.value).not.toContain('--token');
   },
 };
+
+/** Rotate credentials from an expanded machine row, then show configure one-liners. */
+export const RotatedCredentials: Story = {
+  render: () => <RemoteMachines api={gatewayApi()} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() =>
+      expect(canvas.getByRole('heading', { name: 'Remote Control' })).toBeVisible(),
+    );
+    const accessButtons = canvas.getAllByRole('button', { name: 'Access' });
+    const firstAccess = accessButtons[0];
+    if (!firstAccess) throw new Error('Expected an Access button');
+    await userEvent.click(firstAccess);
+    await waitFor(() =>
+      expect(canvas.getByRole('button', { name: 'Rotate credentials' })).toBeVisible(),
+    );
+    await userEvent.click(canvas.getByRole('button', { name: 'Rotate credentials' }));
+    await waitFor(() =>
+      expect(canvas.getByRole('heading', { name: /Rotate credentials for/i })).toBeVisible(),
+    );
+    await userEvent.click(canvas.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() =>
+      expect(canvas.getByRole('heading', { name: /Credentials rotated for/i })).toBeVisible(),
+    );
+    const configure = canvas.getByLabelText(
+      'Already installed (npx configure)',
+    ) as HTMLTextAreaElement;
+    expect(configure.value).toContain('configure --gateway');
+    expect(configure.value).toContain('--token ');
+    expect(configure.value).not.toContain(' install ');
+  },
+};
