@@ -4,15 +4,26 @@ import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { chmod, copyFile, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const configDir = join(homedir(), '.config', 'jian-remote');
@@ -142,10 +153,289 @@ export function macosAppBundlePaths(home = homedir()) {
     appRoot,
     contents: join(appRoot, 'Contents'),
     macosDir: join(appRoot, 'Contents', 'MacOS'),
+    /** Homebrew / official Node often load `@rpath/libnode.*.dylib` from here. */
+    libDir: join(appRoot, 'Contents', 'lib'),
     executable: join(appRoot, 'Contents', 'MacOS', MACOS_APP_NAME),
     infoPlist: join(appRoot, 'Contents', 'Info.plist'),
     bundleId: MACOS_BUNDLE_ID,
   };
+}
+
+/** dyld system locations — leave these on the host; do not copy into the app. */
+export function isMacSystemLibrary(depPath) {
+  if (typeof depPath !== 'string' || !depPath) return true;
+  if (depPath.startsWith('/usr/lib/')) return true;
+  if (depPath.startsWith('/System/')) return true;
+  if (depPath.startsWith('/Library/Apple/')) return true;
+  if (depPath.startsWith('/usr/local/lib/libSystem')) return true;
+  return false;
+}
+
+/**
+ * Parse `otool -L` lines into load-command paths (skips the header "path:" line).
+ * Example line: `\t@rpath/libnode.147.dylib (compatibility version 147.0.0, current version …)`
+ */
+export function parseOtoolDependencies(stdout) {
+  const deps = [];
+  for (const line of String(stdout || '').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.endsWith(':')) continue;
+    const match = /^(.+?)\s+\(compatibility version\b/.exec(trimmed);
+    if (!match) continue;
+    const dep = match[1].trim();
+    if (dep) deps.push(dep);
+  }
+  return deps;
+}
+
+/**
+ * Parse LC_RPATH entries from `otool -l` (or `otool -l -v`) output.
+ * Looks for: `cmd LC_RPATH` … `path <value> (offset …)`
+ */
+export function parseOtoolRpaths(stdout) {
+  const rpaths = [];
+  const lines = String(stdout || '').split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/\bLC_RPATH\b/.test(lines[i])) continue;
+    for (let j = i + 1; j < Math.min(i + 6, lines.length); j += 1) {
+      const match = /^\s*path\s+(.+?)(?:\s+\(offset\s+\d+\))?\s*$/.exec(lines[j]);
+      if (match) {
+        rpaths.push(match[1].trim());
+        break;
+      }
+    }
+  }
+  return rpaths;
+}
+
+/**
+ * Expand @executable_path / @loader_path / @rpath against the source Node layout.
+ * Absolute paths pass through. Unresolvable @rpath names return null.
+ */
+export function resolveMachODependency(
+  dep,
+  { binaryPath, executablePath, rpaths = [], exists = existsSync } = {},
+) {
+  if (typeof dep !== 'string' || !dep) return null;
+  const loaderDir = dirname(binaryPath);
+  const execDir = dirname(executablePath || binaryPath);
+
+  const expandPrefix = (value) => {
+    if (value.startsWith('@loader_path')) {
+      return join(loaderDir, value.slice('@loader_path'.length).replace(/^\//, '') || '.');
+    }
+    if (value.startsWith('@executable_path')) {
+      return join(execDir, value.slice('@executable_path'.length).replace(/^\//, '') || '.');
+    }
+    return value;
+  };
+
+  if (dep.startsWith('@rpath/')) {
+    const rest = dep.slice('@rpath/'.length);
+    for (const rpath of rpaths) {
+      const base = expandPrefix(rpath);
+      const candidate = join(base, rest);
+      if (exists(candidate)) return candidate;
+    }
+    // Common Node layouts when LC_RPATH is missing from a stub parse: bin/ + ../lib/.
+    for (const candidate of [
+      join(loaderDir, rest),
+      join(loaderDir, '..', 'lib', rest),
+      join(execDir, rest),
+      join(execDir, '..', 'lib', rest),
+    ]) {
+      if (exists(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  if (dep.startsWith('@loader_path') || dep.startsWith('@executable_path')) {
+    const candidate = expandPrefix(dep);
+    return exists(candidate) ? candidate : null;
+  }
+
+  if (dep.startsWith('/')) {
+    return exists(dep) ? dep : null;
+  }
+
+  return null;
+}
+
+const SIBLING_DYLIB_PREFIXES = [
+  'libnode.',
+  'libuv.',
+  'libbrotli',
+  'libcares.',
+  'libnghttp',
+  'libopenssl.',
+  'libssl.',
+  'libcrypto.',
+  'libicu',
+];
+
+/**
+ * Sibling search when otool is unavailable or incomplete — Homebrew Cellar and
+ * official tarballs keep libnode next to bin/ or under ../lib/.
+ */
+export function discoverSiblingNodeLibraries(nodePath, { exists = existsSync, listDir } = {}) {
+  const dir = dirname(nodePath);
+  const searchDirs = [dir, join(dir, 'lib'), join(dir, '..', 'lib')];
+  const found = [];
+  const list =
+    listDir ||
+    ((path) => {
+      try {
+        return readdirSync(path);
+      } catch {
+        return [];
+      }
+    });
+  for (const searchDir of searchDirs) {
+    if (!exists(searchDir)) continue;
+    for (const name of list(searchDir)) {
+      if (!name.endsWith('.dylib')) continue;
+      if (!SIBLING_DYLIB_PREFIXES.some((prefix) => name.startsWith(prefix))) continue;
+      const full = join(searchDir, name);
+      if (exists(full)) found.push(full);
+    }
+  }
+  return found;
+}
+
+/**
+ * BFS: every non-system Mach-O dependency of `nodePath` that must live inside the .app.
+ * Returns absolute source paths (deduped, stable order).
+ */
+export function collectNodeRuntimeLibraries(
+  nodePath,
+  {
+    exists = existsSync,
+    readDeps = defaultReadOtoolDeps,
+    readRpaths = defaultReadOtoolRpaths,
+    listDir,
+  } = {},
+) {
+  const realNode = (() => {
+    try {
+      return realpathSync(nodePath);
+    } catch {
+      return nodePath;
+    }
+  })();
+
+  const queue = [realNode];
+  const seenBinaries = new Set();
+  const libraries = [];
+  const seenLibs = new Set();
+
+  const enqueueLib = (source) => {
+    let real = source;
+    try {
+      real = realpathSync(source);
+    } catch {
+      // keep source
+    }
+    if (seenLibs.has(real)) return;
+    seenLibs.add(real);
+    libraries.push(real);
+    queue.push(real);
+  };
+
+  // Seed Cellar/tarball siblings first so a missing otool still walks transitive deps.
+  for (const sibling of discoverSiblingNodeLibraries(realNode, { exists, listDir })) {
+    enqueueLib(sibling);
+  }
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || seenBinaries.has(current)) continue;
+    seenBinaries.add(current);
+
+    const rpaths = readRpaths(current);
+    const deps = readDeps(current);
+    for (const dep of deps) {
+      if (isMacSystemLibrary(dep)) continue;
+      // Self-id lines sometimes appear as the dylib's install name — skip when it resolves to self.
+      const resolved = resolveMachODependency(dep, {
+        binaryPath: current,
+        executablePath: realNode,
+        rpaths,
+        exists,
+      });
+      if (!resolved) continue;
+      let realResolved = resolved;
+      try {
+        realResolved = realpathSync(resolved);
+      } catch {
+        // keep
+      }
+      if (realResolved === realNode || realResolved === current) continue;
+      if (isMacSystemLibrary(realResolved)) continue;
+      enqueueLib(realResolved);
+    }
+  }
+
+  return libraries;
+}
+
+function defaultReadOtoolDeps(binaryPath) {
+  const result = spawnSync('otool', ['-L', binaryPath], { encoding: 'utf8' });
+  if (result.status !== 0) return [];
+  return parseOtoolDependencies(result.stdout || '');
+}
+
+function defaultReadOtoolRpaths(binaryPath) {
+  const result = spawnSync('otool', ['-l', binaryPath], { encoding: 'utf8' });
+  if (result.status !== 0) return [];
+  return parseOtoolRpaths(result.stdout || '');
+}
+
+/** Drop Gatekeeper quarantine on a path (best-effort; missing xattr is fine). */
+export function clearMacQuarantine(targetPath) {
+  spawnSync('xattr', ['-dr', 'com.apple.quarantine', targetPath], { encoding: 'utf8' });
+}
+
+function runInstallNameTool(argv, run) {
+  // -add_rpath fails (status 1) when the rpath already exists — that is fine.
+  return run('install_name_tool', argv);
+}
+
+/**
+ * Rewrite load commands so bundled libs resolve via `@rpath/<basename>` inside Contents/lib.
+ * Best-effort: missing install_name_tool still leaves copies under Contents/lib for @rpath.
+ */
+export function rewriteBundledMachOLinks({
+  executablePath,
+  libDir,
+  libraryBasenames,
+  readDeps = defaultReadOtoolDeps,
+  run = (cmd, argv) => spawnSync(cmd, argv, { encoding: 'utf8' }),
+}) {
+  const names = new Set(libraryBasenames);
+
+  runInstallNameTool(['-add_rpath', '@executable_path/../lib', executablePath], run);
+  runInstallNameTool(['-add_rpath', '@executable_path', executablePath], run);
+
+  for (const name of names) {
+    runInstallNameTool(['-id', `@rpath/${name}`, join(libDir, name)], run);
+  }
+
+  const consumers = [executablePath, ...[...names].map((name) => join(libDir, name))];
+  for (const consumer of consumers) {
+    for (const dep of readDeps(consumer)) {
+      if (isMacSystemLibrary(dep)) continue;
+      const depBase = basename(
+        dep
+          .replace(/^@rpath\//, '')
+          .replace(/^@loader_path\//, '')
+          .replace(/^@executable_path\//, ''),
+      );
+      if (!names.has(depBase)) continue;
+      const desired = `@rpath/${depBase}`;
+      if (dep === desired) continue;
+      runInstallNameTool(['-change', dep, desired, consumer], run);
+    }
+  }
 }
 
 export function buildMacosAppInfoPlist() {
@@ -214,26 +504,78 @@ export function buildLaunchAgentPlist({
 }
 
 /**
- * Copy the current Node binary into Jian Remote.app and ad-hoc sign so Login Items / TCC
- * attach to Jian, not the shared system node (unsigned / ad-hoc — not Developer ID).
+ * Copy the current Node binary *and* its @rpath shared libs (libnode, ICU, …) into
+ * Jian Remote.app, then ad-hoc sign so Login Items / TCC attach to Jian — not system node.
+ * Homebrew / nvm / fnm / official pkg layouts resolve via Contents/lib (@executable_path/../lib).
  */
-async function materializeMacosAppRuntime() {
-  const paths = macosAppBundlePaths();
+export async function materializeMacosAppRuntime({
+  sourceNode = process.execPath,
+  home = homedir(),
+  collectLibraries = collectNodeRuntimeLibraries,
+} = {}) {
+  const paths = macosAppBundlePaths(home);
   await mkdir(paths.macosDir, { recursive: true, mode: 0o755 });
+  await mkdir(paths.libDir, { recursive: true, mode: 0o755 });
   await writeFile(paths.infoPlist, buildMacosAppInfoPlist(), { mode: 0o644 });
-  const source = process.execPath;
+
+  let realSource = sourceNode;
+  try {
+    realSource = realpathSync(sourceNode);
+  } catch {
+    // keep sourceNode
+  }
+
   const temp = `${paths.executable}.${process.pid}.tmp`;
-  await copyFile(source, temp);
+  await copyFile(realSource, temp);
   await chmod(temp, 0o755);
   await rename(temp, paths.executable);
-  // Best-effort ad-hoc sign with our bundle id; ignore failures on locked-down hosts.
+
+  // Drop stale dylibs from a previous Node major so @rpath cannot pick an old libnode.
+  try {
+    for (const name of await readdir(paths.libDir)) {
+      if (!name.endsWith('.dylib')) continue;
+      await rm(join(paths.libDir, name), { force: true });
+    }
+  } catch {
+    // lib dir may be brand new
+  }
+
+  const librarySources = collectLibraries(realSource);
+  const libraryBasenames = [];
+  for (const libSource of librarySources) {
+    const name = basename(libSource);
+    if (!name.endsWith('.dylib')) continue;
+    const dest = join(paths.libDir, name);
+    await copyFile(libSource, dest);
+    await chmod(dest, 0o755);
+    libraryBasenames.push(name);
+  }
+
+  if (libraryBasenames.length > 0) {
+    rewriteBundledMachOLinks({
+      executablePath: paths.executable,
+      libDir: paths.libDir,
+      libraryBasenames,
+    });
+  }
+
+  clearMacQuarantine(paths.appRoot);
+
+  // Sign nested dylibs first, then the executable, then the bundle (ad-hoc / unsigned path).
+  for (const name of libraryBasenames) {
+    spawnSync(
+      'codesign',
+      ['--force', '-s', '-', '--identifier', MACOS_BUNDLE_ID, join(paths.libDir, name)],
+      { stdio: 'ignore' },
+    );
+  }
   spawnSync('codesign', ['--force', '-s', '-', '--identifier', MACOS_BUNDLE_ID, paths.executable], {
     stdio: 'ignore',
   });
   spawnSync('codesign', ['--force', '-s', '-', '--identifier', MACOS_BUNDLE_ID, paths.appRoot], {
     stdio: 'ignore',
   });
-  return paths;
+  return { ...paths, bundledLibraries: libraryBasenames };
 }
 
 export function parseRelease(version) {
