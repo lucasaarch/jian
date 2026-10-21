@@ -76,6 +76,26 @@ export class Remote {
     };
   }
 
+  /** Issue a new worker token and invalidate the previous hash. Token is returned once. */
+  async rotate(machineId: string) {
+    const token = randomBytes(32).toString('base64url');
+    const [machine] = await this.store.db
+      .update(remoteMachines)
+      .set({ tokenHash: tokenHash(token) })
+      .where(eq(remoteMachines.id, machineId))
+      .returning();
+    if (!machine) throw new GatewayError(404, 'Remote machine not found');
+    return {
+      id: machine.id,
+      name: machine.name,
+      platform: machine.platform,
+      online: present(machine.lastSeenAt, this.clock()),
+      allowedProfileIds: machine.allowedProfileIds,
+      createdAt: machine.createdAt.toISOString(),
+      token,
+    };
+  }
+
   async remove(machineId: string) {
     const [machine] = await this.store.db
       .delete(remoteMachines)

@@ -15,6 +15,8 @@ export const remoteMachineCreateSchema = z.strictObject({
 });
 
 export const remoteMachineCreatedSchema = remoteMachineSchema.extend({ token: z.string().min(32) });
+/** Same shape as create: machine fields plus the new worker token (shown once). */
+export const remoteMachineRotatedSchema = remoteMachineCreatedSchema;
 export const remoteMachineAccessSchema = z.strictObject({
   allowedProfileIds: z.array(z.uuid()).max(100),
 });

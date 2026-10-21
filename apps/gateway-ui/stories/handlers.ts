@@ -555,6 +555,17 @@ export const handlers = [
       createdAt: new Date().toISOString(),
     });
   }),
+  http.post('*/v1/remote/machines/:machineId/rotate', ({ params }) =>
+    ok({
+      id: params.machineId,
+      name: "Lucas's Windows PC",
+      platform: 'win32-x64',
+      online: true,
+      allowedProfileIds: data.profiles[0] ? [data.profiles[0].id] : [],
+      createdAt: new Date().toISOString(),
+      token: 'story-rotated-worker-token-abcdefghijklmnopqrstuvwxyz012345',
+    }),
+  ),
   http.delete('*/v1/remote/machines/:machineId', ({ params }) => ok({ id: params.machineId })),
 ];
 

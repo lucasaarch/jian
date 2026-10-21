@@ -59,6 +59,7 @@ it('serves the worker script without authentication so install one-liners can do
     expect(response.headers['content-type']).toMatch(/javascript/);
     expect(response.body).toContain('Jian Remote worker');
     expect(response.body).toContain('--token');
+    expect(response.body).toContain('configure [--gateway');
     expect(response.body).toContain('update [--version');
   } finally {
     await app.close();
@@ -110,6 +111,49 @@ it('serves automatic worker updates only to the matching authenticated machine',
       headers: { authorization: `Bearer ${created.token}`, 'if-none-match': accepted.headers.etag },
     });
     expect(unchanged.statusCode).toBe(304);
+  } finally {
+    await app.close();
+  }
+});
+
+it('rotates the worker token and rejects the previous one', async () => {
+  const services = await testServices();
+  const created = await services.remote.create({ name: 'Rotate me' });
+  const app = createApp({
+    ...services,
+    token: 'host-admin-token-for-test-1234567890-verysecret',
+    logger: false,
+  });
+  try {
+    const before = await app.inject({
+      url: `/v1/remote/worker/${created.id}/tasks/next`,
+      headers: { authorization: `Bearer ${created.token}` },
+    });
+    expect(before.statusCode).toBe(200);
+
+    const rotated = await app.inject({
+      method: 'POST',
+      url: `/v1/remote/machines/${created.id}/rotate`,
+      headers: { authorization: 'Bearer host-admin-token-for-test-1234567890-verysecret' },
+    });
+    expect(rotated.statusCode).toBe(200);
+    const body = rotated.json() as { id: string; token: string; name: string };
+    expect(body.id).toBe(created.id);
+    expect(body.token).toHaveLength(43);
+    expect(body.token).not.toBe(created.token);
+
+    const stale = await app.inject({
+      url: `/v1/remote/worker/${created.id}/tasks/next`,
+      headers: { authorization: `Bearer ${created.token}` },
+    });
+    expect(stale.statusCode).toBe(401);
+
+    const fresh = await app.inject({
+      url: `/v1/remote/worker/${created.id}/tasks/next`,
+      headers: { authorization: `Bearer ${body.token}` },
+    });
+    expect(fresh.statusCode).toBe(200);
+    expect(fresh.json()).toEqual({ task: null });
   } finally {
     await app.close();
   }

@@ -29,6 +29,16 @@ npx @jian-ai/remote-control@latest update
 Reads `~/.config/jian-remote` (no token, machine id, or gateway flags), installs a compatible
 build, and restarts the worker service.
 
+## Configure
+
+Change the stored gateway URL and/or worker token without a full reinstall (restarts the
+existing OS service):
+
+```sh
+jian-remote configure --token WORKER_TOKEN
+jian-remote configure --gateway https://gateway.example --token WORKER_TOKEN
+```
+
 ## Compatibility
 
 Worker and gateway must share the same major.minor. See [docs/remote.md](../../docs/remote.md).
