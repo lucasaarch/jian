@@ -23,7 +23,6 @@ import {
   type ObjectiveCommand,
   objectiveAt,
   parseObjectiveCommand,
-  shouldSeedObjective,
 } from '../sessions/objective.js';
 import type { SessionReader } from '../sessions/port.js';
 import {
@@ -138,10 +137,11 @@ export class Runs {
       options.ownerMessage && !parsed.mediaIds?.length ? parsePonytailMode(parsed.text) : undefined;
     const cavemanChange =
       options.ownerMessage && !parsed.mediaIds?.length ? parseCavemanMode(parsed.text) : undefined;
+    // Panel owner messages and channel ingress both accept /objective commands.
+    // Ordinary chat never auto-seeds — only these commands, the session API, or the agent tool.
+    const fromPerson = Boolean(options.ownerMessage) || activity === 'channel';
     const objectiveCommand =
-      options.ownerMessage && !parsed.mediaIds?.length
-        ? parseObjectiveCommand(parsed.text)
-        : undefined;
+      fromPerson && !parsed.mediaIds?.length ? parseObjectiveCommand(parsed.text) : undefined;
     const data = {
       ...parsed,
       text: [parsed.text, ...(parsed.mediaIds ?? []).map(mediaMarker)].filter(Boolean).join('\n'),
@@ -200,9 +200,8 @@ export class Runs {
           profileId,
           sessionId,
           session,
-          data.text,
           objectiveCommand,
-          Boolean(options.ownerMessage) || activity === 'channel',
+          fromPerson,
         );
         return this.resumeWaiting(
           tx,
@@ -242,9 +241,8 @@ export class Runs {
           profileId,
           sessionId,
           session,
-          data.text,
           objectiveCommand,
-          Boolean(options.ownerMessage) || activity === 'channel',
+          fromPerson,
         );
 
         await appendSteer(tx, inFlight.id, data.text);
@@ -338,9 +336,8 @@ export class Runs {
         profileId,
         sessionId,
         session,
-        data.text,
         objectiveCommand,
-        Boolean(options.ownerMessage) || activity === 'channel',
+        fromPerson,
       );
 
       await recordEvent(
@@ -599,15 +596,15 @@ export class Runs {
   }
 
   /**
-   * Owner commands and auto-seed keep the session objective aligned with what the person asked.
-   * Panel owner messages and channel messages seed; synthetic follow-ups do not.
+   * Explicit owner commands set/close the session objective. Casual chat never seeds one —
+   * that is the agent's job via set_session_objective (or the session API / /objective).
+   * A person message while blocked only resumes the existing goal; it does not replace the text.
    */
   private async applyObjectiveOnSubmit(
     tx: Queryable,
     profileId: string,
     sessionId: string,
     session: Session,
-    text: string,
     command: ObjectiveCommand | undefined,
     fromPerson: boolean,
   ) {
@@ -647,27 +644,13 @@ export class Runs {
 
     if (!fromPerson) return;
 
-    if (current?.status === 'blocked') {
+    // Owner/channel reply while blocked: resume the same goal — never promote chat into a new title.
+    if (current?.status === 'blocked' && current.text) {
       await setSessionObjective(
         tx,
         profileId,
         sessionId,
-        objectiveAt(shouldSeedObjective(text) ? text : current.text, 'open', at, {
-          continuations: 0,
-        }),
-      );
-      return;
-    }
-
-    if (
-      (!current || current.status === 'done' || current.status === 'cancelled') &&
-      shouldSeedObjective(text)
-    ) {
-      await setSessionObjective(
-        tx,
-        profileId,
-        sessionId,
-        objectiveAt(text, 'open', at, { continuations: 0 }),
+        objectiveAt(current.text, 'open', at, { continuations: 0 }),
       );
     }
   }
