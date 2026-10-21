@@ -236,6 +236,28 @@ before (longest side ≤ 1920, ~280 KB binary). The worker shows a **Jian overla
 translucent; `end_session` removes it. Grant **Screen Recording** and **Accessibility** to
 **Jian Remote** in System Settings.
 
+Published `@jian-ai/remote-control` releases ship a **prebuilt universal** `computer-helper`
+(arm64 + x86_64) built on macOS in the Publish workflow. `install` / `update` copy it under
+`~/Library/Application Support/Jian Remote/`; **Xcode is not required** on the Mac that runs
+the worker. From a source checkout, `macos/build-helper.sh` (or `swiftc` on first use) builds
+the same binary when Command Line Tools are present. Developer ID signing and notarization of
+the helper are optional Publish steps when repository secrets are configured (see below); full
+Developer ID + notarization of **Jian Remote.app** remains a separate follow-up.
+
+#### Optional Apple signing secrets (Publish)
+
+Do not put certificates in chat or commit them. If the team enables Developer ID for the helper,
+set these GitHub Actions secrets (Developer ID **Application** `.p12`, plus App Store Connect
+API key for notarytool):
+
+- `APPLE_DEVELOPER_ID_P12` — base64-encoded `.p12`
+- `APPLE_DEVELOPER_ID_P12_PASSWORD`
+- `APPLE_TEAM_ID`
+- `APPLE_API_KEY_ID` / `APPLE_API_ISSUER_ID` / `APPLE_API_KEY_P8` — notarization (optional)
+
+Without those secrets, Publish still ships an ad-hoc–signed helper (same class as today’s
+**Jian Remote.app**).
+
 To revoke a profile, replace `allowedProfileIds` using the access endpoint above. To disconnect
 and invalidate the machine token, delete the machine:
 

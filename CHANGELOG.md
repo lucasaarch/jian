@@ -4,6 +4,22 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 0.8.1 — 2026-10-21
+
+Publish ships a prebuilt universal macOS computer-helper in the npm package so Computer Use works without Xcode Command Line Tools on the worker Mac.
+
+### Remote Control
+
+* **Prebuilt `computer-helper`:** Publish builds a universal (arm64 + x86_64) Swift helper on a macOS runner and includes it in the `@jian-ai/remote-control` tarball. `install` / `update` copy it under `~/Library/Application Support/Jian Remote/`; the worker prefers that binary over compiling with `swiftc`. Macs **without** Xcode Command Line Tools can run Computer Use and the Jian overlay. From a source checkout, `macos/build-helper.sh` (or first-use `swiftc`) still builds when CLT are present. See `docs/remote.md`.
+* **Optional Developer ID:** when repository secrets for a Developer ID Application certificate (and optionally App Store Connect API keys for notarytool) are set, Publish can sign the helper; without them it ships ad-hoc signed, matching **Jian Remote.app** today. Full Developer ID + notarization of the app bundle remains a follow-up.
+* **0.8.0 stayed source-only:** the `@jian-ai/remote-control@0.8.0` package contained Swift source and required `swiftc` on first probe/session. Workers on 0.8.0 without CLT did not advertise `computer-macos-v1`. Promote and `update` to **0.8.1** for the prebuilt helper.
+
+### Upgrading
+
+No new database migrations. After releasing, promote the staged `@jian-ai/remote-control@0.8.1` on npm, then run `npx @jian-ai/remote-control@0.8.1 update` (or `@latest`) on each macOS worker so the packaged binary is materialized.
+
+Stable installations can use the `latest` image tag or pin `0.8.1`.
+
 ## 0.8.0 — 2026-10-21
 
 Anthropic-style Remote Control computer use on macOS with a Jian overlay cursor, replacement of take_remote_screenshot by remote_computer, and always-on workspace shell (allowShell neutralized).
