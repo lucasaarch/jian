@@ -978,7 +978,8 @@ async function updateIfNeeded(base, headers) {
 /** Fallback when the gateway script is missing or refused — pack the exact release from npm. */
 async function updateFromNpm(gatewayVersion) {
   const target = parseRelease(gatewayVersion)?.raw;
-  if (!target) throw new Error('Cannot download a worker update without a gateway release version.');
+  if (!target)
+    throw new Error('Cannot download a worker update without a gateway release version.');
   console.log(`Downloading @jian-ai/remote-control@${target} from npm…`);
   const scriptBytes = fetchNpmWorkerScript(target);
   await applyWorkerScriptAndRestart(scriptBytes, { sourceLabel: `npm @${target}` });
