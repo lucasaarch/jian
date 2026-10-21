@@ -1,6 +1,6 @@
 # Jian Remote Control — Windows computer-use helper
 # JSON lines on stdin → JSON lines on stdout (same cmds as macOS/Linux helpers).
-# Overlay: topmost transparent WinForms pointer (geometric white + blue glow).
+# Overlay: topmost transparent WinForms pointer (white + #2880F8 stroke/glow; macOS uses bitmap).
 # Input: SendInput with save/restore so agent clicks do not strand the user cursor.
 # English-only errors.
 
@@ -123,7 +123,8 @@ function Ensure-Overlay {
       (New-Object System.Drawing.Point(13, 17)),
       (New-Object System.Drawing.Point(22, 17))
     )
-    $glowBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(140, 58, 122, 214))
+    # Parity with macOS ship sprite: white fill + #2880F8 stroke/glow (geometric stand-in).
+    $glowBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(140, 40, 128, 248))
     $glowPts = @(
       (New-Object System.Drawing.Point(3, 4)),
       (New-Object System.Drawing.Point(3, 28)),
@@ -134,9 +135,9 @@ function Ensure-Overlay {
       (New-Object System.Drawing.Point(23, 19))
     )
     $g.FillPolygon($glowBrush, $glowPts)
-    $fill = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 250, 250, 248))
+    $fill = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 255, 255, 255))
     $g.FillPolygon($fill, $pts)
-    $pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(220, 23, 23, 22), 1.1)
+    $pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(255, 40, 128, 248), 2.4)
     $g.DrawPolygon($pen, $pts)
     $glowBrush.Dispose(); $fill.Dispose(); $pen.Dispose()
   })

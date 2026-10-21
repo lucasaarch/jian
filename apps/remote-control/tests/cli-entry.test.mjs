@@ -65,6 +65,8 @@ test('help text documents configure alongside install and update', () => {
   assert.match(result.stdout, /configure \[--gateway/);
   assert.match(result.stdout, /install --gateway/);
   assert.match(result.stdout, /update \[--version/);
+  assert.match(result.stdout, /stop \| start \| restart/);
+  assert.match(result.stdout, /version \| --version \| -V/);
 });
 
 test('importing the module for tests does not run the CLI', () => {
