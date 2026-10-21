@@ -230,7 +230,7 @@ it('queues computer-use tasks when the worker advertises computer-macos-v1', asy
   await expect(pending).resolves.toMatchObject({ taskId, exitCode: 0, computer: { ok: true } });
 });
 
-it('keeps a locked Mac online but refuses Computer Use with a clear error', async () => {
+it('keeps a locked Mac online and still queues Computer Use and shell (no soft 409)', async () => {
   const services = await testServices();
   const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
   const created = await services.remote.create({
@@ -248,12 +248,35 @@ it('keeps a locked Mac online but refuses Computer Use with a clear error', asyn
   const listed = await services.remote.listForProfile(owner.id);
   expect(listed[0]).toMatchObject({ online: true, uiState: 'locked' });
 
-  await expect(
-    services.remote.executeComputer(owner.id, created.id, { action: 'screenshot' }),
-  ).rejects.toMatchObject({
-    statusCode: 409,
-    message: expect.stringMatching(/locked/i),
+  const click = services.remote.executeComputer(owner.id, created.id, {
+    action: 'left_click',
+    coordinate: [1, 1],
   });
+  let polledClick: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
+  for (let attempt = 0; attempt < 20 && !polledClick.task; attempt++) {
+    polledClick = await services.remote.poll(
+      created.id,
+      `Bearer ${created.token}`,
+      'darwin-arm64',
+      'computer-macos-v1',
+      'locked',
+    );
+    if (!polledClick.task) await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  expect(polledClick.task).toMatchObject({
+    kind: 'computer',
+    computer: { action: 'left_click', coordinate: [1, 1] },
+  });
+  if (!polledClick.task) throw new Error('Worker did not receive the click task');
+  await services.remote.complete(created.id, polledClick.task.id, `Bearer ${created.token}`, {
+    taskId: polledClick.task.id,
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+    timedOut: false,
+    computer: { ok: true },
+  });
+  await expect(click).resolves.toMatchObject({ exitCode: 0, computer: { ok: true } });
 
   const shell = services.remote.execute(owner.id, created.id, { command: 'printf ok' });
   let polled: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };

@@ -210,12 +210,8 @@ export function remoteTools(
         const machine = machines.find((item) => item.id === input.machineId);
         if (!machine) throw new GatewayError(403, 'That remote machine is not authorized');
         if (!machine.online) throw new GatewayError(503, 'Remote machine is offline');
-        if (machine.uiState === 'locked') {
-          throw new GatewayError(
-            409,
-            'Mac is locked — unlock the screen to use Computer Use. Shell and file tools may still work while the worker is online.',
-          );
-        }
+        // Locked is advisory (list_remote_machines.uiState). Attempt Computer Use; the
+        // worker wakes the display and only fails if the OS rejects the call.
 
         const result = await remote.executeComputer(
           run.profileId,
