@@ -230,7 +230,7 @@ it('queues computer-use tasks when the worker advertises computer-macos-v1', asy
   await expect(pending).resolves.toMatchObject({ taskId, exitCode: 0, computer: { ok: true } });
 });
 
-it('keeps a locked Mac online: allows screenshot, refuses click, shell still works', async () => {
+it('keeps a locked Mac online and still queues Computer Use and shell (no soft 409)', async () => {
   const services = await testServices();
   const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
   const created = await services.remote.create({
@@ -248,39 +248,35 @@ it('keeps a locked Mac online: allows screenshot, refuses click, shell still wor
   const listed = await services.remote.listForProfile(owner.id);
   expect(listed[0]).toMatchObject({ online: true, uiState: 'locked' });
 
-  await expect(
-    services.remote.executeComputer(owner.id, created.id, {
-      action: 'left_click',
-      coordinate: [1, 1],
-    }),
-  ).rejects.toMatchObject({
-    statusCode: 409,
-    message: expect.stringMatching(/locked/i),
+  const click = services.remote.executeComputer(owner.id, created.id, {
+    action: 'left_click',
+    coordinate: [1, 1],
   });
-
-  const shot = services.remote.executeComputer(owner.id, created.id, { action: 'screenshot' });
-  let polledShot: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
-  for (let attempt = 0; attempt < 20 && !polledShot.task; attempt++) {
-    polledShot = await services.remote.poll(
+  let polledClick: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
+  for (let attempt = 0; attempt < 20 && !polledClick.task; attempt++) {
+    polledClick = await services.remote.poll(
       created.id,
       `Bearer ${created.token}`,
       'darwin-arm64',
       'computer-macos-v1',
       'locked',
     );
-    if (!polledShot.task) await new Promise((resolve) => setTimeout(resolve, 5));
+    if (!polledClick.task) await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  expect(polledShot.task).toMatchObject({ kind: 'computer', computer: { action: 'screenshot' } });
-  if (!polledShot.task) throw new Error('Worker did not receive the screenshot task');
-  await services.remote.complete(created.id, polledShot.task.id, `Bearer ${created.token}`, {
-    taskId: polledShot.task.id,
-    exitCode: 0,
-    stdout: 'fakejpg',
-    stderr: 'Note: Mac session is locked',
-    timedOut: false,
-    computer: { ok: true, widthPx: 10, heightPx: 10 },
+  expect(polledClick.task).toMatchObject({
+    kind: 'computer',
+    computer: { action: 'left_click', coordinate: [1, 1] },
   });
-  await expect(shot).resolves.toMatchObject({ exitCode: 0, computer: { ok: true } });
+  if (!polledClick.task) throw new Error('Worker did not receive the click task');
+  await services.remote.complete(created.id, polledClick.task.id, `Bearer ${created.token}`, {
+    taskId: polledClick.task.id,
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+    timedOut: false,
+    computer: { ok: true },
+  });
+  await expect(click).resolves.toMatchObject({ exitCode: 0, computer: { ok: true } });
 
   const shell = services.remote.execute(owner.id, created.id, { command: 'printf ok' });
   let polled: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };

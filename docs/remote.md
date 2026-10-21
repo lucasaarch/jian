@@ -309,11 +309,12 @@ Developer ID + notarization of **Jian Remote.app** remains a separate follow-up.
 **Online** means the worker is still polling the gateway (HTTPS `tasks/next`), not that the
 desktop is unlocked. The panel and `list_remote_machines` also expose `uiState`:
 
-| `uiState` | Meaning | Shell / files | Computer Use |
-| --- | --- | --- | --- |
-| `unlocked` | Session unlocked, display up | Yes | Yes |
-| `display_asleep` | Display off/asleep, not password-locked | Yes | Worker wakes the display when a session starts |
-| `locked` | Password lock / loginwindow | Yes while online | **Screenshot** may work after waking the display (lock UI only). Click / type / key / scroll / drag need unlock. Desktop apps behind the lock are not visible. |
+| `uiState` | Meaning | What Jian does |
+| --- | --- | --- |
+| `unlocked` | Session unlocked, display up | Shell, files, and Computer Use as usual |
+| `display_asleep` | Display off/asleep, not password-locked | Worker wakes the display (`caffeinate -u`) then attempts capture/input |
+| `locked` | Post-login password lock (Control–Command–Q / idle lock) | **Still online.** Worker wakes the display and **attempts** screenshot, click, type, scroll, etc. `uiState` is advisory — Jian does not soft-refuse. If the OS rejects the API, the tool returns that failure. Shell and file tools keep working. |
+| `unknown` | Probe unavailable | Best-effort; same attempt policy |
 | `unknown` | Probe unavailable | Yes while online | Best-effort; may fail with a normal tool error |
 
 A locked Mac that still looks **Offline** is usually an old LaunchAgent without
@@ -323,11 +324,19 @@ re-install) so launchd rewrites the plist, then check `~/.config/jian-remote/wor
 
 While a computer-use session is open the worker holds `caffeinate` assertions so idle
 display sleep is less likely to interrupt it. A locked Mac often also has the display
-asleep; the worker runs `caffeinate -u` before a screenshot so capture is not confused
-with “lock blocks Screen Recording.” You may get the lock screen image (or black if wake
-failed) — not Finder/Chrome behind loginwindow. That is an OS limit, not ChatGPT-style
-“locked Computer Use” (those products use a separate macOS authorization plugin).
-Lid-closed clamshell sleep still takes the machine truly offline until it wakes.
+asleep; the worker runs `caffeinate -u` before Computer Use so capture/input are not
+confused with “lock alone blocks everything.”
+
+**Hard OS limits (honest):**
+
+- **Post-login lock** (user already signed in, screen locked): shell keeps running. Computer
+  Use is attempted after waking the display. On some macOS builds, `screencapture` /
+  ScreenCaptureKit / CGEvent still fail or only reach the lock UI — that failure is from
+  the OS after we try, not a Jian soft-block. ChatGPT “locked Computer Use” uses a separate
+  SecurityAgent plugin we do not ship.
+- **FileVault / loginwindow before a user session** (reboot, nobody signed in): a normal
+  Aqua LaunchAgent is not in that session. That is a different problem from post-login lock.
+- **Lid-closed clamshell sleep:** true offline until the Mac wakes.
 
 #### Optional Apple signing secrets (Publish)
 

@@ -62,5 +62,5 @@ let the worker compile with `swiftc` when Command Line Tools are installed.
 
 On macOS the LaunchAgent uses `ProcessType=Interactive` and an idle `caffeinate` so the worker
 keeps polling while the screen is locked (App Nap must not freeze timers). A locked Mac stays
-**online** with `uiState: locked`; screenshot may show the lock screen after a display wake,
-but click/type need unlock. See [docs/remote.md](../../docs/remote.md).
+**online** (`uiState: locked` is advisory): the worker wakes the display and attempts
+Computer Use; it does not soft-refuse. See [docs/remote.md](../../docs/remote.md).

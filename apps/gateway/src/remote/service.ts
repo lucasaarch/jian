@@ -190,17 +190,8 @@ export class Remote {
     if (!present(machine.lastSeenAt, this.clock())) {
       throw new GatewayError(503, 'Remote machine is offline');
     }
-    if (parseUiState(machine.uiState) === 'locked') {
-      // Screenshot can still capture the lock UI after the worker wakes the display.
-      // Clicks/typing against desktop apps need an unlock — refuse those here.
-      const action = data.action;
-      if (action !== 'screenshot' && action !== 'wait' && action !== 'end_session') {
-        throw new GatewayError(
-          409,
-          'Mac is locked — unlock the screen before click, type, key, scroll, or drag. Screenshot may still work (lock screen only). Shell and file tools may still work.',
-        );
-      }
-    }
+    // Do not soft-block on uiState=locked: the worker wakes the display and attempts the
+    // action. Failures come back from the OS/API (or as a clear worker error).
     if (!machineSupportsComputer(machine)) {
       throw new GatewayError(
         503,
