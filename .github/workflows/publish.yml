@@ -142,14 +142,89 @@ jobs:
           subject-digest: ${{ steps.inspect.outputs.digest }}
           push-to-registry: true
 
+  # Universal macOS computer-use helper (Swift). Source alone is not enough for Macs without
+  # Xcode CLT; Publish builds arm64+x86_64 and drops the binary into the npm tarball.
+  # Ad-hoc codesign by default. When Apple Developer secrets are set, the same job can
+  # Developer ID–sign (see docs/remote.md); do not paste certificates into chat or logs.
+  computer-helper:
+    needs: notes
+    if: ${{ !cancelled() && needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: macos-14
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build universal computer-helper
+        working-directory: apps/remote-control/macos
+        run: |
+          chmod +x build-helper.sh
+          ./build-helper.sh "$PWD/computer-helper"
+          test -x computer-helper
+          lipo -info computer-helper
+      - name: Optional Developer ID sign
+        working-directory: apps/remote-control/macos
+        env:
+          APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          if [ -z "${APPLE_DEVELOPER_ID_P12:-}" ] || [ -z "${APPLE_DEVELOPER_ID_P12_PASSWORD:-}" ]; then
+            echo 'No Developer ID secrets; keeping ad-hoc signature from build-helper.sh.'
+            exit 0
+          fi
+          CERT_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN="$RUNNER_TEMP/jian-signing.keychain-db"
+          KEYCHAIN_PW="$(openssl rand -base64 32)"
+          echo "$APPLE_DEVELOPER_ID_P12" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security import "$CERT_PATH" -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" $(security list-keychain -d user | sed 's/"//g')
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PW" "$KEYCHAIN"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | awk -F'"' '/Developer ID Application/{print $2; exit}')"
+          if [ -z "$IDENTITY" ]; then
+            echo 'Developer ID Application identity not found in the imported keychain.' >&2
+            exit 1
+          fi
+          codesign --force --options runtime --timestamp \
+            --sign "$IDENTITY" \
+            --identifier com.jian.remote.computer-helper \
+            computer-helper
+          codesign --verify --verbose=2 computer-helper
+          # Notarizing a bare helper is incomplete without signing Jian Remote.app; optional when API secrets exist.
+          if [ -n "${APPLE_API_KEY_ID:-}" ] && [ -n "${APPLE_API_ISSUER_ID:-}" ] && [ -n "${APPLE_API_KEY_P8:-}" ]; then
+            API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+            printf '%s' "$APPLE_API_KEY_P8" > "$API_KEY_PATH"
+            ZIP="$RUNNER_TEMP/computer-helper.zip"
+            ditto -c -k --keepParent computer-helper "$ZIP"
+            xcrun notarytool submit "$ZIP" \
+              --key "$API_KEY_PATH" \
+              --key-id "$APPLE_API_KEY_ID" \
+              --issuer "$APPLE_API_ISSUER_ID" \
+              --wait
+          else
+            echo 'No App Store Connect API secrets; skipping notarytool for the helper.'
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: computer-helper
+          path: apps/remote-control/macos/computer-helper
+          if-no-files-found: error
+          retention-days: 1
+
   # Same version as the gateway image / GitHub release. Requires repository secret NPM_TOKEN
   # (npm Automation / stage-only token with write on the @jian-ai scope). The job runs
   # `npm stage publish`; a maintainer then promotes the staged version on npmjs.com (2FA).
   # Image + GitHub release still publish if this job fails — fix the secret and re-run the
   # job, or cut the next tag.
   npm:
-    needs: notes
-    if: ${{ !cancelled() && needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    needs: [notes, computer-helper]
+    if: ${{ !cancelled() && needs.notes.result == 'success' && needs.computer-helper.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -183,6 +258,17 @@ jobs:
             fs.writeFileSync(bin, stamped);
           " "$version"
           node -e "console.log('Staging @jian-ai/remote-control@' + require('./package.json').version)"
+      - uses: actions/download-artifact@v4
+        with:
+          name: computer-helper
+          path: apps/remote-control/macos
+      - name: Require prebuilt computer-helper in the package
+        working-directory: apps/remote-control
+        run: |
+          test -f macos/computer-helper
+          chmod 755 macos/computer-helper
+          # Prove the Mach-O ships in the tarball (npm uses .npmignore, not repo .gitignore).
+          npm pack --dry-run 2>&1 | grep -F 'macos/computer-helper'
       - name: Require NPM_TOKEN
         run: |
           if [ -z "${{ secrets.NPM_TOKEN }}" ]; then

@@ -75,22 +75,76 @@ export function capturePrimaryScreenshotBase64() {
   return { base64, widthPx, heightPx };
 }
 
-function helperPaths() {
-  const support = join(homedir(), 'Library', 'Application Support', 'Jian Remote');
+function helperPaths(home = homedir()) {
+  const support = join(home, 'Library', 'Application Support', 'Jian Remote');
   return {
     support,
     source: join(support, `${HELPER_NAME}.swift`),
     binary: join(support, HELPER_NAME),
+    stamp: join(support, `${HELPER_NAME}.sha256`),
+  };
+}
+
+/** Paths inside the installed npm package (or a checkout). */
+export function packageHelperPaths(packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..')) {
+  return {
+    swift: join(packageRoot, 'macos', `${HELPER_NAME}.swift`),
+    binary: join(packageRoot, 'macos', HELPER_NAME),
   };
 }
 
 function packageSwiftPath() {
-  return join(dirname(fileURLToPath(import.meta.url)), '..', 'macos', `${HELPER_NAME}.swift`);
+  return packageHelperPaths().swift;
 }
 
+function packageBinaryPath() {
+  return packageHelperPaths().binary;
+}
+
+function stampForBytes(bytes) {
+  return createHash('sha256').update(bytes).digest('hex').slice(0, 16);
+}
+
+/** Drop download quarantine so a helper from npm can exec under the LaunchAgent. */
+function clearQuarantine(path) {
+  spawnSync('xattr', ['-d', 'com.apple.quarantine', path], { encoding: 'utf8' });
+}
+
+/**
+ * Prefer a Publish-built universal binary from the npm package; otherwise compile with swiftc.
+ * Stamp is over the installed artifact bytes so updates replace a stale helper.
+ */
 async function ensureHelperBinary() {
   const paths = helperPaths();
   await mkdir(paths.support, { recursive: true, mode: 0o755 });
+
+  let previous = '';
+  try {
+    previous = (await readFile(paths.stamp, 'utf8')).trim();
+  } catch {
+    previous = '';
+  }
+
+  const packagedBinary = packageBinaryPath();
+  if (existsSync(packagedBinary)) {
+    const bytes = await readFile(packagedBinary);
+    const hash = `bin:${stampForBytes(bytes)}`;
+    if (previous !== hash || !existsSync(paths.binary)) {
+      await copyFile(packagedBinary, paths.binary);
+      await chmod(paths.binary, 0o755);
+      clearQuarantine(paths.binary);
+      await writeFile(paths.stamp, `${hash}\n`, { mode: 0o644 });
+    }
+    // Keep source nearby for debugging / swiftc fallback after a partial install.
+    try {
+      const swift = packageSwiftPath();
+      if (existsSync(swift)) await copyFile(swift, paths.source);
+    } catch {
+      // optional
+    }
+    return paths.binary;
+  }
+
   let sourceText;
   try {
     sourceText = await readFile(packageSwiftPath(), 'utf8');
@@ -99,18 +153,11 @@ async function ensureHelperBinary() {
       sourceText = await readFile(paths.source, 'utf8');
     } catch {
       throw new Error(
-        'Computer-use helper source is missing. Reinstall or update @jian-ai/remote-control.',
+        'Computer-use helper is missing from this install. Reinstall or update @jian-ai/remote-control.',
       );
     }
   }
-  const hash = createHash('sha256').update(sourceText).digest('hex').slice(0, 16);
-  const stamp = join(paths.support, `${HELPER_NAME}.sha256`);
-  let previous = '';
-  try {
-    previous = (await readFile(stamp, 'utf8')).trim();
-  } catch {
-    previous = '';
-  }
+  const hash = `src:${stampForBytes(Buffer.from(sourceText, 'utf8'))}`;
   const needsBuild = previous !== hash || !existsSync(paths.binary);
   await writeFile(paths.source, sourceText, { mode: 0o644 });
   if (needsBuild) {
@@ -122,27 +169,44 @@ async function ensureHelperBinary() {
     if (compiled.status !== 0) {
       throw new Error(
         (compiled.stderr || compiled.stdout || 'swiftc failed').trim() ||
-          'Could not build the Jian computer-use helper. Install Xcode Command Line Tools.',
+          'Could not build the Jian computer-use helper. Published packages ship a prebuilt helper; for source builds install Xcode Command Line Tools, or reinstall @jian-ai/remote-control.',
       );
     }
     await chmod(paths.binary, 0o755);
-    await writeFile(stamp, `${hash}\n`, { mode: 0o644 });
+    clearQuarantine(paths.binary);
+    await writeFile(paths.stamp, `${hash}\n`, { mode: 0o644 });
   }
   return paths.binary;
 }
 
-/** Copy Swift sources next to the installed worker when present in the npm package. */
+/** Copy Swift source and any prebuilt helper next to the installed worker. */
 export async function materializeComputerHelperSources(configDir) {
   if (process.platform !== 'darwin') return;
   try {
-    const from = packageSwiftPath();
-    if (!existsSync(from)) return;
+    const pkg = packageHelperPaths();
+    if (!existsSync(pkg.swift) && !existsSync(pkg.binary)) return;
     const support = join(homedir(), 'Library', 'Application Support', 'Jian Remote');
     await mkdir(support, { recursive: true, mode: 0o755 });
-    await copyFile(from, join(support, `${HELPER_NAME}.swift`));
     const localMacos = join(configDir, 'macos');
     await mkdir(localMacos, { recursive: true, mode: 0o755 });
-    await copyFile(from, join(localMacos, `${HELPER_NAME}.swift`));
+    if (existsSync(pkg.swift)) {
+      await copyFile(pkg.swift, join(support, `${HELPER_NAME}.swift`));
+      await copyFile(pkg.swift, join(localMacos, `${HELPER_NAME}.swift`));
+    }
+    if (existsSync(pkg.binary)) {
+      const destSupport = join(support, HELPER_NAME);
+      const destLocal = join(localMacos, HELPER_NAME);
+      await copyFile(pkg.binary, destSupport);
+      await copyFile(pkg.binary, destLocal);
+      await chmod(destSupport, 0o755);
+      await chmod(destLocal, 0o755);
+      clearQuarantine(destSupport);
+      clearQuarantine(destLocal);
+      const bytes = await readFile(pkg.binary);
+      await writeFile(join(support, `${HELPER_NAME}.sha256`), `bin:${stampForBytes(bytes)}\n`, {
+        mode: 0o644,
+      });
+    }
   } catch {
     // Best-effort on install; computer session will surface a clear error.
   }

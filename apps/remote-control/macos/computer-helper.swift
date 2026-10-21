@@ -5,8 +5,9 @@
   Protocol: newline-delimited JSON on stdin → newline-delimited JSON on stdout (flush each).
   Errors go to stderr in English only.
 
-  Build (on a Mac with Xcode CLT):
-    swiftc -O -framework AppKit -framework Carbon -o computer-helper computer-helper.swift
+  Published npm packages ship a prebuilt universal binary (Publish CI). From source on a Mac:
+    ./build-helper.sh
+    # or: swiftc -O -framework AppKit -framework Carbon -o computer-helper computer-helper.swift
 
   Run as a child of the Node worker; keep stdin/stdout pipes open for the session.
 */
