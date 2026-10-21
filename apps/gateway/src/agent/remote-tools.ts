@@ -192,7 +192,7 @@ export function remoteTools(
     }),
     remote_computer: tool({
       description:
-        'Control an authorized macOS Remote Control computer with Anthropic-style actions: screenshot the primary display, move/click/drag the pointer, type text, press keys, scroll, wait, or end_session (hides the Jian overlay). Coordinates are pixels in the last screenshot image (origin top-left). Screenshot first; use returned widthPx/heightPx. Call end_session when finished with the GUI.',
+        'Control an authorized Remote Control computer (macOS, Linux X11, or Windows) with Anthropic-style actions: screenshot the primary display, move/click/drag the pointer, type text, press keys, scroll, wait, or end_session (hides the Jian overlay). Coordinates are pixels in the last screenshot image (origin top-left). Screenshot first; use returned widthPx/heightPx. Call end_session when finished with the GUI.',
       inputSchema: z.object({
         machineId: z.uuid(),
         action: remoteComputerActionSchema,
