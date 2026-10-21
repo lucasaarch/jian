@@ -223,25 +223,35 @@ each action checks that authorization again. **Machine ACL is the only gate** fo
 and computer use — not the deprecated profile `allowShell` flag (workspace shell on the gateway
 is always available and confined to the profile workspace). Results include exit code, output,
 and timeout status. A machine must be online to accept work. Computer use additionally needs
-worker capability `computer-macos-v1` (macOS). The built-in `remote-control` skill describes
-when to use each tool.
+a worker capability `computer-macos-v1`, `computer-linux-v1`, or `computer-windows-v1`. The
+built-in `remote-control` skill describes when to use each tool.
 
-### Computer use (macOS)
+### Computer use (macOS, Linux, Windows)
 
 `remote_computer` drives the **primary display** with Anthropic-style actions (`screenshot`,
 clicks, move, type, key, scroll, drag, wait, `end_session`). Coordinates are pixels in the
-scaled JPEG the tool returns (`widthPx` × `heightPx`), matching the same compress ladder as
-before (longest side ≤ 1920, ~280 KB binary). The worker shows a **Jian overlay** pointer
-(cream/ink wing mark) while a session is open; after ~30s idle it stays visible but very
-translucent; `end_session` removes it. Grant **Screen Recording** and **Accessibility** to
-**Jian Remote** in System Settings.
+scaled JPEG the tool returns (`widthPx` × `heightPx`). Screenshots are compressed on the
+machine (longest side ≤ 1600, ~280 KB binary). The worker shows a **Jian overlay** pointer
+(geometric white arrow with a soft blue glow) while a session is open; after ~30s idle it
+stays visible but very translucent; `end_session` removes it.
 
-Published `@jian-ai/remote-control` releases ship a **prebuilt universal** `computer-helper`
-(arm64 + x86_64) built on macOS in the Publish workflow. `install` / `update` copy it under
-`~/Library/Application Support/Jian Remote/`; **Xcode is not required** on the Mac that runs
-the worker. From a source checkout, `macos/build-helper.sh` (or `swiftc` on first use) builds
-the same binary when Command Line Tools are present. Developer ID signing and notarization of
-the helper are optional Publish steps when repository secrets are configured (see below); full
+**Pointer UX:** the overlay is the visible agent cursor. Clicks briefly warp the system cursor
+to the target (required for HID injection) then **restore** the user’s previous position so
+the physical mouse is not left at the Jian point. Overlay motion is ease-out interpolated
+between positions (capped ~110 ms) so moves slide instead of teleporting.
+
+| OS | Capability | Screenshot | Input + overlay | Notes |
+| --- | --- | --- | --- | --- |
+| macOS | `computer-macos-v1` | `screencapture` + `sips` | Swift helper (`CGEvent` + AppKit panel) | Grant **Screen Recording** and **Accessibility** to **Jian Remote**. Published packages ship a prebuilt universal helper (no Xcode on the worker Mac). |
+| Linux | `computer-linux-v1` | `ffmpeg` x11grab | Python helper + `xdotool` (X11 overlay) | Needs `DISPLAY`, `xdotool`, `ffmpeg`, and `python3`. Pure Wayland without XWayland/`xdotool` is not advertised yet. |
+| Windows | `computer-windows-v1` | System.Drawing | PowerShell helper (`SendInput` + WinForms overlay) | Interactive desktop session (Task Scheduler logon task). |
+
+Published `@jian-ai/remote-control` releases ship a **prebuilt universal** macOS `computer-helper`
+(arm64 + x86_64) built on macOS in the Publish workflow, plus the Linux/Windows helper scripts.
+`install` / `update` materialize them under the local Jian Remote support directory. From a
+source checkout on a Mac, `macos/build-helper.sh` (or `swiftc` on first use) builds the macOS
+binary when Command Line Tools are present. Developer ID signing and notarization of the macOS
+helper are optional Publish steps when repository secrets are configured (see below); full
 Developer ID + notarization of **Jian Remote.app** remains a separate follow-up.
 
 #### Optional Apple signing secrets (Publish)

@@ -1,6 +1,6 @@
 /**
  * macOS computer-use: primary-display screenshots, coord mapping, Jian overlay helper.
- * English-only messages. Imported by jian-remote.mjs on darwin.
+ * English-only messages. Imported by computer.mjs on darwin.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -9,40 +9,28 @@ import { chmod, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { COMPUTER_CAPABILITIES, imagePixelToPoint, scaleFromGeometry } from './computer-shared.mjs';
 
-export const COMPUTER_CAPABILITY = 'computer-macos-v1';
+export { imagePixelToPoint, scaleFromGeometry } from './computer-shared.mjs';
+
+export const COMPUTER_CAPABILITY = COMPUTER_CAPABILITIES.darwin;
 const IDLE_MS = 30_000;
 const HELPER_NAME = 'computer-helper';
 
-/** Map screenshot image pixels → display points (primary). Half-pixel centers the click. */
-export function imagePixelToPoint(x, y, geometry) {
-  const { originX, originY, pointWidth, pointHeight, widthPx, heightPx } = geometry;
-  if (!(widthPx > 0 && heightPx > 0 && pointWidth > 0 && pointHeight > 0)) {
-    throw new Error('Invalid screenshot geometry for coordinate mapping');
-  }
-  return {
-    pointX: originX + (x + 0.5) * (pointWidth / widthPx),
-    pointY: originY + (y + 0.5) * (pointHeight / heightPx),
-  };
-}
-
-export function scaleFromGeometry(geometry) {
-  return {
-    imageToPointX: geometry.pointWidth / geometry.widthPx,
-    imageToPointY: geometry.pointHeight / geometry.heightPx,
-  };
-}
-
-/** Capture primary display and compress like the gateway’s former screenshotCommand. */
+/**
+ * Capture primary display and compress for the worker channel.
+ * Single-pass ladder starts at 1600/42 (skips a full-res 1920@50 encode that often
+ * exceeded the budget and forced a second sips pass — common waste on Retina).
+ */
 export function capturePrimaryScreenshotBase64() {
   const script = [
     'tmp=$(mktemp /tmp/jian-shot.XXXXXX.jpg);',
     'screencapture -x -t jpg -D 1 "$tmp" || { rm -f "$tmp"; exit 1; };',
-    'sips -Z 1920 -s format jpeg -s formatOptions 50 "$tmp" >/dev/null 2>&1 || true;',
+    'sips -Z 1600 -s format jpeg -s formatOptions 42 "$tmp" >/dev/null 2>&1 || true;',
     'size=$(wc -c < "$tmp" | tr -d " ");',
-    'if [ "$size" -gt 280000 ]; then sips -Z 1440 -s format jpeg -s formatOptions 40 "$tmp" >/dev/null 2>&1 || true; fi;',
+    'if [ "$size" -gt 280000 ]; then sips -Z 1440 -s format jpeg -s formatOptions 38 "$tmp" >/dev/null 2>&1 || true; fi;',
     'size=$(wc -c < "$tmp" | tr -d " ");',
-    'if [ "$size" -gt 280000 ]; then sips -Z 1280 -s format jpeg -s formatOptions 35 "$tmp" >/dev/null 2>&1 || true; fi;',
+    'if [ "$size" -gt 280000 ]; then sips -Z 1280 -s format jpeg -s formatOptions 34 "$tmp" >/dev/null 2>&1 || true; fi;',
     'w=$(sips -g pixelWidth "$tmp" 2>/dev/null | awk "/pixelWidth/{print \\$2}");',
     'h=$(sips -g pixelHeight "$tmp" 2>/dev/null | awk "/pixelHeight/{print \\$2}");',
     'echo "$w $h";',
@@ -137,7 +125,6 @@ async function ensureHelperBinary() {
       clearQuarantine(paths.binary);
       await writeFile(paths.stamp, `${hash}\n`, { mode: 0o644 });
     }
-    // Keep source nearby for debugging / swiftc fallback after a partial install.
     try {
       const swift = packageSwiftPath();
       if (existsSync(swift)) await copyFile(swift, paths.source);
@@ -227,8 +214,10 @@ export class MacComputerSession {
 
   async ensure() {
     if (this.child && !this.child.killed) {
-      await this.send({ cmd: 'ensureSession' });
-      this.active = true;
+      if (!this.active) {
+        await this.send({ cmd: 'ensureSession' });
+        this.active = true;
+      }
       this.bumpIdle();
       return;
     }
@@ -371,7 +360,7 @@ export class MacComputerSession {
     }
 
     if (action === 'wait') {
-      const ms = Math.round((computer.duration ?? 0.5) * 1000);
+      const ms = Math.round((computer.duration ?? 0.35) * 1000);
       await new Promise((r) => setTimeout(r, ms));
       if (this.active) this.bumpIdle();
       return {
@@ -410,22 +399,19 @@ export class MacComputerSession {
     await this.ensure();
 
     try {
-      if (
-        action === 'mouse_move' ||
-        action === 'left_click' ||
-        action === 'right_click' ||
-        action === 'double_click'
-      ) {
+      if (action === 'mouse_move') {
         if (!computer.coordinate) throw new Error('coordinate is required for this action.');
         const { pointX, pointY } = this.mapCoordinate(computer.coordinate);
         const moved = await this.send({ cmd: 'move', pointX, pointY });
         if (!moved.ok) throw new Error(moved.error || 'Move failed.');
-        if (action !== 'mouse_move') {
-          const button = action === 'right_click' ? 'right' : 'left';
-          const count = action === 'double_click' ? 2 : 1;
-          const clicked = await this.send({ cmd: 'click', button, count });
-          if (!clicked.ok) throw new Error(clicked.error || 'Click failed.');
-        }
+      } else if (action === 'left_click' || action === 'right_click' || action === 'double_click') {
+        if (!computer.coordinate) throw new Error('coordinate is required for this action.');
+        const { pointX, pointY } = this.mapCoordinate(computer.coordinate);
+        const button = action === 'right_click' ? 'right' : 'left';
+        const count = action === 'double_click' ? 2 : 1;
+        // One RPC: animate overlay, click, restore user cursor (helper-side).
+        const clicked = await this.send({ cmd: 'clickAt', pointX, pointY, button, count });
+        if (!clicked.ok) throw new Error(clicked.error || 'Click failed.');
       } else if (action === 'left_click_drag') {
         if (!computer.startCoordinate || !computer.coordinate) {
           throw new Error('startCoordinate and coordinate are required for drag.');
@@ -535,8 +521,6 @@ export async function probeComputerCapability() {
     await ensureHelperBinary();
     return true;
   } catch {
-    // Still advertise: screenshot-only path can work; input fails with TCC guidance.
-    // Prefer advertising when swiftc exists so gateway can send jobs after first grant.
     return (
       Boolean(spawnSync('which', ['swiftc'], { encoding: 'utf8' }).stdout?.trim()) ||
       existsSync(helperPaths().binary)

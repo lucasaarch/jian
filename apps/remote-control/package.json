@@ -13,6 +13,8 @@
   "files": [
     "bin",
     "macos",
+    "linux",
+    "windows",
     "README.md"
   ],
   "engines": {

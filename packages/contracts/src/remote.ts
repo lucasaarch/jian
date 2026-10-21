@@ -7,7 +7,7 @@ export const remoteMachineSchema = z.strictObject({
   online: z.boolean(),
   allowedProfileIds: z.array(z.uuid()),
   createdAt: z.iso.datetime(),
-  /** Worker advertised computer-use support (e.g. computer-macos-v1). */
+  /** Worker advertised capabilities (e.g. computer-macos-v1 / linux / windows). */
   capabilities: z.array(z.string()).default([]),
 });
 
@@ -31,7 +31,7 @@ export const remoteCommandSchema = z.strictObject({
 
 const coordinateSchema = z.tuple([z.number().int(), z.number().int()]);
 
-/** Anthropic-style computer actions for Remote Control (macOS v1). */
+/** Anthropic-style computer actions for Remote Control (desktop computer use). */
 export const remoteComputerActionSchema = z.enum([
   'screenshot',
   'left_click',

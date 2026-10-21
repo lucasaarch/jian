@@ -17,7 +17,16 @@ const tokenHash = (token: string) => createHash('sha256').update(token).digest('
 const present = (lastSeen: Date | null, now: number) =>
   !!lastSeen && now - lastSeen.getTime() < 60_000;
 
-const CAPABILITY_COMPUTER_MACOS = 'computer-macos-v1';
+/** Worker capability strings that unlock remote_computer (one per OS backend). */
+const COMPUTER_CAPABILITIES = new Set([
+  'computer-macos-v1',
+  'computer-linux-v1',
+  'computer-windows-v1',
+]);
+
+function machineSupportsComputer(machine: { capabilities: string[] | null }): boolean {
+  return (machine.capabilities ?? []).some((cap) => COMPUTER_CAPABILITIES.has(cap));
+}
 
 function parseCapabilities(header: string | undefined): string[] {
   if (!header?.trim()) return [];
@@ -169,16 +178,10 @@ export class Remote {
     if (!present(machine.lastSeenAt, this.clock())) {
       throw new GatewayError(503, 'Remote machine is offline');
     }
-    if (!machine.capabilities?.includes(CAPABILITY_COMPUTER_MACOS)) {
+    if (!machineSupportsComputer(machine)) {
       throw new GatewayError(
         503,
-        'This remote machine does not support computer use yet. Update Jian Remote on the Mac (computer-macos-v1).',
-      );
-    }
-    if (!machine.platform.toLowerCase().startsWith('darwin')) {
-      throw new GatewayError(
-        400,
-        'Computer use is available on macOS Remote Control machines only.',
+        'This remote machine does not support computer use yet. Update Jian Remote so the worker advertises computer-macos-v1, computer-linux-v1, or computer-windows-v1.',
       );
     }
     const { timeoutMs, ...computer } = data;
@@ -442,4 +445,9 @@ export class Remote {
   }
 }
 
-export const REMOTE_CAPABILITY_COMPUTER_MACOS = CAPABILITY_COMPUTER_MACOS;
+export const REMOTE_CAPABILITY_COMPUTER_MACOS = 'computer-macos-v1';
+export const REMOTE_COMPUTER_CAPABILITIES = [
+  'computer-macos-v1',
+  'computer-linux-v1',
+  'computer-windows-v1',
+] as const;
