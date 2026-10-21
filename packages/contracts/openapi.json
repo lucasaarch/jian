@@ -58,6 +58,16 @@
                         "items": {
                           "type": "string"
                         }
+                      },
+                      "uiState": {
+                        "default": "unknown",
+                        "type": "string",
+                        "enum": [
+                          "unlocked",
+                          "locked",
+                          "display_asleep",
+                          "unknown"
+                        ]
                       }
                     },
                     "required": [
@@ -67,7 +77,8 @@
                       "online",
                       "allowedProfileIds",
                       "createdAt",
-                      "capabilities"
+                      "capabilities",
+                      "uiState"
                     ],
                     "additionalProperties": false
                   }
@@ -330,6 +341,16 @@
                         "type": "string"
                       }
                     },
+                    "uiState": {
+                      "default": "unknown",
+                      "type": "string",
+                      "enum": [
+                        "unlocked",
+                        "locked",
+                        "display_asleep",
+                        "unknown"
+                      ]
+                    },
                     "token": {
                       "type": "string",
                       "minLength": 32
@@ -343,6 +364,7 @@
                     "allowedProfileIds",
                     "createdAt",
                     "capabilities",
+                    "uiState",
                     "token"
                   ],
                   "additionalProperties": false
@@ -611,6 +633,16 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "uiState": {
+                      "default": "unknown",
+                      "type": "string",
+                      "enum": [
+                        "unlocked",
+                        "locked",
+                        "display_asleep",
+                        "unknown"
+                      ]
                     }
                   },
                   "required": [
@@ -620,7 +652,8 @@
                     "online",
                     "allowedProfileIds",
                     "createdAt",
-                    "capabilities"
+                    "capabilities",
+                    "uiState"
                   ],
                   "additionalProperties": false
                 }
@@ -864,6 +897,16 @@
                         "type": "string"
                       }
                     },
+                    "uiState": {
+                      "default": "unknown",
+                      "type": "string",
+                      "enum": [
+                        "unlocked",
+                        "locked",
+                        "display_asleep",
+                        "unknown"
+                      ]
+                    },
                     "token": {
                       "type": "string",
                       "minLength": 32
@@ -877,6 +920,7 @@
                     "allowedProfileIds",
                     "createdAt",
                     "capabilities",
+                    "uiState",
                     "token"
                   ],
                   "additionalProperties": false

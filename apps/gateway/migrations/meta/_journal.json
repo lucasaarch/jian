@@ -407,6 +407,13 @@
       "when": 1792600000000,
       "tag": "0057_remote-computer-use",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1792700000000,
+      "tag": "0058_remote-ui-state",
+      "breakpoints": true
     }
   ]
 }

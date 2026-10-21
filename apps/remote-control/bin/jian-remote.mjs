@@ -136,6 +136,9 @@ export function buildMacosAppInfoPlist() {
 }
 
 export function buildLaunchAgentPlist({ label, executable, script, logPath }) {
+  // ProcessType=Interactive opts the worker out of App Nap. Without it, macOS can freeze the
+  // Node poll loop while the screen is locked or idle; lastSeenAt ages out and the gateway
+  // shows Offline even though the process is still "running".
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -148,6 +151,7 @@ export function buildLaunchAgentPlist({ label, executable, script, logPath }) {
 <string>${xmlEscape(script)}</string>
 <string>run</string>
 </array>
+<key>ProcessType</key><string>Interactive</string>
 <key>RunAtLoad</key><true/>
 <key>KeepAlive</key><true/>
 <key>StandardOutPath</key><string>${xmlEscape(logPath)}</string>
@@ -937,6 +941,7 @@ async function postResult(base, headers, result) {
 async function run() {
   const config = await loadConfig();
   const capabilities = [];
+  let probeMacUiState = () => 'unknown';
   try {
     const { probeComputerCapability, computerCapabilityName } = await import('./computer.mjs');
     const name = computerCapabilityName();
@@ -944,12 +949,27 @@ async function run() {
   } catch {
     // Computer use unavailable until helper is ready; shell tasks still work.
   }
-  const headers = {
+  if (process.platform === 'darwin') {
+    try {
+      const mac = await import('./computer-macos.mjs');
+      mac.startWorkerIdleAssertion(process.pid);
+      probeMacUiState = () => mac.probeMacUiState();
+      for (const signal of ['SIGINT', 'SIGTERM']) {
+        process.once(signal, () => {
+          mac.stopWorkerIdleAssertion();
+        });
+      }
+    } catch {
+      // Idle assertion / uiState probe optional; shell still works.
+    }
+  }
+  const pollHeaders = () => ({
     authorization: `Bearer ${config.token}`,
     'x-jian-platform': `${process.platform}-${process.arch}`,
     'x-jian-remote-version': PACKAGE_VERSION,
+    'x-jian-remote-ui-state': probeMacUiState(),
     ...(capabilities.length ? { 'x-jian-remote-capabilities': capabilities.join(',') } : {}),
-  };
+  });
   const base = `${config.gateway}/v1/remote/worker/${config.machineId}`;
   // Fail fast before the poll loop so an incompatible build does not look "online then stuck".
   const gatewayVersion = await assertCompatibleWithGateway(config.gateway);
@@ -974,6 +994,7 @@ async function run() {
   };
   while (true) {
     try {
+      const headers = pollHeaders();
       if (Date.now() >= nextUpdateCheck) {
         await ensureCompatible();
         await updateIfNeeded(base, headers);

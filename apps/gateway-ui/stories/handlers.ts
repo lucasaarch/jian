@@ -521,6 +521,8 @@ export const handlers = [
         online: true,
         allowedProfileIds: data.profiles[0] ? [data.profiles[0].id] : [],
         createdAt: new Date().toISOString(),
+        capabilities: [],
+        uiState: 'unlocked',
       },
       {
         id: 'a1b2c3d4-2222-4222-8222-222222222222',
@@ -529,6 +531,8 @@ export const handlers = [
         online: false,
         allowedProfileIds: [],
         createdAt: new Date().toISOString(),
+        capabilities: [],
+        uiState: 'unknown',
       },
     ]),
   ),
@@ -541,6 +545,8 @@ export const handlers = [
       online: false,
       allowedProfileIds: body.allowedProfileIds ?? [],
       createdAt: new Date().toISOString(),
+      capabilities: [],
+      uiState: 'unknown',
       token: 'story-remote-worker-token-abcdefghijklmnopqrstuvwxyz012345',
     });
   }),
@@ -553,6 +559,8 @@ export const handlers = [
       online: false,
       allowedProfileIds: body.allowedProfileIds,
       createdAt: new Date().toISOString(),
+      capabilities: [],
+      uiState: 'unknown',
     });
   }),
   http.post('*/v1/remote/machines/:machineId/rotate', ({ params }) =>
@@ -563,6 +571,8 @@ export const handlers = [
       online: true,
       allowedProfileIds: data.profiles[0] ? [data.profiles[0].id] : [],
       createdAt: new Date().toISOString(),
+      capabilities: [],
+      uiState: 'unlocked',
       token: 'story-rotated-worker-token-abcdefghijklmnopqrstuvwxyz012345',
     }),
   ),

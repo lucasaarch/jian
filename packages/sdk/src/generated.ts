@@ -1560,6 +1560,11 @@ export interface operations {
                         createdAt: string;
                         /** @default [] */
                         capabilities: string[];
+                        /**
+                         * @default unknown
+                         * @enum {string}
+                         */
+                        uiState: "unlocked" | "locked" | "display_asleep" | "unknown";
                     }[];
                 };
             };
@@ -1698,6 +1703,11 @@ export interface operations {
                         createdAt: string;
                         /** @default [] */
                         capabilities: string[];
+                        /**
+                         * @default unknown
+                         * @enum {string}
+                         */
+                        uiState: "unlocked" | "locked" | "display_asleep" | "unknown";
                         token: string;
                     };
                 };
@@ -1837,6 +1847,11 @@ export interface operations {
                         createdAt: string;
                         /** @default [] */
                         capabilities: string[];
+                        /**
+                         * @default unknown
+                         * @enum {string}
+                         */
+                        uiState: "unlocked" | "locked" | "display_asleep" | "unknown";
                     };
                 };
             };
@@ -1969,6 +1984,11 @@ export interface operations {
                         createdAt: string;
                         /** @default [] */
                         capabilities: string[];
+                        /**
+                         * @default unknown
+                         * @enum {string}
+                         */
+                        uiState: "unlocked" | "locked" | "display_asleep" | "unknown";
                         token: string;
                     };
                 };
