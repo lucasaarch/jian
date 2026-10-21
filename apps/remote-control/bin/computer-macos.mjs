@@ -20,8 +20,11 @@ const HELPER_NAME = 'computer-helper';
 const UI_STATE_CACHE_MS = 5_000;
 export const MAC_UI_STATES = Object.freeze(['unlocked', 'locked', 'display_asleep', 'unknown']);
 
-const LOCKED_COMPUTER_MESSAGE =
-  'Mac is locked — unlock the screen to use Computer Use. Shell and file tools may still work while the worker is online.';
+const LOCKED_SCREENSHOT_NOTE =
+  'Note: Mac session reports locked — image may be the lock screen (or black if the display stayed asleep). Desktop apps behind loginwindow are often not visible.';
+
+const LOCKED_ACTION_HINT =
+  ' Mac session reports locked; if this failed, unlock or keep the display awake (post-login lock ≠ FileVault loginwindow).';
 
 let cachedUiState = { at: 0, state: 'unknown' };
 let workerIdleCaffeinate = null;
@@ -386,39 +389,48 @@ export class MacComputerSession {
       };
     }
 
-    const uiBlocked = assertComputerUiAllowed();
-    if (uiBlocked) {
-      return {
-        exitCode: 1,
-        stdout: '',
-        stderr: uiBlocked,
-        timedOut: false,
-        computer: { ok: false, error: uiBlocked },
-      };
-    }
+    // Wake display when locked/asleep, then always attempt — never soft-block on uiState.
+    const uiPrep = prepareComputerUi();
 
     if (action === 'screenshot') {
-      await this.ensure();
-      const shot = capturePrimaryScreenshotBase64();
-      if (!this.geometry) throw new Error('Display geometry unavailable.');
-      this.shotGeometry = {
-        ...this.geometry,
-        widthPx: shot.widthPx,
-        heightPx: shot.heightPx,
-      };
-      this.bumpIdle();
-      return {
-        exitCode: 0,
-        stdout: shot.base64,
-        stderr: '',
-        timedOut: false,
-        computer: {
-          ok: true,
+      try {
+        await this.ensure();
+        const shot = capturePrimaryScreenshotBase64();
+        if (!this.geometry) throw new Error('Display geometry unavailable.');
+        this.shotGeometry = {
+          ...this.geometry,
           widthPx: shot.widthPx,
           heightPx: shot.heightPx,
-          scale: scaleFromGeometry(this.shotGeometry),
-        },
-      };
+        };
+        this.bumpIdle();
+        const stderr = uiPrep.sessionLocked ? LOCKED_SCREENSHOT_NOTE : '';
+        return {
+          exitCode: 0,
+          stdout: shot.base64,
+          stderr,
+          timedOut: false,
+          computer: {
+            ok: true,
+            widthPx: shot.widthPx,
+            heightPx: shot.heightPx,
+            scale: scaleFromGeometry(this.shotGeometry),
+          },
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const hint = uiPrep.sessionLocked ? LOCKED_ACTION_HINT : '';
+        const tcc = /accessib|not permitted|not authorized|Screen Recording/i.test(message)
+          ? ' Jian Remote needs Screen Recording (and Accessibility for input) in System Settings.'
+          : '';
+        const full = `${message}${tcc}${hint}`.trim();
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr: full,
+          timedOut: false,
+          computer: { ok: false, error: full },
+        };
+      }
     }
 
     await this.ensure();
@@ -479,12 +491,14 @@ export class MacComputerSession {
       const tcc = /accessib|not permitted|not authorized/i.test(message)
         ? ' Jian Remote needs Accessibility (and Screen Recording for screenshots) in System Settings.'
         : '';
+      const hint = uiPrep.sessionLocked ? LOCKED_ACTION_HINT : '';
+      const full = `${message}${tcc}${hint}`.trim();
       return {
         exitCode: 1,
         stdout: '',
-        stderr: `${message}${tcc}`,
+        stderr: full,
         timedOut: false,
-        computer: { ok: false, error: `${message}${tcc}`.trim() },
+        computer: { ok: false, error: full },
       };
     }
 
@@ -661,15 +675,14 @@ export function wakeMacDisplay(seconds = 3) {
 }
 
 /**
- * Before GUI actions: wake a sleeping display; refuse clearly when the session is locked.
- * Returns null when Computer Use may proceed, or an English error string.
+ * Wake the display when locked or asleep (lock often coincides with display sleep).
+ * Never soft-blocks: callers always attempt the OS API next.
  */
-export function assertComputerUiAllowed() {
+export function prepareComputerUi() {
   let state = probeMacUiState({ force: true });
-  if (state === 'display_asleep' || state === 'unknown') {
+  if (state === 'display_asleep' || state === 'locked' || state === 'unknown') {
     wakeMacDisplay(3);
     state = probeMacUiState({ force: true });
   }
-  if (state === 'locked') return LOCKED_COMPUTER_MESSAGE;
-  return null;
+  return { sessionLocked: state === 'locked', state };
 }

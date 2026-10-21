@@ -61,6 +61,6 @@ Mac) plus Linux/Windows helper scripts. From source on a Mac, run `macos/build-h
 let the worker compile with `swiftc` when Command Line Tools are installed.
 
 On macOS the LaunchAgent uses `ProcessType=Interactive` and an idle `caffeinate` so the worker
-keeps polling while the screen is locked (App Nap must not freeze timers). Computer Use still
-needs an unlocked session; a locked Mac stays **online** with `uiState: locked`. See
-[docs/remote.md](../../docs/remote.md).
+keeps polling while the screen is locked (App Nap must not freeze timers). A locked Mac stays
+**online** (`uiState: locked` is advisory): the worker wakes the display and attempts
+Computer Use; it does not soft-refuse. See [docs/remote.md](../../docs/remote.md).

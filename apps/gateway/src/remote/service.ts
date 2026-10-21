@@ -190,13 +190,8 @@ export class Remote {
     if (!present(machine.lastSeenAt, this.clock())) {
       throw new GatewayError(503, 'Remote machine is offline');
     }
-    if (parseUiState(machine.uiState) === 'locked') {
-      // Keep the machine online for shell; only Computer Use is blocked by the lock screen.
-      throw new GatewayError(
-        409,
-        'Mac is locked — unlock the screen to use Computer Use. Shell and file tools may still work.',
-      );
-    }
+    // Do not soft-block on uiState=locked: the worker wakes the display and attempts the
+    // action. Failures come back from the OS/API (or as a clear worker error).
     if (!machineSupportsComputer(machine)) {
       throw new GatewayError(
         503,

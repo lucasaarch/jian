@@ -6,7 +6,7 @@ Every release of Jian, newest first.
 
 ## 0.8.3 — 2026-10-21
 
-Fleet self-update to the gateway version, remote service CLI (version/stop/start/restart), single-instance update race fix, remote shell cwd ENOENT fix, and white plus blue overlay cursor sprite.
+Fleet self-update to the gateway version, remote service CLI, shell cwd ENOENT fix, overlay cursor sprite, and full remote while the Mac is locked (no soft-block on Computer Use).
 
 ### Remote Control
 
@@ -15,10 +15,11 @@ Fleet self-update to the gateway version, remote service CLI (version/stop/start
 * **Single instance:** `~/.config/jian-remote/worker.pid` lock; start/restart/update always stop the previous worker and wait for it to exit before launching one process. Stale pollers whose in-memory version lags the installed script exit so KeepAlive reloads disk (fixes 0.8.1↔0.8.2 flip-flop after a gateway upgrade). LaunchAgent sets `PATH`, `HOME`, `WorkingDirectory`, and `ThrottleInterval`.
 * **Remote shell ENOENT:** Node reports a missing **cwd** as `spawn /bin/sh ENOENT` even when `/bin/sh` exists (Computer Use kept working; `run_remote_command` did not). The worker now resolves cwd robustly, falls back to `$HOME` with an English note when the agent path is missing, keeps an absolute shell path, and rewrites spawn errors so they name the working directory. Covered by remote-control unit tests in `pnpm check`.
 * **Overlay cursor:** macOS helper draws an embedded bitmap sprite (white fill, thick `#2880F8` stroke, soft blue glow) instead of the sharp geometric / cream-ink path. Linux and Windows overlays use the same white + `#2880F8` colors for parity. Click ripple and save/restore cursor behavior are unchanged.
+* **Full remote while locked (macOS):** `uiState: locked` stays **advisory**. The gateway no longer soft-returns 409 for Computer Use when the screen is locked. The worker wakes the display (`caffeinate -u`) then **attempts** screenshot, click, type, key, scroll, and drag; clear errors only if the OS rejects the call. Shell and file tools keep working while the worker is online (same post-login Aqua session). FileVault / loginwindow before anyone signs in is still a different limit; lid-closed sleep is still true offline. See `docs/remote.md`.
 
 ### Upgrading
 
-No gateway migration. After releasing, promote `@jian-ai/remote-control@0.8.3` on npm (or rely on gateway `/jian-remote.mjs` auto-update), then on each machine either wait for fleet self-update or run:
+No new gateway migration in 0.8.3 (0.8.2 already added `remote_machines.ui_state`). After releasing, promote `@jian-ai/remote-control@0.8.3` on npm (or rely on gateway `/jian-remote.mjs` auto-update), then on each machine either wait for fleet self-update or run:
 
 ```sh
 npx @jian-ai/remote-control@0.8.3 update
@@ -26,7 +27,7 @@ npx @jian-ai/remote-control@0.8.3 update
 jian-remote restart
 ```
 
-Confirm with `jian-remote version` and a short `run_remote_command` (shell) plus a Computer Use move. If Online flips between two worker versions in the log, `jian-remote stop` then `jian-remote start` clears a stray poller.
+Confirm with `jian-remote version` and a short `run_remote_command` (shell) plus a Computer Use move. If Online flips between two worker versions in the log, `jian-remote stop` then `jian-remote start` clears a stray poller. On macOS, `update`/`restart` also refreshes the LaunchAgent so App Nap does not freeze polling while locked.
 
 Stable installations can use the `latest` image tag or pin `0.8.3`.
 
