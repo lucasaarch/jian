@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { chmod, copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const configDir = join(homedir(), '.config', 'jian-remote');
 const configPath = join(configDir, 'config.json');
@@ -210,6 +210,61 @@ async function loadConfig() {
   }
 }
 
+const MACHINE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function parseGatewayBase(gateway) {
+  let gatewayUrl;
+  try {
+    gatewayUrl = new URL(gateway);
+  } catch {
+    return undefined;
+  }
+  if (
+    gatewayUrl.protocol !== 'https:' ||
+    gatewayUrl.username ||
+    gatewayUrl.password ||
+    gatewayUrl.search ||
+    gatewayUrl.hash
+  ) {
+    return undefined;
+  }
+  return gatewayUrl.origin + gatewayUrl.pathname.replace(/\/$/, '');
+}
+
+async function readTokenOption() {
+  const inlineToken = option('--token');
+  if (inlineToken) return inlineToken;
+  if (args.includes('--token-stdin')) return await readStdin();
+  if (args.includes('--token-prompt')) return await readSecret('Worker token (input hidden): ');
+  return undefined;
+}
+
+/** Persist credentials with owner-only permissions under ~/.config/jian-remote. */
+async function writeConfigFile(config) {
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
+  if (process.platform === 'win32') {
+    const account = process.env.USERNAME;
+    if (!account) throw new Error('Could not identify the current Windows user');
+    runChecked(
+      'icacls.exe',
+      [configDir, '/inheritance:r', '/grant:r', `${account}:(OI)(CI)F`],
+      'Could not restrict permissions on the Jian Remote config directory',
+    );
+  } else {
+    await chmod(configDir, 0o700);
+  }
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  if (process.platform === 'win32') {
+    runChecked(
+      'icacls.exe',
+      [configPath, '/inheritance:r', '/grant:r', `${process.env.USERNAME}:F`],
+      'Could not restrict permissions on the Jian Remote config file',
+    );
+  } else {
+    await chmod(configPath, 0o600);
+  }
+}
+
 /** Public /health carries the gateway release so install/update can gate without a worker token. */
 export async function fetchGatewayVersion(gatewayBase, fetcher = fetch) {
   const response = await fetcher(`${gatewayBase.replace(/\/$/, '')}/health`, {
@@ -361,62 +416,20 @@ async function install() {
   const machineId = option('--machine');
   // Prefer an explicit --token for one-liner installs from the panel; stdin/prompt keep
   // the token out of shell history when someone installs by hand.
-  const inlineToken = option('--token');
-  const token = inlineToken
-    ? inlineToken
-    : args.includes('--token-stdin')
-      ? await readStdin()
-      : args.includes('--token-prompt')
-        ? await readSecret('Worker token (input hidden): ')
-        : undefined;
-  let gatewayUrl;
-  try {
-    gatewayUrl = new URL(gateway);
-  } catch {}
-  if (
-    gatewayUrl?.protocol !== 'https:' ||
-    gatewayUrl.username ||
-    gatewayUrl.password ||
-    gatewayUrl.search ||
-    gatewayUrl.hash ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      machineId ?? '',
-    ) ||
-    !token?.trim()
-  ) {
+  const token = await readTokenOption();
+  const gatewayBase = parseGatewayBase(gateway);
+  if (!gatewayBase || !MACHINE_ID.test(machineId ?? '') || !token?.trim()) {
     throw new Error(
       'Usage: jian-remote install --gateway https://... --machine UUID (--token VALUE | --token-prompt | --token-stdin)',
     );
   }
-  const gatewayBase = gatewayUrl.origin + gatewayUrl.pathname.replace(/\/$/, '');
   const gatewayVersion = await assertCompatibleWithGateway(gatewayBase);
   const config = {
     gateway: gatewayBase,
     machineId,
     token: token.trim(),
   };
-  await mkdir(configDir, { recursive: true, mode: 0o700 });
-  if (process.platform === 'win32') {
-    const account = process.env.USERNAME;
-    if (!account) throw new Error('Could not identify the current Windows user');
-    runChecked(
-      'icacls.exe',
-      [configDir, '/inheritance:r', '/grant:r', `${account}:(OI)(CI)F`],
-      'Could not restrict permissions on the Jian Remote config directory',
-    );
-  } else {
-    await chmod(configDir, 0o700);
-  }
-  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-  if (process.platform === 'win32') {
-    runChecked(
-      'icacls.exe',
-      [configPath, '/inheritance:r', '/grant:r', `${process.env.USERNAME}:F`],
-      'Could not restrict permissions on the Jian Remote config file',
-    );
-  } else {
-    await chmod(configPath, 0o600);
-  }
+  await writeConfigFile(config);
   const script = await materializeWorkerScript();
   await startOrRestartService(script);
   console.log(`Credentials are stored with owner-only permissions in ${configPath}.`);
@@ -429,8 +442,75 @@ async function install() {
     'Later upgrades: npx @jian-ai/remote-control@latest update  (reads this config; no token again).',
   );
   console.log(
+    'To change gateway URL or token without reinstalling: jian-remote configure --gateway … --token …',
+  );
+  console.log(
     'If the worker later looks stuck offline, restart the service (or run update) and check ~/.config/jian-remote/worker.log.',
   );
+}
+
+/**
+ * Rewrite stored credentials (gateway URL, worker token, and/or machine id) and restart the
+ * existing OS service — does not wipe the LaunchAgent / systemd unit / scheduled task.
+ */
+async function configure() {
+  const gatewayFlag = option('--gateway');
+  const machineFlag = option('--machine');
+  const tokenFlag =
+    option('--token') !== undefined ||
+    args.includes('--token-stdin') ||
+    args.includes('--token-prompt');
+  if (!gatewayFlag && !machineFlag && !tokenFlag) {
+    throw new Error(
+      'Usage: jian-remote configure [--gateway https://...] [--machine UUID] (--token VALUE | --token-prompt | --token-stdin)\nChange at least one of gateway, machine, or token. Reads ~/.config/jian-remote; restarts the service.',
+    );
+  }
+  const existing = await loadConfig();
+
+  const gatewayBase = gatewayFlag ? parseGatewayBase(gatewayFlag) : undefined;
+  if (gatewayFlag && !gatewayBase) {
+    throw new Error('Gateway must be an https:// URL with no credentials, query, or hash.');
+  }
+  const machineId = machineFlag ?? existing.machineId;
+  if (!MACHINE_ID.test(machineId ?? '')) {
+    throw new Error('Machine id must be a UUID.');
+  }
+  const token = tokenFlag ? await readTokenOption() : existing.token;
+  if (!token?.trim()) {
+    throw new Error('Worker token must not be empty.');
+  }
+
+  const config = {
+    gateway: gatewayBase ?? existing.gateway,
+    machineId,
+    token: token.trim(),
+  };
+  if (typeof config.gateway !== 'string' || !config.gateway.startsWith('https://')) {
+    throw new Error(`Invalid gateway in ${configPath}; re-run install from the panel.`);
+  }
+
+  const gatewayVersion = await assertCompatibleWithGateway(config.gateway);
+  await writeConfigFile(config);
+  // Prefer the already-installed script so configure does not depend on the npx cache.
+  let script = installedScript;
+  try {
+    await readFile(script);
+  } catch {
+    script = await materializeWorkerScript();
+  }
+  await startOrRestartService(script);
+
+  const changed = [
+    gatewayFlag ? 'gateway' : null,
+    machineFlag ? 'machine' : null,
+    tokenFlag ? 'token' : null,
+  ].filter(Boolean);
+  console.log(`Updated ${changed.join(', ')} in ${configPath}. Worker service restarted.`);
+  if (gatewayVersion) {
+    console.log(
+      `Compatible with gateway ${gatewayVersion} (major.minor ${parseRelease(gatewayVersion)?.major}.${parseRelease(gatewayVersion)?.minor}).`,
+    );
+  }
 }
 
 /**
@@ -707,17 +787,28 @@ async function run() {
   }
 }
 
-const invokedAsCli =
-  Boolean(process.argv[1]) && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1]);
+/**
+ * True when this file is the process entry. npm’s `.bin/jian-remote` is a symlink; comparing
+ * resolve() paths alone misses that and made `npx … install` exit 0 with no stdout/stderr.
+ */
+export function isCliEntry(argv1 = process.argv[1], metaUrl = import.meta.url) {
+  if (!argv1) return false;
+  try {
+    return metaUrl === pathToFileURL(realpathSync(argv1)).href;
+  } catch {
+    return resolve(fileURLToPath(metaUrl)) === resolve(argv1);
+  }
+}
 
-if (invokedAsCli) {
+if (isCliEntry()) {
   try {
     if (args[0] === 'install') await install();
+    else if (args[0] === 'configure') await configure();
     else if (args[0] === 'update') await update();
     else if (args[0] === 'run') await run();
     else
       console.log(
-        'Jian Remote worker (@jian-ai/remote-control)\n  install --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)\n  update [--version X.Y.Z|latest]\n  run\n\nInstall: npm install -g @jian-ai/remote-control\nOr:      npx @jian-ai/remote-control@latest install --gateway … --machine … --token …\nUpdate:  npx @jian-ai/remote-control@latest update\n         (reads ~/.config/jian-remote; no token/machine/gateway flags)',
+        'Jian Remote worker (@jian-ai/remote-control)\n  install --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)\n  configure [--gateway HTTPS_URL] [--machine UUID] (--token VALUE | --token-prompt | --token-stdin)\n  update [--version X.Y.Z|latest]\n  run\n\nInstall:    npm install -g @jian-ai/remote-control\nOr:         npx @jian-ai/remote-control@latest install --gateway … --machine … --token …\nConfigure:  jian-remote configure --token …   (or --gateway / --machine; restarts the service)\nUpdate:     npx @jian-ai/remote-control@latest update\n            (upgrades the worker binary; reads ~/.config/jian-remote)',
       );
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);

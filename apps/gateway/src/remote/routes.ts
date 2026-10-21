@@ -54,6 +54,11 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
     async (request) => deps.remote.setAccess(request.params.machineId, request.body),
   );
 
+  app.post<{ Params: { machineId: string } }>(
+    '/v1/remote/machines/:machineId/rotate',
+    async (request) => deps.remote.rotate(request.params.machineId),
+  );
+
   app.delete<{ Params: { machineId: string } }>('/v1/remote/machines/:machineId', async (request) =>
     deps.remote.remove(request.params.machineId),
   );

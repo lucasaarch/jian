@@ -31,7 +31,9 @@ curl -fsS -X PATCH https://gateway.example/v1/remote/machines/MACHINE_UUID/acces
 
 The panel’s Remote Control page shows npm/npx installers after you create a machine. Those
 commands install `@jian-ai/remote-control` and embed the one-time token — no clone of Jian is
-required. The token is shown only once; treat the install command as a secret.
+required. The token is shown only once; treat the install command as a secret. **Rotate
+credentials** on an existing machine issues a new token (invalidates the old one) and shows
+`configure` / `install` one-liners the same way.
 
 ## Install the worker
 
@@ -60,8 +62,8 @@ jian-remote install \
 
 ### Update (no token again)
 
-Credentials stay in `~/.config/jian-remote/config.json`. To refresh the worker to match the
-gateway (or `@latest`) and restart the service:
+Credentials stay in `~/.config/jian-remote/config.json`. To refresh the worker **binary** to match
+the gateway (or `@latest`) and restart the service:
 
 ```sh
 npx --yes @jian-ai/remote-control@latest update
@@ -72,6 +74,25 @@ jian-remote update --version 0.6.0
 ```
 
 `update` does not take `--gateway`, `--machine`, or `--token`.
+
+### Configure (change token or gateway URL)
+
+When the panel rotates credentials, or you move the gateway URL, rewrite the stored config and
+restart the service without wiping the LaunchAgent / systemd unit / Windows task:
+
+```sh
+# Token only (machine id and gateway stay as stored):
+jian-remote configure --token 'WORKER_TOKEN'
+# Or via npx:
+npx --yes @jian-ai/remote-control@latest configure --token 'WORKER_TOKEN'
+
+# Gateway URL and/or machine id as well:
+jian-remote configure --gateway 'https://gateway.example' --token 'WORKER_TOKEN'
+jian-remote configure --machine 'MACHINE_UUID' --token 'WORKER_TOKEN'
+```
+
+At least one of `--gateway`, `--machine`, or a `--token*` flag is required. Success prints what
+changed and that the service restarted; failure prints an English error and exits non-zero.
 
 ### Version compatibility
 
@@ -112,6 +133,45 @@ Yes — when that user signs in. The installer registers:
 
 Until the user logs in (or the user systemd session is lingering), the machine stays offline in
 the panel. The Remote Control page polls Online/Offline every few seconds while it is open.
+
+### Check status and logs (macOS)
+
+A successful `install` prints that the LaunchAgent started, that credentials are in
+`~/.config/jian-remote/config.json`, and how to upgrade later. A failure prints an English
+error on stderr and exits non-zero. If the command prints nothing at all, the CLI did not
+run — that was a bug in `@jian-ai/remote-control@0.7.0` when invoked through npm's symlink
+bin; use a newer package (or run the `.mjs` by absolute path).
+
+After install:
+
+```sh
+# Config and installed worker script (owner-only directory)
+ls -la ~/.config/jian-remote
+
+# LaunchAgent plist
+ls -la ~/Library/LaunchAgents/com.jian.remote.plist
+
+# Is the job loaded? Look for com.jian.remote (PID and last exit status).
+launchctl print "gui/$(id -u)/com.jian.remote"
+
+# Or a short list line:
+launchctl list | grep com.jian.remote
+
+# Worker stdout/stderr (created once launchd starts the job)
+tail -f ~/.config/jian-remote/worker.log
+```
+
+A healthy log starts with a line like `Connected to Jian Remote at https://… (worker …)`.
+`launchctl list` shows a PID (not `-`) when the process is up; a non-zero last-exit status
+with `KeepAlive` means it is crashing and restarting — read the log.
+
+Restart without re-entering the token:
+
+```sh
+npx --yes @jian-ai/remote-control@latest update
+# or bounce launchd:
+launchctl kickstart -k "gui/$(id -u)/com.jian.remote"
+```
 
 ### If the machine stays Offline
 

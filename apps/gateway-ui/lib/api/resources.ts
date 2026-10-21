@@ -24,6 +24,12 @@ export const resourceCalls = (client: Client) => ({
         body: { allowedProfileIds },
       }),
     ),
+  rotateRemoteMachineCredentials: (machineId: string) =>
+    result(
+      client.POST('/v1/remote/machines/{machineId}/rotate', {
+        params: { path: { machineId } },
+      }),
+    ),
   deleteRemoteMachine: (machineId: string) =>
     result(client.DELETE('/v1/remote/machines/{machineId}', { params: { path: { machineId } } })),
   conversationSubagents: (profileId: string, sessionId: string) =>

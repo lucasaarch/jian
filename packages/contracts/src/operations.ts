@@ -85,6 +85,7 @@ import {
   remoteMachineCreatedSchema,
   remoteMachineCreateSchema,
   remoteMachineDeleteSchema,
+  remoteMachineRotatedSchema,
   remoteMachineSchema,
   remoteResultSchema,
   remoteWorkerPollSchema,
@@ -161,6 +162,14 @@ export const operations: Operation[] = [
     params: z.strictObject({ machineId: z.uuid() }),
     body: remoteMachineAccessSchema,
     response: remoteMachineSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/remote/machines/:machineId/rotate',
+    operationId: 'rotateRemoteMachineCredentials',
+    access: 'admin',
+    params: z.strictObject({ machineId: z.uuid() }),
+    response: remoteMachineRotatedSchema,
   },
   {
     method: 'DELETE',
