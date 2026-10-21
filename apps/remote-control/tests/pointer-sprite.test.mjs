@@ -14,8 +14,12 @@ test('macos ships jian-pointer.png and embeds it as base64 in computer-helper.sw
   const swift = readFileSync(swiftPath, 'utf8');
   const png = readFileSync(pngPath);
   assert.ok(png.length > 1000, 'pointer PNG should be a real sprite');
-  assert.match(swift, /jianPointerPngBase64/);
-  assert.match(swift, /iVBORw0KGgo/); // PNG magic in base64
+  const encoded = swift.match(
+    /private let jianPointerPngBase64 = """\n([A-Za-z0-9+/=\n]+)\n"""/,
+  )?.[1];
+  assert.ok(encoded, 'Swift must embed the sprite');
+  const embedded = Buffer.from(encoded.replaceAll('\n', ''), 'base64');
+  assert.deepEqual(embedded, png, 'embedded sprite must match the shipped PNG');
   assert.match(swift, /pointerSize:\s*CGFloat\s*=\s*60/);
   assert.match(swift, /hotspot\s*=\s*CGPoint\(x:\s*12,\s*y:\s*12\)/);
   assert.doesNotMatch(swift, /arrowPath/);
