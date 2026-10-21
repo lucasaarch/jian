@@ -243,13 +243,57 @@ export function versionsCompatible(localVersion, gatewayVersion) {
     local: local.raw,
     gateway: gateway.raw,
     required: `${gateway.major}.${gateway.minor}`,
-    message: `This remote-control ${local.raw} is incompatible with gateway ${gateway.raw}. Jian requires the same major.minor (${gateway.major}.${gateway.minor}). Run: npx @jian-ai/remote-control@${gateway.raw} update`,
+    message: `This remote-control ${local.raw} is incompatible with gateway ${gateway.raw}. Jian requires the same major.minor (${gateway.major}.${gateway.minor}). Connected workers try to self-update to the gateway version automatically; if that fails, run: npx @jian-ai/remote-control@${gateway.raw} update`,
   };
 }
 
 export function compatibilityError(localVersion, gatewayVersion) {
   const result = versionsCompatible(localVersion, gatewayVersion);
   return result.ok ? null : result.message;
+}
+
+/**
+ * True when the worker should self-update so its PACKAGE_VERSION matches the gateway release.
+ * Covers patch bumps and major.minor skew (fleet upgrade to the gateway’s version). Dev /
+ * unversioned gateways never force a match.
+ */
+export function shouldMatchGatewayVersion(localVersion, gatewayVersion) {
+  if (isDevVersion(gatewayVersion)) return false;
+  const gateway = parseRelease(gatewayVersion);
+  if (!gateway) return false;
+  if (isDevVersion(localVersion)) return true;
+  const local = parseRelease(localVersion);
+  if (!local) return true;
+  return local.raw !== gateway.raw;
+}
+
+/** Soft ceiling so a failed fleet update does not KeepAlive-spin every few seconds. */
+export function nextUpdateBackoffMs(failureCount) {
+  const n = Math.max(0, Number(failureCount) || 0);
+  // 5s, 10s, … then cap at 30 minutes (2^9 * 5s = 2560s > 30m).
+  return Math.min(30 * 60_000, 5_000 * 2 ** Math.min(n, 9));
+}
+
+/**
+ * Reject garbage / HTML / truncated downloads before replacing ~/.config/jian-remote/jian-remote.mjs.
+ * Credentials and config.json are never touched by the updater.
+ */
+export function validateWorkerScriptBytes(bytes) {
+  if (!Buffer.isBuffer(bytes) && typeof bytes !== 'string') {
+    return { ok: false, message: 'Worker update was empty or unreadable.' };
+  }
+  const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  if (!buffer.length || buffer.length > 1_000_000) {
+    return { ok: false, message: 'Invalid worker update size.' };
+  }
+  const source = buffer.toString('utf8');
+  if (!source.includes('Jian Remote') || !/export const PACKAGE_VERSION = '[^']+'/.test(source)) {
+    return { ok: false, message: 'Worker update did not look like a Jian Remote script.' };
+  }
+  if (!source.includes('updateIfNeeded') || !source.includes('async function run(')) {
+    return { ok: false, message: 'Worker update was missing required entrypoints.' };
+  }
+  return { ok: true, version: readEmbeddedVersion(source) };
 }
 
 export function cappedAppend(current, chunk, cap = STDOUT_CAP) {
@@ -833,8 +877,84 @@ async function execute(task) {
   return executeShell(task);
 }
 
+const updateStatePath = join(configDir, 'update-state.json');
+
+async function readUpdateState() {
+  try {
+    const raw = JSON.parse(await readFile(updateStatePath, 'utf8'));
+    return {
+      failures: Number(raw?.failures) || 0,
+      lastError: typeof raw?.lastError === 'string' ? raw.lastError : undefined,
+      lastFailureAt: typeof raw?.lastFailureAt === 'string' ? raw.lastFailureAt : undefined,
+    };
+  } catch {
+    return { failures: 0 };
+  }
+}
+
+async function clearUpdateState() {
+  try {
+    rmSync(updateStatePath, { force: true });
+  } catch {
+    // Best-effort; a stale state file only delays the next retry.
+  }
+}
+
+async function recordUpdateFailure(error) {
+  const previous = await readUpdateState();
+  const failures = previous.failures + 1;
+  const lastError = error instanceof Error ? error.message : String(error);
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
+  await writeFile(
+    updateStatePath,
+    `${JSON.stringify(
+      {
+        failures,
+        lastError,
+        lastFailureAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    )}\n`,
+    { mode: 0o600 },
+  );
+  return { failures, lastError, backoffMs: nextUpdateBackoffMs(failures) };
+}
+
+/**
+ * Atomically replace the installed worker script and exit so LaunchAgent / systemd KeepAlive
+ * (or a detached Windows child) load the new code. Never touches config.json.
+ */
+async function applyWorkerScriptAndRestart(updated, { sourceLabel }) {
+  const checked = validateWorkerScriptBytes(updated);
+  if (!checked.ok) throw new Error(checked.message);
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
+  const temp = `${installedScript}.${process.pid}.tmp`;
+  await writeFile(temp, updated, { mode: 0o700 });
+  await rename(temp, installedScript);
+  if (process.platform !== 'win32') await chmod(installedScript, 0o700);
+  await clearUpdateState();
+  console.log(
+    `Worker updated to ${checked.version} from ${sourceLabel}; restarting the OS service to apply it.`,
+  );
+  if (process.platform === 'win32') {
+    // Task Scheduler has no KeepAlive; spawn the new script then exit this process.
+    const child = spawn(process.execPath, [installedScript, 'run'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    child.unref();
+  }
+  // macOS LaunchAgent KeepAlive / Linux systemd Restart=always reload this path.
+  process.exit(0);
+}
+
+/**
+ * Pull the gateway-served worker (same bytes as /jian-remote.mjs, auth’d). Prefer this over npm
+ * for fleets that can reach the gateway but not the registry.
+ */
 async function updateIfNeeded(base, headers) {
-  // Prefer the installed copy under ~/.config so updates land where the service points.
   const script = installedScript;
   let local;
   try {
@@ -851,21 +971,86 @@ async function updateIfNeeded(base, headers) {
   if (response.status === 304) return false;
   if (!response.ok) throw new Error(`worker update check failed: HTTP ${response.status}`);
   const updated = Buffer.from(await response.arrayBuffer());
-  if (!updated.length || updated.length > 1_000_000) throw new Error('Invalid worker update size');
-  await mkdir(configDir, { recursive: true, mode: 0o700 });
-  const temp = `${script}.${process.pid}.tmp`;
-  await writeFile(temp, updated, { mode: 0o700 });
-  await rename(temp, script);
-  console.log('Worker updated; restarting to apply it.');
-  if (process.platform === 'win32') {
-    const child = spawn(process.execPath, [script, 'run'], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    child.unref();
+  await applyWorkerScriptAndRestart(updated, { sourceLabel: 'the gateway' });
+  return true;
+}
+
+/** Fallback when the gateway script is missing or refused — pack the exact release from npm. */
+async function updateFromNpm(gatewayVersion) {
+  const target = parseRelease(gatewayVersion)?.raw;
+  if (!target) throw new Error('Cannot download a worker update without a gateway release version.');
+  console.log(`Downloading @jian-ai/remote-control@${target} from npm…`);
+  const scriptBytes = fetchNpmWorkerScript(target);
+  await applyWorkerScriptAndRestart(scriptBytes, { sourceLabel: `npm @${target}` });
+  return true;
+}
+
+/**
+ * On connect and every few minutes: match the gateway’s worker script. Same major.minor patch
+ * bumps use the authenticated /update ETag path; major.minor skew also self-updates to the
+ * gateway version (gateway script first, npm fallback) instead of refusing forever.
+ */
+async function reconcileWorkerWithGateway(config, base, headers) {
+  const gatewayVersion = await fetchGatewayVersion(config.gateway);
+  const compat = versionsCompatible(PACKAGE_VERSION, gatewayVersion);
+  const mustMatch = shouldMatchGatewayVersion(PACKAGE_VERSION, gatewayVersion);
+
+  let gatewayUpdateError;
+  try {
+    const changed = await updateIfNeeded(base, headers);
+    // 304 and still wrong version → gateway bytes match disk but this process is stale, or the
+    // gateway could not stamp a newer script. Fall through to npm when we must match.
+    if (!changed && mustMatch) {
+      gatewayUpdateError = new Error(
+        `Gateway worker script is unchanged but this process is ${PACKAGE_VERSION} (gateway ${gatewayVersion}).`,
+      );
+    }
+  } catch (error) {
+    gatewayUpdateError = error instanceof Error ? error : new Error(String(error));
   }
-  process.exit(0);
+
+  if (gatewayUpdateError && (mustMatch || !compat.ok)) {
+    console.error(
+      `Gateway self-update did not apply (${gatewayUpdateError.message}); trying npm for ${gatewayVersion}…`,
+    );
+    try {
+      await updateFromNpm(gatewayVersion);
+    } catch (npmError) {
+      const recorded = await recordUpdateFailure(npmError);
+      console.error(
+        `Automatic worker update failed (${recorded.lastError}). Will retry after ${(recorded.backoffMs / 1000).toFixed(0)}s. Credentials in ${configPath} were not changed.`,
+      );
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, recorded.backoffMs));
+      if (!compat.ok) {
+        console.error(
+          compatibilityError(PACKAGE_VERSION, gatewayVersion) ??
+            `This remote-control ${PACKAGE_VERSION} cannot connect to gateway ${gatewayVersion}.`,
+        );
+        process.exit(1);
+      }
+      // Compatible (same major.minor) but newer patch unavailable — keep running on the old build.
+      console.error('Continuing on the installed worker; will retry the update later.');
+      return gatewayVersion;
+    }
+  } else if (gatewayUpdateError) {
+    // Optional content refresh failed while still compatible — log and keep polling.
+    console.error(`Worker update check failed: ${gatewayUpdateError.message}`);
+  }
+
+  if (!compat.ok) {
+    // Update paths returned without exiting (should be rare); refuse with backoff.
+    const recorded = await recordUpdateFailure(
+      new Error(`Still incompatible with gateway ${gatewayVersion} after update attempts.`),
+    );
+    console.error(
+      compatibilityError(PACKAGE_VERSION, gatewayVersion) ??
+        `This remote-control ${PACKAGE_VERSION} cannot connect to gateway ${gatewayVersion}.`,
+    );
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, recorded.backoffMs));
+    process.exit(1);
+  }
+
+  return gatewayVersion;
 }
 
 async function postResult(base, headers, result) {
@@ -971,33 +1156,26 @@ async function run() {
     ...(capabilities.length ? { 'x-jian-remote-capabilities': capabilities.join(',') } : {}),
   });
   const base = `${config.gateway}/v1/remote/worker/${config.machineId}`;
-  // Fail fast before the poll loop so an incompatible build does not look "online then stuck".
-  const gatewayVersion = await assertCompatibleWithGateway(config.gateway);
+  // Match the gateway worker (including major.minor skew) before polling so fleets do not
+  // crash-loop on refuse without attempting a self-update first.
+  const gatewayVersion = await reconcileWorkerWithGateway(config, base, pollHeaders());
   console.log(
     `Connected to Jian Remote at ${config.gateway} (worker ${PACKAGE_VERSION}${gatewayVersion ? `, gateway ${gatewayVersion}` : ''}${capabilities.length ? `, capabilities ${capabilities.join(',')}` : ''})`,
   );
   let failures = 0;
-  let nextUpdateCheck = 0;
+  // First reconcile already ran; space the next check like the historical five-minute cadence.
+  let nextUpdateCheck = Date.now() + 5 * 60_000;
   const delay = async (attempt) => {
     const ceiling = Math.min(60_000, 1000 * 2 ** Math.min(attempt, 6));
     const wait = Math.random() * ceiling;
     console.error(`Retrying in ${(wait / 1000).toFixed(1)}s (attempt ${attempt})…`);
     await new Promise((resolveDelay) => setTimeout(resolveDelay, wait));
   };
-  const ensureCompatible = async () => {
-    const current = await fetchGatewayVersion(config.gateway);
-    const error = compatibilityError(PACKAGE_VERSION, current);
-    if (error) {
-      console.error(error);
-      process.exit(1);
-    }
-  };
   while (true) {
     try {
       const headers = pollHeaders();
       if (Date.now() >= nextUpdateCheck) {
-        await ensureCompatible();
-        await updateIfNeeded(base, headers);
+        await reconcileWorkerWithGateway(config, base, headers);
         nextUpdateCheck = Date.now() + 5 * 60_000;
       }
       const response = await fetch(`${base}/tasks/next`, {

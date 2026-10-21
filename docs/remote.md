@@ -94,13 +94,31 @@ jian-remote configure --machine 'MACHINE_UUID' --token 'WORKER_TOKEN'
 At least one of `--gateway`, `--machine`, or a `--token*` flag is required. Success prints what
 changed and that the service restarted; failure prints an English error and exits non-zero.
 
-### Version compatibility
+### Version compatibility and fleet auto-update
 
-The worker and gateway must share the same **major.minor** (patch and prerelease may differ).
-`install`, `update`, and `run` check `GET /health` for the gateway’s version and refuse to
-continue with a clear error when incompatible — for example a 0.5.x worker against a 0.6.x
-gateway. Local gateway builds with no `JIAN_VERSION` skip the gate. Fix a mismatch with
-`npx @jian-ai/remote-control@GATEWAY_VERSION update`.
+The worker and gateway should share the same **release** (`JIAN_VERSION` / package version).
+`install` and manual `update` still check `GET /health` and refuse a mismatched build with a
+clear error. Local gateway builds with no `JIAN_VERSION` skip the gate.
+
+**Connected workers self-update** so you do not SSH into each machine:
+
+1. On connect and about every five minutes, the worker compares its installed script to the
+   gateway’s authenticated `GET /v1/remote/worker/:id/update` (same bytes as public
+   `/jian-remote.mjs`, with `PACKAGE_VERSION` stamped to the gateway release).
+2. When the script changed (newer **or** older patch, and **major.minor skew** toward the
+   gateway), it writes `~/.config/jian-remote/jian-remote.mjs` atomically and exits so the OS
+   service reloads: LaunchAgent `KeepAlive` on macOS, `systemd --user` `Restart=always` on
+   Linux, or a detached respawn on Windows Task Scheduler.
+3. If the gateway update cannot apply but `/health` reports a release version, the worker
+   falls back to `npm pack @jian-ai/remote-control@GATEWAY_VERSION`, then restarts the same way.
+4. Failed updates **do not** wipe `config.json` or the worker token. Failures are logged,
+   recorded in `~/.config/jian-remote/update-state.json`, and retried with exponential backoff
+   (up to 30 minutes) so KeepAlive does not crash-loop.
+
+Until an auto-update succeeds across a major.minor skew, the worker will not stay online.
+If both the gateway script and npm are unreachable, run
+`npx @jian-ai/remote-control@GATEWAY_VERSION update` once on that machine (or fix network to
+the gateway / registry).
 
 The installer stores the credential with owner-only permissions under `~/.config/jian-remote`,
 copies the worker script there (so npx and global installs share one service path), and
@@ -132,8 +150,9 @@ embedded runtime is roughly the size of Node and is refreshed on `install` / `up
 
 The one-liner puts the token in shell history. Clear history afterwards on a shared machine, or
 install by hand with `--token-prompt` / `--token-stdin` instead. The worker source also lives at
-`apps/remote-control/bin/jian-remote.mjs` in the Jian source tree. The gateway still serves
-`/jian-remote.mjs` for automatic worker self-updates of already-installed machines.
+`apps/remote-control/bin/jian-remote.mjs` in the Jian source tree. The gateway serves
+`/jian-remote.mjs` (public) and the authenticated worker `/update` route for those automatic
+self-updates.
 
 The worker executes Windows commands with PowerShell. The Windows credential directory and file
 ACLs are restricted to the current account. To uninstall, delete the `Jian Remote` task in Task
@@ -211,10 +230,11 @@ launchctl kickstart -k "gui/$(id -u)/com.jian.remote"
    install is only needed if the config was deleted. On macOS, `update` also refreshes the
    LaunchAgent (`ProcessType=Interactive`) so App Nap does not freeze the poller when the
    screen is locked.
-3. Read `~/.config/jian-remote/worker.log`. An incompatible-version error means the worker’s
-   major.minor does not match the gateway — run `update` against the gateway’s version.
-   Repeated `HTTP 502`/`503` means the gateway is up and down — the worker backs off and
-   reconnects. Oversized results are truncated so the worker does not stick offline on HTTP 413.
+3. Read `~/.config/jian-remote/worker.log`. An incompatible-version error after auto-update
+   backoff means the worker could not download the gateway’s script (or npm package) —
+   fix reachability or run `update` against the gateway’s version once. Repeated
+   `HTTP 502`/`503` means the gateway is up and down — the worker backs off and reconnects.
+   Oversized results are truncated so the worker does not stick offline on HTTP 413.
 4. If the panel shows **Online** plus **Locked**, the worker is fine — unlock the Mac for
    Computer Use; shell may still run.
 
