@@ -986,8 +986,10 @@ it('reports a safe context-budget error when required prompt content cannot fit'
 });
 
 it('truncates older turns when compaction cannot free the context budget', async () => {
+  // Workspace shell skills (always on) enlarge the system prompt and tool set; keep enough
+  // headroom that history — not tools/system alone — is what forces truncation.
   const { services, profile, session, run } = await fixture({
-    inputTokens: 16000,
+    inputTokens: 24000,
     outputTokens: 1024,
     maxSteps: 4,
   });
@@ -1118,9 +1120,12 @@ it('preserves bounded, sanitized local tool error details', async () => {
     path: ['cron'],
     issues: [{ path: ['cron'], message: 'Five fields required' }],
   });
+  // Product copy (e.g. ponytail skill) may say "authorization"; assert secret values stay out.
   expect(`${prompt}${durable}`).not.toMatch(
-    /synthetic-cookie|second-cookie|synthetic-header|synthetic-stack|authorization|headers/,
+    /synthetic-cookie|second-cookie|synthetic-header|synthetic-stack|Bearer synthetic/,
   );
+  expect(detail).not.toHaveProperty('headers');
+  expect(detail).not.toHaveProperty('stack');
   expect((await services.runs.run(profile.id, run.id)).status).toBe('completed');
 });
 
