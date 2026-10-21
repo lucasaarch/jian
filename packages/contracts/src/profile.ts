@@ -312,11 +312,17 @@ export const sessionModelSchema = z.strictObject({
 });
 
 /**
+ * Short durable goal for a conversation. Kept small on purpose: auto-continue and
+ * system injection re-send this text, so shell dumps and stack traces must not land here.
+ */
+export const MAX_OBJECTIVE_TEXT = 280;
+
+/**
  * What this conversation is working toward until it is done, blocked on the owner, or cancelled.
  * Survives across turns; the agent loop keeps going while status is `open`.
  */
 export const sessionObjectiveSchema = z.strictObject({
-  text: z.string().trim().min(1).max(2000),
+  text: z.string().trim().min(1).max(MAX_OBJECTIVE_TEXT),
   status: z.enum(['open', 'blocked', 'done', 'cancelled']),
   updatedAt: z.iso.datetime(),
   /** Auto-follow-up runs since the last human or explicit tool status change. */
@@ -328,7 +334,7 @@ export const sessionObjectiveSchema = z.strictObject({
 /** Owner or panel write: set a new open objective, or mark the current one done/cancelled. */
 export const sessionObjectiveInputSchema = z
   .strictObject({
-    text: z.string().trim().min(1).max(2000).optional(),
+    text: z.string().trim().min(1).max(MAX_OBJECTIVE_TEXT).optional(),
     status: z.enum(['open', 'blocked', 'done', 'cancelled']).optional(),
     note: z.string().trim().min(1).max(500).optional(),
   })

@@ -1,8 +1,13 @@
+import { MAX_OBJECTIVE_TEXT } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import {
+  looksLikeObjectiveDump,
   MAX_OBJECTIVE_CONTINUATIONS,
+  MAX_OBJECTIVE_CONTINUE_SUMMARY,
+  objectiveContinuePrompt,
   parseObjectiveCommand,
+  sanitizeObjectiveText,
   shouldSeedObjective,
 } from '../src/sessions/objective.js';
 import { mockModel } from './helpers/model.js';
@@ -26,6 +31,17 @@ const answer = (text: string) => ({
   warnings: [],
 });
 
+const TERMINAL_DUMP = [
+  'Last login: Tue Oct 20 20:34:42 on ttys001',
+  'lucas@host ~ % curl -fsSL https://example.com/update | bash',
+  'node:internal/modules/esm/get_format:218',
+  '  throw new ERR_UNKNOWN_FILE_EXTENSION(ext, filepath)',
+  '  ^',
+  "TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension '.ts'",
+  '    at Object.getFileProtocolModuleFormat [as getFormat] (node:internal/modules/esm/get_format:218:9)',
+  '    at defaultGetFormat (node:internal/modules/esm/get_format:244:36)',
+].join('\n');
+
 describe('objective commands', () => {
   it('parses set, done and cancel forms', () => {
     expect(parseObjectiveCommand('/objective Clone the Jian repository and open a PR')).toEqual({
@@ -47,6 +63,41 @@ describe('objective commands', () => {
         'Clone github.com/lucasaarch/jian over SSH and set up the local development stack',
       ),
     ).toBe(true);
+  });
+});
+
+describe('objective text sanitization', () => {
+  it(`caps durable goals at ${MAX_OBJECTIVE_TEXT} characters`, () => {
+    const long = `Ship the approved feature ${'x'.repeat(MAX_OBJECTIVE_TEXT)}`;
+    const cleaned = sanitizeObjectiveText(long);
+    expect(cleaned.length).toBeLessThanOrEqual(MAX_OBJECTIVE_TEXT);
+    expect(cleaned.startsWith('Ship the approved feature')).toBe(true);
+  });
+
+  it('rejects terminal dumps instead of storing them as the goal', () => {
+    expect(looksLikeObjectiveDump(TERMINAL_DUMP)).toBe(true);
+    const cleaned = sanitizeObjectiveText(TERMINAL_DUMP);
+    expect(cleaned).toBe('Continue prior open work');
+    expect(cleaned).not.toContain('Last login:');
+    expect(cleaned).not.toContain('ERR_UNKNOWN_FILE_EXTENSION');
+    expect(cleaned.length).toBeLessThanOrEqual(MAX_OBJECTIVE_TEXT);
+  });
+
+  it('keeps a short goal line when a dump also carries one', () => {
+    const mixed = `Fix the remote worker install on Lucas’s laptop\n${TERMINAL_DUMP}`;
+    expect(sanitizeObjectiveText(mixed)).toBe('Fix the remote worker install on Lucas’s laptop');
+  });
+
+  it('shapes continue prompts around a short Goal summary', () => {
+    const prompt = objectiveContinuePrompt(TERMINAL_DUMP);
+    expect(prompt).toContain('Continue the open session objective');
+    expect(prompt).toContain('Goal: Continue prior open work');
+    expect(prompt).not.toContain('Objective:');
+    expect(prompt).not.toContain('Last login:');
+    expect(prompt).not.toContain('ERR_UNKNOWN_FILE_EXTENSION');
+    const goal = prompt.match(/Goal: (.+?) Take the next/)?.[1] ?? '';
+    expect(goal.length).toBeGreaterThan(0);
+    expect(goal.length).toBeLessThanOrEqual(MAX_OBJECTIVE_CONTINUE_SUMMARY);
   });
 });
 
@@ -157,6 +208,8 @@ it('keeps queuing follow-up runs until the objective is completed', async () => 
   );
   expect(followUps).toHaveLength(1);
   expect(followUps[0]?.input).toContain('Continue the open session objective');
+  expect(followUps[0]?.input).toContain('Goal: Ship the approved voice-call feature');
+  expect(followUps[0]?.input).not.toContain('Objective:');
 
   let secondCalls = 0;
   const finishing = mockModel({
@@ -192,6 +245,57 @@ it('keeps queuing follow-up runs until the objective is completed', async () => 
   expect(
     (await services.runs.activities(profile.id)).filter((run) => run.status === 'queued'),
   ).toEqual([]);
+});
+
+it('auto-continue does not reinject a stored terminal dump as the wake text', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  // Simulate a pre-cap row that still holds a dump in jsonb (bypasses write sanitization).
+  await services.sessions.writeObjective(profile.id, session.id, {
+    text: TERMINAL_DUMP,
+    status: 'open',
+    updatedAt: new Date().toISOString(),
+    continuations: 0,
+  });
+
+  const first = await services.runs.submit(profile.id, session.id, {
+    text: 'Keep going',
+    requestKey: 'dump-continue',
+  });
+  const model = mockModel({
+    doGenerate: async () => answer('Another slice.'),
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, first.id);
+
+  const followUps = (await services.runs.activities(profile.id)).filter(
+    (run) => run.id !== first.id && run.status === 'queued',
+  );
+  expect(followUps).toHaveLength(1);
+  const wake = followUps[0]?.input ?? '';
+  expect(wake).toContain('Continue the open session objective');
+  expect(wake).toContain('Goal:');
+  expect(wake).not.toContain('Last login:');
+  expect(wake).not.toContain('ERR_UNKNOWN_FILE_EXTENSION');
+  expect(wake).not.toContain('node:internal');
+  expect(wake.length).toBeLessThan(600);
+
+  const stored = await services.sessions.session(profile.id, session.id);
+  expect(stored.objective?.text).not.toContain('Last login:');
+  expect(stored.objective?.text.length).toBeLessThanOrEqual(MAX_OBJECTIVE_TEXT);
+});
+
+it('caps oversized objective writes to a short durable goal', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const long = `Implement the full voice stack end to end ${'detail '.repeat(80)}`;
+  const updated = await services.sessions.setObjective(profile.id, session.id, {
+    text: long,
+    status: 'open',
+  });
+  expect(updated.objective?.text.length).toBeLessThanOrEqual(MAX_OBJECTIVE_TEXT);
+  expect(updated.objective?.text.startsWith('Implement the full voice stack')).toBe(true);
 });
 
 it('blocks on the owner and reopens when they reply', async () => {
@@ -309,4 +413,24 @@ it('injects the open objective into the prompt', async () => {
   const context = await services.contexts.context(run);
   expect(context.system).toContain('Finish the WhatsApp loop fix');
   expect(context.system).toContain('complete_session_objective');
+});
+
+it('prompt injection sanitizes a dump-shaped objective', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  await services.sessions.writeObjective(profile.id, session.id, {
+    text: TERMINAL_DUMP,
+    status: 'open',
+    updatedAt: new Date().toISOString(),
+    continuations: 0,
+  });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Go',
+    requestKey: 'ctx-dump',
+  });
+  const context = await services.contexts.context(run);
+  expect(context.system).not.toContain('Last login:');
+  expect(context.system).not.toContain('ERR_UNKNOWN_FILE_EXTENSION');
+  expect(context.system).toContain('Continue prior open work');
 });

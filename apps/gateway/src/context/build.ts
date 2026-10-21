@@ -6,6 +6,7 @@ import {
   type SessionObjective,
 } from '@jian/contracts';
 import { gatewayTimeZone } from '../core/time-zone.js';
+import { sanitizeObjectiveText } from '../sessions/objective.js';
 import { availableSkills } from '../skills/builtin/index.js';
 import { tokenCounter } from './budget.js';
 
@@ -223,6 +224,11 @@ export function buildContext(
       ]
     : [];
 
+  // Prompt injection uses a sanitized goal — never a stored shell dump or stack.
+  const objectiveForPrompt = sources.objective
+    ? { ...sources.objective, text: sanitizeObjectiveText(sources.objective.text) }
+    : undefined;
+
   const system = [
     run.profile.instructions,
     ...(!worker &&
@@ -238,11 +244,11 @@ export function buildContext(
           `Current activities: ${JSON.stringify(activities)}`,
         ]
       : []),
-    ...(!worker && sources.objective
+    ...(!worker && objectiveForPrompt
       ? [
-          sources.objective.status === 'open'
-            ? `Session objective (open — keep working with tools until complete_session_objective, or block_session_objective if you need the owner): ${JSON.stringify(sources.objective)}`
-            : `Session objective: ${JSON.stringify(sources.objective)}`,
+          objectiveForPrompt.status === 'open'
+            ? `Session objective (open — keep working with tools until complete_session_objective, or block_session_objective if you need the owner): ${JSON.stringify(objectiveForPrompt)}`
+            : `Session objective: ${JSON.stringify(objectiveForPrompt)}`,
         ]
       : []),
     // Without this an agent reached on Telegram does not know its WhatsApp exists, and says it

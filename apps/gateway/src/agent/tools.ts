@@ -2,6 +2,7 @@ import {
   agentCallSchema,
   conversationSubagentInputSchema,
   decisionUseSchema,
+  MAX_OBJECTIVE_TEXT,
   memoryKeySchema,
   memorySchema,
   type Run,
@@ -147,9 +148,9 @@ export function profileTools(
 
     set_session_objective: tool({
       description:
-        'Set or replace the durable objective for this conversation. Use when the owner asks for multi-step work and no open objective fits, or when the goal clearly changed. The gateway keeps running turns while the objective stays open.',
+        'Set or replace the durable objective for this conversation. Pass a short durable goal (what to achieve) — never shell output, logs, stack traces, or tool dumps. The gateway re-injects this text on every auto-continue. Use when the owner asks for multi-step work and no open objective fits, or when the goal clearly changed.',
       inputSchema: z.object({
-        text: z.string().trim().min(1).max(2000),
+        text: z.string().trim().min(1).max(MAX_OBJECTIVE_TEXT),
       }),
       execute: async ({ text }) => {
         if (!services.sessions.setObjective) {

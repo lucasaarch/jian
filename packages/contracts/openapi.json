@@ -25255,7 +25255,7 @@
                           "text": {
                             "type": "string",
                             "minLength": 1,
-                            "maxLength": 2000
+                            "maxLength": 280
                           },
                           "status": {
                             "type": "string",
@@ -25652,7 +25652,7 @@
                         "text": {
                           "type": "string",
                           "minLength": 1,
-                          "maxLength": 2000
+                          "maxLength": 280
                         },
                         "status": {
                           "type": "string",
@@ -26031,7 +26031,7 @@
                         "text": {
                           "type": "string",
                           "minLength": 1,
-                          "maxLength": 2000
+                          "maxLength": 280
                         },
                         "status": {
                           "type": "string",
@@ -26445,7 +26445,7 @@
                         "text": {
                           "type": "string",
                           "minLength": 1,
-                          "maxLength": 2000
+                          "maxLength": 280
                         },
                         "status": {
                           "type": "string",
@@ -26714,7 +26714,7 @@
                   "text": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 2000
+                    "maxLength": 280
                   },
                   "status": {
                     "type": "string",
@@ -26835,7 +26835,7 @@
                         "text": {
                           "type": "string",
                           "minLength": 1,
-                          "maxLength": 2000
+                          "maxLength": 280
                         },
                         "status": {
                           "type": "string",

@@ -14,7 +14,9 @@ and wait for the owner to say continue.
 ## Session objective
 
 When the owner asks for multi-step work, set or update it with \`set_session_objective\`
-if none fits. Keep calling tools until the objective is done. Progress lines are
+if none fits. The text must be a short durable goal (what to achieve) — never paste
+command output, terminal logs, stack traces, or tool dumps; auto-continue re-sends this
+text each slice. Keep calling tools until the objective is done. Progress lines are
 commentary, not a reason to end. Call \`complete_session_objective\` only when the work
 is fully satisfied. When you need a concrete answer from the owner to continue, call
 \`ask_user\` — the run pauses as waiting and resumes when they reply; do not end the turn
