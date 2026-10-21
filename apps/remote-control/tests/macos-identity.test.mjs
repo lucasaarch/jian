@@ -13,6 +13,7 @@ test('macosAppBundlePaths put Jian Remote.app under Application Support', () => 
     '/Users/lucas/Library/Application Support/Jian Remote/Jian Remote.app',
   );
   assert.equal(paths.executable, `${paths.appRoot}/Contents/MacOS/Jian Remote`);
+  assert.equal(paths.libDir, `${paths.appRoot}/Contents/lib`);
   assert.equal(paths.infoPlist, `${paths.appRoot}/Contents/Info.plist`);
   assert.equal(paths.bundleId, 'com.jian.remote');
 });

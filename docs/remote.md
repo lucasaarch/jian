@@ -152,9 +152,14 @@ thin app bundle:
 `~/Library/Application Support/Jian Remote/Jian Remote.app`
 
 whose `Contents/MacOS/Jian Remote` is a copy of the Node runtime used at install time
-(ad-hoc signed with bundle id `com.jian.remote` when `codesign` is available). The plist
-`ProgramArguments` point at that executable plus `~/.config/jian-remote/jian-remote.mjs run`,
-and set `AssociatedBundleIdentifiers` to `com.jian.remote`.
+(ad-hoc signed with bundle id `com.jian.remote` when `codesign` is available). Homebrew,
+nvm, fnm, and the official Node pkg often ship `libnode.*.dylib` (and companions) loaded via
+`@rpath`; those shared libraries are copied into `Contents/lib` so dyld resolves
+`@executable_path/../lib` inside the bundle. Without them, launchd fails immediately with
+`Library not loaded: @rpath/libnode.*.dylib`. The plist `ProgramArguments` point at that
+executable plus `~/.config/jian-remote/jian-remote.mjs run`, and set
+`AssociatedBundleIdentifiers` to `com.jian.remote`. Quarantine is cleared on the refreshed
+bundle.
 
 System Settings → General → Login Items / Background Items should show **Jian Remote**, not
 “Node.js Foundation”. Accessibility and related TCC grants attach to this app path instead of
@@ -164,8 +169,8 @@ the shared system Node binary.
 Developer account is required for the npm distribute path. Gatekeeper is usually quiet for
 LaunchAgent-started jobs; some TCC prompts may still note an unnotarized app. A later release
 can Developer ID–sign and notarize the same layout without changing the install UX. The
-embedded runtime is roughly the size of Node and is refreshed on `install` / `update` /
-`configure` when the service restarts.
+embedded runtime is roughly the size of Node plus its shared libs, and is refreshed on
+`install` / `update` / `configure` when the service restarts.
 
 The one-liner puts the token in shell history. Clear history afterwards on a shared machine, or
 install by hand with `--token-prompt` / `--token-stdin` instead. The worker source also lives at
@@ -224,6 +229,8 @@ ls -la ~/.config/jian-remote
 ls -la ~/Library/LaunchAgents/com.jian.remote.plist
 plutil -p ~/Library/LaunchAgents/com.jian.remote.plist | head
 ls -la ~/Library/Application\ Support/Jian\ Remote/Jian\ Remote.app/Contents/MacOS/
+# Shared Node libs (libnode.*.dylib) — required when install-time Node uses @rpath
+ls -la ~/Library/Application\ Support/Jian\ Remote/Jian\ Remote.app/Contents/lib/ 2>/dev/null || true
 
 # Is the job loaded? Look for com.jian.remote (PID and last exit status).
 launchctl print "gui/$(id -u)/com.jian.remote"
@@ -237,7 +244,11 @@ tail -f ~/.config/jian-remote/worker.log
 
 A healthy log starts with a line like `Connected to Jian Remote at https://… (worker …)`.
 `launchctl list` shows a PID (not `-`) when the process is up; a non-zero last-exit status
-with `KeepAlive` means it is crashing and restarting — read the log.
+with `KeepAlive` means it is crashing and restarting — read the log. If
+`launchctl print` shows repeated exits and the system log mentions
+`Library not loaded: @rpath/libnode`, the app bundle is missing shared libs — run
+`npx @jian-ai/remote-control@latest update` (0.8.4+) to rematerialize `Contents/lib`, or
+point the LaunchAgent at your real `node` temporarily (see the 0.8.4 release note).
 
 Restart without re-entering the token:
 
