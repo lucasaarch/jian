@@ -72,6 +72,9 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
         typeof request.headers['x-jian-platform'] === 'string'
           ? request.headers['x-jian-platform']
           : undefined,
+        typeof request.headers['x-jian-remote-capabilities'] === 'string'
+          ? request.headers['x-jian-remote-capabilities']
+          : undefined,
       ),
   );
 

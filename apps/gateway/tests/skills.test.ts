@@ -297,13 +297,11 @@ describe('the skills every profile carries', () => {
     });
     const names = (profile: typeof plain) => availableSkills(profile).map((skill) => skill.name);
 
+    // Workspace shell / remote-control skills are always on; web and MCP still follow switches.
     for (const skill of [
-      'coding-work',
-      'web-research',
-      'mcp-servers',
-      'github-mcp',
       'machine-tools',
       'remote-control',
+      'coding-work',
       'ponytail',
       'ponytail-review',
       'ponytail-audit',
@@ -311,6 +309,10 @@ describe('the skills every profile carries', () => {
       'ponytail-gain',
       'ponytail-help',
     ]) {
+      expect(names(plain)).toContain(skill);
+      expect(names(equipped)).toContain(skill);
+    }
+    for (const skill of ['web-research', 'mcp-servers', 'github-mcp']) {
       expect(names(plain)).not.toContain(skill);
       expect(names(equipped)).toContain(skill);
     }
@@ -349,7 +351,6 @@ describe('the skills every profile carries', () => {
   it('keeps every built-in skill within what a skill may be', () => {
     for (const skill of builtinSkills({
       allowSelfManagement: true,
-      allowShell: true,
       allowWebSearch: true,
       reachableByAgents: true,
       mcpServers: [
@@ -372,7 +373,6 @@ describe('the skills every profile carries', () => {
   it('keeps product identity separate from operational guidance', () => {
     const skills = builtinSkills({
       allowSelfManagement: false,
-      allowShell: false,
       allowWebSearch: false,
       reachableByAgents: false,
       mcpServers: [],
@@ -414,24 +414,16 @@ describe('the skills every profile carries', () => {
     expect(availableSkills(managing).map((skill) => skill.name)).toContain('managing-yourself');
   });
 
-  it('explains the machine only to a profile that can run commands on it', async () => {
+  it('always explains workspace shell and Remote Control (allowShell is deprecated)', async () => {
     const services = await testServices();
     const plain = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
       model,
     });
-    const shell = await services.profiles.createProfile({
-      name: 'Zero',
-      instructions: 'Help.',
-      model,
-      allowShell: true,
-    });
 
-    expect(availableSkills(plain).map((skill) => skill.name)).not.toContain('machine-tools');
-    expect(availableSkills(plain).map((skill) => skill.name)).not.toContain('remote-control');
-    expect(availableSkills(shell).map((skill) => skill.name)).toContain('machine-tools');
-    expect(availableSkills(shell).map((skill) => skill.name)).toContain('remote-control');
+    expect(availableSkills(plain).map((skill) => skill.name)).toContain('machine-tools');
+    expect(availableSkills(plain).map((skill) => skill.name)).toContain('remote-control');
   });
 
   it('loads a built-in body through the same tool as an imported one', async () => {

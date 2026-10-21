@@ -58,7 +58,8 @@ export const profiles = pgTable('profiles', {
   disabledSkills: jsonb('disabled_skills').$type<string[]>().notNull().default([]),
   mcpServers: jsonb('mcp_servers').$type<McpServer[]>().notNull().default([]),
   allowSelfManagement: boolean('allow_self_management').notNull().default(false),
-  allowShell: boolean('allow_shell').notNull().default(false),
+  // Deprecated product switch — always on; column kept for older rows / API compatibility.
+  allowShell: boolean('allow_shell').notNull().default(true),
   allowWebSearch: boolean('allow_web_search').notNull().default(false),
   learnFromWork: boolean('learn_from_work').notNull().default(true),
   useStickers: boolean('use_stickers').notNull().default(false),
@@ -102,6 +103,8 @@ export const remoteMachines = pgTable('remote_machines', {
   platform: text('platform').notNull(),
   tokenHash: text('token_hash').notNull(),
   allowedProfileIds: jsonb('allowed_profile_ids').$type<string[]>().notNull().default([]),
+  /** From the worker’s x-jian-remote-capabilities header on poll. */
+  capabilities: jsonb('capabilities').$type<string[]>().notNull().default([]),
   createdAt,
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
 });
@@ -116,8 +119,11 @@ export const remoteTasks = pgTable(
     profileId: uuid('profile_id')
       .notNull()
       .references(() => profiles.id, { onDelete: 'cascade' }),
-    command: text('command').notNull(),
+    kind: text('kind').$type<'shell' | 'computer'>().notNull().default('shell'),
+    command: text('command').notNull().default(''),
     cwd: text('cwd'),
+    /** Computer-use params when kind is computer. */
+    payload: jsonb('payload').$type<Record<string, unknown>>(),
     timeoutMs: integer('timeout_ms').notNull(),
     status: text('status').$type<'queued' | 'running' | 'completed' | 'failed'>().notNull(),
     result: jsonb('result'),

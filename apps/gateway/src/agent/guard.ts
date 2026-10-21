@@ -212,7 +212,7 @@ export function guardTools(
 export const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
   run_command: 'machine',
   run_remote_command: 'machine',
-  take_remote_screenshot: 'machine',
+  remote_computer: 'machine',
   pull_remote_file: 'machine',
   push_remote_file: 'machine',
   write_file: 'machine',

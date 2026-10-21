@@ -162,7 +162,6 @@ export function ProfileEditor({
       summary: profile.summary ?? '',
       boundaries: profile.identity.boundaries.join('\n'),
       selfManagement: profile.allowSelfManagement,
-      shell: profile.allowShell,
       webSearch: profile.allowWebSearch,
       learn: profile.learnFromWork,
       agents: profile.reachableByAgents,
@@ -199,7 +198,6 @@ export function ProfileEditor({
         boundaries: lines(String(data.get('boundaries'))),
       },
       allowSelfManagement: data.get('selfManagement') === 'on',
-      allowShell: data.get('shell') === 'on',
       allowWebSearch: data.get('webSearch') === 'on',
       learnFromWork: data.get('learn') === 'on',
       reachableByAgents: data.get('agents') === 'on',
@@ -316,17 +314,6 @@ export function ProfileEditor({
                 <small>
                   The agent may rewrite its own identity and skills. Providers and permissions stay
                   yours.
-                </small>
-              </span>
-            </label>
-            <label className="check-row">
-              <input name="shell" type="checkbox" defaultChecked={profile.allowShell} />
-              <span>
-                <strong>Allow the terminal and files</strong>
-                <small>
-                  The agent may read files, write files and run commands on this machine, with the
-                  privileges of whoever started the gateway. This holds over WhatsApp and Telegram
-                  too: any approved contact gains that path.
                 </small>
               </span>
             </label>
