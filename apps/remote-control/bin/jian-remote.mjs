@@ -1,17 +1,86 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const configPath = join(homedir(), '.config', 'jian-remote', 'config.json');
+const configDir = join(homedir(), '.config', 'jian-remote');
+const configPath = join(configDir, 'config.json');
+/** Stable path the OS service runs — not the npx cache or a transient install location. */
+const installedScript = join(configDir, 'jian-remote.mjs');
 const args = process.argv.slice(2);
 const option = (name) => {
   const index = args.indexOf(name);
   return index < 0 ? undefined : args[index + 1];
 };
+
+/** Soft stdout/stderr caps while capturing a command (chars). Gateway schema matches these. */
+const STDOUT_CAP = 400_000;
+const STDERR_CAP = 50_000;
+/**
+ * Max JSON body for a result POST. The gateway route allows 512 KiB; leave headroom for
+ * framing so a full screenshot still fits without a 413.
+ */
+const RESULT_BODY_BUDGET = 480_000;
+/** Permanent HTTP statuses — retrying forever leaves the task stuck and the machine offline. */
+const PERMANENT_RESULT_STATUS = new Set([400, 401, 403, 404, 413]);
+
+export function cappedAppend(current, chunk, cap = STDOUT_CAP) {
+  return (current + chunk.toString('utf8')).slice(0, cap);
+}
+
+/** Shrink stdout/stderr until the JSON body fits under budget (UTF-8 byte length). */
+export function fitResult(result, budget = RESULT_BODY_BUDGET) {
+  let stdout = result.stdout ?? '';
+  let stderr = result.stderr ?? '';
+  const pack = () =>
+    JSON.stringify({
+      taskId: result.taskId,
+      exitCode: result.exitCode,
+      stdout,
+      stderr,
+      timedOut: Boolean(result.timedOut),
+    });
+  let body = pack();
+  if (Buffer.byteLength(body) <= budget) {
+    return { result: { ...result, stdout, stderr, timedOut: Boolean(result.timedOut) }, body };
+  }
+
+  const note = '\n… truncated to fit the gateway size limit';
+  while (Buffer.byteLength(body) > budget && stdout.length > 0) {
+    const overflow = Buffer.byteLength(body) - budget + Buffer.byteLength(note);
+    const cut = Math.min(stdout.length, Math.max(2048, overflow));
+    stdout = stdout.slice(0, Math.max(0, stdout.length - cut));
+    body = pack();
+  }
+  if (stdout.length < (result.stdout?.length ?? 0))
+    stdout = `${stdout}${note}`.slice(0, STDOUT_CAP);
+
+  body = pack();
+  while (Buffer.byteLength(body) > budget && stderr.length > 0) {
+    const overflow = Buffer.byteLength(body) - budget + Buffer.byteLength(note);
+    const cut = Math.min(stderr.length, Math.max(1024, overflow));
+    stderr = stderr.slice(0, Math.max(0, stderr.length - cut));
+    body = pack();
+  }
+  if (stderr.length < (result.stderr?.length ?? 0))
+    stderr = `${stderr}${note}`.slice(0, STDERR_CAP);
+
+  body = pack();
+  if (Buffer.byteLength(body) > budget) {
+    // Last resort: drop payloads so the agent unblocks instead of spinning on 413.
+    stdout = '';
+    stderr = 'Result omitted: payload exceeded the gateway size limit after truncation.';
+    body = pack();
+  }
+
+  return {
+    result: { ...result, stdout, stderr, timedOut: Boolean(result.timedOut) },
+    body,
+  };
+}
 
 async function readStdin() {
   let value = '';
@@ -33,15 +102,15 @@ async function readSecret(prompt) {
       process.stdin.setRawMode(false);
       process.stdin.pause();
       process.stdin.off('data', onData);
-      process.stdout.write('\\n');
+      process.stdout.write('\n');
       if (error) reject(error);
       else resolve(value);
     };
     const onData = (chunk) => {
       for (const char of chunk) {
-        if (char === '\\u0003') return finish(new Error('Installation cancelled'));
-        if (char === '\\r' || char === '\\n') return finish();
-        if (char === '\\u007f' || char === '\\b') value = value.slice(0, -1);
+        if (char === '\u0003') return finish(new Error('Installation cancelled'));
+        if (char === '\r' || char === '\n') return finish();
+        if (char === '\u007f' || char === '\b') value = value.slice(0, -1);
         else value += char;
       }
     };
@@ -52,6 +121,17 @@ async function readSecret(prompt) {
 function runChecked(command, commandArgs, message) {
   const result = spawnSync(command, commandArgs, { stdio: 'inherit', windowsHide: true });
   if (result.status !== 0) throw new Error(message);
+}
+
+/** Copy this package entry into ~/.config so npx and global installs share one service path. */
+async function materializeWorkerScript() {
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
+  const source = fileURLToPath(import.meta.url);
+  if (source !== installedScript) {
+    await copyFile(source, installedScript);
+  }
+  if (process.platform !== 'win32') await chmod(installedScript, 0o700);
+  return installedScript;
 }
 
 async function install() {
@@ -83,7 +163,7 @@ async function install() {
     !token?.trim()
   ) {
     throw new Error(
-      'Usage: jian-remote.mjs install --gateway https://... --machine UUID (--token VALUE | --token-prompt | --token-stdin)',
+      'Usage: jian-remote install --gateway https://... --machine UUID (--token VALUE | --token-prompt | --token-stdin)',
     );
   }
   const config = {
@@ -91,17 +171,17 @@ async function install() {
     machineId,
     token: token.trim(),
   };
-  await mkdir(dirname(configPath), { recursive: true, mode: 0o700 });
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
   if (process.platform === 'win32') {
     const account = process.env.USERNAME;
     if (!account) throw new Error('Could not identify the current Windows user');
     runChecked(
       'icacls.exe',
-      [dirname(configPath), '/inheritance:r', '/grant:r', `${account}:(OI)(CI)F`],
+      [configDir, '/inheritance:r', '/grant:r', `${account}:(OI)(CI)F`],
       'Could not restrict permissions on the Jian Remote config directory',
     );
   } else {
-    await chmod(dirname(configPath), 0o700);
+    await chmod(configDir, 0o700);
   }
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
   if (process.platform === 'win32') {
@@ -113,7 +193,7 @@ async function install() {
   } else {
     await chmod(configPath, 0o600);
   }
-  const script = fileURLToPath(import.meta.url);
+  const script = await materializeWorkerScript();
   if (process.platform === 'darwin') {
     const launchAgents = join(homedir(), 'Library', 'LaunchAgents');
     const plistPath = join(launchAgents, 'com.jian.remote.plist');
@@ -123,7 +203,7 @@ async function install() {
     await mkdir(launchAgents, { recursive: true, mode: 0o700 });
     await writeFile(
       plistPath,
-      `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(script)}</string><string>run</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>StandardOutPath</key><string>${xml(join(dirname(configPath), 'worker.log'))}</string><key>StandardErrorPath</key><string>${xml(join(dirname(configPath), 'worker.log'))}</string></dict></plist>\n`,
+      `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(script)}</string><string>run</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>StandardOutPath</key><string>${xml(join(configDir, 'worker.log'))}</string><key>StandardErrorPath</key><string>${xml(join(configDir, 'worker.log'))}</string></dict></plist>\n`,
       { mode: 0o600 },
     );
     const domain = `gui/${process.getuid()}`;
@@ -174,10 +254,9 @@ async function install() {
     );
   }
   console.log(`Credentials are stored with owner-only permissions in ${configPath}.`);
-}
-
-function cappedAppend(current, chunk, cap = 400_000) {
-  return (current + chunk.toString('utf8')).slice(0, cap);
+  console.log(
+    'If the worker later looks stuck offline, restart the service (or re-run install) and check ~/.config/jian-remote/worker.log.',
+  );
 }
 
 async function execute(task) {
@@ -210,10 +289,10 @@ async function execute(task) {
       }, 2000).unref();
     }, task.timeoutMs);
     child.stdout.on('data', (chunk) => {
-      stdout = cappedAppend(stdout, chunk);
+      stdout = cappedAppend(stdout, chunk, STDOUT_CAP);
     });
     child.stderr.on('data', (chunk) => {
-      stderr = cappedAppend(stderr, chunk);
+      stderr = cappedAppend(stderr, chunk, STDERR_CAP);
     });
     child.on('error', (error) => {
       clearTimeout(timeout);
@@ -221,7 +300,7 @@ async function execute(task) {
         taskId: task.id,
         exitCode: null,
         stdout,
-        stderr: cappedAppend(stderr, error.message),
+        stderr: cappedAppend(stderr, error.message, STDERR_CAP),
         timedOut,
       });
     });
@@ -233,8 +312,14 @@ async function execute(task) {
 }
 
 async function updateIfNeeded(base, headers) {
-  const script = fileURLToPath(import.meta.url);
-  const local = await readFile(script);
+  // Prefer the installed copy under ~/.config so updates land where the service points.
+  const script = installedScript;
+  let local;
+  try {
+    local = await readFile(script);
+  } catch {
+    local = await readFile(fileURLToPath(import.meta.url));
+  }
   const etag = `"${createHash('sha256').update(local).digest('hex')}"`;
   const response = await fetch(`${base}/update`, {
     headers: { ...headers, 'if-none-match': etag },
@@ -245,6 +330,7 @@ async function updateIfNeeded(base, headers) {
   if (!response.ok) throw new Error(`worker update check failed: HTTP ${response.status}`);
   const updated = Buffer.from(await response.arrayBuffer());
   if (!updated.length || updated.length > 1_000_000) throw new Error('Invalid worker update size');
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
   const temp = `${script}.${process.pid}.tmp`;
   await writeFile(temp, updated, { mode: 0o700 });
   await rename(temp, script);
@@ -260,6 +346,76 @@ async function updateIfNeeded(base, headers) {
   process.exit(0);
 }
 
+async function postResult(base, headers, result) {
+  let { result: payload, body } = fitResult(result);
+  let failures = 0;
+  // full → half → minimal → stop. Never spin forever on 413; that left machines offline.
+  let shrinkStage = 'full';
+
+  while (true) {
+    try {
+      const saved = await fetch(`${base}/tasks/${result.taskId}/result`, {
+        method: 'POST',
+        redirect: 'error',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (saved.ok) return;
+
+      if (saved.status === 413) {
+        if (shrinkStage === 'full') {
+          console.error(
+            'result post failed: HTTP 413 (payload too large); truncating and retrying',
+          );
+          shrinkStage = 'half';
+          ({ result: payload, body } = fitResult(payload, Math.floor(RESULT_BODY_BUDGET / 2)));
+          continue;
+        }
+        if (shrinkStage === 'half') {
+          console.error('result still too large after truncation; sending a minimal stub');
+          shrinkStage = 'minimal';
+          ({ result: payload, body } = fitResult(
+            {
+              ...payload,
+              stdout: '',
+              stderr:
+                'Result omitted: gateway rejected the payload as too large (HTTP 413) after truncation.',
+            },
+            8_000,
+          ));
+          continue;
+        }
+        console.error(
+          'result post rejected: HTTP 413 even for a minimal stub. Not retrying. Restart the Jian Remote service or re-run install if the machine stays offline.',
+        );
+        return;
+      }
+
+      if (PERMANENT_RESULT_STATUS.has(saved.status)) {
+        console.error(
+          `result post rejected: HTTP ${saved.status}. Not retrying. Restart the Jian Remote service or re-run install if the machine stays offline.`,
+        );
+        return;
+      }
+
+      throw new Error(`result post failed: HTTP ${saved.status}`);
+    } catch (error) {
+      failures += 1;
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(message);
+      if (failures >= 40) {
+        console.error(
+          'Gave up posting this result after repeated failures. The gateway task may stay open until the worker recovers; restart the Jian Remote service if Online stays red.',
+        );
+        return;
+      }
+      const ceiling = Math.min(60_000, 1000 * 2 ** Math.min(failures, 6));
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, Math.random() * ceiling));
+    }
+  }
+}
+
 async function run() {
   const config = JSON.parse(await readFile(configPath, 'utf8'));
   const headers = {
@@ -272,7 +428,9 @@ async function run() {
   let nextUpdateCheck = 0;
   const delay = async (attempt) => {
     const ceiling = Math.min(60_000, 1000 * 2 ** Math.min(attempt, 6));
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, Math.random() * ceiling));
+    const wait = Math.random() * ceiling;
+    console.error(`Retrying in ${(wait / 1000).toFixed(1)}s (attempt ${attempt})…`);
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, wait));
   };
   while (true) {
     try {
@@ -285,7 +443,11 @@ async function run() {
         redirect: 'error',
         signal: AbortSignal.timeout(30_000),
       });
+      if (response.status === 502 || response.status === 503) {
+        throw new Error(`poll failed: HTTP ${response.status} (gateway temporarily unavailable)`);
+      }
       if (!response.ok) throw new Error(`poll failed: HTTP ${response.status}`);
+      if (failures > 0) console.log('Reconnected to Jian Remote.');
       failures = 0;
       const { task } = await response.json();
       if (!task) {
@@ -294,37 +456,27 @@ async function run() {
       }
       const result = await execute(task);
       // Retry the result rather than rerunning the command after a transient network error.
-      while (true) {
-        try {
-          const saved = await fetch(`${base}/tasks/${task.id}/result`, {
-            method: 'POST',
-            redirect: 'error',
-            headers: { ...headers, 'content-type': 'application/json' },
-            body: JSON.stringify(result),
-            signal: AbortSignal.timeout(15_000),
-          });
-          if (!saved.ok) throw new Error(`result post failed: HTTP ${saved.status}`);
-          break;
-        } catch (error) {
-          console.error(error.message);
-          await delay(++failures);
-        }
-      }
+      await postResult(base, headers, result);
     } catch (error) {
-      console.error(error.message);
+      console.error(error instanceof Error ? error.message : error);
       await delay(++failures);
     }
   }
 }
 
-try {
-  if (args[0] === 'install') await install();
-  else if (args[0] === 'run') await run();
-  else
-    console.log(
-      'Jian Remote worker\n  install --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)\n  run',
-    );
-} catch (error) {
-  console.error(error.message);
-  process.exitCode = 1;
+const invokedAsCli =
+  Boolean(process.argv[1]) && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1]);
+
+if (invokedAsCli) {
+  try {
+    if (args[0] === 'install') await install();
+    else if (args[0] === 'run') await run();
+    else
+      console.log(
+        'Jian Remote worker (@jian-ai/remote-control)\n  install --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)\n  run\n\nInstall: npm install -g @jian-ai/remote-control\nOr:      npx @jian-ai/remote-control@latest install --gateway … --machine … --token …',
+      );
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
 }

@@ -13,11 +13,13 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY .husky/install.mjs .husky/install.mjs
 COPY apps/gateway/package.json apps/gateway/package.json
 COPY apps/gateway-ui/package.json apps/gateway-ui/package.json
+COPY apps/remote-control/package.json apps/remote-control/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
 RUN pnpm install --frozen-lockfile
 COPY apps/gateway apps/gateway
 COPY apps/gateway-ui apps/gateway-ui
+COPY apps/remote-control apps/remote-control
 COPY packages packages
 # The release notes ride in the build, so the panel can say what changed in this version.
 COPY docs/releases docs/releases

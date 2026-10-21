@@ -1,14 +1,32 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import type { Remote } from './service.js';
 
-/** Shipped next to the gateway package so a machine can download it without cloning Jian. */
-const workerScript = fileURLToPath(new URL('../../bin/jian-remote.mjs', import.meta.url));
+/**
+ * Worker script shipped as `@jian-ai/remote-control`. Resolved from the workspace (dev) or
+ * the deployed tree so `/jian-remote.mjs` and `/update` stay available without cloning Jian.
+ */
+const require = createRequire(import.meta.url);
+const workerScript = (() => {
+  try {
+    return require.resolve('@jian-ai/remote-control/bin/jian-remote.mjs');
+  } catch {
+    // Fallback for a checkout that has not linked the package yet.
+    return fileURLToPath(new URL('../../../remote-control/bin/jian-remote.mjs', import.meta.url));
+  }
+})();
+
+/**
+ * Contract allows ~400 KiB stdout + 50 KiB stderr. Default Fastify bodyLimit is 256 KiB,
+ * which produced HTTP 413 and left workers retrying forever. Match the schema with headroom.
+ */
+const REMOTE_RESULT_BODY_LIMIT = 512 * 1024;
 
 export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remote }): void {
-  // Public: the panel's install one-liner curls this before it has a worker token.
+  // Public: legacy curl installers and the worker's self-update still fetch this script.
   app.get<{ Params: { machineId: string } }>(
     '/v1/remote/worker/:machineId/update',
     { config: { workerAuth: true } },
@@ -72,6 +90,7 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
 
   app.post<{ Params: { machineId: string; taskId: string } }>(
     '/v1/remote/worker/:machineId/tasks/:taskId/result',
+    { bodyLimit: REMOTE_RESULT_BODY_LIMIT },
     async (request) =>
       deps.remote.complete(
         request.params.machineId,

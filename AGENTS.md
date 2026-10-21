@@ -6,11 +6,12 @@ TypeScript on Node 24+, Fastify, PostgreSQL, pg-boss.
 ## Layout
 
 ```text
-apps/gateway/       HTTP API, runtime, workers, tests
-apps/gateway-ui/    Next.js panel, statically exported into the gateway
-packages/contracts/ Zod schemas — the source of the HTTP contract
-packages/sdk/       Generated TypeScript client
-docs/               Architecture, security, channels, panel
+apps/gateway/         HTTP API, runtime, workers, tests
+apps/gateway-ui/      Next.js panel, statically exported into the gateway
+apps/remote-control/  Published npm worker (`@jian-ai/remote-control`)
+packages/contracts/   Zod schemas — the source of the HTTP contract
+packages/sdk/         Generated TypeScript client
+docs/                 Architecture, security, channels, panel
 ```
 
 Products share contracts, never each other's internals.

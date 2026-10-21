@@ -1,8 +1,9 @@
-name: Image
-# A release publishes the image, and nothing else does: a tag is the only commit anyone
-# has said is worth running. `make release` pushes it, after its note in docs/releases is
-# written; this workflow builds both architectures and publishes the GitHub release with that
-# note. `workflow_dispatch` stays for building an image by hand, and publishes no release.
+name: Publish
+# A release publishes the gateway image and the remote-control npm package, and nothing else
+# does: a tag is the only commit anyone has said is worth running. `make release` pushes it,
+# after its note in docs/releases is written; this workflow builds both architectures, publishes
+# `@jian-ai/remote-control` at the same version, and publishes the GitHub release with that note.
+# `workflow_dispatch` stays for building an image by hand, and publishes no release or npm package.
 on:
   push:
     tags: ['v*.*.*']
@@ -140,6 +141,47 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.inspect.outputs.digest }}
           push-to-registry: true
+
+  # Same version as the gateway image / GitHub release. Requires repository secret NPM_TOKEN
+  # (npm Automation token with publish rights on the @jian-ai scope). Image + GitHub release
+  # still publish if this job fails — fix the secret and re-run the job, or cut the next tag.
+  npm:
+    needs: notes
+    if: ${{ !cancelled() && needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          scope: '@jian-ai'
+      - name: Stamp package version from the tag
+        working-directory: apps/remote-control
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          node -e "
+            const fs = require('node:fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = process.argv[1];
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          " "$version"
+          node -e "console.log('Publishing @jian-ai/remote-control@' + require('./package.json').version)"
+      - name: Require NPM_TOKEN
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo 'Missing repository secret NPM_TOKEN.'
+            echo 'Create an npm Automation token with publish rights on the @jian-ai scope,'
+            echo 'add it as NPM_TOKEN, then re-run this job (or cut the next release tag).'
+            exit 1
+          fi
+      - name: Publish @jian-ai/remote-control
+        working-directory: apps/remote-control
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   release:
     needs: [notes, index]

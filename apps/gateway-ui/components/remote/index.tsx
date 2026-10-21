@@ -116,6 +116,8 @@ export function RemoteMachines({ api }: Props) {
   const [openId, setOpenId] = useState<string>();
   const [removing, setRemoving] = useState<Machine>();
   const [gatewayOrigin, setGatewayOrigin] = useState('https://YOUR-JIAN-GATEWAY');
+  /** npm dist-tag or exact version matching this gateway release when known. */
+  const [packageTag, setPackageTag] = useState('latest');
 
   const refresh = useCallback(
     async (opts?: { quiet?: boolean }) => {
@@ -148,7 +150,19 @@ export function RemoteMachines({ api }: Props) {
   useEffect(() => {
     setGatewayOrigin(window.location.origin);
     void refresh();
-  }, [refresh]);
+    void api
+      .releases()
+      .then((releases) => {
+        const version = releases.version?.trim();
+        // Dev builds have no version; pin published installs to the running release.
+        if (version && /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
+          setPackageTag(version);
+        }
+      })
+      .catch(() => {
+        // Keep @latest when the releases endpoint is unavailable.
+      });
+  }, [api, refresh]);
 
   // Worker presence is polled by the gateway; refresh Online/Offline without a manual reload.
   // Faster while the install modal is open (someone is connecting a machine right now).
@@ -208,12 +222,14 @@ export function RemoteMachines({ api }: Props) {
     }
   }
 
-  const scriptUrl = `${gatewayOrigin}/jian-remote.mjs`;
-  const windowsInstall = created
-    ? `$dir="$env:USERPROFILE\\.config\\jian-remote"; New-Item -ItemType Directory -Force -Path $dir | Out-Null; irm '${scriptUrl}' -OutFile "$dir\\jian-remote.mjs"; node "$dir\\jian-remote.mjs" install --gateway '${gatewayOrigin}' --machine '${created.id}' --token '${created.token}'`
+  const packageRef = `@jian-ai/remote-control@${packageTag}`;
+  const installFlags = created
+    ? `install --gateway '${gatewayOrigin}' --machine '${created.id}' --token '${created.token}'`
     : '';
-  const unixInstall = created
-    ? `mkdir -p ~/.config/jian-remote && curl -fsS -o ~/.config/jian-remote/jian-remote.mjs '${scriptUrl}' && node ~/.config/jian-remote/jian-remote.mjs install --gateway '${gatewayOrigin}' --machine '${created.id}' --token '${created.token}'`
+  // Same npm one-liner on every OS once Node.js 24+ is installed.
+  const npxInstall = created ? `npx --yes ${packageRef} ${installFlags}` : '';
+  const globalInstall = created
+    ? `npm install -g ${packageRef} && jian-remote ${installFlags}`
     : '';
 
   return (
@@ -245,8 +261,8 @@ export function RemoteMachines({ api }: Props) {
             </Button>
           }
         >
-          Register a computer, then run the one-line installer the panel shows — it downloads the
-          worker and connects it. No clone of Jian is required.
+          Register a computer, then run the npm/npx installer the panel shows — it embeds the
+          gateway URL, machine id, and token. No clone of Jian is required.
         </Empty>
       ) : (
         <div className="resource-list">
@@ -381,20 +397,20 @@ export function RemoteMachines({ api }: Props) {
       {created && (
         <Modal
           title={`${created.name} created`}
-          description="Run one of these installers on the computer. Each downloads the worker from this gateway and connects it. The token is shown only once."
+          description="Run one of these installers on the computer. Each installs @jian-ai/remote-control from npm and connects it. The token is shown only once."
           close={() => setCreated(null)}
           footer={<Button onClick={() => setCreated(null)}>Done</Button>}
         >
           <div className="remote-created">
             <CopyBlock
-              label="Windows (PowerShell)"
-              value={windowsInstall}
-              ariaLabel="Copy Windows install command"
+              label="Any OS (npx)"
+              value={npxInstall}
+              ariaLabel="Copy npx install command"
             />
             <CopyBlock
-              label="macOS / Linux"
-              value={unixInstall}
-              ariaLabel="Copy macOS or Linux install command"
+              label="Global install"
+              value={globalInstall}
+              ariaLabel="Copy global npm install command"
             />
             <CopyBlock
               label="Worker token only"
@@ -406,8 +422,9 @@ export function RemoteMachines({ api }: Props) {
               once, then clear shell history if you share that terminal. The gateway must be
               reachable over HTTPS from the computer. After install, the worker starts on login
               (Windows Task Scheduler ONLOGON, macOS LaunchAgent, or Linux systemd --user), so a
-              reboot brings it back when that user signs in. This list refreshes Online status every
-              few seconds while the page is open.
+              reboot brings it back when that user signs in. If Online stays red, restart the local
+              service or re-run install and check ~/.config/jian-remote/worker.log. This list
+              refreshes Online status every few seconds while the page is open.
             </p>
           </div>
         </Modal>

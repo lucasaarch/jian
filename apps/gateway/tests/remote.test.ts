@@ -113,3 +113,38 @@ it('authenticates the worker API with its machine token, not the gateway admin t
     await app.close();
   }
 });
+
+it('accepts a large remote result that previously hit the default 256 KiB body limit', async () => {
+  const services = await testServices();
+  const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+  const created = await services.remote.create({ name: 'Shot', allowedProfileIds: [owner.id] });
+  const pending = services.remote.execute(owner.id, created.id, { command: 'printf shot' });
+  let polled: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
+  for (let attempt = 0; attempt < 20 && !polled.task; attempt++) {
+    polled = await services.remote.poll(created.id, `Bearer ${created.token}`, 'darwin-arm64');
+    if (!polled.task) await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  if (!polled.task) throw new Error('Worker did not receive the task');
+  const taskId = polled.task.id;
+  const stdout = 'A'.repeat(300_000);
+  const app = createApp({
+    ...services,
+    token: 'host-admin-token-for-test-1234567890-verysecret',
+    logger: false,
+  });
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: `/v1/remote/worker/${created.id}/tasks/${taskId}/result`,
+      headers: {
+        authorization: `Bearer ${created.token}`,
+        'content-type': 'application/json',
+      },
+      payload: { taskId, exitCode: 0, stdout, stderr: '', timedOut: false },
+    });
+    expect(response.statusCode).toBe(200);
+    await expect(pending).resolves.toMatchObject({ taskId, exitCode: 0, stdout });
+  } finally {
+    await app.close();
+  }
+});

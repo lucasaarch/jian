@@ -29,33 +29,44 @@ curl -fsS -X PATCH https://gateway.example/v1/remote/machines/MACHINE_UUID/acces
   -d '{"allowedProfileIds":["PROFILE_UUID"]}'
 ```
 
-The panel’s Remote Control page shows a one-line installer after you create a machine. That
-command downloads the worker from the gateway and embeds the one-time token — no clone of Jian
-is required. The token is shown only once; treat the install command as a secret.
+The panel’s Remote Control page shows npm/npx installers after you create a machine. Those
+commands install `@jian-ai/remote-control` and embed the one-time token — no clone of Jian is
+required. The token is shown only once; treat the install command as a secret.
 
 ## Install the worker
 
-Install Node.js 24+ on the computer. The gateway serves the worker script at
-`https://gateway.example/jian-remote.mjs` (same origin as the panel). The installer stores the
-credential with owner-only permissions and installs a per-user LaunchAgent on macOS, a systemd
-service on Linux, or a Task Scheduler logon task on Windows. The Windows task runs only in the
-current user's session.
+Install Node.js 24+ on the computer. The published package is `@jian-ai/remote-control` (CLI
+`jian-remote`), versioned with each Jian release. The panel pins the running gateway version
+when known; otherwise use `@latest`.
 
-Windows (PowerShell) — copy from the panel, or substitute your values:
-
-```powershell
-$dir="$env:USERPROFILE\.config\jian-remote"; New-Item -ItemType Directory -Force -Path $dir | Out-Null; irm 'https://gateway.example/jian-remote.mjs' -OutFile "$dir\jian-remote.mjs"; node "$dir\jian-remote.mjs" install --gateway 'https://gateway.example' --machine 'MACHINE_UUID' --token 'WORKER_TOKEN'
-```
-
-macOS / Linux:
+Any OS (npx) — copy from the panel, or substitute your values:
 
 ```sh
-mkdir -p ~/.config/jian-remote && curl -fsS -o ~/.config/jian-remote/jian-remote.mjs 'https://gateway.example/jian-remote.mjs' && node ~/.config/jian-remote/jian-remote.mjs install --gateway 'https://gateway.example' --machine 'MACHINE_UUID' --token 'WORKER_TOKEN'
+npx --yes @jian-ai/remote-control@latest install \
+  --gateway 'https://gateway.example' \
+  --machine 'MACHINE_UUID' \
+  --token 'WORKER_TOKEN'
 ```
 
+Global install:
+
+```sh
+npm install -g @jian-ai/remote-control@latest
+jian-remote install \
+  --gateway 'https://gateway.example' \
+  --machine 'MACHINE_UUID' \
+  --token 'WORKER_TOKEN'
+```
+
+The installer stores the credential with owner-only permissions under `~/.config/jian-remote`,
+copies the worker script there (so npx and global installs share one service path), and
+installs a per-user LaunchAgent on macOS, a systemd service on Linux, or a Task Scheduler
+logon task on Windows. The Windows task runs only in the current user's session.
+
 The one-liner puts the token in shell history. Clear history afterwards on a shared machine, or
-install by hand with `--token-prompt` / `--token-stdin` instead. The worker script also lives at
-`apps/gateway/bin/jian-remote.mjs` in the Jian source tree if you prefer to copy it yourself.
+install by hand with `--token-prompt` / `--token-stdin` instead. The worker source also lives at
+`apps/remote-control/bin/jian-remote.mjs` in the Jian source tree. The gateway still serves
+`/jian-remote.mjs` for automatic worker self-updates of already-installed machines.
 
 The worker executes Windows commands with PowerShell. The Windows credential directory and file
 ACLs are restricted to the current account. To uninstall, delete the `Jian Remote` task in Task
@@ -64,7 +75,8 @@ Scheduler and remove `%USERPROFILE%\\.config\\jian-remote`.
 Keep the worker script at its installed path: the OS service starts that file. The worker uses
 `/bin/sh -lc` on macOS/Linux and PowerShell on Windows, inherits the local user's environment,
 and returns at most about 400 KB of stdout (enough for a compressed screenshot or a small file
-as base64) and 50 KB of stderr. Do not authorize profiles that should not have access to those
+as base64) and 50 KB of stderr. Oversized results are truncated before upload so the worker does
+not stick offline on HTTP 413. Do not authorize profiles that should not have access to those
 local privileges.
 
 ### Starts again after reboot
@@ -75,8 +87,17 @@ Yes — when that user signs in. The installer registers:
 - **macOS:** LaunchAgent `com.jian.remote` (`RunAtLoad` + `KeepAlive`).
 - **Linux:** `systemd --user` unit `jian-remote.service` enabled for the user session.
 
-Until the user logs in (or the user systemd session is lingering), the machine stays Offline in
+Until the user logs in (or the user systemd session is lingering), the machine stays offline in
 the panel. The Remote Control page polls Online/Offline every few seconds while it is open.
+
+### If the machine stays Offline
+
+1. Confirm the computer can reach the gateway over HTTPS.
+2. Restart the local service (Task Scheduler / `launchctl` / `systemctl --user restart jian-remote`),
+   or re-run the install command from the panel.
+3. Read `~/.config/jian-remote/worker.log`. Repeated `HTTP 502`/`503` means the gateway is up
+   and down — the worker backs off and reconnects. A former `HTTP 413` loop meant a result was
+   too large; current workers truncate and deliver a stub so the agent unblocks.
 
 ## Agent use and revocation
 
