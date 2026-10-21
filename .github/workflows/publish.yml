@@ -143,8 +143,10 @@ jobs:
           push-to-registry: true
 
   # Same version as the gateway image / GitHub release. Requires repository secret NPM_TOKEN
-  # (npm Automation token with publish rights on the @jian-ai scope). Image + GitHub release
-  # still publish if this job fails — fix the secret and re-run the job, or cut the next tag.
+  # (npm Automation / stage-only token with write on the @jian-ai scope). The job runs
+  # `npm stage publish`; a maintainer then promotes the staged version on npmjs.com (2FA).
+  # Image + GitHub release still publish if this job fails — fix the secret and re-run the
+  # job, or cut the next tag.
   npm:
     needs: notes
     if: ${{ !cancelled() && needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
@@ -158,6 +160,9 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           scope: '@jian-ai'
+      # `npm stage publish` needs npm CLI 11.15.0+ (Node 22.14+). Actions' bundled npm may be older.
+      - name: Install npm with stage publish
+        run: npm install -g npm@^11.15.0
       - name: Stamp package version from the tag
         working-directory: apps/remote-control
         run: |
@@ -177,18 +182,18 @@ jobs:
             if (stamped === source) throw new Error('PACKAGE_VERSION stamp target not found');
             fs.writeFileSync(bin, stamped);
           " "$version"
-          node -e "console.log('Publishing @jian-ai/remote-control@' + require('./package.json').version)"
+          node -e "console.log('Staging @jian-ai/remote-control@' + require('./package.json').version)"
       - name: Require NPM_TOKEN
         run: |
           if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
             echo 'Missing repository secret NPM_TOKEN.'
-            echo 'Create an npm Automation token with publish rights on the @jian-ai scope,'
+            echo 'Create an npm Automation (stage-only) token with write on the @jian-ai scope,'
             echo 'add it as NPM_TOKEN, then re-run this job (or cut the next release tag).'
             exit 1
           fi
-      - name: Publish @jian-ai/remote-control
+      - name: Stage @jian-ai/remote-control
         working-directory: apps/remote-control
-        run: npm publish --access public
+        run: npm stage publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
