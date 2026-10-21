@@ -6,13 +6,17 @@ Every release of Jian, newest first.
 
 ## 0.7.2 — 2026-10-21
 
-Jian Remote.app macOS Login Items identity, clearer install CLI success output, and screenshot channel fit so Retina captures are no longer truncated grey JPEGs.
+Jian Remote.app macOS Login Items identity, clearer install CLI success output, screenshot channel fit so Retina captures are no longer truncated grey JPEGs, and session objectives no longer auto-seed from casual chat.
 
 ### Remote Control
 
 * **macOS app identity:** the LaunchAgent no longer runs the system `node` binary (shown as “Node.js Foundation” in Login Items / Background Items and for TCC). Install materializes a thin **Jian Remote.app** under `~/Library/Application Support/Jian Remote/` whose `Contents/MacOS/Jian Remote` is a copy of the install-time Node runtime (ad-hoc signed with bundle id `com.jian.remote` when `codesign` is available). The plist points at that executable and sets `AssociatedBundleIdentifiers`, so permissions attach to Jian instead of every Node process. **v1 is unsigned / ad-hoc** (npm distribute path; no Apple Developer account required); Developer ID notarization can layer on the same layout later. See `docs/remote.md`.
 * **CLI success / status output:** `install`, `configure`, and `update` print a short success headline plus aligned facts (service, config path, gateway compatibility). Colors only on a TTY; respects `NO_COLOR` / `FORCE_COLOR`. Help and errors are lightly aligned for consistency.
 * **Screenshot grey / truncation:** Retina JPEG base64 could hit the ~400 KB worker stdout channel mid-stream and decode as a corrupt image (often a solid grey lower half). `take_remote_screenshot` now scales and recompresses on the machine (longest side ≤ 1920, quality stepped down to about 280 KB binary) before base64. The gateway rejects incomplete JPEGs instead of storing them; the worker notes stdout truncation on stderr when the channel cap is hit. File pull/push still need to stay under the same ~300 KB binary budget.
+
+### Agent loop
+
+* **No auto-seeded objectives from chat:** casual and task-shaped owner or channel messages no longer open a durable session objective. An objective is set only with `/objective …`, `PUT /v1/profiles/{profileId}/sessions/{sessionId}/objective`, or the agent tool `set_session_objective`. A reply while the objective is `blocked` resumes the prior goal text instead of replacing it with chat. Channel `/objective` commands are parsed the same way as panel owner messages.
 
 ### Upgrading
 
