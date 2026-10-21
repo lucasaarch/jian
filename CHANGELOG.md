@@ -4,6 +4,45 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 0.7.0 — 2026-10-21
+
+Remote Control as an npm package, worker auto-update and reliability, Listening quiet polls with session listeners UI, WhatsApp delivery and objective-continue fixes, and staged npm publish for releases.
+
+### Remote Control
+
+* **`@jian-ai/remote-control`:** the Windows / Mac / Linux worker ships as a public npm package (`jian-remote`), versioned with each Jian release. The panel shows npm / npx installers after you create a machine; no clone of the gateway repo is required. Install with `npx --yes @jian-ai/remote-control@… install …` or `npm install -g @jian-ai/remote-control@…`.
+* **Update without the token again:** credentials stay in `~/.config/jian-remote/config.json`. Run `npx --yes @jian-ai/remote-control@latest update` (or `jian-remote update`) to refresh the worker to match the gateway and restart the service. Worker and gateway must share the same major.minor.
+* **Panel and docs:** redesigned Remote Control page, online poll status, reboot guidance, screenshot and file tools, and the built-in `remote-control` skill.
+* **Worker auto-update:** connected workers check the gateway for a newer script every five minutes, install it atomically, and restart. Polling and result delivery retry transient network failures with exponential backoff and jitter.
+* **Large results and offline loops:** oversized result posts that used to return HTTP 413 and leave the worker effectively offline are fitted / handled so reconnect and delivery recover without manual intervention.
+* **Publish flow:** the Publish workflow stages `@jian-ai/remote-control` at the release version with `npm stage publish` (Automation / stage-only `NPM_TOKEN`). A maintainer promotes the staged package on npmjs.com with 2FA. The gateway image and GitHub release still publish if the npm job fails.
+
+### Listening
+
+* **Quiet polls:** Listening polls wake a conversation only when observed state changes, so unchanged CI or pull-request state does not spam the session.
+* **Subscription expiry and TTL:** subscriptions can expire; quiet / TTL behaviour keeps long-lived polls from drifting.
+* **Session listeners UI:** the conversation surfaces active listeners so the owner can see what is watching without leaving the session.
+
+### Channels
+
+* **WhatsApp:** flushed commentary is no longer double-sent when the outbound path and the WhatsApp driver both delivered the same progress lines.
+
+### Agent loop
+
+* **Short session objectives:** objective text stays short so automatic continuation prompts carry a stable goal instead of dumping tool output, shell logs, or error stacks back into the next turn.
+
+### Panel
+
+* **Select in modals:** Select popups paint past modal footers instead of being clipped by overflow.
+
+### Upgrading
+
+Apply migrations `0054_remote_machines`, `0055_deliveries-one-per-run`, and `0056_subscription-expiry` when upgrading from 0.6.x.
+
+Existing installations keep working without Remote Control until a machine is created and a worker is installed. After releasing, promote the staged `@jian-ai/remote-control@0.7.0` on npm before relying on `@latest` installers. Keep the profile workspace persistent so SSH keys, checkouts, and CLI authentication survive container recreation.
+
+Stable installations can use the `latest` image tag or pin `0.7.0`.
+
 ## 0.6.0 — 2026-10-20
 
 xAI/Grok, conversation subagents with shared workspace, durable session objectives, mid-run questions, GitHub MCP and Listening (poll by default), Gemini Live voice calls, and MCP/SSH reliability fixes.
@@ -39,10 +78,6 @@ xAI/Grok, conversation subagents with shared workspace, durable session objectiv
 * **Gemini Live in the gateway conversation:** choose a Gemini Live model under Model defaults › Voice calls, then use the phone control in the composer. The gateway mints a short-lived Gemini token; the browser streams microphone audio and plays the reply. On hang-up, the owner's spoken transcript is submitted through the ordinary session run path (not a separate summary endpoint). Voice selection is available for Live calls.
 * **Model defaults:** Voice calls lists Gemini Live and OpenAI `gpt-live` / `gpt-realtime` models for API-key providers (not ChatGPT OAuth). Starting a call still requires Gemini Live; OpenAI Live sessions are not wired yet and return a clear conflict if selected.
 * **Composer:** the phone control starts or ends a Live call; the microphone control remains the voice-note recorder.
-
-### Remote Control
-
-* **Worker auto-update:** connected workers check the gateway for a newer script every five minutes, install it atomically, and restart. Polling and result delivery retry transient network failures with exponential backoff and jitter, so temporary internet loss does not require manual intervention.
 
 ### MCP and SSH
 
