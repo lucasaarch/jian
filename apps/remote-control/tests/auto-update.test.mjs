@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  isStaleInstalledWorker,
   nextUpdateBackoffMs,
   shouldMatchGatewayVersion,
   validateWorkerScriptBytes,
@@ -44,4 +45,9 @@ test('validateWorkerScriptBytes accepts the real worker and rejects junk', () =>
     validateWorkerScriptBytes(Buffer.from("export const PACKAGE_VERSION = '1.0.0'\n")).ok,
     false,
   );
+});
+
+test('isStaleInstalledWorker is true only when disk release differs from this process', () => {
+  assert.equal(isStaleInstalledWorker('0.8.1', "export const PACKAGE_VERSION = '0.8.2';\n"), true);
+  assert.equal(isStaleInstalledWorker('0.8.2', "export const PACKAGE_VERSION = '0.8.2';\n"), false);
 });

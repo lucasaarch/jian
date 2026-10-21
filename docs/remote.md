@@ -75,6 +75,20 @@ jian-remote update --version 0.6.0
 
 `update` does not take `--gateway`, `--machine`, or `--token`.
 
+### Version, stop, start, restart
+
+```sh
+jian-remote version          # also: --version / -V
+jian-remote stop             # unload LaunchAgent / stop systemd --user / end Task Scheduler job
+jian-remote start            # ensure previous worker is dead, then start exactly one
+jian-remote restart          # stop then start
+```
+
+Success prints a short English block (service kind + started/stopped/restarted). Failure prints
+`Error: …` on stderr and exits non-zero. `start` / `restart` / `update` / auto-update always
+stop any previous worker (OS job + `~/.config/jian-remote/worker.pid`) before a new process
+runs, so two pollers cannot fight after a KeepAlive race.
+
 ### Configure (change token or gateway URL)
 
 When the panel rotates credentials, or you move the gateway URL, rewrite the stored config and
@@ -114,6 +128,11 @@ clear error. Local gateway builds with no `JIAN_VERSION` skip the gate.
 4. Failed updates **do not** wipe `config.json` or the worker token. Failures are logged,
    recorded in `~/.config/jian-remote/update-state.json`, and retried with exponential backoff
    (up to 30 minutes) so KeepAlive does not crash-loop.
+5. Prefer the gateway script. npm is a fallback only when the **installed** script is not yet
+   on the gateway release. If npm is missing that version (staged but not promoted), the worker
+   keeps the gateway bytes and backs off — it does not bounce forever between an older npm
+   tarball and the gateway stamp. A process whose in-memory version is older than the file on
+   disk exits so KeepAlive loads the installed script (avoids a stale second poller).
 
 Until an auto-update succeeds across a major.minor skew, the worker will not stay online.
 If both the gateway script and npm are unreachable, run
@@ -176,7 +195,8 @@ that should not have access to those local privileges.
 Yes — when that user signs in. The installer registers:
 
 - **Windows:** Task Scheduler task `Jian Remote` with trigger `ONLOGON` (interactive, limited).
-- **macOS:** LaunchAgent `com.jian.remote` (`RunAtLoad` + `KeepAlive`).
+- **macOS:** LaunchAgent `com.jian.remote` (`RunAtLoad` + `KeepAlive` + `ThrottleInterval`, with
+  an explicit `PATH` for the app-identity Node binary).
 - **Linux:** `systemd --user` unit `jian-remote.service` enabled for the user session.
 
 Until the user logs in (or the user systemd session is lingering), the machine stays offline in
@@ -218,8 +238,10 @@ with `KeepAlive` means it is crashing and restarting — read the log.
 Restart without re-entering the token:
 
 ```sh
+jian-remote restart
+# or refresh the binary then restart:
 npx --yes @jian-ai/remote-control@latest update
-# or bounce launchd:
+# low-level launchd bounce (prefer jian-remote restart):
 launchctl kickstart -k "gui/$(id -u)/com.jian.remote"
 ```
 

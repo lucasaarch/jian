@@ -44,4 +44,11 @@ test('LaunchAgent points at the app binary and associates the bundle id', () => 
   assert.match(xml, /<key>AssociatedBundleIdentifiers<\/key>/);
   assert.match(xml, /<string>com\.jian\.remote<\/string>/);
   assert.match(xml, /<key>ProcessType<\/key>\s*<string>Interactive<\/string>/);
+  assert.match(xml, /<key>EnvironmentVariables<\/key>/);
+  assert.match(
+    xml,
+    /<key>PATH<\/key>\s*<string>\/usr\/local\/bin:\/opt\/homebrew\/bin:\/usr\/bin:\/bin/,
+  );
+  assert.match(xml, /<key>ThrottleInterval<\/key>\s*<integer>10<\/integer>/);
+  assert.match(xml, /<key>KeepAlive<\/key>\s*<true\/>/);
 });

@@ -29,6 +29,16 @@ npx @jian-ai/remote-control@latest update
 Reads `~/.config/jian-remote` (no token, machine id, or gateway flags), installs a compatible
 build, and restarts the worker service.
 
+## Version and service control
+
+```sh
+jian-remote version          # also --version / -V
+jian-remote stop | start | restart
+```
+
+`start` / `restart` stop any previous worker before launching one process (LaunchAgent,
+systemd --user, or Task Scheduler).
+
 ## Configure
 
 Change the stored gateway URL and/or worker token without a full reinstall (restarts the

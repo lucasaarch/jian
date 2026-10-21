@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
-import { chmod, copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { chmod, copyFile, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -11,11 +18,35 @@ const configDir = join(homedir(), '.config', 'jian-remote');
 const configPath = join(configDir, 'config.json');
 /** Stable path the OS service runs — not the npx cache or a transient install location. */
 const installedScript = join(configDir, 'jian-remote.mjs');
+/** Exclusive run lock — prevents KeepAlive / CLI races from leaving two pollers alive. */
+const workerLockPath = join(configDir, 'worker.pid');
+const updateStatePath = join(configDir, 'update-state.json');
+const MACOS_LAUNCH_AGENT_LABEL = 'com.jian.remote';
+const LINUX_SERVICE_UNIT = 'jian-remote.service';
+const WINDOWS_TASK_NAME = 'Jian Remote';
+/** Minimal PATH for launchd — app-identity Node copies otherwise inherit an empty env. */
+export const LAUNCH_AGENT_PATH = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin';
+/** KeepAlive floor so a bad update cannot spin-restart every second. */
+export const LAUNCH_AGENT_THROTTLE_INTERVAL_SEC = 10;
+
 const args = process.argv.slice(2);
 const option = (name) => {
   const index = args.indexOf(name);
   return index < 0 ? undefined : args[index + 1];
 };
+
+/**
+ * Parse argv for the top-level command and version flags (`version`, `--version`, `-V`).
+ * Version flags win over a subcommand so `jian-remote --version update` still prints the version.
+ */
+export function parseCliInvocation(argv = args) {
+  const list = Array.isArray(argv) ? argv : [];
+  if (list.includes('--version') || list.includes('-V') || list[0] === 'version') {
+    return { command: 'version', versionRequested: true };
+  }
+  const command = list[0] && !list[0].startsWith('-') ? list[0] : undefined;
+  return { command, versionRequested: false };
+}
 
 /**
  * Stamped to the release tag on npm publish and when the gateway serves this script.
@@ -135,10 +166,20 @@ export function buildMacosAppInfoPlist() {
 `;
 }
 
-export function buildLaunchAgentPlist({ label, executable, script, logPath }) {
+export function buildLaunchAgentPlist({
+  label,
+  executable,
+  script,
+  logPath,
+  pathEnv = LAUNCH_AGENT_PATH,
+  throttleIntervalSec = LAUNCH_AGENT_THROTTLE_INTERVAL_SEC,
+}) {
   // ProcessType=Interactive opts the worker out of App Nap. Without it, macOS can freeze the
   // Node poll loop while the screen is locked or idle; lastSeenAt ages out and the gateway
   // shows Offline even though the process is still "running".
+  // Explicit PATH: launchd gives app-identity Node an empty environment; without /bin on PATH,
+  // child tools and some spawn lookups fail even when the worker uses absolute shell paths.
+  // ThrottleInterval: after an update exit, KeepAlive must not immediately fight a CLI restart.
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -151,9 +192,14 @@ export function buildLaunchAgentPlist({ label, executable, script, logPath }) {
 <string>${xmlEscape(script)}</string>
 <string>run</string>
 </array>
+<key>EnvironmentVariables</key>
+<dict>
+<key>PATH</key><string>${xmlEscape(pathEnv)}</string>
+</dict>
 <key>ProcessType</key><string>Interactive</string>
 <key>RunAtLoad</key><true/>
 <key>KeepAlive</key><true/>
+<key>ThrottleInterval</key><integer>${Number(throttleIntervalSec) || 10}</integer>
 <key>StandardOutPath</key><string>${xmlEscape(logPath)}</string>
 <key>StandardErrorPath</key><string>${xmlEscape(logPath)}</string>
 </dict></plist>
@@ -522,19 +568,11 @@ function fetchNpmWorkerScript(version) {
   }
 }
 
-/** Copy a worker script into ~/.config so npx and global installs share one service path. */
-async function materializeWorkerScript(sourceBytes) {
-  await mkdir(configDir, { recursive: true, mode: 0o700 });
-  if (sourceBytes) {
-    const temp = `${installedScript}.${process.pid}.tmp`;
-    await writeFile(temp, sourceBytes, { mode: 0o700 });
-    await rename(temp, installedScript);
-  } else {
-    const source = fileURLToPath(import.meta.url);
-    if (source !== installedScript) await copyFile(source, installedScript);
-  }
-  if (process.platform !== 'win32') await chmod(installedScript, 0o700);
-  // Companion modules + OS helpers (computer use). Best-effort beside the worker.
+/**
+ * Copy computer-use companions next to the installed worker. Never overwrites jian-remote.mjs
+ * (auto-update must not clobber a gateway-stamped script with an older npm copy).
+ */
+async function materializeCompanionModules() {
   try {
     const here = dirname(fileURLToPath(import.meta.url));
     const companions = [
@@ -557,25 +595,215 @@ async function materializeWorkerScript(sourceBytes) {
   } catch {
     // Install still succeeds; computer-use probe will explain if the helper is missing.
   }
+}
+
+/** Copy a worker script into ~/.config so npx and global installs share one service path. */
+async function materializeWorkerScript(sourceBytes) {
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
+  if (sourceBytes) {
+    const temp = `${installedScript}.${process.pid}.tmp`;
+    await writeFile(temp, sourceBytes, { mode: 0o700 });
+    await rename(temp, installedScript);
+  } else {
+    const source = fileURLToPath(import.meta.url);
+    if (source !== installedScript) await copyFile(source, installedScript);
+  }
+  if (process.platform !== 'win32') await chmod(installedScript, 0o700);
+  await materializeCompanionModules();
   return installedScript;
 }
 
+/** True when `pid` is a live process (best-effort; false on ESRCH / invalid). */
+export function isPidAlive(pid) {
+  const n = Number(pid);
+  if (!Number.isInteger(n) || n <= 0) return false;
+  try {
+    process.kill(n, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readWorkerLockPid(lockPath = workerLockPath) {
+  try {
+    const raw = readFileSync(lockPath, 'utf8').trim();
+    const pid = Number(raw);
+    return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function sleepMs(ms) {
+  const sab = new SharedArrayBuffer(4);
+  const ia = new Int32Array(sab);
+  Atomics.wait(ia, 0, 0, Math.max(0, Number(ms) || 0));
+}
+
 /**
- * Register or bounce the per-user service so it runs the installed script and reconnects.
+ * Stop a stray worker PID (SIGTERM → wait → SIGKILL). Used by stop/restart and the run lock.
+ */
+export function terminateWorkerPid(
+  pid,
+  { waitMs = 8_000, kill = process.kill.bind(process) } = {},
+) {
+  if (!isPidAlive(pid)) return { stopped: true, alreadyDead: true };
+  try {
+    kill(pid, 'SIGTERM');
+  } catch {
+    return { stopped: !isPidAlive(pid) };
+  }
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline && isPidAlive(pid)) sleepMs(100);
+  if (isPidAlive(pid)) {
+    try {
+      kill(pid, 'SIGKILL');
+    } catch {
+      // ESRCH — already gone.
+    }
+    sleepMs(100);
+  }
+  return { stopped: !isPidAlive(pid) };
+}
+
+/**
+ * Claim the exclusive worker lock. If another live PID holds it, terminate that process first
+ * so KeepAlive / CLI restarts never leave two pollers on the same machine.
+ */
+export async function acquireWorkerLock({
+  lockPath = workerLockPath,
+  pid = process.pid,
+  maxAttempts = 8,
+} = {}) {
+  await mkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const existing = readWorkerLockPid(lockPath);
+    if (existing && existing !== pid && isPidAlive(existing)) {
+      console.error(
+        `Another Jian Remote worker is running (pid ${existing}); stopping it before continuing.`,
+      );
+      terminateWorkerPid(existing);
+    }
+    if (existing && !isPidAlive(existing)) {
+      try {
+        await unlink(lockPath);
+      } catch {
+        // Lost the race to remove a stale lock; retry create.
+      }
+    }
+    try {
+      writeFileSync(lockPath, `${pid}\n`, { flag: 'wx', mode: 0o600 });
+      return { ok: true, pid };
+    } catch (error) {
+      if (error && error.code !== 'EEXIST') throw error;
+      sleepMs(150);
+    }
+  }
+  throw new Error(
+    `Could not claim the Jian Remote worker lock at ${lockPath}. Stop other workers with: jian-remote stop`,
+  );
+}
+
+export async function releaseWorkerLock({ lockPath = workerLockPath, pid = process.pid } = {}) {
+  const existing = readWorkerLockPid(lockPath);
+  if (existing !== undefined && existing !== pid) return;
+  try {
+    await unlink(lockPath);
+  } catch {
+    // Best-effort; a stale pid file is cleared on the next acquire.
+  }
+}
+
+function macosPlistPath() {
+  return join(homedir(), 'Library', 'LaunchAgents', `${MACOS_LAUNCH_AGENT_LABEL}.plist`);
+}
+
+function linuxUnitPath() {
+  return join(homedir(), '.config', 'systemd', 'user', LINUX_SERVICE_UNIT);
+}
+
+export function serviceKindForPlatform(platform = process.platform) {
+  if (platform === 'darwin') return 'LaunchAgent';
+  if (platform === 'linux') return 'systemd --user';
+  if (platform === 'win32') return 'Task Scheduler';
+  return 'none';
+}
+
+/**
+ * Fully stop the OS service and any worker still holding the pid lock.
+ * Clear success/failure for the `jian-remote stop` CLI.
+ */
+async function stopService() {
+  const kind = serviceKindForPlatform();
+  if (process.platform === 'darwin') {
+    const plistPath = macosPlistPath();
+    const domain = `gui/${process.getuid()}`;
+    spawnSync('launchctl', ['bootout', domain, plistPath], { stdio: 'ignore' });
+    spawnSync('launchctl', ['bootout', `${domain}/${MACOS_LAUNCH_AGENT_LABEL}`], {
+      stdio: 'ignore',
+    });
+  } else if (process.platform === 'linux') {
+    spawnSync('systemctl', ['--user', 'stop', LINUX_SERVICE_UNIT], { stdio: 'ignore' });
+  } else if (process.platform === 'win32') {
+    spawnSync('schtasks.exe', ['/End', '/TN', WINDOWS_TASK_NAME], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+  } else {
+    throw new Error(`Service stop is unsupported on ${process.platform}.`);
+  }
+
+  const locked = readWorkerLockPid();
+  if (locked) {
+    const result = terminateWorkerPid(locked);
+    if (!result.stopped) {
+      throw new Error(
+        `Stopped the ${kind} job but worker pid ${locked} is still running. Try again or kill it manually.`,
+      );
+    }
+  }
+  await releaseWorkerLock({ pid: locked ?? process.pid });
+  // Also clear a lock we never owned (stop from a CLI process).
+  try {
+    await unlink(workerLockPath);
+  } catch {
+    // absent
+  }
+  return { service: kind, stopped: true };
+}
+
+/**
+ * Register (if needed) and start exactly one worker. Always stops any previous instance first.
  * On macOS, ProgramArguments[0] is the Jian Remote.app Node copy — not system node — so
  * Login Items / TCC show "Jian Remote".
  */
-async function startOrRestartService(script) {
+async function startService(script = installedScript) {
+  try {
+    await stopService();
+  } catch (error) {
+    // First install / never registered: stop may complain on exotic platforms only.
+    // A live pid that will not die must still fail the start.
+    if (error instanceof Error && /still running/i.test(error.message)) throw error;
+  }
+
+  try {
+    await readFile(script);
+  } catch {
+    throw new Error(
+      `No installed worker at ${script}. Run: jian-remote install --gateway … --machine … --token …`,
+    );
+  }
+
   if (process.platform === 'darwin') {
     const launchAgents = join(homedir(), 'Library', 'LaunchAgents');
-    const plistPath = join(launchAgents, 'com.jian.remote.plist');
-    const label = 'com.jian.remote';
+    const plistPath = macosPlistPath();
     const app = await materializeMacosAppRuntime();
     await mkdir(launchAgents, { recursive: true, mode: 0o700 });
     await writeFile(
       plistPath,
       buildLaunchAgentPlist({
-        label,
+        label: MACOS_LAUNCH_AGENT_LABEL,
         executable: app.executable,
         script,
         logPath: join(configDir, 'worker.log'),
@@ -583,7 +811,9 @@ async function startOrRestartService(script) {
       { mode: 0o600 },
     );
     const domain = `gui/${process.getuid()}`;
+    // bootout again after writing the plist so KeepAlive cannot resurrect the old definition.
     spawnSync('launchctl', ['bootout', domain, plistPath], { stdio: 'ignore' });
+    sleepMs(400);
     const loaded = spawnSync('launchctl', ['bootstrap', domain, plistPath], { stdio: 'inherit' });
     if (loaded.status !== 0) throw new Error('Could not start Jian Remote with launchd');
     return {
@@ -596,24 +826,16 @@ async function startOrRestartService(script) {
     await mkdir(unitDir, { recursive: true, mode: 0o700 });
     const quote = (value) => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
     const unit = `[Unit]\nDescription=Jian Remote worker\nAfter=network-online.target\n\n[Service]\nExecStart=${quote(process.execPath)} ${quote(script)} run\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n`;
-    await writeFile(join(unitDir, 'jian-remote.service'), unit, { mode: 0o600 });
-    for (const command of [
-      ['daemon-reload'],
-      ['enable', '--now', 'jian-remote.service'],
-      ['restart', 'jian-remote.service'],
-    ]) {
+    await writeFile(linuxUnitPath(), unit, { mode: 0o600 });
+    for (const command of [['daemon-reload'], ['enable', '--now', LINUX_SERVICE_UNIT]]) {
       const result = spawnSync('systemctl', ['--user', ...command], { stdio: 'inherit' });
       if (result.status !== 0)
         throw new Error('Could not install/start Jian Remote with systemd --user');
     }
-    return { service: 'systemd --user', detail: 'jian-remote.service' };
+    return { service: 'systemd --user', detail: LINUX_SERVICE_UNIT };
   }
   if (process.platform === 'win32') {
     const action = `"${process.execPath}" "${script}" run`;
-    spawnSync('schtasks.exe', ['/End', '/TN', 'Jian Remote'], {
-      stdio: 'ignore',
-      windowsHide: true,
-    });
     runChecked(
       'schtasks.exe',
       [
@@ -621,7 +843,7 @@ async function startOrRestartService(script) {
         '/SC',
         'ONLOGON',
         '/TN',
-        'Jian Remote',
+        WINDOWS_TASK_NAME,
         '/TR',
         action,
         '/F',
@@ -633,13 +855,47 @@ async function startOrRestartService(script) {
     );
     runChecked(
       'schtasks.exe',
-      ['/Run', '/TN', 'Jian Remote'],
+      ['/Run', '/TN', WINDOWS_TASK_NAME],
       'Could not start the Jian Remote scheduled task',
     );
-    return { service: 'Task Scheduler', detail: 'Jian Remote (ONLOGON)' };
+    return { service: 'Task Scheduler', detail: `${WINDOWS_TASK_NAME} (ONLOGON)` };
   }
   printInfo(`Service auto-install is unsupported on ${process.platform}. Run: node ${script} run`);
   return { service: 'none', detail: process.platform };
+}
+
+async function restartService(script = installedScript) {
+  // stopService is invoked inside startService; call stop first for clear CLI semantics / logs.
+  await stopService().catch(() => undefined);
+  return startService(script);
+}
+
+/** @deprecated use restartService — kept as the install/configure/update entry name. */
+async function startOrRestartService(script) {
+  return restartService(script);
+}
+
+async function printVersionAndExit() {
+  console.log(PACKAGE_VERSION);
+}
+
+async function cliStop() {
+  const result = await stopService();
+  printSuccess('Stopped Jian Remote', [['Service', `${result.service} stopped`]]);
+}
+
+async function cliStart() {
+  const started = await startService(installedScript);
+  const facts = [['Service', `${started.service} started`]];
+  if (started.detail) facts.push(['Identity', started.detail]);
+  printSuccess('Started Jian Remote', facts);
+}
+
+async function cliRestart() {
+  const started = await restartService(installedScript);
+  const facts = [['Service', `${started.service} restarted`]];
+  if (started.detail) facts.push(['Identity', started.detail]);
+  printSuccess('Restarted Jian Remote', facts);
 }
 
 async function install() {
@@ -764,20 +1020,40 @@ async function update() {
   let scriptBytes;
   let installedVersion = PACKAGE_VERSION;
   // When this process already matches the target (typical: npx @jian-ai/remote-control@X update),
-  // copy ourselves. Otherwise pull the exact package from npm.
+  // copy ourselves. Require an **exact** semver match — same major.minor alone used to let a
+  // global 0.8.1 CLI rewrite the installed script while the gateway was already on 0.8.2,
+  // fighting auto-update and flip-flopping two pollers.
   const selfMatchesTarget =
     target === 'latest'
       ? !isDevVersion(PACKAGE_VERSION)
-      : PACKAGE_VERSION === target.replace(/^v/, '') ||
-        versionsCompatible(PACKAGE_VERSION, target).ok;
+      : PACKAGE_VERSION === target.replace(/^v/, '');
 
   if (selfMatchesTarget && !isDevVersion(PACKAGE_VERSION)) {
     scriptBytes = await readFile(fileURLToPath(import.meta.url));
     installedVersion = PACKAGE_VERSION;
   } else {
-    printInfo(`Downloading @jian-ai/remote-control@${target}…`);
-    scriptBytes = fetchNpmWorkerScript(target);
-    installedVersion = readEmbeddedVersion(scriptBytes.toString('utf8'));
+    // Prefer the gateway’s stamped script when targeting that release — works when npm has not
+    // published the version yet. Fall back to npm pack for pins / latest.
+    const wantGatewayScript =
+      gatewayVersion &&
+      target !== 'latest' &&
+      parseRelease(target)?.raw === parseRelease(gatewayVersion)?.raw;
+    if (wantGatewayScript) {
+      try {
+        printInfo('Downloading worker script from the gateway…');
+        scriptBytes = await fetchGatewayWorkerScript(config.gateway);
+        installedVersion = readEmbeddedVersion(scriptBytes.toString('utf8'));
+      } catch (error) {
+        printInfo(
+          `Gateway script download failed (${error instanceof Error ? error.message : error}); trying npm…`,
+        );
+      }
+    }
+    if (!scriptBytes) {
+      printInfo(`Downloading @jian-ai/remote-control@${target}…`);
+      scriptBytes = fetchNpmWorkerScript(target);
+      installedVersion = readEmbeddedVersion(scriptBytes.toString('utf8'));
+    }
   }
 
   const error = compatibilityError(installedVersion, gatewayVersion);
@@ -807,16 +1083,32 @@ async function update() {
   printSuccess('Updated Jian Remote', facts);
 }
 
+/** Absolute shell path for remote commands — never rely on PATH for the shell itself. */
+export function shellCommandForPlatform(platform = process.platform) {
+  if (platform === 'win32') return 'powershell.exe';
+  if (existsSync('/bin/sh')) return '/bin/sh';
+  if (existsSync('/bin/bash')) return '/bin/bash';
+  return '/bin/sh';
+}
+
+function workerChildEnv() {
+  const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
+  const current = process.env[pathKey] ?? process.env.PATH ?? '';
+  const prefix = process.platform === 'win32' ? '' : LAUNCH_AGENT_PATH;
+  const merged = prefix ? `${prefix}${current ? `:${current}` : ''}` : current || LAUNCH_AGENT_PATH;
+  return { ...process.env, [pathKey]: merged, PATH: merged };
+}
+
 async function executeShell(task) {
   return await new Promise((resolveResult) => {
-    const command = process.platform === 'win32' ? 'powershell.exe' : '/bin/sh';
+    const command = shellCommandForPlatform();
     const commandArgs =
       process.platform === 'win32'
         ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', task.command]
         : ['-lc', task.command];
     const child = spawn(command, commandArgs, {
       cwd: task.cwd || homedir(),
-      env: process.env,
+      env: workerChildEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -877,8 +1169,6 @@ async function execute(task) {
   return executeShell(task);
 }
 
-const updateStatePath = join(configDir, 'update-state.json');
-
 async function readUpdateState() {
   try {
     const raw = JSON.parse(await readFile(updateStatePath, 'utf8'));
@@ -922,23 +1212,53 @@ async function recordUpdateFailure(error) {
 }
 
 /**
+ * True when this process’s PACKAGE_VERSION no longer matches the installed script on disk.
+ * A surviving poller after another worker already applied an update must exit so KeepAlive
+ * loads the new file — ETag 304 alone is not enough (disk matches gateway, memory is stale).
+ */
+export function isStaleInstalledWorker(processVersion, installedSource) {
+  if (isDevVersion(processVersion)) return false;
+  if (typeof installedSource !== 'string' || !installedSource) return false;
+  const diskVersion = readEmbeddedVersion(installedSource);
+  if (!diskVersion || diskVersion === 'unknown' || isDevVersion(diskVersion)) return false;
+  return diskVersion !== processVersion;
+}
+
+/**
  * Atomically replace the installed worker script and exit so LaunchAgent / systemd KeepAlive
  * (or a detached Windows child) load the new code. Never touches config.json.
+ * Does not call startOrRestartService — that would race KeepAlive and leave two pollers.
  */
 async function applyWorkerScriptAndRestart(updated, { sourceLabel }) {
   const checked = validateWorkerScriptBytes(updated);
   if (!checked.ok) throw new Error(checked.message);
+  // Same bytes already on disk and already loaded — do not thrash restart loops when npm and
+  // the gateway script disagree about packaging but stamp the same version.
+  try {
+    const existing = await readFile(installedScript);
+    if (
+      existing.equals(Buffer.isBuffer(updated) ? updated : Buffer.from(updated)) &&
+      checked.version === PACKAGE_VERSION
+    ) {
+      await clearUpdateState();
+      return false;
+    }
+  } catch {
+    // No installed script yet — fall through and write.
+  }
   await mkdir(configDir, { recursive: true, mode: 0o700 });
   const temp = `${installedScript}.${process.pid}.tmp`;
   await writeFile(temp, updated, { mode: 0o700 });
   await rename(temp, installedScript);
   if (process.platform !== 'win32') await chmod(installedScript, 0o700);
+  // Best-effort companions from this process’s package (gateway /update is main script only).
+  await materializeCompanionModules();
   await clearUpdateState();
-  console.log(
-    `Worker updated to ${checked.version} from ${sourceLabel}; restarting the OS service to apply it.`,
-  );
+  console.log(`Worker updated to ${checked.version} from ${sourceLabel}; restarting to apply it.`);
+  await releaseWorkerLock();
   if (process.platform === 'win32') {
     // Task Scheduler has no KeepAlive; spawn the new script then exit this process.
+    // Only one detached child — do not also leave this process polling.
     const child = spawn(process.execPath, [installedScript, 'run'], {
       detached: true,
       stdio: 'ignore',
@@ -962,46 +1282,114 @@ async function updateIfNeeded(base, headers) {
   } catch {
     local = await readFile(fileURLToPath(import.meta.url));
   }
+  if (isStaleInstalledWorker(PACKAGE_VERSION, local.toString('utf8'))) {
+    console.log(
+      `Worker process ${PACKAGE_VERSION} is stale (installed script is newer); restarting to load it.`,
+    );
+    await releaseWorkerLock();
+    process.exit(0);
+  }
   const etag = `"${createHash('sha256').update(local).digest('hex')}"`;
   const response = await fetch(`${base}/update`, {
     headers: { ...headers, 'if-none-match': etag },
     redirect: 'error',
     signal: AbortSignal.timeout(15_000),
   });
-  if (response.status === 304) return false;
+  if (response.status === 304) {
+    // Disk matches gateway. If this process is still the wrong release, exit to reload disk
+    // (second poller that survived an earlier update).
+    return false;
+  }
   if (!response.ok) throw new Error(`worker update check failed: HTTP ${response.status}`);
   const updated = Buffer.from(await response.arrayBuffer());
-  await applyWorkerScriptAndRestart(updated, { sourceLabel: 'the gateway' });
-  return true;
+  const applied = await applyWorkerScriptAndRestart(updated, { sourceLabel: 'the gateway' });
+  // applyWorkerScriptAndRestart exits on a real replace; false means already current.
+  return applied !== false;
 }
 
-/** Fallback when the gateway script is missing or refused — pack the exact release from npm. */
-async function updateFromNpm(gatewayVersion) {
+/** Public /jian-remote.mjs — same stamped bytes as authenticated /update, no worker token. */
+async function fetchGatewayWorkerScript(gatewayBase, fetcher = fetch) {
+  const response = await fetcher(`${gatewayBase.replace(/\/$/, '')}/jian-remote.mjs`, {
+    redirect: 'error',
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not download gateway worker script: HTTP ${response.status}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+/**
+ * Fallback when authenticated /update did not leave disk on the gateway release.
+ * Prefer public /jian-remote.mjs (works when npm is not promoted yet); then npm pack.
+ */
+async function updateFromNpm(gatewayVersion, gatewayBase) {
   const target = parseRelease(gatewayVersion)?.raw;
   if (!target)
     throw new Error('Cannot download a worker update without a gateway release version.');
+  if (gatewayBase) {
+    try {
+      console.log(`Downloading worker script from the gateway (/jian-remote.mjs)…`);
+      const fromGateway = await fetchGatewayWorkerScript(gatewayBase);
+      const applied = await applyWorkerScriptAndRestart(fromGateway, {
+        sourceLabel: 'the gateway (/jian-remote.mjs)',
+      });
+      if (applied !== false) return true;
+    } catch (error) {
+      console.error(
+        `Gateway script download failed (${error instanceof Error ? error.message : error}); trying npm…`,
+      );
+    }
+  }
   console.log(`Downloading @jian-ai/remote-control@${target} from npm…`);
   const scriptBytes = fetchNpmWorkerScript(target);
-  await applyWorkerScriptAndRestart(scriptBytes, { sourceLabel: `npm @${target}` });
-  return true;
+  const applied = await applyWorkerScriptAndRestart(scriptBytes, {
+    sourceLabel: `npm @${target}`,
+  });
+  return applied !== false;
 }
 
 /**
  * On connect and every few minutes: match the gateway’s worker script. Same major.minor patch
  * bumps use the authenticated /update ETag path; major.minor skew also self-updates to the
  * gateway version (gateway script first, npm fallback) instead of refusing forever.
+ *
+ * Prefer the gateway script. Only hit npm when the gateway path did not leave the **installed**
+ * script on the gateway release — never rewrite a correct gateway install with an older npm
+ * tarball (staged-but-unpublished packages caused 0.8.1↔0.8.2 thrash).
  */
 async function reconcileWorkerWithGateway(config, base, headers) {
   const gatewayVersion = await fetchGatewayVersion(config.gateway);
+  const gatewayRelease = parseRelease(gatewayVersion)?.raw;
   const compat = versionsCompatible(PACKAGE_VERSION, gatewayVersion);
   const mustMatch = shouldMatchGatewayVersion(PACKAGE_VERSION, gatewayVersion);
+
+  let installedVersion;
+  try {
+    installedVersion = readEmbeddedVersion((await readFile(installedScript)).toString('utf8'));
+  } catch {
+    installedVersion = undefined;
+  }
 
   let gatewayUpdateError;
   try {
     const changed = await updateIfNeeded(base, headers);
+    // Re-read after a no-op check; updateIfNeeded exits on apply.
+    try {
+      installedVersion = readEmbeddedVersion((await readFile(installedScript)).toString('utf8'));
+    } catch {
+      // keep previous
+    }
     // 304 and still wrong version → gateway bytes match disk but this process is stale, or the
-    // gateway could not stamp a newer script. Fall through to npm when we must match.
+    // gateway could not stamp a newer script. Fall through to npm only when disk is wrong too.
     if (!changed && mustMatch) {
+      if (gatewayRelease && installedVersion === gatewayRelease) {
+        console.log(
+          `Installed worker is ${installedVersion} but this process is ${PACKAGE_VERSION}; restarting to load the installed script.`,
+        );
+        await releaseWorkerLock();
+        process.exit(0);
+      }
       gatewayUpdateError = new Error(
         `Gateway worker script is unchanged but this process is ${PACKAGE_VERSION} (gateway ${gatewayVersion}).`,
       );
@@ -1010,12 +1398,14 @@ async function reconcileWorkerWithGateway(config, base, headers) {
     gatewayUpdateError = error instanceof Error ? error : new Error(String(error));
   }
 
-  if (gatewayUpdateError && (mustMatch || !compat.ok)) {
+  const diskAlreadyMatches = Boolean(gatewayRelease) && installedVersion === gatewayRelease;
+
+  if (gatewayUpdateError && (mustMatch || !compat.ok) && !diskAlreadyMatches) {
     console.error(
       `Gateway self-update did not apply (${gatewayUpdateError.message}); trying npm for ${gatewayVersion}…`,
     );
     try {
-      await updateFromNpm(gatewayVersion);
+      await updateFromNpm(gatewayVersion, config.gateway);
     } catch (npmError) {
       const recorded = await recordUpdateFailure(npmError);
       console.error(
@@ -1033,6 +1423,10 @@ async function reconcileWorkerWithGateway(config, base, headers) {
       console.error('Continuing on the installed worker; will retry the update later.');
       return gatewayVersion;
     }
+  } else if (gatewayUpdateError && diskAlreadyMatches) {
+    console.error(
+      `Worker update check reported ${gatewayUpdateError.message}; installed script already matches gateway ${gatewayRelease}. Not rewriting from npm.`,
+    );
   } else if (gatewayUpdateError) {
     // Optional content refresh failed while still compatible — log and keep polling.
     console.error(`Worker update check failed: ${gatewayUpdateError.message}`);
@@ -1125,6 +1519,29 @@ async function postResult(base, headers, result) {
 }
 
 async function run() {
+  await acquireWorkerLock();
+  let stopMacIdle = () => {};
+  const shutdown = () => {
+    try {
+      stopMacIdle();
+    } catch {
+      // ignore
+    }
+    try {
+      const existing = readWorkerLockPid();
+      if (existing === process.pid) rmSync(workerLockPath, { force: true });
+    } catch {
+      // Best-effort unlock.
+    }
+  };
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.once(signal, () => {
+      shutdown();
+      process.exit(0);
+    });
+  }
+  process.once('exit', shutdown);
+
   const config = await loadConfig();
   const capabilities = [];
   let probeMacUiState = () => 'unknown';
@@ -1139,12 +1556,8 @@ async function run() {
     try {
       const mac = await import('./computer-macos.mjs');
       mac.startWorkerIdleAssertion(process.pid);
+      stopMacIdle = () => mac.stopWorkerIdleAssertion();
       probeMacUiState = () => mac.probeMacUiState();
-      for (const signal of ['SIGINT', 'SIGTERM']) {
-        process.once(signal, () => {
-          mac.stopWorkerIdleAssertion();
-        });
-      }
     } catch {
       // Idle assertion / uiState probe optional; shell still works.
     }
@@ -1220,25 +1633,34 @@ export function isCliEntry(argv1 = process.argv[1], metaUrl = import.meta.url) {
 
 if (isCliEntry()) {
   try {
-    if (args[0] === 'install') await install();
-    else if (args[0] === 'configure') await configure();
-    else if (args[0] === 'update') await update();
-    else if (args[0] === 'run') await run();
+    const invocation = parseCliInvocation(args);
+    if (invocation.command === 'version') await printVersionAndExit();
+    else if (invocation.command === 'install') await install();
+    else if (invocation.command === 'configure') await configure();
+    else if (invocation.command === 'update') await update();
+    else if (invocation.command === 'stop') await cliStop();
+    else if (invocation.command === 'start') await cliStart();
+    else if (invocation.command === 'restart') await cliRestart();
+    else if (invocation.command === 'run') await run();
     else {
       const color = shouldColorize();
       const title = paint('Jian Remote', ANSI.bold, color);
       const pkg = paint('(@jian-ai/remote-control)', ANSI.dim, color);
       console.log(`${title} worker ${pkg}
+  version | --version | -V
   install --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)
   configure [--gateway HTTPS_URL] [--machine UUID] (--token VALUE | --token-prompt | --token-stdin)
   update [--version X.Y.Z|latest]
+  stop | start | restart
   run
 
 Install:    npm install -g @jian-ai/remote-control
 Or:         npx @jian-ai/remote-control@latest install --gateway … --machine … --token …
 Configure:  jian-remote configure --token …   (or --gateway / --machine; restarts the service)
 Update:     npx @jian-ai/remote-control@latest update
-            (upgrades the worker binary; reads ~/.config/jian-remote)`);
+            (upgrades the worker binary; reads ~/.config/jian-remote)
+Service:    jian-remote stop | start | restart
+Version:    jian-remote version`);
     }
   } catch (error) {
     const color = shouldColorize({ isTTY: process.stderr.isTTY });
