@@ -87,22 +87,22 @@ export const RotatedCredentials: Story = {
     await waitFor(() =>
       expect(canvas.getByRole('heading', { name: 'Remote Control' })).toBeVisible(),
     );
-    const accessButtons = canvas.getAllByRole('button', { name: 'Access' });
+    // Machine rows load asynchronously from MSW; wait before expanding.
+    const accessButtons = await canvas.findAllByRole('button', { name: 'Access' });
     const firstAccess = accessButtons[0];
     if (!firstAccess) throw new Error('Expected an Access button');
     await userEvent.click(firstAccess);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Rotate credentials' }));
+    // Confirm / reveal modals use <dialog>; query the document, not only the story root.
+    const page = within(canvasElement.ownerDocument.body);
     await waitFor(() =>
-      expect(canvas.getByRole('button', { name: 'Rotate credentials' })).toBeVisible(),
+      expect(page.getByRole('heading', { name: /Rotate credentials for/i })).toBeVisible(),
     );
-    await userEvent.click(canvas.getByRole('button', { name: 'Rotate credentials' }));
+    await userEvent.click(page.getByRole('button', { name: 'Confirm' }));
     await waitFor(() =>
-      expect(canvas.getByRole('heading', { name: /Rotate credentials for/i })).toBeVisible(),
+      expect(page.getByRole('heading', { name: /Credentials rotated for/i })).toBeVisible(),
     );
-    await userEvent.click(canvas.getByRole('button', { name: 'Confirm' }));
-    await waitFor(() =>
-      expect(canvas.getByRole('heading', { name: /Credentials rotated for/i })).toBeVisible(),
-    );
-    const configure = canvas.getByLabelText(
+    const configure = page.getByLabelText(
       'Already installed (npx configure)',
     ) as HTMLTextAreaElement;
     expect(configure.value).toContain('configure --gateway');
