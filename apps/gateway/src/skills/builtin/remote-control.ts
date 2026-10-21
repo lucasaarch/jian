@@ -21,12 +21,12 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
 - \`run_remote_command\` — shell on that computer (PowerShell on Windows, \`/bin/sh\` on
   macOS/Linux). Open apps, install software, Git, builds, scripts — anything a local user
   would type. Prefer \`remote_computer\` for GUI and screenshots, and pull/push for files.
-- \`remote_computer\` — Anthropic-style desktop control on **macOS** (primary display):
-  \`screenshot\`, \`left_click\`, \`right_click\`, \`double_click\`, \`mouse_move\`, \`type\`,
-  \`key\`, \`scroll\`, \`left_click_drag\`, \`wait\`, \`end_session\`. Coordinates are pixels in
-  the screenshot image (origin top-left); use the returned \`widthPx\` / \`heightPx\`. A Jian
-  overlay pointer is visible on the Mac while the session is open; call \`end_session\` when
-  finished so it disappears.
+- \`remote_computer\` — Anthropic-style desktop control on **macOS, Linux (X11), and Windows**
+  (primary display): \`screenshot\`, \`left_click\`, \`right_click\`, \`double_click\`,
+  \`mouse_move\`, \`type\`, \`key\`, \`scroll\`, \`left_click_drag\`, \`wait\`, \`end_session\`.
+  Coordinates are pixels in the screenshot image (origin top-left); use the returned
+  \`widthPx\` / \`heightPx\`. A Jian overlay pointer is visible while the session is open;
+  call \`end_session\` when finished so it disappears.
 - \`pull_remote_file\` — read a remote path into conversation media (size-capped).
 - \`push_remote_file\` — write UTF-8 or base64 bytes to a remote path (size-capped).
 
@@ -40,11 +40,12 @@ succeeded unless the tool result confirms it (exit code, stdout, or \`ok: true\`
    one if several). Offline means the worker is not polling — say so; do not invent success.
    \`uiState: locked\` means the Mac is locked but still online: use shell/files if needed,
    tell the owner to unlock for Computer Use — do not call that offline.
-   Computer use needs capability \`computer-macos-v1\` (macOS Jian Remote updated for it).
+   Computer use needs capability \`computer-macos-v1\`, \`computer-linux-v1\`, or
+   \`computer-windows-v1\` (updated Jian Remote on that OS).
 2. Say one short line before a slow or visible action ("Opening Calculator on Mark.").
 3. For GUI work: \`remote_computer\` with \`action: screenshot\` first, then click/type using
-   those image coordinates; screenshot again after meaningful UI changes. Prefer
-   \`run_remote_command\` when a CLI exists.
+   those image coordinates; screenshot again after meaningful UI changes — not after every
+   keystroke. Prefer \`run_remote_command\` when a CLI exists.
 4. When done with the GUI, \`remote_computer\` with \`action: end_session\`.
 5. For "show me the screen", screenshot then \`send_file\` with that \`mediaId\`.
 6. For a small file exchange, use pull/push. Larger transfers need an arrangement the owner
@@ -62,8 +63,9 @@ signs in. Until then the machine stays offline in the panel.
 - Screenshot and file payloads travel as base64 on the worker channel (~300 KB binary).
   Screenshots are scaled/recompressed on the remote machine to fit.
 - macOS computer use needs **Screen Recording** and **Accessibility** for **Jian Remote** in
-  System Settings. If a tool result says those are missing, tell the owner — do not invent
-  shell workarounds that bypass Jian’s app identity.
+  System Settings. Linux needs an X11 session with \`xdotool\` and \`ffmpeg\`. Windows needs an
+  interactive desktop session. If a tool result says permissions or tools are missing, tell
+  the owner — do not invent shell workarounds that bypass Jian’s app identity.
 - A **locked** Mac (password lock / loginwindow) stays online when the worker is polling;
   Computer Use needs the owner to unlock. Display sleep alone is woken when a session
   starts. Lid-closed system sleep is true offline until the Mac wakes.

@@ -1,9 +1,15 @@
 /*
   Jian Remote Control — macOS computer-use helper
 
-  Long-lived AppKit process: overlay pointer + synthetic mouse/keyboard via CoreGraphics.
+  Long-lived AppKit process: Jian overlay pointer + synthetic mouse/keyboard via CoreGraphics.
   Protocol: newline-delimited JSON on stdin → newline-delimited JSON on stdout (flush each).
   Errors go to stderr in English only.
+
+  Pointer UX (Lucas / v0.8.2 polish):
+  - Geometric white arrow (anathema-white style) with a soft brand-blue glow underneath.
+  - Agent actions save the user’s cursor, hide it briefly, drive HID at the target, then
+    restore — so clicks do not leave the physical mouse stranded at the Jian position.
+  - Overlay tip animates (ease-out) between positions; system cursor is not the visible UX.
 
   Published npm packages ship a prebuilt universal binary (Publish CI). From source on a Mac:
     ./build-helper.sh
@@ -73,16 +79,18 @@ private func intValue(_ object: [String: Any], _ key: String) -> Int? {
   return nil
 }
 
-// MARK: - Colors (Jian UI)
+// MARK: - Colors (Jian + geometric white pointer)
 
-private let jianCream = NSColor(srgbRed: 0xF5 / 255, green: 0xF5 / 255, blue: 0xF3 / 255, alpha: 1)
 private let jianInk = NSColor(srgbRed: 0x17 / 255, green: 0x17 / 255, blue: 0x16 / 255, alpha: 1)
+/// Soft brand blue under the pointer — visible, not neon.
+private let jianGlow = NSColor(srgbRed: 0x3A / 255, green: 0x7A / 255, blue: 0xD6 / 255, alpha: 1)
+private let pointerWhite = NSColor(srgbRed: 0xFA / 255, green: 0xFA / 255, blue: 0xF8 / 255, alpha: 1)
 
-private let sessionAlpha: CGFloat = 0.92
+private let sessionAlpha: CGFloat = 0.94
 private let idleAlpha: CGFloat = 0.18
-private let pointerSize: CGFloat = 32
-/// Tip of the wing relative to the view's top-left (hotspot for cursor placement).
-private let hotspot = CGPoint(x: 4, y: 4)
+private let pointerSize: CGFloat = 36
+/// Tip of the geometric arrow (hotspot) near the view's top-left.
+private let hotspot = CGPoint(x: 2, y: 2)
 
 // MARK: - Overlay view
 
@@ -98,11 +106,11 @@ private final class JianPointerView: NSView {
     guard let ctx = NSGraphicsContext.current?.cgContext else { return }
 
     if rippleVisible {
-      let maxRadius = pointerSize * 0.95
-      let radius = 4 + maxRadius * rippleProgress
+      let maxRadius = pointerSize * 0.9
+      let radius = 3 + maxRadius * rippleProgress
       let alpha = max(0, 1 - rippleProgress)
       ctx.saveGState()
-      ctx.setStrokeColor(jianInk.withAlphaComponent(0.55 * alpha).cgColor)
+      ctx.setStrokeColor(jianGlow.withAlphaComponent(0.45 * alpha).cgColor)
       ctx.setLineWidth(1.5)
       ctx.strokeEllipse(in: CGRect(
         x: hotspot.x - radius,
@@ -113,57 +121,55 @@ private final class JianPointerView: NSView {
       ctx.restoreGState()
     }
 
-    let path = Self.wingPath(in: bounds)
+    let path = Self.arrowPath(in: bounds)
+
+    // Soft blue glow under the white blade (brand cue without neon spam).
     ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: 1.5), blur: 4, color: NSColor.black.withAlphaComponent(0.28).cgColor)
-    let fillAlpha = 1 - fillPulse * 0.35
-    jianCream.withAlphaComponent(fillAlpha).setFill()
+    ctx.setShadow(
+      offset: CGSize(width: 0, height: 2),
+      blur: 10,
+      color: jianGlow.withAlphaComponent(0.55).cgColor
+    )
+    jianGlow.withAlphaComponent(0.35).setFill()
     path.fill()
     ctx.restoreGState()
 
-    jianInk.setStroke()
-    path.lineWidth = 2
-    path.lineJoinStyle = .round
-    path.lineCapStyle = .round
+    ctx.saveGState()
+    ctx.setShadow(
+      offset: CGSize(width: 0.5, height: 1.2),
+      blur: 2.5,
+      color: NSColor.black.withAlphaComponent(0.22).cgColor
+    )
+    let fillAlpha = 1 - fillPulse * 0.28
+    pointerWhite.withAlphaComponent(fillAlpha).setFill()
+    path.fill()
+    ctx.restoreGState()
+
+    jianInk.withAlphaComponent(0.85).setStroke()
+    path.lineWidth = 1.15
+    path.lineJoinStyle = .miter
+    path.lineCapStyle = .butt
+    path.miterLimit = 8
     path.stroke()
   }
 
-  /// Ascending wing mark inspired by the Jian brand path (favicon / mark.tsx).
-  private static func wingPath(in bounds: NSRect) -> NSBezierPath {
+  /// Sharp geometric pointer (anathema-white style): tip → shaft → barb.
+  private static func arrowPath(in bounds: NSRect) -> NSBezierPath {
     let s = min(bounds.width, bounds.height)
     let path = NSBezierPath()
-    // Tip near top-left (hotspot), body sweeping down-right then curling back — one ascending wing.
-    path.move(to: CGPoint(x: s * 0.12, y: s * 0.10))
-    path.curve(
-      to: CGPoint(x: s * 0.72, y: s * 0.18),
-      controlPoint1: CGPoint(x: s * 0.28, y: s * 0.02),
-      controlPoint2: CGPoint(x: s * 0.52, y: s * 0.06)
-    )
-    path.curve(
-      to: CGPoint(x: s * 0.88, y: s * 0.55),
-      controlPoint1: CGPoint(x: s * 0.88, y: s * 0.28),
-      controlPoint2: CGPoint(x: s * 0.94, y: s * 0.42)
-    )
-    path.curve(
-      to: CGPoint(x: s * 0.42, y: s * 0.88),
-      controlPoint1: CGPoint(x: s * 0.80, y: s * 0.72),
-      controlPoint2: CGPoint(x: s * 0.58, y: s * 0.90)
-    )
-    path.curve(
-      to: CGPoint(x: s * 0.18, y: s * 0.48),
-      controlPoint1: CGPoint(x: s * 0.26, y: s * 0.86),
-      controlPoint2: CGPoint(x: s * 0.12, y: s * 0.68)
-    )
-    path.curve(
-      to: CGPoint(x: s * 0.12, y: s * 0.10),
-      controlPoint1: CGPoint(x: s * 0.22, y: s * 0.32),
-      controlPoint2: CGPoint(x: s * 0.08, y: s * 0.20)
-    )
+    // Coordinates in view space (flipped Y): tip near top-left hotspot.
+    path.move(to: CGPoint(x: s * 0.06, y: s * 0.06))
+    path.line(to: CGPoint(x: s * 0.06, y: s * 0.72))
+    path.line(to: CGPoint(x: s * 0.28, y: s * 0.55))
+    path.line(to: CGPoint(x: s * 0.42, y: s * 0.88))
+    path.line(to: CGPoint(x: s * 0.55, y: s * 0.82))
+    path.line(to: CGPoint(x: s * 0.36, y: s * 0.48))
+    path.line(to: CGPoint(x: s * 0.62, y: s * 0.48))
     path.close()
     return path
   }
 
-  func flashClick(duration: TimeInterval = 0.2) {
+  func flashClick(duration: TimeInterval = 0.16) {
     rippleTimer?.invalidate()
     rippleVisible = true
     rippleProgress = 0
@@ -207,6 +213,7 @@ private final class OverlayController {
   private var pointerView: JianPointerView?
   /// Current tip/hotspot in global top-left Quartz coordinates.
   private var tipPoint = CGPoint.zero
+  private var hasTip = false
 
   private init() {}
 
@@ -241,6 +248,10 @@ private final class OverlayController {
     ensureWindow()
     guard let window else { return }
     window.alphaValue = sessionAlpha
+    if !hasTip {
+      tipPoint = quartzMouseLocation()
+      hasTip = true
+    }
     positionWindow()
     window.orderFrontRegardless()
   }
@@ -257,10 +268,12 @@ private final class OverlayController {
     guard let window else { return }
     window.orderOut(nil)
     window.alphaValue = 0
+    hasTip = false
   }
 
   func moveTip(to globalTopLeft: CGPoint) {
     tipPoint = globalTopLeft
+    hasTip = true
     ensureWindow()
     positionWindow()
   }
@@ -277,7 +290,6 @@ private final class OverlayController {
     // Quartz global: origin top-left of primary, Y down. Cocoa: origin bottom-left, Y up.
     let mainHeight = NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
     let tipCocoaY = mainHeight - tipPoint.y
-    // Window origin is bottom-left; hotspot is hotspot.y down from the top of the view.
     let origin = NSPoint(
       x: tipPoint.x - hotspot.x,
       y: tipCocoaY - (pointerSize - hotspot.y)
@@ -286,26 +298,82 @@ private final class OverlayController {
   }
 }
 
-// MARK: - Coordinate helpers
+// MARK: - Cursor location / preserve
 
-private func cgPointFromTopLeft(_ x: Double, _ y: Double) -> CGPoint {
-  CGPoint(x: x, y: y)
+/// Quartz global top-left coordinates for the live system cursor.
+private func quartzMouseLocation() -> CGPoint {
+  let cocoa = NSEvent.mouseLocation
+  let mainHeight = NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
+  return CGPoint(x: cocoa.x, y: mainHeight - cocoa.y)
 }
 
-// MARK: - Mouse / keyboard
-
-private func postMouseMove(to point: CGPoint) {
-  OverlayController.shared.moveTip(to: point)
+/// Warp HID cursor without moving the Jian overlay tip.
+private func warpSystemCursor(to point: CGPoint) {
   guard let event = CGEvent(
     mouseEventSource: nil,
     mouseType: .mouseMoved,
     mouseCursorPosition: point,
     mouseButton: .left
   ) else {
-    logError("could not create mouseMoved event")
+    logError("could not create mouseMoved event for warp")
     return
   }
   event.post(tap: .cghidEventTap)
+}
+
+/**
+  Save → hide → act → restore → show.
+
+  HID clicks must be posted at the target (macOS delivers them at the event location),
+  but we restore immediately so Lucas’s physical mouse is not left at the Jian point.
+*/
+private func withPreservedUserCursor(_ body: () -> Void) {
+  let saved = quartzMouseLocation()
+  CGDisplayHideCursor(CGMainDisplayID())
+  body()
+  warpSystemCursor(to: saved)
+  // Tiny yield so the restore event lands before unhide.
+  Thread.sleep(forTimeInterval: 0.008)
+  CGDisplayShowCursor(CGMainDisplayID())
+}
+
+// MARK: - Smooth overlay motion
+
+private func easeOutCubic(_ t: Double) -> Double {
+  let x = min(1, max(0, t))
+  return 1 - pow(1 - x, 3)
+}
+
+private func animateOverlay(to target: CGPoint) {
+  OverlayController.shared.ensureSession()
+  let start = OverlayController.shared.currentTip()
+  let distance = hypot(target.x - start.x, target.y - start.y)
+  if distance < 1.5 {
+    OverlayController.shared.moveTip(to: target)
+    return
+  }
+  // ~0.25 ms/px, clamped — snappy for agent loops.
+  let duration = min(0.11, max(0.028, distance * 0.00025))
+  let steps = max(1, Int(ceil(duration * 60)))
+  let stepSleep = duration / Double(steps)
+  for i in 1...steps {
+    let t = easeOutCubic(Double(i) / Double(steps))
+    let p = CGPoint(
+      x: start.x + (target.x - start.x) * t,
+      y: start.y + (target.y - start.y) * t
+    )
+    OverlayController.shared.moveTip(to: p)
+    if i < steps {
+      RunLoop.current.run(until: Date(timeIntervalSinceNow: stepSleep))
+    }
+  }
+  OverlayController.shared.moveTip(to: target)
+}
+
+// MARK: - Mouse / keyboard
+
+private func postOverlayMove(to point: CGPoint) {
+  animateOverlay(to: point)
 }
 
 private func postMouseClick(button: CGMouseButton, count: Int64) {
@@ -314,77 +382,91 @@ private func postMouseClick(button: CGMouseButton, count: Int64) {
   let downType: CGEventType = button == .right ? .rightMouseDown : .leftMouseDown
   let upType: CGEventType = button == .right ? .rightMouseUp : .leftMouseUp
 
-  for clickIndex in 1...max(1, count) {
-    if let down = CGEvent(
-      mouseEventSource: nil,
-      mouseType: downType,
-      mouseCursorPosition: point,
-      mouseButton: button
-    ) {
-      down.setIntegerValueField(.mouseEventClickState, value: clickIndex)
-      down.post(tap: .cghidEventTap)
-    }
-    if let up = CGEvent(
-      mouseEventSource: nil,
-      mouseType: upType,
-      mouseCursorPosition: point,
-      mouseButton: button
-    ) {
-      up.setIntegerValueField(.mouseEventClickState, value: clickIndex)
-      up.post(tap: .cghidEventTap)
-    }
-    if clickIndex < count {
-      Thread.sleep(forTimeInterval: 0.05)
+  withPreservedUserCursor {
+    warpSystemCursor(to: point)
+    for clickIndex in 1...max(1, count) {
+      if let down = CGEvent(
+        mouseEventSource: nil,
+        mouseType: downType,
+        mouseCursorPosition: point,
+        mouseButton: button
+      ) {
+        down.setIntegerValueField(.mouseEventClickState, value: clickIndex)
+        down.post(tap: .cghidEventTap)
+      }
+      if let up = CGEvent(
+        mouseEventSource: nil,
+        mouseType: upType,
+        mouseCursorPosition: point,
+        mouseButton: button
+      ) {
+        up.setIntegerValueField(.mouseEventClickState, value: clickIndex)
+        up.post(tap: .cghidEventTap)
+      }
+      if clickIndex < count {
+        Thread.sleep(forTimeInterval: 0.04)
+      }
     }
   }
 }
 
+private func postClickAt(point: CGPoint, button: CGMouseButton, count: Int64) {
+  animateOverlay(to: point)
+  postMouseClick(button: button, count: count)
+}
+
 private func postDrag(from: CGPoint, to: CGPoint) {
-  postMouseMove(to: from)
+  OverlayController.shared.ensureSession()
+  animateOverlay(to: from)
   OverlayController.shared.flashClick()
-  Thread.sleep(forTimeInterval: 0.02)
 
-  if let down = CGEvent(
-    mouseEventSource: nil,
-    mouseType: .leftMouseDown,
-    mouseCursorPosition: from,
-    mouseButton: .left
-  ) {
-    down.post(tap: .cghidEventTap)
-  }
+  withPreservedUserCursor {
+    warpSystemCursor(to: from)
+    Thread.sleep(forTimeInterval: 0.012)
 
-  let steps = 12
-  for i in 1...steps {
-    let t = CGFloat(i) / CGFloat(steps)
-    let p = CGPoint(
-      x: from.x + (to.x - from.x) * t,
-      y: from.y + (to.y - from.y) * t
-    )
-    OverlayController.shared.moveTip(to: p)
-    if let drag = CGEvent(
+    if let down = CGEvent(
       mouseEventSource: nil,
-      mouseType: .leftMouseDragged,
-      mouseCursorPosition: p,
+      mouseType: .leftMouseDown,
+      mouseCursorPosition: from,
       mouseButton: .left
     ) {
-      drag.post(tap: .cghidEventTap)
+      down.post(tap: .cghidEventTap)
     }
-    Thread.sleep(forTimeInterval: 0.008)
-  }
 
-  if let up = CGEvent(
-    mouseEventSource: nil,
-    mouseType: .leftMouseUp,
-    mouseCursorPosition: to,
-    mouseButton: .left
-  ) {
-    up.post(tap: .cghidEventTap)
+    let distance = hypot(to.x - from.x, to.y - from.y)
+    let steps = max(6, min(14, Int(distance / 40) + 6))
+    for i in 1...steps {
+      let t = easeOutCubic(Double(i) / Double(steps))
+      let p = CGPoint(
+        x: from.x + (to.x - from.x) * t,
+        y: from.y + (to.y - from.y) * t
+      )
+      OverlayController.shared.moveTip(to: p)
+      if let drag = CGEvent(
+        mouseEventSource: nil,
+        mouseType: .leftMouseDragged,
+        mouseCursorPosition: p,
+        mouseButton: .left
+      ) {
+        drag.post(tap: .cghidEventTap)
+      }
+      Thread.sleep(forTimeInterval: 0.006)
+    }
+
+    if let up = CGEvent(
+      mouseEventSource: nil,
+      mouseType: .leftMouseUp,
+      mouseCursorPosition: to,
+      mouseButton: .left
+    ) {
+      up.post(tap: .cghidEventTap)
+    }
   }
   OverlayController.shared.moveTip(to: to)
 }
 
 private func postScroll(at point: CGPoint, direction: String, amount: Int) {
-  postMouseMove(to: point)
+  animateOverlay(to: point)
   let n = max(1, amount)
   var dx = 0
   var dy = 0
@@ -397,18 +479,21 @@ private func postScroll(at point: CGPoint, direction: String, amount: Int) {
     logError("unknown scroll direction: \(direction)")
     return
   }
-  for _ in 0..<n {
-    if let event = CGEvent(
-      scrollWheelEvent2Source: nil,
-      units: .line,
-      wheelCount: 2,
-      wheel1: Int32(dy),
-      wheel2: Int32(dx),
-      wheel3: 0
-    ) {
-      event.post(tap: .cghidEventTap)
+  withPreservedUserCursor {
+    warpSystemCursor(to: point)
+    for _ in 0..<n {
+      if let event = CGEvent(
+        scrollWheelEvent2Source: nil,
+        units: .line,
+        wheelCount: 2,
+        wheel1: Int32(dy),
+        wheel2: Int32(dx),
+        wheel3: 0
+      ) {
+        event.post(tap: .cghidEventTap)
+      }
+      Thread.sleep(forTimeInterval: 0.012)
     }
-    Thread.sleep(forTimeInterval: 0.02)
   }
 }
 
@@ -480,7 +565,6 @@ private func postUnicodeChar(_ scalar: UniChar) {
 }
 
 private func typeText(_ text: String) {
-  // Iterate UTF-16 code units; map Return/Tab to virtual keys when present as characters.
   let utf16 = Array(text.utf16)
   var i = 0
   while i < utf16.count {
@@ -496,7 +580,7 @@ private func typeText(_ text: String) {
       postUnicodeChar(unit)
     }
     i += 1
-    Thread.sleep(forTimeInterval: 0.005)
+    Thread.sleep(forTimeInterval: 0.002)
   }
 }
 
@@ -547,7 +631,6 @@ private func parseAndPostKey(_ keySpec: String) -> Bool {
     }
   }
 
-  // Function keys F1–F12
   if token.hasPrefix("f"), let n = Int(token.dropFirst()), (1...12).contains(n) {
     let base = kVK_F1
     postKeyCode(CGKeyCode(base + (n - 1)), flags: flags)
@@ -567,7 +650,6 @@ private func geometryResponse() -> [String: Any] {
   }
   let frame = screen.frame
   let scale = screen.backingScaleFactor
-  // Primary display: Cocoa origin is bottom-left of main screen; Quartz global top-left origin is (0,0).
   return [
     "ok": true,
     "originX": 0,
@@ -638,7 +720,8 @@ private func handleCommand(_ object: [String: Any]) {
       writeError("move requires pointX and pointY")
       return
     }
-    postMouseMove(to: cgPointFromTopLeft(x, y))
+    // Overlay-only: do not warp the user’s system cursor.
+    postOverlayMove(to: CGPoint(x: x, y: y))
     writeOk()
 
   case "click":
@@ -659,6 +742,28 @@ private func handleCommand(_ object: [String: Any]) {
     postMouseClick(button: button, count: count)
     writeOk()
 
+  case "clickAt":
+    guard let x = doubleValue(object, "pointX"), let y = doubleValue(object, "pointY") else {
+      writeError("clickAt requires pointX and pointY")
+      return
+    }
+    let buttonName = (object["button"] as? String ?? "left").lowercased()
+    let count = Int64(intValue(object, "count") ?? 1)
+    let button: CGMouseButton
+    switch buttonName {
+    case "left": button = .left
+    case "right": button = .right
+    default:
+      writeError("button must be left or right")
+      return
+    }
+    if count != 1 && count != 2 {
+      writeError("count must be 1 or 2")
+      return
+    }
+    postClickAt(point: CGPoint(x: x, y: y), button: button, count: count)
+    writeOk()
+
   case "drag":
     guard let fromX = doubleValue(object, "fromX"),
       let fromY = doubleValue(object, "fromY"),
@@ -668,7 +773,7 @@ private func handleCommand(_ object: [String: Any]) {
       writeError("drag requires fromX, fromY, toX, toY")
       return
     }
-    postDrag(from: cgPointFromTopLeft(fromX, fromY), to: cgPointFromTopLeft(toX, toY))
+    postDrag(from: CGPoint(x: fromX, y: fromY), to: CGPoint(x: toX, y: toY))
     writeOk()
 
   case "type":
@@ -704,7 +809,7 @@ private func handleCommand(_ object: [String: Any]) {
       writeError("direction must be up, down, left, or right")
       return
     }
-    postScroll(at: cgPointFromTopLeft(x, y), direction: dir, amount: amount)
+    postScroll(at: CGPoint(x: x, y: y), direction: dir, amount: amount)
     writeOk()
 
   default:
@@ -724,7 +829,6 @@ private final class StdinReader {
       while true {
         let chunk = handle.availableData
         if chunk.isEmpty {
-          // EOF — exit the process cleanly.
           DispatchQueue.main.async {
             NSApp.terminate(nil)
           }

@@ -490,19 +490,26 @@ async function materializeWorkerScript(sourceBytes) {
     if (source !== installedScript) await copyFile(source, installedScript);
   }
   if (process.platform !== 'win32') await chmod(installedScript, 0o700);
-  // Companion modules + macOS helper source (computer use). Best-effort beside the worker.
+  // Companion modules + OS helpers (computer use). Best-effort beside the worker.
   try {
     const here = dirname(fileURLToPath(import.meta.url));
-    const computerSrc = join(here, 'computer-macos.mjs');
-    const computerDest = join(configDir, 'computer-macos.mjs');
-    if (existsSync(computerSrc) && computerSrc !== computerDest) {
-      await copyFile(computerSrc, computerDest);
-      if (process.platform !== 'win32') await chmod(computerDest, 0o700);
+    const companions = [
+      'computer.mjs',
+      'computer-shared.mjs',
+      'computer-macos.mjs',
+      'computer-linux.mjs',
+      'computer-windows.mjs',
+    ];
+    for (const name of companions) {
+      const src = join(here, name);
+      const dest = join(configDir, name);
+      if (existsSync(src) && src !== dest) {
+        await copyFile(src, dest);
+        if (process.platform !== 'win32') await chmod(dest, 0o700);
+      }
     }
-    if (process.platform === 'darwin') {
-      const { materializeComputerHelperSources } = await import('./computer-macos.mjs');
-      await materializeComputerHelperSources(configDir);
-    }
+    const { materializeComputerHelperSources } = await import('./computer.mjs');
+    await materializeComputerHelperSources(configDir);
   } catch {
     // Install still succeeds; computer-use probe will explain if the helper is missing.
   }
@@ -820,17 +827,7 @@ async function executeShell(task) {
 
 async function execute(task) {
   if (task.kind === 'computer') {
-    if (process.platform !== 'darwin') {
-      return {
-        taskId: task.id,
-        exitCode: 1,
-        stdout: '',
-        stderr: 'Computer use is supported on macOS Jian Remote only.',
-        timedOut: false,
-        computer: { ok: false, error: 'Computer use is supported on macOS Jian Remote only.' },
-      };
-    }
-    const { executeComputerTask } = await import('./computer-macos.mjs');
+    const { executeComputerTask } = await import('./computer.mjs');
     return executeComputerTask(task);
   }
   return executeShell(task);
@@ -945,10 +942,16 @@ async function run() {
   const config = await loadConfig();
   const capabilities = [];
   let probeMacUiState = () => 'unknown';
+  try {
+    const { probeComputerCapability, computerCapabilityName } = await import('./computer.mjs');
+    const name = computerCapabilityName();
+    if (name && (await probeComputerCapability())) capabilities.push(name);
+  } catch {
+    // Computer use unavailable until helper is ready; shell tasks still work.
+  }
   if (process.platform === 'darwin') {
     try {
       const mac = await import('./computer-macos.mjs');
-      if (await mac.probeComputerCapability()) capabilities.push(mac.COMPUTER_CAPABILITY);
       mac.startWorkerIdleAssertion(process.pid);
       probeMacUiState = () => mac.probeMacUiState();
       for (const signal of ['SIGINT', 'SIGTERM']) {
@@ -957,7 +960,7 @@ async function run() {
         });
       }
     } catch {
-      // Computer use unavailable until helper builds; shell tasks still work.
+      // Idle assertion / uiState probe optional; shell still works.
     }
   }
   const pollHeaders = () => ({

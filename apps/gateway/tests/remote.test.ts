@@ -279,6 +279,89 @@ it('keeps a locked Mac online but refuses Computer Use with a clear error', asyn
   await expect(shell).resolves.toMatchObject({ exitCode: 0, stdout: 'ok' });
 });
 
+it('queues computer-use tasks for Linux workers advertising computer-linux-v1', async () => {
+  const services = await testServices();
+  const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+  const created = await services.remote.create({
+    name: 'Desk Linux',
+    allowedProfileIds: [owner.id],
+  });
+
+  await services.remote.poll(
+    created.id,
+    `Bearer ${created.token}`,
+    'linux-x64',
+    'computer-linux-v1',
+  );
+  const pending = services.remote.executeComputer(owner.id, created.id, {
+    action: 'screenshot',
+  });
+  let polled: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
+  for (let attempt = 0; attempt < 20 && !polled.task; attempt++) {
+    polled = await services.remote.poll(
+      created.id,
+      `Bearer ${created.token}`,
+      'linux-x64',
+      'computer-linux-v1',
+    );
+    if (!polled.task) await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  expect(polled.task).toMatchObject({ kind: 'computer', computer: { action: 'screenshot' } });
+  if (!polled.task) throw new Error('Worker did not receive the computer task');
+  const taskId = polled.task.id;
+  await services.remote.complete(created.id, taskId, `Bearer ${created.token}`, {
+    taskId,
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+    timedOut: false,
+    computer: { ok: true, widthPx: 100, heightPx: 80 },
+  });
+  await expect(pending).resolves.toMatchObject({ taskId, exitCode: 0, computer: { ok: true } });
+});
+
+it('queues computer-use tasks for Windows workers advertising computer-windows-v1', async () => {
+  const services = await testServices();
+  const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+  const created = await services.remote.create({ name: 'Desk Win', allowedProfileIds: [owner.id] });
+
+  await services.remote.poll(
+    created.id,
+    `Bearer ${created.token}`,
+    'win32-x64',
+    'computer-windows-v1',
+  );
+  const pending = services.remote.executeComputer(owner.id, created.id, {
+    action: 'left_click',
+    coordinate: [5, 5],
+  });
+  let polled: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
+  for (let attempt = 0; attempt < 20 && !polled.task; attempt++) {
+    polled = await services.remote.poll(
+      created.id,
+      `Bearer ${created.token}`,
+      'win32-x64',
+      'computer-windows-v1',
+    );
+    if (!polled.task) await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  expect(polled.task).toMatchObject({
+    kind: 'computer',
+    computer: { action: 'left_click', coordinate: [5, 5] },
+  });
+  if (!polled.task) throw new Error('Worker did not receive the computer task');
+  const taskId = polled.task.id;
+  await services.remote.complete(created.id, taskId, `Bearer ${created.token}`, {
+    taskId,
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+    timedOut: false,
+    computer: { ok: true },
+  });
+  await expect(pending).resolves.toMatchObject({ taskId, exitCode: 0, computer: { ok: true } });
+});
+
 it('accepts a large remote result that previously hit the default 256 KiB body limit', async () => {
   const services = await testServices();
   const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });

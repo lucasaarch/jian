@@ -43,9 +43,10 @@ jian-remote configure --gateway https://gateway.example --token WORKER_TOKEN
 
 Worker and gateway must share the same major.minor. See [docs/remote.md](../../docs/remote.md).
 
-Requires Node.js 24+. Published builds include a prebuilt macOS `computer-helper` for Computer
-Use (no Xcode on the worker Mac). From source, run `macos/build-helper.sh` on a Mac, or let the
-worker compile with `swiftc` when Command Line Tools are installed.
+Requires Node.js 24+. Computer Use works on macOS, Linux (X11 + `xdotool`/`ffmpeg`), and
+Windows. Published builds include a prebuilt macOS `computer-helper` (no Xcode on the worker
+Mac) plus Linux/Windows helper scripts. From source on a Mac, run `macos/build-helper.sh`, or
+let the worker compile with `swiftc` when Command Line Tools are installed.
 
 On macOS the LaunchAgent uses `ProcessType=Interactive` and an idle `caffeinate` so the worker
 keeps polling while the screen is locked (App Nap must not freeze timers). Computer Use still
