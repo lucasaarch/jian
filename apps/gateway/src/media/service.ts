@@ -558,7 +558,7 @@ export class Media {
           } else if (!isModelMedia(asset.mimeType)) {
             content.push({
               type: 'text',
-              text: documentText(id, asset) ?? opaqueFile(id, asset, run.profile.allowShell),
+              text: documentText(id, asset) ?? opaqueFile(id, asset, true),
             });
           } else if (asset.mimeType === 'application/pdf') {
             content.push({
@@ -615,8 +615,7 @@ export class Media {
             throw new Error('Media is not part of this conversation');
           if (!isModelMedia(asset.mimeType))
             return {
-              text:
-                documentText(mediaId, asset) ?? opaqueFile(mediaId, asset, run.profile.allowShell),
+              text: documentText(mediaId, asset) ?? opaqueFile(mediaId, asset, true),
             };
           return {
             text: await this.analyze(
@@ -654,21 +653,17 @@ export class Media {
         }),
         execute: async (input, options) => this.sendFile(run, input, options.toolCallId),
       }),
-      ...(run.profile.allowShell
-        ? {
-            save_attachment: tool({
-              description:
-                'Write an attachment of this conversation to an absolute path on the machine, to open it with the machine tools.',
-              inputSchema: z.object({
-                mediaId: z.uuid(),
-                path: z.string().min(1).max(4096),
-                overwrite: z.boolean().default(false),
-              }),
-              execute: async ({ mediaId, path, overwrite }) =>
-                this.saveFile(run, mediaId, path, overwrite),
-            }),
-          }
-        : {}),
+      save_attachment: tool({
+        description:
+          'Write an attachment of this conversation to an absolute path in your workspace, to open it with the machine tools.',
+        inputSchema: z.object({
+          mediaId: z.uuid(),
+          path: z.string().min(1).max(4096),
+          overwrite: z.boolean().default(false),
+        }),
+        execute: async ({ mediaId, path, overwrite }) =>
+          this.saveFile(run, mediaId, path, overwrite),
+      }),
       generate_image: tool({
         description:
           'Generate an image using this profile’s selected image model. Stores the image and queues it for delivery in this conversation. Never claim delivery before it is confirmed.',
@@ -932,7 +927,6 @@ export class Media {
     let name = input.name?.trim();
 
     if (input.path !== undefined) {
-      if (!run.profile.allowShell) throw new Error('This profile cannot read files on the machine');
       if (!isAbsolute(input.path)) throw new Error('Use an absolute path');
       // Held to the profile's workspace, like the file tools: the gateway reads it, not a
       // confined command.
@@ -984,7 +978,6 @@ export class Media {
 
   /** Writes an attachment of this conversation to disk, for the machine tools to open. */
   async saveFile(run: Run, mediaId: string, path: string, overwrite: boolean) {
-    if (!run.profile.allowShell) throw new Error('This profile cannot write files on the machine');
     if (!isAbsolute(path)) throw new Error('Use an absolute path');
     const asset = await findMedia(this.store.db, run.profileId, mediaId);
     if (asset.sessionId !== run.sessionId)

@@ -12,6 +12,7 @@
   },
   "files": [
     "bin",
+    "macos",
     "README.md"
   ],
   "engines": {

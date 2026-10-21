@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Run } from '@jian/contracts';
+import { remoteComputerActionSchema } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
@@ -68,11 +69,11 @@ export function validateScreenshotBase64(
 
 /**
  * Platform shell that captures, then scales/recompresses so base64 fits the worker channel.
- * Exported for unit tests — do not call from agents directly.
+ * Still used for non-macOS screenshots via run_remote_command fallbacks in tests; macOS
+ * computer-use captures inside the worker. Exported for unit tests.
  */
 export function screenshotCommand(platform: 'windows' | 'macos' | 'linux') {
   if (platform === 'windows') {
-    // Scale longest side to 1920 and JPEG quality 50 so Retina/4K frames stay under the cap.
     return [
       'Add-Type -AssemblyName System.Windows.Forms,System.Drawing;',
       '$bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds;',
@@ -107,10 +108,10 @@ export function screenshotCommand(platform: 'windows' | 'macos' | 'linux') {
   }
 
   if (platform === 'macos') {
-    // screencapture alone on Retina often exceeds ~300 KB binary; sips shrinks before base64.
+    // Primary display only (-D 1) so coordinates match computer-use mapping.
     return [
       'tmp=$(mktemp /tmp/jian-shot.XXXXXX.jpg);',
-      'screencapture -x -t jpg "$tmp" || { rm -f "$tmp"; exit 1; };',
+      'screencapture -x -t jpg -D 1 "$tmp" || { rm -f "$tmp"; exit 1; };',
       'sips -Z 1920 -s format jpeg -s formatOptions 50 "$tmp" >/dev/null 2>&1 || true;',
       'size=$(wc -c < "$tmp" | tr -d " ");',
       'if [ "$size" -gt 280000 ]; then sips -Z 1440 -s format jpeg -s formatOptions 40 "$tmp" >/dev/null 2>&1 || true; fi;',
@@ -159,25 +160,27 @@ function pushCommand(platform: 'windows' | 'macos' | 'linux', path: string, base
   return `mkdir -p "$(dirname '${shellPath}')" && printf '%s' '${base64}' | base64 -d > '${shellPath}'`;
 }
 
+const coordinateSchema = z.tuple([z.number().int(), z.number().int()]);
+
 /**
- * Remote Control tools: the authorized machine’s shell, plus screenshot and file transfer
- * through the worker’s polling channel (base64 on stdout — size-capped).
+ * Remote Control tools: shell, Anthropic-style computer use, and file transfer through the
+ * worker polling channel. Authorization is the machine’s profile ACL — not allowShell.
  */
 export function remoteTools(
   run: Run,
-  remote: Pick<Remote, 'listForProfile' | 'execute'>,
+  remote: Pick<Remote, 'listForProfile' | 'execute' | 'executeComputer'>,
   store: Store,
 ): ToolSet {
   const tools: ToolSet = {
     list_remote_machines: tool({
       description:
-        'List remote computers explicitly authorized for this agent (Remote Control). Commands and file tools run there automatically as the logged-in local user.',
+        'List remote computers explicitly authorized for this agent (Remote Control). Commands and computer use run there as the logged-in local user.',
       inputSchema: z.object({}),
       execute: async () => remote.listForProfile(run.profileId),
     }),
     run_remote_command: tool({
       description:
-        'Run a shell command on an authorized remote computer (PowerShell on Windows, /bin/sh on macOS/Linux). Use for apps, installs, Git, builds and anything the local programming tools would do on that machine. Prefer take_remote_screenshot / pull_remote_file / push_remote_file for those jobs. Never claim success unless the result confirms it.',
+        'Run a shell command on an authorized remote computer (PowerShell on Windows, /bin/sh on macOS/Linux). Use for apps, installs, Git, builds and anything the local programming tools would do on that machine. Prefer remote_computer for GUI clicks and screenshots, and pull_remote_file / push_remote_file for file transfer. Never claim success unless the result confirms it.',
       inputSchema: z.object({
         machineId: z.uuid(),
         command: z.string().min(1).max(8000),
@@ -187,40 +190,90 @@ export function remoteTools(
       execute: async ({ machineId, command, cwd, timeoutMs }, { abortSignal }) =>
         remote.execute(run.profileId, machineId, { command, cwd, timeoutMs }, abortSignal),
     }),
-    take_remote_screenshot: tool({
+    remote_computer: tool({
       description:
-        'Capture the primary display of an authorized remote computer and store the JPEG in this conversation. Returns a mediaId you can send with send_file. Prefer this over inventing screenshot commands.',
+        'Control an authorized macOS Remote Control computer with Anthropic-style actions: screenshot the primary display, move/click/drag the pointer, type text, press keys, scroll, wait, or end_session (hides the Jian overlay). Coordinates are pixels in the last screenshot image (origin top-left). Screenshot first; use returned widthPx/heightPx. Call end_session when finished with the GUI.',
       inputSchema: z.object({
         machineId: z.uuid(),
-        timeoutMs: z.number().int().min(5000).max(120000).default(60000),
+        action: remoteComputerActionSchema,
+        coordinate: coordinateSchema.optional(),
+        start_coordinate: coordinateSchema.optional(),
+        text: z.string().min(1).max(4000).optional(),
+        key: z.string().min(1).max(100).optional(),
+        scroll_direction: z.enum(['up', 'down', 'left', 'right']).optional(),
+        scroll_amount: z.number().int().min(1).max(20).optional(),
+        duration: z.number().min(0).max(5).optional(),
+        timeoutMs: z.number().int().min(1000).max(120000).default(30000),
       }),
-      execute: async ({ machineId, timeoutMs }, { abortSignal }) => {
+      execute: async (input, { abortSignal }) => {
         const machines = await remote.listForProfile(run.profileId);
-        const machine = machines.find((item) => item.id === machineId);
+        const machine = machines.find((item) => item.id === input.machineId);
         if (!machine) throw new GatewayError(403, 'That remote machine is not authorized');
         if (!machine.online) throw new GatewayError(503, 'Remote machine is offline');
 
-        const platform = platformOf(machine);
-        const result = await remote.execute(
+        const result = await remote.executeComputer(
           run.profileId,
-          machineId,
-          { command: screenshotCommand(platform), timeoutMs },
+          input.machineId,
+          {
+            action: input.action,
+            coordinate: input.coordinate,
+            startCoordinate: input.start_coordinate,
+            text: input.text,
+            key: input.key,
+            scrollDirection: input.scroll_direction,
+            scrollAmount: input.scroll_amount,
+            duration: input.duration,
+            timeoutMs: input.timeoutMs,
+          },
           abortSignal,
         );
-        if (result.timedOut || result.exitCode !== 0) {
+
+        if (input.action !== 'screenshot') {
+          const computer = (
+            result as {
+              computer?: { ok?: boolean; error?: string };
+              timedOut?: boolean;
+              exitCode?: number | null;
+              stderr?: string;
+            }
+          ).computer;
           return {
-            ok: false,
-            platform,
+            ok: computer?.ok !== false && !result.timedOut && (result.exitCode ?? 0) === 0,
+            action: input.action,
             exitCode: result.exitCode,
             stderr: result.stderr,
             timedOut: result.timedOut,
+            error: computer?.error,
+            machineId: input.machineId,
+            machineName: machine.name,
+          };
+        }
+
+        if (result.timedOut || result.exitCode !== 0) {
+          return {
+            ok: false,
+            action: 'screenshot',
+            exitCode: result.exitCode,
+            stderr: result.stderr,
+            timedOut: result.timedOut,
+            machineId: input.machineId,
           };
         }
 
         const checked = validateScreenshotBase64(result.stdout, REMOTE_PAYLOAD_CHARS);
         if (!checked.ok) {
-          return { ok: false, error: checked.error, stderr: result.stderr };
+          return { ok: false, action: 'screenshot', error: checked.error, stderr: result.stderr };
         }
+
+        const computer = (
+          result as {
+            computer?: {
+              widthPx?: number;
+              heightPx?: number;
+              scale?: { imageToPointX: number; imageToPointY: number };
+            };
+          }
+        ).computer;
 
         const mediaId = randomUUID();
         const name = `remote-screenshot-${machine.name.replace(/[^\w.-]+/g, '_')}.jpg`;
@@ -238,12 +291,17 @@ export function remoteTools(
 
         return {
           ok: true,
+          action: 'screenshot',
           mediaId,
           name,
           bytes: checked.bytes.length,
-          machineId,
+          widthPx: computer?.widthPx,
+          heightPx: computer?.heightPx,
+          scale: computer?.scale,
+          displayId: 'primary' as const,
+          machineId: input.machineId,
           machineName: machine.name,
-          hint: 'Send it in this chat with send_file using this mediaId.',
+          hint: 'Aim clicks in this image’s pixel space (widthPx × heightPx). Send with send_file using mediaId when the owner should see it.',
         };
       },
     }),

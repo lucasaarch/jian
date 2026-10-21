@@ -59,13 +59,13 @@ describe('tool loading', () => {
     }
   });
 
-  it('offers only groups this profile actually has', async () => {
+  it('still offers shell and remote when the deprecated allowShell flag is false', async () => {
     const tools = profileTools(services, { ...run, profile: { ...profile, allowShell: false } });
 
     deferTools(tools, new Set());
 
-    expect(tools.load_tools?.description).not.toContain('shell:');
-    expect(tools.load_tools?.description).not.toContain('remote:');
+    expect(tools.load_tools?.description).toContain('shell:');
+    expect(tools.run_command).toBeDefined();
     expect(tools.load_tools?.description).toContain('contacts:');
   });
 
@@ -84,6 +84,7 @@ describe('tool loading', () => {
 
     await load({ groups: ['remote'] }, { toolCallId: 'c2', messages: [] });
     expect(loaded.has('run_remote_command')).toBe(true);
-    expect(loaded.has('take_remote_screenshot')).toBe(true);
+    expect(loaded.has('remote_computer')).toBe(true);
+    expect(loaded.has('take_remote_screenshot')).toBe(false);
   });
 });

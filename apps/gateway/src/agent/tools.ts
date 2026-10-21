@@ -98,7 +98,7 @@ export type ToolServices = {
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
   work?: Pick<Work, 'spawnInConversation'>;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove'>;
-  remote?: Pick<Remote, 'listForProfile' | 'execute'>;
+  remote?: Pick<Remote, 'listForProfile' | 'execute' | 'executeComputer'>;
 };
 
 export function profileTools(
@@ -586,11 +586,11 @@ export function profileTools(
     });
   }
 
-  if (run.profile.allowShell) {
-    Object.assign(tools, shellTools(run.profileId, gitAccess));
-    if (services.remote) {
-      Object.assign(tools, remoteTools(run, services.remote, services.store));
-    }
+  // Workspace-confined shell/files are always available. Remote Control is gated only by
+  // each machine’s allowedProfileIds — not by the deprecated allowShell profile flag.
+  Object.assign(tools, shellTools(run.profileId, gitAccess));
+  if (services.remote) {
+    Object.assign(tools, remoteTools(run, services.remote, services.store));
   }
 
   // Writing its own skills is part of every agent's work, not of managing itself: what it
@@ -728,11 +728,11 @@ export const TOOL_GROUPS = {
   },
   remote: {
     summary:
-      'list Remote Control machines, run commands there, take screenshots, and pull or push files',
+      'list Remote Control machines, run commands there, drive the Mac screen (remote_computer), and pull or push files',
     tools: [
       'list_remote_machines',
       'run_remote_command',
-      'take_remote_screenshot',
+      'remote_computer',
       'pull_remote_file',
       'push_remote_file',
     ],

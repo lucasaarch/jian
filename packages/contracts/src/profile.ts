@@ -227,11 +227,11 @@ export const profileSchema = z.strictObject({
   mcpServers: z.array(mcpSchema).default([]),
   allowSelfManagement: z.boolean().default(false),
   /**
-   * Reading files, writing files and running commands on the machine the gateway runs on,
-   * with the privileges of whoever started it. Off by default and never implied by anything
-   * else: it is the one setting that turns a conversation into access to a computer.
+   * Deprecated. Workspace-confined shell and file tools are always available; the panel no
+   * longer exposes this switch. Kept on the wire so older clients keep parsing. Ignored for
+   * enforcement — treated as always on. Remote Control is gated by machine ACL only.
    */
-  allowShell: z.boolean().default(false),
+  allowShell: z.boolean().default(true),
   /**
    * Searching the web and reading public pages, through the installation's search service.
    * What comes back is written by strangers, so it reaches the agent as data to weigh.

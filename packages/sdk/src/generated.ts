@@ -1558,6 +1558,8 @@ export interface operations {
                         allowedProfileIds: string[];
                         /** Format: date-time */
                         createdAt: string;
+                        /** @default [] */
+                        capabilities: string[];
                     }[];
                 };
             };
@@ -1694,6 +1696,8 @@ export interface operations {
                         allowedProfileIds: string[];
                         /** Format: date-time */
                         createdAt: string;
+                        /** @default [] */
+                        capabilities: string[];
                         token: string;
                     };
                 };
@@ -1831,6 +1835,8 @@ export interface operations {
                         allowedProfileIds: string[];
                         /** Format: date-time */
                         createdAt: string;
+                        /** @default [] */
+                        capabilities: string[];
                     };
                 };
             };
@@ -1961,6 +1967,8 @@ export interface operations {
                         allowedProfileIds: string[];
                         /** Format: date-time */
                         createdAt: string;
+                        /** @default [] */
+                        capabilities: string[];
                         token: string;
                     };
                 };
@@ -2211,9 +2219,32 @@ export interface operations {
                         task: {
                             /** Format: uuid */
                             id: string;
-                            command: string;
+                            /**
+                             * @default shell
+                             * @enum {string}
+                             */
+                            kind: "shell" | "computer";
+                            command: string | null;
                             cwd: string | null;
                             timeoutMs: number;
+                            computer?: {
+                                /** @enum {string} */
+                                action: "screenshot" | "left_click" | "right_click" | "double_click" | "mouse_move" | "type" | "key" | "scroll" | "left_click_drag" | "wait" | "end_session";
+                                coordinate?: [
+                                    number,
+                                    number
+                                ];
+                                startCoordinate?: [
+                                    number,
+                                    number
+                                ];
+                                text?: string;
+                                key?: string;
+                                /** @enum {string} */
+                                scrollDirection?: "up" | "down" | "left" | "right";
+                                scrollAmount?: number;
+                                duration?: number;
+                            };
                         } | null;
                     };
                 };
@@ -2339,6 +2370,16 @@ export interface operations {
                     stderr: string;
                     /** @default false */
                     timedOut?: boolean;
+                    computer?: {
+                        ok: boolean;
+                        widthPx?: number;
+                        heightPx?: number;
+                        scale?: {
+                            imageToPointX: number;
+                            imageToPointY: number;
+                        };
+                        error?: string;
+                    };
                 };
             };
         };
@@ -11147,7 +11188,7 @@ export interface operations {
                         }[];
                         /** @default false */
                         allowSelfManagement: boolean;
-                        /** @default false */
+                        /** @default true */
                         allowShell: boolean;
                         /** @default false */
                         allowWebSearch: boolean;
@@ -11411,7 +11452,7 @@ export interface operations {
                         }[];
                         /** @default false */
                         allowSelfManagement: boolean;
-                        /** @default false */
+                        /** @default true */
                         allowShell: boolean;
                         /** @default false */
                         allowWebSearch: boolean;
@@ -11669,7 +11710,7 @@ export interface operations {
                     }[];
                     /** @default false */
                     allowSelfManagement?: boolean;
-                    /** @default false */
+                    /** @default true */
                     allowShell?: boolean;
                     /** @default false */
                     allowWebSearch?: boolean;
@@ -11817,7 +11858,7 @@ export interface operations {
                         }[];
                         /** @default false */
                         allowSelfManagement: boolean;
-                        /** @default false */
+                        /** @default true */
                         allowShell: boolean;
                         /** @default false */
                         allowWebSearch: boolean;
@@ -12083,7 +12124,7 @@ export interface operations {
                         }[];
                         /** @default false */
                         allowSelfManagement: boolean;
-                        /** @default false */
+                        /** @default true */
                         allowShell: boolean;
                         /** @default false */
                         allowWebSearch: boolean;
@@ -12577,7 +12618,7 @@ export interface operations {
                         }[];
                         /** @default false */
                         allowSelfManagement: boolean;
-                        /** @default false */
+                        /** @default true */
                         allowShell: boolean;
                         /** @default false */
                         allowWebSearch: boolean;
@@ -12973,7 +13014,7 @@ export interface operations {
                             }[];
                             /** @default false */
                             allowSelfManagement: boolean;
-                            /** @default false */
+                            /** @default true */
                             allowShell: boolean;
                             /** @default false */
                             allowWebSearch: boolean;

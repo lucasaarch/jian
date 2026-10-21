@@ -130,13 +130,13 @@ const sh = async (tool: unknown, command: string) =>
   };
 
 describe('running commands on the machine the gateway runs on', () => {
-  it('hands out nothing unless the owner turned it on for this profile', async () => {
+  it('always hands out workspace shell and file tools (allowShell is deprecated)', async () => {
     const { tools: off } = await toolsFor(false);
 
-    expect(off.run_command).toBeUndefined();
-    expect(off.read_file).toBeUndefined();
-    expect(off.write_file).toBeUndefined();
-    expect(off.list_directory).toBeUndefined();
+    expect(off.run_command).toBeDefined();
+    expect(off.read_file).toBeDefined();
+    expect(off.write_file).toBeDefined();
+    expect(off.list_directory).toBeDefined();
 
     expect((await toolsFor(true)).tools.run_command).toBeDefined();
   });
