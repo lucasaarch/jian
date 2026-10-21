@@ -1,5 +1,5 @@
 // Cuts a release: `make release VERSION=1.2.3`. The note comes first, then the tag;
-// the Image workflow publishes the image and GitHub release.
+// the Publish workflow publishes the image, npm package, and GitHub release.
 // Everything that can be wrong is checked before anything is written or pushed.
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -48,4 +48,6 @@ if (git('tag', '--list', `v${version}`)) {
 git('tag', '-a', `v${version}`, '-m', `Jian ${version}`);
 git('push', 'origin', `v${version}`);
 
-console.log(`Tagged v${version}. The Image workflow builds it and publishes the release.`);
+console.log(
+  `Tagged v${version}. The Publish workflow builds the image, publishes @jian-ai/remote-control@${version}, and creates the GitHub release.`,
+);

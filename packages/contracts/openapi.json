@@ -17678,6 +17678,10 @@
                     "service": {
                       "type": "string",
                       "const": "jian"
+                    },
+                    "version": {
+                      "type": "string",
+                      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
                     }
                   },
                   "required": [
