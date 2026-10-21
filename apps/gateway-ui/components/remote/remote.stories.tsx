@@ -63,12 +63,18 @@ export const CreatedToken: Story = {
     await waitFor(() =>
       expect(canvas.getByRole('heading', { name: 'Demo laptop created' })).toBeVisible(),
     );
-    const windows = canvas.getByLabelText('Windows (PowerShell)') as HTMLTextAreaElement;
-    expect(windows.value).toContain('/jian-remote.mjs');
-    expect(windows.value).toContain('--token ');
-    expect(windows.value).toContain('irm ');
-    const unix = canvas.getByLabelText('macOS / Linux') as HTMLTextAreaElement;
-    expect(unix.value).toContain('curl -fsS');
-    expect(unix.value).toContain('--token ');
+    const npx = canvas.getByLabelText('Any OS (npx)') as HTMLTextAreaElement;
+    expect(npx.value).toContain('npx --yes @jian-ai/remote-control@');
+    expect(npx.value).toContain('--token ');
+    expect(npx.value).toContain('--gateway ');
+    expect(npx.value).toContain('--machine ');
+    const global = canvas.getByLabelText('Global install') as HTMLTextAreaElement;
+    expect(global.value).toContain('npm install -g @jian-ai/remote-control@');
+    expect(global.value).toContain('jian-remote install');
+    expect(global.value).toContain('--token ');
+    const update = canvas.getByLabelText('Later: update worker') as HTMLTextAreaElement;
+    expect(update.value).toContain('npx --yes @jian-ai/remote-control@');
+    expect(update.value).toMatch(/ update$/);
+    expect(update.value).not.toContain('--token');
   },
 };

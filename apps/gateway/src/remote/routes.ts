@@ -1,14 +1,16 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import type { Remote } from './service.js';
+import { workerScriptBytes } from './worker-script.js';
 
-/** Shipped next to the gateway package so a machine can download it without cloning Jian. */
-const workerScript = fileURLToPath(new URL('../../bin/jian-remote.mjs', import.meta.url));
+/**
+ * Contract allows ~400 KiB stdout + 50 KiB stderr. Default Fastify bodyLimit is 256 KiB,
+ * which produced HTTP 413 and left workers retrying forever. Match the schema with headroom.
+ */
+const REMOTE_RESULT_BODY_LIMIT = 512 * 1024;
 
 export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remote }): void {
-  // Public: the panel's install one-liner curls this before it has a worker token.
+  // Public: legacy curl installers and the worker's self-update still fetch this script.
   app.get<{ Params: { machineId: string } }>(
     '/v1/remote/worker/:machineId/update',
     { config: { workerAuth: true } },
@@ -17,9 +19,8 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
         request.params.machineId,
         request.headers.authorization ?? '',
       );
-      if (!existsSync(workerScript))
-        return reply.code(404).send({ error: 'Worker script not found' });
-      const script = readFileSync(workerScript);
+      const script = workerScriptBytes();
+      if (!script) return reply.code(404).send({ error: 'Worker script not found' });
       const etag = `"${createHash('sha256').update(script).digest('hex')}"`;
       if (request.headers['if-none-match'] === etag)
         return reply.code(304).header('ETag', etag).send();
@@ -32,15 +33,14 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
   );
 
   app.get('/jian-remote.mjs', { config: { publicUiAsset: true } }, async (_request, reply) => {
-    if (!existsSync(workerScript)) {
-      return reply.code(404).send({ error: 'Worker script not found' });
-    }
+    const script = workerScriptBytes();
+    if (!script) return reply.code(404).send({ error: 'Worker script not found' });
 
     return reply
       .type('text/javascript; charset=utf-8')
       .header('Content-Disposition', 'attachment; filename="jian-remote.mjs"')
       .header('Cache-Control', 'no-cache')
-      .send(readFileSync(workerScript));
+      .send(script);
   });
 
   app.get('/v1/remote/machines', async () => deps.remote.list());
@@ -72,6 +72,7 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
 
   app.post<{ Params: { machineId: string; taskId: string } }>(
     '/v1/remote/worker/:machineId/tasks/:taskId/result',
+    { bodyLimit: REMOTE_RESULT_BODY_LIMIT },
     async (request) =>
       deps.remote.complete(
         request.params.machineId,

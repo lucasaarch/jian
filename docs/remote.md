@@ -29,33 +29,67 @@ curl -fsS -X PATCH https://gateway.example/v1/remote/machines/MACHINE_UUID/acces
   -d '{"allowedProfileIds":["PROFILE_UUID"]}'
 ```
 
-The panel’s Remote Control page shows a one-line installer after you create a machine. That
-command downloads the worker from the gateway and embeds the one-time token — no clone of Jian
-is required. The token is shown only once; treat the install command as a secret.
+The panel’s Remote Control page shows npm/npx installers after you create a machine. Those
+commands install `@jian-ai/remote-control` and embed the one-time token — no clone of Jian is
+required. The token is shown only once; treat the install command as a secret.
 
 ## Install the worker
 
-Install Node.js 24+ on the computer. The gateway serves the worker script at
-`https://gateway.example/jian-remote.mjs` (same origin as the panel). The installer stores the
-credential with owner-only permissions and installs a per-user LaunchAgent on macOS, a systemd
-service on Linux, or a Task Scheduler logon task on Windows. The Windows task runs only in the
-current user's session.
+Install Node.js 24+ on the computer. The published package is `@jian-ai/remote-control` (CLI
+`jian-remote`), versioned with each Jian release. The panel pins the running gateway version
+when known; otherwise use `@latest`.
 
-Windows (PowerShell) — copy from the panel, or substitute your values:
-
-```powershell
-$dir="$env:USERPROFILE\.config\jian-remote"; New-Item -ItemType Directory -Force -Path $dir | Out-Null; irm 'https://gateway.example/jian-remote.mjs' -OutFile "$dir\jian-remote.mjs"; node "$dir\jian-remote.mjs" install --gateway 'https://gateway.example' --machine 'MACHINE_UUID' --token 'WORKER_TOKEN'
-```
-
-macOS / Linux:
+Any OS (npx) — copy from the panel, or substitute your values:
 
 ```sh
-mkdir -p ~/.config/jian-remote && curl -fsS -o ~/.config/jian-remote/jian-remote.mjs 'https://gateway.example/jian-remote.mjs' && node ~/.config/jian-remote/jian-remote.mjs install --gateway 'https://gateway.example' --machine 'MACHINE_UUID' --token 'WORKER_TOKEN'
+npx --yes @jian-ai/remote-control@latest install \
+  --gateway 'https://gateway.example' \
+  --machine 'MACHINE_UUID' \
+  --token 'WORKER_TOKEN'
 ```
 
+Global install:
+
+```sh
+npm install -g @jian-ai/remote-control@latest
+jian-remote install \
+  --gateway 'https://gateway.example' \
+  --machine 'MACHINE_UUID' \
+  --token 'WORKER_TOKEN'
+```
+
+### Update (no token again)
+
+Credentials stay in `~/.config/jian-remote/config.json`. To refresh the worker to match the
+gateway (or `@latest`) and restart the service:
+
+```sh
+npx --yes @jian-ai/remote-control@latest update
+# or, when installed globally:
+jian-remote update
+# optional pin:
+jian-remote update --version 0.6.0
+```
+
+`update` does not take `--gateway`, `--machine`, or `--token`.
+
+### Version compatibility
+
+The worker and gateway must share the same **major.minor** (patch and prerelease may differ).
+`install`, `update`, and `run` check `GET /health` for the gateway’s version and refuse to
+continue with a clear error when incompatible — for example a 0.5.x worker against a 0.6.x
+gateway. Local gateway builds with no `JIAN_VERSION` skip the gate. Fix a mismatch with
+`npx @jian-ai/remote-control@GATEWAY_VERSION update`.
+
+The installer stores the credential with owner-only permissions under `~/.config/jian-remote`,
+copies the worker script there (so npx and global installs share one service path), and
+installs a per-user LaunchAgent on macOS, a systemd service on Linux, or a Task Scheduler
+logon task on Windows. The Windows task runs only in the current user's session.
+
 The one-liner puts the token in shell history. Clear history afterwards on a shared machine, or
-install by hand with `--token-prompt` / `--token-stdin` instead. The worker script also lives at
-`apps/gateway/bin/jian-remote.mjs` in the Jian source tree if you prefer to copy it yourself.
+install by hand with `--token-prompt` / `--token-stdin` instead. The worker source also lives at
+`apps/remote-control/bin/jian-remote.mjs` in the Jian source tree. The gateway still serves
+`/jian-remote.mjs` for automatic worker self-updates of already-installed machines.
 
 The worker executes Windows commands with PowerShell. The Windows credential directory and file
 ACLs are restricted to the current account. To uninstall, delete the `Jian Remote` task in Task
@@ -64,7 +98,8 @@ Scheduler and remove `%USERPROFILE%\\.config\\jian-remote`.
 Keep the worker script at its installed path: the OS service starts that file. The worker uses
 `/bin/sh -lc` on macOS/Linux and PowerShell on Windows, inherits the local user's environment,
 and returns at most about 400 KB of stdout (enough for a compressed screenshot or a small file
-as base64) and 50 KB of stderr. Do not authorize profiles that should not have access to those
+as base64) and 50 KB of stderr. Oversized results are truncated before upload so the worker does
+not stick offline on HTTP 413. Do not authorize profiles that should not have access to those
 local privileges.
 
 ### Starts again after reboot
@@ -75,8 +110,18 @@ Yes — when that user signs in. The installer registers:
 - **macOS:** LaunchAgent `com.jian.remote` (`RunAtLoad` + `KeepAlive`).
 - **Linux:** `systemd --user` unit `jian-remote.service` enabled for the user session.
 
-Until the user logs in (or the user systemd session is lingering), the machine stays Offline in
+Until the user logs in (or the user systemd session is lingering), the machine stays offline in
 the panel. The Remote Control page polls Online/Offline every few seconds while it is open.
+
+### If the machine stays Offline
+
+1. Confirm the computer can reach the gateway over HTTPS.
+2. Run `npx @jian-ai/remote-control@latest update` (or restart the local service). Re-running
+   install is only needed if the config was deleted.
+3. Read `~/.config/jian-remote/worker.log`. An incompatible-version error means the worker’s
+   major.minor does not match the gateway — run `update` against the gateway’s version.
+   Repeated `HTTP 502`/`503` means the gateway is up and down — the worker backs off and
+   reconnects. Oversized results are truncated so the worker does not stick offline on HTTP 413.
 
 ## Agent use and revocation
 

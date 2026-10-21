@@ -109,9 +109,10 @@ image-push: ## Push the locally built image; the multi-architecture index comes 
 changelog: ## Regenerate CHANGELOG.md from docs/releases
 	node scripts/changelog.mjs
 
-# Releasing needs a note and its generated changelog; .github/workflows/image.yml builds both
-# architectures and publishes the GitHub release with the note in it. The script refuses to
-# tag a dirty tree, a main that is not on origin, or a tag that already exists.
+# Releasing needs a note and its generated changelog; .github/workflows/publish.yml builds both
+# architectures, publishes @jian-ai/remote-control at the same version, and publishes the GitHub
+# release with the note in it. The script refuses to tag a dirty tree, a main that is not on
+# origin, or a tag that already exists.
 release: ## Cut a release: write the note, run `make changelog`, then `make release VERSION=1.2.3`
 	@test "$(origin VERSION)" = "command line" || { echo "usage: make release VERSION=1.2.3"; exit 1; }
 	node scripts/release.mjs $(VERSION)

@@ -9700,6 +9700,7 @@ export interface operations {
                         status: "ok";
                         /** @constant */
                         service: "jian";
+                        version?: string;
                     };
                 };
             };

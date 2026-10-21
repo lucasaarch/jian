@@ -583,7 +583,16 @@ export const operations: Operation[] = [
     path: '/health',
     operationId: 'health',
     access: 'public',
-    response: z.strictObject({ status: z.literal('ok'), service: z.literal('jian') }),
+    // `version` is the running release (JIAN_VERSION). Absent on local/dev builds. Remote
+    // Control uses it for the major.minor compatibility gate.
+    response: z.strictObject({
+      status: z.literal('ok'),
+      service: z.literal('jian'),
+      version: z
+        .string()
+        .regex(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/)
+        .optional(),
+    }),
   },
   {
     // Public because the body carries the host token this route exists to verify.

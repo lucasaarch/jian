@@ -1,0 +1,42 @@
+{
+  "name": "@jian-ai/remote-control",
+  "version": "0.0.0-dev",
+  "description": "Jian Remote Control worker — connect a computer to a Jian gateway over HTTPS",
+  "type": "module",
+  "bin": {
+    "jian-remote": "./bin/jian-remote.mjs"
+  },
+  "exports": {
+    ".": "./bin/jian-remote.mjs",
+    "./bin/jian-remote.mjs": "./bin/jian-remote.mjs"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lucasaarch/jian.git",
+    "directory": "apps/remote-control"
+  },
+  "homepage": "https://github.com/lucasaarch/jian/blob/main/docs/remote.md",
+  "bugs": {
+    "url": "https://github.com/lucasaarch/jian/issues"
+  },
+  "keywords": [
+    "jian",
+    "remote",
+    "agent",
+    "gateway"
+  ]
+}

@@ -56,6 +56,9 @@ importers:
       '@fastify/static':
         specifier: 10.1.4
         version: 10.1.4
+      '@jian-ai/remote-control':
+        specifier: workspace:*
+        version: link:../remote-control
       '@jian/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -64,7 +67,7 @@ importers:
         version: 7.0.108(zod@4.6.5)
       baileys:
         specifier: 7.0.0-rc14
-        version: 7.0.0-rc14(sharp@0.35.5(@types/node@26.6.2))
+        version: 7.0.0-rc14(sharp@0.35.5(@types/node@26.6.2))(supports-color@10.2.2)
       cron-parser:
         specifier: 5.10.1
         version: 5.10.1
@@ -235,6 +238,8 @@ importers:
       vitest:
         specifier: 5.0.1
         version: 5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(msw@2.15.0(@types/node@26.6.2)(typescript@5.9.3))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  apps/remote-control: {}
 
   packages/contracts:
     dependencies:
@@ -5080,7 +5085,7 @@ snapshots:
     dependencies:
       '@testing-library/dom': 10.4.2
 
-  '@tokenizer/inflate@0.4.1':
+  '@tokenizer/inflate@0.4.1(supports-color@10.2.2)':
     dependencies:
       debug: 4.4.3(supports-color@10.2.2)
       token-types: 6.1.2
@@ -5345,14 +5350,14 @@ snapshots:
 
   axe-core@4.13.0: {}
 
-  baileys@7.0.0-rc14(sharp@0.35.5(@types/node@26.6.2)):
+  baileys@7.0.0-rc14(sharp@0.35.5(@types/node@26.6.2))(supports-color@10.2.2):
     dependencies:
       '@cacheable/node-cache': 1.7.6
       '@hapi/boom': 9.1.4
       async-mutex: 0.5.0
       libsignal: 6.0.0
       lru-cache: 11.5.3
-      music-metadata: 11.16.1
+      music-metadata: 11.16.1(supports-color@10.2.2)
       p-queue: 9.3.3
       pino: 9.14.0
       protobufjs: 7.6.6
@@ -5678,9 +5683,9 @@ snapshots:
 
   fflate@0.8.3: {}
 
-  file-type@21.3.4:
+  file-type@21.3.4(supports-color@10.2.2):
     dependencies:
-      '@tokenizer/inflate': 0.4.1
+      '@tokenizer/inflate': 0.4.1(supports-color@10.2.2)
       strtok3: 10.6.2
       token-types: 6.1.2
       uint8array-extras: 1.6.0
@@ -6095,13 +6100,13 @@ snapshots:
       - '@types/node'
     optional: true
 
-  music-metadata@11.16.1:
+  music-metadata@11.16.1(supports-color@10.2.2):
     dependencies:
       '@borewit/text-codec': 0.2.2
       '@tokenizer/token': 0.3.0
       content-type: 2.1.0
       debug: 4.4.3(supports-color@10.2.2)
-      file-type: 21.3.4
+      file-type: 21.3.4(supports-color@10.2.2)
       media-typer: 2.0.0
       strtok3: 10.6.2
       token-types: 6.1.2

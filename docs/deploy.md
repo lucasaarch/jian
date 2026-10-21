@@ -207,13 +207,20 @@ The `JIAN_MASTER_KEYS` keyring lives outside the database, in `.env` or in a sec
 
 ## Publishing
 
-The `Image` workflow builds on two native runners, `ubuntu-24.04` and `ubuntu-24.04-arm`, each pushing by digest, and a final job joins them into a multi-architecture index. Nothing is emulated. It runs on a `v*.*.*` tag and nowhere else.
+The `Publish` workflow builds on two native runners, `ubuntu-24.04` and `ubuntu-24.04-arm`, each pushing by digest, and a final job joins them into a multi-architecture index. Nothing is emulated. On the same tag it also publishes the npm package `@jian-ai/remote-control` at that version. It runs on a `v*.*.*` tag and nowhere else (aside from `workflow_dispatch`, which builds an image only).
 
 A release is a note and a tag, both by hand:
 
 1. Write `docs/releases/1.2.3.md`: a front matter with `date: YYYY-MM-DD`, an optional `summary:`, and the note. It becomes the GitHub release and the dialog the panel opens once after the update. The version is chosen by whoever writes the note, not computed from commits.
-2. Commit the note and push `main`, then run `make release VERSION=1.2.3`. The version lives only in the tag; `package.json` stays `0.1.0`.
-3. The tag runs the `Image` workflow: it checks the note, builds both architectures, and publishes the GitHub release with the note.
+2. Commit the note and push `main`, then run `make release VERSION=1.2.3`. The version lives only in the tag; workspace `package.json` files stay at their placeholder versions. The Publish workflow stamps `@jian-ai/remote-control` to `1.2.3` for that publish only.
+3. The tag runs the `Publish` workflow: it checks the note, builds both architectures, publishes `@jian-ai/remote-control@1.2.3` to npm, and publishes the GitHub release with the note.
+
+### npm auth (`NPM_TOKEN`)
+
+The npm job needs a repository secret named `NPM_TOKEN`: an npm **Automation** token with
+publish rights on the `@jian-ai` scope (and the package `@jian-ai/remote-control` once it
+exists). Without it the npm job fails with a short message; the gateway image and GitHub
+release still publish. Add the secret, then re-run the npm job or cut the next release tag.
 
 `make release` refuses a version with no note, a working tree with changes, a `main` that is not on `origin`, and a tag that already exists; a published version is never moved. A candidate such as `1.2.3-rc.1` publishes its own image tag and a pre-release, and leaves `latest` alone.
 
