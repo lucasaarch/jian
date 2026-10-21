@@ -1,6 +1,9 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
+  type RemoteComputerParams,
   remoteCommandSchema,
+  remoteComputerCommandSchema,
+  remoteComputerParamsSchema,
   remoteMachineAccessSchema,
   remoteMachineCreateSchema,
   remoteResultSchema,
@@ -14,6 +17,43 @@ const tokenHash = (token: string) => createHash('sha256').update(token).digest('
 const present = (lastSeen: Date | null, now: number) =>
   !!lastSeen && now - lastSeen.getTime() < 60_000;
 
+const CAPABILITY_COMPUTER_MACOS = 'computer-macos-v1';
+
+function parseCapabilities(header: string | undefined): string[] {
+  if (!header?.trim()) return [];
+  return [
+    ...new Set(
+      header
+        .split(/[,\s]+/)
+        .map((part) => part.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, 20);
+}
+
+function publicMachine(
+  machine: typeof remoteMachines.$inferSelect,
+  now: number,
+): {
+  id: string;
+  name: string;
+  platform: string;
+  online: boolean;
+  allowedProfileIds: string[];
+  createdAt: string;
+  capabilities: string[];
+} {
+  return {
+    id: machine.id,
+    name: machine.name,
+    platform: machine.platform,
+    online: present(machine.lastSeenAt, now),
+    allowedProfileIds: machine.allowedProfileIds,
+    createdAt: machine.createdAt.toISOString(),
+    capabilities: machine.capabilities ?? [],
+  };
+}
+
 export class Remote {
   constructor(
     private store: Store,
@@ -25,10 +65,8 @@ export class Remote {
       .select()
       .from(remoteMachines)
       .orderBy(asc(remoteMachines.createdAt));
-    return rows.map(({ tokenHash: _secret, lastSeenAt, ...machine }) => ({
-      ...machine,
-      online: present(lastSeenAt, this.clock()),
-    }));
+    const now = this.clock();
+    return rows.map((machine) => publicMachine(machine, now));
   }
 
   async create(input: unknown) {
@@ -44,6 +82,7 @@ export class Remote {
       platform,
       tokenHash: tokenHash(token),
       allowedProfileIds: data.allowedProfileIds,
+      capabilities: [],
       createdAt,
     });
     return {
@@ -53,6 +92,7 @@ export class Remote {
       online: false,
       allowedProfileIds: data.allowedProfileIds,
       createdAt: createdAt.toISOString(),
+      capabilities: [] as string[],
       token,
     };
   }
@@ -66,14 +106,7 @@ export class Remote {
       .where(eq(remoteMachines.id, machineId))
       .returning();
     if (!machine) throw new GatewayError(404, 'Remote machine not found');
-    return {
-      id: machine.id,
-      name: machine.name,
-      platform: machine.platform,
-      online: present(machine.lastSeenAt, this.clock()),
-      allowedProfileIds: machine.allowedProfileIds,
-      createdAt: machine.createdAt.toISOString(),
-    };
+    return publicMachine(machine, this.clock());
   }
 
   /** Issue a new worker token and invalidate the previous hash. Token is returned once. */
@@ -85,15 +118,7 @@ export class Remote {
       .where(eq(remoteMachines.id, machineId))
       .returning();
     if (!machine) throw new GatewayError(404, 'Remote machine not found');
-    return {
-      id: machine.id,
-      name: machine.name,
-      platform: machine.platform,
-      online: present(machine.lastSeenAt, this.clock()),
-      allowedProfileIds: machine.allowedProfileIds,
-      createdAt: machine.createdAt.toISOString(),
-      token,
-    };
+    return { ...publicMachine(machine, this.clock()), token };
   }
 
   async remove(machineId: string) {
@@ -110,32 +135,96 @@ export class Remote {
       .select()
       .from(remoteMachines)
       .orderBy(asc(remoteMachines.createdAt));
+    const now = this.clock();
     return rows
       .filter((machine) => machine.allowedProfileIds.includes(profileId))
-      .map(({ tokenHash: _secret, lastSeenAt, ...machine }) => ({
-        ...machine,
-        online: present(lastSeenAt, this.clock()),
-      }));
+      .map((machine) => publicMachine(machine, now));
   }
 
   async execute(profileId: string, machineId: string, input: unknown, signal?: AbortSignal) {
     const data = remoteCommandSchema.parse(input);
     await this.machineForProfile(profileId, machineId);
+    return this.waitForTask(
+      profileId,
+      machineId,
+      {
+        kind: 'shell',
+        command: data.command,
+        cwd: data.cwd ?? null,
+        payload: null,
+        timeoutMs: data.timeoutMs,
+      },
+      signal,
+    );
+  }
+
+  async executeComputer(
+    profileId: string,
+    machineId: string,
+    input: unknown,
+    signal?: AbortSignal,
+  ) {
+    const data = remoteComputerCommandSchema.parse(input);
+    const machine = await this.machineForProfile(profileId, machineId);
+    if (!present(machine.lastSeenAt, this.clock())) {
+      throw new GatewayError(503, 'Remote machine is offline');
+    }
+    if (!machine.capabilities?.includes(CAPABILITY_COMPUTER_MACOS)) {
+      throw new GatewayError(
+        503,
+        'This remote machine does not support computer use yet. Update Jian Remote on the Mac (computer-macos-v1).',
+      );
+    }
+    if (!machine.platform.toLowerCase().startsWith('darwin')) {
+      throw new GatewayError(
+        400,
+        'Computer use is available on macOS Remote Control machines only.',
+      );
+    }
+    const { timeoutMs, ...computer } = data;
+    return this.waitForTask(
+      profileId,
+      machineId,
+      {
+        kind: 'computer',
+        command: '',
+        cwd: null,
+        payload: computer,
+        timeoutMs,
+      },
+      signal,
+    );
+  }
+
+  private async waitForTask(
+    profileId: string,
+    machineId: string,
+    task: {
+      kind: 'shell' | 'computer';
+      command: string;
+      cwd: string | null;
+      payload: RemoteComputerParams | Record<string, unknown> | null;
+      timeoutMs: number;
+    },
+    signal?: AbortSignal,
+  ) {
     const taskId = randomUUID();
     const now = new Date(this.clock());
     await this.store.db.insert(remoteTasks).values({
       id: taskId,
       machineId,
       profileId,
-      command: data.command,
-      cwd: data.cwd ?? null,
-      timeoutMs: data.timeoutMs,
+      kind: task.kind,
+      command: task.command,
+      cwd: task.cwd,
+      payload: task.payload,
+      timeoutMs: task.timeoutMs,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
     });
 
-    const deadline = this.clock() + data.timeoutMs + 30_000;
+    const deadline = this.clock() + task.timeoutMs + 30_000;
     while (this.clock() < deadline) {
       if (signal?.aborted) {
         await this.store.db
@@ -154,17 +243,18 @@ export class Remote {
           .where(and(eq(remoteTasks.id, taskId), eq(remoteTasks.status, 'queued')));
         throw new GatewayError(499, 'Remote command was cancelled');
       }
-      const [task] = await this.store.db
+      const [row] = await this.store.db
         .select()
         .from(remoteTasks)
         .where(eq(remoteTasks.id, taskId))
         .limit(1);
-      if (task?.status === 'completed' || task?.status === 'failed') {
-        const result = task.result as {
+      if (row?.status === 'completed' || row?.status === 'failed') {
+        const result = row.result as {
           exitCode: number | null;
           stdout: string;
           stderr: string;
           timedOut: boolean;
+          computer?: unknown;
         } | null;
         return (
           result ?? {
@@ -205,15 +295,25 @@ export class Remote {
     throw new GatewayError(504, 'Remote command timed out');
   }
 
-  async poll(machineId: string, authorization: string, reportedPlatform: string | undefined) {
+  async poll(
+    machineId: string,
+    authorization: string,
+    reportedPlatform?: string | undefined,
+    capabilitiesHeader?: string | undefined,
+  ) {
     const machine = await this.authenticate(machineId, authorization);
     const platform =
       reportedPlatform && /^(darwin|linux|win32)-(arm64|x64)$/.test(reportedPlatform)
         ? reportedPlatform
         : machine.platform;
+    const capabilities = parseCapabilities(capabilitiesHeader);
     await this.store.db
       .update(remoteMachines)
-      .set({ lastSeenAt: new Date(this.clock()), platform })
+      .set({
+        lastSeenAt: new Date(this.clock()),
+        platform,
+        capabilities,
+      })
       .where(eq(remoteMachines.id, machineId));
     if (!machine.allowedProfileIds.length) return { task: null };
     const tasks = await this.store.db
@@ -236,9 +336,41 @@ export class Remote {
       .where(and(eq(remoteTasks.id, next.id), eq(remoteTasks.status, 'queued')))
       .returning();
     if (!claimed) return { task: null };
+    const kind = claimed.kind ?? 'shell';
+    if (kind === 'computer') {
+      const parsed = remoteComputerParamsSchema.safeParse(claimed.payload);
+      if (!parsed.success) {
+        await this.store.db
+          .update(remoteTasks)
+          .set({
+            status: 'failed',
+            result: {
+              taskId: claimed.id,
+              exitCode: 1,
+              stdout: '',
+              stderr: 'Invalid computer-use payload',
+              timedOut: false,
+            },
+            updatedAt: new Date(this.clock()),
+          })
+          .where(eq(remoteTasks.id, claimed.id));
+        return { task: null };
+      }
+      return {
+        task: {
+          id: claimed.id,
+          kind: 'computer' as const,
+          command: null,
+          cwd: null,
+          timeoutMs: claimed.timeoutMs,
+          computer: parsed.data,
+        },
+      };
+    }
     return {
       task: {
         id: claimed.id,
+        kind: 'shell' as const,
         command: claimed.command,
         cwd: claimed.cwd,
         timeoutMs: claimed.timeoutMs,
@@ -309,3 +441,5 @@ export class Remote {
       throw new GatewayError(404, 'One or more profiles were not found');
   }
 }
+
+export const REMOTE_CAPABILITY_COMPUTER_MACOS = CAPABILITY_COMPUTER_MACOS;

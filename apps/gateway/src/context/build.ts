@@ -187,11 +187,8 @@ export function buildContext(
       : []),
     // The tools are deferred like any other group, and a model that cannot see them answers
     // that it has no access instead of asking for them.
-    ...(run.profile.allowShell
-      ? [
-          'You can run commands and read, edit, find and search files on the machine this gateway runs on: load the shell and files tool groups when a task needs them.',
-        ]
-      : []),
+    'You can run commands and read, edit, find and search files in your workspace on the machine this gateway runs on: load the shell and files tool groups when a task needs them.',
+    'Remote Control machines on your access list support shell and (on macOS) computer use via the remote tool group — gated by machine access, not a separate shell switch.',
     ...(run.profile.allowWebSearch
       ? [
           'You can search the web and read public pages: load the web tool group when a question needs current or outside information, and say where an answer came from.',

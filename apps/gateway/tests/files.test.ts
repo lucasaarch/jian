@@ -257,11 +257,11 @@ it('sends a file the agent writes once, with its caption, however often the call
   await expect(
     send.execute({ content: 'x', name: 'report.pdf' }, { ...call, toolCallId: 'pdf' }),
   ).rejects.toThrow('not a text format');
-  // Without the machine there is no path to read and no disk to save to.
+  // Paths outside the workspace and system read roots are rejected (allowShell no longer gates this).
   await expect(
-    send.execute({ path: '/etc/hosts' }, { ...call, toolCallId: 'path' }),
-  ).rejects.toThrow('cannot read files on the machine');
-  expect(f.services.media.tools(f.run).save_attachment).toBeUndefined();
+    send.execute({ path: '/var/jian-not-allowed' }, { ...call, toolCallId: 'path' }),
+  ).rejects.toThrow(/outside your workspace/i);
+  expect(f.services.media.tools(f.run).save_attachment).toBeDefined();
 });
 
 it('saves an attachment to disk and sends a file from it when the machine is on', async () => {

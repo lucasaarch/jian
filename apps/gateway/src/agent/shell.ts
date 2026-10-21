@@ -8,11 +8,10 @@ import { confine, confined, workspaceOf } from './workspace.js';
 /**
  * Running commands on the machine the gateway runs on, with the file tools beside them.
  *
- * What bounds them first is the profile switch that hands them out at all — everything here is
- * off unless `allowShell` is on for that profile. Anyone who can make this agent act, including
- * an approved contact on a chat channel, can make it run a command. The runtime puts a guard in
- * front of each action that changes the machine (see guard.ts); it is a second opinion, not a
- * boundary.
+ * Always offered: the former `allowShell` profile switch is deprecated. Anyone who can make this
+ * agent act, including an approved contact on a chat channel, can make it run a command. The
+ * runtime puts a guard in front of each action that changes the machine (see guard.ts); it is a
+ * second opinion, not a boundary.
  *
  * The boundary is the profile's workspace (see workspace.ts): a command starts there, with it as
  * `HOME` and `TMPDIR`, confined by Landlock to it and to the system's tools. It also starts

@@ -1,56 +1,66 @@
 import type { Skill } from '@jian/contracts';
 
-/** Offered with the shell: Remote Control tools exist only when allowShell is on. */
+/** Offered with workspace shell skills: Remote Control is gated by machine ACL, not allowShell. */
 export const remoteControl: Skill = {
   name: 'remote-control',
   description:
-    'Use when asked to control a computer the owner connected under Remote Control: run commands there, open apps, take a screenshot, or copy files to or from that machine.',
+    'Use when asked to control a computer the owner connected under Remote Control: run commands there, drive the screen (click, type, scroll), take a screenshot, or copy files to or from that machine.',
   instructions: `# Remote Control
 
 The owner connects computers in the panel under **Remote Control**. Each machine has a worker
 that polls this gateway over HTTPS. Only profiles the owner authorized for that machine may
-use it. Commands run as the logged-in local user — full local privileges, not a sandbox.
+use it — that ACL covers shell and computer use together. Commands and GUI actions run as the
+logged-in local user — full local privileges, not a sandbox.
 
 Load the \`remote\` tool group with \`load_tools\` before calling these tools.
 
 ## The tools
 
-- \`list_remote_machines\` — machines authorized for you: id, name, platform, online.
+- \`list_remote_machines\` — machines authorized for you: id, name, platform, online, capabilities.
 - \`run_remote_command\` — shell on that computer (PowerShell on Windows, \`/bin/sh\` on
   macOS/Linux). Open apps, install software, Git, builds, scripts — anything a local user
-  would type. Prefer the dedicated tools below for screenshots and file transfer.
-- \`take_remote_screenshot\` — primary display as a JPEG in this conversation (\`mediaId\`).
-  Send it with \`send_file\`. Prefer this over inventing screenshot commands.
+  would type. Prefer \`remote_computer\` for GUI and screenshots, and pull/push for files.
+- \`remote_computer\` — Anthropic-style desktop control on **macOS** (primary display):
+  \`screenshot\`, \`left_click\`, \`right_click\`, \`double_click\`, \`mouse_move\`, \`type\`,
+  \`key\`, \`scroll\`, \`left_click_drag\`, \`wait\`, \`end_session\`. Coordinates are pixels in
+  the screenshot image (origin top-left); use the returned \`widthPx\` / \`heightPx\`. A Jian
+  overlay pointer is visible on the Mac while the session is open; call \`end_session\` when
+  finished so it disappears.
 - \`pull_remote_file\` — read a remote path into conversation media (size-capped).
 - \`push_remote_file\` — write UTF-8 or base64 bytes to a remote path (size-capped).
 
-Gateway \`files\` / \`shell\` tools act on the **gateway host**, not the remote PC. For work
-on the remote computer, use the remote tools. Programming there is \`run_remote_command\`
-(and push/pull for files). Do not claim a remote action succeeded unless the tool result
-confirms it (exit code, stdout, or \`ok: true\`).
+Gateway \`files\` / \`shell\` tools act on the **gateway host** (your workspace), not the remote
+PC. For work on the remote computer, use the remote tools. Do not claim a remote action
+succeeded unless the tool result confirms it (exit code, stdout, or \`ok: true\`).
 
 ## How to work
 
 1. \`list_remote_machines\` and pick an **online** machine the owner named (or confirm which
    one if several). Offline means the worker is not polling — say so; do not invent success.
+   Computer use needs capability \`computer-macos-v1\` (macOS Jian Remote updated for it).
 2. Say one short line before a slow or visible action ("Opening Calculator on Mark.").
-3. For "show me the screen", use \`take_remote_screenshot\` then \`send_file\` with that
-   \`mediaId\`.
-4. For a small file exchange, use pull/push. Larger transfers need an arrangement the owner
+3. For GUI work: \`remote_computer\` with \`action: screenshot\` first, then click/type using
+   those image coordinates; screenshot again after meaningful UI changes. Prefer
+   \`run_remote_command\` when a CLI exists.
+4. When done with the GUI, \`remote_computer\` with \`action: end_session\`.
+5. For "show me the screen", screenshot then \`send_file\` with that \`mediaId\`.
+6. For a small file exchange, use pull/push. Larger transfers need an arrangement the owner
    made (cloud folder, \`scp\`, etc.) via \`run_remote_command\`.
 
 ## After reboot
 
 The installer registers a per-user auto-start: Windows Task Scheduler **ONLOGON**, macOS
 LaunchAgent, or Linux \`systemd --user\`. After a reboot the worker starts when that user
-signs in. Until then the machine stays Offline in the panel.
+signs in. Until then the machine stays offline in the panel.
 
 ## Limits
 
-- A command stops after at most two minutes (\`timeoutMs\`).
+- A command or computer action stops after at most two minutes (\`timeoutMs\`).
 - Screenshot and file payloads travel as base64 on the worker channel (~300 KB binary).
-  Screenshots are scaled/recompressed on the remote machine to fit; do not invent your own
-  full-resolution capture commands for chat.
+  Screenshots are scaled/recompressed on the remote machine to fit.
+- macOS computer use needs **Screen Recording** and **Accessibility** for **Jian Remote** in
+  System Settings. If a tool result says those are missing, tell the owner — do not invent
+  shell workarounds that bypass Jian’s app identity.
 - Never print the worker token or stored credentials into the chat.
 `,
 };
