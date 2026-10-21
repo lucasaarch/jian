@@ -107,6 +107,29 @@ copies the worker script there (so npx and global installs share one service pat
 installs a per-user LaunchAgent on macOS, a systemd service on Linux, or a Task Scheduler
 logon task on Windows. The Windows task runs only in the current user's session.
 
+### macOS app identity (Login Items / TCC)
+
+On macOS the LaunchAgent does **not** run the system `node` binary. Install materializes a
+thin app bundle:
+
+`~/Library/Application Support/Jian Remote/Jian Remote.app`
+
+whose `Contents/MacOS/Jian Remote` is a copy of the Node runtime used at install time
+(ad-hoc signed with bundle id `com.jian.remote` when `codesign` is available). The plist
+`ProgramArguments` point at that executable plus `~/.config/jian-remote/jian-remote.mjs run`,
+and set `AssociatedBundleIdentifiers` to `com.jian.remote`.
+
+System Settings → General → Login Items / Background Items should show **Jian Remote**, not
+“Node.js Foundation”. Accessibility and related TCC grants attach to this app path instead of
+the shared system Node binary.
+
+**Tradeoffs (v1):** the app is **unsigned / ad-hoc**, not Developer ID–notarized — no Apple
+Developer account is required for the npm distribute path. Gatekeeper is usually quiet for
+LaunchAgent-started jobs; some TCC prompts may still note an unnotarized app. A later release
+can Developer ID–sign and notarize the same layout without changing the install UX. The
+embedded runtime is roughly the size of Node and is refreshed on `install` / `update` /
+`configure` when the service restarts.
+
 The one-liner puts the token in shell history. Clear history afterwards on a shared machine, or
 install by hand with `--token-prompt` / `--token-stdin` instead. The worker source also lives at
 `apps/remote-control/bin/jian-remote.mjs` in the Jian source tree. The gateway still serves
@@ -118,10 +141,16 @@ Scheduler and remove `%USERPROFILE%\\.config\\jian-remote`.
 
 Keep the worker script at its installed path: the OS service starts that file. The worker uses
 `/bin/sh -lc` on macOS/Linux and PowerShell on Windows, inherits the local user's environment,
-and returns at most about 400 KB of stdout (enough for a compressed screenshot or a small file
-as base64) and 50 KB of stderr. Oversized results are truncated before upload so the worker does
-not stick offline on HTTP 413. Do not authorize profiles that should not have access to those
-local privileges.
+and returns at most about 400 KB of stdout and 50 KB of stderr. Oversized results are truncated
+before upload so the worker does not stick offline on HTTP 413.
+
+**Screenshots:** `take_remote_screenshot` captures JPEG, then **scales and recompresses** on the
+machine (longest side ≤ 1920, quality stepped down until the binary is under ~280 KB) so base64
+fits the channel. Cutting base64 mid-stream used to decode as a corrupt image (often a solid
+grey lower half). The gateway rejects incomplete JPEGs instead of storing them. File pull/push
+still need to stay under the same ~300 KB binary budget; larger files need an owner-arranged
+transfer via `run_remote_command`. Do not authorize profiles that should not have access to
+those local privileges.
 
 ### Starts again after reboot
 
@@ -148,8 +177,10 @@ After install:
 # Config and installed worker script (owner-only directory)
 ls -la ~/.config/jian-remote
 
-# LaunchAgent plist
+# LaunchAgent plist (ProgramArguments[0] should be …/Jian Remote.app/Contents/MacOS/Jian Remote)
 ls -la ~/Library/LaunchAgents/com.jian.remote.plist
+plutil -p ~/Library/LaunchAgents/com.jian.remote.plist | head
+ls -la ~/Library/Application\ Support/Jian\ Remote/Jian\ Remote.app/Contents/MacOS/
 
 # Is the job loaded? Look for com.jian.remote (PID and last exit status).
 launchctl print "gui/$(id -u)/com.jian.remote"

@@ -34,6 +34,150 @@ const RESULT_BODY_BUDGET = 480_000;
 /** Permanent HTTP statuses — retrying forever leaves the task stuck and the machine offline. */
 const PERMANENT_RESULT_STATUS = new Set([400, 401, 403, 404, 413]);
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+const MACOS_BUNDLE_ID = 'com.jian.remote';
+const MACOS_APP_NAME = 'Jian Remote';
+
+const ANSI = {
+  reset: '\u001b[0m',
+  bold: '\u001b[1m',
+  dim: '\u001b[2m',
+  green: '\u001b[32m',
+  yellow: '\u001b[33m',
+  red: '\u001b[31m',
+};
+
+/** Color when stdout is a TTY, unless NO_COLOR; FORCE_COLOR=1 enables even when piped. */
+export function shouldColorize(options = {}) {
+  // Use `in` so tests can pass forceColor: undefined without falling back to the process env.
+  const isTTY = 'isTTY' in options ? options.isTTY : process.stdout.isTTY;
+  const noColor = 'noColor' in options ? options.noColor : process.env.NO_COLOR;
+  const forceColor = 'forceColor' in options ? options.forceColor : process.env.FORCE_COLOR;
+  if (noColor !== undefined && noColor !== '') return false;
+  if (forceColor !== undefined && forceColor !== '' && forceColor !== '0') return true;
+  return Boolean(isTTY);
+}
+
+const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+
+export function stripAnsi(text) {
+  return text.replace(ANSI_PATTERN, '');
+}
+
+function paint(text, code, color) {
+  return color ? `${code}${text}${ANSI.reset}` : text;
+}
+
+/**
+ * Tasteful success block for install/configure/update — headline plus aligned facts.
+ * Keep facts short; avoid rainbow spam.
+ */
+export function formatSuccessBlock({ headline, facts = [], color = shouldColorize() }) {
+  const mark = paint('✓', ANSI.green, color);
+  const title = paint(headline, ANSI.bold, color);
+  const lines = [`${mark} ${title}`];
+  const width = Math.min(12, Math.max(0, ...facts.map(([label]) => String(label).length)));
+  for (const [label, value] of facts) {
+    const key = paint(String(label).padEnd(width), ANSI.dim, color);
+    lines.push(`  ${key}  ${value}`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+function printSuccess(headline, facts) {
+  process.stdout.write(formatSuccessBlock({ headline, facts, color: shouldColorize() }));
+}
+
+function printInfo(message) {
+  const color = shouldColorize();
+  const prefix = paint('·', ANSI.dim, color);
+  console.log(`${prefix} ${message}`);
+}
+
+function xmlEscape(value) {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+/** Paths for the thin macOS .app that owns Login Items / TCC identity (not system node). */
+export function macosAppBundlePaths(home = homedir()) {
+  const appRoot = join(
+    home,
+    'Library',
+    'Application Support',
+    MACOS_APP_NAME,
+    `${MACOS_APP_NAME}.app`,
+  );
+  return {
+    appRoot,
+    contents: join(appRoot, 'Contents'),
+    macosDir: join(appRoot, 'Contents', 'MacOS'),
+    executable: join(appRoot, 'Contents', 'MacOS', MACOS_APP_NAME),
+    infoPlist: join(appRoot, 'Contents', 'Info.plist'),
+    bundleId: MACOS_BUNDLE_ID,
+  };
+}
+
+export function buildMacosAppInfoPlist() {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleDisplayName</key><string>${MACOS_APP_NAME}</string>
+<key>CFBundleExecutable</key><string>${MACOS_APP_NAME}</string>
+<key>CFBundleIdentifier</key><string>${MACOS_BUNDLE_ID}</string>
+<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+<key>CFBundleName</key><string>${MACOS_APP_NAME}</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>LSMinimumSystemVersion</key><string>12.0</string>
+<key>NSHighResolutionCapable</key><true/>
+</dict></plist>
+`;
+}
+
+export function buildLaunchAgentPlist({ label, executable, script, logPath }) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>${xmlEscape(label)}</string>
+<key>AssociatedBundleIdentifiers</key>
+<array><string>${MACOS_BUNDLE_ID}</string></array>
+<key>ProgramArguments</key>
+<array>
+<string>${xmlEscape(executable)}</string>
+<string>${xmlEscape(script)}</string>
+<string>run</string>
+</array>
+<key>RunAtLoad</key><true/>
+<key>KeepAlive</key><true/>
+<key>StandardOutPath</key><string>${xmlEscape(logPath)}</string>
+<key>StandardErrorPath</key><string>${xmlEscape(logPath)}</string>
+</dict></plist>
+`;
+}
+
+/**
+ * Copy the current Node binary into Jian Remote.app and ad-hoc sign so Login Items / TCC
+ * attach to Jian, not the shared system node (unsigned / ad-hoc — not Developer ID).
+ */
+async function materializeMacosAppRuntime() {
+  const paths = macosAppBundlePaths();
+  await mkdir(paths.macosDir, { recursive: true, mode: 0o755 });
+  await writeFile(paths.infoPlist, buildMacosAppInfoPlist(), { mode: 0o644 });
+  const source = process.execPath;
+  const temp = `${paths.executable}.${process.pid}.tmp`;
+  await copyFile(source, temp);
+  await chmod(temp, 0o755);
+  await rename(temp, paths.executable);
+  // Best-effort ad-hoc sign with our bundle id; ignore failures on locked-down hosts.
+  spawnSync('codesign', ['--force', '-s', '-', '--identifier', MACOS_BUNDLE_ID, paths.executable], {
+    stdio: 'ignore',
+  });
+  spawnSync('codesign', ['--force', '-s', '-', '--identifier', MACOS_BUNDLE_ID, paths.appRoot], {
+    stdio: 'ignore',
+  });
+  return paths;
+}
 
 export function parseRelease(version) {
   const raw = typeof version === 'string' ? version.replace(/^v/, '').trim() : '';
@@ -340,26 +484,38 @@ async function materializeWorkerScript(sourceBytes) {
   return installedScript;
 }
 
-/** Register or bounce the per-user service so it runs the installed script and reconnects. */
+/**
+ * Register or bounce the per-user service so it runs the installed script and reconnects.
+ * On macOS, ProgramArguments[0] is the Jian Remote.app Node copy — not system node — so
+ * Login Items / TCC show "Jian Remote".
+ */
 async function startOrRestartService(script) {
   if (process.platform === 'darwin') {
     const launchAgents = join(homedir(), 'Library', 'LaunchAgents');
     const plistPath = join(launchAgents, 'com.jian.remote.plist');
-    const xml = (value) =>
-      value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
     const label = 'com.jian.remote';
+    const app = await materializeMacosAppRuntime();
     await mkdir(launchAgents, { recursive: true, mode: 0o700 });
     await writeFile(
       plistPath,
-      `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(script)}</string><string>run</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>StandardOutPath</key><string>${xml(join(configDir, 'worker.log'))}</string><key>StandardErrorPath</key><string>${xml(join(configDir, 'worker.log'))}</string></dict></plist>\n`,
+      buildLaunchAgentPlist({
+        label,
+        executable: app.executable,
+        script,
+        logPath: join(configDir, 'worker.log'),
+      }),
       { mode: 0o600 },
     );
     const domain = `gui/${process.getuid()}`;
     spawnSync('launchctl', ['bootout', domain, plistPath], { stdio: 'ignore' });
     const loaded = spawnSync('launchctl', ['bootstrap', domain, plistPath], { stdio: 'inherit' });
     if (loaded.status !== 0) throw new Error('Could not start Jian Remote with launchd');
-    console.log('Installed and started the per-user launchd service.');
-  } else if (process.platform === 'linux') {
+    return {
+      service: 'LaunchAgent',
+      detail: `Login Items identity: ${MACOS_APP_NAME}.app (${app.appRoot})`,
+    };
+  }
+  if (process.platform === 'linux') {
     const unitDir = join(homedir(), '.config', 'systemd', 'user');
     await mkdir(unitDir, { recursive: true, mode: 0o700 });
     const quote = (value) => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
@@ -374,8 +530,9 @@ async function startOrRestartService(script) {
       if (result.status !== 0)
         throw new Error('Could not install/start Jian Remote with systemd --user');
     }
-    console.log('Installed and started the per-user systemd service.');
-  } else if (process.platform === 'win32') {
+    return { service: 'systemd --user', detail: 'jian-remote.service' };
+  }
+  if (process.platform === 'win32') {
     const action = `"${process.execPath}" "${script}" run`;
     spawnSync('schtasks.exe', ['/End', '/TN', 'Jian Remote'], {
       stdio: 'ignore',
@@ -403,12 +560,10 @@ async function startOrRestartService(script) {
       ['/Run', '/TN', 'Jian Remote'],
       'Could not start the Jian Remote scheduled task',
     );
-    console.log('Installed and started the per-user Windows logon task.');
-  } else {
-    console.log(
-      `Service auto-install is unsupported on ${process.platform}. Run: node ${script} run`,
-    );
+    return { service: 'Task Scheduler', detail: 'Jian Remote (ONLOGON)' };
   }
+  printInfo(`Service auto-install is unsupported on ${process.platform}. Run: node ${script} run`);
+  return { service: 'none', detail: process.platform };
 }
 
 async function install() {
@@ -431,21 +586,21 @@ async function install() {
   };
   await writeConfigFile(config);
   const script = await materializeWorkerScript();
-  await startOrRestartService(script);
-  console.log(`Credentials are stored with owner-only permissions in ${configPath}.`);
+  const started = await startOrRestartService(script);
+  const facts = [
+    ['Service', `${started.service} started`],
+    ['Config', configPath],
+  ];
   if (gatewayVersion) {
-    console.log(
-      `Compatible with gateway ${gatewayVersion} (major.minor ${parseRelease(gatewayVersion)?.major}.${parseRelease(gatewayVersion)?.minor}).`,
-    );
+    const release = parseRelease(gatewayVersion);
+    facts.push(['Gateway', `${gatewayVersion} (major.minor ${release?.major}.${release?.minor})`]);
   }
-  console.log(
-    'Later upgrades: npx @jian-ai/remote-control@latest update  (reads this config; no token again).',
-  );
-  console.log(
-    'To change gateway URL or token without reinstalling: jian-remote configure --gateway … --token …',
-  );
-  console.log(
-    'If the worker later looks stuck offline, restart the service (or run update) and check ~/.config/jian-remote/worker.log.',
+  if (started.detail) facts.push(['Identity', started.detail]);
+  printSuccess('Installed Jian Remote', facts);
+  printInfo('Upgrade later: npx @jian-ai/remote-control@latest update  (no token again)');
+  printInfo('Change URL or token: jian-remote configure --gateway … --token …');
+  printInfo(
+    'If Offline sticks: update or restart the service; check ~/.config/jian-remote/worker.log',
   );
 }
 
@@ -498,19 +653,23 @@ async function configure() {
   } catch {
     script = await materializeWorkerScript();
   }
-  await startOrRestartService(script);
+  const started = await startOrRestartService(script);
 
   const changed = [
     gatewayFlag ? 'gateway' : null,
     machineFlag ? 'machine' : null,
     tokenFlag ? 'token' : null,
   ].filter(Boolean);
-  console.log(`Updated ${changed.join(', ')} in ${configPath}. Worker service restarted.`);
+  const facts = [
+    ['Changed', changed.join(', ')],
+    ['Config', configPath],
+    ['Service', `${started.service} restarted`],
+  ];
   if (gatewayVersion) {
-    console.log(
-      `Compatible with gateway ${gatewayVersion} (major.minor ${parseRelease(gatewayVersion)?.major}.${parseRelease(gatewayVersion)?.minor}).`,
-    );
+    const release = parseRelease(gatewayVersion);
+    facts.push(['Gateway', `${gatewayVersion} (major.minor ${release?.major}.${release?.minor})`]);
   }
+  printSuccess('Configured Jian Remote', facts);
 }
 
 /**
@@ -540,7 +699,7 @@ async function update() {
     scriptBytes = await readFile(fileURLToPath(import.meta.url));
     installedVersion = PACKAGE_VERSION;
   } else {
-    console.log(`Downloading @jian-ai/remote-control@${target}…`);
+    printInfo(`Downloading @jian-ai/remote-control@${target}…`);
     scriptBytes = fetchNpmWorkerScript(target);
     installedVersion = readEmbeddedVersion(scriptBytes.toString('utf8'));
   }
@@ -557,15 +716,19 @@ async function update() {
     { stdio: 'inherit', windowsHide: true },
   );
   if (npmInstall.status !== 0) {
-    console.log(
+    printInfo(
       'Global npm install skipped or failed; the service still uses ~/.config/jian-remote/jian-remote.mjs.',
     );
   }
 
-  await startOrRestartService(script);
-  console.log(
-    `Updated Jian Remote to ${installedVersion}${gatewayVersion ? ` (gateway ${gatewayVersion})` : ''}. Worker restarted.`,
-  );
+  const started = await startOrRestartService(script);
+  const facts = [
+    ['Version', installedVersion],
+    ['Service', `${started.service} restarted`],
+  ];
+  if (gatewayVersion) facts.push(['Gateway', gatewayVersion]);
+  if (started.detail) facts.push(['Identity', started.detail]);
+  printSuccess('Updated Jian Remote', facts);
 }
 
 async function execute(task) {
@@ -582,6 +745,7 @@ async function execute(task) {
     });
     let stdout = '';
     let stderr = '';
+    let stdoutSeen = 0;
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
@@ -598,6 +762,7 @@ async function execute(task) {
       }, 2000).unref();
     }, task.timeoutMs);
     child.stdout.on('data', (chunk) => {
+      stdoutSeen += chunk.toString('utf8').length;
       stdout = cappedAppend(stdout, chunk, STDOUT_CAP);
     });
     child.stderr.on('data', (chunk) => {
@@ -615,6 +780,14 @@ async function execute(task) {
     });
     child.on('close', (code) => {
       clearTimeout(timeout);
+      // Mark silent stdout cuts so screenshot tools can reject grey/truncated JPEGs.
+      if (stdoutSeen > STDOUT_CAP) {
+        stderr = cappedAppend(
+          stderr,
+          '\n[jian-remote] stdout truncated at the worker channel cap\n',
+          STDERR_CAP,
+        );
+      }
       resolveResult({ taskId: task.id, exitCode: code, stdout, stderr, timedOut });
     });
   });
@@ -806,12 +979,26 @@ if (isCliEntry()) {
     else if (args[0] === 'configure') await configure();
     else if (args[0] === 'update') await update();
     else if (args[0] === 'run') await run();
-    else
-      console.log(
-        'Jian Remote worker (@jian-ai/remote-control)\n  install --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)\n  configure [--gateway HTTPS_URL] [--machine UUID] (--token VALUE | --token-prompt | --token-stdin)\n  update [--version X.Y.Z|latest]\n  run\n\nInstall:    npm install -g @jian-ai/remote-control\nOr:         npx @jian-ai/remote-control@latest install --gateway … --machine … --token …\nConfigure:  jian-remote configure --token …   (or --gateway / --machine; restarts the service)\nUpdate:     npx @jian-ai/remote-control@latest update\n            (upgrades the worker binary; reads ~/.config/jian-remote)',
-      );
+    else {
+      const color = shouldColorize();
+      const title = paint('Jian Remote', ANSI.bold, color);
+      const pkg = paint('(@jian-ai/remote-control)', ANSI.dim, color);
+      console.log(`${title} worker ${pkg}
+  install --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)
+  configure [--gateway HTTPS_URL] [--machine UUID] (--token VALUE | --token-prompt | --token-stdin)
+  update [--version X.Y.Z|latest]
+  run
+
+Install:    npm install -g @jian-ai/remote-control
+Or:         npx @jian-ai/remote-control@latest install --gateway … --machine … --token …
+Configure:  jian-remote configure --token …   (or --gateway / --machine; restarts the service)
+Update:     npx @jian-ai/remote-control@latest update
+            (upgrades the worker binary; reads ~/.config/jian-remote)`);
+    }
   } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
+    const color = shouldColorize({ isTTY: process.stderr.isTTY });
+    const prefix = paint('Error', ANSI.red, color);
+    console.error(`${prefix}: ${error instanceof Error ? error.message : error}`);
     process.exitCode = 1;
   }
 }

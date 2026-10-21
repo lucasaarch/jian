@@ -49,6 +49,8 @@ signs in. Until then the machine stays Offline in the panel.
 
 - A command stops after at most two minutes (\`timeoutMs\`).
 - Screenshot and file payloads travel as base64 on the worker channel (~300 KB binary).
+  Screenshots are scaled/recompressed on the remote machine to fit; do not invent your own
+  full-resolution capture commands for chat.
 - Never print the worker token or stored credentials into the chat.
 `,
 };
