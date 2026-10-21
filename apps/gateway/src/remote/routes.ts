@@ -75,6 +75,9 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
         typeof request.headers['x-jian-remote-capabilities'] === 'string'
           ? request.headers['x-jian-remote-capabilities']
           : undefined,
+        typeof request.headers['x-jian-remote-ui-state'] === 'string'
+          ? request.headers['x-jian-remote-ui-state']
+          : undefined,
       ),
   );
 

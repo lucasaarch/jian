@@ -43,4 +43,5 @@ test('LaunchAgent points at the app binary and associates the bundle id', () => 
   assert.doesNotMatch(xml, /\/usr\/local\/bin\/node/);
   assert.match(xml, /<key>AssociatedBundleIdentifiers<\/key>/);
   assert.match(xml, /<string>com\.jian\.remote<\/string>/);
+  assert.match(xml, /<key>ProcessType<\/key>\s*<string>Interactive<\/string>/);
 });

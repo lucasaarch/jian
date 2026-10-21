@@ -191,9 +191,12 @@ it('queues computer-use tasks when the worker advertises computer-macos-v1', asy
     `Bearer ${created.token}`,
     'darwin-arm64',
     'computer-macos-v1',
+    'unlocked',
   );
   const listed = await services.remote.listForProfile(owner.id);
   expect(listed[0]?.capabilities).toContain('computer-macos-v1');
+  expect(listed[0]?.uiState).toBe('unlocked');
+  expect(listed[0]?.online).toBe(true);
 
   const pending = services.remote.executeComputer(owner.id, created.id, {
     action: 'mouse_move',
@@ -206,6 +209,7 @@ it('queues computer-use tasks when the worker advertises computer-macos-v1', asy
       `Bearer ${created.token}`,
       'darwin-arm64',
       'computer-macos-v1',
+      'unlocked',
     );
     if (!polled.task) await new Promise((resolve) => setTimeout(resolve, 5));
   }
@@ -224,6 +228,55 @@ it('queues computer-use tasks when the worker advertises computer-macos-v1', asy
     computer: { ok: true },
   });
   await expect(pending).resolves.toMatchObject({ taskId, exitCode: 0, computer: { ok: true } });
+});
+
+it('keeps a locked Mac online but refuses Computer Use with a clear error', async () => {
+  const services = await testServices();
+  const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+  const created = await services.remote.create({
+    name: 'Locked Mac',
+    allowedProfileIds: [owner.id],
+  });
+
+  await services.remote.poll(
+    created.id,
+    `Bearer ${created.token}`,
+    'darwin-arm64',
+    'computer-macos-v1',
+    'locked',
+  );
+  const listed = await services.remote.listForProfile(owner.id);
+  expect(listed[0]).toMatchObject({ online: true, uiState: 'locked' });
+
+  await expect(
+    services.remote.executeComputer(owner.id, created.id, { action: 'screenshot' }),
+  ).rejects.toMatchObject({
+    statusCode: 409,
+    message: expect.stringMatching(/locked/i),
+  });
+
+  const shell = services.remote.execute(owner.id, created.id, { command: 'printf ok' });
+  let polled: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
+  for (let attempt = 0; attempt < 20 && !polled.task; attempt++) {
+    polled = await services.remote.poll(
+      created.id,
+      `Bearer ${created.token}`,
+      'darwin-arm64',
+      'computer-macos-v1',
+      'locked',
+    );
+    if (!polled.task) await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  expect(polled.task).toMatchObject({ kind: 'shell', command: 'printf ok' });
+  if (!polled.task) throw new Error('Worker did not receive the shell task');
+  await services.remote.complete(created.id, polled.task.id, `Bearer ${created.token}`, {
+    taskId: polled.task.id,
+    exitCode: 0,
+    stdout: 'ok',
+    stderr: '',
+    timedOut: false,
+  });
+  await expect(shell).resolves.toMatchObject({ exitCode: 0, stdout: 'ok' });
 });
 
 it('accepts a large remote result that previously hit the default 256 KiB body limit', async () => {

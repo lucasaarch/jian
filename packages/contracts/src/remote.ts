@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/** macOS session posture from the worker (lock ≠ offline). */
+export const remoteUiStateSchema = z.enum(['unlocked', 'locked', 'display_asleep', 'unknown']);
+
 export const remoteMachineSchema = z.strictObject({
   id: z.uuid(),
   name: z.string(),
@@ -9,6 +12,11 @@ export const remoteMachineSchema = z.strictObject({
   createdAt: z.iso.datetime(),
   /** Worker advertised computer-use support (e.g. computer-macos-v1). */
   capabilities: z.array(z.string()).default([]),
+  /**
+   * Screen lock / display sleep as reported by the worker. Online means the poller is alive;
+   * locked means Computer Use needs an unlock (shell may still work).
+   */
+  uiState: remoteUiStateSchema.default('unknown'),
 });
 
 export const remoteMachineCreateSchema = z.strictObject({

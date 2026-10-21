@@ -208,11 +208,15 @@ launchctl kickstart -k "gui/$(id -u)/com.jian.remote"
 
 1. Confirm the computer can reach the gateway over HTTPS.
 2. Run `npx @jian-ai/remote-control@latest update` (or restart the local service). Re-running
-   install is only needed if the config was deleted.
+   install is only needed if the config was deleted. On macOS, `update` also refreshes the
+   LaunchAgent (`ProcessType=Interactive`) so App Nap does not freeze the poller when the
+   screen is locked.
 3. Read `~/.config/jian-remote/worker.log`. An incompatible-version error means the worker’s
    major.minor does not match the gateway — run `update` against the gateway’s version.
    Repeated `HTTP 502`/`503` means the gateway is up and down — the worker backs off and
    reconnects. Oversized results are truncated so the worker does not stick offline on HTTP 413.
+4. If the panel shows **Online** plus **Locked**, the worker is fine — unlock the Mac for
+   Computer Use; shell may still run.
 
 ## Agent use and revocation
 
@@ -235,6 +239,29 @@ before (longest side ≤ 1920, ~280 KB binary). The worker shows a **Jian overla
 (cream/ink wing mark) while a session is open; after ~30s idle it stays visible but very
 translucent; `end_session` removes it. Grant **Screen Recording** and **Accessibility** to
 **Jian Remote** in System Settings.
+
+### Online vs locked vs asleep (macOS)
+
+**Online** means the worker is still polling the gateway (HTTPS `tasks/next`), not that the
+desktop is unlocked. The panel and `list_remote_machines` also expose `uiState`:
+
+| `uiState` | Meaning | Shell / files | Computer Use |
+| --- | --- | --- | --- |
+| `unlocked` | Session unlocked, display up | Yes | Yes |
+| `display_asleep` | Display off/asleep, not password-locked | Yes | Worker wakes the display when a session starts |
+| `locked` | Password lock / loginwindow | Yes while online | Clear error — unlock the Mac first |
+| `unknown` | Probe unavailable | Yes while online | Best-effort; may fail with a normal tool error |
+
+A locked Mac that still looks **Offline** is usually an old LaunchAgent without
+`ProcessType=Interactive` (App Nap freezing the Node poll loop) or true system sleep
+(lid closed without power policy). Run `npx @jian-ai/remote-control@latest update` (or
+re-install) so launchd rewrites the plist, then check `~/.config/jian-remote/worker.log`.
+
+While a computer-use session is open the worker holds `caffeinate` assertions so idle
+display sleep is less likely to interrupt it. That does **not** unlock a password lock, and
+it does not claim ChatGPT/Codex-style “locked Computer Use” (those products use a separate
+macOS authorization plugin). Lid-closed clamshell sleep still takes the machine truly
+offline until it wakes.
 
 Published `@jian-ai/remote-control` releases ship a **prebuilt universal** `computer-helper`
 (arm64 + x86_64) built on macOS in the Publish workflow. `install` / `update` copy it under

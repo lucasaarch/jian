@@ -16,7 +16,8 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
 
 ## The tools
 
-- \`list_remote_machines\` — machines authorized for you: id, name, platform, online, capabilities.
+- \`list_remote_machines\` — machines authorized for you: id, name, platform, online, uiState,
+  capabilities.
 - \`run_remote_command\` — shell on that computer (PowerShell on Windows, \`/bin/sh\` on
   macOS/Linux). Open apps, install software, Git, builds, scripts — anything a local user
   would type. Prefer \`remote_computer\` for GUI and screenshots, and pull/push for files.
@@ -37,6 +38,8 @@ succeeded unless the tool result confirms it (exit code, stdout, or \`ok: true\`
 
 1. \`list_remote_machines\` and pick an **online** machine the owner named (or confirm which
    one if several). Offline means the worker is not polling — say so; do not invent success.
+   \`uiState: locked\` means the Mac is locked but still online: use shell/files if needed,
+   tell the owner to unlock for Computer Use — do not call that offline.
    Computer use needs capability \`computer-macos-v1\` (macOS Jian Remote updated for it).
 2. Say one short line before a slow or visible action ("Opening Calculator on Mark.").
 3. For GUI work: \`remote_computer\` with \`action: screenshot\` first, then click/type using
@@ -61,6 +64,9 @@ signs in. Until then the machine stays offline in the panel.
 - macOS computer use needs **Screen Recording** and **Accessibility** for **Jian Remote** in
   System Settings. If a tool result says those are missing, tell the owner — do not invent
   shell workarounds that bypass Jian’s app identity.
+- A **locked** Mac (password lock / loginwindow) stays online when the worker is polling;
+  Computer Use needs the owner to unlock. Display sleep alone is woken when a session
+  starts. Lid-closed system sleep is true offline until the Mac wakes.
 - Never print the worker token or stored credentials into the chat.
 `,
 };

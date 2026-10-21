@@ -105,6 +105,14 @@ export const remoteMachines = pgTable('remote_machines', {
   allowedProfileIds: jsonb('allowed_profile_ids').$type<string[]>().notNull().default([]),
   /** From the worker’s x-jian-remote-capabilities header on poll. */
   capabilities: jsonb('capabilities').$type<string[]>().notNull().default([]),
+  /**
+   * From x-jian-remote-ui-state on poll: unlocked | locked | display_asleep | unknown.
+   * Independent of online (lastSeenAt); a locked Mac can still poll.
+   */
+  uiState: text('ui_state')
+    .$type<'unlocked' | 'locked' | 'display_asleep' | 'unknown'>()
+    .notNull()
+    .default('unknown'),
   createdAt,
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
 });

@@ -46,3 +46,8 @@ Worker and gateway must share the same major.minor. See [docs/remote.md](../../d
 Requires Node.js 24+. Published builds include a prebuilt macOS `computer-helper` for Computer
 Use (no Xcode on the worker Mac). From source, run `macos/build-helper.sh` on a Mac, or let the
 worker compile with `swiftc` when Command Line Tools are installed.
+
+On macOS the LaunchAgent uses `ProcessType=Interactive` and an idle `caffeinate` so the worker
+keeps polling while the screen is locked (App Nap must not freeze timers). Computer Use still
+needs an unlocked session; a locked Mac stays **online** with `uiState: locked`. See
+[docs/remote.md](../../docs/remote.md).

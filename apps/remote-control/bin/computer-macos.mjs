@@ -13,6 +13,16 @@ import { fileURLToPath } from 'node:url';
 export const COMPUTER_CAPABILITY = 'computer-macos-v1';
 const IDLE_MS = 30_000;
 const HELPER_NAME = 'computer-helper';
+/** How long we cache lock / display-asleep probes between HTTPS polls. */
+const UI_STATE_CACHE_MS = 5_000;
+export const MAC_UI_STATES = Object.freeze(['unlocked', 'locked', 'display_asleep', 'unknown']);
+
+const LOCKED_COMPUTER_MESSAGE =
+  'Mac is locked — unlock the screen to use Computer Use. Shell and file tools may still work while the worker is online.';
+
+let cachedUiState = { at: 0, state: 'unknown' };
+let workerIdleCaffeinate = null;
+let sessionDisplayCaffeinate = null;
 
 /** Map screenshot image pixels → display points (primary). Half-pixel centers the click. */
 export function imagePixelToPoint(x, y, geometry) {
@@ -229,6 +239,7 @@ export class MacComputerSession {
     if (this.child && !this.child.killed) {
       await this.send({ cmd: 'ensureSession' });
       this.active = true;
+      startSessionDisplayAssertion(this.child.pid || process.pid);
       this.bumpIdle();
       return;
     }
@@ -247,6 +258,7 @@ export class MacComputerSession {
       this.failAll('Computer-use helper exited unexpectedly.');
       this.child = null;
       this.active = false;
+      stopSessionDisplayAssertion();
     });
     const ping = await this.send({ cmd: 'ping' });
     if (!ping.ok) throw new Error(ping.error || 'Computer-use helper did not respond.');
@@ -263,6 +275,7 @@ export class MacComputerSession {
     };
     await this.send({ cmd: 'ensureSession' });
     this.active = true;
+    startSessionDisplayAssertion(this.child.pid || process.pid);
     this.bumpIdle();
   }
 
@@ -343,6 +356,7 @@ export class MacComputerSession {
   async end() {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;
+    stopSessionDisplayAssertion();
     if (this.child) {
       try {
         await this.send({ cmd: 'endSession' });
@@ -380,6 +394,17 @@ export class MacComputerSession {
         stderr: '',
         timedOut: false,
         computer: { ok: true },
+      };
+    }
+
+    const uiBlocked = assertComputerUiAllowed();
+    if (uiBlocked) {
+      return {
+        exitCode: 1,
+        stdout: '',
+        stderr: uiBlocked,
+        timedOut: false,
+        computer: { ok: false, error: uiBlocked },
       };
     }
 
@@ -542,4 +567,125 @@ export async function probeComputerCapability() {
       existsSync(helperPaths().binary)
     );
   }
+}
+
+function normalizeUiState(value) {
+  return MAC_UI_STATES.includes(value) ? value : 'unknown';
+}
+
+/**
+ * Lock screen vs display sleep vs unlocked. Prefer the helper binary (CGSession +
+ * CGDisplayIsAsleep); fall back to unknown so we never invent "offline".
+ */
+export function probeMacUiState({ force = false } = {}) {
+  if (process.platform !== 'darwin') return 'unknown';
+  const now = Date.now();
+  if (!force && now - cachedUiState.at < UI_STATE_CACHE_MS) return cachedUiState.state;
+
+  let state = 'unknown';
+  const binary = helperPaths().binary;
+  if (existsSync(binary)) {
+    const probed = spawnSync(binary, ['--session-status'], {
+      encoding: 'utf8',
+      timeout: 4_000,
+      maxBuffer: 16_000,
+    });
+    if (probed.status === 0) {
+      try {
+        const line = (probed.stdout || '').trim().split('\n').pop();
+        const parsed = JSON.parse(line || '{}');
+        if (parsed?.ok) state = normalizeUiState(parsed.state);
+      } catch {
+        state = 'unknown';
+      }
+    }
+  }
+
+  cachedUiState = { at: now, state };
+  return state;
+}
+
+/**
+ * Prevent idle system sleep for the worker process so HTTPS polls keep firing when the
+ * screen is locked. Does not claim lid-closed / clamshell immunity (see docs/remote.md).
+ */
+export function startWorkerIdleAssertion(pid = process.pid) {
+  if (process.platform !== 'darwin') return null;
+  stopWorkerIdleAssertion();
+  try {
+    workerIdleCaffeinate = spawn('/usr/bin/caffeinate', ['-i', '-w', String(pid)], {
+      stdio: 'ignore',
+      detached: false,
+    });
+    workerIdleCaffeinate.on('error', () => {
+      workerIdleCaffeinate = null;
+    });
+    workerIdleCaffeinate.unref?.();
+    return workerIdleCaffeinate;
+  } catch {
+    workerIdleCaffeinate = null;
+    return null;
+  }
+}
+
+export function stopWorkerIdleAssertion() {
+  if (!workerIdleCaffeinate) return;
+  try {
+    workerIdleCaffeinate.kill('SIGTERM');
+  } catch {
+    // already gone
+  }
+  workerIdleCaffeinate = null;
+}
+
+/** While a computer-use session is open, also keep the display from idling off. */
+function startSessionDisplayAssertion(pid = process.pid) {
+  if (process.platform !== 'darwin') return;
+  stopSessionDisplayAssertion();
+  try {
+    sessionDisplayCaffeinate = spawn('/usr/bin/caffeinate', ['-dimsu', '-w', String(pid)], {
+      stdio: 'ignore',
+      detached: false,
+    });
+    sessionDisplayCaffeinate.on('error', () => {
+      sessionDisplayCaffeinate = null;
+    });
+    sessionDisplayCaffeinate.unref?.();
+  } catch {
+    sessionDisplayCaffeinate = null;
+  }
+}
+
+function stopSessionDisplayAssertion() {
+  if (!sessionDisplayCaffeinate) return;
+  try {
+    sessionDisplayCaffeinate.kill('SIGTERM');
+  } catch {
+    // already gone
+  }
+  sessionDisplayCaffeinate = null;
+}
+
+/** User-activity assertion: nudge a sleeping (unlocked) display awake. */
+export function wakeMacDisplay(seconds = 3) {
+  if (process.platform !== 'darwin') return;
+  const secs = Math.max(1, Math.min(30, Math.round(seconds)));
+  spawnSync('/usr/bin/caffeinate', ['-u', '-t', String(secs)], {
+    encoding: 'utf8',
+    timeout: (secs + 2) * 1000,
+  });
+}
+
+/**
+ * Before GUI actions: wake a sleeping display; refuse clearly when the session is locked.
+ * Returns null when Computer Use may proceed, or an English error string.
+ */
+export function assertComputerUiAllowed() {
+  let state = probeMacUiState({ force: true });
+  if (state === 'display_asleep' || state === 'unknown') {
+    wakeMacDisplay(3);
+    state = probeMacUiState({ force: true });
+  }
+  if (state === 'locked') return LOCKED_COMPUTER_MESSAGE;
+  return null;
 }
