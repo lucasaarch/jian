@@ -86,7 +86,9 @@ function helperPaths(home = homedir()) {
 }
 
 /** Paths inside the installed npm package (or a checkout). */
-export function packageHelperPaths(packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..')) {
+export function packageHelperPaths(
+  packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..'),
+) {
   return {
     swift: join(packageRoot, 'macos', `${HELPER_NAME}.swift`),
     binary: join(packageRoot, 'macos', HELPER_NAME),
