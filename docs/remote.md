@@ -58,6 +58,29 @@ jian-remote install \
   --token 'WORKER_TOKEN'
 ```
 
+### Update (no token again)
+
+Credentials stay in `~/.config/jian-remote/config.json`. To refresh the worker to match the
+gateway (or `@latest`) and restart the service:
+
+```sh
+npx --yes @jian-ai/remote-control@latest update
+# or, when installed globally:
+jian-remote update
+# optional pin:
+jian-remote update --version 0.6.0
+```
+
+`update` does not take `--gateway`, `--machine`, or `--token`.
+
+### Version compatibility
+
+The worker and gateway must share the same **major.minor** (patch and prerelease may differ).
+`install`, `update`, and `run` check `GET /health` for the gateway’s version and refuse to
+continue with a clear error when incompatible — for example a 0.5.x worker against a 0.6.x
+gateway. Local gateway builds with no `JIAN_VERSION` skip the gate. Fix a mismatch with
+`npx @jian-ai/remote-control@GATEWAY_VERSION update`.
+
 The installer stores the credential with owner-only permissions under `~/.config/jian-remote`,
 copies the worker script there (so npx and global installs share one service path), and
 installs a per-user LaunchAgent on macOS, a systemd service on Linux, or a Task Scheduler
@@ -93,11 +116,12 @@ the panel. The Remote Control page polls Online/Offline every few seconds while 
 ### If the machine stays Offline
 
 1. Confirm the computer can reach the gateway over HTTPS.
-2. Restart the local service (Task Scheduler / `launchctl` / `systemctl --user restart jian-remote`),
-   or re-run the install command from the panel.
-3. Read `~/.config/jian-remote/worker.log`. Repeated `HTTP 502`/`503` means the gateway is up
-   and down — the worker backs off and reconnects. A former `HTTP 413` loop meant a result was
-   too large; current workers truncate and deliver a stub so the agent unblocks.
+2. Run `npx @jian-ai/remote-control@latest update` (or restart the local service). Re-running
+   install is only needed if the config was deleted.
+3. Read `~/.config/jian-remote/worker.log`. An incompatible-version error means the worker’s
+   major.minor does not match the gateway — run `update` against the gateway’s version.
+   Repeated `HTTP 502`/`503` means the gateway is up and down — the worker backs off and
+   reconnects. Oversized results are truncated so the worker does not stick offline on HTTP 413.
 
 ## Agent use and revocation
 

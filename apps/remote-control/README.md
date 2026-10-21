@@ -19,4 +19,18 @@ npx @jian-ai/remote-control@latest install \
   --token WORKER_TOKEN
 ```
 
-Requires Node.js 24+. Full documentation: [docs/remote.md](../../docs/remote.md).
+## Update
+
+```sh
+npx @jian-ai/remote-control@latest update
+# or: jian-remote update [--version 0.6.0]
+```
+
+Reads `~/.config/jian-remote` (no token, machine id, or gateway flags), installs a compatible
+build, and restarts the worker service.
+
+## Compatibility
+
+Worker and gateway must share the same major.minor. See [docs/remote.md](../../docs/remote.md).
+
+Requires Node.js 24+.

@@ -59,8 +59,31 @@ it('serves the worker script without authentication so install one-liners can do
     expect(response.headers['content-type']).toMatch(/javascript/);
     expect(response.body).toContain('Jian Remote worker');
     expect(response.body).toContain('--token');
+    expect(response.body).toContain('update [--version');
   } finally {
     await app.close();
+  }
+});
+
+it('stamps the served worker PACKAGE_VERSION to JIAN_VERSION for major.minor compatibility', async () => {
+  const previous = process.env.JIAN_VERSION;
+  process.env.JIAN_VERSION = '0.6.0';
+  const services = await testServices();
+  const app = createApp({
+    ...services,
+    token: 'host-admin-token-for-test-1234567890-verysecret',
+    logger: false,
+  });
+  try {
+    const health = await app.inject({ url: '/health' });
+    expect(health.json()).toMatchObject({ status: 'ok', service: 'jian', version: '0.6.0' });
+    const response = await app.inject({ url: '/jian-remote.mjs' });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("export const PACKAGE_VERSION = '0.6.0'");
+  } finally {
+    await app.close();
+    if (previous === undefined) delete process.env.JIAN_VERSION;
+    else process.env.JIAN_VERSION = previous;
   }
 });
 

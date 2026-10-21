@@ -72,5 +72,9 @@ export const CreatedToken: Story = {
     expect(global.value).toContain('npm install -g @jian-ai/remote-control@');
     expect(global.value).toContain('jian-remote install');
     expect(global.value).toContain('--token ');
+    const update = canvas.getByLabelText('Later: update worker') as HTMLTextAreaElement;
+    expect(update.value).toContain('npx --yes @jian-ai/remote-control@');
+    expect(update.value).toMatch(/ update$/);
+    expect(update.value).not.toContain('--token');
   },
 };

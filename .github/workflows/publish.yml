@@ -164,9 +164,18 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           node -e "
             const fs = require('node:fs');
+            const version = process.argv[1];
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            pkg.version = process.argv[1];
+            pkg.version = version;
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            const bin = 'bin/jian-remote.mjs';
+            const source = fs.readFileSync(bin, 'utf8');
+            const stamped = source.replace(
+              /export const PACKAGE_VERSION = '[^']*'/,
+              \"export const PACKAGE_VERSION = '\" + version + \"'\",
+            );
+            if (stamped === source) throw new Error('PACKAGE_VERSION stamp target not found');
+            fs.writeFileSync(bin, stamped);
           " "$version"
           node -e "console.log('Publishing @jian-ai/remote-control@' + require('./package.json').version)"
       - name: Require NPM_TOKEN

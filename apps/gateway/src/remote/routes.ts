@@ -1,23 +1,7 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import type { Remote } from './service.js';
-
-/**
- * Worker script shipped as `@jian-ai/remote-control`. Resolved from the workspace (dev) or
- * the deployed tree so `/jian-remote.mjs` and `/update` stay available without cloning Jian.
- */
-const require = createRequire(import.meta.url);
-const workerScript = (() => {
-  try {
-    return require.resolve('@jian-ai/remote-control/bin/jian-remote.mjs');
-  } catch {
-    // Fallback for a checkout that has not linked the package yet.
-    return fileURLToPath(new URL('../../../remote-control/bin/jian-remote.mjs', import.meta.url));
-  }
-})();
+import { workerScriptBytes } from './worker-script.js';
 
 /**
  * Contract allows ~400 KiB stdout + 50 KiB stderr. Default Fastify bodyLimit is 256 KiB,
@@ -35,9 +19,8 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
         request.params.machineId,
         request.headers.authorization ?? '',
       );
-      if (!existsSync(workerScript))
-        return reply.code(404).send({ error: 'Worker script not found' });
-      const script = readFileSync(workerScript);
+      const script = workerScriptBytes();
+      if (!script) return reply.code(404).send({ error: 'Worker script not found' });
       const etag = `"${createHash('sha256').update(script).digest('hex')}"`;
       if (request.headers['if-none-match'] === etag)
         return reply.code(304).header('ETag', etag).send();
@@ -50,15 +33,14 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
   );
 
   app.get('/jian-remote.mjs', { config: { publicUiAsset: true } }, async (_request, reply) => {
-    if (!existsSync(workerScript)) {
-      return reply.code(404).send({ error: 'Worker script not found' });
-    }
+    const script = workerScriptBytes();
+    if (!script) return reply.code(404).send({ error: 'Worker script not found' });
 
     return reply
       .type('text/javascript; charset=utf-8')
       .header('Content-Disposition', 'attachment; filename="jian-remote.mjs"')
       .header('Cache-Control', 'no-cache')
-      .send(readFileSync(workerScript));
+      .send(script);
   });
 
   app.get('/v1/remote/machines', async () => deps.remote.list());

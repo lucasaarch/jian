@@ -231,6 +231,7 @@ export function RemoteMachines({ api }: Props) {
   const globalInstall = created
     ? `npm install -g ${packageRef} && jian-remote ${installFlags}`
     : '';
+  const updateCommand = `npx --yes ${packageRef} update`;
 
   return (
     <>
@@ -413,18 +414,25 @@ export function RemoteMachines({ api }: Props) {
               ariaLabel="Copy global npm install command"
             />
             <CopyBlock
+              label="Later: update worker"
+              value={updateCommand}
+              ariaLabel="Copy update command"
+            />
+            <CopyBlock
               label="Worker token only"
               value={created.token}
               ariaLabel="Copy worker token"
             />
             <p className="note">
-              Needs Node.js 24+ on the computer. The command includes the worker token — run it
-              once, then clear shell history if you share that terminal. The gateway must be
-              reachable over HTTPS from the computer. After install, the worker starts on login
-              (Windows Task Scheduler ONLOGON, macOS LaunchAgent, or Linux systemd --user), so a
-              reboot brings it back when that user signs in. If Online stays red, restart the local
-              service or re-run install and check ~/.config/jian-remote/worker.log. This list
-              refreshes Online status every few seconds while the page is open.
+              Needs Node.js 24+ on the computer. The install command includes the worker token — run
+              it once, then clear shell history if you share that terminal. Later upgrades use
+              update (reads ~/.config/jian-remote; no token again) and must share the gateway’s
+              major.minor version. The gateway must be reachable over HTTPS from the computer. After
+              install, the worker starts on login (Windows Task Scheduler ONLOGON, macOS
+              LaunchAgent, or Linux systemd --user), so a reboot brings it back when that user signs
+              in. If Online stays red, run update, restart the local service, or check
+              ~/.config/jian-remote/worker.log. This list refreshes Online status every few seconds
+              while the page is open.
             </p>
           </div>
         </Modal>

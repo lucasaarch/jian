@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { chmod, copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,6 +17,12 @@ const option = (name) => {
   return index < 0 ? undefined : args[index + 1];
 };
 
+/**
+ * Stamped to the release tag on npm publish and when the gateway serves this script.
+ * Compatibility with the gateway requires the same major.minor (see versionsCompatible).
+ */
+export const PACKAGE_VERSION = '0.0.0-dev';
+
 /** Soft stdout/stderr caps while capturing a command (chars). Gateway schema matches these. */
 const STDOUT_CAP = 400_000;
 const STDERR_CAP = 50_000;
@@ -26,6 +33,76 @@ const STDERR_CAP = 50_000;
 const RESULT_BODY_BUDGET = 480_000;
 /** Permanent HTTP statuses — retrying forever leaves the task stuck and the machine offline. */
 const PERMANENT_RESULT_STATUS = new Set([400, 401, 403, 404, 413]);
+const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+
+export function parseRelease(version) {
+  const raw = typeof version === 'string' ? version.replace(/^v/, '').trim() : '';
+  const match = SEMVER.exec(raw);
+  if (!match) return null;
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: match[4],
+    raw,
+  };
+}
+
+export function isDevVersion(version) {
+  const raw = typeof version === 'string' ? version.replace(/^v/, '').trim() : '';
+  return !raw || raw === '0.0.0-dev' || raw === '0.0.0';
+}
+
+/**
+ * Rule: a released remote-control may talk to a released gateway only when major.minor match
+ * (patch and prerelease may differ). A gateway with no version (local `make dev`) skips the
+ * gate so developers are not blocked. A released gateway rejects a dev/unknown worker.
+ */
+export function versionsCompatible(localVersion, gatewayVersion) {
+  if (isDevVersion(gatewayVersion)) {
+    return { ok: true, skipped: true };
+  }
+  const gateway = parseRelease(gatewayVersion);
+  if (!gateway) return { ok: true, skipped: true };
+
+  if (isDevVersion(localVersion)) {
+    return {
+      ok: false,
+      skipped: false,
+      local: localVersion ?? 'unknown',
+      gateway: gateway.raw,
+      required: `${gateway.major}.${gateway.minor}`,
+      message: `This remote-control build (${localVersion ?? 'unknown'}) is not a released package and cannot connect to gateway ${gateway.raw}. Install a matching release: npx @jian-ai/remote-control@${gateway.raw} update`,
+    };
+  }
+  const local = parseRelease(localVersion);
+  if (!local) {
+    return {
+      ok: false,
+      skipped: false,
+      local: localVersion ?? 'unknown',
+      gateway: gateway.raw,
+      required: `${gateway.major}.${gateway.minor}`,
+      message: `This remote-control version (${localVersion ?? 'unknown'}) is not a valid release and cannot connect to gateway ${gateway.raw}.`,
+    };
+  }
+  if (local.major === gateway.major && local.minor === gateway.minor) {
+    return { ok: true, skipped: false, local: local.raw, gateway: gateway.raw };
+  }
+  return {
+    ok: false,
+    skipped: false,
+    local: local.raw,
+    gateway: gateway.raw,
+    required: `${gateway.major}.${gateway.minor}`,
+    message: `This remote-control ${local.raw} is incompatible with gateway ${gateway.raw}. Jian requires the same major.minor (${gateway.major}.${gateway.minor}). Run: npx @jian-ai/remote-control@${gateway.raw} update`,
+  };
+}
+
+export function compatibilityError(localVersion, gatewayVersion) {
+  const result = versionsCompatible(localVersion, gatewayVersion);
+  return result.ok ? null : result.message;
+}
 
 export function cappedAppend(current, chunk, cap = STDOUT_CAP) {
   return (current + chunk.toString('utf8')).slice(0, cap);
@@ -123,15 +200,160 @@ function runChecked(command, commandArgs, message) {
   if (result.status !== 0) throw new Error(message);
 }
 
-/** Copy this package entry into ~/.config so npx and global installs share one service path. */
-async function materializeWorkerScript() {
+async function loadConfig() {
+  try {
+    return JSON.parse(await readFile(configPath, 'utf8'));
+  } catch {
+    throw new Error(
+      `No Jian Remote config at ${configPath}. Run install first (from the panel), or: jian-remote install --gateway https://… --machine UUID --token …`,
+    );
+  }
+}
+
+/** Public /health carries the gateway release so install/update can gate without a worker token. */
+export async function fetchGatewayVersion(gatewayBase, fetcher = fetch) {
+  const response = await fetcher(`${gatewayBase.replace(/\/$/, '')}/health`, {
+    redirect: 'error',
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`Could not read gateway version: HTTP ${response.status}`);
+  const body = await response.json();
+  return typeof body?.version === 'string' && body.version.trim() ? body.version.trim() : undefined;
+}
+
+async function assertCompatibleWithGateway(gatewayBase, localVersion = PACKAGE_VERSION) {
+  const gatewayVersion = await fetchGatewayVersion(gatewayBase);
+  const error = compatibilityError(localVersion, gatewayVersion);
+  if (error) throw new Error(error);
+  return gatewayVersion;
+}
+
+function readEmbeddedVersion(scriptSource) {
+  const match = /export const PACKAGE_VERSION = '([^']+)'/.exec(scriptSource);
+  return match?.[1] ?? 'unknown';
+}
+
+/** Pull a specific npm release’s worker script into a temp path (for update when self is wrong). */
+function fetchNpmWorkerScript(version) {
+  const dir = mkdtempSync(join(tmpdir(), 'jian-remote-'));
+  try {
+    const packed = spawnSync(
+      'npm',
+      ['pack', `@jian-ai/remote-control@${version}`, '--pack-destination', dir],
+      { encoding: 'utf8', windowsHide: true },
+    );
+    if (packed.status !== 0) {
+      throw new Error(
+        packed.stderr?.trim() ||
+          `Could not download @jian-ai/remote-control@${version} from npm. Check the version and network.`,
+      );
+    }
+    const tarball = packed.stdout
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .at(-1);
+    if (!tarball)
+      throw new Error(`npm pack produced no tarball for @jian-ai/remote-control@${version}`);
+    const tarballPath = join(dir, tarball);
+    const extracted = spawnSync('tar', ['-xzf', tarballPath, '-C', dir], {
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    if (extracted.status !== 0) {
+      throw new Error(extracted.stderr?.trim() || 'Could not extract the remote-control package');
+    }
+    return readFileSync(join(dir, 'package', 'bin', 'jian-remote.mjs'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Copy a worker script into ~/.config so npx and global installs share one service path. */
+async function materializeWorkerScript(sourceBytes) {
   await mkdir(configDir, { recursive: true, mode: 0o700 });
-  const source = fileURLToPath(import.meta.url);
-  if (source !== installedScript) {
-    await copyFile(source, installedScript);
+  if (sourceBytes) {
+    const temp = `${installedScript}.${process.pid}.tmp`;
+    await writeFile(temp, sourceBytes, { mode: 0o700 });
+    await rename(temp, installedScript);
+  } else {
+    const source = fileURLToPath(import.meta.url);
+    if (source !== installedScript) await copyFile(source, installedScript);
   }
   if (process.platform !== 'win32') await chmod(installedScript, 0o700);
   return installedScript;
+}
+
+/** Register or bounce the per-user service so it runs the installed script and reconnects. */
+async function startOrRestartService(script) {
+  if (process.platform === 'darwin') {
+    const launchAgents = join(homedir(), 'Library', 'LaunchAgents');
+    const plistPath = join(launchAgents, 'com.jian.remote.plist');
+    const xml = (value) =>
+      value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    const label = 'com.jian.remote';
+    await mkdir(launchAgents, { recursive: true, mode: 0o700 });
+    await writeFile(
+      plistPath,
+      `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(script)}</string><string>run</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>StandardOutPath</key><string>${xml(join(configDir, 'worker.log'))}</string><key>StandardErrorPath</key><string>${xml(join(configDir, 'worker.log'))}</string></dict></plist>\n`,
+      { mode: 0o600 },
+    );
+    const domain = `gui/${process.getuid()}`;
+    spawnSync('launchctl', ['bootout', domain, plistPath], { stdio: 'ignore' });
+    const loaded = spawnSync('launchctl', ['bootstrap', domain, plistPath], { stdio: 'inherit' });
+    if (loaded.status !== 0) throw new Error('Could not start Jian Remote with launchd');
+    console.log('Installed and started the per-user launchd service.');
+  } else if (process.platform === 'linux') {
+    const unitDir = join(homedir(), '.config', 'systemd', 'user');
+    await mkdir(unitDir, { recursive: true, mode: 0o700 });
+    const quote = (value) => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+    const unit = `[Unit]\nDescription=Jian Remote worker\nAfter=network-online.target\n\n[Service]\nExecStart=${quote(process.execPath)} ${quote(script)} run\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n`;
+    await writeFile(join(unitDir, 'jian-remote.service'), unit, { mode: 0o600 });
+    for (const command of [
+      ['daemon-reload'],
+      ['enable', '--now', 'jian-remote.service'],
+      ['restart', 'jian-remote.service'],
+    ]) {
+      const result = spawnSync('systemctl', ['--user', ...command], { stdio: 'inherit' });
+      if (result.status !== 0)
+        throw new Error('Could not install/start Jian Remote with systemd --user');
+    }
+    console.log('Installed and started the per-user systemd service.');
+  } else if (process.platform === 'win32') {
+    const action = `"${process.execPath}" "${script}" run`;
+    spawnSync('schtasks.exe', ['/End', '/TN', 'Jian Remote'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    runChecked(
+      'schtasks.exe',
+      [
+        '/Create',
+        '/SC',
+        'ONLOGON',
+        '/TN',
+        'Jian Remote',
+        '/TR',
+        action,
+        '/F',
+        '/RL',
+        'LIMITED',
+        '/IT',
+      ],
+      'Could not install the Jian Remote logon task with Task Scheduler',
+    );
+    runChecked(
+      'schtasks.exe',
+      ['/Run', '/TN', 'Jian Remote'],
+      'Could not start the Jian Remote scheduled task',
+    );
+    console.log('Installed and started the per-user Windows logon task.');
+  } else {
+    console.log(
+      `Service auto-install is unsupported on ${process.platform}. Run: node ${script} run`,
+    );
+  }
 }
 
 async function install() {
@@ -166,8 +388,10 @@ async function install() {
       'Usage: jian-remote install --gateway https://... --machine UUID (--token VALUE | --token-prompt | --token-stdin)',
     );
   }
+  const gatewayBase = gatewayUrl.origin + gatewayUrl.pathname.replace(/\/$/, '');
+  const gatewayVersion = await assertCompatibleWithGateway(gatewayBase);
   const config = {
-    gateway: gatewayUrl.origin + gatewayUrl.pathname.replace(/\/$/, ''),
+    gateway: gatewayBase,
     machineId,
     token: token.trim(),
   };
@@ -194,68 +418,73 @@ async function install() {
     await chmod(configPath, 0o600);
   }
   const script = await materializeWorkerScript();
-  if (process.platform === 'darwin') {
-    const launchAgents = join(homedir(), 'Library', 'LaunchAgents');
-    const plistPath = join(launchAgents, 'com.jian.remote.plist');
-    const xml = (value) =>
-      value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-    const label = 'com.jian.remote';
-    await mkdir(launchAgents, { recursive: true, mode: 0o700 });
-    await writeFile(
-      plistPath,
-      `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(script)}</string><string>run</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>StandardOutPath</key><string>${xml(join(configDir, 'worker.log'))}</string><key>StandardErrorPath</key><string>${xml(join(configDir, 'worker.log'))}</string></dict></plist>\n`,
-      { mode: 0o600 },
-    );
-    const domain = `gui/${process.getuid()}`;
-    spawnSync('launchctl', ['bootout', domain, plistPath], { stdio: 'ignore' });
-    const loaded = spawnSync('launchctl', ['bootstrap', domain, plistPath], { stdio: 'inherit' });
-    if (loaded.status !== 0) throw new Error('Could not start Jian Remote with launchd');
-    console.log('Installed and started the per-user launchd service.');
-  } else if (process.platform === 'linux') {
-    const unitDir = join(homedir(), '.config', 'systemd', 'user');
-    await mkdir(unitDir, { recursive: true, mode: 0o700 });
-    const quote = (value) => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
-    const unit = `[Unit]\nDescription=Jian Remote worker\nAfter=network-online.target\n\n[Service]\nExecStart=${quote(process.execPath)} ${quote(script)} run\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n`;
-    await writeFile(join(unitDir, 'jian-remote.service'), unit, { mode: 0o600 });
-    for (const command of [['daemon-reload'], ['enable', '--now', 'jian-remote.service']]) {
-      const result = spawnSync('systemctl', ['--user', ...command], { stdio: 'inherit' });
-      if (result.status !== 0)
-        throw new Error('Could not install/start Jian Remote with systemd --user');
-    }
-    console.log('Installed and started the per-user systemd service.');
-  } else if (process.platform === 'win32') {
-    const action = `"${process.execPath}" "${script}" run`;
-    runChecked(
-      'schtasks.exe',
-      [
-        '/Create',
-        '/SC',
-        'ONLOGON',
-        '/TN',
-        'Jian Remote',
-        '/TR',
-        action,
-        '/F',
-        '/RL',
-        'LIMITED',
-        '/IT',
-      ],
-      'Could not install the Jian Remote logon task with Task Scheduler',
-    );
-    runChecked(
-      'schtasks.exe',
-      ['/Run', '/TN', 'Jian Remote'],
-      'Could not start the Jian Remote scheduled task',
-    );
-    console.log('Installed and started the per-user Windows logon task.');
-  } else {
+  await startOrRestartService(script);
+  console.log(`Credentials are stored with owner-only permissions in ${configPath}.`);
+  if (gatewayVersion) {
     console.log(
-      `Saved credentials to ${configPath}; service auto-install is unsupported on ${process.platform}. Run: node ${script} run`,
+      `Compatible with gateway ${gatewayVersion} (major.minor ${parseRelease(gatewayVersion)?.major}.${parseRelease(gatewayVersion)?.minor}).`,
     );
   }
-  console.log(`Credentials are stored with owner-only permissions in ${configPath}.`);
   console.log(
-    'If the worker later looks stuck offline, restart the service (or re-run install) and check ~/.config/jian-remote/worker.log.',
+    'Later upgrades: npx @jian-ai/remote-control@latest update  (reads this config; no token again).',
+  );
+  console.log(
+    'If the worker later looks stuck offline, restart the service (or run update) and check ~/.config/jian-remote/worker.log.',
+  );
+}
+
+/**
+ * Refresh the installed worker from npm (or this process when already the right build), using
+ * credentials already stored under ~/.config/jian-remote — never re-ask for token/machine/gateway.
+ */
+async function update() {
+  const config = await loadConfig();
+  if (typeof config.gateway !== 'string' || !config.gateway.startsWith('https://')) {
+    throw new Error(`Invalid gateway in ${configPath}; re-run install from the panel.`);
+  }
+  const gatewayVersion = await fetchGatewayVersion(config.gateway);
+  const requested = option('--version');
+  const target = requested?.trim() || gatewayVersion || 'latest';
+
+  let scriptBytes;
+  let installedVersion = PACKAGE_VERSION;
+  // When this process already matches the target (typical: npx @jian-ai/remote-control@X update),
+  // copy ourselves. Otherwise pull the exact package from npm.
+  const selfMatchesTarget =
+    target === 'latest'
+      ? !isDevVersion(PACKAGE_VERSION)
+      : PACKAGE_VERSION === target.replace(/^v/, '') ||
+        versionsCompatible(PACKAGE_VERSION, target).ok;
+
+  if (selfMatchesTarget && !isDevVersion(PACKAGE_VERSION)) {
+    scriptBytes = await readFile(fileURLToPath(import.meta.url));
+    installedVersion = PACKAGE_VERSION;
+  } else {
+    console.log(`Downloading @jian-ai/remote-control@${target}…`);
+    scriptBytes = fetchNpmWorkerScript(target);
+    installedVersion = readEmbeddedVersion(scriptBytes.toString('utf8'));
+  }
+
+  const error = compatibilityError(installedVersion, gatewayVersion);
+  if (error) throw new Error(error);
+
+  const script = await materializeWorkerScript(scriptBytes);
+
+  // Keep a global install in sync when the operator uses the jian-remote bin from PATH.
+  const npmInstall = spawnSync(
+    'npm',
+    ['install', '-g', `@jian-ai/remote-control@${target === 'latest' ? installedVersion : target}`],
+    { stdio: 'inherit', windowsHide: true },
+  );
+  if (npmInstall.status !== 0) {
+    console.log(
+      'Global npm install skipped or failed; the service still uses ~/.config/jian-remote/jian-remote.mjs.',
+    );
+  }
+
+  await startOrRestartService(script);
+  console.log(
+    `Updated Jian Remote to ${installedVersion}${gatewayVersion ? ` (gateway ${gatewayVersion})` : ''}. Worker restarted.`,
   );
 }
 
@@ -417,13 +646,18 @@ async function postResult(base, headers, result) {
 }
 
 async function run() {
-  const config = JSON.parse(await readFile(configPath, 'utf8'));
+  const config = await loadConfig();
   const headers = {
     authorization: `Bearer ${config.token}`,
     'x-jian-platform': `${process.platform}-${process.arch}`,
+    'x-jian-remote-version': PACKAGE_VERSION,
   };
   const base = `${config.gateway}/v1/remote/worker/${config.machineId}`;
-  console.log(`Connected to Jian Remote at ${config.gateway}`);
+  // Fail fast before the poll loop so an incompatible build does not look "online then stuck".
+  const gatewayVersion = await assertCompatibleWithGateway(config.gateway);
+  console.log(
+    `Connected to Jian Remote at ${config.gateway} (worker ${PACKAGE_VERSION}${gatewayVersion ? `, gateway ${gatewayVersion}` : ''})`,
+  );
   let failures = 0;
   let nextUpdateCheck = 0;
   const delay = async (attempt) => {
@@ -432,9 +666,18 @@ async function run() {
     console.error(`Retrying in ${(wait / 1000).toFixed(1)}s (attempt ${attempt})…`);
     await new Promise((resolveDelay) => setTimeout(resolveDelay, wait));
   };
+  const ensureCompatible = async () => {
+    const current = await fetchGatewayVersion(config.gateway);
+    const error = compatibilityError(PACKAGE_VERSION, current);
+    if (error) {
+      console.error(error);
+      process.exit(1);
+    }
+  };
   while (true) {
     try {
       if (Date.now() >= nextUpdateCheck) {
+        await ensureCompatible();
         await updateIfNeeded(base, headers);
         nextUpdateCheck = Date.now() + 5 * 60_000;
       }
@@ -470,10 +713,11 @@ const invokedAsCli =
 if (invokedAsCli) {
   try {
     if (args[0] === 'install') await install();
+    else if (args[0] === 'update') await update();
     else if (args[0] === 'run') await run();
     else
       console.log(
-        'Jian Remote worker (@jian-ai/remote-control)\n  install --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)\n  run\n\nInstall: npm install -g @jian-ai/remote-control\nOr:      npx @jian-ai/remote-control@latest install --gateway … --machine … --token …',
+        'Jian Remote worker (@jian-ai/remote-control)\n  install --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)\n  update [--version X.Y.Z|latest]\n  run\n\nInstall: npm install -g @jian-ai/remote-control\nOr:      npx @jian-ai/remote-control@latest install --gateway … --machine … --token …\nUpdate:  npx @jian-ai/remote-control@latest update\n         (reads ~/.config/jian-remote; no token/machine/gateway flags)',
       );
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
