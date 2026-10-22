@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       jq ripgrep fd-find gawk sed grep diffutils patch file tree less nano vim-tiny \
       zip unzip xz-utils bzip2 zstd \
       procps psmisc lsof iproute2 iputils-ping dnsutils netcat-openbsd \
-      build-essential pkg-config \
+      build-essential pkg-config libfontconfig1-dev \
       python3 python3-pip python3-venv python3-dev \
       sqlite3 postgresql-client \
  && ln -s /usr/bin/fdfind /usr/local/bin/fd \
@@ -48,6 +48,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       > /etc/apt/sources.list.d/github-cli.list \
  && apt-get update && apt-get install -y --no-install-recommends gh \
  && rm -rf /var/lib/apt/lists/*
+# Rust projects such as Lemon need a current toolchain plus rustfmt and clippy. Keep the
+# toolchain in the image, but leave CARGO_HOME unset so each workspace user gets a writable
+# cache and can install their own crates under their home directory.
+ENV RUSTUP_HOME=/usr/local/rustup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | env CARGO_HOME=/tmp/rust-bootstrap RUSTUP_HOME=/usr/local/rustup sh -s -- \
+          -y --no-modify-path --profile minimal --default-toolchain stable \
+          --component rustfmt --component clippy \
+ && cp -a /tmp/rust-bootstrap/bin/. /usr/local/bin/ \
+ && rm -rf /tmp/rust-bootstrap
 # Go from its own tarball, checked against the digest go.dev publishes for each architecture.
 ARG GO_VERSION=1.27.1
 ARG TARGETARCH
