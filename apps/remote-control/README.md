@@ -37,7 +37,8 @@ jian-remote stop | start | restart
 ```
 
 `start` / `restart` stop any previous worker before launching one process (LaunchAgent,
-systemd --user, or Task Scheduler).
+systemd `--user` or system unit, or Task Scheduler). On Linux headless/root hosts without a
+user bus, `install` falls back to a system unit (or pass `install --system`).
 
 ## Configure
 

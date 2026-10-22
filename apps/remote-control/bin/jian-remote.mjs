@@ -2,7 +2,9 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  accessSync,
   existsSync,
+  constants as fsConstants,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -22,7 +24,7 @@ import {
   unlink,
   writeFile,
 } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
+import { homedir, tmpdir, userInfo } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -35,6 +37,9 @@ const workerLockPath = join(configDir, 'worker.pid');
 const updateStatePath = join(configDir, 'update-state.json');
 const MACOS_LAUNCH_AGENT_LABEL = 'com.jian.remote';
 const LINUX_SERVICE_UNIT = 'jian-remote.service';
+/** Remembers whether Linux install used systemd --user or a system unit (headless/root VPS). */
+const linuxServiceScopePath = join(configDir, 'linux-service-scope');
+const LINUX_SYSTEM_UNIT_PATH = join('/etc/systemd/system', LINUX_SERVICE_UNIT);
 const WINDOWS_TASK_NAME = 'Jian Remote';
 /** Minimal PATH for launchd — app-identity Node copies otherwise inherit an empty env. */
 export const LAUNCH_AGENT_PATH = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin';
@@ -1068,13 +1073,174 @@ function macosPlistPath() {
   return join(homedir(), 'Library', 'LaunchAgents', `${MACOS_LAUNCH_AGENT_LABEL}.plist`);
 }
 
-function linuxUnitPath() {
+function linuxUserUnitPath() {
   return join(homedir(), '.config', 'systemd', 'user', LINUX_SERVICE_UNIT);
 }
 
-export function serviceKindForPlatform(platform = process.platform) {
+/**
+ * True when this process can talk to the per-user systemd bus.
+ * Headless VPS / root SSH sessions often lack XDG_RUNTIME_DIR and fail with
+ * "Failed to connect to bus: No medium found".
+ */
+export function linuxUserBusAvailable({
+  env = process.env,
+  run = (argv) => spawnSync('systemctl', ['--user', ...argv], { encoding: 'utf8' }),
+} = {}) {
+  const runtimeDir = env.XDG_RUNTIME_DIR;
+  if (!runtimeDir || typeof runtimeDir !== 'string') return false;
+  try {
+    if (!statSync(runtimeDir).isDirectory()) return false;
+  } catch {
+    return false;
+  }
+  const result = run(['show-environment']);
+  if (result.error) return false;
+  const stderr = `${result.stderr ?? ''}`;
+  if (/Failed to connect to bus|No medium found|No such file or directory/i.test(stderr)) {
+    return false;
+  }
+  return result.status === 0;
+}
+
+/** True when this process can install `/etc/systemd/system/jian-remote.service`. */
+export function canInstallLinuxSystemUnit({
+  uid = typeof process.getuid === 'function' ? process.getuid() : undefined,
+  systemDir = '/etc/systemd/system',
+  access = (path, mode) => accessSync(path, mode),
+} = {}) {
+  if (uid === 0) return true;
+  try {
+    access(systemDir, fsConstants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function linuxServiceKind(scope = 'user') {
+  return scope === 'system' ? 'systemd (system)' : 'systemd --user';
+}
+
+/**
+ * Pick systemd --user vs system unit. Prefer --user when the bus works; fall back to a
+ * system unit on headless/root hosts; `--system` forces the system unit.
+ */
+export function chooseLinuxServiceScope({
+  preferSystem = false,
+  env = process.env,
+  userBusAvailable = () => linuxUserBusAvailable({ env }),
+  canSystem = () => canInstallLinuxSystemUnit(),
+} = {}) {
+  if (preferSystem) {
+    if (!canSystem()) {
+      throw new Error(
+        'install --system needs write access to /etc/systemd/system (run as root, or use sudo).',
+      );
+    }
+    return 'system';
+  }
+  if (userBusAvailable()) return 'user';
+  if (canSystem()) return 'system';
+  throw new Error(
+    [
+      'Could not reach systemd --user (no user bus). This is common on a headless VPS or root SSH session',
+      '("Failed to connect to bus: No medium found" / missing XDG_RUNTIME_DIR).',
+      '',
+      'Fix options:',
+      '  1. Prefer a normal user + lingering, then reinstall:',
+      '       sudo loginctl enable-linger USERNAME',
+      '       # as USERNAME:',
+      '       export XDG_RUNTIME_DIR=/run/user/$(id -u)',
+      '       jian-remote install --gateway … --machine … --token …',
+      '  2. Install a system unit (as root):',
+      '       jian-remote install --system --gateway … --machine … --token …',
+      '  3. Foreground smoke test (config may already be on disk from a failed install):',
+      '       node ~/.config/jian-remote/jian-remote.mjs run',
+    ].join('\n'),
+  );
+}
+
+async function writeLinuxServiceScope(scope) {
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
+  await writeFile(linuxServiceScopePath, `${scope}\n`, { mode: 0o600 });
+}
+
+async function readLinuxServiceScope() {
+  try {
+    const text = (await readFile(linuxServiceScopePath, 'utf8')).trim();
+    if (text === 'system' || text === 'user') return text;
+  } catch {
+    // absent or unreadable — fall through to heuristics
+  }
+  if (existsSync(LINUX_SYSTEM_UNIT_PATH)) return 'system';
+  return 'user';
+}
+
+/**
+ * Fresh `install` probes the bus (and honors `--system`). Later start/restart/update/configure
+ * keep the saved scope so a system-unit VPS install does not flip back if a user bus appears.
+ */
+async function resolveLinuxInstallScope() {
+  const preferSystem = args.includes('--system');
+  if (preferSystem) return chooseLinuxServiceScope({ preferSystem: true });
+  const command = parseCliInvocation(args).command;
+  if (command && command !== 'install') {
+    try {
+      const saved = (await readFile(linuxServiceScopePath, 'utf8')).trim();
+      if (saved === 'system') {
+        if (canInstallLinuxSystemUnit()) return 'system';
+      } else if (saved === 'user' && linuxUserBusAvailable()) {
+        return 'user';
+      }
+    } catch {
+      // choose below
+    }
+  }
+  return chooseLinuxServiceScope({ preferSystem: false });
+}
+
+export function buildLinuxServiceUnit({
+  script,
+  scope,
+  home = homedir(),
+  nodePath = process.execPath,
+  uid = typeof process.getuid === 'function' ? process.getuid() : 0,
+  username,
+} = {}) {
+  const quote = (value) => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+  const wantedBy = scope === 'system' ? 'multi-user.target' : 'default.target';
+  const lines = [
+    '[Unit]',
+    'Description=Jian Remote worker',
+    'After=network-online.target',
+    'Wants=network-online.target',
+    '',
+    '[Service]',
+    `ExecStart=${quote(nodePath)} ${quote(script)} run`,
+    'Restart=always',
+    'RestartSec=3',
+    // System units do not inherit the installing shell's HOME; pin it so config stays findable.
+    `Environment=${quote(`HOME=${home}`)}`,
+    `WorkingDirectory=${quote(home)}`,
+  ];
+  if (scope === 'system' && uid !== 0) {
+    let name = username;
+    if (!name) {
+      try {
+        name = userInfo().username;
+      } catch {
+        name = undefined;
+      }
+    }
+    if (name) lines.push(`User=${name}`);
+  }
+  lines.push('', '[Install]', `WantedBy=${wantedBy}`, '');
+  return lines.join('\n');
+}
+
+export function serviceKindForPlatform(platform = process.platform, linuxScope = 'user') {
   if (platform === 'darwin') return 'LaunchAgent';
-  if (platform === 'linux') return 'systemd --user';
+  if (platform === 'linux') return linuxServiceKind(linuxScope);
   if (platform === 'win32') return 'Task Scheduler';
   return 'none';
 }
@@ -1084,7 +1250,8 @@ export function serviceKindForPlatform(platform = process.platform) {
  * Clear success/failure for the `jian-remote stop` CLI.
  */
 async function stopService() {
-  const kind = serviceKindForPlatform();
+  const linuxScope = process.platform === 'linux' ? await readLinuxServiceScope() : 'user';
+  const kind = serviceKindForPlatform(process.platform, linuxScope);
   if (process.platform === 'darwin') {
     const plistPath = macosPlistPath();
     const domain = `gui/${process.getuid()}`;
@@ -1093,7 +1260,11 @@ async function stopService() {
       stdio: 'ignore',
     });
   } else if (process.platform === 'linux') {
-    spawnSync('systemctl', ['--user', 'stop', LINUX_SERVICE_UNIT], { stdio: 'ignore' });
+    if (linuxScope === 'system') {
+      spawnSync('systemctl', ['stop', LINUX_SERVICE_UNIT], { stdio: 'ignore' });
+    } else {
+      spawnSync('systemctl', ['--user', 'stop', LINUX_SERVICE_UNIT], { stdio: 'ignore' });
+    }
   } else if (process.platform === 'win32') {
     spawnSync('schtasks.exe', ['/End', '/TN', WINDOWS_TASK_NAME], {
       stdio: 'ignore',
@@ -1171,17 +1342,62 @@ async function startService(script = installedScript) {
     };
   }
   if (process.platform === 'linux') {
+    const scope = await resolveLinuxInstallScope();
+    const unitBody = buildLinuxServiceUnit({ script, scope });
+    if (scope === 'system') {
+      // Drop a leftover user unit so stop/start do not fight two managers.
+      spawnSync('systemctl', ['--user', 'disable', '--now', LINUX_SERVICE_UNIT], {
+        stdio: 'ignore',
+      });
+      try {
+        await unlink(linuxUserUnitPath());
+      } catch {
+        // absent
+      }
+      await writeFile(LINUX_SYSTEM_UNIT_PATH, unitBody, { mode: 0o644 });
+      await writeLinuxServiceScope('system');
+      for (const command of [['daemon-reload'], ['enable', '--now', LINUX_SERVICE_UNIT]]) {
+        const result = spawnSync('systemctl', command, { stdio: 'inherit' });
+        if (result.status !== 0) {
+          throw new Error('Could not install/start Jian Remote with systemd (system unit)');
+        }
+      }
+      if (!args.includes('--system') && parseCliInvocation(args).command === 'install') {
+        printInfo(
+          'systemd --user bus unavailable; installed a system unit instead (headless/root). Prefer a normal user + loginctl enable-linger when you can.',
+        );
+      }
+      return { service: linuxServiceKind('system'), detail: LINUX_SYSTEM_UNIT_PATH };
+    }
+
     const unitDir = join(homedir(), '.config', 'systemd', 'user');
     await mkdir(unitDir, { recursive: true, mode: 0o700 });
-    const quote = (value) => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
-    const unit = `[Unit]\nDescription=Jian Remote worker\nAfter=network-online.target\n\n[Service]\nExecStart=${quote(process.execPath)} ${quote(script)} run\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n`;
-    await writeFile(linuxUnitPath(), unit, { mode: 0o600 });
+    await writeFile(linuxUserUnitPath(), unitBody, { mode: 0o600 });
+    await writeLinuxServiceScope('user');
+    // Best-effort: clear a previous system install if this user can.
+    if (existsSync(LINUX_SYSTEM_UNIT_PATH) && canInstallLinuxSystemUnit()) {
+      spawnSync('systemctl', ['disable', '--now', LINUX_SERVICE_UNIT], { stdio: 'ignore' });
+      try {
+        await unlink(LINUX_SYSTEM_UNIT_PATH);
+        spawnSync('systemctl', ['daemon-reload'], { stdio: 'ignore' });
+      } catch {
+        // leave system unit; user scope marker wins for this CLI
+      }
+    }
     for (const command of [['daemon-reload'], ['enable', '--now', LINUX_SERVICE_UNIT]]) {
       const result = spawnSync('systemctl', ['--user', ...command], { stdio: 'inherit' });
-      if (result.status !== 0)
-        throw new Error('Could not install/start Jian Remote with systemd --user');
+      if (result.status !== 0) {
+        throw new Error(
+          [
+            'Could not install/start Jian Remote with systemd --user.',
+            'If you see "Failed to connect to bus: No medium found", the user bus is missing',
+            '(common on headless VPS / root SSH). Retry with: jian-remote install --system …',
+            'or enable lingering: sudo loginctl enable-linger "$(whoami)" && export XDG_RUNTIME_DIR=/run/user/$(id -u)',
+          ].join(' '),
+        );
+      }
     }
-    return { service: 'systemd --user', detail: LINUX_SERVICE_UNIT };
+    return { service: linuxServiceKind('user'), detail: LINUX_SERVICE_UNIT };
   }
   if (process.platform === 'win32') {
     const action = `"${process.execPath}" "${script}" run`;
@@ -1256,7 +1472,7 @@ async function install() {
   const gatewayBase = parseGatewayBase(gateway);
   if (!gatewayBase || !MACHINE_ID.test(machineId ?? '') || !token?.trim()) {
     throw new Error(
-      'Usage: jian-remote install --gateway https://... --machine UUID (--token VALUE | --token-prompt | --token-stdin)',
+      'Usage: jian-remote install [--system] --gateway https://... --machine UUID (--token VALUE | --token-prompt | --token-stdin)',
     );
   }
   const gatewayVersion = await assertCompatibleWithGateway(gatewayBase);
@@ -2086,7 +2302,7 @@ if (isCliEntry()) {
       const pkg = paint('(@jian-ai/remote-control)', ANSI.dim, color);
       console.log(`${title} worker ${pkg}
   version | --version | -V
-  install --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)
+  install [--system] --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)
   configure [--gateway HTTPS_URL] [--machine UUID] (--token VALUE | --token-prompt | --token-stdin)
   update [--version X.Y.Z|latest]
   stop | start | restart
@@ -2094,6 +2310,7 @@ if (isCliEntry()) {
 
 Install:    npm install -g @jian-ai/remote-control
 Or:         npx @jian-ai/remote-control@latest install --gateway … --machine … --token …
+            (Linux headless/root VPS: add --system, or use a normal user + loginctl enable-linger)
 Configure:  jian-remote configure --token …   (or --gateway / --machine; restarts the service)
 Update:     npx @jian-ai/remote-control@latest update
             (upgrades the worker binary; reads ~/.config/jian-remote)

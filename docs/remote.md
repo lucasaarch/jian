@@ -79,7 +79,7 @@ jian-remote update --version 0.6.0
 
 ```sh
 jian-remote version          # also: --version / -V
-jian-remote stop             # unload LaunchAgent / stop systemd --user / end Task Scheduler job
+jian-remote stop             # unload LaunchAgent / stop systemd (--user or system) / end Task Scheduler job
 jian-remote start            # ensure previous worker is dead, then start exactly one
 jian-remote restart          # stop then start
 ```
@@ -206,10 +206,15 @@ Yes — when that user signs in. The installer registers:
 - **Windows:** Task Scheduler task `Jian Remote` with trigger `ONLOGON` (interactive, limited).
 - **macOS:** LaunchAgent `com.jian.remote` (`RunAtLoad` + `KeepAlive` + `ThrottleInterval`, with
   an explicit `PATH` for the app-identity Node binary).
-- **Linux:** `systemd --user` unit `jian-remote.service` enabled for the user session.
+- **Linux:** `systemd --user` unit `jian-remote.service` when the user bus is available. On a
+  headless VPS or root SSH session without a user bus (`Failed to connect to bus: No medium
+  found`), `install` falls back to a **system** unit at `/etc/systemd/system/jian-remote.service`
+  when it can write there (typically root), or you can pass `install --system`. Prefer a normal
+  user with `loginctl enable-linger` when you can.
 
-Until the user logs in (or the user systemd session is lingering), the machine stays offline in
-the panel. The Remote Control page polls Online/Offline every few seconds while it is open.
+Until the user logs in (or the user systemd session is lingering), a `--user` install stays
+offline in the panel. A system-unit install starts at boot with `multi-user.target`. The Remote
+Control page polls Online/Offline every few seconds while it is open.
 
 ### Check status and logs (macOS)
 
@@ -373,4 +378,7 @@ curl -fsS -X DELETE https://gateway.example/v1/remote/machines/MACHINE_UUID \
 
 Deleting a machine removes its queued tasks. This invalidates gateway access immediately;
 remove the LaunchAgent/systemd unit and local config from the Mac to stop its polling process
-and erase its stored credential. On macOS, run `launchctl bootout gui/$(id -u) "$HOME/Library/LaunchAgents/com.jian.remote.plist"` and remove that plist; on Linux, run `systemctl --user disable --now jian-remote.service` and remove `~/.config/systemd/user/jian-remote.service`. Then remove `~/.config/jian-remote` from the Mac to erase the credential and log.
+and erase its stored credential. On macOS, run `launchctl bootout gui/$(id -u) "$HOME/Library/LaunchAgents/com.jian.remote.plist"` and remove that plist; on Linux, run `systemctl --user disable --now jian-remote.service` and remove
+`~/.config/systemd/user/jian-remote.service` (or `systemctl disable --now jian-remote.service` and
+remove `/etc/systemd/system/jian-remote.service` for a system-unit install). Then remove
+`~/.config/jian-remote` to erase the credential and log.

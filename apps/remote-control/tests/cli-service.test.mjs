@@ -6,8 +6,13 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  buildLinuxServiceUnit,
+  canInstallLinuxSystemUnit,
+  chooseLinuxServiceScope,
   isPidAlive,
   isStaleInstalledWorker,
+  linuxServiceKind,
+  linuxUserBusAvailable,
   parseCliInvocation,
   readWorkerLockPid,
   serviceKindForPlatform,
@@ -54,6 +59,8 @@ test('help text documents version and stop/start/restart', () => {
   assert.match(result.stdout, /version \| --version \| -V/);
   assert.match(result.stdout, /stop \| start \| restart/);
   assert.match(result.stdout, /jian-remote stop \| start \| restart/);
+  assert.match(result.stdout, /install \[--system\]/);
+  assert.match(result.stdout, /enable-linger|--system/);
 });
 
 test('isStaleInstalledWorker detects a surviving process after disk was updated', () => {
@@ -86,8 +93,126 @@ test('readWorkerLockPid reads a pid file and ignores junk', () => {
 test('serviceKindForPlatform names the OS service', () => {
   assert.equal(serviceKindForPlatform('darwin'), 'LaunchAgent');
   assert.equal(serviceKindForPlatform('linux'), 'systemd --user');
+  assert.equal(serviceKindForPlatform('linux', 'system'), 'systemd (system)');
   assert.equal(serviceKindForPlatform('win32'), 'Task Scheduler');
   assert.equal(serviceKindForPlatform('freebsd'), 'none');
+  assert.equal(linuxServiceKind('user'), 'systemd --user');
+  assert.equal(linuxServiceKind('system'), 'systemd (system)');
+});
+
+test('linuxUserBusAvailable requires XDG_RUNTIME_DIR and a working user bus', () => {
+  assert.equal(linuxUserBusAvailable({ env: {}, run: () => ({ status: 0, stderr: '' }) }), false);
+  assert.equal(
+    linuxUserBusAvailable({
+      env: { XDG_RUNTIME_DIR: '/tmp' },
+      run: () => ({
+        status: 1,
+        stderr: 'Failed to connect to bus: No medium found\n',
+        stdout: '',
+      }),
+    }),
+    false,
+  );
+  assert.equal(
+    linuxUserBusAvailable({
+      env: { XDG_RUNTIME_DIR: '/tmp' },
+      run: () => ({ status: 0, stderr: '', stdout: 'HOME=/tmp\n' }),
+    }),
+    true,
+  );
+});
+
+test('chooseLinuxServiceScope prefers user, falls back to system, or explains', () => {
+  assert.equal(
+    chooseLinuxServiceScope({
+      userBusAvailable: () => true,
+      canSystem: () => true,
+    }),
+    'user',
+  );
+  assert.equal(
+    chooseLinuxServiceScope({
+      preferSystem: true,
+      userBusAvailable: () => true,
+      canSystem: () => true,
+    }),
+    'system',
+  );
+  assert.equal(
+    chooseLinuxServiceScope({
+      userBusAvailable: () => false,
+      canSystem: () => true,
+    }),
+    'system',
+  );
+  assert.throws(
+    () =>
+      chooseLinuxServiceScope({
+        preferSystem: true,
+        userBusAvailable: () => false,
+        canSystem: () => false,
+      }),
+    /install --system needs write access/,
+  );
+  assert.throws(
+    () =>
+      chooseLinuxServiceScope({
+        userBusAvailable: () => false,
+        canSystem: () => false,
+      }),
+    /No medium found|enable-linger|install --system|jian-remote\.mjs run/s,
+  );
+});
+
+test('canInstallLinuxSystemUnit is true for root or a writable system dir', () => {
+  assert.equal(canInstallLinuxSystemUnit({ uid: 0, access: () => undefined }), true);
+  assert.equal(
+    canInstallLinuxSystemUnit({
+      uid: 1000,
+      access: () => {
+        throw new Error('EACCES');
+      },
+    }),
+    false,
+  );
+  assert.equal(canInstallLinuxSystemUnit({ uid: 1000, access: () => undefined }), true);
+});
+
+test('buildLinuxServiceUnit targets default.target for user and multi-user for system', () => {
+  const userUnit = buildLinuxServiceUnit({
+    script: '/home/ada/.config/jian-remote/jian-remote.mjs',
+    scope: 'user',
+    home: '/home/ada',
+    nodePath: '/usr/bin/node',
+    uid: 1000,
+  });
+  assert.match(userUnit, /WantedBy=default\.target/);
+  assert.match(
+    userUnit,
+    /ExecStart="\/usr\/bin\/node" "\/home\/ada\/\.config\/jian-remote\/jian-remote\.mjs" run/,
+  );
+  assert.doesNotMatch(userUnit, /^User=/m);
+
+  const systemUnit = buildLinuxServiceUnit({
+    script: '/root/.config/jian-remote/jian-remote.mjs',
+    scope: 'system',
+    home: '/root',
+    nodePath: '/usr/bin/node',
+    uid: 0,
+  });
+  assert.match(systemUnit, /WantedBy=multi-user\.target/);
+  assert.match(systemUnit, /Environment="HOME=\/root"/);
+  assert.doesNotMatch(systemUnit, /^User=/m);
+
+  const systemAsUser = buildLinuxServiceUnit({
+    script: '/home/ada/.config/jian-remote/jian-remote.mjs',
+    scope: 'system',
+    home: '/home/ada',
+    nodePath: '/usr/bin/node',
+    uid: 1000,
+    username: 'ada',
+  });
+  assert.match(systemAsUser, /^User=ada$/m);
 });
 
 test('shellCommandForPlatform prefers an absolute Unix shell', () => {
