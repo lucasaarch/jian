@@ -33,12 +33,16 @@ Stable installations can use the `latest` image tag or pin `0.8.6`.
 
 ## 0.8.5 — 2026-10-22
 
-Rust development support in the workspace image, Fontconfig headers for Lemon, and Listening that stays silent while watcher state is unchanged.
+Rust toolchain and Fontconfig in the workspace image, MCP legacy fallback for dual-era servers (Atlassian v2), and Listening that stays silent while watcher state is unchanged.
 
 ### Workspace
 
 * **Rust development toolchain:** the workspace image now includes stable Rust, Cargo, `rustfmt`, and Clippy. Cargo keeps its cache under each user's home directory, so it remains writable and can persist with the workspace volume.
 * **Fontconfig development files:** the image includes `libfontconfig1-dev` and `pkg-config`, allowing Rust projects that depend on Fontconfig to compile without asking the workspace user to install system packages. This enables Lemon's Linux checks in the workspace.
+
+### MCP
+
+* **Legacy fallback after modern refusal:** connecting to an HTTP MCP server still probes with `server/discover` (2026-07-28). When the peer answers that modern serving is disabled — or returns an unsupported-protocol error that lists only pre-2026 revisions — Jian retries with the legacy `initialize` handshake instead of surfacing the refusal in the panel. Modern-only peers and ordinary legacy servers are unchanged. This restores Check / Sign in against `https://mcp.atlassian.com/v2/mcp`.
 
 ### Listening
 
@@ -46,7 +50,7 @@ Rust development support in the workspace image, Fontconfig headers for Lemon, a
 
 ### Upgrading
 
-No database migrations. Recreate the gateway container with the 0.8.5 image to make the Rust toolchain, Fontconfig development files, and Listening quiet-wait behavior available.
+No database migrations. Recreate the gateway container with the 0.8.5 image for the Rust toolchain, Fontconfig headers, MCP legacy fallback, and Listening quiet-wait behavior. After upgrading, re-run **Check** on the Atlassian MCP server under Skills → MCP after OAuth sign-in if needed.
 
 Stable installations can use the `latest` image tag or pin `0.8.5`.
 
