@@ -22,6 +22,47 @@ A command does not inherit the gateway's environment either: it starts with `PAT
 
 What this does not cover: the network is not restricted, so a command reaches any address the container reaches (the database without its password, for one). On a kernel without Landlock (before 5.13, or with it left out of the LSM list) commands run unconfined, and the gateway logs a warning at the first one; each profile still has its own directory and the file tools still enforce it. Give the shell only to profiles whose every sender you trust.
 
+## Scoped virtual displays
+
+`jian-display -- COMMAND` runs inside the existing command sandbox, not beside the gateway.
+Each invocation starts its own Xvfb and application as children in the same Landlock domain.
+The only listener is Linux's abstract Unix transport (`-nolisten tcp -nolisten unix -listen
+local`); `-displayfd` allocates its display and reports readiness without shared lock files.
+There is no persistent display broker, desktop, VNC, port or cross-tool display session.
+
+A fresh 128-bit MIT-MAGIC-COOKIE-1 is present before Xvfb starts. Authority files are mode
+0600 in a fresh mode-0700 directory under the profile workspace. The wrapper replaces caller
+`DISPLAY`, `XAUTHORITY`, Wayland and runtime paths, disables MIT-SHM and forces software Mesa
+OpenGL/Vulkan; it grants neither shared `/tmp` nor `/dev/shm` writes. Debian's XKB compiler
+normally uses `/var/lib/xkb` or `/tmp`; the image builds Xvfb from Debian's security-patched
+source with a small private-`TMPDIR` output fix. That fix rejects shell metacharacters and
+X display syntax in paths, never silently falls back for a supplied private directory, and
+adds no privilege or new filesystem permission. Xvfb and xkbcomp keep the same sandbox.
+
+On Landlock ABI 6+ (Linux 6.12+), even another invocation of the same profile cannot reach
+this abstract socket from a separate sandbox domain. Older Landlock kernels still protect
+the cookie file between profiles, but abstract-socket separation is not available: cookie
+authentication remains essential. Without Landlock, the same UID can already read another
+profile's workspace; 0700 and cookies alone do **not** repair that missing boundary. Do not
+claim secure cross-profile GUI isolation on such a host. Trusted host modifications such as
+`/etc/X<display>.hosts` ACLs can also override normal X authorization; do not add them.
+
+The supervisor bounds startup to 10 seconds and total lifetime to 110 seconds (a caller can
+shorten the latter). It terminates the application/server process groups, including ordinary
+background children, on normal exit, failure, timeout and TERM/INT/HUP. Parent-death signals
+kill the direct server/application if the supervisor receives SIGKILL; SIGKILL cannot run
+file cleanup, so a private `.jian-display-*` directory may remain. This is lifecycle hygiene,
+not a general process jail: deliberately daemonized/escaped descendants are not promised
+process-tree containment. Save captures under the workspace and send them with existing
+file/media tools; no display endpoint or authority file should be shared.
+
+`make test-display` exercises the supervisor without graphics dependencies.
+`make image-test-display IMAGE=jian VERSION=ci` runs actual authenticated X11, GLX screenshot
+pixel checks, lavapipe Vulkan presentation/capture, concurrent synthetic profiles, rejected
+cookies, cross-domain probes and cleanup in the built image with no new privileges or
+capabilities. It requires Landlock and reports the ABI; copied-cookie domain isolation is
+checked only on ABI 6+. These checks do not certify every GUI framework or Lemon version.
+
 ## Encryption and rotation
 
 `JIAN_MASTER_KEYS` is a JSON object mapping identifiers to 32-byte keys in Base64. `JIAN_ACTIVE_KEY_ID` chooses the key used for new writes. Setup creates a keyring in `.env` with mode `0600`; when hosting, inject it through a secret manager. Do not put that keyring in the database, in Git, or in the same backup as the database.
