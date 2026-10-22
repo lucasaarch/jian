@@ -502,7 +502,14 @@ export const providerModels: Record<string, ProviderModelList> = {
   },
   [ids.openai]: {
     providerId: ids.openai,
-    models: [model('gpt-5.6-sol'), model('gpt-5.6-luna', { known: false })],
+    models: [
+      model('gpt-6.1-sol', {
+        displayName: 'GPT-6.1 Sol',
+        reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+      }),
+      model('gpt-6-sol', { displayName: 'GPT-6 Sol' }),
+      model('gpt-5.6-luna', { known: false }),
+    ],
     fetchedAt: at(60),
     stale: false,
   },
@@ -518,7 +525,7 @@ export const modelDefaults: ModelDefaults = {
     reasoningEffort: 'medium',
   },
   channel: { providerId: ids.anthropic, modelId: 'claude-sonnet-5', reasoningEffort: 'medium' },
-  compaction: { providerId: ids.openai, modelId: 'gpt-5.6-luna', reasoningEffort: 'low' },
+  compaction: { providerId: ids.openai, modelId: 'gpt-6.1-sol', reasoningEffort: 'low' },
   image: 'disabled',
   vision: 'disabled',
   audio: 'disabled',
