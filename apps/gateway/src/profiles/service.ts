@@ -8,7 +8,7 @@ import {
   profileSchema,
 } from '@jian/contracts';
 import { and, eq, isNull } from 'drizzle-orm';
-import { mcpValueSecret } from '../agent/mcp-connect.js';
+import { mcpOauthClientSecretKey, mcpValueSecret } from '../agent/mcp-connect.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -30,9 +30,17 @@ import { forget, hasActiveRun } from './reset.js';
 /** One value on its way to the vault, still carrying which server and which slot it came from. */
 type TypedMcpValue = { server: string; kind: 'header' | 'env'; name: string; value: string };
 
+/** A pre-registered OAuth client secret typed for one server. */
+type OauthClientSecret = { server: string; value: string };
+
 /** The profile as it will be stored, and the values that have to leave it. */
-function stripMcpValues(profile: Profile): { stored: Profile; values: TypedMcpValue[] } {
+function stripMcpValues(profile: Profile): {
+  stored: Profile;
+  values: TypedMcpValue[];
+  oauthSecrets: OauthClientSecret[];
+} {
   const values: TypedMcpValue[] = [];
+  const oauthSecrets: OauthClientSecret[] = [];
 
   const mcpServers: McpServer[] = profile.mcpServers.map((server) => {
     const strip = (kind: 'header' | 'env', list: McpServer['headers']) =>
@@ -44,14 +52,29 @@ function stripMcpValues(profile: Profile): { stored: Profile; values: TypedMcpVa
         return { name: value.name, ...(value.fromEnv ? { fromEnv: value.fromEnv } : {}) };
       });
 
+    const oauthClientSecret = server.oauthClientSecret
+      ? (() => {
+          if (server.oauthClientSecret.value) {
+            oauthSecrets.push({ server: server.name, value: server.oauthClientSecret.value });
+          }
+
+          return {
+            ...(server.oauthClientSecret.fromEnv
+              ? { fromEnv: server.oauthClientSecret.fromEnv }
+              : {}),
+          };
+        })()
+      : undefined;
+
     return {
       ...server,
       headers: strip('header', server.headers),
       env: strip('env', server.env),
+      ...(oauthClientSecret ? { oauthClientSecret } : {}),
     };
   });
 
-  return { stored: { ...profile, mcpServers }, values };
+  return { stored: { ...profile, mcpServers }, values, oauthSecrets };
 }
 
 /** Where an MCP server's bearer token lives in the vault, addressed by the server's name. */
@@ -99,7 +122,7 @@ export class Profiles {
 
       // Stripped before the row exists and written after it: a secret references its profile,
       // so there has to be one to reference.
-      const { stored, values } = stripMcpValues(profile);
+      const { stored, values, oauthSecrets } = stripMcpValues(profile);
 
       await insertProfile(tx, stored);
       await tx.insert(modelDefaults).values(
@@ -111,6 +134,7 @@ export class Profiles {
         })),
       );
       await this.writeMcpValues(profile.id, values, tx);
+      await this.writeOauthClientSecrets(profile.id, oauthSecrets, tx);
       await insertRevision(tx, stored);
 
       await recordEvent(tx, this.clock, stored.id, 'profile.created', {
@@ -132,9 +156,10 @@ export class Profiles {
     previous: Profile | undefined,
     tx: Queryable,
   ): Promise<Profile> {
-    const { stored, values } = stripMcpValues(profile);
+    const { stored, values, oauthSecrets } = stripMcpValues(profile);
 
     await this.writeMcpValues(profile.id, values, tx);
+    await this.writeOauthClientSecrets(profile.id, oauthSecrets, tx);
 
     for (const server of stored.mcpServers) {
       await this.discardStaleMcpValues(profile.id, server, previous, tx);
@@ -156,6 +181,16 @@ export class Profiles {
   ): Promise<void> {
     for (const { server, kind, name, value } of values) {
       await this.vault.put(profileId, mcpValueSecret(server, kind, name), value, tx);
+    }
+  }
+
+  private async writeOauthClientSecrets(
+    profileId: string,
+    secrets: OauthClientSecret[],
+    tx: Queryable,
+  ): Promise<void> {
+    for (const { server, value } of secrets) {
+      await this.vault.put(profileId, mcpOauthClientSecretKey(server), value, tx);
     }
   }
 
@@ -181,6 +216,11 @@ export class Profiles {
         }
       }
     }
+
+    // Dropping the OAuth client-secret field (or leaving OAuth) clears the vault entry.
+    if (before.oauthClientSecret && !server.oauthClientSecret) {
+      await this.vault.discard(profileId, mcpOauthClientSecretKey(server.name), tx);
+    }
   }
 
   private async discardMcpValues(
@@ -191,6 +231,7 @@ export class Profiles {
     // The legacy single-token entry and the sign-in share the server's own address.
     await this.vault.discard(profileId, mcpSecret(server.name), tx);
     await this.vault.discard(profileId, `${mcpSecret(server.name)}:oauth`, tx);
+    await this.vault.discard(profileId, mcpOauthClientSecretKey(server.name), tx);
 
     for (const kind of ['header', 'env'] as const) {
       for (const value of kind === 'header' ? server.headers : server.env) {
@@ -277,10 +318,23 @@ export class Profiles {
           }),
         );
 
+      let oauthClientSecret: McpServer['oauthClientSecret'];
+
+      if (server.oauthClientSecret?.fromEnv) {
+        oauthClientSecret = { fromEnv: server.oauthClientSecret.fromEnv };
+      } else if (server.oauthClientSecret) {
+        const secret = await this.vault.read(fromProfileId, mcpOauthClientSecretKey(server.name));
+
+        oauthClientSecret = secret ? { value: secret } : undefined;
+      }
+
+      const { oauthClientSecret: _ignored, ...definition } = server;
+
       added.push({
-        ...server,
+        ...definition,
         headers: await copy('header', server.headers),
         env: await copy('env', server.env),
+        ...(oauthClientSecret ? { oauthClientSecret } : {}),
       });
     }
 
