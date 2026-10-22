@@ -104,6 +104,26 @@ export async function dueSubscriptions(db: Queryable, now: Date) {
   return rows.map(toSubscription);
 }
 
+/** Enabled listeners bound to one conversation (for quiet-while-waiting checks). */
+export async function listSessionSubscriptions(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+) {
+  const rows = await db
+    .select()
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.profileId, profileId),
+        eq(subscriptions.sessionId, sessionId),
+        eq(subscriptions.enabled, true),
+      ),
+    )
+    .orderBy(asc(subscriptions.createdAt));
+  return rows.map(toSubscription);
+}
+
 export async function insertSubscription(
   db: Queryable,
   subscription: Subscription,

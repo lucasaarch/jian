@@ -6,7 +6,7 @@ Every release of Jian, newest first.
 
 ## 0.8.5 — 2026-10-22
 
-Rust development support in the workspace image, and Jian Remote Linux install falls back to a system systemd unit (or accepts --system) when the user bus is missing on headless/root VPS hosts.
+Rust toolchain and Fontconfig in the workspace image, Jian Remote Linux systemd system-unit fallback, MCP legacy fallback for dual-era servers (Atlassian v2), and Listening that stays silent while watcher state is unchanged.
 
 ### Workspace
 
@@ -17,9 +17,17 @@ Rust development support in the workspace image, and Jian Remote Linux install f
 
 * **Linux headless / root VPS install:** `jian-remote install` still prefers `systemd --user`. When the user bus is unavailable (`Failed to connect to bus: No medium found`, missing `XDG_RUNTIME_DIR` — typical on root SSH to a VPS), it falls back to a **system** unit at `/etc/systemd/system/jian-remote.service` if it can write there, or you can pass `install --system`. Scope is remembered under `~/.config/jian-remote/linux-service-scope` so `stop` / `start` / `restart` / `update` / `configure` keep the same manager. Errors without a usable bus or system write access now print linger / `--system` / foreground `run` instructions. See `docs/remote.md`.
 
+### MCP
+
+* **Legacy fallback after modern refusal:** connecting to an HTTP MCP server still probes with `server/discover` (2026-07-28). When the peer answers that modern serving is disabled — or returns an unsupported-protocol error that lists only pre-2026 revisions — Jian retries with the legacy `initialize` handshake instead of surfacing the refusal in the panel. Modern-only peers and ordinary legacy servers are unchanged. This restores Check / Sign in against `https://mcp.atlassian.com/v2/mcp`.
+
+### Listening
+
+* **Silent while unchanged:** creating an enabled GitHub listener pauses an open session objective so objective auto-continue cannot restate “still pending” every poll interval. Unchanged GitHub snapshots still do not submit a run or deliver to the channel. A real state change (CI conclusion, PR merge/close) reopens the objective and wakes the conversation once. After a subscription wake, auto-continue may run so the agent can act on the event.
+
 ### Upgrading
 
-No database migrations. Recreate the gateway container with the 0.8.5 image to make the Rust toolchain and Fontconfig development files available in shell workspaces. After releasing, promote `@jian-ai/remote-control@0.8.5` on npm (or rely on gateway `/jian-remote.mjs` auto-update). On a Linux VPS that failed under 0.8.4 with a missing user bus:
+No database migrations. Recreate the gateway container with the 0.8.5 image for the Rust toolchain, Fontconfig headers, MCP legacy fallback, and Listening quiet-wait behavior. After upgrading, re-run **Check** on the Atlassian MCP server under Skills → MCP after OAuth sign-in if needed. After releasing, promote `@jian-ai/remote-control@0.8.5` on npm (or rely on gateway `/jian-remote.mjs` auto-update). On a Linux VPS that failed under 0.8.4 with a missing user bus:
 
 ```sh
 # As root (or with write access to /etc/systemd/system):

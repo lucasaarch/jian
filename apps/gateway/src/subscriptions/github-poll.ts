@@ -335,3 +335,28 @@ export function observationToStore(
 ): SubscriptionObservation {
   return stabilizeObservation(previous, nextRaw);
 }
+
+/**
+ * True while an enabled listener still expects a future GitHub transition (CI finish and/or
+ * PR close). Used to keep objective auto-continue quiet — the next turn comes from a wake.
+ */
+export function listenerIsWaiting(
+  subscription: Pick<Subscription, 'enabled' | 'expiresAt' | 'filter' | 'lastObservation'>,
+  now: Date = new Date(),
+): boolean {
+  if (!subscription.enabled) return false;
+  if (Date.parse(subscription.expiresAt) <= now.getTime()) return false;
+
+  const { filter, lastObservation: observation } = subscription;
+  const watchChecks = filter.events.includes('check_suite.completed');
+  const watchPull = filter.events.includes('pull_request.closed');
+
+  // No snapshot yet: the first real observation (or wake) has not settled.
+  if (!observation?.pullState && observation?.checksCompleted === undefined) {
+    return true;
+  }
+
+  const waitingChecks = watchChecks && !observation?.checksCompleted;
+  const waitingPull = watchPull && observation?.pullState !== 'closed';
+  return waitingChecks || waitingPull;
+}
