@@ -4,6 +4,21 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 0.8.5 — 2026-10-22
+
+Rust development support in the workspace image, including the stable toolchain and Fontconfig headers needed to build Lemon.
+
+### Workspace
+
+* **Rust development toolchain:** the workspace image now includes stable Rust, Cargo, `rustfmt`, and Clippy. Cargo keeps its cache under each user's home directory, so it remains writable and can persist with the workspace volume.
+* **Fontconfig development files:** the image includes `libfontconfig1-dev` and `pkg-config`, allowing Rust projects that depend on Fontconfig to compile without asking the workspace user to install system packages. This enables Lemon's Linux checks in the workspace.
+
+### Upgrading
+
+No database migrations. Recreate the gateway container with the 0.8.5 image to make the Rust toolchain and Fontconfig development files available in shell workspaces.
+
+Stable installations can use the `latest` image tag or pin `0.8.5`.
+
 ## 0.8.4 — 2026-10-21
 
 Jian Remote.app bundles Node @rpath shared libraries (libnode) so the macOS LaunchAgent no longer crashes immediately on Homebrew and similar installs.
