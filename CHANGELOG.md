@@ -4,7 +4,7 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
-## 0.8.5 — 2026-10-22
+## 0.8.6 — 2026-10-22
 
 Jian Remote Linux install falls back to a system systemd unit (or accepts --system) when the user bus is missing on headless/root VPS hosts.
 
@@ -14,20 +14,35 @@ Jian Remote Linux install falls back to a system systemd unit (or accepts --syst
 
 ### Upgrading
 
-No new database migrations. After releasing, promote `@jian-ai/remote-control@0.8.5` on npm (or rely on gateway `/jian-remote.mjs` auto-update). On a Linux VPS that failed under 0.8.4 with a missing user bus:
+No new database migrations. After releasing, promote `@jian-ai/remote-control@0.8.6` on npm (or rely on gateway `/jian-remote.mjs` auto-update). On a Linux VPS that failed under 0.8.4 with a missing user bus:
 
 ```sh
 # As root (or with write access to /etc/systemd/system):
-npx --yes @jian-ai/remote-control@0.8.5 install --system \
+npx --yes @jian-ai/remote-control@0.8.6 install --system \
   --gateway 'https://gateway.example' --machine MACHINE_UUID --token WORKER_TOKEN
 
 # Or prefer a normal user:
 sudo loginctl enable-linger USERNAME
 # as USERNAME:
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
-npx --yes @jian-ai/remote-control@0.8.5 install \
+npx --yes @jian-ai/remote-control@0.8.6 install \
   --gateway 'https://gateway.example' --machine MACHINE_UUID --token WORKER_TOKEN
 ```
+
+Stable installations can use the `latest` image tag or pin `0.8.6`.
+
+## 0.8.5 — 2026-10-22
+
+Rust development support in the workspace image, including the stable toolchain and Fontconfig headers needed to build Lemon.
+
+### Workspace
+
+* **Rust development toolchain:** the workspace image now includes stable Rust, Cargo, `rustfmt`, and Clippy. Cargo keeps its cache under each user's home directory, so it remains writable and can persist with the workspace volume.
+* **Fontconfig development files:** the image includes `libfontconfig1-dev` and `pkg-config`, allowing Rust projects that depend on Fontconfig to compile without asking the workspace user to install system packages. This enables Lemon's Linux checks in the workspace.
+
+### Upgrading
+
+No database migrations. Recreate the gateway container with the 0.8.5 image to make the Rust toolchain and Fontconfig development files available in shell workspaces.
 
 Stable installations can use the `latest` image tag or pin `0.8.5`.
 
