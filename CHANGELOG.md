@@ -4,7 +4,7 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
-## 0.8.7 — 2026-10-22
+## 0.8.8 — 2026-10-22
 
 Listening stays silent while CI or pull-request state is unchanged — no auto-continue spam on the channel until a real watcher wake.
 
@@ -14,9 +14,9 @@ Listening stays silent while CI or pull-request state is unchanged — no auto-c
 
 ### Upgrading
 
-No database migrations. Recreate the gateway container with the 0.8.7 image (or pull `latest`) so Listening quiet-wait behavior is active.
+No database migrations. Recreate the gateway container with the 0.8.8 image (or pull `latest`) so Listening quiet-wait behavior is active.
 
-Stable installations can use the `latest` image tag or pin `0.8.7`.
+Stable installations can use the `latest` image tag or pin `0.8.8`.
 
 ## 0.8.6 — 2026-10-22
 
