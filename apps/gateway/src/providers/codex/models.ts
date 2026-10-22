@@ -6,10 +6,10 @@ import { accountHeaders } from './model.js';
  *
  * `client_version` is read as a Codex CLI version and decides what the backend will show: it
  * hides anything whose minimum version is newer, and the request is refused outright without
- * it. Keep this at a Codex version known to list the current account models; 0.0.0 omits newer
- * models even when the same account sees them in the Codex CLI.
+ * it. Keep this at a current Codex CLI release (today 0.163.0) so GPT-6.1 Sol and peers stay
+ * visible; 0.0.0 omits newer models even when the same account sees them in the Codex CLI.
  */
-const CATALOG = 'https://chatgpt.com/backend-api/codex/models?client_version=0.156.0';
+const CATALOG = 'https://chatgpt.com/backend-api/codex/models?client_version=0.163.0';
 const effort = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 const catalog = z.object({
