@@ -6,7 +6,11 @@ Every release of Jian, newest first.
 
 ## 0.8.5 — 2026-10-22
 
-Rust toolchain and Fontconfig in the workspace image, Jian Remote Linux systemd system-unit fallback, MCP legacy fallback for dual-era servers (Atlassian v2), and Listening that stays silent while watcher state is unchanged.
+Rust toolchain and Fontconfig in the workspace image, Jian Remote Linux systemd system-unit fallback, MCP legacy fallback for dual-era servers (Atlassian v2), Listening that stays silent while watcher state is unchanged, and a refreshed Codex catalog pin for GPT-6.1 Sol.
+
+### Models
+
+* **GPT-6.1 Sol:** ChatGPT-connected accounts keep selecting `gpt-6.1-sol` (display name GPT-6.1 Sol) when their Codex catalog offers it. The gateway now requests the Codex model catalog with client version `0.163.0` (current Codex CLI) so the account list stays aligned with models whose minimum client version is newer than the previous pin. Reasoning efforts stay `low` / `medium` / `high` / `xhigh` / `max` when the catalog reports them; Jian still does not offer Codex `ultra` (Ultracode / subagent delegation) as a reasoning level. API-key OpenAI accounts continue to learn the same id from `GET /v1/models` plus the public models.dev catalog for limits and list prices. Fast and Ultrafast remain OpenAI `service_tier` modes, not separate model ids, and are not yet selectable in the panel.
 
 ### Workspace
 
@@ -27,7 +31,7 @@ Rust toolchain and Fontconfig in the workspace image, Jian Remote Linux systemd 
 
 ### Upgrading
 
-No database migrations. Recreate the gateway container with the 0.8.5 image for the Rust toolchain, Fontconfig headers, MCP legacy fallback, and Listening quiet-wait behavior. After upgrading, re-run **Check** on the Atlassian MCP server under Skills → MCP after OAuth sign-in if needed. After releasing, promote `@jian-ai/remote-control@0.8.5` on npm (or rely on gateway `/jian-remote.mjs` auto-update). On a Linux VPS that failed under 0.8.4 with a missing user bus:
+No database migrations. Recreate the gateway container with the 0.8.5 image for the Rust toolchain, Fontconfig headers, MCP legacy fallback, Listening quiet-wait behavior, and the refreshed Codex catalog pin. Model availability still depends on the connected ChatGPT plan or API key; refresh Providers after upgrading if a ChatGPT login was already connected. After upgrading, re-run **Check** on the Atlassian MCP server under Skills → MCP after OAuth sign-in if needed. After releasing, promote `@jian-ai/remote-control@0.8.5` on npm (or rely on gateway `/jian-remote.mjs` auto-update). On a Linux VPS that failed under 0.8.4 with a missing user bus:
 
 ```sh
 # As root (or with write access to /etc/systemd/system):

@@ -64,7 +64,7 @@ describe('the models a ChatGPT login may call', () => {
     ]);
 
     // Without the version the backend refuses, and without the account it answers empty.
-    expect(asked[0]?.url).toContain('client_version=0.156.0');
+    expect(asked[0]?.url).toContain('client_version=0.163.0');
     expect(asked[0]?.headers.get('chatgpt-account-id')).toBe('acct-1');
     expect(asked[0]?.headers.get('authorization')).toBe(`Bearer ${token('acct-1')}`);
   });
