@@ -2,7 +2,7 @@ import type { Skill } from '@jian/contracts';
 
 /**
  * Offered with any MCP server configured: GitHub is the common case, and teaching it only
- * when the server is named "github" would miss a renamed preset.
+ * when the server is named "github" would miss a renamed server.
  */
 export const githubMcp: Skill = {
   name: 'github-mcp',
@@ -16,14 +16,16 @@ with \`load_mcp_tools\` before calling.
 
 ## Auth modes the owner may have configured
 
-- **HTTP + OAuth** (\`https://api.githubcopilot.com/mcp/\`) — the owner signs in from MCP servers
-  in the panel (\`JIAN_PUBLIC_URL\` required). Preferred: validation errors usually include field
-  detail.
+- **HTTP + OAuth** (\`https://api.githubcopilot.com/mcp/\`) — the owner creates a GitHub OAuth App
+  (or GitHub App), sets its callback to this gateway MCP OAuth callback, enters the client id
+  and secret on the MCP server, then signs in from the panel (\`JIAN_PUBLIC_URL\` required).
+  Preferred: validation errors usually include field detail. GitHub's auth server does not
+  support dynamic client registration.
 - **stdio + PAT** — a local process with \`GITHUB_PERSONAL_ACCESS_TOKEN\`. Prefer the official
   image \`ghcr.io/github/github-mcp-server\` (Docker). The archived npm package
   \`@modelcontextprotocol/server-github\` often returns only "Validation Failed" on
   \`create_issue\` and omits GitHub's \`errors[]\` — fix arguments from this skill, or ask the
-  owner to switch preset.
+  owner to switch to HTTP+OAuth or Docker+PAT.
 
 You cannot complete OAuth or mint a PAT. If the server needs sign-in, say so.
 

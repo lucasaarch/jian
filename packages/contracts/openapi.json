@@ -20724,6 +20724,27 @@
                               "additionalProperties": false
                             }
                           },
+                          "oauthClientId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "oauthClientSecret": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 16000,
+                                "writeOnly": true
+                              },
+                              "fromEnv": {
+                                "type": "string",
+                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
                           "disabledTools": {
                             "default": [],
                             "maxItems": 200,
@@ -21386,6 +21407,27 @@
                                 "additionalProperties": false
                               }
                             },
+                            "oauthClientId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "oauthClientSecret": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 16000,
+                                  "writeOnly": true
+                                },
+                                "fromEnv": {
+                                  "type": "string",
+                                  "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
                             "disabledTools": {
                               "default": [],
                               "maxItems": 200,
@@ -22030,6 +22072,27 @@
                             "additionalProperties": false
                           }
                         },
+                        "oauthClientId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "oauthClientSecret": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000,
+                              "writeOnly": true
+                            },
+                            "fromEnv": {
+                              "type": "string",
+                              "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
                         "disabledTools": {
                           "default": [],
                           "maxItems": 200,
@@ -22461,6 +22524,27 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "oauthClientId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "oauthClientSecret": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 16000,
+                                "writeOnly": true
+                              },
+                              "fromEnv": {
+                                "type": "string",
+                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                              }
+                            },
+                            "additionalProperties": false
                           },
                           "disabledTools": {
                             "default": [],
@@ -23133,6 +23217,27 @@
                               "additionalProperties": false
                             }
                           },
+                          "oauthClientId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "oauthClientSecret": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 16000,
+                                "writeOnly": true
+                              },
+                              "fromEnv": {
+                                "type": "string",
+                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
                           "disabledTools": {
                             "default": [],
                             "maxItems": 200,
@@ -23762,6 +23867,27 @@
                             "additionalProperties": false
                           }
                         },
+                        "oauthClientId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "oauthClientSecret": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000,
+                              "writeOnly": true
+                            },
+                            "fromEnv": {
+                              "type": "string",
+                              "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
                         "disabledTools": {
                           "default": [],
                           "maxItems": 200,
@@ -24191,6 +24317,27 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "oauthClientId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "oauthClientSecret": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 16000,
+                                "writeOnly": true
+                              },
+                              "fromEnv": {
+                                "type": "string",
+                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                              }
+                            },
+                            "additionalProperties": false
                           },
                           "disabledTools": {
                             "default": [],
@@ -25319,6 +25466,27 @@
                                     ],
                                     "additionalProperties": false
                                   }
+                                },
+                                "oauthClientId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "oauthClientSecret": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 16000,
+                                      "writeOnly": true
+                                    },
+                                    "fromEnv": {
+                                      "type": "string",
+                                      "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 },
                                 "disabledTools": {
                                   "default": [],

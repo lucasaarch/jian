@@ -12,6 +12,10 @@ import { stdioTransport } from './mcp-stdio.js';
 export const mcpValueSecret = (server: string, kind: 'header' | 'env', name: string) =>
   `${mcpSecret(server)}:${kind}:${name}`;
 
+/** Pre-registered OAuth client secret for a server that cannot use dynamic registration. */
+export const mcpOauthClientSecretKey = (server: string) =>
+  `${mcpSecret(server)}:oauth:client_secret`;
+
 export type SecretReader = Pick<Vault, 'read'>;
 
 /** A value the owner typed, or one the host environment carries. Absent means not configured. */
