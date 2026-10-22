@@ -911,7 +911,7 @@ function subscriptionTools(subscriptions: NonNullable<ToolServices['subscription
     }),
     create_subscription: tool({
       description:
-        'Watch a GitHub pull request for CI finishing or the PR closing/merging. The gateway polls GitHub on an interval and wakes this conversation only when that state changes (not every tick) — no webhook setup required. Listeners expire (default 1 hour; set durationSeconds for 30 minutes / 1 hour / 1 day). Keep or open a session objective so the wake continues the work. Optionally returns a webhookSecret if you later want a faster path.',
+        'Watch a GitHub pull request for CI finishing or the PR closing/merging. The gateway polls GitHub on an interval and wakes this conversation only when that state changes (not every tick) — no webhook setup required, and unchanged polls stay silent. Listeners expire (default 1 hour; set durationSeconds for 30 minutes / 1 hour / 1 day). An open session objective is blocked while Listening waits and reopened on a real wake. Optionally returns a webhookSecret if you later want a faster path.',
       inputSchema: z.object({
         name: z.string().min(1).max(80),
         instruction: z.string().min(1).max(4000),

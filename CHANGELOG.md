@@ -4,6 +4,20 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 0.8.7 — 2026-10-22
+
+Listening stays silent while CI or pull-request state is unchanged — no auto-continue spam on the channel until a real watcher wake.
+
+### Listening
+
+* **Silent while unchanged:** creating an enabled GitHub listener pauses an open session objective so objective auto-continue cannot restate “still pending” every poll interval. Unchanged GitHub snapshots still do not submit a run or deliver to the channel. A real state change (CI conclusion, PR merge/close) reopens the objective and wakes the conversation once. After a subscription wake, auto-continue may run so the agent can act on the event.
+
+### Upgrading
+
+No database migrations. Recreate the gateway container with the 0.8.7 image (or pull `latest`) so Listening quiet-wait behavior is active.
+
+Stable installations can use the `latest` image tag or pin `0.8.7`.
+
 ## 0.8.6 — 2026-10-22
 
 Jian Remote Linux install falls back to a system systemd unit (or accepts --system) when the user bus is missing on headless/root VPS hosts.
