@@ -1,5 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { expect, it } from 'vitest';
+import { AgentRuntime } from '../src/agent/runtime.js';
+import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
 const input = {
@@ -7,6 +9,18 @@ const input = {
   instructions: 'Help.',
   model: { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
 };
+
+const usage = {
+  inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+  outputTokens: { total: 10, text: 10, reasoning: 0 },
+};
+
+const answer = (text: string) => ({
+  content: [{ type: 'text' as const, text }],
+  finishReason: { unified: 'stop' as const, raw: 'stop' },
+  usage,
+  warnings: [],
+});
 
 it('polls GitHub and wakes once when checks complete', async () => {
   let now = Date.parse('2026-10-20T05:00:00.000Z');
@@ -92,6 +106,122 @@ it('polls GitHub and wakes once when checks complete', async () => {
   expect(after?.lastRunId).toBe(wakes[0]?.id);
   expect(after?.lastObservation?.checksCompleted).toBe(true);
   expect(urls.some((url) => url.includes('/pulls/38'))).toBe(true);
+});
+
+it('stays silent on unchanged watcher polls and does not auto-continue while Listening waits', async () => {
+  let now = Date.parse('2026-10-22T15:00:00.000Z');
+  const services = await testServices(() => now);
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+
+  const delivered: string[] = [];
+  services.subscriptions.useDeliveries({
+    deliverRun: async (_profileId, _sessionId, runId) => {
+      delivered.push(runId);
+    },
+  });
+  services.objectives.useDeliveries({
+    deliverRun: async (_profileId, _sessionId, runId) => {
+      delivered.push(runId);
+    },
+  });
+
+  let checkStatus: 'in_progress' | 'completed' = 'in_progress';
+  services.subscriptions.useGithub(async (inputUrl) => {
+    const url = String(inputUrl);
+    if (url.includes('/pulls/75')) {
+      return Response.json({
+        state: 'open',
+        merged: false,
+        head: { sha: 'cafe75head' },
+      });
+    }
+    if (url.includes('/check-runs')) {
+      return Response.json({
+        check_runs: [
+          {
+            name: 'Check',
+            status: checkStatus,
+            conclusion: checkStatus === 'completed' ? 'success' : null,
+          },
+        ],
+      });
+    }
+    return new Response('not found', { status: 404 });
+  });
+
+  await services.sessions.setObjective(profile.id, session.id, {
+    text: 'Merge PR 75 when CI is green',
+    status: 'open',
+  });
+
+  const created = await services.subscriptions.create(
+    profile.id,
+    {
+      name: 'PR 75 Check',
+      instruction: 'CI finished — continue the objective. Do not merge without authorization.',
+      sessionId: session.id,
+      source: 'github',
+      filter: {
+        owner: 'lucasaarch',
+        repo: 'jian',
+        events: ['check_suite.completed', 'pull_request.closed'],
+        pullNumber: 75,
+        checkName: 'Check',
+        pollIntervalSeconds: 30,
+      },
+      enabled: true,
+    },
+    'agent',
+  );
+
+  // Creating a watcher must pause auto-continue so "still pending" turns never queue.
+  expect((await services.sessions.session(profile.id, session.id)).objective).toMatchObject({
+    status: 'blocked',
+    text: 'Merge PR 75 when CI is green',
+  });
+  expect((await services.sessions.session(profile.id, session.id)).objective?.note ?? '').toMatch(
+    /Listening/i,
+  );
+
+  const announce = await services.runs.submit(profile.id, session.id, {
+    text: 'Watch PR 75 for me',
+    requestKey: 'announce-watch',
+  });
+  await new AgentRuntime(services, () =>
+    mockModel({ doGenerate: async () => answer('Watching.') }),
+  ).execute(profile.id, announce.id);
+
+  expect(
+    (await services.runs.activities(profile.id)).filter(
+      (run) => run.requestKey?.startsWith('objective-continue:') && run.status === 'queued',
+    ),
+  ).toHaveLength(0);
+  expect(delivered).toHaveLength(0);
+
+  for (let i = 0; i < 4; i += 1) {
+    await services.subscriptions.pollDue();
+    now += 30_000;
+  }
+  expect(
+    (await services.runs.recent(profile.id)).filter((item) =>
+      item.requestKey.startsWith(`subscription:${created.id}:`),
+    ),
+  ).toHaveLength(0);
+  expect(delivered).toHaveLength(0);
+
+  checkStatus = 'completed';
+  await services.subscriptions.pollDue();
+
+  const wakes = (await services.runs.recent(profile.id)).filter((item) =>
+    item.requestKey.startsWith(`subscription:${created.id}:`),
+  );
+  expect(wakes).toHaveLength(1);
+  expect(delivered).toEqual([wakes[0]?.id]);
+  expect((await services.sessions.session(profile.id, session.id)).objective).toMatchObject({
+    status: 'open',
+    text: 'Merge PR 75 when CI is green',
+  });
 });
 
 it('keeps unchanged polls silent and does not spam while open and green', async () => {

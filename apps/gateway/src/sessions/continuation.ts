@@ -3,6 +3,8 @@ import type { Clock } from '../core/clock.js';
 import { nowIso } from '../core/clock.js';
 import type { Runs } from '../runs/service.js';
 import type { Store } from '../storage/database.js';
+import { listenerIsWaiting } from '../subscriptions/github-poll.js';
+import { listSessionSubscriptions } from '../subscriptions/repository.js';
 import { MAX_OBJECTIVE_CONTINUATIONS, objectiveAt, objectiveContinuePrompt } from './objective.js';
 import { setSessionObjective } from './repository.js';
 import type { Sessions } from './service.js';
@@ -46,6 +48,16 @@ export class ObjectiveContinuation {
 
       const objective = session.objective;
       if (objective?.status !== 'open') return null;
+
+      // Listening owns resume while a watcher still expects a GitHub transition. Auto-continue
+      // here only restates "still pending" on the channel; a real wake comes from poll/webhook.
+      // After a subscription wake, allow slices so the agent can act on the event.
+      const waiting = (await listSessionSubscriptions(tx, run.profileId, run.sessionId)).some(
+        (item) => listenerIsWaiting(item, new Date(this.clock())),
+      );
+      if (waiting && !run.requestKey?.startsWith('subscription:')) {
+        return null;
+      }
 
       if (objective.continuations >= MAX_OBJECTIVE_CONTINUATIONS) {
         const blocked = objectiveAt(objective.text, 'blocked', nowIso(this.clock), {

@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import {
   canonicalizeObservation,
   detectPollWake,
+  listenerIsWaiting,
   observationsEqual,
   observationToStore,
   stabilizeObservation,
@@ -115,4 +116,22 @@ it('wakes when the pull request merges', () => {
   const wake = detectPollWake({ filter: { ...filter }, lastObservation: openGreen }, merged);
   expect(wake?.event).toBe('pull_request.closed');
   expect(wake?.summary.some((line) => line.includes('Changed: pull open → merged'))).toBe(true);
+});
+
+it('treats pending CI or an open PR as still waiting', () => {
+  const base = {
+    enabled: true,
+    expiresAt: '2099-01-01T00:00:00.000Z',
+    filter: { ...filter },
+  };
+  expect(listenerIsWaiting({ ...base, lastObservation: openPending })).toBe(true);
+  expect(listenerIsWaiting({ ...base, lastObservation: openGreen })).toBe(true);
+  expect(listenerIsWaiting({ ...base, lastObservation: merged })).toBe(false);
+  expect(
+    listenerIsWaiting({
+      ...base,
+      filter: { ...filter, events: ['check_suite.completed'] },
+      lastObservation: openGreen,
+    }),
+  ).toBe(false);
 });
