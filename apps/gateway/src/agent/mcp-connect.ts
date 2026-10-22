@@ -1,7 +1,8 @@
-import { createMCPClient, type MCPClient } from '@ai-sdk/mcp';
+import type { MCPClient } from '@ai-sdk/mcp';
 import type { McpServer, McpValue } from '@jian/contracts';
 import { mcpSecret } from '../profiles/service.js';
 import type { Vault } from '../security/vault.js';
+import { createNegotiatedMcpClient } from './mcp-negotiate.js';
 import { stdioTransport } from './mcp-stdio.js';
 
 /**
@@ -76,7 +77,7 @@ export type McpConnection = {
   lifetime?: AbortSignal;
   env?: NodeJS.ProcessEnv;
   /** Present only for a server the owner signed in to; the SDK drives the whole exchange. */
-  authProvider?: Parameters<typeof createMCPClient>[0]['transport'] extends infer T
+  authProvider?: Parameters<typeof createNegotiatedMcpClient>[0]['transport'] extends infer T
     ? T extends { authProvider?: infer A }
       ? A
       : never
@@ -89,7 +90,7 @@ export async function connectMcp(connection: McpConnection): Promise<MCPClient> 
   const env = connection.env ?? process.env;
 
   if (server.transport === 'stdio') {
-    return createMCPClient({
+    return createNegotiatedMcpClient({
       transport: stdioTransport({
         command: server.command as string,
         args: server.args,
@@ -106,7 +107,7 @@ export async function connectMcp(connection: McpConnection): Promise<MCPClient> 
       ? await collect(profileId, server, 'header', server.headers, vault, env)
       : undefined;
 
-  return createMCPClient({
+  return createNegotiatedMcpClient({
     transport: {
       type: 'http',
       url: server.url as string,
