@@ -4,20 +4,6 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
-## 0.8.7 — 2026-10-22
-
-MCP HTTP clients fall back to the legacy initialize handshake when a dual-era server disables modern serving (Atlassian v2).
-
-### MCP
-
-* **Legacy fallback after modern refusal:** connecting to an HTTP MCP server still probes with `server/discover` (2026-07-28). When the peer answers that modern serving is disabled — or returns an unsupported-protocol error that lists only pre-2026 revisions — Jian retries with the legacy `initialize` handshake instead of surfacing the refusal in the panel. Modern-only peers and ordinary legacy servers are unchanged. This restores Check / Sign in against `https://mcp.atlassian.com/v2/mcp`.
-
-### Upgrading
-
-No database migrations. Restart the gateway on 0.8.7 (or rebuild from this commit). Re-run **Check** on the Atlassian MCP server under Skills → MCP after OAuth sign-in if needed.
-
-Stable installations can use the `latest` image tag or pin `0.8.7`.
-
 ## 0.8.6 — 2026-10-22
 
 Jian Remote Linux install falls back to a system systemd unit (or accepts --system) when the user bus is missing on headless/root VPS hosts.
@@ -47,16 +33,20 @@ Stable installations can use the `latest` image tag or pin `0.8.6`.
 
 ## 0.8.5 — 2026-10-22
 
-Rust development support in the workspace image, including the stable toolchain and Fontconfig headers needed to build Lemon.
+Rust toolchain in the workspace image, plus MCP legacy fallback when dual-era servers disable modern serving (Atlassian v2).
 
 ### Workspace
 
 * **Rust development toolchain:** the workspace image now includes stable Rust, Cargo, `rustfmt`, and Clippy. Cargo keeps its cache under each user's home directory, so it remains writable and can persist with the workspace volume.
 * **Fontconfig development files:** the image includes `libfontconfig1-dev` and `pkg-config`, allowing Rust projects that depend on Fontconfig to compile without asking the workspace user to install system packages. This enables Lemon's Linux checks in the workspace.
 
+### MCP
+
+* **Legacy fallback after modern refusal:** connecting to an HTTP MCP server still probes with `server/discover` (2026-07-28). When the peer answers that modern serving is disabled — or returns an unsupported-protocol error that lists only pre-2026 revisions — Jian retries with the legacy `initialize` handshake instead of surfacing the refusal in the panel. Modern-only peers and ordinary legacy servers are unchanged. This restores Check / Sign in against `https://mcp.atlassian.com/v2/mcp`.
+
 ### Upgrading
 
-No database migrations. Recreate the gateway container with the 0.8.5 image to make the Rust toolchain and Fontconfig development files available in shell workspaces.
+No database migrations. Recreate the gateway container with the 0.8.5 image to make the Rust toolchain and Fontconfig development files available in shell workspaces. After upgrading, re-run **Check** on the Atlassian MCP server under Skills → MCP after OAuth sign-in if needed.
 
 Stable installations can use the `latest` image tag or pin `0.8.5`.
 
