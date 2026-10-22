@@ -4,41 +4,18 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
-## 0.8.6 — 2026-10-22
-
-Jian Remote Linux install falls back to a system systemd unit (or accepts --system) when the user bus is missing on headless/root VPS hosts.
-
-### Remote Control
-
-* **Linux headless / root VPS install:** `jian-remote install` still prefers `systemd --user`. When the user bus is unavailable (`Failed to connect to bus: No medium found`, missing `XDG_RUNTIME_DIR` — typical on root SSH to a VPS), it falls back to a **system** unit at `/etc/systemd/system/jian-remote.service` if it can write there, or you can pass `install --system`. Scope is remembered under `~/.config/jian-remote/linux-service-scope` so `stop` / `start` / `restart` / `update` / `configure` keep the same manager. Errors without a usable bus or system write access now print linger / `--system` / foreground `run` instructions. See `docs/remote.md`.
-
-### Upgrading
-
-No new database migrations. After releasing, promote `@jian-ai/remote-control@0.8.6` on npm (or rely on gateway `/jian-remote.mjs` auto-update). On a Linux VPS that failed under 0.8.4 with a missing user bus:
-
-```sh
-# As root (or with write access to /etc/systemd/system):
-npx --yes @jian-ai/remote-control@0.8.6 install --system \
-  --gateway 'https://gateway.example' --machine MACHINE_UUID --token WORKER_TOKEN
-
-# Or prefer a normal user:
-sudo loginctl enable-linger USERNAME
-# as USERNAME:
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-npx --yes @jian-ai/remote-control@0.8.6 install \
-  --gateway 'https://gateway.example' --machine MACHINE_UUID --token WORKER_TOKEN
-```
-
-Stable installations can use the `latest` image tag or pin `0.8.6`.
-
 ## 0.8.5 — 2026-10-22
 
-Rust toolchain and Fontconfig in the workspace image, MCP legacy fallback for dual-era servers (Atlassian v2), and Listening that stays silent while watcher state is unchanged.
+Rust toolchain and Fontconfig in the workspace image, Jian Remote Linux systemd system-unit fallback, MCP legacy fallback for dual-era servers (Atlassian v2), and Listening that stays silent while watcher state is unchanged.
 
 ### Workspace
 
 * **Rust development toolchain:** the workspace image now includes stable Rust, Cargo, `rustfmt`, and Clippy. Cargo keeps its cache under each user's home directory, so it remains writable and can persist with the workspace volume.
 * **Fontconfig development files:** the image includes `libfontconfig1-dev` and `pkg-config`, allowing Rust projects that depend on Fontconfig to compile without asking the workspace user to install system packages. This enables Lemon's Linux checks in the workspace.
+
+### Remote Control
+
+* **Linux headless / root VPS install:** `jian-remote install` still prefers `systemd --user`. When the user bus is unavailable (`Failed to connect to bus: No medium found`, missing `XDG_RUNTIME_DIR` — typical on root SSH to a VPS), it falls back to a **system** unit at `/etc/systemd/system/jian-remote.service` if it can write there, or you can pass `install --system`. Scope is remembered under `~/.config/jian-remote/linux-service-scope` so `stop` / `start` / `restart` / `update` / `configure` keep the same manager. Errors without a usable bus or system write access now print linger / `--system` / foreground `run` instructions. See `docs/remote.md`.
 
 ### MCP
 
@@ -50,7 +27,20 @@ Rust toolchain and Fontconfig in the workspace image, MCP legacy fallback for du
 
 ### Upgrading
 
-No database migrations. Recreate the gateway container with the 0.8.5 image for the Rust toolchain, Fontconfig headers, MCP legacy fallback, and Listening quiet-wait behavior. After upgrading, re-run **Check** on the Atlassian MCP server under Skills → MCP after OAuth sign-in if needed.
+No database migrations. Recreate the gateway container with the 0.8.5 image for the Rust toolchain, Fontconfig headers, MCP legacy fallback, and Listening quiet-wait behavior. After upgrading, re-run **Check** on the Atlassian MCP server under Skills → MCP after OAuth sign-in if needed. After releasing, promote `@jian-ai/remote-control@0.8.5` on npm (or rely on gateway `/jian-remote.mjs` auto-update). On a Linux VPS that failed under 0.8.4 with a missing user bus:
+
+```sh
+# As root (or with write access to /etc/systemd/system):
+npx --yes @jian-ai/remote-control@0.8.5 install --system \
+  --gateway 'https://gateway.example' --machine MACHINE_UUID --token WORKER_TOKEN
+
+# Or prefer a normal user:
+sudo loginctl enable-linger USERNAME
+# as USERNAME:
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+npx --yes @jian-ai/remote-control@0.8.5 install \
+  --gateway 'https://gateway.example' --machine MACHINE_UUID --token WORKER_TOKEN
+```
 
 Stable installations can use the `latest` image tag or pin `0.8.5`.
 
