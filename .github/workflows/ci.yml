@@ -20,6 +20,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
+      - run: make test-display
   # Every story opened in a real browser: a component change that breaks a screen nobody opened
   # fails here instead of in the next person's Storybook.
   storybook:
@@ -63,3 +64,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run test:integration
       - run: docker build -t jian:ci .
+      - run: make image-test-display IMAGE=jian VERSION=ci
