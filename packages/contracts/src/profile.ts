@@ -107,6 +107,18 @@ export const mcpValueSchema = z.strictObject({
  */
 export const mcpAuthSchema = z.enum(['none', 'headers', 'oauth']);
 
+/**
+ * A confidential OAuth client's secret, same write-once shape as a header value: send `value`
+ * to store it, omit `value` to keep the stored one, omit the whole field to clear it.
+ */
+export const mcpOauthClientSecretSchema = z.strictObject({
+  value: secretSchema.optional(),
+  fromEnv: z
+    .string()
+    .regex(/^JIAN_MCP_[A-Z0-9_]+$/)
+    .optional(),
+});
+
 export const mcpSchema = z
   .strictObject({
     name: z.string().regex(/^[a-z0-9_]{1,30}$/),
@@ -118,6 +130,16 @@ export const mcpSchema = z
     command: z.string().trim().min(1).max(400).optional(),
     args: z.array(z.string().max(400)).max(30).default([]),
     env: z.array(mcpValueSchema).max(20).default([]),
+    /**
+     * Pre-registered OAuth client id when the authorization server has no
+     * `registration_endpoint` (RFC 7591). GitHub's Copilot MCP auth server is one such AS —
+     * create a GitHub OAuth App (or GitHub App) whose callback is this gateway's MCP OAuth
+     * callback, then put its client id here. Servers that support dynamic registration leave
+     * this empty.
+     */
+    oauthClientId: z.string().trim().min(1).max(200).optional(),
+    /** Optional secret for that client id. Required by GitHub OAuth Apps; public PKCE clients omit it. */
+    oauthClientSecret: mcpOauthClientSecretSchema.optional(),
     /** The server's own names of tools the owner switched off: the agent is never offered them. */
     disabledTools: z.array(z.string().min(1).max(200)).max(200).default([]),
   })
@@ -138,6 +160,14 @@ export const mcpSchema = z
     // the owner to, and nothing to redirect back to.
     if (value.auth === 'oauth' && value.transport !== 'http') {
       ctx.addIssue({ code: 'custom', message: 'OAuth needs an HTTP server', path: ['auth'] });
+    }
+
+    if (value.auth !== 'oauth' && (value.oauthClientId || value.oauthClientSecret)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'OAuth client credentials only apply when authentication is OAuth',
+        path: ['oauthClientId'],
+      });
     }
   });
 

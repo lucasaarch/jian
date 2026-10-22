@@ -3,6 +3,7 @@ import type { McpStatus, Profile } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
 import type { Vault } from '../security/vault.js';
 import { McpOAuth } from './mcp-oauth.js';
+import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
 
 /**
@@ -31,8 +32,15 @@ export class McpLogins {
   }
 
   /** Handed to the MCP client, which asks it for tokens and for somewhere to send the owner. */
-  readonly provider: McpOAuthProviders = (profileId, server) =>
-    new McpOAuth(this.vault, profileId, server, this.callback(profileId, server), this.pending);
+  readonly provider: McpOAuthProviders = (profileId, server, oauth) =>
+    new McpOAuth(
+      this.vault,
+      profileId,
+      server,
+      this.callback(profileId, server),
+      this.pending,
+      oauth,
+    );
 
   /** Where the owner has to go, if the last attempt decided they had to go somewhere. */
   authorizationUrl(profileId: string, server: string): string | undefined {
@@ -47,7 +55,7 @@ export class McpLogins {
       throw new GatewayError(404, 'MCP server not found');
     }
 
-    const result = await auth(this.provider(profile.id, server), {
+    const result = await auth(this.provider(profile.id, server, mcpOauthClient(configured)), {
       serverUrl: configured.url,
       authorizationCode: code,
       fetchFn: this.fetcher,

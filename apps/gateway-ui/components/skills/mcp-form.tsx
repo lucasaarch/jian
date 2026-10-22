@@ -5,7 +5,6 @@ import { useState } from 'react';
 import type { McpServer, McpValue } from '../../lib/api';
 import { Button, Field, Modal, StackedFields } from '../ui';
 import { Select } from '../ui/select';
-import { mcpPresets } from './mcp-presets';
 
 type Draft = {
   name: string;
@@ -16,6 +15,8 @@ type Draft = {
   command: string;
   args: string;
   env: McpValue[];
+  oauthClientId: string;
+  oauthClientSecret: string;
 };
 
 /** A value already stored carries no `value`: the panel cannot read it and must not clear it. */
@@ -31,6 +32,8 @@ function draftOf(server?: McpServer): Draft {
     command: server?.command ?? '',
     args: (server?.args ?? []).join(' '),
     env: server?.env ?? [],
+    oauthClientId: server?.oauthClientId ?? '',
+    oauthClientSecret: '',
   };
 }
 
@@ -58,7 +61,6 @@ export function McpForm({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftOf(server));
-  const [presetId, setPresetId] = useState('');
   const change = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
 
   const values = (kind: 'headers' | 'env') => ({
@@ -66,12 +68,7 @@ export function McpForm({
     set: (list: McpValue[]) => change({ [kind]: list } as Partial<Draft>),
   });
 
-  const applyPreset = (id: string) => {
-    setPresetId(id);
-    const preset = mcpPresets.find((item) => item.id === id);
-    if (!preset) return;
-    setDraft(draftOf(preset.server));
-  };
+  const secretSaved = Boolean(server?.oauthClientSecret);
 
   return (
     <Modal
@@ -95,6 +92,9 @@ export function McpForm({
         onSubmit={(event) => {
           event.preventDefault();
 
+          const oauthClientId = draft.oauthClientId.trim();
+          const oauthClientSecret = draft.oauthClientSecret.trim();
+
           onSave({
             name: draft.name.trim(),
             transport: draft.transport,
@@ -103,6 +103,16 @@ export function McpForm({
               ? {
                   url: draft.url.trim(),
                   headers: draft.auth === 'headers' ? clean(draft.headers) : [],
+                  ...(draft.auth === 'oauth' && oauthClientId
+                    ? {
+                        oauthClientId,
+                        ...(oauthClientSecret
+                          ? { oauthClientSecret: { value: oauthClientSecret } }
+                          : secretSaved
+                            ? { oauthClientSecret: {} }
+                            : {}),
+                      }
+                    : {}),
                 }
               : { headers: [] }),
             ...(draft.transport === 'stdio'
@@ -115,32 +125,6 @@ export function McpForm({
           } as McpServer);
         }}
       >
-        {!server && (
-          <Field
-            label="Start from"
-            hint={
-              mcpPresets.find((item) => item.id === presetId)?.hint ??
-              'Or leave blank and fill in below.'
-            }
-          >
-            <Select
-              value={presetId || 'custom'}
-              disabled={busy}
-              onValueChange={(value) => {
-                if (value === 'custom') {
-                  setPresetId('');
-                  setDraft(draftOf());
-                  return;
-                }
-                applyPreset(value);
-              }}
-              options={[
-                { value: 'custom', label: 'Custom server' },
-                ...mcpPresets.map((item) => ({ value: item.id, label: item.label })),
-              ]}
-            />
-          </Field>
-        )}
         <Field label="Name" hint="Lowercase letters, digits and underscore.">
           <input
             name="name"
@@ -199,10 +183,35 @@ export function McpForm({
               />
             )}
             {draft.auth === 'oauth' && (
-              <p className="note">
-                Save the server, then use <strong>Test the connection</strong> — it answers with the
-                link to sign in.
-              </p>
+              <>
+                <p className="note">
+                  Save the server, then use <strong>Test the connection</strong> — it answers with
+                  the link to sign in. Needs <code>JIAN_PUBLIC_URL</code>.
+                </p>
+                <Field
+                  label="OAuth client id"
+                  hint="Required when the auth server has no dynamic registration (for example GitHub Copilot MCP). Create an OAuth App whose callback is this gateway MCP OAuth callback, then paste the client id. Leave blank when the server registers Jian itself."
+                >
+                  <input
+                    value={draft.oauthClientId}
+                    autoComplete="off"
+                    placeholder="Iv1.… or OAuth App client id"
+                    onChange={(event) => change({ oauthClientId: event.target.value })}
+                  />
+                </Field>
+                <Field
+                  label="OAuth client secret"
+                  hint="Required by GitHub OAuth Apps. Public PKCE clients leave this blank."
+                >
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={draft.oauthClientSecret}
+                    placeholder={secretSaved ? 'Saved — leave blank to keep' : 'Client secret'}
+                    onChange={(event) => change({ oauthClientSecret: event.target.value })}
+                  />
+                </Field>
+              </>
             )}
           </>
         ) : (
@@ -243,7 +252,7 @@ export function McpForm({
   );
 }
 
-/** Name and value pairs, where a value already saved shows as kept rather than as empty. */
+/** Name and value pairs, where a value already stored shows as kept rather than as empty. */
 function ValueRows({
   label,
   hint,

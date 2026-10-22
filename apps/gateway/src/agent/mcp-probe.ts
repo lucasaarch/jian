@@ -3,7 +3,21 @@ import { GatewayError } from '../core/errors.js';
 import { createSafeFetch } from '../security/outbound.js';
 import type { Vault } from '../security/vault.js';
 import { connectMcp, MissingMcpValue } from './mcp-connect.js';
+import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
+
+/** Turns the SDK's DCR refusal into the action the owner must take on the MCP form. */
+export function clarifyOauthError(message: string): string {
+  if (/does not support dynamic client registration/i.test(message)) {
+    return (
+      'This auth server does not support dynamic client registration. ' +
+      'Create an OAuth App (or GitHub App), set its callback to this gateway MCP OAuth ' +
+      'callback, enter the client id (and secret if the app has one) on the MCP server, then try again.'
+    );
+  }
+
+  return message;
+}
 
 /**
  * Connects to one configured server and reports what it answered. This is the owner asking
@@ -33,7 +47,9 @@ export async function probeMcpServer(
       vault,
       fetcher: fetcher ?? (outbound?.fetch as typeof globalThis.fetch),
       signal: AbortSignal.timeout(20_000),
-      ...(server.auth === 'oauth' ? { authProvider: oauth?.(profile.id, server.name) } : {}),
+      ...(server.auth === 'oauth'
+        ? { authProvider: oauth?.(profile.id, server.name, mcpOauthClient(server)) }
+        : {}),
     });
 
     try {
@@ -55,7 +71,7 @@ export async function probeMcpServer(
       error instanceof MissingMcpValue
         ? error.detail
         : error instanceof Error
-          ? error.message
+          ? clarifyOauthError(error.message)
           : 'The server did not answer';
 
     return { name, reachable: false, tools: [], error: reason.slice(0, 300), checkedAt };

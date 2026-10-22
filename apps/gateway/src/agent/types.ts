@@ -6,8 +6,23 @@ import type { GatewayVault } from '../security/gateway-vault.js';
 import type { createSafeFetch } from '../security/outbound.js';
 import type { Vault } from '../security/vault.js';
 
-/** One provider per profile and server, built over whatever that sign-in already stored. */
-export type McpOAuthProviders = (profileId: string, server: string) => OAuthClientProvider;
+/** Pre-registered OAuth client when the authorization server has no registration endpoint. */
+export type McpOAuthClient = {
+  clientId: string;
+  /** Host env var that holds the client secret, when the owner did not type one into the vault. */
+  secretFromEnv?: string;
+};
+
+/**
+ * One provider per profile and server. A static `oauth` client is used when the authorization
+ * server has no dynamic registration endpoint; a typed secret is read from the vault by the
+ * provider itself.
+ */
+export type McpOAuthProviders = (
+  profileId: string,
+  server: string,
+  oauth?: McpOAuthClient,
+) => OAuthClientProvider;
 
 export type ModelResolver = (
   config: ModelConfig,

@@ -11203,6 +11203,11 @@ export interface operations {
                                 value?: string;
                                 fromEnv?: string;
                             }[];
+                            oauthClientId?: string;
+                            oauthClientSecret?: {
+                                value?: string;
+                                fromEnv?: string;
+                            };
                             /** @default [] */
                             disabledTools: string[];
                         }[];
@@ -11467,6 +11472,11 @@ export interface operations {
                                 value?: string;
                                 fromEnv?: string;
                             }[];
+                            oauthClientId?: string;
+                            oauthClientSecret?: {
+                                value?: string;
+                                fromEnv?: string;
+                            };
                             /** @default [] */
                             disabledTools: string[];
                         }[];
@@ -11725,6 +11735,11 @@ export interface operations {
                             value?: string;
                             fromEnv?: string;
                         }[];
+                        oauthClientId?: string;
+                        oauthClientSecret?: {
+                            value?: string;
+                            fromEnv?: string;
+                        };
                         /** @default [] */
                         disabledTools?: string[];
                     }[];
@@ -11873,6 +11888,11 @@ export interface operations {
                                 value?: string;
                                 fromEnv?: string;
                             }[];
+                            oauthClientId?: string;
+                            oauthClientSecret?: {
+                                value?: string;
+                                fromEnv?: string;
+                            };
                             /** @default [] */
                             disabledTools: string[];
                         }[];
@@ -12139,6 +12159,11 @@ export interface operations {
                                 value?: string;
                                 fromEnv?: string;
                             }[];
+                            oauthClientId?: string;
+                            oauthClientSecret?: {
+                                value?: string;
+                                fromEnv?: string;
+                            };
                             /** @default [] */
                             disabledTools: string[];
                         }[];
@@ -12490,6 +12515,11 @@ export interface operations {
                             value?: string;
                             fromEnv?: string;
                         }[];
+                        oauthClientId?: string;
+                        oauthClientSecret?: {
+                            value?: string;
+                            fromEnv?: string;
+                        };
                         /** @default [] */
                         disabledTools?: string[];
                     }[];
@@ -12633,6 +12663,11 @@ export interface operations {
                                 value?: string;
                                 fromEnv?: string;
                             }[];
+                            oauthClientId?: string;
+                            oauthClientSecret?: {
+                                value?: string;
+                                fromEnv?: string;
+                            };
                             /** @default [] */
                             disabledTools: string[];
                         }[];
@@ -13029,6 +13064,11 @@ export interface operations {
                                     value?: string;
                                     fromEnv?: string;
                                 }[];
+                                oauthClientId?: string;
+                                oauthClientSecret?: {
+                                    value?: string;
+                                    fromEnv?: string;
+                                };
                                 /** @default [] */
                                 disabledTools: string[];
                             }[];

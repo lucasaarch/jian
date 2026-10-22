@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { OAuthClientProvider } from '@ai-sdk/mcp';
+import type { OAuthClientInformation, OAuthClientProvider } from '@ai-sdk/mcp';
 import { mcpSecret } from '../profiles/service.js';
 import type { Vault } from '../security/vault.js';
+import { mcpOauthClientSecretKey } from './mcp-connect.js';
+import type { McpOAuthClient } from './types.js';
 
 /**
  * What one server's sign-in leaves behind: the tokens, the client the authorization server
@@ -23,6 +25,10 @@ const owner = (server: string) => `${mcpSecret(server)}:oauth`;
  * this for storage and for a place to send the owner. Everything it saves lands in the same
  * encrypted vault entry, so removing the server removes the sign-in with it.
  *
+ * When the authorization server has no `registration_endpoint` (GitHub Copilot MCP, and others
+ * that skip RFC 7591), the owner supplies a pre-registered client id (and optional secret).
+ * `clientInformation` returns those instead of attempting dynamic registration.
+ *
  * `redirectToAuthorization` does not open a browser: nothing here has one. It records the URL
  * for the panel to show, and the sign-in finishes when the owner comes back through the
  * callback route.
@@ -35,6 +41,9 @@ export class McpOAuth implements OAuthClientProvider {
     private readonly callbackUrl: string,
     /** Where a pending authorization URL is left for the panel to read. */
     private readonly pending: Map<string, string>,
+    /** Pre-registered client when the AS does not offer dynamic registration. */
+    private readonly oauth?: McpOAuthClient,
+    private readonly env: NodeJS.ProcessEnv = process.env,
   ) {}
 
   private async read(): Promise<Stored> {
@@ -94,8 +103,31 @@ export class McpOAuth implements OAuthClientProvider {
     return verifier;
   }
 
-  async clientInformation() {
-    return (await this.read()).client as never;
+  private async staticClientSecret(): Promise<string | undefined> {
+    if (this.oauth?.secretFromEnv) {
+      return this.env[this.oauth.secretFromEnv]?.trim() || undefined;
+    }
+
+    return this.vault.read(this.profileId, mcpOauthClientSecretKey(this.server));
+  }
+
+  async clientInformation(): Promise<OAuthClientInformation | undefined> {
+    const stored = (await this.read()).client as OAuthClientInformation | undefined;
+
+    if (stored) {
+      return stored;
+    }
+
+    if (!this.oauth?.clientId) {
+      return undefined;
+    }
+
+    const clientSecret = await this.staticClientSecret();
+
+    return {
+      client_id: this.oauth.clientId,
+      ...(clientSecret ? { client_secret: clientSecret } : {}),
+    };
   }
 
   async saveClientInformation(client: unknown) {

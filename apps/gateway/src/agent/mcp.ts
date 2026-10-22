@@ -5,6 +5,7 @@ import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { connectMcp, type SecretReader } from './mcp-connect.js';
 import { mcpClientDisconnected } from './mcp-errors.js';
+import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
 
 interface McpContext {
@@ -172,7 +173,9 @@ async function openServer(
       signal: AbortSignal.any([context.signal, AbortSignal.timeout(MCP_CONNECT_MS)]),
       lifetime: context.signal,
       ...(config.auth === 'oauth'
-        ? { authProvider: context.oauth?.(run.profileId, config.name) }
+        ? {
+            authProvider: context.oauth?.(run.profileId, config.name, mcpOauthClient(config)),
+          }
         : {}),
     });
 
