@@ -12,8 +12,10 @@ import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { Vault } from '../security/vault.js';
+import { objectiveAt } from '../sessions/objective.js';
 import type { SessionReader } from '../sessions/port.js';
-import type { Store } from '../storage/database.js';
+import { setSessionObjective } from '../sessions/repository.js';
+import type { Queryable, Store } from '../storage/database.js';
 import {
   detectPollWake,
   type GithubTokenSource,
@@ -46,7 +48,12 @@ function isExpired(subscription: Pick<Subscription, 'expiresAt'>, now: Date): bo
 }
 
 type RunSubmitter = {
-  submit(profileId: string, sessionId: string, input: unknown): Promise<Run>;
+  submit(
+    profileId: string,
+    sessionId: string,
+    input: unknown,
+    options?: { transaction?: Queryable },
+  ): Promise<Run>;
 };
 
 type Deliveries = {
@@ -159,6 +166,12 @@ export class Subscriptions {
         id: subscription.id,
       });
 
+      // Pause objective auto-continue while this listener waits — otherwise every empty
+      // poll interval the model restates "still pending" on the channel.
+      if (data.enabled) {
+        await this.pauseObjectiveForListening(tx, profileId, data.sessionId, data.name);
+      }
+
       // Webhook secret is optional acceleration; polling is the default path.
       return { ...subscription, webhookSecret: secret };
     });
@@ -198,6 +211,10 @@ export class Subscriptions {
         updatedAt: nowIso(this.clock),
       };
       await replaceSubscription(tx, next, row.secretHash);
+      // Re-enable only — a filter tweak mid-wait must not re-block an objective already resumed.
+      if (data.enabled === true) {
+        await this.pauseObjectiveForListening(tx, profileId, next.sessionId, next.name);
+      }
       return next;
     });
   }
@@ -215,6 +232,26 @@ export class Subscriptions {
   async history(profileId: string, id: string) {
     await assertFound(await findSubscription(this.store.db, profileId, id), 'Subscription');
     return listDeliveries(this.store.db, profileId, id);
+  }
+
+  private pauseObjectiveForListening(
+    tx: Queryable,
+    profileId: string,
+    sessionId: string,
+    listenerName: string,
+  ) {
+    return pauseObjectiveForListeningImpl(
+      this.sessions,
+      tx,
+      this.clock,
+      profileId,
+      sessionId,
+      listenerName,
+    );
+  }
+
+  private resumeObjectiveForListening(tx: Queryable, profileId: string, sessionId: string) {
+    return resumeObjectiveForListeningImpl(this.sessions, tx, this.clock, profileId, sessionId);
   }
 
   /**
@@ -335,19 +372,27 @@ export class Subscriptions {
       .join('\n');
 
     try {
-      const run = await this.runs.submit(subscription.profileId, subscription.sessionId, {
-        text,
-        requestKey: `subscription:${subscription.id}:${wake.deliveryKey}`,
-      });
+      const run = await this.store.transaction(subscription.profileId, async (tx) => {
+        // A real state change resumes work the create path paused.
+        await this.resumeObjectiveForListening(tx, subscription.profileId, subscription.sessionId);
 
-      await this.store.transaction(subscription.profileId, async (tx) => {
+        const submitted = await this.runs.submit(
+          subscription.profileId,
+          subscription.sessionId,
+          {
+            text,
+            requestKey: `subscription:${subscription.id}:${wake.deliveryKey}`,
+          },
+          { transaction: tx },
+        );
+
         await insertDelivery(tx, {
           id: randomUUID(),
           subscriptionId: subscription.id,
           profileId: subscription.profileId,
           deliveryKey: wake.deliveryKey,
           event: wake.event,
-          runId: run.id,
+          runId: submitted.id,
           createdAt: nowIso(this.clock),
         });
         await replaceSubscription(
@@ -357,12 +402,13 @@ export class Subscriptions {
             nextPollAt,
             lastObservation: wake.observation,
             lastWakeAt: nowIso(this.clock),
-            lastRunId: run.id,
+            lastRunId: submitted.id,
             lastError: undefined,
             updatedAt: nowIso(this.clock),
           },
           secretHash,
         );
+        return submitted;
       });
 
       await this.wakeDelivery?.deliverRun(subscription.profileId, subscription.sessionId, run.id);
@@ -435,19 +481,26 @@ export class Subscriptions {
       .join('\n');
 
     try {
-      const run = await this.runs.submit(subscription.profileId, subscription.sessionId, {
-        text,
-        requestKey: `subscription:${subscriptionId}:${deliveryId}`,
-      });
+      const run = await this.store.transaction(subscription.profileId, async (tx) => {
+        await this.resumeObjectiveForListening(tx, subscription.profileId, subscription.sessionId);
 
-      await this.store.transaction(subscription.profileId, async (tx) => {
+        const submitted = await this.runs.submit(
+          subscription.profileId,
+          subscription.sessionId,
+          {
+            text,
+            requestKey: `subscription:${subscriptionId}:${deliveryId}`,
+          },
+          { transaction: tx },
+        );
+
         await insertDelivery(tx, {
           id: randomUUID(),
           subscriptionId,
           profileId: subscription.profileId,
           deliveryKey: deliveryId,
           event,
-          runId: run.id,
+          runId: submitted.id,
           createdAt: nowIso(this.clock),
         });
         await replaceSubscription(
@@ -455,12 +508,13 @@ export class Subscriptions {
           {
             ...subscription,
             lastWakeAt: nowIso(this.clock),
-            lastRunId: run.id,
+            lastRunId: submitted.id,
             lastError: undefined,
             updatedAt: nowIso(this.clock),
           },
           row.secretHash,
         );
+        return submitted;
       });
 
       await this.wakeDelivery?.deliverRun(subscription.profileId, subscription.sessionId, run.id);
@@ -498,4 +552,51 @@ function header(
 ): string | undefined {
   const value = headers[name] ?? headers[name.toLowerCase()];
   return Array.isArray(value) ? value[0] : value;
+}
+
+/** Pause open-objective auto-continue while a listener waits for a GitHub transition. */
+async function pauseObjectiveForListeningImpl(
+  sessions: SessionReader,
+  tx: Queryable,
+  clock: Clock,
+  profileId: string,
+  sessionId: string,
+  listenerName: string,
+) {
+  const session = await sessions.session(profileId, sessionId, tx);
+  const objective = session.objective;
+  if (objective?.status !== 'open' || !objective.text) return;
+
+  await setSessionObjective(
+    tx,
+    profileId,
+    sessionId,
+    objectiveAt(objective.text, 'blocked', nowIso(clock), {
+      continuations: objective.continuations,
+      note: `Waiting for Listening (${listenerName}). The gateway wakes this conversation when the watched state changes.`,
+    }),
+  );
+}
+
+/** Resume an objective the Listening path paused — leave owner-blocked questions alone. */
+async function resumeObjectiveForListeningImpl(
+  sessions: SessionReader,
+  tx: Queryable,
+  clock: Clock,
+  profileId: string,
+  sessionId: string,
+) {
+  const session = await sessions.session(profileId, sessionId, tx);
+  const objective = session.objective;
+  if (objective?.status !== 'blocked' || !objective.text) return;
+  if (objective.note && !/Listening/i.test(objective.note)) return;
+
+  await setSessionObjective(
+    tx,
+    profileId,
+    sessionId,
+    objectiveAt(objective.text, 'open', nowIso(clock), {
+      continuations: 0,
+    }),
+  );
 }

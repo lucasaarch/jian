@@ -9,11 +9,12 @@ export const subscriptions: Skill = {
 A subscription is an instruction, a conversation, and a GitHub filter. The gateway **polls**
 GitHub on an interval (default every 30 seconds) and wakes this conversation **only when the
 watched state changes** (CI conclusion, PR merged/closed) — not on every poll tick. Unchanged
-polls stay silent. Do **not** message the channel that the watcher is "still active" or that
-CI is "still pending" while nothing changed — the gateway already handles that quietly.
+polls stay silent — no model turn, no channel message. Do **not** message the channel that
+the watcher is "still active" or that CI is "still pending" while nothing changed.
 Listeners **expire** (default 1 hour; set \`durationSeconds\` for 30 minutes, 1 hour, or 1 day).
-Keep or open a session objective so a real wake continues the work. Do **not** pause the
-objective for webhook configuration — polling is enough.
+Creating an enabled listener **blocks** an open session objective so auto-continue cannot spam
+"still pending"; a real wake reopens it. Do **not** pause the objective yourself only to wait
+for webhook configuration — polling is enough.
 
 The tools are in the \`subscriptions\` group; load it with \`load_tools\`:
 \`list_subscriptions\`, \`create_subscription\`, \`update_subscription\`, \`delete_subscription\`.
@@ -37,7 +38,7 @@ The tools are in the \`subscriptions\` group; load it with \`load_tools\`:
 - **sessionId** — omit it to wake this conversation.
 
 After creating one, tell the person you are watching and will continue when it finishes —
-once. Do not keep confirming the watcher on unchanged polls. Do not ask them to configure a
+**once**. Do not keep confirming the watcher on unchanged polls. Do not ask them to configure a
 repository webhook. A webhook secret may be returned for an optional faster path; ignore it
 unless they want that setup.
 
