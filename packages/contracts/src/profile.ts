@@ -131,14 +131,17 @@ export const mcpSchema = z
     args: z.array(z.string().max(400)).max(30).default([]),
     env: z.array(mcpValueSchema).max(20).default([]),
     /**
-     * Pre-registered OAuth client id when the authorization server has no
-     * `registration_endpoint` (RFC 7591). GitHub's Copilot MCP auth server is one such AS —
-     * create a GitHub OAuth App (or GitHub App) whose callback is this gateway's MCP OAuth
-     * callback, then put its client id here. Servers that support dynamic registration leave
-     * this empty.
+     * Advanced: pre-registered OAuth client id when the authorization server has no
+     * `registration_endpoint` (RFC 7591) and install-level credentials do not apply.
+     * GitHub Copilot MCP (`api.githubcopilot.com`) uses `JIAN_GITHUB_OAUTH_CLIENT_ID` /
+     * `JIAN_GITHUB_OAUTH_CLIENT_SECRET` on the gateway instead — leave this empty there.
+     * Servers that support dynamic registration also leave this empty.
      */
     oauthClientId: z.string().trim().min(1).max(200).optional(),
-    /** Optional secret for that client id. Required by GitHub OAuth Apps; public PKCE clients omit it. */
+    /**
+     * Advanced: optional secret for `oauthClientId`. Prefer install env for GitHub;
+     * public PKCE clients omit it.
+     */
     oauthClientSecret: mcpOauthClientSecretSchema.optional(),
     /** The server's own names of tools the owner switched off: the agent is never offered them. */
     disabledTools: z.array(z.string().min(1).max(200)).max(200).default([]),

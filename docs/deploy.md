@@ -127,7 +127,9 @@ An agent with the shell switch on works in its workspace under `/home/node/works
 | `JIAN_ALLOW_PRIVATE_ORIGINS` | no | empty | Exact private origins allowed for outbound calls, for example `http://127.0.0.1:11434`. |
 | `JIAN_CAVEMAN_ENABLED` | no | `false` | Set to `true` to route native OpenAI and Anthropic API-key model requests through Caveman. Otherwise provider calls remain direct. |
 | `JIAN_CAVEMAN_PROXY_URL` | no | `http://127.0.0.1:8788` | Exact proxy origin. The default starts the bundled listener when Caveman is enabled in the image; override it for a separately managed proxy. |
-| `JIAN_PUBLIC_URL` | no | — | Where the outside world reaches this gateway, over HTTPS. Telegram's webhook is registered there, rather than at whatever address the panel was opened on, and an MCP server that signs in with OAuth redirects the owner back to it; without it, that sign-in is unavailable. |
+| `JIAN_PUBLIC_URL` | no | — | Where the outside world reaches this gateway, over HTTPS. Telegram's webhook is registered there, rather than at whatever address the panel was opened on, and an MCP server that signs in with OAuth redirects the owner back to `{JIAN_PUBLIC_URL}/v1/mcp/oauth/callback`; without it, that sign-in is unavailable. |
+| `JIAN_GITHUB_OAUTH_CLIENT_ID` | no | — | Client id of one GitHub OAuth App (or GitHub App) for this install. Used when an MCP server at `https://api.githubcopilot.com/mcp/` signs in with OAuth and the panel did not supply a client id. Register the App callback as `{JIAN_PUBLIC_URL}/v1/mcp/oauth/callback`. |
+| `JIAN_GITHUB_OAUTH_CLIENT_SECRET` | no | — | Client secret for that GitHub OAuth App. Required by GitHub OAuth Apps; leave unset only for a public client that does not need one. |
 | `JIAN_WORKSPACES` | no | `$HOME/workspaces` | Where each profile's workspace is created, one directory per profile. |
 | `POSTGRES_PASSWORD` | Compose only | — | The PostgreSQL password in `compose.yaml`; it also builds the service's `DATABASE_URL`. |
 | `JIAN_VERSION` | Compose only | `latest` | The image tag `compose.yaml` uses. |

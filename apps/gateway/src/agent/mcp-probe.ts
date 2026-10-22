@@ -6,13 +6,15 @@ import { connectMcp, MissingMcpValue } from './mcp-connect.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
 
-/** Turns the SDK's DCR refusal into the action the owner must take on the MCP form. */
+/** Turns the SDK's DCR refusal into the action the owner must take. */
 export function clarifyOauthError(message: string): string {
   if (/does not support dynamic client registration/i.test(message)) {
     return (
       'This auth server does not support dynamic client registration. ' +
-      'Create an OAuth App (or GitHub App), set its callback to this gateway MCP OAuth ' +
-      'callback, enter the client id (and secret if the app has one) on the MCP server, then try again.'
+      'For GitHub Copilot MCP, set JIAN_GITHUB_OAUTH_CLIENT_ID and ' +
+      'JIAN_GITHUB_OAUTH_CLIENT_SECRET on the gateway (one OAuth App whose callback is ' +
+      '/v1/mcp/oauth/callback under JIAN_PUBLIC_URL), then try again. ' +
+      'Other servers: enter a client id under Advanced on the MCP server.'
     );
   }
 

@@ -3,7 +3,7 @@ import type { McpStatus, Profile } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
 import type { Vault } from '../security/vault.js';
 import { McpOAuth } from './mcp-oauth.js';
-import { mcpOauthClient } from './mcp-oauth-client.js';
+import { MCP_OAUTH_CALLBACK_PATH, mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
 
 /**
@@ -13,6 +13,9 @@ import type { McpOAuthProviders } from './types.js';
  * An authorization URL lives only in memory: it is one step of one sign-in, it expires on its
  * own, and a gateway that restarts mid-flow should ask the owner to start again rather than
  * resume something nobody is waiting on.
+ *
+ * The callback path is fixed for the whole install so one GitHub OAuth App (or any other
+ * pre-registered client) registers a single redirect URI under `JIAN_PUBLIC_URL`.
  */
 export class McpLogins {
   private readonly pending = new Map<string, string>();
@@ -22,25 +25,17 @@ export class McpLogins {
     /** The address the owner reaches this gateway on; the redirect has to come back to it. */
     private readonly publicUrl: string,
     private readonly fetcher: typeof globalThis.fetch = fetch,
+    private readonly env: NodeJS.ProcessEnv = process.env,
   ) {}
 
-  private callback(profileId: string, server: string): string {
-    return new URL(
-      `/v1/profiles/${profileId}/mcp-servers/${server}/oauth/callback`,
-      this.publicUrl,
-    ).toString();
+  /** One redirect URI for every MCP OAuth sign-in on this gateway. */
+  callbackUrl(): string {
+    return new URL(MCP_OAUTH_CALLBACK_PATH, this.publicUrl).toString();
   }
 
   /** Handed to the MCP client, which asks it for tokens and for somewhere to send the owner. */
   readonly provider: McpOAuthProviders = (profileId, server, oauth) =>
-    new McpOAuth(
-      this.vault,
-      profileId,
-      server,
-      this.callback(profileId, server),
-      this.pending,
-      oauth,
-    );
+    new McpOAuth(this.vault, profileId, server, this.callbackUrl(), this.pending, oauth, this.env);
 
   /** Where the owner has to go, if the last attempt decided they had to go somewhere. */
   authorizationUrl(profileId: string, server: string): string | undefined {
@@ -55,12 +50,15 @@ export class McpLogins {
       throw new GatewayError(404, 'MCP server not found');
     }
 
-    const result = await auth(this.provider(profile.id, server, mcpOauthClient(configured)), {
-      serverUrl: configured.url,
-      authorizationCode: code,
-      fetchFn: this.fetcher,
-      ...(state ? { callbackState: state } : {}),
-    });
+    const result = await auth(
+      this.provider(profile.id, server, mcpOauthClient(configured, this.env)),
+      {
+        serverUrl: configured.url,
+        authorizationCode: code,
+        fetchFn: this.fetcher,
+        ...(state ? { callbackState: state } : {}),
+      },
+    );
 
     if (result !== 'AUTHORIZED') {
       throw new GatewayError(409, 'The authorization server did not complete the sign-in');

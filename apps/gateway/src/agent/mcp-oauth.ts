@@ -3,6 +3,7 @@ import type { OAuthClientInformation, OAuthClientProvider } from '@ai-sdk/mcp';
 import { mcpSecret } from '../profiles/service.js';
 import type { Vault } from '../security/vault.js';
 import { mcpOauthClientSecretKey } from './mcp-connect.js';
+import { mcpOauthCallbackState } from './mcp-oauth-client.js';
 import type { McpOAuthClient } from './types.js';
 
 /**
@@ -26,12 +27,14 @@ const owner = (server: string) => `${mcpSecret(server)}:oauth`;
  * encrypted vault entry, so removing the server removes the sign-in with it.
  *
  * When the authorization server has no `registration_endpoint` (GitHub Copilot MCP, and others
- * that skip RFC 7591), the owner supplies a pre-registered client id (and optional secret).
- * `clientInformation` returns those instead of attempting dynamic registration.
+ * that skip RFC 7591), a static client comes from the install GitHub OAuth App env vars, or
+ * from an advanced per-server client id. `clientInformation` returns that instead of
+ * attempting dynamic registration.
  *
  * `redirectToAuthorization` does not open a browser: nothing here has one. It records the URL
  * for the panel to show, and the sign-in finishes when the owner comes back through the
- * callback route.
+ * fixed MCP OAuth callback. OAuth `state` carries profile and server so that one redirect URI
+ * works for every MCP server on the install.
  */
 export class McpOAuth implements OAuthClientProvider {
   constructor(
@@ -147,19 +150,24 @@ export class McpOAuth implements OAuthClientProvider {
   }
 
   async state() {
-    const state = randomUUID();
+    const nonce = randomUUID();
 
-    await this.write({ state });
+    await this.write({ state: nonce });
 
-    return state;
+    return mcpOauthCallbackState(this.profileId, this.server, nonce);
   }
 
   async saveState(state: string) {
-    await this.write({ state });
+    // The SDK may hand back the compound callback state; only the nonce is stored.
+    const nonce = state.includes('.') ? (state.split('.').at(-1) ?? state) : state;
+
+    await this.write({ state: nonce });
   }
 
   async storedState() {
-    return (await this.read()).state;
+    const nonce = (await this.read()).state;
+
+    return nonce ? mcpOauthCallbackState(this.profileId, this.server, nonce) : undefined;
   }
 
   /**

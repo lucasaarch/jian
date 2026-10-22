@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { McpLogins } from '../agent/mcp-login.js';
+import { MCP_OAUTH_CALLBACK_PATH, parseMcpOauthCallbackState } from '../agent/mcp-oauth-client.js';
 import { probeMcpServer } from '../agent/mcp-probe.js';
 import { GatewayError } from '../core/errors.js';
 import type { ProfileParams } from '../http/params.js';
@@ -74,12 +75,11 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteSe
     },
   );
 
-  // The authorization server redirects the owner's browser here, so the answer is a page.
-  app.get<{ Params: ProfileParams & { name: string }; Querystring: Record<string, string> }>(
-    '/v1/profiles/:profileId/mcp-servers/:name/oauth/callback',
+  // One callback for the install: the OAuth App registers this single path under JIAN_PUBLIC_URL.
+  // Profile and server travel in `state`, which the vault nonce still proves.
+  app.get<{ Querystring: Record<string, string> }>(
+    MCP_OAUTH_CALLBACK_PATH,
     async (request, reply) => {
-      const { profileId, name } = request.params;
-
       if (!deps.mcpLogins) {
         throw new GatewayError(503, 'MCP sign-in is not configured on this gateway');
       }
@@ -92,9 +92,24 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteSe
         return reply.type('text/html').send(page('Sign-in refused', request.query.error ?? ''));
       }
 
-      await deps.mcpLogins.complete(await deps.profiles.profile(profileId), name, code, state);
+      const parsed = parseMcpOauthCallbackState(state);
 
-      return reply.type('text/html').send(page(`${name} is connected`, 'You can close this tab.'));
+      if (!parsed) {
+        return reply
+          .type('text/html')
+          .send(page('Sign-in refused', 'This sign-in was not started here.'));
+      }
+
+      await deps.mcpLogins.complete(
+        await deps.profiles.profile(parsed.profileId),
+        parsed.server,
+        code,
+        state,
+      );
+
+      return reply
+        .type('text/html')
+        .send(page(`${parsed.server} is connected`, 'You can close this tab.'));
     },
   );
 }

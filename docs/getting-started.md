@@ -159,12 +159,13 @@ runs over HTTP or stdio. A remote catalogue is discovered on connection and sear
 `search_mcp_tools`; schemas reach the prompt only after `load_mcp_tools`. Large results
 become paginated artifacts, capped at 1 MB per result. HTTP MCP supports header auth and
 OAuth (OAuth needs `JIAN_PUBLIC_URL`). For GitHub's remote MCP
-(`https://api.githubcopilot.com/mcp/`), create a GitHub OAuth App (or GitHub App), set its
-callback to this gateway MCP OAuth callback, and enter the client id and secret on the MCP
-server — GitHub's auth server does not support dynamic client registration. Docker+PAT
-(`ghcr.io/github/github-mcp-server`) remains an alternative. With `allowShell`, the agent can
-also use `gh` once authenticated in the profile workspace — see `docs/gateway-ui.md` and
-`docs/deploy.md`.
+(`https://api.githubcopilot.com/mcp/`), set `JIAN_GITHUB_OAUTH_CLIENT_ID` and
+`JIAN_GITHUB_OAUTH_CLIENT_SECRET` on the gateway for one GitHub OAuth App whose callback is
+`{JIAN_PUBLIC_URL}/v1/mcp/oauth/callback`, then in the panel paste the URL, choose OAuth, save,
+and sign in — GitHub's auth server does not support dynamic client registration, and the panel
+does not ask for client credentials. Docker+PAT (`ghcr.io/github/github-mcp-server`) remains an
+alternative. With `allowShell`, the agent can also use `gh` once authenticated in the profile
+workspace — see `docs/gateway-ui.md` and `docs/deploy.md`.
 
 ## Verification
 

@@ -61,6 +61,10 @@ const config = z
     // Where a browser reaches this gateway. An MCP authorization server redirects the owner
     // back to it, so it has to be the public address rather than the listening one.
     JIAN_PUBLIC_URL: z.url().optional(),
+    // One GitHub OAuth App for the install: Copilot MCP and similar AS hosts without DCR.
+    // The panel never asks for these; register callback `{JIAN_PUBLIC_URL}/v1/mcp/oauth/callback`.
+    JIAN_GITHUB_OAUTH_CLIENT_ID: z.string().min(1).optional(),
+    JIAN_GITHUB_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
   })
   .safeParse(process.env);
 

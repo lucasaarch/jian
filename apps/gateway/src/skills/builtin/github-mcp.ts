@@ -16,11 +16,11 @@ with \`load_mcp_tools\` before calling.
 
 ## Auth modes the owner may have configured
 
-- **HTTP + OAuth** (\`https://api.githubcopilot.com/mcp/\`) — the owner creates a GitHub OAuth App
-  (or GitHub App), sets its callback to this gateway MCP OAuth callback, enters the client id
-  and secret on the MCP server, then signs in from the panel (\`JIAN_PUBLIC_URL\` required).
-  Preferred: validation errors usually include field detail. GitHub's auth server does not
-  support dynamic client registration.
+- **HTTP + OAuth** (\`https://api.githubcopilot.com/mcp/\`) — the gateway has
+  \`JIAN_GITHUB_OAUTH_CLIENT_ID\` / \`JIAN_GITHUB_OAUTH_CLIENT_SECRET\` for one GitHub OAuth App
+  (callback \`{JIAN_PUBLIC_URL}/v1/mcp/oauth/callback\`); the owner pastes the URL, chooses OAuth,
+  and signs in from the panel. Preferred: validation errors usually include field detail.
+  GitHub's auth server does not support dynamic client registration.
 - **stdio + PAT** — a local process with \`GITHUB_PERSONAL_ACCESS_TOKEN\`. Prefer the official
   image \`ghcr.io/github/github-mcp-server\` (Docker). The archived npm package
   \`@modelcontextprotocol/server-github\` often returns only "Validation Failed" on
