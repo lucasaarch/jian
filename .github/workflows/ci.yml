@@ -65,3 +65,33 @@ jobs:
       - run: pnpm run test:integration
       - run: docker build -t jian:ci .
       - run: make image-test-display IMAGE=jian VERSION=ci
+      - name: Check out pinned Lemon render fixture
+        uses: actions/checkout@v4
+        with:
+          repository: lucasaarch/lemon
+          ref: a5c716a263b67c0ce51ecb47e81251bf4439ec2e
+          path: .lemon-smoke
+          persist-credentials: false
+      - name: Build and render the actual Lemon counter in the image
+        timeout-minutes: 20
+        run: |
+          mkdir -p "$RUNNER_TEMP/lemon-display"
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e HOME=/home/node/lemon \
+            -v "$GITHUB_WORKSPACE/.lemon-smoke:/home/node/lemon" \
+            -v "$GITHUB_WORKSPACE/apps/gateway/test-display.py:/usr/local/libexec/test-display.py:ro" \
+            -v "$RUNNER_TEMP/lemon-display:/artifacts" \
+            --entrypoint bash jian:ci -euo pipefail -c '
+              cd "$HOME"
+              cargo build --locked --example counter 2>&1 | tee /artifacts/build.log
+              python3 /usr/local/libexec/test-display.py \
+                --lemon "$HOME/target/debug/examples/counter" /artifacts \
+                2>&1 | tee /artifacts/test.log
+            '
+      - name: Preserve Lemon render evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lemon-display
+          path: ${{ runner.temp }}/lemon-display
+          if-no-files-found: warn

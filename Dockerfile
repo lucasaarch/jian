@@ -81,7 +81,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       git openssh-client curl wget rsync \
       chromium xvfb xauth x11-utils x11-apps mesa-utils vulkan-tools \
       libgl1-mesa-dri libegl1 libglx-mesa0 mesa-vulkan-drivers \
-      libx11-dev libgl-dev \
+      libx11-dev libgl-dev libxcursor1 libxi6 libxrandr2 libxkbcommon-x11-0 \
+      fonts-dejavu-core \
       jq ripgrep fd-find gawk sed grep diffutils patch file tree less nano vim-tiny \
       zip unzip xz-utils bzip2 zstd \
       procps psmisc lsof iproute2 iputils-ping dnsutils netcat-openbsd \

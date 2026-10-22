@@ -3,11 +3,14 @@
 
 Fails, rather than skips, when Landlock or graphics dependencies are unavailable.
 The outer harness creates synthetic profiles, using the production filesystem grants.
+For a prebuilt Lemon counter: test-display.py --lemon BINARY ARTIFACT_DIRECTORY.
+Compile outside the sandbox/display deadline; this mode never downloads or builds.
 """
 
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import socket
@@ -16,6 +19,9 @@ import sys
 import tempfile
 import time
 import unittest
+
+LEMON_BINARY = None
+LEMON_ARTIFACTS = None
 
 RENDERER = r'''
 #include <GL/gl.h>
@@ -58,14 +64,68 @@ def checked(args, **kwargs):
     return subprocess.run(args, check=True, timeout=30, **kwargs)
 
 
-def screenshot():
-    image = Path.home() / "screen.xwd"
-    checked(["xwd", "-root", "-silent", "-out", str(image)])
+def screenshot(window=None, width=1280, height=720, name="screen"):
+    image = Path.home() / f"{name}.xwd"
+    # xwd uses XGetImage, not MIT-SHM (which the wrapper disables).
+    target = ["-id", window] if window else ["-root"]
+    checked(["xwd", *target, "-silent", "-out", str(image)])
     pixels = checked(["ffmpeg", "-v", "error", "-i", str(image), "-frames:v", "1",
                       "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
                      stdout=subprocess.PIPE).stdout
-    assert len(pixels) == 1280 * 720 * 3
+    assert len(pixels) == width * height * 3, "Unexpected screenshot dimensions"
     return pixels
+
+
+def lemon_pixel_counts(pixels):
+    assert len(pixels) == 520 * 320 * 3
+    bright = sum(min(pixels[(y * 520 + x) * 3:(y * 520 + x) * 3 + 3]) > 180
+                 for y in range(24, 146) for x in range(24, 496))
+    black = sum(max(pixels[i:i + 3]) < 16 for i in range(0, len(pixels), 3))
+    return bright, black
+
+
+def lemon_render():
+    home = Path.home()
+    env = dict(os.environ, WINIT_X11_SCALE_FACTOR="1", WGPU_BACKEND="vulkan",
+               WGPU_ADAPTER_NAME="llvmpipe", LEMON_DEBUG="layout,paint", RUST_BACKTRACE="1")
+    for key in ("WAYLAND_DISPLAY", "WAYLAND_SOCKET"):
+        env.pop(key, None)
+    # The wrapper already selects the installed lavapipe ICD and private runtime/cache.
+    with (home / "lemon.log").open("w") as log:
+        app = subprocess.Popen([str(home / "counter")], env=env, stdout=log, stderr=log)
+    try:
+        deadline = time.monotonic() + 60  # First-use lavapipe shader warmup.
+        while True:
+            assert app.poll() is None, "Lemon exited unexpectedly; see lemon.log"
+            tree = checked(["xwininfo", "-root", "-tree"], stdout=subprocess.PIPE).stdout.decode()
+            window = re.search(r'(0x[0-9a-fA-F]+) "Lemon — counter"', tree)
+            if window:
+                window_id = window.group(1)
+                info = checked(["xwininfo", "-id", window_id], stdout=subprocess.PIPE).stdout.decode()
+                assert re.search(r"Width: 520\b", info) and re.search(r"Height: 320\b", info), info
+                pixels = screenshot(window_id, 520, 320, "lemon")
+                # Preserve the last captured frame even if layout/pixel assertions time out.
+                checked(["ffmpeg", "-v", "error", "-y", "-i", str(home / "lemon.xwd"),
+                         "-frames:v", "1", str(home / "lemon.png")])
+                bright, black = lemon_pixel_counts(pixels)
+                trace = (home / "lemon.log").read_text()
+                if (bright > 100 and black > 1000 and "layout_pass ok" in trace
+                        and re.search(r"paint_pass[^\n]*glyphs=[1-9][0-9]*\b", trace)):
+                    assert app.poll() is None, "Lemon exited during capture"
+                    print(f"Lemon 520x320 Vulkan/X11 render: {bright} bright text pixels, "
+                          f"{black} black background pixels; layout and glyph paint passed", flush=True)
+                    return
+            assert time.monotonic() < deadline, "Lemon render timed out; see lemon.log/lemon.png"
+            time.sleep(0.25)
+    finally:
+        # Expected TERM is cleanup, not evidence of successful application completion.
+        if app.poll() is None:
+            app.terminate()
+        try:
+            app.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            app.kill()
+            app.wait(timeout=5)
 
 
 def inside(mode):
@@ -86,6 +146,10 @@ def inside(mode):
     wrapper = os.getppid()
     children = Path(f"/proc/{wrapper}/task/{wrapper}/children").read_text().split()
     server = next(int(pid) for pid in children if int(pid) != os.getpid())
+    if mode == "lemon":
+        (home / "server.json").write_text(json.dumps({"server": server, "display": os.environ["DISPLAY"]}))
+        lemon_render()
+        return
     if mode == "hold":
         (home / "ready.json").write_text(json.dumps({
             "display": os.environ["DISPLAY"], "auth": os.environ["XAUTHORITY"],
@@ -179,8 +243,8 @@ class DisplaySmoke(unittest.TestCase):
         self.children.append(process)
         return process
 
-    def wait(self, process, home, expected=0):
-        result = process.wait(timeout=25)
+    def wait(self, process, home, expected=0, timeout=25):
+        result = process.wait(timeout=timeout)
         logs = "\n".join(p.read_text() for p in home.glob("log-*.txt"))
         self.assertEqual(result, expected, logs)
         self.assertFalse(list(home.glob(".jian-display-*")), logs)
@@ -196,6 +260,28 @@ class DisplaySmoke(unittest.TestCase):
                     p.read_text() for p in home.glob("log-*.txt")))
             time.sleep(0.05)
         return process, json.loads((home / "ready.json").read_text())
+
+    def test_lemon_counter(self):
+        if LEMON_BINARY is None:
+            self.skipTest("Use --lemon BINARY ARTIFACT_DIRECTORY for pinned Lemon proof")
+        home = self.profile("lemon")
+        shutil.copy2(LEMON_BINARY, home / "counter")
+        try:
+            process = self.start(home, ["jian-display", "--", "python3", str(home / "test.py"),
+                                        "--inside", "lemon"], {"JIAN_DISPLAY_TIMEOUT_SECONDS": "110"})
+            print(self.wait(process, home, timeout=115), flush=True)
+            self.assertGreater((home / "lemon.png").stat().st_size, 1000)
+            details = json.loads((home / "server.json").read_text())
+            self.assertFalse(Path(f"/proc/{details['server']}").exists(), "Xvfb survived wrapper")
+            with socket.socket(socket.AF_UNIX) as client:
+                self.assertNotEqual(client.connect_ex("\0/tmp/.X11-unix/X" +
+                                                     details["display"][1:]), 0)
+        finally:
+            # Outside Landlock: export only diagnostic files, never the Xauthority cookie.
+            LEMON_ARTIFACTS.mkdir(parents=True, exist_ok=True)
+            for pattern in ("lemon.*", "log-*.txt", "server.json"):
+                for path in home.glob(pattern):
+                    shutil.copy2(path, LEMON_ARTIFACTS / path.name)
 
     def test_render_and_capture(self):
         home = self.profile("render")
@@ -260,5 +346,9 @@ class DisplaySmoke(unittest.TestCase):
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "--inside":
         inside(sys.argv[2])
+    elif len(sys.argv) == 4 and sys.argv[1] == "--lemon":
+        LEMON_BINARY = Path(sys.argv[2]).resolve(strict=True)
+        LEMON_ARTIFACTS = Path(sys.argv[3]).resolve()
+        unittest.main(argv=[sys.argv[0], "DisplaySmoke.test_lemon_counter"], verbosity=2)
     else:
         unittest.main(verbosity=2)
