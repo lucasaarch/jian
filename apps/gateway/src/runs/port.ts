@@ -21,6 +21,8 @@ export type SubmitOptions = {
   author?: { id: string; name?: string };
   subagent?: Subagent;
   transaction?: Queryable;
+  /** Revalidate channel authority under the submission lock, after catalog/network work. */
+  beforeSubmit?: (tx: Queryable) => Promise<void>;
 };
 
 export interface RunReader {
@@ -35,6 +37,7 @@ export interface RunWriter extends RunReader {
     input: unknown,
     options?: SubmitOptions,
   ): Promise<Run>;
+  cancel(profileId: string, runId: string, transaction?: Queryable): Promise<Run>;
   relayTo(profileId: string, runId: string, sessionId: string | null): Promise<void>;
 }
 

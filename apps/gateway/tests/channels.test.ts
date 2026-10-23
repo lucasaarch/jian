@@ -72,6 +72,218 @@ function webhook(secret: string): ChannelRequest {
 }
 
 describe('Telegram transport', () => {
+  it('does not call the adapter when channel automation pauses and resumes during media read', async () => {
+    const f = await setup(async () => Response.json({ ok: true, result: { message_id: 5 } }));
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let dispatch: Promise<void> | undefined;
+    let read: ReturnType<typeof vi.spyOn> | undefined;
+    const send = vi.spyOn(TelegramChannel.prototype, 'send');
+
+    try {
+      await f.channels.receive(f.channel.id, webhook(f.channel.webhookToken));
+      const [pending] = await f.channels.contacts(f.profile.id);
+      if (!pending) throw new Error('Contact request missing');
+      await f.channels.approveContact(f.profile.id, pending.id);
+      const [run] = await f.services.runs.activities(f.profile.id);
+      if (!run) throw new Error('Run missing');
+      await f.services.lifecycle.claim(run.id, f.profile.id, 'worker');
+      await f.services.lifecycle.finish(f.profile.id, run.id, 'worker', 'completed', 'Done');
+      await f.channels.dispatch();
+      send.mockClear();
+
+      await f.services.media.sendFile(
+        run,
+        { source: 'content', content: 'Attachment', name: 'reply.txt' },
+        'media-read-pause',
+      );
+      const originalRead = f.services.media.read.bind(f.services.media);
+      read = vi.spyOn(f.services.media, 'read').mockImplementation(async (...args) => {
+        const media = await originalRead(...args);
+        await gate;
+        return media;
+      });
+      dispatch = f.channels.dispatch();
+      await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+
+      await f.channels.update(f.profile.id, f.channel.id, { enabled: false });
+      await f.channels.update(f.profile.id, f.channel.id, { enabled: true });
+      release();
+      await dispatch;
+      await f.channels.dispatch();
+
+      expect(send).not.toHaveBeenCalled();
+      const media = (await f.channels.deliveries(f.profile.id)).filter((item) => item.mediaId);
+      expect(media).toHaveLength(1);
+      expect(media[0]).toMatchObject({ status: 'failed', remoteMessageIds: [] });
+    } finally {
+      release();
+      await dispatch;
+      read?.mockRestore();
+      send.mockRestore();
+      await f.channels.stop();
+      await f.app.close();
+    }
+  });
+
+  it('rejects late media and errands from a cancelled source run after resume', async () => {
+    const f = await setup(async () => Response.json({ ok: true, result: { message_id: 5 } }));
+    const send = vi.spyOn(TelegramChannel.prototype, 'send');
+    try {
+      await f.channels.receive(f.channel.id, webhook(f.channel.webhookToken));
+      const [pending] = await f.channels.contacts(f.profile.id);
+      if (!pending) throw new Error('Contact request missing');
+      const contact = await f.channels.approveContact(f.profile.id, pending.id);
+      const [run] = await f.services.runs.activities(f.profile.id);
+      if (!run || !contact.sessionId) throw new Error('Contact run missing');
+      await f.services.lifecycle.claim(run.id, f.profile.id, 'worker');
+      await f.channels.update(f.profile.id, f.channel.id, { enabled: false });
+      expect(await f.services.runs.run(f.profile.id, run.id)).toMatchObject({
+        status: 'cancelled',
+      });
+      await f.channels.update(f.profile.id, f.channel.id, { enabled: true });
+      await f.channels.dispatch();
+      send.mockClear();
+
+      // These calls already started in the worker, but only persist their output after resume.
+      await f.services.media.sendFile(
+        run,
+        { source: 'content', content: 'Late attachment', name: 'late.txt' },
+        'cancelled-late-file',
+      );
+      await f.services.errands.write(
+        f.profile.id,
+        contact.sessionId,
+        run.id,
+        'Late errand',
+        'cancelled-late-errand',
+      );
+      await f.channels.dispatch();
+      await f.channels.dispatch();
+
+      const late = (await f.channels.deliveries(f.profile.id)).filter(
+        (item) => item.mediaId || item.notice === 'Late errand',
+      );
+      expect(late).toHaveLength(2);
+      for (const delivery of late) {
+        expect(delivery).toMatchObject({
+          sourceRunId: run.id,
+          status: 'failed',
+          remoteMessageIds: [],
+          error: 'The source run was cancelled',
+        });
+      }
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      send.mockRestore();
+      await f.channels.stop();
+      await f.app.close();
+    }
+  });
+
+  it('invalidates completed work created during a pause and does not invalidate an idempotent resume', async () => {
+    const f = await setup(async () => Response.json({ ok: true, result: { message_id: 5 } }));
+    const send = vi.spyOn(TelegramChannel.prototype, 'send');
+    try {
+      await f.channels.receive(f.channel.id, webhook(f.channel.webhookToken));
+      const [pending] = await f.channels.contacts(f.profile.id);
+      if (!pending) throw new Error('Missing contact');
+      const contact = await f.channels.approveContact(f.profile.id, pending.id);
+      if (!contact.sessionId) throw new Error('Missing conversation');
+      await f.channels.update(f.profile.id, f.channel.id, { enabled: false });
+      const during = await f.services.runs.submit(f.profile.id, contact.sessionId, {
+        text: 'A schedule fired during the pause',
+        requestKey: 'scheduled-while-paused',
+      });
+      await f.services.lifecycle.claim(during.id, f.profile.id, 'worker');
+      await f.services.lifecycle.finish(
+        f.profile.id,
+        during.id,
+        'worker',
+        'completed',
+        'Old scheduled answer',
+      );
+      await f.channels.deliverRun(f.profile.id, contact.sessionId, during.id);
+      await f.channels.update(f.profile.id, f.channel.id, { enabled: true });
+      await f.channels.dispatch();
+      expect(send).not.toHaveBeenCalled();
+      expect(
+        (await f.channels.deliveries(f.profile.id)).find((d) => d.runId === during.id),
+      ).toMatchObject({ status: 'failed', error: 'Delivery predates an automation pause' });
+      await f.channels.receive(f.channel.id, {
+        ...webhook(f.channel.webhookToken),
+        payload: later,
+      });
+      const [fresh] = await f.services.runs.activities(f.profile.id);
+      if (!fresh) throw new Error('Missing fresh run');
+      await f.channels.update(f.profile.id, f.channel.id, { enabled: true });
+      expect((await f.services.runs.run(f.profile.id, fresh.id)).status).toBe('queued');
+      await f.services.lifecycle.claim(fresh.id, f.profile.id, 'worker');
+      await f.services.lifecycle.finish(
+        f.profile.id,
+        fresh.id,
+        'worker',
+        'completed',
+        'Fresh answer',
+      );
+      await f.channels.dispatch();
+      expect(send).toHaveBeenCalledOnce();
+    } finally {
+      send.mockRestore();
+      await f.channels.stop();
+      await f.app.close();
+    }
+  });
+
+  it('pauses automation without rotating its webhook or delivering queued notices after resume', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ ok: true, result: { message_id: 5 } }),
+    );
+    const f = await setup(fetcher);
+    try {
+      expect(f.channel.enabled).toBe(true);
+      await f.channels.receive(f.channel.id, webhook(f.channel.webhookToken));
+      const [pending] = await f.channels.contacts(f.profile.id);
+      expect(pending?.status).toBe('pending');
+      const secret = await f.services.vault.read(f.profile.id, `channel:${f.channel.id}`);
+      await f.channels.update(f.profile.id, f.channel.id, { enabled: false });
+      expect(
+        await f.channels.receive(f.channel.id, {
+          ...webhook(f.channel.webhookToken),
+          payload: later,
+        }),
+      ).toEqual({ accepted: false });
+      await f.channels.update(f.profile.id, f.channel.id, { enabled: true });
+      await f.channels.dispatch();
+      expect(fetcher).not.toHaveBeenCalled();
+      expect((await f.channels.deliveries(f.profile.id))[0]?.status).toBe('failed');
+      expect(await f.services.vault.read(f.profile.id, `channel:${f.channel.id}`)).toBe(secret);
+      const restored = new Channels(
+        f.services,
+        fetch,
+        new ChannelRegistry([new ApiChannel(), new TelegramChannel()]),
+      );
+      try {
+        expect((await restored.list(f.profile.id))[0]).toMatchObject({
+          enabled: true,
+          id: f.channel.id,
+        });
+        const accepted = await restored.receive(f.channel.id, {
+          ...webhook(f.channel.webhookToken),
+          payload: later,
+        });
+        expect(accepted).toMatchObject({ accepted: false, contact: 'pending' });
+      } finally {
+        await restored.stop();
+      }
+    } finally {
+      await f.channels.stop();
+      await f.app.close();
+    }
+  });
+
   it('connects one channel per type and frees the type again after disconnecting', async () => {
     const f = await setup(async () => Response.json({ ok: true }));
 

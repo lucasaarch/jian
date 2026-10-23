@@ -128,6 +128,7 @@ export class Errands {
 
     await insertDelivery(tx, {
       id,
+      sourceRunId: runId,
       profileId,
       channelId: contact.channelId,
       chatId: contact.chatId,

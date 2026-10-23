@@ -11821,6 +11821,10 @@
                         "api"
                       ]
                     },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "allowAllContacts": {
                       "default": false,
                       "type": "boolean"
@@ -11856,6 +11860,7 @@
                     "id",
                     "profileId",
                     "type",
+                    "enabled",
                     "allowAllContacts",
                     "createdAt",
                     "webhookToken"
@@ -12087,6 +12092,10 @@
                           "api"
                         ]
                       },
+                      "enabled": {
+                        "default": true,
+                        "type": "boolean"
+                      },
                       "allowAllContacts": {
                         "default": false,
                         "type": "boolean"
@@ -12113,6 +12122,7 @@
                       "id",
                       "profileId",
                       "type",
+                      "enabled",
                       "allowAllContacts",
                       "createdAt"
                     ],
@@ -12336,6 +12346,18 @@
                   {
                     "type": "object",
                     "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "enabled"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
                       "allowAllContacts": {
                         "type": "boolean"
                       }
@@ -12418,6 +12440,10 @@
                         "api"
                       ]
                     },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "allowAllContacts": {
                       "default": false,
                       "type": "boolean"
@@ -12444,6 +12470,7 @@
                     "id",
                     "profileId",
                     "type",
+                    "enabled",
                     "allowAllContacts",
                     "createdAt"
                   ],
@@ -12682,6 +12709,10 @@
                         "api"
                       ]
                     },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "allowAllContacts": {
                       "default": false,
                       "type": "boolean"
@@ -12708,6 +12739,7 @@
                     "id",
                     "profileId",
                     "type",
+                    "enabled",
                     "allowAllContacts",
                     "createdAt"
                   ],
@@ -12975,6 +13007,10 @@
                           "blocked"
                         ]
                       },
+                      "aiEnabled": {
+                        "default": true,
+                        "type": "boolean"
+                      },
                       "sessionId": {
                         "type": "string",
                         "format": "uuid",
@@ -13010,11 +13046,346 @@
                       "actorId",
                       "chatId",
                       "status",
+                      "aiEnabled",
                       "createdAt",
                       "updatedAt"
                     ],
                     "additionalProperties": false
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profileId}/contacts/{id}": {
+      "patch": {
+        "operationId": "updateContact",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Required permission: admin.",
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "aiEnabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "aiEnabled"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "profileId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "channelId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "whatsapp",
+                        "whatsapp-business",
+                        "telegram",
+                        "api"
+                      ]
+                    },
+                    "scope": {
+                      "default": "direct",
+                      "type": "string",
+                      "enum": [
+                        "direct",
+                        "group"
+                      ]
+                    },
+                    "actorId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "chatId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "displayName": {
+                      "type": "string",
+                      "maxLength": 100
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "blocked"
+                      ]
+                    },
+                    "aiEnabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "sessionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "message": {
+                      "description": "The message held until the owner decides.",
+                      "type": "string",
+                      "maxLength": 8000
+                    },
+                    "avatar": {
+                      "description": "The picture the contact or group uses on its channel, as a data URL.",
+                      "type": "string",
+                      "maxLength": 200000
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "profileId",
+                    "channelId",
+                    "type",
+                    "scope",
+                    "actorId",
+                    "chatId",
+                    "status",
+                    "aiEnabled",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -13286,6 +13657,10 @@
                         "blocked"
                       ]
                     },
+                    "aiEnabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "sessionId": {
                       "type": "string",
                       "format": "uuid",
@@ -13321,6 +13696,7 @@
                     "actorId",
                     "chatId",
                     "status",
+                    "aiEnabled",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -13596,6 +13972,10 @@
                         "blocked"
                       ]
                     },
+                    "aiEnabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "sessionId": {
                       "type": "string",
                       "format": "uuid",
@@ -13631,6 +14011,7 @@
                     "actorId",
                     "chatId",
                     "status",
+                    "aiEnabled",
                     "createdAt",
                     "updatedAt"
                   ],

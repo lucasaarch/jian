@@ -8,6 +8,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  ne,
   or,
   sql,
 } from 'drizzle-orm';
@@ -39,7 +40,9 @@ export function toChannel(row: ChannelRow & { metaConfigured?: boolean }): Chann
       id: row.id,
       profileId: row.profileId,
       type: row.type,
-      allowAllContacts: row.type === 'whatsapp' && row.allowAllContacts,
+      allowAllContacts:
+        ['whatsapp', 'whatsapp-business'].includes(row.type) && row.allowAllContacts,
+      enabled: row.enabled,
       ...(row.type === 'whatsapp-business' && row.metaConfigured !== undefined
         ? { whatsappBusinessStatus: row.metaConfigured ? 'configured' : 'pending' }
         : {}),
@@ -47,6 +50,7 @@ export function toChannel(row: ChannelRow & { metaConfigured?: boolean }): Chann
       ...(row.revokedAt ? { revokedAt: row.revokedAt.toISOString() } : {}),
     }),
     tokenHash: row.webhookTokenHash ?? '',
+    ...(row.automationPausedAt ? { automationPausedAt: row.automationPausedAt.toISOString() } : {}),
     ...(row.address ? { address: row.address } : {}),
     ...(row.handle ? { handle: row.handle } : {}),
   };
@@ -134,6 +138,8 @@ export async function insertChannel(db: Queryable, record: ChannelRecord): Promi
     handle: record.handle ?? null,
     webhookTokenHash: record.tokenHash,
     allowAllContacts: record.allowAllContacts,
+    enabled: record.enabled,
+    automationPausedAt: record.automationPausedAt ? new Date(record.automationPausedAt) : null,
     createdAt: new Date(record.createdAt),
     revokedAt: record.revokedAt ? new Date(record.revokedAt) : null,
   });
@@ -145,6 +151,18 @@ export async function setAllowAllContacts(
   value: boolean,
 ): Promise<void> {
   await db.update(channels).set({ allowAllContacts: value }).where(eq(channels.id, id));
+}
+
+export async function setChannelEnabled(
+  db: Queryable,
+  id: string,
+  enabled: boolean,
+): Promise<void> {
+  await db
+    .update(channels)
+    // Advancing on resume also invalidates work created by a schedule during the pause.
+    .set({ enabled, automationPausedAt: new Date() })
+    .where(and(eq(channels.id, id), ne(channels.enabled, enabled)));
 }
 
 /** Written unconditionally, as before: revoking twice carries the second instant. */
@@ -172,6 +190,7 @@ export function toContact(row: ContactRow, type: ChannelType): ContactRecord {
       chatId: row.chatId,
       ...(row.title ? { displayName: row.title } : {}),
       status: row.status,
+      aiEnabled: row.aiEnabled,
       ...(row.sessionId ? { sessionId: row.sessionId } : {}),
       ...(typeof row.heldMessage === 'string' ? { message: row.heldMessage } : {}),
       ...(row.avatar ? { avatar: row.avatar } : {}),
@@ -179,6 +198,7 @@ export function toContact(row: ContactRow, type: ChannelType): ContactRecord {
       updatedAt: row.updatedAt.toISOString(),
     }),
     ...(row.heldMessageId ? { requestKey: row.heldMessageId } : {}),
+    ...(row.aiPausedAt ? { aiPausedAt: row.aiPausedAt.toISOString() } : {}),
     agentTurns: row.agentTurns,
     seen: row.seen,
     ...(row.avatarCheckedAt ? { avatarCheckedAt: row.avatarCheckedAt.toISOString() } : {}),
@@ -208,6 +228,8 @@ function toContactRow(contact: ContactRecord): typeof contacts.$inferInsert {
     actorId: contact.actorId,
     title: contact.displayName ?? null,
     status: contact.status,
+    aiEnabled: contact.aiEnabled,
+    aiPausedAt: contact.aiPausedAt ? new Date(contact.aiPausedAt) : null,
     sessionId: contact.sessionId ?? null,
     heldMessage: contact.message ?? null,
     heldMessageId: contact.requestKey ?? null,
@@ -273,6 +295,17 @@ export async function findContactByIdentity(
     )
     .limit(1);
 
+  return row ? toContact(row.contact, row.type) : null;
+}
+
+export async function findContactByChat(
+  db: Queryable,
+  channelId: string,
+  chatId: string,
+): Promise<ContactRecord | null> {
+  const [row] = await contactQuery(db)
+    .where(and(eq(contacts.channelId, channelId), eq(contacts.chatId, chatId)))
+    .limit(1);
   return row ? toContact(row.contact, row.type) : null;
 }
 
@@ -365,6 +398,7 @@ export function toDelivery(row: DeliveryRow): DeliveryRecord {
       saidCount: row.saidCount,
     }),
     ...(row.inboundEventId ? { inboundEventId: row.inboundEventId } : {}),
+    ...(row.sourceRunId ? { sourceRunId: row.sourceRunId } : {}),
     ...(row.connectionGeneration === null
       ? {}
       : { connectionGeneration: row.connectionGeneration }),
@@ -381,6 +415,7 @@ function toDeliveryRow(delivery: DeliveryRecord): typeof deliveries.$inferInsert
     notice: delivery.notice ?? null,
     mediaId: delivery.mediaId ?? null,
     inboundEventId: delivery.inboundEventId ?? null,
+    sourceRunId: delivery.sourceRunId ?? null,
     status: delivery.status,
     error: delivery.error ?? null,
     remoteMessageIds: delivery.remoteMessageIds,
