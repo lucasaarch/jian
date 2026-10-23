@@ -1,7 +1,25 @@
 import { channelSchema, contactSchema, deliverySchema } from '@jian/contracts';
-import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
-import { channels, contacts, deliveries, metaReceipts, profiles } from '../storage/schema.js';
+import {
+  channels,
+  contacts,
+  deliveries,
+  metaBindings,
+  metaReceipts,
+  profiles,
+} from '../storage/schema.js';
 import type { ChannelType } from './channel.js';
 import type { ContactRecord } from './contacts.js';
 import type { ChannelRecord, DeliveryRecord } from './service.js';
@@ -15,13 +33,16 @@ type DeliveryRow = typeof deliveries.$inferSelect;
  * unset field out entirely; the parse is the boundary. What the owner never sees — the webhook
  * token hash and the address this connection speaks as — rides beside the parsed document.
  */
-export function toChannel(row: ChannelRow): ChannelRecord {
+export function toChannel(row: ChannelRow & { metaConfigured?: boolean }): ChannelRecord {
   return {
     ...channelSchema.parse({
       id: row.id,
       profileId: row.profileId,
       type: row.type,
       allowAllContacts: row.type === 'whatsapp' && row.allowAllContacts,
+      ...(row.type === 'whatsapp-business' && row.metaConfigured !== undefined
+        ? { whatsappBusinessStatus: row.metaConfigured ? 'configured' : 'pending' }
+        : {}),
       createdAt: row.createdAt.toISOString(),
       ...(row.revokedAt ? { revokedAt: row.revokedAt.toISOString() } : {}),
     }),
@@ -31,8 +52,13 @@ export function toChannel(row: ChannelRow): ChannelRecord {
   };
 }
 
+const channelColumns = {
+  ...getTableColumns(channels),
+  metaConfigured: sql<boolean>`exists (select 1 from ${metaBindings} where ${metaBindings.channelId} = ${channels.id})`,
+};
+
 export async function findChannel(db: Queryable, id: string): Promise<ChannelRecord | null> {
-  const [row] = await db.select().from(channels).where(eq(channels.id, id)).limit(1);
+  const [row] = await db.select(channelColumns).from(channels).where(eq(channels.id, id)).limit(1);
 
   return row ? toChannel(row) : null;
 }
@@ -44,7 +70,7 @@ export async function findLiveChannel(
   type: ChannelType,
 ): Promise<ChannelRecord | null> {
   const [row] = await db
-    .select()
+    .select(channelColumns)
     .from(channels)
     .where(
       and(eq(channels.profileId, profileId), eq(channels.type, type), isNull(channels.revokedAt)),
@@ -56,7 +82,7 @@ export async function findLiveChannel(
 
 export async function listChannels(db: Queryable, profileId: string): Promise<ChannelRecord[]> {
   const rows = await db
-    .select()
+    .select(channelColumns)
     .from(channels)
     .where(eq(channels.profileId, profileId))
     .orderBy(asc(channels.createdAt))
@@ -91,7 +117,7 @@ export async function listLiveChannelsOfType(
   type: ChannelType,
 ): Promise<ChannelRecord[]> {
   const rows = await db
-    .select()
+    .select(channelColumns)
     .from(channels)
     .where(and(eq(channels.type, type), isNull(channels.revokedAt)))
     .limit(200);

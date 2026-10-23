@@ -1,6 +1,6 @@
 import { type Client, channel, profile } from './params';
 import { result } from './result';
-import type { NewChannel } from './types';
+import type { ChannelPatch, NewChannel } from './types';
 
 /** Channels, the pairing each one needs, and who is allowed to write through them. */
 export const channelCalls = (client: Client) => ({
@@ -8,7 +8,7 @@ export const channelCalls = (client: Client) => ({
     result(client.GET('/v1/profiles/{profileId}/channels', { params: profile(profileId) })),
   createChannel: (profileId: string, body: NewChannel) =>
     result(client.POST('/v1/profiles/{profileId}/channels', { params: profile(profileId), body })),
-  updateChannel: (profileId: string, channelId: string, body: { allowAllContacts: boolean }) =>
+  updateChannel: (profileId: string, channelId: string, body: ChannelPatch) =>
     result(
       client.PATCH('/v1/profiles/{profileId}/channels/{channelId}', {
         params: channel(profileId, channelId),
