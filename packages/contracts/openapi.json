@@ -11728,43 +11728,62 @@
                     "writeOnly": true
                   },
                   "whatsappBusiness": {
-                    "type": "object",
-                    "properties": {
-                      "accessToken": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 16000,
-                        "writeOnly": true
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "verifyToken": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000,
+                            "writeOnly": true
+                          }
+                        },
+                        "required": [
+                          "verifyToken"
+                        ],
+                        "additionalProperties": false
                       },
-                      "appSecret": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 16000,
-                        "writeOnly": true
-                      },
-                      "verifyToken": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 16000,
-                        "writeOnly": true
-                      },
-                      "phoneNumberId": {
-                        "type": "string",
-                        "pattern": "^\\d{1,40}$"
-                      },
-                      "businessAccountId": {
-                        "type": "string",
-                        "pattern": "^\\d{1,40}$"
+                      {
+                        "type": "object",
+                        "properties": {
+                          "accessToken": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000,
+                            "writeOnly": true
+                          },
+                          "appSecret": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000,
+                            "writeOnly": true
+                          },
+                          "verifyToken": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000,
+                            "writeOnly": true
+                          },
+                          "phoneNumberId": {
+                            "type": "string",
+                            "pattern": "^\\d{1,40}$"
+                          },
+                          "businessAccountId": {
+                            "type": "string",
+                            "pattern": "^\\d{1,40}$"
+                          }
+                        },
+                        "required": [
+                          "accessToken",
+                          "appSecret",
+                          "verifyToken",
+                          "phoneNumberId",
+                          "businessAccountId"
+                        ],
+                        "additionalProperties": false
                       }
-                    },
-                    "required": [
-                      "accessToken",
-                      "appSecret",
-                      "verifyToken",
-                      "phoneNumberId",
-                      "businessAccountId"
-                    ],
-                    "additionalProperties": false
+                    ]
                   }
                 },
                 "required": [
@@ -11805,6 +11824,13 @@
                     "allowAllContacts": {
                       "default": false,
                       "type": "boolean"
+                    },
+                    "whatsappBusinessStatus": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "configured"
+                      ]
                     },
                     "createdAt": {
                       "type": "string",
@@ -12065,6 +12091,13 @@
                         "default": false,
                         "type": "boolean"
                       },
+                      "whatsappBusinessStatus": {
+                        "type": "string",
+                        "enum": [
+                          "pending",
+                          "configured"
+                        ]
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
@@ -12299,16 +12332,61 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "allowAllContacts": {
-                    "type": "boolean"
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "allowAllContacts": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "allowAllContacts"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "whatsappBusiness": {
+                        "type": "object",
+                        "properties": {
+                          "accessToken": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000,
+                            "writeOnly": true
+                          },
+                          "appSecret": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000,
+                            "writeOnly": true
+                          },
+                          "phoneNumberId": {
+                            "type": "string",
+                            "pattern": "^\\d{1,40}$"
+                          },
+                          "businessAccountId": {
+                            "type": "string",
+                            "pattern": "^\\d{1,40}$"
+                          }
+                        },
+                        "required": [
+                          "accessToken",
+                          "appSecret",
+                          "phoneNumberId",
+                          "businessAccountId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "whatsappBusiness"
+                    ],
+                    "additionalProperties": false
                   }
-                },
-                "required": [
-                  "allowAllContacts"
-                ],
-                "additionalProperties": false
+                ]
               }
             }
           }
@@ -12343,6 +12421,13 @@
                     "allowAllContacts": {
                       "default": false,
                       "type": "boolean"
+                    },
+                    "whatsappBusinessStatus": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "configured"
+                      ]
                     },
                     "createdAt": {
                       "type": "string",
@@ -12600,6 +12685,13 @@
                     "allowAllContacts": {
                       "default": false,
                       "type": "boolean"
+                    },
+                    "whatsappBusinessStatus": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "configured"
+                      ]
                     },
                     "createdAt": {
                       "type": "string",

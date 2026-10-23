@@ -96,8 +96,8 @@ export const MetaSetup: Story = {
   play: async (context) => {
     await open('whatsapp-business')(context);
     const canvas = within(context.canvasElement);
-    await expect(canvas.getByLabelText('Access token')).toHaveAttribute('type', 'password');
-    await expect(canvas.getByLabelText('App secret')).toHaveAttribute('type', 'password');
+    await expect(canvas.queryByLabelText('Access token')).toBeNull();
+    await expect(canvas.queryByLabelText('App secret')).toBeNull();
     await expect(canvas.getByLabelText('Verify token')).toHaveAttribute('type', 'password');
   },
 };
@@ -114,6 +114,7 @@ export const MetaConfigured: Story = {
               id: ids.whatsapp,
               profileId: ids.zero,
               type: 'whatsapp-business',
+              whatsappBusinessStatus: 'configured',
               createdAt: '2026-10-23T12:00:00Z',
               allowAllContacts: false,
             },
@@ -128,8 +129,46 @@ export const MetaConfigured: Story = {
     await open('whatsapp-business')(context);
     const canvas = within(context.canvasElement);
     await expect(canvas.getByText('Configured', { exact: true })).toBeVisible();
-    await waitFor(() => expect(canvas.getByText(/\/v1\/whatsapp-business\//)).toBeVisible());
+    await expect(canvas.getByRole('textbox', { name: 'Meta callback URL' })).toHaveValue(
+      `${window.location.origin}/v1/whatsapp-business/${ids.whatsapp}`,
+    );
     await expect(canvas.queryByText('Groups', { exact: true })).toBeNull();
+  },
+};
+
+/** The reserved callback works for GET challenges; message setup is still incomplete. */
+export const MetaPending: Story = {
+  render: () => (
+    <Channels
+      {...sectionProps({
+        data: {
+          ...profileData,
+          channels: [
+            {
+              id: ids.whatsapp,
+              profileId: ids.zero,
+              type: 'whatsapp-business',
+              whatsappBusinessStatus: 'pending',
+              createdAt: '2026-10-23T12:00:00Z',
+              allowAllContacts: false,
+            },
+          ],
+          contacts: [],
+          groups: [],
+        },
+      })}
+    />
+  ),
+  play: async (context) => {
+    await open('whatsapp-business')(context);
+    const canvas = within(context.canvasElement);
+    await expect(canvas.getByText('Setup pending', { exact: true })).toBeVisible();
+    await expect(canvas.getByLabelText('Access token')).toHaveAttribute('type', 'password');
+    await expect(canvas.getByLabelText('App secret')).toHaveAttribute('type', 'password');
+    await expect(canvas.queryByLabelText('Verify token')).toBeNull();
+    await expect(canvas.getByRole('textbox', { name: 'Meta callback URL' })).toHaveValue(
+      `${window.location.origin}/v1/whatsapp-business/${ids.whatsapp}`,
+    );
   },
 };
 

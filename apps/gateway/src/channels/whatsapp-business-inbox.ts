@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { whatsappBusinessSetupSchema } from '@jian/contracts';
 import { and, asc, eq, isNull, lte, ne, sql } from 'drizzle-orm';
 import { GatewayError } from '../core/errors.js';
 import type { Vault } from '../security/vault.js';
@@ -15,8 +16,6 @@ import type { IncomingMessage } from './channel.js';
 import { findChannel, findDeliveryByRemoteId } from './repository.js';
 import { type ChannelRecord, channelSecret } from './service.js';
 import {
-  type MetaCredentials,
-  metaCredentials,
   metaSignature,
   metaWebhookSchema,
   WhatsAppBusinessChannel,
@@ -32,6 +31,7 @@ export async function metaCanSend(
     .select({ lastInbound: metaWindows.lastInbound })
     .from(metaWindows)
     .innerJoin(channels, eq(channels.id, metaWindows.channelId))
+    .innerJoin(metaBindings, eq(metaBindings.channelId, channels.id))
     .innerJoin(
       contacts,
       and(
@@ -87,15 +87,13 @@ export class MetaInbox {
     private readonly signal: AbortSignal,
   ) {}
 
-  private async authenticated(
-    channelId: string,
-  ): Promise<{ channel: ChannelRecord; credential: MetaCredentials }> {
+  private async authenticated(channelId: string) {
     const channel = await findChannel(this.store.db, channelId);
     if (!channel || channel.revokedAt || channel.type !== 'whatsapp-business')
       throw new GatewayError(401, 'Unauthorized');
-    const credential = metaCredentials(
-      await this.vault.read(channel.profileId, channelSecret(channelId)),
-    );
+    const stored = await this.vault.read(channel.profileId, channelSecret(channelId));
+    if (!stored) throw new GatewayError(401, 'Unauthorized');
+    const credential = whatsappBusinessSetupSchema.parse(JSON.parse(stored));
     return { channel, credential };
   }
 
@@ -120,6 +118,8 @@ export class MetaInbox {
 
   async receive(channelId: string, raw: Buffer, signature: unknown) {
     const { channel, credential } = await this.authenticated(channelId);
+    if (channel.whatsappBusinessStatus !== 'configured' || !('appSecret' in credential))
+      throw new GatewayError(401, 'Unauthorized');
     if (!metaSignature(raw, signature, credential.appSecret))
       throw new GatewayError(401, 'Unauthorized');
     let payload: unknown;

@@ -50,6 +50,7 @@ export type ScheduleRun = JsonResponse<'listScheduleRuns', 200>[number];
 export type Subscription = JsonResponse<'listSubscriptions', 200>[number];
 export type ProfilePatch = RequestBody<'updateProfile'>;
 export type NewChannel = RequestBody<'createChannel'>;
+export type ChannelPatch = RequestBody<'updateChannel'>;
 export type NewProvider = RequestBody<'createProvider'>;
 export type ModelDefaultsInput = RequestBody<'setModelDefaults'>;
 export type DecisionsStatus = JsonResponse<'getDecisions', 200>;

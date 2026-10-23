@@ -105,17 +105,49 @@ The host comes from the `Host` header of the connect request, so connect through
 
 ## WhatsApp Business through Meta Cloud API
 
-**WhatsApp Business (Meta)** is the independent `whatsapp-business` connector, not a QR-linked Baileys device. The prototype supports receptive, one-to-one customer support. It does not activate a Meta account, register a production number, complete Embedded Signup, or automatically subscribe a webhook. A saved channel is **Configured**, not proof of a working connection or delivery.
+**WhatsApp Business (Meta)** is the independent `whatsapp-business` connector, not a QR-linked Baileys device. The prototype supports receptive, one-to-one customer support. It does not activate a Meta account, register a production number, complete Embedded Signup, or automatically subscribe a webhook. Setup has two stages: **Setup pending** reserves the callback URL using only a verify token; **Configured** means the remaining credentials were saved and validated, not proof of webhook subscription, a working connection or delivery.
 
 ### Prepare a test account
 
 1. Check the current [Meta AI-provider policy](https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing/ai-providers), [business terms](https://www.whatsapp.com/legal/business-solution-terms), account eligibility, recipient markets and pricing **before real deployment**. Jian is an agent platform: describing an installation as customer support does not automatically exempt it from AI-provider requirements. Official API access guarantees neither approval nor immunity from account restrictions. Do not assume free usage; test allowances and production charges depend on Meta's current terms.
 2. Follow Meta's [Cloud API getting-started guide](https://developers.facebook.com/documentation/business-messaging/whatsapp/get-started). Create a developer app with WhatsApp enabled and use the supplied test number and explicitly allowed test recipients first. Do not migrate the existing Baileys number as part of this setup.
-3. Obtain an access token for the correct business and number. A temporary developer token may be useful for initial testing but expires. For an enduring setup, create a system user, assign the app and WhatsApp assets, and issue a system-user token with the required WhatsApp permissions (including `whatsapp_business_messaging` for messaging and `whatsapp_business_management` for account/subscription management). Confirm permissions, asset access and expiry in Meta; a token alone does not grant access to every number.
-4. Copy the app's **App secret**, the **Phone number ID**, and the **WhatsApp Business account ID (WABA ID)**. The phone number ID is not a telephone number, and the WABA ID is not a business portfolio ID. Choose a separate, unpredictable **verify token** for the webhook challenge. Keep all three secrets out of logs, screenshots and source control; never put the access token or app secret in a URL.
-5. In **Channels → WhatsApp Business (Meta) → Set up**, enter those five values and save. The password fields are not saved to browser storage or read back; they are cleared on submission and closing the form. The gateway stores the credentials in its encrypted vault. To replace credentials, disconnect and configure again. Saving verifies Graph API v25.0 access and account membership; the configured number must appear in the first 100 entries of the WABA's phone-number list. Otherwise this prototype fails safely rather than assuming membership.
+3. For the second stage, obtain an access token for the correct business and number; it is **not required to create the callback first**. A temporary developer token may be useful for initial testing but expires. For an enduring setup, create a system user, assign the app and WhatsApp assets, and issue a system-user token with the required WhatsApp permissions (including `whatsapp_business_messaging` for messaging and `whatsapp_business_management` for account/subscription management). Confirm permissions, asset access and expiry in Meta; a token alone does not grant access to every number.
+4. When available, copy the app's **App secret**, the **Phone number ID**, and the **WhatsApp Business account ID (WABA ID)** for completion later. The phone number ID is not a telephone number, and the WABA ID is not a business portfolio ID. Choose a separate, unpredictable **verify token** for the webhook challenge. Keep all three secrets out of logs, screenshots and source control; never put the access token or app secret in a URL.
+5. In **Channels → WhatsApp Business (Meta) → Set up**, enter **only the verify token** and choose **Create callback URL**. Keep your chosen value for Meta: it cannot be read back here. Jian creates a channel marked **Setup pending** and shows its actual callback URL with a copy button. No access token or app secret is needed yet, and messaging is unavailable while pending.
+6. Use that callback URL and the same verify token in Meta's manual webhook setup (see below). A successful GET challenge does not change Jian's setup status or prove subscription/delivery. Return to the same channel's **Manage → Complete Meta setup** form and enter the access token, app secret, phone number ID and WABA ID. Choose **Complete setup**. The original verify token, channel ID and callback URL are preserved. If validation fails, the channel stays pending and the callback remains the same; re-enter the cleared credentials to retry.
+7. Completing setup verifies Graph API v25.0 access and account membership; the configured number must appear in the first 100 entries of the WABA's phone-number list. Otherwise this prototype fails safely rather than assuming membership. Finish the manual subscriptions and test only after completion. **Configured** does not mean Meta's webhook was automatically verified or that messaging is live.
 
-The host-authenticated create operation takes this shape (placeholders only; never publish real credentials):
+The password fields are uncontrolled, are not saved to browser storage or read back, and are cleared on submission (success or failure) and unmounted on closing the form. The gateway stores credentials in its encrypted vault. Completion is not token rotation: to replace configured credentials or a lost verify token, disconnect and configure again, which generates a new channel ID and callback URL. Existing fully configured channels remain configured.
+
+### Two-stage API setup
+
+All channel-management calls require host authentication (or the authenticated panel cookie). The examples contain placeholders only; never publish real credentials. First, `POST /v1/profiles/{profileId}/channels` with:
+
+```json
+{
+  "type": "whatsapp-business",
+  "whatsappBusiness": {
+    "verifyToken": "<chosen-webhook-verify-secret>"
+  }
+}
+```
+
+The response includes a generated `id` and safe `whatsappBusinessStatus: "pending"`, not the verify token. Use that real ID in the callback path. Later, `PATCH /v1/profiles/{profileId}/channels/{channelId}` with:
+
+```json
+{
+  "whatsappBusiness": {
+    "accessToken": "<system-user-access-token>",
+    "appSecret": "<meta-app-secret>",
+    "phoneNumberId": "<meta-phone-number-id>",
+    "businessAccountId": "<whatsapp-business-account-id>"
+  }
+}
+```
+
+Do not send a new verify token in the completion request. Successful completion returns `whatsappBusinessStatus: "configured"`; it uses the stored verify token and keeps the same ID and URL. A validation error does not complete or replace the pending configuration. This PATCH is for pending setup only, not rotation of configured credentials.
+
+For clients that already have all five values, full creation in a single POST remains supported:
 
 ```json
 {
@@ -132,8 +164,8 @@ The host-authenticated create operation takes this shape (placeholders only; nev
 
 ### Subscribe the signed webhook manually
 
-1. Expose the gateway through a public **HTTPS/TLS** endpoint reachable by Meta. Use the gateway's public origin, not a development panel origin or an internal address. Configure the callback in Meta as `https://<public-gateway>/v1/whatsapp-business/<channelId>` (route pattern: `/v1/whatsapp-business/:channelId`). The panel shows the path for the saved channel; correct the origin if the panel is hosted separately.
-2. Enter the same verify token in Meta's webhook configuration. Meta calls GET with `hub.mode`, `hub.verify_token` and `hub.challenge`; the gateway verifies the token before answering the challenge. This challenge does not authenticate later POSTs. Meta sends the verify token in that GET query: disable query-string access logging for this endpoint at the reverse proxy or redact `hub.verify_token`.
+1. Expose the gateway through a public **HTTPS/TLS** endpoint reachable by Meta. Use the gateway's public origin, not a development panel origin or an internal address. Configure the callback in Meta as `https://<public-gateway>/v1/whatsapp-business/<channelId>` (route pattern: `/v1/whatsapp-business/:channelId`). `<channelId>` is a placeholder, not literal text to paste: replace it with the generated channel ID from the create response. The panel's copyable URL already contains the real ID automatically. It uses the panel's origin, so if the panel is hosted separately, replace **only the origin** with the gateway's exact public HTTPS origin, keeping `/v1/whatsapp-business/<real-generated-ID>` unchanged. Do not append `/ui` or use the development panel port.
+2. Enter the same verify token in Meta's webhook configuration. Meta calls GET with `hub.mode`, `hub.verify_token` and `hub.challenge`; the gateway verifies the token before answering the challenge, including while setup is pending. Pending channels cannot accept message POSTs or send replies until completion. The panel does not track whether Meta performed or accepted this challenge. This challenge does not authenticate later POSTs. Meta sends the verify token in that GET query: disable query-string access logging for this endpoint at the reverse proxy or redact `hub.verify_token`.
 3. Subscribe to the WhatsApp `messages` webhook field and subscribe the app to the intended WABA (through Meta's tooling or its `/{WABA-ID}/subscribed_apps` Graph API operation). Saving credentials in Jian does neither of these subscriptions for you.
 4. POST payloads must carry a valid `X-Hub-Signature-256`: HMAC-SHA256 over the original request body with the app secret. A reverse proxy must preserve the signed body and header. The channel also checks the configured account and phone number IDs; a valid app signature is not permission to route another number's messages to this profile. Do not use the API server's `X-Jian-Channel-Token` or `/v1/ingress` endpoint for Meta.
 5. Send a message **from an allowed test customer's phone to the test business number**, approve that contact in Jian, and observe both the conversation and delivery results. A successful save, challenge, Graph API acceptance or local `sent` record is not proof that a customer's phone received a message. Check actual status events and the recipient device. These instructions do not claim any real account activation or live integration verification.
