@@ -14,6 +14,7 @@ import {
   windowOpen,
 } from '../src/channels/whatsapp-business.js';
 import { metaCanSend } from '../src/channels/whatsapp-business-inbox.js';
+import { Errands } from '../src/errands/service.js';
 import {
   mediaAssets,
   metaBindings,
@@ -141,6 +142,382 @@ const context = (fetcher: typeof fetch, canReply = async (_chat: string) => true
 
 const { verifyToken: _verifyToken, ...completion } = credentials;
 const admin = { authorization: 'Bearer synthetic-admin-token-at-least-32-characters' };
+
+describe('Meta automation controls', () => {
+  const sends = (f: Awaited<ReturnType<typeof setup>>) =>
+    f.fetcher.mock.calls.filter(([url]) => String(url).endsWith('/messages'));
+
+  it('allows new private contacts without changing existing pending or blocked decisions', async () => {
+    const f = await setup();
+    try {
+      await f.post(batch([message('pending')]));
+      await f.channels.dispatch();
+      const [pending] = await f.channels.contacts(f.profile.id);
+      if (!pending) throw new Error('Missing contact');
+      await f.channels.update(f.profile.id, f.channel.id, { allowAllContacts: true });
+      await f.post(batch([message('still-pending')]));
+      await f.channels.dispatch();
+      expect((await f.channels.contacts(f.profile.id))[0]?.status).toBe('pending');
+      await f.channels.blockContact(f.profile.id, pending.id);
+      await f.post(batch([message('blocked')]));
+      await f.channels.dispatch();
+      expect((await f.channels.contacts(f.profile.id))[0]?.status).toBe('blocked');
+      await f.post(batch([{ ...message('new-private'), from: '15550000002' }]));
+      await f.channels.dispatch();
+      const approved = (await f.channels.contacts(f.profile.id)).find(
+        (c) => c.chatId === '15550000002',
+      );
+      expect(approved).toMatchObject({ status: 'approved', aiEnabled: true });
+      expect(approved?.sessionId).toBeDefined();
+      expect(await f.services.runs.activities(f.profile.id)).toHaveLength(1);
+      expect(sends(f)).toHaveLength(1); // Only the initial approval notice, never one for the new contact.
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('pauses a channel without losing credentials/callback and never replays its inbox on resume', async () => {
+    const f = await setup();
+    try {
+      const secret = await f.services.vault.read(f.profile.id, `channel:${f.channel.id}`);
+      await f.post(batch([message('queued-before-pause')]));
+      const paused = await f.channels.update(f.profile.id, f.channel.id, { enabled: false });
+      expect(paused).toMatchObject({ enabled: false, whatsappBusinessStatus: 'configured' });
+      expect(paused).not.toHaveProperty('automationPausedAt');
+      const url = `/v1/whatsapp-business/${f.channel.id}?hub.mode=subscribe&hub.verify_token=${credentials.verifyToken}&hub.challenge=1234`;
+      expect((await f.app.inject({ url })).body).toBe('1234');
+      expect((await f.post(batch([message('during-pause')]))).statusCode).toBe(200);
+      await f.channels.dispatch();
+      expect(await f.channels.contacts(f.profile.id)).toHaveLength(0);
+      expect(sends(f)).toHaveLength(0);
+      await f.channels.update(f.profile.id, f.channel.id, { enabled: true });
+      const restarted = new Channels(f.services, f.fetcher);
+      try {
+        await restarted.dispatch();
+        expect(await restarted.contacts(f.profile.id)).toHaveLength(0);
+        expect(await f.services.vault.read(f.profile.id, `channel:${f.channel.id}`)).toBe(secret);
+        expect(await f.services.store.db.select().from(metaBindings)).toHaveLength(1);
+        await f.post(batch([message('after-resume')]));
+        await restarted.dispatch();
+        expect(await restarted.contacts(f.profile.id)).toHaveLength(1);
+        expect(sends(f)).toHaveLength(1);
+      } finally {
+        await restarted.stop();
+      }
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('pauses AI for only one chat, cancels its run, and suppresses old replies even after resume', async () => {
+    const f = await setup();
+    try {
+      await f.channels.update(f.profile.id, f.channel.id, { allowAllContacts: true });
+      await f.post(batch([message('chat-a'), { ...message('chat-b'), from: '15550000002' }]));
+      await f.channels.dispatch();
+      const contacts = await f.channels.contacts(f.profile.id);
+      const a = contacts.find((c) => c.chatId === '15550000001');
+      const b = contacts.find((c) => c.chatId === '15550000002');
+      if (!a || !b) throw new Error('Missing conversations');
+      const initial = await f.services.runs.activities(f.profile.id);
+      const runA = initial.find((run) => run.sessionId === a.sessionId);
+      const runB = initial.find((run) => run.sessionId === b.sessionId);
+      if (!runA || !runB) throw new Error('Missing runs');
+      const paused = await f.channels.updateContact(f.profile.id, a.id, { aiEnabled: false });
+      expect(paused).toMatchObject({
+        status: 'approved',
+        aiEnabled: false,
+        sessionId: a.sessionId,
+      });
+      expect(paused).not.toHaveProperty('aiPausedAt');
+      expect((await f.services.runs.run(f.profile.id, runA.id)).status).toBe('cancelled');
+      expect((await f.services.runs.run(f.profile.id, runB.id)).status).toBe('queued');
+      await f.post(batch([message('chat-a-off')]));
+      expect(await metaCanSend(f.services.store.db, f.channel.id, a.chatId)).toBe(false);
+      await f.channels.updateContact(f.profile.id, a.id, { aiEnabled: true });
+      await f.channels.dispatch();
+      expect(sends(f)).toHaveLength(0);
+      expect(
+        (await f.channels.deliveries(f.profile.id)).find((d) => d.runId === runA.id),
+      ).toMatchObject({ status: 'failed' });
+      await f.post(batch([message('chat-a-resumed')]));
+      await f.channels.dispatch();
+      expect(
+        (await f.services.runs.activities(f.profile.id)).filter(
+          (run) => run.sessionId === a.sessionId,
+        ),
+      ).toHaveLength(1);
+      const fresh = (await f.services.runs.activities(f.profile.id)).find(
+        (run) => run.sessionId === a.sessionId,
+      );
+      expect(fresh?.id).not.toBe(runA.id);
+      expect((await f.channels.contacts(f.profile.id)).find((c) => c.id === b.id)?.aiEnabled).toBe(
+        true,
+      );
+      if (!fresh) throw new Error('Missing resumed run');
+      for (const run of [runB, fresh]) {
+        await f.services.lifecycle.claim(run.id, f.profile.id, 'synthetic-worker');
+        await f.services.lifecycle.finish(
+          f.profile.id,
+          run.id,
+          'synthetic-worker',
+          'completed',
+          'Ready',
+        );
+      }
+      await f.channels.dispatch();
+      expect(sends(f)).toHaveLength(2);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it.each(['channel', 'chat'] as const)(
+    'revalidates a %s pause/resume after model catalog work, before run insertion',
+    async (scope) => {
+      const f = await setup();
+      let release!: () => void;
+      let entered!: () => void;
+      const began = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const warm = vi
+        .spyOn(f.services.providers, 'warmCatalog')
+        .mockImplementationOnce(async () => {
+          entered();
+          await gate;
+        });
+      try {
+        await f.channels.update(f.profile.id, f.channel.id, { allowAllContacts: true });
+        await f.post(batch([message('racing-pause')]));
+        const dispatch = f.channels.dispatch();
+        await began;
+        if (scope === 'channel') {
+          await f.channels.update(f.profile.id, f.channel.id, { enabled: false });
+          await f.channels.update(f.profile.id, f.channel.id, { enabled: true });
+        } else {
+          const [contact] = await f.channels.contacts(f.profile.id);
+          if (!contact) throw new Error('Missing contact');
+          await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: false });
+          await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: true });
+        }
+        release();
+        await dispatch;
+        expect(await f.services.runs.activities(f.profile.id)).toHaveLength(0);
+        expect(sends(f)).toHaveLength(0);
+        expect((await f.services.store.db.select().from(metaInbox))[0]?.processedAt).not.toBeNull();
+        await f.post(batch([message('fresh-after-race')]));
+        await f.channels.dispatch();
+        expect(await f.services.runs.activities(f.profile.id)).toHaveLength(1);
+      } finally {
+        release();
+        warm.mockRestore();
+        await f.close();
+      }
+    },
+  );
+
+  it('revalidates a relayed errand answer under the submission lock after a chat pause', async () => {
+    const f = await setup();
+    let release!: () => void;
+    let entered!: () => void;
+    const began = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await f.channels.update(f.profile.id, f.channel.id, { allowAllContacts: true });
+      await f.post(batch([message('relay-start')]));
+      await f.channels.dispatch();
+      const [contact] = await f.channels.contacts(f.profile.id);
+      const [initial] = await f.services.runs.activities(f.profile.id);
+      if (!contact || !initial) throw new Error('Missing initial conversation');
+      await f.services.lifecycle.claim(initial.id, f.profile.id, 'worker');
+      await f.services.lifecycle.finish(f.profile.id, initial.id, 'worker', 'completed', 'Ready');
+      const owner = await f.services.sessions.createSession(f.profile.id, { title: 'Owner' });
+      await f.services.store.transaction(f.profile.id, (tx) =>
+        new Errands(f.services.store).open(tx, f.profile.id, contact, owner.id, 'Ready?'),
+      );
+      const warm = vi
+        .spyOn(f.services.providers, 'warmCatalog')
+        .mockImplementationOnce(async () => {
+          entered();
+          await gate;
+        });
+      try {
+        await f.post(batch([message('relay-answer', 'Yes')]));
+        const dispatch = f.channels.dispatch();
+        await began;
+        await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: false });
+        await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: true });
+        release();
+        await dispatch;
+        expect(await f.services.runs.activities(f.profile.id)).toHaveLength(0);
+        expect(await f.services.sessions.messages(f.profile.id, owner.id)).toHaveLength(0);
+      } finally {
+        release();
+        warm.mockRestore();
+      }
+    } finally {
+      release?.();
+      await f.close();
+    }
+  });
+
+  it.each(['channel', 'chat'] as const)(
+    'discards a late worker handoff after a %s pause, even when its parent had completed',
+    async (scope) => {
+      const f = await setup();
+      try {
+        await f.channels.update(f.profile.id, f.channel.id, { allowAllContacts: true });
+        await f.post(batch([message('worker-start')]));
+        await f.channels.dispatch();
+        const [contact] = await f.channels.contacts(f.profile.id);
+        const [parent] = await f.services.runs.activities(f.profile.id);
+        if (!contact || !parent) throw new Error('Missing parent conversation');
+        const child = await f.services.work.spawnInConversation(
+          parent,
+          {
+            role: 'review',
+            name: 'Reviewer',
+            identity: 'Review.',
+            brief: 'Review this task.',
+          },
+          'review',
+        );
+        await f.services.lifecycle.claim(parent.id, f.profile.id, 'parent');
+        await f.services.lifecycle.finish(
+          f.profile.id,
+          parent.id,
+          'parent',
+          'completed',
+          'Delegated.',
+        );
+        if (scope === 'channel') {
+          await f.channels.update(f.profile.id, f.channel.id, { enabled: false });
+          await f.channels.update(f.profile.id, f.channel.id, { enabled: true });
+        } else {
+          await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: false });
+          await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: true });
+        }
+        await f.services.lifecycle.claim(child.runId, f.profile.id, 'child');
+        await f.services.lifecycle.finish(
+          f.profile.id,
+          child.runId,
+          'child',
+          'completed',
+          'Late report.',
+        );
+        f.services.work.useDeliveries(f.channels);
+        await f.services.work.reportWorker(f.profile.id, child.runId);
+        await f.services.work.reportWorker(f.profile.id, child.runId);
+        await f.channels.dispatch();
+        expect(await f.services.runs.activities(f.profile.id)).toHaveLength(0);
+        expect(sends(f)).toHaveLength(0);
+        const transcript = await f.services.sessions.messages(f.profile.id, parent.sessionId);
+        expect(transcript.some((item) => item.content.includes('Late report.'))).toBe(false);
+      } finally {
+        await f.close();
+      }
+    },
+  );
+
+  it('clears held pre-pause messages and keeps paused messages out of contact history', async () => {
+    const f = await setup();
+    try {
+      await f.post(batch([message('held-before', 'Held before pause')]));
+      await f.channels.dispatch();
+      const [contact] = await f.channels.contacts(f.profile.id);
+      if (!contact) throw new Error('Missing contact');
+      expect(contact.message).toBe('Held before pause');
+      await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: false });
+      await f.post(batch([message('ignored-while-off', 'Must not be replayed')]));
+      await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: true });
+      await f.channels.approveContact(f.profile.id, contact.id);
+      await f.channels.dispatch();
+      expect(await f.services.runs.activities(f.profile.id)).toHaveLength(0);
+      expect((await f.channels.contacts(f.profile.id))[0]?.message).toBeUndefined();
+      await f.post(batch([message('new-after', 'Only the new message')]));
+      await f.channels.dispatch();
+      const [fresh] = await f.services.runs.activities(f.profile.id);
+      expect(fresh?.input).toBe('Only the new message');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('requires host auth and ownership for controls and rejects coercion or mixed updates', async () => {
+    const f = await setup();
+    try {
+      await f.post(batch([message('request')]));
+      await f.channels.dispatch();
+      const [contact] = await f.channels.contacts(f.profile.id);
+      if (!contact) throw new Error('Missing contact');
+      const other = await f.services.profiles.createProfile({
+        name: 'Other',
+        instructions: 'Help',
+      });
+      for (const [url, payload] of [
+        [`/v1/profiles/${f.profile.id}/contacts/${contact.id}`, { aiEnabled: false }],
+        [`/v1/profiles/${f.profile.id}/channels/${f.channel.id}`, { enabled: false }],
+      ] as const) {
+        for (const headers of [{}, { authorization: `Bearer ${f.channel.webhookToken}` }]) {
+          expect((await f.app.inject({ method: 'PATCH', url, headers, payload })).statusCode).toBe(
+            401,
+          );
+        }
+        expect(
+          (
+            await f.app.inject({
+              method: 'PATCH',
+              url: url.replace(f.profile.id, other.id),
+              headers: admin,
+              payload,
+            })
+          ).statusCode,
+        ).toBe(404);
+        const key = 'aiEnabled' in payload ? 'aiEnabled' : 'enabled';
+        expect(
+          (
+            await f.app.inject({
+              method: 'PATCH',
+              url,
+              headers: admin,
+              payload: { [key]: 'false' },
+            })
+          ).statusCode,
+        ).toBe(400);
+        expect(
+          (
+            await f.app.inject({
+              method: 'PATCH',
+              url,
+              headers: admin,
+              payload: { ...payload, status: 'approved' },
+            })
+          ).statusCode,
+        ).toBe(400);
+        expect(
+          (await f.app.inject({ method: 'PATCH', url, headers: admin, payload })).statusCode,
+        ).toBe(200);
+      }
+      await f.channels.revoke(f.profile.id, f.channel.id);
+      await expect(
+        f.channels.update(f.profile.id, f.channel.id, { enabled: true }),
+      ).rejects.toThrow('disconnected');
+      await expect(
+        f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: true }),
+      ).rejects.toThrow('disconnected');
+    } finally {
+      await f.close();
+    }
+  });
+});
 
 describe('Meta staged setup', () => {
   it('accepts only a verify token or all credentials; completion cannot replace the verify token', () => {
@@ -347,9 +724,9 @@ describe('Meta staged setup', () => {
       await expect(
         f.channels.update(other.id, api.id, { whatsappBusiness: completion }),
       ).rejects.toThrow('Only WhatsApp Business');
-      await expect(
-        f.channels.update(f.profile.id, f.channel.id, { allowAllContacts: true }),
-      ).rejects.toThrow('Only WhatsApp supports');
+      expect(
+        await f.channels.update(f.profile.id, f.channel.id, { allowAllContacts: true }),
+      ).toMatchObject({ allowAllContacts: true });
       expect(f.fetcher).not.toHaveBeenCalled();
       await f.channels.revoke(f.profile.id, f.channel.id);
       await expect(

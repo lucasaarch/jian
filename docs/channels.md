@@ -4,9 +4,23 @@ A profile has four possible channels — WhatsApp (Baileys), WhatsApp Business (
 
 `POST /v1/profiles/{profileId}/channels` configures a type. The API server uses the one-time `webhookToken` (only its hash is kept); Telegram uses it for webhook authentication. Meta uses its own signed webhook and verify token instead, and Baileys has no HTTP intake. A second channel of the same type answers `409`. `DELETE /v1/profiles/{profileId}/channels/{channelId}` disconnects, deletes the channel's secret from the vault and frees the type for a new connection. Approved contacts and their conversations are kept.
 
+## Pause automation without disconnecting
+
+In **Channels → Manage**, **Channel automation** pauses/resumes a channel without revoking it, relinking it, or clearing credentials, configuration, contacts or history. The host-only `PATCH /v1/profiles/{profileId}/channels/{channelId}` accepts `{ "enabled": false }` to pause and `{ "enabled": true }` to resume. `channel.enabled` defaults to `true`, including existing channels where the field was absent.
+
+A disabled channel starts no automated ingress/runs and sends no outbound deliveries, including queued replies. Queued, running and waiting runs in its contact sessions are cancelled; requests already in flight may still finish at their provider. Incoming messages are ignored while paused; resuming never replays a backlog. A network request already in flight may finish. **Disconnect** remains a separate destructive credential-removal action, not a pause control.
+
+For WhatsApp Business, manual service in the Business app is untouched **if the account already supports it**. Jian does not provision, enable or guarantee app/API coexistence; eligibility and setup remain with Meta.
+
+### Pause AI in one Business chat
+
+In **Channels → WhatsApp Business (Meta) → Manage → Contacts**, each contact has an **AI replies** switch, separate from Approve/Revoke. `contact.aiEnabled` defaults to `true`. The host-only `PATCH /v1/profiles/{profileId}/contacts/{id}` accepts `{ "aiEnabled": false }` to pause and `{ "aiEnabled": true }` to resume; clients use `api.updateContact(profileId, id, { aiEnabled })`.
+
+A chat pause prevents AI runs and AI output, including queued replies. Incoming messages are acknowledged and ignored while paused, never automatically replayed on resume. Already in-flight network requests may finish. Toggling AI does not approve a pending/blocked contact; approval does not override a pause. Both the channel and chat must be enabled, and normal approval and Meta customer-service-window restrictions still apply.
+
 ## Contacts and approval
 
-The first message from an unknown sender does not enter the profile. The gateway records a contact request with who wrote and what they said, tells the person once that the owner has to approve, and holds the message.
+By default, the first message from an unknown sender does not enter the profile. The gateway records a contact request with who wrote and what they said, tells the person once that the owner has to approve, and holds the message.
 
 | Method and path | Behaviour |
 | --- | --- |
@@ -15,6 +29,8 @@ The first message from an unknown sender does not enter the profile. The gateway
 | `POST /v1/profiles/{profileId}/contacts/{contactId}/block` | Discards the message and ignores the sender silently |
 
 All of them need the host token: approving is granting access to the agent.
+
+**Allow all contacts**, available for both WhatsApp (Baileys) and WhatsApp Business (Meta), is an opt-in channel setting (`PATCH` with `{ "allowAllContacts": true }`, default `false`). It allows new private contacts without manual approval; blocked contacts remain blocked, groups still require approval, and no contact gains owner access. This permission does not override channel/chat pauses or Meta reply-window rules.
 
 Rules the implementation guarantees:
 
@@ -145,7 +161,7 @@ The response includes a generated `id` and safe `whatsappBusinessStatus: "pendin
 }
 ```
 
-Do not send a new verify token in the completion request. Successful completion returns `whatsappBusinessStatus: "configured"`; it uses the stored verify token and keeps the same ID and URL. A validation error does not complete or replace the pending configuration. This PATCH is for pending setup only, not rotation of configured credentials.
+Do not send a new verify token in the completion request. Successful completion returns `whatsappBusinessStatus: "configured"`; it uses the stored verify token and keeps the same ID and URL. A validation error does not complete or replace the pending configuration. This credentials-completion payload is for pending setup only, not rotation of configured credentials. Independent `enabled` and `allowAllContacts` PATCH payloads remain available for channel controls.
 
 For clients that already have all five values, full creation in a single POST remains supported:
 

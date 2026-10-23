@@ -5,6 +5,7 @@ import {
   channelPatchSchema,
   channelQrSchema,
   channelSchema,
+  contactPatchSchema,
   contactSchema,
   deliverySchema,
   groupSchema,
@@ -455,6 +456,14 @@ export const operations: Operation[] = [
     operationId: 'listContacts',
     access: 'admin',
     response: z.array(contactSchema),
+  },
+  {
+    method: 'PATCH',
+    path: `${profile}/contacts/:id`,
+    operationId: 'updateContact',
+    access: 'admin',
+    body: contactPatchSchema,
+    response: contactSchema,
   },
   {
     method: 'POST',

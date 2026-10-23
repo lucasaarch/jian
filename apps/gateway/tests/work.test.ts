@@ -112,6 +112,42 @@ it('runs a scoped subagent in its parent conversation and delivers one durable h
   }
 });
 
+it('records a late worker report without restarting its cancelled principal', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile({
+    name: 'Coordinator',
+    instructions: 'Help.',
+    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  });
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const parent = await services.runs.submit(profile.id, session.id, {
+    text: 'Review.',
+    requestKey: 'parent',
+  });
+  const child = await services.work.spawnInConversation(
+    parent,
+    {
+      role: 'review',
+      name: 'Reviewer',
+      identity: 'Review.',
+      brief: 'Check the change.',
+    },
+    'child',
+  );
+  await services.runs.cancel(profile.id, parent.id);
+  await services.lifecycle.claim(child.runId, profile.id, 'worker');
+  await services.lifecycle.finish(profile.id, child.runId, 'worker', 'completed', 'Done.');
+  await services.work.reportWorker(profile.id, child.runId);
+  await services.work.reportWorker(profile.id, child.runId);
+  expect(await services.runs.activities(profile.id)).toHaveLength(0);
+  expect(await listUnreportedSubagents(services.store.db, 10)).toEqual([]);
+  expect(
+    (await services.sessions.messages(profile.id, session.id)).some((message) =>
+      message.content.includes('Subagent "Reviewer"'),
+    ),
+  ).toBe(false);
+});
+
 it('executes a conversation subagent through the agent loop and retains its transcript', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'jian-conversation-worker-')));
   const previous = process.env.JIAN_WORKSPACES;

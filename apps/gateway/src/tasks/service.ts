@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { conversationSubagentInputSchema, type Run } from '@jian/contracts';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { findChannel, findContactBySession } from '../channels/repository.js';
 import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -135,6 +136,24 @@ export class Work {
         return;
       if (state?.reportedAt) return;
       const principal = await this.runs.run(profileId, worker.subagent.parentRunId, tx);
+      const contact = await findContactBySession(tx, profileId, principal.sessionId);
+      const channel = contact ? await findChannel(tx, contact.channelId) : null;
+      // A late worker must not restart automation invalidated by a pause, even after resume.
+      if (
+        principal.status === 'cancelled' ||
+        (contact &&
+          (!channel?.enabled ||
+            channel.revokedAt ||
+            !contact.aiEnabled ||
+            (channel.automationPausedAt && principal.createdAt <= channel.automationPausedAt) ||
+            (contact.aiPausedAt && principal.createdAt <= contact.aiPausedAt)))
+      ) {
+        await tx
+          .update(runs)
+          .set({ subagentReportedAt: new Date(this.clock()) })
+          .where(and(eq(runs.profileId, profileId), eq(runs.id, runId)));
+        return;
+      }
       const followUp = await this.runs.submit(
         profileId,
         principal.sessionId,

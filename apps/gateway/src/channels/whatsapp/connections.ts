@@ -5,7 +5,7 @@ import type { SecretBox } from '../../security/crypto.js';
 import type { Queryable, Store } from '../../storage/database.js';
 import type { DeliveryOutcome, IncomingMessage, OutgoingMessage } from '../channel.js';
 import { channelLog } from '../logging.js';
-import { findChannel, setChannelAddress } from '../repository.js';
+import { findChannel, findContactByIdentity, setChannelAddress } from '../repository.js';
 import {
   claimConnection,
   countPendingInbox,
@@ -223,8 +223,15 @@ export class WhatsAppConnections {
   private async enqueue(record: ConnectionRecord, message: IncomingMessage) {
     await this.store.transaction(record.profileId, async (tx) => {
       await this.owned(tx, record);
-      // Who may be answered is decided by contact approval, after the message is durable.
-      assertFound(await findChannel(tx, record.id), 'Channel');
+      // Preserve deduplication, but never retain messages received while automation is paused.
+      const channel = assertFound(await findChannel(tx, record.id), 'Channel');
+      const contact = await findContactByIdentity(
+        tx,
+        record.id,
+        message.chatId,
+        message.scope === 'group' ? message.chatId : message.actorId,
+      );
+      const paused = !channel.enabled || contact?.aiEnabled === false;
 
       const id = createHash('sha256')
         .update(JSON.stringify([record.id, message.requestKey]))
@@ -234,7 +241,7 @@ export class WhatsAppConnections {
         return;
       }
 
-      if ((await countPendingInbox(tx, record.id)) >= INBOX_CAPACITY) {
+      if (!paused && (await countPendingInbox(tx, record.id)) >= INBOX_CAPACITY) {
         throw new Error('WhatsApp inbox capacity reached');
       }
 
@@ -243,8 +250,17 @@ export class WhatsAppConnections {
         profileId: record.profileId,
         channelId: record.id,
         generation: record.generation,
-        message,
-        status: 'pending',
+        message: paused
+          ? {
+              actorId: message.actorId,
+              chatId: message.chatId,
+              requestKey: message.requestKey,
+              text: '',
+              scope: message.scope,
+              mentions: [],
+            }
+          : message,
+        status: paused ? 'discarded' : 'pending',
         receivedAt: this.now(),
       });
     });

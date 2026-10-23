@@ -49,6 +49,13 @@ export const channelCalls = (client: Client) => ({
     result(client.GET('/v1/profiles/{profileId}/deliveries', { params: profile(profileId) })),
   contacts: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/contacts', { params: profile(profileId) })),
+  updateContact: (profileId: string, id: string, body: { aiEnabled: boolean }) =>
+    result(
+      client.PATCH('/v1/profiles/{profileId}/contacts/{id}', {
+        params: { path: { profileId, id } },
+        body,
+      }),
+    ),
   // A room belongs to the installation, not to one profile: several agents sit in the same one.
   groups: () => result(client.GET('/v1/groups')),
   approveContact: (profileId: string, contactId: string) =>

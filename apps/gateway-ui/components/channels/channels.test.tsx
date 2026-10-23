@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { Channel, GatewayApi, NewChannel, ProfileData } from '../../lib/api';
+import type { Channel, Contact, GatewayApi, NewChannel, ProfileData } from '../../lib/api';
 import { profiles } from '../../stories/fixtures';
 import { Channels } from '.';
 
@@ -14,7 +14,12 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function render(channels: Channel[] = [], fail = false) {
+async function render(
+  channels: Channel[] = [],
+  fail = false,
+  contacts: Contact[] = [],
+  busy = false,
+) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const profile = profiles[0];
   if (!profile) throw new Error('Missing profile fixture');
@@ -24,6 +29,7 @@ async function render(channels: Channel[] = [], fail = false) {
       id: 'meta-channel',
       profileId: profile.id,
       type: body.type,
+      enabled: true,
       createdAt: '2026-10-23T12:00:00Z',
       allowAllContacts: false,
       webhookToken: 'synthetic-unused-ingress-token',
@@ -33,7 +39,21 @@ async function render(channels: Channel[] = [], fail = false) {
     if (fail) throw new Error('Synthetic save failure');
   });
   const connect = vi.fn(async () => {});
-  const api = { createChannel, updateChannel, connect } as unknown as GatewayApi;
+  const updateContact = vi.fn(async () => {
+    if (fail) throw new Error('Synthetic save failure');
+  });
+  const approveContact = vi.fn(async () => {});
+  const blockContact = vi.fn(async () => {});
+  const revokeChannel = vi.fn(async () => {});
+  const api = {
+    createChannel,
+    updateChannel,
+    updateContact,
+    approveContact,
+    blockContact,
+    revokeChannel,
+    connect,
+  } as unknown as GatewayApi;
   const element = document.createElement('div');
   document.body.append(element);
   const root = createRoot(element);
@@ -51,10 +71,10 @@ async function render(channels: Channel[] = [], fail = false) {
       root.render(
         <Channels
           profile={profile}
-          data={{ channels, contacts: [], groups: [] } as unknown as ProfileData}
+          data={{ channels, contacts, groups: [] } as unknown as ProfileData}
           api={api}
           mutate={mutate}
-          busy={false}
+          busy={busy}
         />,
       );
     });
@@ -67,8 +87,137 @@ async function render(channels: Channel[] = [], fail = false) {
     if (!panel) throw new Error('Missing channel panel');
     return panel;
   };
-  return { element, createChannel, updateChannel, connect, mutate, toggle, refresh };
+  return {
+    element,
+    createChannel,
+    updateChannel,
+    updateContact,
+    approveContact,
+    blockContact,
+    revokeChannel,
+    connect,
+    mutate,
+    toggle,
+    refresh,
+  };
 }
+
+const business: Channel = {
+  id: 'business',
+  profileId: 'profile',
+  type: 'whatsapp-business',
+  createdAt: '2026-10-23T12:00:00Z',
+  whatsappBusinessStatus: 'configured',
+  enabled: true,
+  allowAllContacts: false,
+};
+const customer: Contact = {
+  id: 'customer',
+  profileId: 'profile',
+  channelId: business.id,
+  type: 'whatsapp-business',
+  actorId: '5511999999999',
+  chatId: '5511999999999',
+  displayName: 'Customer',
+  status: 'approved',
+  aiEnabled: true,
+  scope: 'direct',
+  createdAt: '2026-10-23T12:00:00Z',
+  updatedAt: '2026-10-23T12:00:00Z',
+};
+
+for (const enabled of [undefined, true, false]) {
+  it(`saves only enabled when channel automation is ${enabled}`, async () => {
+    const { enabled: _enabled, ...legacyChannel } = business;
+    // Deliberately omit the required field to exercise pre-automation API payloads.
+    const channel = enabled === undefined ? (legacyChannel as Channel) : { ...business, enabled };
+    const { toggle, updateChannel, revokeChannel, connect } = await render([channel]);
+    const panel = await toggle('whatsapp-business');
+    const control = panel.querySelector<HTMLButtonElement>('[aria-label="Channel automation"]');
+    expect(control?.getAttribute('aria-checked')).toBe(String(enabled ?? true));
+    await act(async () => control?.click());
+    expect(updateChannel).toHaveBeenCalledExactlyOnceWith(profiles[0]?.id, business.id, {
+      enabled: !(enabled ?? true),
+    });
+    expect(revokeChannel).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
+    expect(panel.textContent).toContain('never replayed');
+    expect(panel.textContent).toContain('Jian does not enable app/API coexistence');
+    if (enabled === false) expect(panel.closest('article')?.textContent).toContain('Paused');
+  });
+}
+
+for (const type of ['whatsapp', 'whatsapp-business'] as const) {
+  it(`allows all contacts for ${type} with a separate permissions patch`, async () => {
+    const { toggle, updateChannel } = await render([{ ...business, type }]);
+    const panel = await toggle(type);
+    const control = panel.querySelector<HTMLButtonElement>('[aria-label="Allow all contacts"]');
+    expect(control?.getAttribute('aria-checked')).toBe('false');
+    await act(async () => control?.click());
+    expect(updateChannel).toHaveBeenCalledExactlyOnceWith(profiles[0]?.id, business.id, {
+      allowAllContacts: true,
+    });
+  });
+}
+
+for (const aiEnabled of [undefined, true, false]) {
+  it(`keeps chat AI ${aiEnabled} separate from approval and channel pause`, async () => {
+    const { aiEnabled: _aiEnabled, ...legacyContact } = customer;
+    // Deliberately omit the required field to exercise pre-automation API payloads.
+    const contact =
+      aiEnabled === undefined ? (legacyContact as Contact) : { ...customer, aiEnabled };
+    const { toggle, updateContact, approveContact, blockContact, updateChannel } = await render(
+      [{ ...business, enabled: false }],
+      false,
+      [contact],
+    );
+    const panel = await toggle('whatsapp-business');
+    const control = panel.querySelector<HTMLButtonElement>(
+      '[aria-label="AI replies for Customer"]',
+    );
+    expect(control?.getAttribute('aria-checked')).toBe(String(aiEnabled ?? true));
+    expect(panel.textContent).toContain('Approved');
+    expect(panel.textContent).toContain('never replayed automatically');
+    await act(async () => control?.click());
+    expect(updateContact).toHaveBeenCalledExactlyOnceWith(profiles[0]?.id, customer.id, {
+      aiEnabled: !(aiEnabled ?? true),
+    });
+    expect(approveContact).not.toHaveBeenCalled();
+    expect(blockContact).not.toHaveBeenCalled();
+    expect(updateChannel).not.toHaveBeenCalled();
+  });
+}
+
+it('keeps controls unchanged when saving fails and disables them while busy', async () => {
+  const failed = await render([business], true, [customer]);
+  const panel = await failed.toggle('whatsapp-business');
+  for (const control of panel.querySelectorAll<HTMLButtonElement>('[role="switch"]')) {
+    const checked = control.getAttribute('aria-checked');
+    await act(async () => control.click());
+    expect(control.getAttribute('aria-checked')).toBe(checked);
+  }
+  const busy = await render([business], false, [customer], true);
+  for (const control of busy.element.querySelectorAll<HTMLButtonElement>('[role="switch"]')) {
+    expect(control.disabled).toBe(true);
+    await act(async () => control.click());
+  }
+  expect(busy.updateContact).not.toHaveBeenCalled();
+  expect(busy.updateChannel).not.toHaveBeenCalled();
+});
+
+it('shows the AI control for pending and blocked Business contacts but not Baileys', async () => {
+  const pending = await render([business], false, [
+    { ...customer, status: 'pending', aiEnabled: false },
+  ]);
+  expect(pending.element.querySelector('[aria-label="AI replies for Customer"]')).not.toBeNull();
+  expect(pending.element.textContent).toContain('Approval does not resume paused automation');
+  const blocked = await render([business], false, [{ ...customer, status: 'blocked' }]);
+  expect(blocked.element.querySelector('[aria-label="AI replies for Customer"]')).not.toBeNull();
+  const baileys = await render([{ ...business, type: 'whatsapp' }], false, [
+    { ...customer, type: 'whatsapp' },
+  ]);
+  expect(baileys.element.querySelector('[aria-label="AI replies for Customer"]')).toBeNull();
+});
 
 const credentials = {
   accessToken: 'synthetic-access-token',
@@ -133,6 +282,7 @@ it('shows configured rather than connected, with the signed Meta URL and no grou
       id: 'meta-channel',
       profileId: 'profile',
       type: 'whatsapp-business',
+      enabled: true,
       createdAt: '2026-10-23T12:00:00Z',
       allowAllContacts: false,
     },
@@ -143,7 +293,10 @@ it('shows configured rather than connected, with the signed Meta URL and no grou
   );
   expect(panel.textContent).not.toContain('/v1/ingress/');
   expect(panel.querySelector('input')).toBeNull();
-  expect(panel.querySelector('[role="switch"]')).toBeNull();
+  expect(panel.querySelector('[aria-label="Allow all contacts"]')).not.toBeNull();
+  expect(
+    panel.querySelector('[aria-label="Channel automation"]')?.getAttribute('aria-checked'),
+  ).toBe('true');
   expect(panel.textContent).not.toContain('Add the agent to one');
   expect(panel.textContent).toContain('Replies after expiry are blocked');
   expect(panel.textContent).toContain('Ogg/Opus mono');
@@ -156,6 +309,7 @@ const pendingChannel: Channel = {
   id: 'generated-meta-channel',
   profileId: 'profile',
   type: 'whatsapp-business',
+  enabled: true,
   createdAt: '2026-10-23T12:00:00Z',
   allowAllContacts: false,
   whatsappBusinessStatus: 'pending',
