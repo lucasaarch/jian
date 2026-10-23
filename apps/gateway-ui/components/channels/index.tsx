@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import type { Channel, ChannelType } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionProps } from '../props';
-import { Badge, Button, Confirm, Field, Secret, SectionHeading } from '../ui';
+import { Badge, Button, Confirm, Field, Secret, SectionHeading, Switch } from '../ui';
 import { Conversations } from './conversations';
 import { kinds } from './kinds';
 import { Pairing } from './pairing';
@@ -167,6 +167,29 @@ export function Channels(props: SectionProps) {
                         Disconnect
                       </Button>
                     </div>
+                    {kind.type === 'whatsapp' && (
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="font-medium">Allow all contacts</p>
+                          <p className="note">
+                            Let new contacts chat privately without manual approval. Blocked
+                            contacts stay blocked, groups still need approval, and contacts never
+                            receive owner access.
+                          </p>
+                        </div>
+                        <Switch
+                          label="Allow all contacts"
+                          checked={channel.allowAllContacts ?? false}
+                          disabled={busy}
+                          onChange={(allowAllContacts) =>
+                            void mutate(
+                              () => api.updateChannel(profile.id, channel.id, { allowAllContacts }),
+                              'Contact permissions updated.',
+                            )
+                          }
+                        />
+                      </div>
+                    )}
                     <Conversations {...props} channel={channel} />
                   </>
                 ) : (

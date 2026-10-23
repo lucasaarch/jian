@@ -99,7 +99,7 @@ export class Contacts {
    */
   async intake(
     tx: Queryable,
-    channel: { id: string; profileId: string; type: ChannelType },
+    channel: { id: string; profileId: string; type: ChannelType; allowAllContacts?: boolean },
     message: IncomingMessage,
   ): Promise<Intake> {
     const profileId = channel.profileId;
@@ -112,6 +112,7 @@ export class Contacts {
 
     if (!existing) {
       const name = group ? message.groupName : message.displayName;
+      const allow = channel.type === 'whatsapp' && !group && channel.allowAllContacts === true;
 
       const contact: ContactRecord = {
         id: randomUUID(),
@@ -122,18 +123,24 @@ export class Contacts {
         actorId,
         chatId: message.chatId,
         ...(name ? { displayName: name } : {}),
-        status: 'pending',
+        status: allow ? 'approved' : 'pending',
         // Nothing is held for a room. Releasing it on approval would answer a message that
         // named nobody, which is exactly what a group with several agents must not do.
-        ...(group ? {} : { message: message.text, requestKey: message.requestKey }),
+        ...(group || allow ? {} : { message: message.text, requestKey: message.requestKey }),
         createdAt: now,
         updatedAt: now,
       };
 
       if (await insertContact(tx, contact)) {
-        await recordEvent(tx, this.clock, profileId, 'contact.requested', this.view(contact));
+        if (!allow) {
+          await recordEvent(tx, this.clock, profileId, 'contact.requested', this.view(contact));
+          return { status: 'pending', announce: !group };
+        }
 
-        return { status: 'pending', announce: !group };
+        const approved = { ...contact, sessionId: await this.openSession(tx, contact) };
+        await updateContact(tx, approved);
+        await recordEvent(tx, this.clock, profileId, 'contact.approved', this.view(approved));
+        return { status: 'approved', contact: approved };
       }
 
       existing = assertFound(

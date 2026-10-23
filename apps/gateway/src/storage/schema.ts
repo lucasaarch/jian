@@ -645,6 +645,7 @@ export const channels = pgTable(
     handle: text('handle'),
     // The profile picture last put on the account, as `<address>:<hash>` or `<address>:none`.
     pictureSynced: text('picture_synced'),
+    allowAllContacts: boolean('allow_all_contacts').notNull().default(false),
     webhookTokenHash: text('webhook_token_hash').notNull(),
     createdAt,
     revokedAt: timestamp('revoked_at', { withTimezone: true }),

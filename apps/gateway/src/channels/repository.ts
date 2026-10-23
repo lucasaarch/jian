@@ -21,6 +21,7 @@ export function toChannel(row: ChannelRow): ChannelRecord {
       id: row.id,
       profileId: row.profileId,
       type: row.type,
+      allowAllContacts: row.type === 'whatsapp' && row.allowAllContacts,
       createdAt: row.createdAt.toISOString(),
       ...(row.revokedAt ? { revokedAt: row.revokedAt.toISOString() } : {}),
     }),
@@ -106,9 +107,18 @@ export async function insertChannel(db: Queryable, record: ChannelRecord): Promi
     address: record.address ?? null,
     handle: record.handle ?? null,
     webhookTokenHash: record.tokenHash,
+    allowAllContacts: record.allowAllContacts,
     createdAt: new Date(record.createdAt),
     revokedAt: record.revokedAt ? new Date(record.revokedAt) : null,
   });
+}
+
+export async function setAllowAllContacts(
+  db: Queryable,
+  id: string,
+  value: boolean,
+): Promise<void> {
+  await db.update(channels).set({ allowAllContacts: value }).where(eq(channels.id, id));
 }
 
 /** Written unconditionally, as before: revoking twice carries the second instant. */
