@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 WRAPPER = Path(__file__).with_name("jian-display.py").resolve()
 FAKE_SERVER = '''#!/usr/bin/python3
@@ -35,8 +36,22 @@ sys.exit(module.main(sys.argv[2:]))
 def alive(pid):
     try:
         return Path(f"/proc/{pid}/stat").read_text().split()[2] != "Z"
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):
+        # The process may exit before open (ENOENT) or during read (ESRCH).
         return False
+
+
+class ProcessLiveness(unittest.TestCase):
+    def test_process_disappearing_during_stat_read(self):
+        for error in (FileNotFoundError, ProcessLookupError):
+            with self.subTest(error=error.__name__):
+                with patch.object(Path, "read_text", side_effect=error):
+                    self.assertFalse(alive(123))
+
+    def test_other_stat_errors_are_not_hidden(self):
+        with patch.object(Path, "read_text", side_effect=PermissionError):
+            with self.assertRaises(PermissionError):
+                alive(123)
 
 
 class Supervisor(unittest.TestCase):
