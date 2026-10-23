@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   channelInputSchema,
+  channelPatchSchema,
   type channelSchema,
   type deliverySchema,
   type Group,
@@ -65,6 +66,7 @@ import {
   listPictureTargets,
   markChannelRevoked,
   markPictureSynced,
+  setAllowAllContacts,
   setContactAvatar,
   updateDelivery,
 } from './repository.js';
@@ -317,6 +319,7 @@ export class Channels {
       id: randomUUID(),
       profileId,
       type: data.type,
+      allowAllContacts: false,
       tokenHash: issued.hash,
       ...(identity?.address ? { address: identity.address } : {}),
       ...(identity?.handle ? { handle: identity.handle } : {}),
@@ -378,6 +381,28 @@ export class Channels {
     return (await listChannels(this.services.store.db, profileId)).map((channel) =>
       this.metadata(channel),
     );
+  }
+
+  async update(profileId: string, id: string, input: unknown) {
+    const data = channelPatchSchema.parse(input);
+    const record = await this.services.store.transaction(profileId, async (tx) => {
+      const value = await findChannel(tx, id);
+      const channel = assertFound(value?.profileId === profileId ? value : null, 'Channel');
+
+      if (channel.type !== 'whatsapp') {
+        throw new GatewayError(400, 'Only WhatsApp supports allowing all contacts');
+      }
+      if (channel.revokedAt) {
+        throw new GatewayError(409, 'This channel is disconnected');
+      }
+
+      await setAllowAllContacts(tx, id, data.allowAllContacts);
+      const updated = { ...channel, ...data };
+      await recordEvent(tx, Date.now, profileId, 'channel.updated', this.metadata(updated));
+      return updated;
+    });
+
+    return this.metadata(record);
   }
 
   private async revokeWithin(profileId: string, id: string, tx: Queryable): Promise<ChannelRecord> {
@@ -815,7 +840,10 @@ export class Channels {
     const intake = await this.services.store.transaction(
       channel.profileId,
       async (tx): Promise<Intake & { decision?: GroupDecision }> => {
-        const outcome = await this.people.intake(tx, channel, data);
+        // Settings and intake share the profile lock, so disabling the option takes effect
+        // even for a message whose channel was loaded before the owner's PATCH.
+        const current = assertFound(await findChannel(tx, channel.id), 'Channel');
+        const outcome = await this.people.intake(tx, current, data);
         if (outcome.status === 'pending' && outcome.announce)
           await this.notify(tx, channel, data.chatId, connectionGeneration);
         let decision: GroupDecision | undefined;

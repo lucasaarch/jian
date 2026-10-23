@@ -467,7 +467,8 @@ export interface paths {
         delete: operations["revokeChannel"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** @description Required permission: admin. */
+        patch: operations["updateChannel"];
         trace?: never;
     };
     "/v1/profiles/{profileId}/contacts": {
@@ -6834,6 +6835,8 @@ export interface operations {
                         profileId: string;
                         /** @enum {string} */
                         type: "whatsapp" | "telegram" | "api";
+                        /** @default false */
+                        allowAllContacts: boolean;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -6974,6 +6977,8 @@ export interface operations {
                         profileId: string;
                         /** @enum {string} */
                         type: "whatsapp" | "telegram" | "api";
+                        /** @default false */
+                        allowAllContacts: boolean;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -7110,6 +7115,149 @@ export interface operations {
                         profileId: string;
                         /** @enum {string} */
                         type: "whatsapp" | "telegram" | "api";
+                        /** @default false */
+                        allowAllContacts: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        revokedAt?: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    updateChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                channelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    allowAllContacts: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        /** @enum {string} */
+                        type: "whatsapp" | "telegram" | "api";
+                        /** @default false */
+                        allowAllContacts: boolean;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */

@@ -44,6 +44,28 @@ export const TelegramExpanded: Story = {
   },
 };
 
+const permissionsProps = sectionProps();
+const whatsapp = profileData.channels.find((channel) => channel.type === 'whatsapp');
+if (!whatsapp) throw new Error('No WhatsApp channel in the fixtures');
+const updateChannel = fn(async () => ({ ...whatsapp, allowAllContacts: true }));
+
+/** The opt-in is WhatsApp-only and saves through the channel settings API. */
+export const AllowAllContacts: Story = {
+  render: () => <Channels {...permissionsProps} api={{ ...permissionsProps.api, updateChannel }} />,
+  play: async (context) => {
+    await open('whatsapp')(context);
+    const canvas = within(context.canvasElement);
+    const toggle = canvas.getByRole('switch', { name: 'Allow all contacts' });
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(toggle);
+    await expect(updateChannel).toHaveBeenCalledWith(permissionsProps.profile.id, ids.whatsapp, {
+      allowAllContacts: true,
+    });
+    await open('telegram')(context);
+    await expect(canvas.queryByRole('switch', { name: 'Allow all contacts' })).toBeNull();
+  },
+};
+
 /** Someone new wrote on WhatsApp: who, what they said, and the two answers. */
 export const WhatsAppRequest: Story = {
   render: () => <Channels {...sectionProps()} />,

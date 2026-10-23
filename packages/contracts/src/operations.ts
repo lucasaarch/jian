@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   channelConnectionSchema,
   channelInputSchema,
+  channelPatchSchema,
   channelQrSchema,
   channelSchema,
   contactSchema,
@@ -431,6 +432,14 @@ export const operations: Operation[] = [
     operationId: 'listChannels',
     access: 'admin',
     response: z.array(channelSchema),
+  },
+  {
+    method: 'PATCH',
+    path: `${profile}/channels/:channelId`,
+    operationId: 'updateChannel',
+    access: 'admin',
+    body: channelPatchSchema,
+    response: channelSchema,
   },
   {
     method: 'DELETE',

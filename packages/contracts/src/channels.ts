@@ -28,10 +28,15 @@ export const channelInputSchema = z
     path: ['botToken'],
   });
 
+export const channelPatchSchema = z.strictObject({
+  allowAllContacts: z.boolean(),
+});
+
 export const channelSchema = z.strictObject({
   id: z.uuid(),
   profileId: z.uuid(),
   type: channelTypeSchema,
+  allowAllContacts: z.boolean().default(false),
   createdAt: z.iso.datetime(),
   revokedAt: z.iso.datetime().optional(),
 });
