@@ -114,6 +114,33 @@ export function registerChannelRoutes(app: FastifyInstance, deps: ChannelRouteSe
         .send(await linkedDevices().disconnect(request.params.profileId, request.params.channelId)),
   );
 
+  // Encapsulation keeps the raw parser and 3 MB ceiling off every other API route.
+  void app.register(async (meta) => {
+    meta.removeContentTypeParser('application/json');
+    meta.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_request, body, done) =>
+      done(null, body),
+    );
+    meta.get<{ Params: { channelId: string } }>(
+      '/v1/whatsapp-business/:channelId',
+      async (request, reply) => {
+        reply.header('Cache-Control', 'no-store').type('text/plain');
+        return channels().metaChallenge(request.params.channelId, request.query);
+      },
+    );
+    meta.post<{ Params: { channelId: string } }>(
+      '/v1/whatsapp-business/:channelId',
+      { bodyLimit: 3 * 1024 * 1024 },
+      async (request) => {
+        if (!Buffer.isBuffer(request.body)) throw new GatewayError(400, 'Expected a JSON body');
+        return channels().receiveMeta(
+          request.params.channelId,
+          request.body,
+          request.headers['x-hub-signature-256'],
+        );
+      },
+    );
+  });
+
   app.post<{ Params: { channelId: string } }>('/v1/ingress/:channelId', async (request, reply) =>
     reply.code(202).send(
       await channels().receive(request.params.channelId, {

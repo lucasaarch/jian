@@ -8,6 +8,7 @@ import {
   type GroupTurn,
   type ingressResultSchema,
 } from '@jian/contracts';
+import { eq } from 'drizzle-orm';
 import type { z } from 'zod';
 import { assertFound, GatewayError, NoModelAvailable } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -26,6 +27,7 @@ import type { SessionWriter } from '../sessions/port.js';
 import { insertMessage } from '../sessions/repository.js';
 import type { Stickers } from '../stickers/service.js';
 import type { Queryable, Store } from '../storage/database.js';
+import { metaBindings } from '../storage/schema.js';
 import {
   type ChannelRequest,
   type ChannelType,
@@ -71,6 +73,8 @@ import {
   updateDelivery,
 } from './repository.js';
 import { findConnection, writeAuthChunks, writeConnection } from './whatsapp/repository.js';
+import { verifyMetaNumber } from './whatsapp-business.js';
+import { MetaInbox, metaCanSend, metaCausalInbound } from './whatsapp-business-inbox.js';
 
 /**
  * `address` is what this connection speaks as on its protocol — the linked WhatsApp account or
@@ -86,7 +90,11 @@ export type ChannelRecord = z.infer<typeof channelSchema> & {
 /** Where a channel's bot token lives in the vault. Revoking the channel takes it with it. */
 export const channelSecret = (channelId: string) => `channel:${channelId}`;
 
-export type DeliveryRecord = z.infer<typeof deliverySchema> & { connectionGeneration?: number };
+export type DeliveryRecord = z.infer<typeof deliverySchema> & {
+  connectionGeneration?: number;
+  /** Internal authority, never accepted from an outbound tool or public API. */
+  inboundEventId?: string;
+};
 
 const DISPATCH_INTERVAL_MS = 2000;
 /** How often channels are compared with their profile's picture: a change shows within this. */
@@ -182,7 +190,10 @@ export class Channels {
   private timer?: ReturnType<typeof setTimeout>;
   private stopped = false;
   private pending: Promise<void> = Promise.resolve();
+  private metaTimer?: ReturnType<typeof setTimeout>;
+  private metaPending: Promise<void> = Promise.resolve();
   private readonly abort = new AbortController();
+  private readonly meta: MetaInbox;
 
   constructor(
     private readonly services: ChannelServices,
@@ -191,7 +202,17 @@ export class Channels {
     private readonly errands = new Errands(services.store),
     private readonly people = new Contacts(services),
     private readonly rooms = new Groups(services.profiles, services.decisions?.ask),
-  ) {}
+  ) {
+    this.meta = new MetaInbox(services.store, services.vault, fetcher, this.abort.signal);
+  }
+
+  metaChallenge(id: string, query: unknown) {
+    return this.meta.challenge(id, query);
+  }
+
+  receiveMeta(id: string, raw: Buffer, signature: unknown) {
+    return this.meta.receive(id, raw, signature);
+  }
 
   /** Where the outside world reaches this gateway (`JIAN_PUBLIC_URL`), for webhooks. */
   private publicUrl?: string;
@@ -206,7 +227,7 @@ export class Channels {
         return;
       }
 
-      this.pending = this.dispatch()
+      this.pending = this.dispatchOutbound()
         .catch((error) => channelLog('dispatch.failed', {}, error))
         .then(() => this.syncPictures())
         .catch((error) => channelLog('picture.failed', {}, error));
@@ -218,14 +239,30 @@ export class Channels {
       }
     };
 
+    // Media intake may wait on a remote download. It must not hold the shared outbox
+    // clock: even deliveries queued after a download started still need their next tick.
+    const intake = async () => {
+      if (this.stopped) return;
+      this.metaPending = this.meta
+        .drain((channel, data) => this.accept(channel, data))
+        .catch((error) => channelLog('dispatch.failed', {}, error));
+      await this.metaPending;
+      if (!this.stopped) {
+        this.metaTimer = setTimeout(intake, DISPATCH_INTERVAL_MS);
+        this.metaTimer.unref();
+      }
+    };
+
     void tick();
+    void intake();
   }
 
   async stop() {
     this.stopped = true;
     this.abort.abort();
     clearTimeout(this.timer);
-    await this.pending;
+    clearTimeout(this.metaTimer);
+    await Promise.all([this.pending, this.metaPending]);
   }
 
   private metadata({
@@ -303,7 +340,7 @@ export class Channels {
    * told where to deliver, and the owner registers the webhook by hand.
    */
   async connect(profileId: string, input: unknown, origin?: string) {
-    const { botToken, ...data } = channelInputSchema.parse(input);
+    const { botToken, whatsappBusiness, ...data } = channelInputSchema.parse(input);
 
     await this.services.profiles.profile(profileId);
     this.registry.get(data.type);
@@ -311,6 +348,8 @@ export class Channels {
     if (await findLiveChannel(this.services.store.db, profileId, data.type)) {
       throw new GatewayError(409, 'This channel type is already connected');
     }
+
+    if (whatsappBusiness) await verifyMetaNumber(whatsappBusiness, this.fetcher, this.abort.signal);
 
     const issued = issueToken();
     const identity = botToken ? await this.identify(data.type, botToken) : undefined;
@@ -332,14 +371,32 @@ export class Channels {
         await this.services.vault.put(profileId, channelSecret(record.id), botToken, tx);
       }
 
+      if (whatsappBusiness) {
+        await this.services.vault.put(
+          profileId,
+          channelSecret(record.id),
+          JSON.stringify(whatsappBusiness),
+          tx,
+        );
+      }
+
       try {
         await insertChannel(tx, record);
+        if (whatsappBusiness)
+          await tx.insert(metaBindings).values({
+            channelId: record.id,
+            phoneNumberId: whatsappBusiness.phoneNumberId,
+            businessAccountId: whatsappBusiness.businessAccountId,
+          });
       } catch (error) {
         // The partial unique index has the last word on one live channel per type. Reaching it
         // means another request connected this type first, which is a conflict for the owner
         // rather than a gateway fault.
         if (isUniqueViolation(error)) {
-          throw new GatewayError(409, 'This channel type is already connected');
+          throw new GatewayError(
+            409,
+            'This channel type or Meta phone number is already connected',
+          );
         }
 
         throw error;
@@ -411,6 +468,7 @@ export class Channels {
     const record = { ...channel, revokedAt: new Date().toISOString() };
 
     await markChannelRevoked(tx, id, new Date(record.revokedAt));
+    await tx.delete(metaBindings).where(eq(metaBindings.channelId, id));
     await this.services.vault.discard(profileId, channelSecret(id), tx);
 
     await recordEvent(tx, () => Date.parse(record.revokedAt), profileId, 'channel.disconnected', {
@@ -844,8 +902,9 @@ export class Channels {
         // even for a message whose channel was loaded before the owner's PATCH.
         const current = assertFound(await findChannel(tx, channel.id), 'Channel');
         const outcome = await this.people.intake(tx, current, data);
+        if (outcome.status === 'approved' && outcome.duplicate) return outcome;
         if (outcome.status === 'pending' && outcome.announce)
-          await this.notify(tx, channel, data.chatId, connectionGeneration);
+          await this.notify(tx, channel, data.chatId, connectionGeneration, data.requestKey);
         let decision: GroupDecision | undefined;
         if (outcome.status === 'approved' && data.scope === 'group') {
           await rememberPerson(tx, {
@@ -950,6 +1009,10 @@ export class Channels {
       return { accepted: false, contact: intake.status };
     }
 
+    if (intake.duplicate) {
+      return { accepted: false, contact: 'approved' as const };
+    }
+
     if (intake.decision && !intake.decision.speak) {
       return { accepted: false, contact: 'approved' as const, silence: intake.decision.reason };
     }
@@ -1046,11 +1109,15 @@ export class Channels {
 
       if (tell && this.registry.get(channel.type).send) {
         await insertDelivery(tx, {
-          id: randomUUID(),
+          id:
+            channel.type === 'whatsapp-business'
+              ? stableUuid(`meta-no-model:${channel.id}:${requestKey}`)
+              : randomUUID(),
           profileId: channel.profileId,
           channelId: channel.id,
           chatId: contact.chatId,
           notice: NO_MODEL_NOTICE,
+          ...(channel.type === 'whatsapp-business' ? { inboundEventId: requestKey } : {}),
           status: 'pending',
           createdAt: new Date(now).toISOString(),
           updatedAt: new Date(now).toISOString(),
@@ -1218,6 +1285,7 @@ export class Channels {
         await insertDelivery(tx, {
           id: run.id,
           runId: run.id,
+          ...(channel.type === 'whatsapp-business' ? { inboundEventId: requestKey } : {}),
           profileId: channel.profileId,
           channelId: channel.id,
           chatId: contact.chatId,
@@ -1239,6 +1307,7 @@ export class Channels {
     channel: ChannelRecord,
     chatId: string,
     connectionGeneration?: number,
+    inboundEventId?: string,
   ) {
     if (!this.registry.get(channel.type).send) {
       return;
@@ -1252,6 +1321,7 @@ export class Channels {
       channelId: channel.id,
       chatId,
       notice: APPROVAL_NOTICE,
+      ...(channel.type === 'whatsapp-business' ? { inboundEventId } : {}),
       status: 'pending',
       createdAt: now,
       updatedAt: now,
@@ -1358,7 +1428,17 @@ export class Channels {
     return listDeliveries(this.services.store.db, profileId);
   }
 
+  /** A complete manual tick; the running worker uses independent intake/outbox clocks. */
   async dispatch() {
+    await Promise.all([
+      this.meta.drain((channel, data) => this.accept(channel, data)),
+      this.dispatchOutbound(),
+    ]);
+    // Include notices/runs created by this intake in a manual tick as well.
+    await this.dispatchOutbound();
+  }
+
+  private async dispatchOutbound() {
     await this.recoverUncertainDeliveries();
 
     const deliveries = await listDeliveriesByPhase(this.services.store.db, 'pending', 20);
@@ -1455,9 +1535,9 @@ export class Channels {
           ...current,
           ...outcome,
           // A retry keeps the ids of what is already on screen; the attempt confirmed none.
-          remoteMessageIds: outcome.remoteMessageIds.length
-            ? outcome.remoteMessageIds
-            : current.remoteMessageIds,
+          remoteMessageIds: [
+            ...new Set([...current.remoteMessageIds, ...outcome.remoteMessageIds]),
+          ],
           updatedAt: new Date().toISOString(),
         });
       });
@@ -1561,7 +1641,19 @@ export class Channels {
     });
 
     for (const text of claimed) {
-      await this.deliver(delivery, text);
+      const outcome = await this.deliver(delivery, text);
+      if (outcome.remoteMessageIds.length)
+        await this.services.store.transaction(delivery.profileId, async (tx) => {
+          const current = await findDelivery(tx, delivery.id);
+          if (current)
+            await updateDelivery(tx, {
+              ...current,
+              remoteMessageIds: [
+                ...new Set([...current.remoteMessageIds, ...outcome.remoteMessageIds]),
+              ],
+              updatedAt: new Date().toISOString(),
+            });
+        });
     }
 
     return claimed.length > 0;
@@ -1575,7 +1667,7 @@ export class Channels {
   private async showProgress(delivery: DeliveryRecord): Promise<void> {
     const channel = await findChannel(this.services.store.db, delivery.channelId);
 
-    if (!channel || channel.revokedAt) {
+    if (!channel || channel.revokedAt || (await this.metaDeliveryError(channel, delivery))) {
       return;
     }
 
@@ -1615,6 +1707,24 @@ export class Channels {
     });
   }
 
+  /** Common egress policy for finals, commentary, notices, media and typing. A schedule,
+   * cross-session tool, or late task can have an open window but has no causal authority. */
+  private async metaDeliveryError(channel: ChannelRecord, delivery: DeliveryRecord) {
+    if (channel.type !== 'whatsapp-business') return undefined;
+    if (!(await metaCanSend(this.services.store.db, channel.id, delivery.chatId)))
+      return 'WhatsApp replies require an inbound message within 24 hours';
+    if (
+      !(await metaCausalInbound(
+        this.services.store.db,
+        channel.id,
+        delivery.chatId,
+        delivery.inboundEventId,
+      ))
+    )
+      return 'WhatsApp Business is receptive-only: no causal inbound for this delivery';
+    return undefined;
+  }
+
   private async deliver(
     delivery: DeliveryRecord,
     text: string,
@@ -1628,6 +1738,9 @@ export class Channels {
       if (!channel || channel.revokedAt) {
         throw new Error('Channel unavailable');
       }
+
+      const denied = await this.metaDeliveryError(channel, delivery);
+      if (denied) return { status: 'failed', remoteMessageIds: [], error: denied };
 
       if (delivery.connectionGeneration !== undefined) {
         const connection = await findConnection(this.services.store.db, delivery.channelId);
@@ -1656,6 +1769,8 @@ export class Channels {
         credential,
         fetch: this.fetcher,
         signal: this.abort.signal,
+        canReply: async (chatId: string) =>
+          chatId === delivery.chatId && !(await this.metaDeliveryError(channel, delivery)),
       };
       const people = await this.groupPeople(delivery);
 
@@ -1710,6 +1825,7 @@ export class Channels {
           return {
             status: remoteMessageIds.length ? 'unknown' : outcome.status,
             remoteMessageIds,
+            ...(outcome.error ? { error: outcome.error } : {}),
           };
         }
       }

@@ -33,7 +33,7 @@ export type ContactRecord = z.infer<typeof contactSchema> & {
 export type Contact = z.infer<typeof contactSchema>;
 
 export type Intake =
-  | { status: 'approved'; contact: ContactRecord }
+  | { status: 'approved'; contact: ContactRecord; duplicate?: boolean }
   | { status: 'pending'; announce: boolean }
   | { status: 'blocked' };
 
@@ -42,6 +42,7 @@ const MAX_HELD_CHARACTERS = 8000;
 
 const names: Record<ChannelType, string> = {
   whatsapp: 'WhatsApp',
+  'whatsapp-business': 'WhatsApp Business (Meta)',
   telegram: 'Telegram',
   api: 'API',
 };
@@ -157,14 +158,31 @@ export class Contacts {
     // request instead of producing another one. No event is recorded for those later messages:
     // nothing a stranger sends may drive an automatic reply or a panel update in a loop.
     if (existing.status === 'pending') {
+      if (
+        channel.type === 'whatsapp-business' &&
+        (existing.requestKey === message.requestKey || existing.seen?.includes(message.requestKey))
+      )
+        return { status: 'pending', announce: false };
       const held = existing.message ? `${existing.message}\n\n${message.text}` : message.text;
 
       if (!group && held !== existing.message && held.length <= MAX_HELD_CHARACTERS) {
-        await updateContact(tx, { ...existing, message: held, updatedAt: now });
+        await updateContact(tx, {
+          ...existing,
+          message: held,
+          updatedAt: now,
+          ...(channel.type === 'whatsapp-business'
+            ? { seen: [...(existing.seen ?? []), message.requestKey] }
+            : {}),
+        });
       }
 
       return { status: 'pending', announce: false };
     }
+
+    // Pending messages were released as a single turn. Replaying an appended event after
+    // approval must not submit that fragment as another turn (or restage its media).
+    if (channel.type === 'whatsapp-business' && existing.seen?.includes(message.requestKey))
+      return { status: 'approved', contact: existing, duplicate: true };
 
     // A renamed room keeps its request: the owner approved the conversation, not its subject.
     const renamed =

@@ -14,10 +14,18 @@ export function conversationName(
 
   const contact = contacts.find((item) => item.sessionId === session.id);
   const peer = profiles.find((item) => item.id === session.peerProfileId);
-  const stored = session.title?.replace(/^(Agent|WhatsApp|Telegram)\s·\s/, '');
+  const stored = session.title?.replace(
+    /^(Agent|WhatsApp(?: Business(?: \(Meta\))?)?|Telegram)\s·\s/,
+    '',
+  );
 
-  if (session.channel === 'whatsapp' || session.channel === 'telegram') {
-    const app = session.channel === 'whatsapp' ? 'WhatsApp' : 'Telegram';
+  if (['whatsapp', 'whatsapp-business', 'telegram'].includes(session.channel)) {
+    const app =
+      session.channel === 'whatsapp-business'
+        ? 'WhatsApp Business (Meta)'
+        : session.channel === 'whatsapp'
+          ? 'WhatsApp (Baileys)'
+          : 'Telegram';
 
     return {
       name: contact?.displayName ?? stored ?? 'Unknown contact',

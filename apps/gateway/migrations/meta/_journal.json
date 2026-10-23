@@ -421,6 +421,20 @@
       "when": 1792764000000,
       "tag": "0059_whatsapp-allow-all-contacts",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1792776000000,
+      "tag": "0060_whatsapp-business",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1792776500000,
+      "tag": "0061_meta-causal-delivery",
+      "breakpoints": true
     }
   ]
 }
