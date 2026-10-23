@@ -10,6 +10,7 @@ import {
   submitSchema,
   TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
+import { eq } from 'drizzle-orm';
 import { resumePrompt } from '../agent/ask-user.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError, NoModelAvailable } from '../core/errors.js';
@@ -19,21 +20,12 @@ import type { ProfileReader } from '../profiles/port.js';
 import type { ModelFallback } from '../providers/fallback.js';
 import type { ProviderSelection } from '../providers/port.js';
 import { readModelDefaults, writeModelDefaults } from '../providers/repository.js';
-import {
-  type ObjectiveCommand,
-  objectiveAt,
-  parseObjectiveCommand,
-} from '../sessions/objective.js';
+import { parseObjectiveCommand } from '../sessions/objective.js';
 import type { SessionReader } from '../sessions/port.js';
-import {
-  insertMessage,
-  parseCavemanMode,
-  parsePonytailMode,
-  setCavemanMode,
-  setPonytailMode,
-  setSessionObjective,
-} from '../sessions/repository.js';
+import { insertMessage, parseCavemanMode, parsePonytailMode } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
+import { runs as runRows } from '../storage/schema.js';
+import { queuesInbound } from './drain.js';
 import type { SubmitOptions } from './port.js';
 import {
   appendSteer,
@@ -49,6 +41,7 @@ import {
   setRelayTo,
   updateRun,
 } from './repository.js';
+import { applySessionEffects, type PendingSessionEffects } from './session-effects.js';
 
 /** The cap on what one profile may have waiting or in flight at once. */
 const ACTIVE_RUN_LIMIT = 32;
@@ -142,6 +135,10 @@ export class Runs {
     const fromPerson = Boolean(options.ownerMessage) || activity === 'channel';
     const objectiveCommand =
       fromPerson && !parsed.mediaIds?.length ? parseObjectiveCommand(parsed.text) : undefined;
+    // Server handoffs carry results, never a fresh person command or blocked-goal reply.
+    const effects: PendingSessionEffects = options.handoffToRunId
+      ? { fromPerson: false }
+      : { ponytail: modeChange, caveman: cavemanChange, objectiveCommand, fromPerson };
     const data = {
       ...parsed,
       text: [parsed.text, ...(parsed.mediaIds ?? []).map(mediaMarker)].filter(Boolean).join('\n'),
@@ -185,6 +182,17 @@ export class Runs {
         return this.sameRequest(duplicate, data.text, data.model);
       }
 
+      const draining = await queuesInbound(tx);
+      const sessionEffects = async (runId: string, defer = draining) => {
+        if (defer) {
+          await tx
+            .update(runRows)
+            .set({ pendingSessionEffects: effects })
+            .where(eq(runRows.id, runId));
+        } else {
+          await applySessionEffects(tx, profileId, sessionId, session, effects, this.clock);
+        }
+      };
       const waiting = await findWaitingSessionRun(tx, profileId, sessionId);
 
       // Answering a mid-run question resumes work; it is not a steer and not a bare "continue".
@@ -193,17 +201,7 @@ export class Runs {
         const answered = await findRunByRequestKey(tx, profileId, sessionId, resumeKey);
         if (answered) return this.sameRequest(answered, data.text, data.model);
 
-        if (modeChange) await setPonytailMode(tx, profileId, sessionId, modeChange);
-        if (cavemanChange) await setCavemanMode(tx, profileId, sessionId, cavemanChange);
-        await this.applyObjectiveOnSubmit(
-          tx,
-          profileId,
-          sessionId,
-          session,
-          objectiveCommand,
-          fromPerson,
-        );
-        return this.resumeWaiting(
+        const resumed = await this.resumeWaiting(
           tx,
           profileId,
           session,
@@ -214,9 +212,18 @@ export class Runs {
           author,
           activity,
         );
+        await sessionEffects(resumed.id);
+        return resumed;
       }
 
-      const inFlight = await findActiveSessionRun(tx, profileId, sessionId);
+      let inFlight = draining ? null : await findActiveSessionRun(tx, profileId, sessionId);
+      if (draining && options.handoffToRunId) {
+        const caller = await this.run(profileId, options.handoffToRunId, tx);
+        if (caller.sessionId !== sessionId) throw new GatewayError(409, 'Handoff session mismatch');
+        // A completion may be needed by a caller still executing. Never steer queued ingress
+        // instead, and never admit a new root merely because it is a completion notification.
+        if (caller.status === 'running') inFlight = caller;
+      }
 
       // A person who writes again while the agent is working is not starting a second turn —
       // they are changing what this one should be about. The message joins the run in flight
@@ -234,16 +241,7 @@ export class Runs {
           createdAt: nowIso(this.clock),
         });
 
-        if (modeChange) await setPonytailMode(tx, profileId, sessionId, modeChange);
-        if (cavemanChange) await setCavemanMode(tx, profileId, sessionId, cavemanChange);
-        await this.applyObjectiveOnSubmit(
-          tx,
-          profileId,
-          sessionId,
-          session,
-          objectiveCommand,
-          fromPerson,
-        );
+        await sessionEffects(inFlight.id, false);
 
         await appendSteer(tx, inFlight.id, data.text);
 
@@ -329,16 +327,7 @@ export class Runs {
       };
 
       await insertMessage(tx, message);
-      if (modeChange) await setPonytailMode(tx, profileId, sessionId, modeChange);
-      if (cavemanChange) await setCavemanMode(tx, profileId, sessionId, cavemanChange);
-      await this.applyObjectiveOnSubmit(
-        tx,
-        profileId,
-        sessionId,
-        session,
-        objectiveCommand,
-        fromPerson,
-      );
+      await sessionEffects(run.id);
 
       await recordEvent(
         tx,
@@ -593,65 +582,5 @@ export class Runs {
     );
 
     return run;
-  }
-
-  /**
-   * Explicit owner commands set/close the session objective. Casual chat never seeds one —
-   * that is the agent's job via set_session_objective (or the session API / /objective).
-   * A person message while blocked only resumes the existing goal; it does not replace the text.
-   */
-  private async applyObjectiveOnSubmit(
-    tx: Queryable,
-    profileId: string,
-    sessionId: string,
-    session: Session,
-    command: ObjectiveCommand | undefined,
-    fromPerson: boolean,
-  ) {
-    if (session.channel === TASK_SESSION_CHANNEL) return;
-    const at = nowIso(this.clock);
-    const current = session.objective;
-
-    if (command?.action === 'set') {
-      await setSessionObjective(
-        tx,
-        profileId,
-        sessionId,
-        objectiveAt(command.text, 'open', at, { continuations: 0 }),
-      );
-      return;
-    }
-    if (command?.action === 'done') {
-      if (!current?.text) return;
-      await setSessionObjective(
-        tx,
-        profileId,
-        sessionId,
-        objectiveAt(current.text, 'done', at, { continuations: current.continuations }),
-      );
-      return;
-    }
-    if (command?.action === 'cancel') {
-      if (!current?.text) return;
-      await setSessionObjective(
-        tx,
-        profileId,
-        sessionId,
-        objectiveAt(current.text, 'cancelled', at, { continuations: current.continuations }),
-      );
-      return;
-    }
-
-    if (!fromPerson) return;
-
-    // Owner/channel reply while blocked: resume the same goal — never promote chat into a new title.
-    if (current?.status === 'blocked' && current.text) {
-      await setSessionObjective(
-        tx,
-        profileId,
-        sessionId,
-        objectiveAt(current.text, 'open', at, { continuations: 0 }),
-      );
-    }
   }
 }

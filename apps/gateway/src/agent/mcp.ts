@@ -5,13 +5,14 @@ import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { connectMcp, type SecretReader } from './mcp-connect.js';
 import { mcpClientDisconnected } from './mcp-errors.js';
+import type { McpCleanupResource } from './mcp-negotiate.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
 
 interface McpContext {
   vault: SecretReader | undefined;
   secrets: Set<string>;
-  clients: MCPClient[];
+  clients: McpCleanupResource[];
   fetcher: typeof globalThis.fetch;
   signal: AbortSignal;
   /** Absent in a gateway without the OAuth store; a server needing it then fails to connect. */
@@ -172,12 +173,17 @@ async function openServer(
       // timeout cannot kill a server that already listed its tools.
       signal: AbortSignal.any([context.signal, AbortSignal.timeout(MCP_CONNECT_MS)]),
       lifetime: context.signal,
+      registerCleanup: (resource) => context.clients.push(resource),
       ...(config.auth === 'oauth'
         ? {
             authProvider: context.oauth?.(run.profileId, config.name, mcpOauthClient(config)),
           }
         : {}),
     });
+
+    // Ownership starts at acquisition, not after tools/list succeeds. The runtime must also
+    // close clients whose listing fails or whose sibling connection aborts the turn.
+    context.clients.push(client);
 
     return { live: { config, client, offered: await client.tools() } };
   } catch (error) {
@@ -206,15 +212,14 @@ async function reconnectServer(
         );
       }
 
+      // openServer already registered the replacement. Keep the old handle as well until
+      // its close is confirmed; a failed close must reach runtime cleanup, not disappear.
+      await previous.close();
       const index = context.clients.indexOf(previous);
 
       if (index >= 0) {
-        context.clients[index] = reopened.live.client;
-      } else {
-        context.clients.push(reopened.live.client);
+        context.clients.splice(index, 1);
       }
-
-      await previous.close().catch(() => {});
       live.client = reopened.live.client;
       live.offered = reopened.live.offered;
     })().finally(() => {
@@ -303,9 +308,15 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
 
   // All at once, each on its own clock: a turn waits for the slowest server, not for the sum
   // of them, and one that hangs is given up on without holding the others.
-  const reached = await Promise.all(
+  const settled = await Promise.allSettled(
     run.profile.mcpServers.map(async (config) => openServer(run, config, context)),
   );
+  // Do not enter runtime cleanup while another open can still acquire and register a client.
+  // In particular an abort in one tools/list must not orphan a slower successful connection.
+  const reached = settled.map((result) => {
+    if (result.status === 'rejected') throw result.reason;
+    return result.value;
+  });
 
   // Merged in the owner's order, so the catalog reads the same whichever server answered first.
   for (let index = 0; index < reached.length; index++) {
@@ -322,7 +333,6 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
     }
 
     const { live } = result;
-    context.clients.push(live.client);
 
     // Everything the server offers. A long catalog costs nothing per turn: only the tools the
     // agent has loaded are sent with a request, so a server with a hundred of them is no

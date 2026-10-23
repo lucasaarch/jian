@@ -15,7 +15,7 @@ import {
   sql,
 } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
-import { checkpoints, profileRevisions, runs } from '../storage/schema.js';
+import { checkpoints, deploymentDrain, profileRevisions, runs } from '../storage/schema.js';
 
 type RunRow = typeof runs.$inferSelect;
 type CheckpointRow = typeof checkpoints.$inferSelect;
@@ -403,12 +403,27 @@ export async function setRelayTo(
 export type RunAddress = { id: string; profileId: string };
 
 export async function listQueuedRuns(db: Queryable, limit: number): Promise<RunAddress[]> {
-  return db
-    .select({ id: runs.id, profileId: runs.profileId })
-    .from(runs)
-    .where(eq(runs.status, 'queued'))
-    .orderBy(asc(runs.createdAt))
-    .limit(limit);
+  return (
+    db
+      .select({ id: runs.id, profileId: runs.profileId })
+      .from(runs)
+      // An optimization, not the fence: claim rechecks under the shared row lock. Filter
+      // BEFORE the limit so a backlog of blocked roots cannot starve admitted dependencies.
+      .where(
+        and(
+          eq(runs.status, 'queued'),
+          sql`NOT EXISTS (
+      SELECT 1 FROM ${deploymentDrain}
+      WHERE ${deploymentDrain.owner} IS NOT NULL
+        AND (${deploymentDrain.phase} = 'holding'
+          OR (${runs.call} IS NULL AND ${runs.subagent} IS NULL)
+          OR ${runs.requestKey} LIKE 'ask-answer:%')
+    )`,
+        ),
+      )
+      .orderBy(asc(runs.createdAt))
+      .limit(limit)
+  );
 }
 
 /**

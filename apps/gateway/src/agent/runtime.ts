@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { MCPClient } from '@ai-sdk/mcp';
 import { LEARNING_SESSION_CHANNEL, type ModelConfig, type Run } from '@jian/contracts';
 import {
   generateText,
@@ -40,6 +39,7 @@ import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache 
 import { ACTION_KINDS, actionGuard, guardTools, mcpActionKind } from './guard.js';
 import { availableNote, connectMcpTools, unavailableNote } from './mcp.js';
 import { mcpOutcomeUncertain } from './mcp-errors.js';
+import type { McpCleanupResource } from './mcp-negotiate.js';
 import { Narrator } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
@@ -183,7 +183,7 @@ export class AgentRuntime {
     watchdog.unref();
 
     const signal = AbortSignal.any([controller.signal, stalled.signal]);
-    const clients: MCPClient[] = [];
+    const clients: McpCleanupResource[] = [];
     const outbound = this.options.outbound ?? createSafeFetch();
     const ownsOutbound = !this.options.outbound;
     const secrets = new Set<string>();
@@ -197,13 +197,19 @@ export class AgentRuntime {
       this.services.lifecycle.progress(runId, owner, snapshot),
     );
 
+    let renewing = true;
     const pulse = setInterval(() => {
-      void this.services.lifecycle
-        .heartbeat(profileId, runId, owner)
-        .catch(() => controller.abort());
+      void this.services.lifecycle.heartbeat(profileId, runId, owner).catch(() => {
+        // A heartbeat already in flight may reject after finish/wait released the run lease.
+        if (renewing) controller.abort();
+      });
     }, 10_000);
 
     pulse.unref();
+    const stopHeartbeat = () => {
+      renewing = false;
+      clearInterval(pulse);
+    };
 
     try {
       const defaults = await this.services.providers?.modelDefaults?.(profileId);
@@ -873,6 +879,7 @@ export class AgentRuntime {
 
       if (askUser) {
         const question = buildRunQuestion(askUser, nowIso(Date.now));
+        stopHeartbeat();
         await this.services.lifecycle.wait(profileId, runId, owner, question);
         await this.nameConversation(run, secrets);
         return;
@@ -929,6 +936,7 @@ export class AgentRuntime {
         throw new Error('Agent stopped without a complete final response');
       }
 
+      stopHeartbeat();
       await this.services.lifecycle.finish(
         profileId,
         runId,
@@ -970,6 +978,7 @@ export class AgentRuntime {
           const current = await this.services.runs.run(profileId, runId).catch(() => null);
           if (current?.status === 'running' && current.leaseOwner === owner) {
             const question = buildRunQuestion(pause, nowIso(Date.now));
+            stopHeartbeat();
             await this.services.lifecycle
               .wait(profileId, runId, owner, question)
               .catch((waitError: unknown) =>
@@ -990,6 +999,7 @@ export class AgentRuntime {
       const current = await this.services.runs.run(profileId, runId);
 
       if (current.status === 'running' && current.leaseOwner === owner) {
+        stopHeartbeat();
         await this.services.lifecycle
           .finish(
             profileId,
@@ -1012,13 +1022,23 @@ export class AgentRuntime {
         await this.services.peers.deliverLate(profileId, runId).catch(() => {});
       }
     } finally {
-      clearInterval(pulse);
+      stopHeartbeat();
       clearInterval(watchdog);
-      this.controllers.delete(runId);
-      await Promise.allSettled(clients.map((client) => client.close()));
-
-      if (ownsOutbound) {
-        await outbound.close();
+      try {
+        // Try every close and wait for all of them. A rejected close is not proof of cleanup:
+        // retain the durable marker for explicit reconciliation instead of admitting a successor.
+        const closed = await Promise.allSettled([
+          ...clients.map(async (client) => client.close()),
+          ...(ownsOutbound ? [(async () => outbound.close())()] : []),
+        ]);
+        const errors = closed.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        );
+        // biome-ignore lint/correctness/noUnsafeFinally: Cleanup failure must reject even a waiting run's early return, while retaining its marker.
+        if (errors.length) throw new AggregateError(errors, 'Run cleanup could not be confirmed');
+        await this.services.lifecycle.releaseExecution(runId, owner);
+      } finally {
+        this.controllers.delete(runId);
       }
     }
   }

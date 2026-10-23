@@ -79,6 +79,8 @@ export type McpConnection = {
    * `signal` must set this to the run abort alone, or the timeout ends the server mid-turn.
    */
   lifetime?: AbortSignal;
+  /** Owns a stdio transport before initialization can fail to return its client. */
+  registerCleanup?: Parameters<typeof createNegotiatedMcpClient>[1];
   env?: NodeJS.ProcessEnv;
   /** Present only for a server the owner signed in to; the SDK drives the whole exchange. */
   authProvider?: Parameters<typeof createNegotiatedMcpClient>[0]['transport'] extends infer T
@@ -94,16 +96,19 @@ export async function connectMcp(connection: McpConnection): Promise<MCPClient> 
   const env = connection.env ?? process.env;
 
   if (server.transport === 'stdio') {
-    return createNegotiatedMcpClient({
-      transport: stdioTransport({
-        command: server.command as string,
-        args: server.args,
-        env: await collect(profileId, server, 'env', server.env, vault, env),
-        signal: connection.lifetime ?? signal,
-      }),
-      initializationOptions: { signal, timeout: 15_000 },
-      maxRetries: 0,
-    });
+    return createNegotiatedMcpClient(
+      {
+        transport: stdioTransport({
+          command: server.command as string,
+          args: server.args,
+          env: await collect(profileId, server, 'env', server.env, vault, env),
+          signal: connection.lifetime ?? signal,
+        }),
+        initializationOptions: { signal, timeout: 15_000 },
+        maxRetries: 0,
+      },
+      connection.registerCleanup,
+    );
   }
 
   const headers =

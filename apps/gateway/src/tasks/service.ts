@@ -150,7 +150,7 @@ export class Work {
             .filter(Boolean)
             .join('\n'),
         },
-        { transaction: tx },
+        { transaction: tx, handoffToRunId: principal.id },
       );
       await this.deliveries?.deliverRun(profileId, principal.sessionId, followUp.id, tx);
       await tx

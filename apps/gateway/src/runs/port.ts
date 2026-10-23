@@ -20,6 +20,8 @@ export type SubmitOptions = {
   /** Who wrote the message, when the conversation is a room with several people in it. */
   author?: { id: string; name?: string };
   subagent?: Subagent;
+  /** Server-only completion: during drain it may steer this still-running caller, not ingress. */
+  handoffToRunId?: string;
   transaction?: Queryable;
 };
 
@@ -42,6 +44,7 @@ export interface RunWriter extends RunReader {
 export interface RunExecution {
   claim(runId: string, profileId: string, owner: string): Promise<Run | null>;
   heartbeat(profileId: string, runId: string, owner: string): Promise<void>;
+  releaseExecution(runId: string, owner: string): Promise<void>;
   checkpoint(profileId: string, runId: string, owner: string, data: unknown): Promise<void>;
   progress(runId: string, owner: string, progress: RunProgress | null): Promise<void>;
   steer(runId: string, owner: string): Promise<string | null>;

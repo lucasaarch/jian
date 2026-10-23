@@ -170,6 +170,9 @@ Provider, MCP and channel keys do not live in the environment: they are typed in
 ## Updating and rolling back
 
 Updating means changing the tag and starting again. The migration runs at startup.
+For platforms that run a one-shot command before replacing the old service, the optional
+[predeploy execution drain](predeploy-drain.md) waits for active runs and holds admission
+across the swap. Bootstrap drain-aware workers before enabling it; it is not enabled by default.
 
 ```bash
 # Compose: pin the version in .env and recreate the container

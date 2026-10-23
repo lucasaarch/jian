@@ -7,7 +7,7 @@ import {
   profilePatchSchema,
   profileSchema,
 } from '@jian/contracts';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { mcpOauthClientSecretKey, mcpValueSecret } from '../agent/mcp-connect.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
@@ -15,7 +15,7 @@ import { recordEvent } from '../core/events.js';
 import { environmentProvider, type ProviderKind, providerCatalog } from '../providers/catalog.js';
 import type { Vault } from '../security/vault.js';
 import type { Queryable, Store } from '../storage/database.js';
-import { modelDefaults, providers } from '../storage/schema.js';
+import { modelDefaults, providers, runs } from '../storage/schema.js';
 import {
   deleteProfileRow,
   findProfile,
@@ -409,6 +409,15 @@ export class Profiles {
     await this.profile(id);
 
     await this.store.transaction(id, async (tx) => {
+      // A terminal run can still own cleanup; cascading it away would erase drain evidence.
+      const [executing] = await tx
+        .select({ id: runs.id })
+        .from(runs)
+        .where(and(eq(runs.profileId, id), isNotNull(runs.executionOwner)))
+        .limit(1);
+      if (executing) {
+        throw new GatewayError(409, 'An execution is still cleaning up. Wait before deleting.');
+      }
       await this.beforeDelete?.(id, tx);
       await deleteProfileRow(tx, id);
     });
@@ -429,7 +438,7 @@ export class Profiles {
       if (await hasActiveRun(tx, id)) {
         throw new GatewayError(
           409,
-          'An answer is still running. Wait for it to finish, or cancel it, then reset.',
+          'An answer is queued, running, or still cleaning up. Wait for cleanup before resetting.',
         );
       }
 

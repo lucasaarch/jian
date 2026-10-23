@@ -72,22 +72,73 @@ export function shouldFallbackToLegacyInitialize(error: unknown): boolean {
   return offersLegacy && !offersModern;
 }
 
+/** Cleanup ownership does not require a fully initialized SDK client. */
+export type McpCleanupResource = { close(): Promise<void> };
+
 /**
  * Opens an MCP client with discovery first, then a legacy handshake when the peer refuses
  * modern serving. Modern-only and plain legacy servers keep working unchanged.
  */
-export async function createNegotiatedMcpClient(config: MCPClientConfig): Promise<MCPClient> {
+export async function createNegotiatedMcpClient(
+  config: MCPClientConfig,
+  register?: (resource: McpCleanupResource) => void,
+): Promise<MCPClient> {
+  const transport = config.transport;
+  let lastClose: Promise<void> | undefined;
+
+  // Custom transports (notably stdio) exist before the SDK returns a client. Own their
+  // cleanup now: SDK init swallows close failures and stops awaiting close on abort.
+  if ('start' in transport) {
+    const close = transport.close.bind(transport);
+    let closing: Promise<void> | undefined;
+    transport.close = () => {
+      if (!closing) {
+        const pending = Promise.resolve().then(() => close());
+        lastClose = closing = pending;
+        // A later runtime cleanup may retry a failed close, but never race an ongoing one.
+        void pending.then(
+          () => {
+            closing = undefined;
+          },
+          () => {
+            closing = undefined;
+          },
+        );
+      }
+      return closing;
+    };
+    register?.({ close: () => transport.close() });
+  }
+
+  const open = async (protocolVersionDiscovery: boolean): Promise<MCPClient> => {
+    lastClose = undefined;
+    try {
+      return await createMCPClient({ ...config, protocolVersionDiscovery });
+    } catch (error) {
+      if ('start' in transport) {
+        try {
+          // Observe the SDK's exact close, even if it rejected or init stopped waiting.
+          // Do not reuse this transport for fallback until its old close has completed.
+          await (lastClose ?? transport.close());
+        } catch (cleanupError) {
+          throw new AggregateError([error, cleanupError], 'MCP initialization cleanup failed');
+        }
+      }
+      throw error;
+    }
+  };
+
   if (config.protocolVersionDiscovery === false) {
-    return createMCPClient(config);
+    return open(false);
   }
 
   try {
-    return await createMCPClient({ ...config, protocolVersionDiscovery: true });
+    return await open(true);
   } catch (error) {
     if (!shouldFallbackToLegacyInitialize(error)) {
       throw error;
     }
 
-    return createMCPClient({ ...config, protocolVersionDiscovery: false });
+    return open(false);
   }
 }

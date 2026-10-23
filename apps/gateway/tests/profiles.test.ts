@@ -71,6 +71,37 @@ it('uses optimistic versions for profile and memory edits', async () => {
 const avatar = `data:image/jpeg;base64,${Buffer.from('synthetic-image-bytes').toString('base64')}`;
 
 describe('deleting a profile', () => {
+  it.each(['completed', 'cancelled', 'failed'] as const)(
+    'preserves the %s executor marker until cleanup is explicitly released',
+    async (status) => {
+      const { services, profile, session } = await setup();
+      const run = await services.runs.submit(profile.id, session.id, {
+        text: 'Work',
+        requestKey: 'cleanup',
+      });
+      await services.lifecycle.claim(run.id, profile.id, 'executor');
+      if (status === 'cancelled') await services.runs.cancel(profile.id, run.id);
+      else await services.lifecycle.finish(profile.id, run.id, 'executor', status, 'Done');
+      await expect(services.profiles.resetProfile(profile.id)).rejects.toMatchObject({
+        statusCode: 409,
+      });
+      await expect(services.profiles.deleteProfile(profile.id)).rejects.toMatchObject({
+        statusCode: 409,
+      });
+      await services.lifecycle.releaseExecution(run.id, 'stale-owner');
+      await expect(services.profiles.deleteProfile(profile.id)).rejects.toMatchObject({
+        statusCode: 409,
+      });
+      await services.lifecycle.releaseExecution(run.id, 'executor');
+      await expect(services.profiles.resetProfile(profile.id)).resolves.toMatchObject({
+        id: profile.id,
+      });
+      await expect(services.profiles.deleteProfile(profile.id)).resolves.toEqual({
+        id: profile.id,
+      });
+    },
+  );
+
   it('removes the profile and everything it ever held', async () => {
     const { services, profile, session } = await setup();
 

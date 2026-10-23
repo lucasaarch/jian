@@ -16,6 +16,23 @@ export function stdioTransport(options: {
 }): MCPTransport {
   let child: ReturnType<typeof spawn> | undefined;
   let buffer = '';
+  let closed = Promise.resolve();
+
+  // Observe `close`, not kill()'s boolean: a signal being sent proves neither process exit
+  // nor closed pipes. A child can ignore SIGTERM or leave inherited pipes open.
+  const waitForClose = async (confirmation: Promise<void>): Promise<boolean> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        confirmation.then(() => true),
+        new Promise<false>((resolve) => {
+          timer = setTimeout(() => resolve(false), 1_000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
 
   const transport: MCPTransport = {
     async start() {
@@ -31,8 +48,13 @@ export function stdioTransport(options: {
         signal: options.signal,
       });
 
+      closed = new Promise<void>((resolve) => {
+        child?.once('close', () => {
+          resolve();
+          transport.onclose?.();
+        });
+      });
       child.on('error', (error) => transport.onerror?.(error));
-      child.on('close', () => transport.onclose?.());
 
       // Diagnostics belong on stderr by the protocol's own rule; they are not messages.
       child.stderr?.on('data', () => undefined);
@@ -75,9 +97,24 @@ export function stdioTransport(options: {
     },
 
     async close() {
-      child?.kill();
-      child = undefined;
-      buffer = '';
+      const closing = child;
+      if (!closing) return;
+
+      const confirmation = closed;
+      closing.kill('SIGTERM');
+      if (!(await waitForClose(confirmation))) {
+        closing.kill('SIGKILL');
+        if (!(await waitForClose(confirmation))) {
+          // Retain the handle so a retry can still confirm termination. The runtime must
+          // keep its execution marker when cleanup cannot be established.
+          throw new Error('MCP command termination could not be confirmed');
+        }
+      }
+
+      if (child === closing) {
+        child = undefined;
+        buffer = '';
+      }
     },
   };
 

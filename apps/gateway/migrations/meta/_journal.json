@@ -421,6 +421,13 @@
       "when": 1792764000000,
       "tag": "0059_whatsapp-allow-all-contacts",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1792765000000,
+      "tag": "0060_deployment-drain",
+      "breakpoints": true
     }
   ]
 }
