@@ -1,7 +1,7 @@
 import { channelSchema, contactSchema, deliverySchema } from '@jian/contracts';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
-import { channels, contacts, deliveries, profiles } from '../storage/schema.js';
+import { channels, contacts, deliveries, metaReceipts, profiles } from '../storage/schema.js';
 import type { ChannelType } from './channel.js';
 import type { ContactRecord } from './contacts.js';
 import type { ChannelRecord, DeliveryRecord } from './service.js';
@@ -330,6 +330,7 @@ export function toDelivery(row: DeliveryRow): DeliveryRecord {
       ...(row.runId ? { runId: row.runId } : {}),
       chatId: row.chatId,
       status: row.status,
+      ...(row.error ? { error: row.error } : {}),
       ...(row.notice ? { notice: row.notice } : {}),
       ...(row.mediaId ? { mediaId: row.mediaId } : {}),
       createdAt: row.createdAt.toISOString(),
@@ -337,6 +338,7 @@ export function toDelivery(row: DeliveryRow): DeliveryRecord {
       remoteMessageIds: row.remoteMessageIds,
       saidCount: row.saidCount,
     }),
+    ...(row.inboundEventId ? { inboundEventId: row.inboundEventId } : {}),
     ...(row.connectionGeneration === null
       ? {}
       : { connectionGeneration: row.connectionGeneration }),
@@ -352,7 +354,9 @@ function toDeliveryRow(delivery: DeliveryRecord): typeof deliveries.$inferInsert
     chatId: delivery.chatId,
     notice: delivery.notice ?? null,
     mediaId: delivery.mediaId ?? null,
+    inboundEventId: delivery.inboundEventId ?? null,
     status: delivery.status,
+    error: delivery.error ?? null,
     remoteMessageIds: delivery.remoteMessageIds,
     saidCount: delivery.saidCount,
     connectionGeneration: delivery.connectionGeneration ?? null,
@@ -404,7 +408,31 @@ export async function listDeliveries(db: Queryable, profileId: string): Promise<
     .orderBy(desc(deliveries.createdAt))
     .limit(100);
 
-  return rows.map(toDelivery);
+  const result = rows.map(toDelivery);
+  const channelIds = [...new Set(rows.map((row) => row.channelId))];
+  const remoteIds = [...new Set(rows.flatMap((row) => row.remoteMessageIds.map(String)))];
+  if (!channelIds.length || !remoteIds.length) return result;
+  const receipts = await db
+    .select()
+    .from(metaReceipts)
+    .where(
+      and(inArray(metaReceipts.channelId, channelIds), inArray(metaReceipts.remoteId, remoteIds)),
+    );
+  for (const delivery of result) {
+    const matching = receipts.filter(
+      (receipt) =>
+        receipt.channelId === delivery.channelId &&
+        receipt.chatId === delivery.chatId &&
+        delivery.remoteMessageIds.includes(receipt.remoteId),
+    );
+    if (matching.length)
+      delivery.remoteReceipts = matching.map((receipt) => ({
+        messageId: receipt.remoteId,
+        status: receipt.status as 'sent' | 'delivered' | 'read' | 'failed',
+        at: receipt.at.toISOString(),
+      }));
+  }
+  return result;
 }
 
 /**

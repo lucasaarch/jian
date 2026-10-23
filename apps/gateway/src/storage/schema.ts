@@ -628,7 +628,12 @@ export const releaseReads = pgTable('release_reads', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const channelType = pgEnum('channel_type', ['api', 'telegram', 'whatsapp']);
+export const channelType = pgEnum('channel_type', [
+  'api',
+  'telegram',
+  'whatsapp',
+  'whatsapp-business',
+]);
 
 export const channels = pgTable(
   'channels',
@@ -657,6 +662,65 @@ export const channels = pgTable(
       .where(sql`${table.revokedAt} is null`),
     uniqueIndex('channels_webhook_token').on(table.webhookTokenHash),
   ],
+);
+
+/** Explicit, exclusive routing binding. Credentials live only in the profile vault. */
+export const metaBindings = pgTable('meta_bindings', {
+  channelId: uuid('channel_id')
+    .primaryKey()
+    .references(() => channels.id, { onDelete: 'cascade' }),
+  phoneNumberId: text('phone_number_id').notNull().unique(),
+  businessAccountId: text('business_account_id').notNull(),
+});
+
+export const metaWindows = pgTable(
+  'meta_windows',
+  {
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => channels.id, { onDelete: 'cascade' }),
+    chatId: text('chat_id').notNull(),
+    lastInbound: timestamp('last_inbound', { withTimezone: true }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.channelId, table.chatId] })],
+);
+
+/** Kept after processing: Meta retries for seven days; completed ids must not be forgotten. */
+export const metaInbox = pgTable(
+  'meta_inbox',
+  {
+    sequence: bigserial('sequence', { mode: 'number' }).notNull(),
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => channels.id, { onDelete: 'cascade' }),
+    eventId: text('event_id').notNull(),
+    payload: jsonb('payload').notNull().$type<unknown>(),
+    availableAt: timestamp('available_at', { withTimezone: true }).notNull().defaultNow(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.channelId, table.eventId] }),
+    index('meta_inbox_pending').on(table.availableAt).where(sql`${table.processedAt} is null`),
+    index('meta_inbox_head')
+      .on(table.channelId, table.sequence)
+      .where(sql`${table.processedAt} is null`),
+  ],
+);
+
+export const metaReceipts = pgTable(
+  'meta_receipts',
+  {
+    chatId: text('chat_id').notNull(),
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => channels.id, { onDelete: 'cascade' }),
+    remoteId: text('remote_id').notNull(),
+    status: text('status').notNull(),
+    rank: integer('rank').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.channelId, table.remoteId] })],
 );
 
 export const contactScope = pgEnum('contact_scope', ['direct', 'group']);
@@ -783,6 +847,8 @@ export const deliveries = pgTable(
     // Gateway-authored text sent without a run, such as the approval notice.
     notice: text('notice'),
     mediaId: uuid('media_id'),
+    // Only direct inbound intake can grant a Meta delivery its causal authority.
+    inboundEventId: text('inbound_event_id'),
     status: deliveryStatus('status').notNull(),
     error: text('error'),
     // What the protocol called the message it accepted, for a later receipt to match.

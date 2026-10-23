@@ -1,8 +1,8 @@
 # Channels
 
-A profile has three possible channels — WhatsApp, Telegram and the API server — and at most one of each. Connecting is the whole configuration: there is no name, no chosen session and no list of senders. Who may talk to the agent is decided afterwards: contact by contact in private conversations, and once per room in groups.
+A profile has four possible channels — WhatsApp (Baileys), WhatsApp Business (Meta), Telegram and the API server — and at most one of each. Connecting is the whole configuration: there is no name, no chosen session and no list of senders. Who may talk to the agent is decided afterwards: contact by contact in private conversations, and once per room in groups.
 
-`POST /v1/profiles/{profileId}/channels` connects a type and returns the `webhookToken` once; the database keeps only its hash. A second channel of the same type answers `409`. `DELETE /v1/profiles/{profileId}/channels/{channelId}` disconnects, deletes the channel's secret from the vault and frees the type for a new connection. Approved contacts and their conversations are kept.
+`POST /v1/profiles/{profileId}/channels` configures a type. The API server uses the one-time `webhookToken` (only its hash is kept); Telegram uses it for webhook authentication. Meta uses its own signed webhook and verify token instead, and Baileys has no HTTP intake. A second channel of the same type answers `409`. `DELETE /v1/profiles/{profileId}/channels/{channelId}` disconnects, deletes the channel's secret from the vault and frees the type for a new connection. Approved contacts and their conversations are kept.
 
 ## Contacts and approval
 
@@ -31,6 +31,8 @@ The automatic notice only exists on channels that can answer. The API server onl
 Each conversation is a session of the profile, created on approval and titled with the channel and the sender — `WhatsApp · 5511999999999@c.us`, `WhatsApp · Team room`. Nothing is configured for that. The sessions appear under **Sessions** in the panel, share the profile's identity, tools and memories, and keep their history apart. A room's session is separate from the private conversations of the same people.
 
 ## Rooms
+
+This section describes Baileys, Telegram and custom API rooms. WhatsApp Business (Meta) groups are unavailable in this prototype; its separate restrictions are documented below.
 
 A room is a conversation where several people and several agents write. Each agent joins through its own connection — its own number on WhatsApp, its own bot on Telegram — so the isolation between profiles stays whole: each profile sees the room through its connection, and what the other agents write reaches it as a message from another participant, over the protocol itself. Telegram is the exception: it never delivers a bot's messages to other bots, so once an agent's message is sent to a room the gateway hands it to the installation's other agents approved there, as if the room had delivered it — heard, answered only when it calls them, and counted in the room's budget. There is no shared room and no common transcript inside the gateway.
 
@@ -101,9 +103,65 @@ The worker processes deliveries once the run has finished. `GET /v1/profiles/{pr
 
 The host comes from the `Host` header of the connect request, so connect through the public domain, not an internal address. The local tests simulate Telegram and configure no real bot.
 
+## WhatsApp Business through Meta Cloud API
+
+**WhatsApp Business (Meta)** is the independent `whatsapp-business` connector, not a QR-linked Baileys device. The prototype supports receptive, one-to-one customer support. It does not activate a Meta account, register a production number, complete Embedded Signup, or automatically subscribe a webhook. A saved channel is **Configured**, not proof of a working connection or delivery.
+
+### Prepare a test account
+
+1. Check the current [Meta AI-provider policy](https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing/ai-providers), [business terms](https://www.whatsapp.com/legal/business-solution-terms), account eligibility, recipient markets and pricing **before real deployment**. Jian is an agent platform: describing an installation as customer support does not automatically exempt it from AI-provider requirements. Official API access guarantees neither approval nor immunity from account restrictions. Do not assume free usage; test allowances and production charges depend on Meta's current terms.
+2. Follow Meta's [Cloud API getting-started guide](https://developers.facebook.com/documentation/business-messaging/whatsapp/get-started). Create a developer app with WhatsApp enabled and use the supplied test number and explicitly allowed test recipients first. Do not migrate the existing Baileys number as part of this setup.
+3. Obtain an access token for the correct business and number. A temporary developer token may be useful for initial testing but expires. For an enduring setup, create a system user, assign the app and WhatsApp assets, and issue a system-user token with the required WhatsApp permissions (including `whatsapp_business_messaging` for messaging and `whatsapp_business_management` for account/subscription management). Confirm permissions, asset access and expiry in Meta; a token alone does not grant access to every number.
+4. Copy the app's **App secret**, the **Phone number ID**, and the **WhatsApp Business account ID (WABA ID)**. The phone number ID is not a telephone number, and the WABA ID is not a business portfolio ID. Choose a separate, unpredictable **verify token** for the webhook challenge. Keep all three secrets out of logs, screenshots and source control; never put the access token or app secret in a URL.
+5. In **Channels → WhatsApp Business (Meta) → Set up**, enter those five values and save. The password fields are not saved to browser storage or read back; they are cleared on submission and closing the form. The gateway stores the credentials in its encrypted vault. To replace credentials, disconnect and configure again. Saving verifies Graph API v25.0 access and account membership; the configured number must appear in the first 100 entries of the WABA's phone-number list. Otherwise this prototype fails safely rather than assuming membership.
+
+The host-authenticated create operation takes this shape (placeholders only; never publish real credentials):
+
+```json
+{
+  "type": "whatsapp-business",
+  "whatsappBusiness": {
+    "accessToken": "<system-user-access-token>",
+    "appSecret": "<meta-app-secret>",
+    "verifyToken": "<chosen-webhook-verify-secret>",
+    "phoneNumberId": "<meta-phone-number-id>",
+    "businessAccountId": "<whatsapp-business-account-id>"
+  }
+}
+```
+
+### Subscribe the signed webhook manually
+
+1. Expose the gateway through a public **HTTPS/TLS** endpoint reachable by Meta. Use the gateway's public origin, not a development panel origin or an internal address. Configure the callback in Meta as `https://<public-gateway>/v1/whatsapp-business/<channelId>` (route pattern: `/v1/whatsapp-business/:channelId`). The panel shows the path for the saved channel; correct the origin if the panel is hosted separately.
+2. Enter the same verify token in Meta's webhook configuration. Meta calls GET with `hub.mode`, `hub.verify_token` and `hub.challenge`; the gateway verifies the token before answering the challenge. This challenge does not authenticate later POSTs. Meta sends the verify token in that GET query: disable query-string access logging for this endpoint at the reverse proxy or redact `hub.verify_token`.
+3. Subscribe to the WhatsApp `messages` webhook field and subscribe the app to the intended WABA (through Meta's tooling or its `/{WABA-ID}/subscribed_apps` Graph API operation). Saving credentials in Jian does neither of these subscriptions for you.
+4. POST payloads must carry a valid `X-Hub-Signature-256`: HMAC-SHA256 over the original request body with the app secret. A reverse proxy must preserve the signed body and header. The channel also checks the configured account and phone number IDs; a valid app signature is not permission to route another number's messages to this profile. Do not use the API server's `X-Jian-Channel-Token` or `/v1/ingress` endpoint for Meta.
+5. Send a message **from an allowed test customer's phone to the test business number**, approve that contact in Jian, and observe both the conversation and delivery results. A successful save, challenge, Graph API acceptance or local `sent` record is not proof that a customer's phone received a message. Check actual status events and the recipient device. These instructions do not claim any real account activation or live integration verification.
+
+Start with a dedicated Meta app and a single-number test account for each channel in this prototype. An app-level callback is not a per-profile routing table: replacing it with another channel's URL can stop the first channel receiving events. Batches containing a different account or number are rejected rather than routed across profiles. Sharing one app across channels would require explicitly configured per-number webhook overrides or a separately designed app-level router; this prototype does not configure either.
+
+See Meta's [webhook setup](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/create-webhook-endpoint) for the current dashboard and subscription requirements.
+
+### Reply window and prototype limits
+
+- Only a valid **customer inbound message** opens or renews that customer's **24-hour customer-service window**. Agent replies, delivery receipts, contact approval and background work do not renew it.
+- Free-form replies are checked at send time, not just when a run begins. If the window expires while an answer, progress update, audio reply or delayed result is being prepared, that reply is blocked. The customer must write again to reopen the window. Local contact approval is not Meta opt-in and cannot bypass this restriction.
+- There are **no templates or proactive messages** in this prototype. An open window alone is not authorization: delivery must be tied to a signed inbound message for this channel and recipient. Scheduled reminders, unsolicited cross-conversation sends and autonomous late task results are blocked even inside an open window. Replies and voice attachments produced by the inbound conversation's run remain subject to the send-time window. It does not silently fall back to Baileys or another connector. Future template support would require explicit implementation, approved templates and the applicable consent rules, not arbitrary content disguised as a template.
+- **Audio is limited to Ogg/Opus mono voice messages, up to 16 MB, in both directions.** Other audio formats, images, documents and stickers are not supported by this connector. An unsupported or failed incoming audio download becomes an explicit unreadable-audio note, not an invented transcript. Incoming audio uses the profile's existing media/transcription settings after contact approval; outgoing voice uses the existing speech tools. Plain-text replies are limited to 4,096 characters per message.
+- **Groups are unavailable.** A future Groups API integration would need separate eligibility and payload validation. Meta currently documents an **Official Business Account (OBA)** requirement, a maximum of **8 participants**, only **one Cloud API business per group**, and invitation-based participation. A normal Cloud API account is not automatically an OBA; ordinary Baileys groups cannot simply be joined or imported. Check the current [Groups API](https://developers.facebook.com/documentation/business-messaging/whatsapp/groups) and [OBA requirements](https://developers.facebook.com/documentation/business-messaging/whatsapp/official-business-accounts) before planning this work.
+- **No contact, approval, session-history or group migration between connectors.** Baileys and Meta retain separate channel identities and permissions even when the same person writes on both. Disconnecting retains that connector's local history; it does not transfer it to another connector.
+
+### Durability and validation limits
+
+Signed webhook batches are persisted transactionally before HTTP 200, with a 3 MB limit specific to this route. The durable inbox retains completed event keys and payloads for the channel's lifetime; there is no automatic retention or compaction policy yet. Profile/channel deletion cascades inbox data. A processing attempt has a ten-minute crash-recovery lease; message keys make contact intake, media storage and run submission replay-safe. This does not promise exactly-once execution of arbitrary external model tools.
+
+Media downloads use fixed Graph/CDN HTTPS hosts, no redirects, a 20-second request deadline and a streaming 16 MB ceiling. Ogg/Opus identification checks are not a full decoder. An uncertain message write (timeout, ambiguous acceptance, or Graph 5xx) becomes terminal `unknown`, with no automatic resend. Graph 4xx refusals become terminal failures. Delivery status events are kept separately and never start model runs; the deliveries API exposes remote receipts and safe local failure explanations.
+
+Automated coverage uses shipped migrations, disposable databases and mocked Graph responses. No real account activation, webhook subscription, phone delivery, audio decoding/transcription, token rotation or eligibility verification is implied. Those checks require an explicitly authorized test-number exercise before production activation.
+
 ## Adapters
 
-Each protocol implements `Channel`, in `apps/gateway/src/channels/channel.ts`. `ApiChannel` normalises HTTP intake; `TelegramChannel` reads updates and sends answers. `WhatsAppChannel` uses the linked-device connection the worker keeps. `ChannelRegistry` picks the adapter by type, so the `Channels` service branches on no protocol.
+Each protocol implements `Channel`, in `apps/gateway/src/channels/channel.ts`. `ApiChannel` normalises HTTP intake; `TelegramChannel` reads updates and sends answers. `WhatsAppChannel` uses the linked-device connection the worker keeps; the separate Meta adapter uses Cloud API credentials and signed HTTP intake. `ChannelRegistry` picks the adapter by type. The shared `Channels` service owns authorization and delivery, with protocol-specific setup and authenticated ingress where required.
 
 The interface defines the optional webhook authentication header, the intake normalisation, the optional send and the optional typing indicator. The absence of `send` means the channel only receives: the API server produces no fictitious delivery and no approval notice. Credentials and the guarded HTTP client are handed to an adapter only while it sends.
 
@@ -127,7 +185,7 @@ A run the gateway starts by itself — a colleague's late answer, a contact's re
 
 A delivery can exist with no run behind it: the approval notice carries its own text in `notice`. The worker sends that text directly, waiting on no run.
 
-To add a protocol, implement the adapter, register it, and declare its type and intake in `packages/contracts`, including the HTTP route where one is needed. Regenerate the OpenAPI document and the SDK. The interface is internal; the public contract stays explicit and versionable. A protocol that signs its payload, instead of carrying a token in a header, will need an authentication strategy to match. Linked devices accept no webhook: their messages come only from the worker's authenticated connection. Delivery ids are numbers or strings, depending on the protocol.
+To add a protocol, implement the adapter, register it, and declare its type and intake in `packages/contracts`, including the HTTP route where one is needed. Regenerate the OpenAPI document and the SDK. The interface is internal; the public contract stays explicit and versionable. A protocol that signs its payload, instead of carrying a token in a header, needs a matching authentication strategy, as the Meta webhook does. Linked devices accept no webhook: their messages come only from the worker's authenticated connection. Delivery ids are numbers or strings, depending on the protocol.
 
 ## WhatsApp through a linked device
 

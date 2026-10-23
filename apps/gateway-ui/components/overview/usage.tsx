@@ -286,7 +286,8 @@ export function ModelCards({ stats }: { stats: ProfileStats }) {
 }
 
 const channels: Record<string, { label: string; icon: ReactNode }> = {
-  whatsapp: { label: 'WhatsApp', icon: <WhatsAppLogo size={18} /> },
+  whatsapp: { label: 'WhatsApp (Baileys)', icon: <WhatsAppLogo size={18} /> },
+  'whatsapp-business': { label: 'WhatsApp Business (Meta)', icon: <WhatsAppLogo size={18} /> },
   telegram: { label: 'Telegram', icon: <TelegramLogo size={18} /> },
   gateway: { label: 'Gateway', icon: <MessageCircle size={18} /> },
   agent: { label: 'Agents', icon: <Bot size={18} /> },
