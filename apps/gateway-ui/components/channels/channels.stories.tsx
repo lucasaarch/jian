@@ -72,7 +72,7 @@ export const WhatsAppRequest: Story = {
   play: async (context) => {
     await open('whatsapp')(context);
     await waitFor(() =>
-      expect(within(context.canvasElement).getByText(/Peguei esse número/)).toBeVisible(),
+      expect(within(context.canvasElement).getByText(/Omar gave me this number/)).toBeVisible(),
     );
   },
 };
@@ -84,6 +84,53 @@ export const NothingConnected: Story = {
       {...sectionProps({ data: { ...profileData, channels: [], contacts: [], groups: [] } })}
     />
   ),
+};
+
+/** Manual setup is deliberately separate from Baileys QR pairing. */
+export const MetaSetup: Story = {
+  render: () => (
+    <Channels
+      {...sectionProps({ data: { ...profileData, channels: [], contacts: [], groups: [] } })}
+    />
+  ),
+  play: async (context) => {
+    await open('whatsapp-business')(context);
+    const canvas = within(context.canvasElement);
+    await expect(canvas.getByLabelText('Access token')).toHaveAttribute('type', 'password');
+    await expect(canvas.getByLabelText('App secret')).toHaveAttribute('type', 'password');
+    await expect(canvas.getByLabelText('Verify token')).toHaveAttribute('type', 'password');
+  },
+};
+
+/** Saving is configuration, not proof that Meta is subscribed or delivery works. */
+export const MetaConfigured: Story = {
+  render: () => (
+    <Channels
+      {...sectionProps({
+        data: {
+          ...profileData,
+          channels: [
+            {
+              id: ids.whatsapp,
+              profileId: ids.zero,
+              type: 'whatsapp-business',
+              createdAt: '2026-10-23T12:00:00Z',
+              allowAllContacts: false,
+            },
+          ],
+          contacts: [],
+          groups: [],
+        },
+      })}
+    />
+  ),
+  play: async (context) => {
+    await open('whatsapp-business')(context);
+    const canvas = within(context.canvasElement);
+    await expect(canvas.getByText('Configured', { exact: true })).toBeVisible();
+    await waitFor(() => expect(canvas.getByText(/\/v1\/whatsapp-business\//)).toBeVisible());
+    await expect(canvas.queryByText('Groups', { exact: true })).toBeNull();
+  },
 };
 
 export const ChannelConversations: Story = {

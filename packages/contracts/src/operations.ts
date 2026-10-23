@@ -129,6 +129,7 @@ export type Operation = {
   response: z.ZodType;
   status?: number;
   stream?: boolean;
+  responseContentType?: 'text/plain';
 };
 
 const profile = '/v1/profiles/:profileId';
@@ -523,6 +524,31 @@ export const operations: Operation[] = [
     body: ingressSchema,
     response: ingressResultSchema,
     status: 202,
+  },
+  {
+    method: 'GET',
+    path: '/v1/whatsapp-business/:channelId',
+    operationId: 'verifyWhatsAppBusinessWebhook',
+    access: 'webhook',
+    query: z.object({
+      'hub.mode': z.literal('subscribe'),
+      'hub.verify_token': z.string().max(16000),
+      'hub.challenge': z.string().max(256),
+    }),
+    response: z.string().describe('The Meta challenge, returned as text/plain.'),
+    responseContentType: 'text/plain',
+  },
+  {
+    method: 'POST',
+    path: '/v1/whatsapp-business/:channelId',
+    operationId: 'whatsappBusinessIngress',
+    access: 'webhook',
+    body: z
+      .unknown()
+      .describe(
+        'Meta webhook JSON authenticated with HMAC-SHA256 over the original bytes. Maximum 3 MB.',
+      ),
+    response: z.strictObject({ accepted: z.boolean() }),
   },
   {
     method: 'POST',
@@ -1135,7 +1161,13 @@ function securityRequirements(operation: Operation) {
 
   if (operation.access === 'webhook') {
     const scheme =
-      operation.operationId === 'telegramIngress' ? 'telegramWebhook' : 'channelWebhook';
+      operation.operationId === 'telegramIngress'
+        ? 'telegramWebhook'
+        : operation.operationId === 'whatsappBusinessIngress'
+          ? 'metaSignature'
+          : operation.operationId === 'verifyWhatsAppBusinessWebhook'
+            ? 'metaVerifyToken'
+            : 'channelWebhook';
 
     return [{ [scheme]: [] }];
   }
@@ -1167,7 +1199,11 @@ function openAPIResponses(operation: Operation, schema: RouteSchema) {
   return Object.fromEntries(
     Object.entries(schema.response).map(([code, value]) => {
       const contentType =
-        operation.stream && code === '200' ? 'text/event-stream' : 'application/json';
+        operation.stream && code === '200'
+          ? 'text/event-stream'
+          : Number(code) < 400
+            ? (operation.responseContentType ?? 'application/json')
+            : 'application/json';
 
       return [
         code,
@@ -1220,6 +1256,13 @@ export function createOpenAPI() {
         bearerAuth: { type: 'http', scheme: 'bearer' },
         telegramWebhook: { type: 'apiKey', in: 'header', name: 'X-Telegram-Bot-Api-Secret-Token' },
         channelWebhook: { type: 'apiKey', in: 'header', name: 'X-Jian-Channel-Token' },
+        metaSignature: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-Hub-Signature-256',
+          description: 'sha256=<HMAC of the raw body using the Meta App Secret>',
+        },
+        metaVerifyToken: { type: 'apiKey', in: 'query', name: 'hub.verify_token' },
       },
     },
   };

@@ -34,7 +34,9 @@ export function Conversations({
     mutate(
       () => api.approveContact(profile.id, contact.id),
       contact.status === 'pending'
-        ? `${name} approved. What they wrote went to the agent.`
+        ? channel.type === 'whatsapp-business'
+          ? `${name} approved. Replies still require an open customer-service window.`
+          : `${name} approved. What they wrote went to the agent.`
         : `${name} approved again.`,
     );
   const refuse = (contact: Contact, name: string) =>
@@ -80,7 +82,9 @@ export function Conversations({
           <p>
             {contact.scope === 'group'
               ? 'Until you approve, the agent reads nothing there.'
-              : 'Approving hands this message to the agent, and it answers.'}
+              : channel.type === 'whatsapp-business'
+                ? 'Approving hands this message to the agent. An expired reply window blocks delivery.'
+                : 'Approving hands this message to the agent, and it answers.'}
           </p>
           <Button
             variant="quiet"
@@ -147,28 +151,30 @@ export function Conversations({
 
   return (
     <div className="channel-conversations">
-      <section>
-        <h3>Groups</h3>
-        {groups.length ? (
-          groups.map((contact) => {
-            const room = data.groups.find(
-              (group) => group.type === contact.type && group.chatId === contact.chatId,
-            );
-            const others = (room?.profiles ?? []).filter(
-              (item) => item.status === 'approved' && item.profileId !== profile.id,
-            );
+      {channel.type !== 'whatsapp-business' && (
+        <section>
+          <h3>Groups</h3>
+          {groups.length ? (
+            groups.map((contact) => {
+              const room = data.groups.find(
+                (group) => group.type === contact.type && group.chatId === contact.chatId,
+              );
+              const others = (room?.profiles ?? []).filter(
+                (item) => item.status === 'approved' && item.profileId !== profile.id,
+              );
 
-            return row(
-              contact,
-              others.length
-                ? `With ${others.map((item) => item.name).join(', ')} · ${agents(others.length + 1)}`
-                : 'The only agent here',
-            );
-          })
-        ) : (
-          <p className="note">No groups yet. Add the agent to one and approve the request.</p>
-        )}
-      </section>
+              return row(
+                contact,
+                others.length
+                  ? `With ${others.map((item) => item.name).join(', ')} · ${agents(others.length + 1)}`
+                  : 'The only agent here',
+              );
+            })
+          ) : (
+            <p className="note">No groups yet. Add the agent to one and approve the request.</p>
+          )}
+        </section>
+      )}
       <section>
         <h3>Contacts</h3>
         {people.length ? (
@@ -177,10 +183,12 @@ export function Conversations({
           <p className="note">Nobody yet. Someone's first message shows up here as a request.</p>
         )}
       </section>
-      <p className="note">
-        In a group the agent reads everything and answers only when someone mentions it or replies
-        to it.
-      </p>
+      {channel.type !== 'whatsapp-business' && (
+        <p className="note">
+          In a group the agent reads everything and answers only when someone mentions it or replies
+          to it.
+        </p>
+      )}
     </div>
   );
 }

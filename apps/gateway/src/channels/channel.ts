@@ -36,6 +36,8 @@ export interface DeliveryContext {
   credential?: string;
   fetch: typeof globalThis.fetch;
   signal: AbortSignal;
+  /** Rechecked before each Meta message write, including notices and audio. */
+  canReply?: (chatId: string) => Promise<boolean>;
 }
 
 export interface DeliveryOutcome {
@@ -45,6 +47,7 @@ export interface DeliveryOutcome {
    * that may have landed must never be sent twice.
    */
   status: 'sent' | 'failed' | 'unknown' | 'pending';
+  error?: string;
   remoteMessageIds: Array<string | number>;
 }
 

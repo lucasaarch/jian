@@ -14,7 +14,7 @@ import { generateText, type ModelMessage, type ToolSet, tool } from 'ai';
 import { and, count, desc, eq, inArray, isNull, like } from 'drizzle-orm';
 import { z } from 'zod';
 import { openToRead, writeInWorkspace } from '../agent/workspace.js';
-import { findContactBySession, insertDelivery } from '../channels/repository.js';
+import { findContactBySession, findDelivery, insertDelivery } from '../channels/repository.js';
 import { findConnection } from '../channels/whatsapp/repository.js';
 import { GatewayError } from '../core/errors.js';
 import { stableUuid } from '../core/ids.js';
@@ -820,12 +820,23 @@ export class Media {
       );
       if (contact?.status === 'approved') {
         const connection = await findConnection(tx, contact.channelId);
+        // A generated reply may inherit only its own inbound turn's authority. A tool
+        // targeting another session (or an autonomous run) cannot borrow an open window.
+        const source =
+          contact.type === 'whatsapp-business' && sessionId === run.sessionId
+            ? await findDelivery(tx, run.id)
+            : null;
+        const inboundEventId =
+          source?.channelId === contact.channelId && source.chatId === contact.chatId
+            ? source.inboundEventId
+            : undefined;
         await insertDelivery(tx, {
           id: deliveryId,
           profileId: run.profileId,
           channelId: contact.channelId,
           chatId: contact.chatId,
           mediaId,
+          ...(inboundEventId ? { inboundEventId } : {}),
           ...(caption ? { notice: caption } : {}),
           status: 'pending',
           createdAt: now,
