@@ -11716,6 +11716,7 @@
                     "type": "string",
                     "enum": [
                       "whatsapp",
+                      "whatsapp-business",
                       "telegram",
                       "api"
                     ]
@@ -11725,6 +11726,45 @@
                     "minLength": 1,
                     "maxLength": 16000,
                     "writeOnly": true
+                  },
+                  "whatsappBusiness": {
+                    "type": "object",
+                    "properties": {
+                      "accessToken": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 16000,
+                        "writeOnly": true
+                      },
+                      "appSecret": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 16000,
+                        "writeOnly": true
+                      },
+                      "verifyToken": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 16000,
+                        "writeOnly": true
+                      },
+                      "phoneNumberId": {
+                        "type": "string",
+                        "pattern": "^\\d{1,40}$"
+                      },
+                      "businessAccountId": {
+                        "type": "string",
+                        "pattern": "^\\d{1,40}$"
+                      }
+                    },
+                    "required": [
+                      "accessToken",
+                      "appSecret",
+                      "verifyToken",
+                      "phoneNumberId",
+                      "businessAccountId"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -11757,6 +11797,7 @@
                       "type": "string",
                       "enum": [
                         "whatsapp",
+                        "whatsapp-business",
                         "telegram",
                         "api"
                       ]
@@ -12015,6 +12056,7 @@
                         "type": "string",
                         "enum": [
                           "whatsapp",
+                          "whatsapp-business",
                           "telegram",
                           "api"
                         ]
@@ -12293,6 +12335,7 @@
                       "type": "string",
                       "enum": [
                         "whatsapp",
+                        "whatsapp-business",
                         "telegram",
                         "api"
                       ]
@@ -12549,6 +12592,7 @@
                       "type": "string",
                       "enum": [
                         "whatsapp",
+                        "whatsapp-business",
                         "telegram",
                         "api"
                       ]
@@ -12804,6 +12848,7 @@
                         "type": "string",
                         "enum": [
                           "whatsapp",
+                          "whatsapp-business",
                           "telegram",
                           "api"
                         ]
@@ -13114,6 +13159,7 @@
                       "type": "string",
                       "enum": [
                         "whatsapp",
+                        "whatsapp-business",
                         "telegram",
                         "api"
                       ]
@@ -13423,6 +13469,7 @@
                       "type": "string",
                       "enum": [
                         "whatsapp",
+                        "whatsapp-business",
                         "telegram",
                         "api"
                       ]
@@ -13698,6 +13745,7 @@
                         "type": "string",
                         "enum": [
                           "whatsapp",
+                          "whatsapp-business",
                           "telegram",
                           "api"
                         ]
@@ -13993,6 +14041,42 @@
                           "failed",
                           "unknown"
                         ]
+                      },
+                      "error": {
+                        "description": "Safe local delivery failure, without credentials or provider payloads.",
+                        "type": "string"
+                      },
+                      "remoteReceipts": {
+                        "description": "Meta confirmations, distinct from local sent (API acceptance only).",
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "messageId": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "sent",
+                                "delivered",
+                                "read",
+                                "failed"
+                              ]
+                            },
+                            "at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "required": [
+                            "messageId",
+                            "status",
+                            "at"
+                          ],
+                          "additionalProperties": false
+                        }
                       },
                       "createdAt": {
                         "type": "string",
@@ -15439,6 +15523,463 @@
                         "reaction",
                         "no-model"
                       ]
+                    }
+                  },
+                  "required": [
+                    "accepted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/whatsapp-business/{channelId}": {
+      "get": {
+        "operationId": "verifyWhatsAppBusinessWebhook",
+        "security": [
+          {
+            "metaVerifyToken": []
+          }
+        ],
+        "description": "Required permission: webhook.",
+        "parameters": [
+          {
+            "name": "channelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "hub.mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "const": "subscribe"
+            }
+          },
+          {
+            "name": "hub.verify_token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 16000
+            }
+          },
+          {
+            "name": "hub.challenge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "description": "The Meta challenge, returned as text/plain."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "whatsappBusinessIngress",
+        "security": [
+          {
+            "metaSignature": []
+          }
+        ],
+        "description": "Required permission: webhook.",
+        "parameters": [
+          {
+            "name": "channelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Meta webhook JSON authenticated with HMAC-SHA256 over the original bytes. Maximum 3 MB."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -40880,6 +41421,17 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-Jian-Channel-Token"
+      },
+      "metaSignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Hub-Signature-256",
+        "description": "sha256=<HMAC of the raw body using the Meta App Secret>"
+      },
+      "metaVerifyToken": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "hub.verify_token"
       }
     }
   }

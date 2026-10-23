@@ -3,7 +3,7 @@ import { inlineMediaSchema } from './media.js';
 import { secretSchema } from './security.js';
 
 /** One channel of each type per profile: the panel connects a type, it does not name a binding. */
-export const channelTypeSchema = z.enum(['whatsapp', 'telegram', 'api']);
+export const channelTypeSchema = z.enum(['whatsapp', 'whatsapp-business', 'telegram', 'api']);
 
 /**
  * How many replies the agents of this installation may write in a group before a person
@@ -17,16 +17,32 @@ export const GROUP_AGENT_TURN_LIMIT = 3;
 /** A conversation is one person writing privately, or a room where several participants write. */
 export const conversationScopeSchema = z.enum(['direct', 'group']);
 
+export const whatsappBusinessInputSchema = z.strictObject({
+  accessToken: secretSchema,
+  appSecret: secretSchema,
+  verifyToken: secretSchema,
+  phoneNumberId: z.string().regex(/^\d{1,40}$/),
+  businessAccountId: z.string().regex(/^\d{1,40}$/),
+});
+
 export const channelInputSchema = z
   .strictObject({
     type: channelTypeSchema,
     // The Telegram bot token. It goes to the vault under `channel:<id>` and is never read back.
     botToken: secretSchema.optional(),
+    whatsappBusiness: whatsappBusinessInputSchema.optional(),
   })
   .refine((value) => (value.type === 'telegram') === (value.botToken !== undefined), {
     message: 'Telegram connects with a bot token; the other channels connect without one',
     path: ['botToken'],
-  });
+  })
+  .refine(
+    (value) => (value.type === 'whatsapp-business') === (value.whatsappBusiness !== undefined),
+    {
+      message: 'WhatsApp Business requires its own Meta credentials',
+      path: ['whatsappBusiness'],
+    },
+  );
 
 export const channelPatchSchema = z.strictObject({
   allowAllContacts: z.boolean(),
@@ -240,6 +256,20 @@ export const deliverySchema = z.strictObject({
   runId: z.uuid().optional(),
   chatId: z.string(),
   status: z.enum(['pending', 'sending', 'sent', 'failed', 'unknown']),
+  error: z
+    .string()
+    .optional()
+    .describe('Safe local delivery failure, without credentials or provider payloads.'),
+  remoteReceipts: z
+    .array(
+      z.strictObject({
+        messageId: z.string(),
+        status: z.enum(['sent', 'delivered', 'read', 'failed']),
+        at: z.iso.datetime(),
+      }),
+    )
+    .optional()
+    .describe('Meta confirmations, distinct from local sent (API acceptance only).'),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
   remoteMessageIds: z.array(z.union([z.number(), z.string()])).default([]),

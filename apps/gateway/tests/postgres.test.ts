@@ -1,8 +1,10 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { and, eq } from 'drizzle-orm';
 import { PgBoss } from 'pg-boss';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { Channels } from '../src/channels/service.js';
+import { MetaInbox } from '../src/channels/whatsapp-business-inbox.js';
 import { recordEvent } from '../src/core/events.js';
 import { Peers } from '../src/peers/service.js';
 import { updateProfileRow } from '../src/profiles/repository.js';
@@ -13,6 +15,7 @@ import { Vault } from '../src/security/vault.js';
 import { buildServices } from '../src/services.js';
 import { pageMessages } from '../src/sessions/repository.js';
 import { PostgresStore } from '../src/storage/postgres.js';
+import { channels, metaInbox } from '../src/storage/schema.js';
 import { mockModel } from './helpers/model.js';
 import { events, runRows } from './helpers/rows.js';
 
@@ -49,6 +52,86 @@ afterAll(async () => {
 });
 
 describe('PostgreSQL durability', () => {
+  it('keeps Meta FIFO across workers, retry leases and a crashed head', async () => {
+    const profile = await services.profiles.createProfile(input);
+    const channelId = randomUUID();
+    await store.db.insert(channels).values({
+      id: channelId,
+      profileId: profile.id,
+      type: 'whatsapp-business',
+      webhookTokenHash: `synthetic-${channelId}`,
+    });
+    const now = String(Math.floor(Date.now() / 1000));
+    for (const id of ['first', 'second', 'third']) {
+      await store.db.insert(metaInbox).values({
+        channelId,
+        eventId: id,
+        payload: {
+          kind: 'message',
+          message: { id, from: '15550000001', type: 'text', timestamp: now, text: { body: id } },
+        },
+      });
+    }
+    const fetcher = (() => {
+      throw new Error('No network allowed');
+    }) as typeof fetch;
+    const signal = new AbortController().signal;
+    // Separate stores/pools reproduce independent workers, not a single test transaction.
+    const other = new PostgresStore(connectionString);
+    const a = new MetaInbox(store, services.vault, fetcher, signal);
+    const b = new MetaInbox(other, services.vault, fetcher, signal);
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const seen: string[] = [];
+    try {
+      const draining = a.drain(async (_channel, data) => {
+        seen.push(data.text);
+        entered();
+        await gate;
+        throw new Error('Simulated crash after accept');
+      });
+      await started;
+      await b.drain(async (_channel, data) => {
+        seen.push(data.text);
+      });
+      expect(seen).toEqual(['first']);
+      release();
+      await draining;
+      // A failed head remains leased; neither a later tick nor another worker skips it.
+      await b.drain(async (_channel, data) => {
+        seen.push(data.text);
+      });
+      expect(seen).toEqual(['first']);
+      await store.db
+        .update(metaInbox)
+        .set({ availableAt: new Date(0) })
+        .where(and(eq(metaInbox.channelId, channelId), eq(metaInbox.eventId, 'first')));
+      await Promise.all([
+        a.drain(async (_channel, data) => {
+          seen.push(data.text);
+        }),
+        b.drain(async (_channel, data) => {
+          seen.push(data.text);
+        }),
+      ]);
+      expect(seen).toEqual(['first', 'first', 'second', 'third']);
+      const rows = await store.db
+        .select()
+        .from(metaInbox)
+        .where(eq(metaInbox.channelId, channelId));
+      expect(rows.every((row) => row.processedAt)).toBe(true);
+    } finally {
+      release();
+      await other.close();
+    }
+  });
+
   it('keeps conversation subagents scoped and delivers one handoff after concurrent spawn retries', async () => {
     const profile = await services.profiles.createProfile(input);
     const session = await services.sessions.createSession(profile.id, { title: 'Subagents' });

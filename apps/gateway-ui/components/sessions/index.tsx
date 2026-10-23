@@ -46,10 +46,11 @@ const objectiveLabel = {
  * the one where it looks back on its work. A channel the panel does not know, such as a
  * session opened through the API, reads as API.
  */
-type Kind = 'whatsapp' | 'telegram' | 'agent' | 'api' | 'learning';
+type Kind = 'whatsapp' | 'whatsapp-business' | 'telegram' | 'agent' | 'api' | 'learning';
 
 const kinds: { kind: Kind; name: string; icon: ComponentType<{ size?: number }> }[] = [
-  { kind: 'whatsapp', name: 'WhatsApp', icon: WhatsAppLogo },
+  { kind: 'whatsapp', name: 'WhatsApp (Baileys)', icon: WhatsAppLogo },
+  { kind: 'whatsapp-business', name: 'WhatsApp Business (Meta)', icon: WhatsAppLogo },
   { kind: 'telegram', name: 'Telegram', icon: TelegramLogo },
   { kind: 'agent', name: 'Agents', icon: Bot },
   { kind: 'api', name: 'API Server', icon: Terminal },
@@ -60,12 +61,15 @@ const kindOf = (session: Session): Kind =>
   session.channel === LEARNING_SESSION_CHANNEL
     ? 'learning'
     : session.channel === 'whatsapp' ||
+        session.channel === 'whatsapp-business' ||
         session.channel === 'telegram' ||
         session.channel === AGENT_SESSION_CHANNEL
       ? (session.channel as Kind)
       : 'api';
 
 const isGateway = (session: Session) => session.channel === GATEWAY_SESSION_CHANNEL;
+const isMessaging = (session: Session) =>
+  ['whatsapp', 'whatsapp-business', 'telegram'].includes(session.channel);
 
 /** Today's conversations show the hour; older ones the day, as a messaging app does. */
 const when = (value: string) => {
@@ -351,7 +355,7 @@ export function Sessions({
                     profileId={profile.id}
                     session={active}
                     data={data}
-                    channel={kindOf(active) === 'whatsapp' || kindOf(active) === 'telegram'}
+                    channel={isMessaging(active)}
                     saved={() => void refresh()}
                   />
                 </div>
@@ -365,7 +369,7 @@ export function Sessions({
                       profileId={profile.id}
                       session={active}
                       data={data}
-                      channel={kindOf(active) === 'whatsapp' || kindOf(active) === 'telegram'}
+                      channel={isMessaging(active)}
                       saved={() => void refresh()}
                     />
                   </div>

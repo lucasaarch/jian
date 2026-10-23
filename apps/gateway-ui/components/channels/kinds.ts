@@ -1,12 +1,19 @@
 import { Send, Smartphone, Terminal } from 'lucide-react';
 
-/** The three transports a profile can connect, and what each one asks of the owner. */
+/** The transports a profile can configure, and what each one asks of the owner. */
 export const kinds = [
   {
     type: 'whatsapp' as const,
-    name: 'WhatsApp',
+    name: 'WhatsApp (Baileys)',
     icon: Smartphone,
     description: 'A device paired to your WhatsApp. Connecting means scanning the QR code.',
+  },
+  {
+    type: 'whatsapp-business' as const,
+    name: 'WhatsApp Business (Meta)',
+    icon: Smartphone,
+    description:
+      'Official Cloud API. A manual setup for inbound customer support, not a linked device.',
   },
   {
     type: 'telegram' as const,

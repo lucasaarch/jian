@@ -3,7 +3,26 @@ import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 import type { ProfileStats } from '../../lib/api';
 import { statsFor } from '../../stories/fixtures';
-import { ModelCards, UsageSummary } from './usage';
+import { ChannelCards, ModelCards, UsageSummary } from './usage';
+
+it('labels Meta usage independently of Baileys and the API server', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const sample = statsFor(30);
+  const stats = {
+    ...sample,
+    channels: [
+      { channel: 'whatsapp-business', turns: 1, conversations: 1, tokens: 100 },
+      { channel: 'whatsapp', turns: 1, conversations: 1, tokens: 100 },
+    ],
+  } as ProfileStats;
+  const element = document.createElement('div');
+  const root = createRoot(element);
+  await act(async () => root.render(<ChannelCards stats={stats} />));
+  expect(element.textContent).toContain('WhatsApp Business (Meta)');
+  expect(element.textContent).toContain('WhatsApp (Baileys)');
+  expect(element.textContent).not.toContain('API Server');
+  await act(async () => root.unmount());
+});
 
 it('keeps a long model history compact until the owner asks for all of it', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });

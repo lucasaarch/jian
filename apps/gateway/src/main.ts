@@ -11,6 +11,7 @@ import { TelegramChannel } from './channels/telegram.js';
 import { WhatsAppChannel } from './channels/whatsapp/adapter.js';
 import { WhatsAppConnections } from './channels/whatsapp/connections.js';
 import { createWhatsAppDeviceFactory } from './channels/whatsapp/driver.js';
+import { WhatsAppBusinessChannel } from './channels/whatsapp-business.js';
 import { Coordination } from './coordination/service.js';
 import { ModelCatalog } from './providers/catalog-source.js';
 import { CodexLogin } from './providers/codex/login.js';
@@ -152,6 +153,7 @@ const whatsapp = new WhatsAppConnections(store, box, createWhatsAppDeviceFactory
 const channelRegistry = new ChannelRegistry([
   new ApiChannel(),
   new TelegramChannel(),
+  new WhatsAppBusinessChannel(),
   new WhatsAppChannel(whatsapp),
 ]);
 const channels = new Channels(services, outbound.fetch, channelRegistry);
