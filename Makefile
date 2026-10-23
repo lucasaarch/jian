@@ -16,7 +16,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .PHONY: help install setup up down logs ps dev db-up db-stop db-reset changelog \
         check test test-integration lint format build image image-push \
-        release storybook storybook-smoke
+        release storybook storybook-smoke test-display image-test-display
 
 ##@ General
 
@@ -81,6 +81,9 @@ check: ## Lint, typecheck, unit tests, build and contract drift
 test: ## Unit tests, no Docker and no provider
 	pnpm run test
 
+test-display: ## Display supervisor tests; Python only, no graphics dependencies
+	PYTHONDONTWRITEBYTECODE=1 python3 apps/gateway/test-display-unit.py
+
 test-integration: ## Persistence tests; needs TEST_DATABASE_URL
 	pnpm run test:integration
 
@@ -100,6 +103,11 @@ image: ## Build the gateway image for this machine's architecture
 		--build-arg JIAN_VERSION=$(VERSION) \
 		--build-arg JIAN_REVISION=$(REVISION) \
 		-t $(IMAGE):$(VERSION) .
+
+image-test-display: ## Real image X11/GL/Vulkan capture, isolation and cleanup; requires Landlock
+	docker run --rm --security-opt=no-new-privileges --cap-drop=ALL \
+		-v "$(CURDIR)/apps/gateway/test-display.py:/usr/local/libexec/test-display.py:ro" \
+		--entrypoint python3 $(IMAGE):$(VERSION) /usr/local/libexec/test-display.py
 
 image-push: ## Push the locally built image; the multi-architecture index comes from CI
 	docker push $(IMAGE):$(VERSION)

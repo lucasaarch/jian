@@ -37,6 +37,33 @@ exists with \`command -v <tool>\`, and install nothing there unless the owner as
 - Diagnosis: \`ps\`, \`kill\`, \`lsof\`, \`ip\`, \`ping\`, \`dig\`, \`nc\`.
 - Data and media: \`sqlite3\`, \`psql\`, \`ffmpeg\`.
 
+## GUI applications and screenshots
+
+The image includes \`jian-display -- COMMAND [ARG ...]\`: one fresh authenticated Xvfb
+for that command, with software Mesa OpenGL (llvmpipe) and Vulkan (lavapipe). Use it inside
+\`run_command\`; do not start a shared X server, disable authentication or grant access to
+\`/tmp\` or \`/dev/shm\`. No desktop, VNC or GPU device is needed.
+
+Run the application and capture in the SAME invocation; another tool call cannot reuse
+this display. For example (replace \`my-gui-app\` with the actual executable):
+
+\`\`\`sh
+jian-display -- sh -c '
+  my-gui-app &
+  sleep 3
+  xwd -root -silent -out "$HOME/screenshot.xwd"
+  ffmpeg -y -i "$HOME/screenshot.xwd" -frames:v 1 "$HOME/screenshot.png"
+'
+\`\`\`
+
+Then send \`screenshot.png\` with the existing file/media tools. Select the X11 backend
+when an app requires it; Wayland is not provided. The wrapper resets display/authority
+and runtime paths, disables MIT-SHM, and stops the server/app process groups at exit.
+The hard lifetime is 110 seconds including startup; set \`run_command.timeoutMs\` to
+120000 for longer captures. \`JIAN_DISPLAY_TIMEOUT_SECONDS\` can shorten, never extend,
+the wrapper limit. Exit 124 means timeout, 125 means setup/server failure; other exit
+codes come from the command. This is not a persistent interactive GUI session.
+
 ## Installing more
 
 You are the user \`node\`, without root and without \`sudo\`. Your workspace lives on a

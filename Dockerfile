@@ -1,3 +1,49 @@
+# syntax=docker/dockerfile:1
+# Debian's XKB compiler output defaults to /var/lib/xkb or /tmp, neither writable
+# inside a profile sandbox. Rebuild only Xvfb with a small TMPDIR fix; keep the
+# distro security patches and ordinary runtime dependencies. No privileged helper.
+FROM node:24-bookworm-slim AS display-build
+RUN sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/debian.sources \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends dpkg-dev meson ninja-build python3 \
+ && apt-get build-dep -y xorg-server
+WORKDIR /build
+RUN apt-get source "xorg-server=$(apt-cache policy xvfb | awk '/Candidate:/ {print $2}')"
+RUN python3 - <<'PY'
+from pathlib import Path
+source, = Path('/build').glob('xorg-server-*/xkb/ddxLoad.c')
+text = source.read_text()
+old = '''#ifndef WIN32
+    /* Can we write an xkm and then open it too? */'''
+new = r'''#ifndef WIN32
+    /* Jian: both compiler output and the subsequent read/unlink stay inside
+     * the caller's private directory. The path enters a double-quoted shell
+     * argument, so reject shell metacharacters and xkbcomp display syntax. */
+    const char *tmp = PrivsElevated() ? NULL : getenv("TMPDIR");
+    if (tmp) {
+        if (tmp[0] != '/' || strpbrk(tmp, "\\\"$`:"))
+            FatalError("XKB: invalid TMPDIR\n");
+        r = snprintf(outdir, size, "%s%s", tmp,
+                     tmp[strlen(tmp) - 1] == '/' ? "" : "/");
+        if (r < 0 || (size_t)r >= size)
+            FatalError("XKB: TMPDIR too long\n");
+        return;
+    }
+    /* Can we write an xkm and then open it too? */'''
+assert text.count(old) == 1, 'XKB source changed; review the private-output patch'
+source.write_text(text.replace(old, new))
+PY
+RUN cd /build/xorg-server-* \
+ && meson setup build --prefix=/usr --buildtype=release \
+      -Dxorg=false -Dxnest=false -Dxephyr=false -Dxvfb=true \
+      -Dglamor=false -Dudev=false -Dudev_kms=false -Dsystemd_logind=false \
+      -Dhal=false -Ddri1=false -Ddri2=false -Ddri3=false -Ddrm=false \
+      -Dsecure-rpc=false -Ddocs=false -Ddevel-docs=false \
+      -Dxkb_dir=/usr/share/X11/xkb -Dxkb_bin_dir=/usr/bin \
+      -Ddefault_font_path=built-ins -Dglx=true -Dxcsecurity=true \
+ && ninja -C build hw/vfb/Xvfb \
+ && install -Dm755 build/hw/vfb/Xvfb /out/Xvfb
+
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 RUN corepack enable
@@ -33,7 +79,10 @@ FROM node:24-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash ffmpeg ca-certificates gnupg \
       git openssh-client curl wget rsync \
-      chromium \
+      chromium xvfb xauth x11-utils x11-apps mesa-utils vulkan-tools \
+      libgl1-mesa-dri libegl1 libglx-mesa0 mesa-vulkan-drivers \
+      libx11-dev libgl-dev libxcursor1 libxi6 libxrandr2 libxkbcommon-x11-0 \
+      fonts-dejavu-core \
       jq ripgrep fd-find gawk sed grep diffutils patch file tree less nano vim-tiny \
       zip unzip xz-utils bzip2 zstd \
       procps psmisc lsof iproute2 iputils-ping dnsutils netcat-openbsd \
@@ -84,6 +133,9 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.18 /uv /uvx /usr/local/bin/
 RUN corepack enable
 # The helper that confines each agent command to its profile's workspace with Landlock. It is
 # built here, where the C toolchain already is, so it matches this image's libc and architecture.
+COPY --from=display-build /out/Xvfb /usr/local/bin/Xvfb
+COPY apps/gateway/jian-display.py /usr/local/bin/jian-display
+RUN chmod 755 /usr/local/bin/jian-display
 COPY apps/gateway/native/jian-sandbox.c /tmp/jian-sandbox.c
 RUN gcc -O2 -Wall -Wextra -Werror -o /usr/local/bin/jian-sandbox /tmp/jian-sandbox.c \
  && rm /tmp/jian-sandbox.c
