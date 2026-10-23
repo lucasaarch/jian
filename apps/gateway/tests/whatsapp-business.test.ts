@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { channelInputSchema } from '@jian/contracts';
+import { channelInputSchema, channelPatchSchema } from '@jian/contracts';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -16,6 +16,7 @@ import {
 import { metaCanSend } from '../src/channels/whatsapp-business-inbox.js';
 import {
   mediaAssets,
+  metaBindings,
   metaInbox,
   metaReceipts,
   metaWindows,
@@ -64,7 +65,7 @@ const batch = (
   ],
 });
 
-async function setup() {
+async function setup(pending = false) {
   const services = await testServices();
   const profile = await services.profiles.createProfile({
     name: 'Prototype',
@@ -84,7 +85,7 @@ async function setup() {
   const channels = new Channels(services, fetcher);
   const channel = await channels.connect(profile.id, {
     type: 'whatsapp-business',
-    whatsappBusiness: credentials,
+    whatsappBusiness: pending ? { verifyToken: credentials.verifyToken } : credentials,
   });
   const app = createApp({
     ...services,
@@ -136,6 +137,298 @@ const context = (fetcher: typeof fetch, canReply = async (_chat: string) => true
   fetch: fetcher,
   signal: new AbortController().signal,
   canReply,
+});
+
+const { verifyToken: _verifyToken, ...completion } = credentials;
+const admin = { authorization: 'Bearer synthetic-admin-token-at-least-32-characters' };
+
+describe('Meta staged setup', () => {
+  it('accepts only a verify token or all credentials; completion cannot replace the verify token', () => {
+    for (const key of Object.keys(completion)) {
+      expect(
+        channelInputSchema.safeParse({
+          type: 'whatsapp-business',
+          whatsappBusiness: {
+            verifyToken: credentials.verifyToken,
+            [key]: completion[key as keyof typeof completion],
+          },
+        }).success,
+      ).toBe(false);
+      const partial = { ...completion } as Record<string, string>;
+      delete partial[key];
+      expect(channelPatchSchema.safeParse({ whatsappBusiness: partial }).success).toBe(false);
+    }
+    expect(channelPatchSchema.safeParse({ whatsappBusiness: credentials }).success).toBe(false);
+    expect(
+      channelPatchSchema.safeParse({ whatsappBusiness: completion, allowAllContacts: true })
+        .success,
+    ).toBe(false);
+    expect(channelPatchSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('validates staged create and partial completion at the HTTP boundary', async () => {
+    const f = await setup(true);
+    try {
+      const other = await f.services.profiles.createProfile({
+        name: 'Other',
+        instructions: 'Help',
+      });
+      const url = `/v1/profiles/${other.id}/channels`;
+      expect(
+        (
+          await f.app.inject({
+            method: 'POST',
+            url,
+            headers: admin,
+            payload: {
+              type: 'whatsapp-business',
+              whatsappBusiness: {
+                verifyToken: credentials.verifyToken,
+                accessToken: credentials.accessToken,
+              },
+            },
+          })
+        ).statusCode,
+      ).toBe(400);
+      const created = await f.app.inject({
+        method: 'POST',
+        url,
+        headers: admin,
+        payload: {
+          type: 'whatsapp-business',
+          whatsappBusiness: { verifyToken: credentials.verifyToken },
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json().whatsappBusinessStatus).toBe('pending');
+      expect(
+        (
+          await f.app.inject({
+            method: 'PATCH',
+            url: `${url}/${created.json().id}`,
+            headers: admin,
+            payload: { whatsappBusiness: { accessToken: credentials.accessToken } },
+          })
+        ).statusCode,
+      ).toBe(400);
+      expect(f.fetcher).not.toHaveBeenCalled();
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('creates a stable callback before Graph credentials and only enables intake after completion', async () => {
+    const f = await setup(true);
+    try {
+      const url = `/v1/whatsapp-business/${f.channel.id}?hub.mode=subscribe&hub.verify_token=${credentials.verifyToken}&hub.challenge=1234`;
+      expect(f.channel.whatsappBusinessStatus).toBe('pending');
+      expect(f.fetcher).not.toHaveBeenCalled();
+      expect((await f.channels.list(f.profile.id))[0]?.whatsappBusinessStatus).toBe('pending');
+      expect((await f.app.inject({ url })).body).toBe('1234');
+      expect(
+        (await f.app.inject({ url: url.replace(credentials.verifyToken, 'wrong') })).statusCode,
+      ).toBe(401);
+      expect((await f.post(batch([message('before')]))).statusCode).toBe(401);
+      expect(await f.services.store.db.select().from(metaInbox)).toHaveLength(0);
+      expect(await f.services.store.db.select().from(metaWindows)).toHaveLength(0);
+      expect(await f.channels.contacts(f.profile.id)).toHaveLength(0);
+      expect(await metaCanSend(f.services.store.db, f.channel.id, '15550000001')).toBe(false);
+      const refused = await new WhatsAppBusinessChannel().send(
+        { chatId: '15550000001', text: 'Not configured' },
+        {
+          ...context(f.fetcher, (chatId) => metaCanSend(f.services.store.db, f.channel.id, chatId)),
+          credential: JSON.stringify({ verifyToken: credentials.verifyToken }),
+        },
+      );
+      expect(refused.status).toBe('failed');
+      expect(f.fetcher).not.toHaveBeenCalled();
+      const response = await f.app.inject({
+        method: 'PATCH',
+        url: `/v1/profiles/${f.profile.id}/channels/${f.channel.id}`,
+        headers: admin,
+        payload: { whatsappBusiness: completion },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        id: f.channel.id,
+        whatsappBusinessStatus: 'configured',
+      });
+      for (const secret of Object.values(credentials)) expect(response.body).not.toContain(secret);
+      expect(
+        JSON.parse(
+          (await f.services.vault.read(f.profile.id, `channel:${f.channel.id}`)) ?? 'null',
+        ),
+      ).toEqual(credentials);
+      expect((await f.app.inject({ url })).body).toBe('1234');
+      expect((await f.channels.list(f.profile.id))[0]?.whatsappBusinessStatus).toBe('configured');
+      expect((await f.post(batch([message('after')]))).statusCode).toBe(200);
+      await f.channels.dispatch();
+      expect(await f.channels.contacts(f.profile.id)).toHaveLength(1);
+      expect(
+        f.fetcher.mock.calls.filter(([url]) => String(url).endsWith('/messages')),
+      ).toHaveLength(1);
+      await expect(
+        f.channels.update(f.profile.id, f.channel.id, { whatsappBusiness: completion }),
+      ).rejects.toThrow('already configured');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('keeps the pending vault and callback on Graph refusal, network failure and duplicate number', async () => {
+    const f = await setup(true);
+    try {
+      const original = await f.services.vault.read(f.profile.id, `channel:${f.channel.id}`);
+      f.fetcher.mockResolvedValueOnce(new Response('', { status: 401 }));
+      await expect(
+        f.channels.update(f.profile.id, f.channel.id, { whatsappBusiness: completion }),
+      ).rejects.toThrow('Meta refused');
+      f.fetcher.mockRejectedValueOnce(new Error('synthetic network failure'));
+      await expect(
+        f.channels.update(f.profile.id, f.channel.id, { whatsappBusiness: completion }),
+      ).rejects.toThrow('synthetic network failure');
+      const other = await f.services.profiles.createProfile({
+        name: 'Other',
+        instructions: 'Help',
+      });
+      const otherChannel = await f.channels.connect(other.id, {
+        type: 'whatsapp-business',
+        whatsappBusiness: credentials,
+      });
+      await expect(
+        f.channels.update(f.profile.id, f.channel.id, { whatsappBusiness: completion }),
+      ).rejects.toThrow('already connected');
+      expect(await f.services.vault.read(f.profile.id, `channel:${f.channel.id}`)).toBe(original);
+      expect((await f.channels.list(f.profile.id))[0]?.whatsappBusinessStatus).toBe('pending');
+      expect(await f.services.store.db.select().from(metaBindings)).toHaveLength(1);
+      const url = `/v1/whatsapp-business/${f.channel.id}?hub.mode=subscribe&hub.verify_token=${credentials.verifyToken}&hub.challenge=1234`;
+      expect((await f.app.inject({ url })).body).toBe('1234');
+      await f.channels.revoke(other.id, otherChannel.id);
+      expect(
+        (await f.channels.update(f.profile.id, f.channel.id, { whatsappBusiness: completion }))
+          .whatsappBusinessStatus,
+      ).toBe('configured');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('requires host authorization and profile ownership, rejects revoked setup and other channel types', async () => {
+    const f = await setup(true);
+    try {
+      const url = `/v1/profiles/${f.profile.id}/channels/${f.channel.id}`;
+      for (const headers of [{}, { authorization: `Bearer ${f.channel.webhookToken}` }]) {
+        expect(
+          (
+            await f.app.inject({
+              method: 'PATCH',
+              url,
+              headers,
+              payload: { whatsappBusiness: completion },
+            })
+          ).statusCode,
+        ).toBe(401);
+      }
+      const other = await f.services.profiles.createProfile({
+        name: 'Other',
+        instructions: 'Help',
+      });
+      expect(
+        (
+          await f.app.inject({
+            method: 'PATCH',
+            url: url.replace(f.profile.id, other.id),
+            headers: admin,
+            payload: { whatsappBusiness: completion },
+          })
+        ).statusCode,
+      ).toBe(404);
+      const api = await f.channels.connect(other.id, { type: 'api' });
+      await expect(
+        f.channels.update(other.id, api.id, { whatsappBusiness: completion }),
+      ).rejects.toThrow('Only WhatsApp Business');
+      await expect(
+        f.channels.update(f.profile.id, f.channel.id, { allowAllContacts: true }),
+      ).rejects.toThrow('Only WhatsApp supports');
+      expect(f.fetcher).not.toHaveBeenCalled();
+      await f.channels.revoke(f.profile.id, f.channel.id);
+      await expect(
+        f.channels.update(f.profile.id, f.channel.id, { whatsappBusiness: completion }),
+      ).rejects.toThrow('disconnected');
+      expect(await f.services.vault.read(f.profile.id, `channel:${f.channel.id}`)).toBeUndefined();
+      expect(
+        (
+          await f.app.inject({
+            url: `/v1/whatsapp-business/${f.channel.id}?hub.mode=subscribe&hub.verify_token=${credentials.verifyToken}&hub.challenge=1234`,
+          })
+        ).statusCode,
+      ).toBe(401);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('rolls back the binding when saving completed credentials fails', async () => {
+    const f = await setup(true);
+    const original = await f.services.vault.read(f.profile.id, `channel:${f.channel.id}`);
+    const put = vi.spyOn(f.services.vault, 'put').mockRejectedValueOnce(new Error('vault failure'));
+    try {
+      await expect(
+        f.channels.update(f.profile.id, f.channel.id, { whatsappBusiness: completion }),
+      ).rejects.toThrow('vault failure');
+      expect(await f.services.store.db.select().from(metaBindings)).toHaveLength(0);
+      expect(await f.services.vault.read(f.profile.id, `channel:${f.channel.id}`)).toBe(original);
+      expect((await f.channels.list(f.profile.id))[0]?.whatsappBusinessStatus).toBe('pending');
+      expect((await f.post(batch([message('rollback')]))).statusCode).toBe(401);
+    } finally {
+      put.mockRestore();
+      await f.close();
+    }
+  });
+
+  it('serializes revocation behind an in-flight completion and leaves no active credentials', async () => {
+    const f = await setup(true);
+    let release!: (response: Response) => void;
+    const graph = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    f.fetcher.mockImplementationOnce(() => graph);
+    try {
+      const completing = f.channels.update(f.profile.id, f.channel.id, {
+        whatsappBusiness: completion,
+      });
+      await vi.waitFor(() => expect(f.fetcher).toHaveBeenCalledTimes(1));
+      const revoking = f.channels.revoke(f.profile.id, f.channel.id);
+      release(Response.json({ data: [{ id: credentials.phoneNumberId }] }));
+      await Promise.all([completing, revoking]);
+      expect(await f.services.store.db.select().from(metaBindings)).toHaveLength(0);
+      expect(await f.services.vault.read(f.profile.id, `channel:${f.channel.id}`)).toBeUndefined();
+      expect((await f.channels.list(f.profile.id))[0]?.revokedAt).toBeDefined();
+      expect((await f.post(batch([message('revoked')]))).statusCode).toBe(401);
+      await expect(
+        f.channels.update(f.profile.id, f.channel.id, { whatsappBusiness: completion }),
+      ).rejects.toThrow('disconnected');
+    } finally {
+      release(Response.json({ data: [{ id: credentials.phoneNumberId }] }));
+      await f.close();
+    }
+  });
+
+  it('serializes simultaneous completion without changing a configured binding', async () => {
+    const f = await setup(true);
+    try {
+      const results = await Promise.allSettled([
+        f.channels.update(f.profile.id, f.channel.id, { whatsappBusiness: completion }),
+        f.channels.update(f.profile.id, f.channel.id, { whatsappBusiness: completion }),
+      ]);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      expect(await f.services.store.db.select().from(metaBindings)).toHaveLength(1);
+      expect(f.fetcher).toHaveBeenCalledTimes(2);
+    } finally {
+      await f.close();
+    }
+  });
 });
 
 describe('Meta trust boundary and durable inbox', () => {

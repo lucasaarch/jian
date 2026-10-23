@@ -9,7 +9,7 @@ import type { SectionProps } from '../props';
 import { Badge, Button, Confirm, Field, Secret, SectionHeading, Switch } from '../ui';
 import { Conversations } from './conversations';
 import { kinds } from './kinds';
-import { MetaCredentials, MetaLimits } from './meta';
+import { MetaCallback, MetaCredentials, MetaLimits } from './meta';
 import { Pairing } from './pairing';
 
 export function Channels(props: SectionProps) {
@@ -69,7 +69,7 @@ export function Channels(props: SectionProps) {
         }
       },
       type === 'whatsapp-business'
-        ? 'Meta credentials saved. Complete webhook setup in Meta before testing delivery.'
+        ? 'Meta callback created. Setup pending: register the webhook in Meta, then complete credentials here.'
         : `${kinds.find((kind) => kind.type === type)?.name} connected.`,
     );
   };
@@ -105,6 +105,7 @@ export function Channels(props: SectionProps) {
         {kinds.map((kind) => {
           const channel = connected(kind.type);
           const open = editing === kind.type;
+          const metaPending = channel?.whatsappBusinessStatus === 'pending';
 
           return (
             <article
@@ -121,7 +122,9 @@ export function Channels(props: SectionProps) {
                   <Badge tone={channel && kind.type !== 'whatsapp-business' ? 'good' : 'neutral'}>
                     {kind.type === 'whatsapp-business'
                       ? channel
-                        ? 'Configured'
+                        ? metaPending
+                          ? 'Setup pending'
+                          : 'Configured'
                         : 'Not configured'
                       : channel
                         ? 'Connected'
@@ -136,7 +139,7 @@ export function Channels(props: SectionProps) {
                   <div className="connection-meta">
                     <span>{reach(channel)}</span>
                     <span>
-                      {kind.type === 'whatsapp-business' ? 'Configured' : 'Connected'} on{' '}
+                      {kind.type === 'whatsapp-business' ? 'Created' : 'Connected'} on{' '}
                       {date(channel.createdAt)}
                     </span>
                   </div>
@@ -171,7 +174,7 @@ export function Channels(props: SectionProps) {
                 {kind.type === 'whatsapp-business' && <MetaLimits />}
                 {channel ? (
                   <>
-                    {kind.type !== 'whatsapp' && (
+                    {kind.type !== 'whatsapp' && kind.type !== 'whatsapp-business' && (
                       <p className="note">
                         Webhook: <code>{webhook(channel)}</code>
                       </p>
@@ -184,14 +187,34 @@ export function Channels(props: SectionProps) {
                       </p>
                     )}
                     {kind.type === 'whatsapp-business' && (
-                      <p className="note">
-                        Manually register this public HTTPS URL and your verify token in Meta,
-                        subscribe the app to the business account and its messages events, and test
-                        an inbound message. Use the gateway’s public origin if this panel is served
-                        elsewhere. Meta signs POST payloads with your app secret; no
-                        X-Jian-Channel-Token is used. To rotate credentials, disconnect and
-                        configure again. This saved configuration is not a delivery health check.
-                      </p>
+                      <>
+                        <MetaCallback url={webhook(channel)} />
+                        {metaPending && (
+                          <p className="note">
+                            Setup pending. Messaging is unavailable until credentials are completed.
+                          </p>
+                        )}
+                        <p className="note">
+                          Manually register this public HTTPS URL and your verify token in Meta,
+                          subscribe the app to the business account and its messages events, and
+                          test an inbound message. Use the gateway’s public origin if this panel is
+                          served elsewhere. Meta signs POST payloads with your app secret; no
+                          X-Jian-Channel-Token is used. To rotate credentials, disconnect and
+                          configure again. This saved configuration is not a delivery health check.
+                        </p>
+                        {metaPending && open && (
+                          <MetaCredentials
+                            busy={busy}
+                            save={(whatsappBusiness) => {
+                              void mutate(
+                                () =>
+                                  api.updateChannel(profile.id, channel.id, { whatsappBusiness }),
+                                'Meta credentials saved. Complete manual subscriptions in Meta before testing delivery.',
+                              );
+                            }}
+                          />
+                        )}
+                      </>
                     )}
                     <div className="flex flex-wrap items-center gap-3">
                       <Button
@@ -226,7 +249,7 @@ export function Channels(props: SectionProps) {
                         />
                       </div>
                     )}
-                    <Conversations {...props} channel={channel} />
+                    {!metaPending && <Conversations {...props} channel={channel} />}
                   </>
                 ) : (
                   <form
@@ -245,18 +268,14 @@ export function Channels(props: SectionProps) {
                         const form = event.currentTarget;
                         const fields = new FormData(form);
                         const whatsappBusiness = {
-                          accessToken: String(fields.get('accessToken') ?? '').trim(),
-                          appSecret: String(fields.get('appSecret') ?? '').trim(),
                           verifyToken: String(fields.get('verifyToken') ?? '').trim(),
-                          phoneNumberId: String(fields.get('phoneNumberId') ?? '').trim(),
-                          businessAccountId: String(fields.get('businessAccountId') ?? '').trim(),
                         };
-                        if (Object.values(whatsappBusiness).some((value) => !value)) {
-                          setError('Enter all five Meta credentials and IDs.');
+                        // Clear before validation/request; even failed saves must not retain secrets.
+                        form.reset();
+                        if (!whatsappBusiness.verifyToken) {
+                          setError('Enter a verify token.');
                           return;
                         }
-                        // Clear before the request; even failed saves must not retain secrets.
-                        form.reset();
                         void connect(kind.type, whatsappBusiness);
                         return;
                       }
@@ -264,7 +283,20 @@ export function Channels(props: SectionProps) {
                       void connect(kind.type);
                     }}
                   >
-                    {kind.type === 'whatsapp-business' && open && <MetaCredentials />}
+                    {kind.type === 'whatsapp-business' && open && (
+                      <Field
+                        label="Verify token"
+                        hint="Choose an unpredictable secret. Keep it to enter the same value in Meta’s webhook setup; it cannot be read back here."
+                      >
+                        <input
+                          name="verifyToken"
+                          type="password"
+                          autoComplete="off"
+                          spellCheck={false}
+                          required
+                        />
+                      </Field>
+                    )}
                     {kind.type === 'telegram' && (
                       <Field
                         label="Bot token"
@@ -284,7 +316,9 @@ export function Channels(props: SectionProps) {
                     <div className="flex flex-wrap items-center gap-3">
                       <Button type="submit" busy={busy}>
                         <kind.icon size={16} />
-                        {kind.type === 'whatsapp-business' ? 'Save' : 'Connect'} {kind.name}
+                        {kind.type === 'whatsapp-business'
+                          ? 'Create callback URL'
+                          : `Connect ${kind.name}`}
                       </Button>
                       <span className="text-xs text-muted">
                         {kind.type === 'whatsapp'
@@ -292,7 +326,7 @@ export function Channels(props: SectionProps) {
                           : kind.type === 'api'
                             ? 'Creates the webhook URL and token, shown once.'
                             : kind.type === 'whatsapp-business'
-                              ? 'Manual webhook subscription required after saving.'
+                              ? 'Creates a pending channel, not a working connection. Credentials come next.'
                               : 'Use the token BotFather gave you.'}
                       </span>
                     </div>

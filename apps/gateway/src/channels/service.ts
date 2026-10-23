@@ -7,6 +7,7 @@ import {
   type Group,
   type GroupTurn,
   type ingressResultSchema,
+  whatsappBusinessSetupSchema,
 } from '@jian/contracts';
 import { eq } from 'drizzle-orm';
 import type { z } from 'zod';
@@ -349,7 +350,9 @@ export class Channels {
       throw new GatewayError(409, 'This channel type is already connected');
     }
 
-    if (whatsappBusiness) await verifyMetaNumber(whatsappBusiness, this.fetcher, this.abort.signal);
+    const configured =
+      whatsappBusiness && 'accessToken' in whatsappBusiness ? whatsappBusiness : undefined;
+    if (configured) await verifyMetaNumber(configured, this.fetcher, this.abort.signal);
 
     const issued = issueToken();
     const identity = botToken ? await this.identify(data.type, botToken) : undefined;
@@ -359,6 +362,9 @@ export class Channels {
       profileId,
       type: data.type,
       allowAllContacts: false,
+      ...(whatsappBusiness
+        ? { whatsappBusinessStatus: configured ? ('configured' as const) : ('pending' as const) }
+        : {}),
       tokenHash: issued.hash,
       ...(identity?.address ? { address: identity.address } : {}),
       ...(identity?.handle ? { handle: identity.handle } : {}),
@@ -382,11 +388,11 @@ export class Channels {
 
       try {
         await insertChannel(tx, record);
-        if (whatsappBusiness)
+        if (configured)
           await tx.insert(metaBindings).values({
             channelId: record.id,
-            phoneNumberId: whatsappBusiness.phoneNumberId,
-            businessAccountId: whatsappBusiness.businessAccountId,
+            phoneNumberId: configured.phoneNumberId,
+            businessAccountId: configured.businessAccountId,
           });
       } catch (error) {
         // The partial unique index has the last word on one live channel per type. Reaching it
@@ -446,15 +452,41 @@ export class Channels {
       const value = await findChannel(tx, id);
       const channel = assertFound(value?.profileId === profileId ? value : null, 'Channel');
 
-      if (channel.type !== 'whatsapp') {
-        throw new GatewayError(400, 'Only WhatsApp supports allowing all contacts');
-      }
       if (channel.revokedAt) {
         throw new GatewayError(409, 'This channel is disconnected');
       }
 
-      await setAllowAllContacts(tx, id, data.allowAllContacts);
-      const updated = { ...channel, ...data };
+      let updated: ChannelRecord;
+      if ('whatsappBusiness' in data) {
+        if (channel.type !== 'whatsapp-business')
+          throw new GatewayError(400, 'Only WhatsApp Business supports Meta credentials');
+        if (channel.whatsappBusinessStatus === 'configured')
+          throw new GatewayError(409, 'This Meta channel is already configured');
+        const stored = await this.services.vault.read(profileId, channelSecret(id), tx);
+        if (!stored) throw new GatewayError(409, 'Meta setup is unavailable');
+        const { verifyToken } = whatsappBusinessSetupSchema.parse(JSON.parse(stored));
+        const credential = { ...data.whatsappBusiness, verifyToken };
+        // The profile lock serializes completion and revoke, including Graph validation.
+        await verifyMetaNumber(credential, this.fetcher, this.abort.signal);
+        try {
+          await tx.insert(metaBindings).values({
+            channelId: id,
+            phoneNumberId: credential.phoneNumberId,
+            businessAccountId: credential.businessAccountId,
+          });
+        } catch (error) {
+          if (isUniqueViolation(error))
+            throw new GatewayError(409, 'This Meta phone number is already connected');
+          throw error;
+        }
+        await this.services.vault.put(profileId, channelSecret(id), JSON.stringify(credential), tx);
+        updated = { ...channel, whatsappBusinessStatus: 'configured' };
+      } else {
+        if (channel.type !== 'whatsapp')
+          throw new GatewayError(400, 'Only WhatsApp supports allowing all contacts');
+        await setAllowAllContacts(tx, id, data.allowAllContacts);
+        updated = { ...channel, ...data };
+      }
       await recordEvent(tx, Date.now, profileId, 'channel.updated', this.metadata(updated));
       return updated;
     });

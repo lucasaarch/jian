@@ -25,12 +25,22 @@ export const whatsappBusinessInputSchema = z.strictObject({
   businessAccountId: z.string().regex(/^\d{1,40}$/),
 });
 
+/** Register the callback before Meta issues the remaining credentials. */
+export const whatsappBusinessSetupSchema = z.union([
+  z.strictObject({ verifyToken: secretSchema }),
+  whatsappBusinessInputSchema,
+]);
+
+export const whatsappBusinessCompletionSchema = whatsappBusinessInputSchema.omit({
+  verifyToken: true,
+});
+
 export const channelInputSchema = z
   .strictObject({
     type: channelTypeSchema,
     // The Telegram bot token. It goes to the vault under `channel:<id>` and is never read back.
     botToken: secretSchema.optional(),
-    whatsappBusiness: whatsappBusinessInputSchema.optional(),
+    whatsappBusiness: whatsappBusinessSetupSchema.optional(),
   })
   .refine((value) => (value.type === 'telegram') === (value.botToken !== undefined), {
     message: 'Telegram connects with a bot token; the other channels connect without one',
@@ -44,15 +54,17 @@ export const channelInputSchema = z
     },
   );
 
-export const channelPatchSchema = z.strictObject({
-  allowAllContacts: z.boolean(),
-});
+export const channelPatchSchema = z.union([
+  z.strictObject({ allowAllContacts: z.boolean() }),
+  z.strictObject({ whatsappBusiness: whatsappBusinessCompletionSchema }),
+]);
 
 export const channelSchema = z.strictObject({
   id: z.uuid(),
   profileId: z.uuid(),
   type: channelTypeSchema,
   allowAllContacts: z.boolean().default(false),
+  whatsappBusinessStatus: z.enum(['pending', 'configured']).optional(),
   createdAt: z.iso.datetime(),
   revokedAt: z.iso.datetime().optional(),
 });
