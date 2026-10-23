@@ -274,8 +274,20 @@ export const schedules: Schedule[] = [
 ];
 
 export const channels: Channel[] = [
-  { id: ids.telegram, profileId: ids.zero, type: 'telegram', createdAt: at(60 * 24 * 10) },
-  { id: ids.whatsapp, profileId: ids.zero, type: 'whatsapp', createdAt: at(60 * 24 * 10) },
+  {
+    id: ids.telegram,
+    profileId: ids.zero,
+    type: 'telegram',
+    allowAllContacts: false,
+    createdAt: at(60 * 24 * 10),
+  },
+  {
+    id: ids.whatsapp,
+    profileId: ids.zero,
+    type: 'whatsapp',
+    allowAllContacts: false,
+    createdAt: at(60 * 24 * 10),
+  },
 ];
 
 export const connection: Connection = {

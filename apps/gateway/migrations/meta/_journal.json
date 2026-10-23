@@ -414,6 +414,13 @@
       "when": 1792700000000,
       "tag": "0058_remote-ui-state",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1792764000000,
+      "tag": "0059_whatsapp-allow-all-contacts",
+      "breakpoints": true
     }
   ]
 }

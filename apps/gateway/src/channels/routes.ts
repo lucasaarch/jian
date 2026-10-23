@@ -1,3 +1,4 @@
+import { channelPatchSchema } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import { GatewayError } from '../core/errors.js';
 import type { ChannelParams, ContactParams, ProfileParams, SessionParams } from '../http/params.js';
@@ -36,6 +37,18 @@ export function registerChannelRoutes(app: FastifyInstance, deps: ChannelRouteSe
 
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/channels', async (request) =>
     channels().list(request.params.profileId),
+  );
+
+  app.patch<{ Params: ChannelParams }>(
+    '/v1/profiles/:profileId/channels/:channelId',
+    {
+      // Do not let the global AJV coercion turn a string into an authorization setting.
+      preValidation: async (request) => {
+        channelPatchSchema.parse(request.body);
+      },
+    },
+    async (request) =>
+      channels().update(request.params.profileId, request.params.channelId, request.body),
   );
 
   app.delete<{ Params: ChannelParams }>(

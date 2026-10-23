@@ -8,6 +8,13 @@ export const channelCalls = (client: Client) => ({
     result(client.GET('/v1/profiles/{profileId}/channels', { params: profile(profileId) })),
   createChannel: (profileId: string, body: NewChannel) =>
     result(client.POST('/v1/profiles/{profileId}/channels', { params: profile(profileId), body })),
+  updateChannel: (profileId: string, channelId: string, body: { allowAllContacts: boolean }) =>
+    result(
+      client.PATCH('/v1/profiles/{profileId}/channels/{channelId}', {
+        params: channel(profileId, channelId),
+        body,
+      }),
+    ),
   revokeChannel: (profileId: string, channelId: string) =>
     result(
       client.DELETE('/v1/profiles/{profileId}/channels/{channelId}', {

@@ -14,6 +14,7 @@ import type {
 } from '../src/channels/whatsapp/types.js';
 import { Media } from '../src/media/service.js';
 import { SecretBox } from '../src/security/crypto.js';
+import { cavemanMode } from '../src/sessions/repository.js';
 import { authRow, connectionRow, pendingInbox } from './helpers/rows.js';
 import { testServices } from './helpers/services.js';
 
@@ -93,6 +94,137 @@ async function setup(send?: (chatId: string, text: string) => Promise<string>) {
 }
 
 describe('WhatsApp linked device', () => {
+  it('persists the owner-only allow-all setting and validates its boundary', async () => {
+    const f = await setup();
+    const patch = (
+      payload: Record<string, unknown>,
+      headers: Record<string, string> = admin,
+      url = f.base,
+    ) => f.app.inject({ method: 'PATCH', url, headers, payload });
+
+    try {
+      expect(f.binding.allowAllContacts).toBe(false);
+      expect((await patch({ allowAllContacts: true }, {})).statusCode).toBe(401);
+      expect(
+        (await patch({ allowAllContacts: true }, { authorization: 'Bearer contact-token' }))
+          .statusCode,
+      ).toBe(401);
+      for (const payload of [
+        {},
+        { allowAllContacts: 'true' },
+        { allowAllContacts: true, owner: true },
+      ]) {
+        expect((await patch(payload)).statusCode).toBe(400);
+      }
+      const other = await f.services.profiles.createProfile({
+        name: 'Other',
+        instructions: 'Help.',
+      });
+      expect(
+        (
+          await patch(
+            { allowAllContacts: true },
+            admin,
+            `/v1/profiles/${other.id}/channels/${f.binding.id}`,
+          )
+        ).statusCode,
+      ).toBe(404);
+
+      const updated = await patch({ allowAllContacts: true });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json()).toMatchObject({ id: f.binding.id, allowAllContacts: true });
+      expect(updated.body).not.toContain('tokenHash');
+      // A fresh service reads durable state, not an in-memory setting on the patched instance.
+      const restored = new Channels(
+        f.services,
+        fetch,
+        new ChannelRegistry([new WhatsAppChannel(f.whatsapp)]),
+      );
+      expect((await restored.list(f.profile.id))[0]?.allowAllContacts).toBe(true);
+      expect((await patch({ allowAllContacts: false })).json().allowAllContacts).toBe(false);
+      await f.channels.revoke(f.profile.id, f.binding.id);
+      expect((await patch({ allowAllContacts: true })).statusCode).toBe(409);
+    } finally {
+      await f.whatsapp.stop();
+      await f.app.close();
+    }
+  });
+
+  it('allows new private contacts without granting owner rights, but keeps blocks and groups manual', async () => {
+    const f = await setup();
+    try {
+      await f.whatsapp.connect(f.profile.id, f.binding.id);
+      await f.whatsapp.tick(f.receive);
+      const callbacks = f.devices[0]?.callbacks;
+      if (!callbacks) throw new Error('Device missing');
+      await callbacks.ready('5511888888888@c.us');
+      await callbacks.message(message);
+      await f.whatsapp.tick(f.receive);
+      const [blocked] = await f.channels.contacts(f.profile.id);
+      if (!blocked) throw new Error('Contact missing');
+      expect(blocked.status).toBe('pending');
+      expect(await f.services.runs.activities(f.profile.id)).toHaveLength(0);
+      await f.channels.blockContact(f.profile.id, blocked.id);
+      await f.channels.update(f.profile.id, f.binding.id, { allowAllContacts: true });
+
+      await callbacks.message({ ...message, requestKey: 'blocked-again' });
+      const newcomer = '5511000000000@c.us';
+      const incoming = {
+        ...message,
+        actorId: newcomer,
+        chatId: newcomer,
+        text: '/caveman ultra',
+        requestKey: 'new-private',
+      };
+      await callbacks.message(incoming);
+      await callbacks.message(incoming);
+      await callbacks.message({
+        ...message,
+        scope: 'group',
+        chatId: 'room@g.us',
+        requestKey: 'new-room',
+      });
+      await f.whatsapp.tick(f.receive);
+      const contacts = await f.channels.contacts(f.profile.id);
+      expect(contacts.find((c) => c.id === blocked.id)?.status).toBe('blocked');
+      expect(contacts.find((c) => c.scope === 'group')).toMatchObject({ status: 'pending' });
+      expect(contacts.find((c) => c.scope === 'group')?.sessionId).toBeUndefined();
+      const approved = contacts.find((c) => c.actorId === newcomer);
+      expect(approved).toMatchObject({ status: 'approved' });
+      expect(approved?.message).toBeUndefined();
+      if (!approved?.sessionId) throw new Error('Approved session missing');
+      expect(await f.services.sessions.session(f.profile.id, approved.sessionId)).toMatchObject({
+        channel: 'whatsapp',
+        scope: 'direct',
+      });
+      expect(await cavemanMode(f.store.db, f.profile.id, approved.sessionId)).toBe('off');
+      const runs = await f.services.runs.activities(f.profile.id);
+      expect(runs).toHaveLength(1);
+      expect(runs[0]).toMatchObject({ sessionId: approved.sessionId, input: '/caveman ultra' });
+      expect(
+        (await f.channels.deliveries(f.profile.id)).filter(
+          (d) => d.chatId === newcomer && d.notice,
+        ),
+      ).toHaveLength(0);
+
+      await f.channels.update(f.profile.id, f.binding.id, { allowAllContacts: false });
+      await callbacks.message({
+        ...message,
+        actorId: 'later@c.us',
+        chatId: 'later@c.us',
+        requestKey: 'after-disable',
+      });
+      await f.whatsapp.tick(f.receive);
+      expect(
+        (await f.channels.contacts(f.profile.id)).find((c) => c.actorId === 'later@c.us')?.status,
+      ).toBe('pending');
+      expect(await f.services.runs.activities(f.profile.id)).toHaveLength(1);
+    } finally {
+      await f.whatsapp.stop();
+      await f.app.close();
+    }
+  });
+
   it('restricts linking and short-lived QR codes to the host token without exposing secrets in status', async () => {
     const f = await setup();
 
