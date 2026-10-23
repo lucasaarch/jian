@@ -29,8 +29,11 @@ async function render(channels: Channel[] = [], fail = false) {
       webhookToken: 'synthetic-unused-ingress-token',
     };
   });
+  const updateChannel = vi.fn(async () => {
+    if (fail) throw new Error('Synthetic save failure');
+  });
   const connect = vi.fn(async () => {});
-  const api = { createChannel, connect } as unknown as GatewayApi;
+  const api = { createChannel, updateChannel, connect } as unknown as GatewayApi;
   const element = document.createElement('div');
   document.body.append(element);
   const root = createRoot(element);
@@ -43,17 +46,19 @@ async function render(channels: Channel[] = [], fail = false) {
       return false;
     }
   });
-  await act(async () => {
-    root.render(
-      <Channels
-        profile={profile}
-        data={{ channels, contacts: [], groups: [] } as unknown as ProfileData}
-        api={api}
-        mutate={mutate}
-        busy={false}
-      />,
-    );
-  });
+  const refresh = async (channels: Channel[]) =>
+    act(async () => {
+      root.render(
+        <Channels
+          profile={profile}
+          data={{ channels, contacts: [], groups: [] } as unknown as ProfileData}
+          api={api}
+          mutate={mutate}
+          busy={false}
+        />,
+      );
+    });
+  await refresh(channels);
   const toggle = async (type: string) => {
     await act(async () =>
       element.querySelector<HTMLButtonElement>(`[aria-controls="channel-${type}"]`)?.click(),
@@ -62,13 +67,12 @@ async function render(channels: Channel[] = [], fail = false) {
     if (!panel) throw new Error('Missing channel panel');
     return panel;
   };
-  return { element, createChannel, connect, mutate, toggle };
+  return { element, createChannel, updateChannel, connect, mutate, toggle, refresh };
 }
 
 const credentials = {
   accessToken: 'synthetic-access-token',
   appSecret: 'synthetic-app-secret',
-  verifyToken: 'synthetic-verify-secret',
   phoneNumberId: '123456',
   businessAccountId: '987654',
 };
@@ -85,9 +89,12 @@ for (const fail of [false, true]) {
   it(`sends only Meta credentials and clears secrets on ${fail ? 'failed' : 'successful'} save`, async () => {
     const { toggle, createChannel, connect, element, mutate } = await render([], fail);
     const panel = await toggle('whatsapp-business');
-    expect(panel.querySelectorAll('input[type="password"]')).toHaveLength(3);
+    expect(panel.querySelectorAll('input[type="password"]')).toHaveLength(1);
+    expect(panel.querySelectorAll('input')).toHaveLength(1);
     const storage = vi.spyOn(Storage.prototype, 'setItem');
-    fill(panel);
+    const verifyToken = panel.querySelector<HTMLInputElement>('[name="verifyToken"]');
+    if (!verifyToken) throw new Error('Missing verify token field');
+    verifyToken.value = 'synthetic-verify-secret';
     await act(async () => {
       panel
         .querySelector('form')
@@ -95,27 +102,29 @@ for (const fail of [false, true]) {
     });
     expect(createChannel).toHaveBeenCalledWith(profiles[0]?.id, {
       type: 'whatsapp-business',
-      whatsappBusiness: credentials,
+      whatsappBusiness: { verifyToken: 'synthetic-verify-secret' },
     });
     expect(connect).not.toHaveBeenCalled();
     expect(storage).not.toHaveBeenCalled();
-    expect(panel.querySelector<HTMLInputElement>('[name="accessToken"]')?.value).toBe('');
-    expect(panel.querySelector<HTMLInputElement>('[name="appSecret"]')?.value).toBe('');
+    expect(panel.querySelector('[name="accessToken"]')).toBeNull();
+    expect(panel.querySelector('[name="appSecret"]')).toBeNull();
     expect(panel.querySelector<HTMLInputElement>('[name="verifyToken"]')?.value).toBe('');
     expect(element.textContent).not.toContain('synthetic-unused-ingress-token');
     expect(document.body.textContent).not.toContain('Webhook configuration');
-    expect(mutate.mock.calls[0]?.[1]).toContain('Complete webhook setup');
+    expect(mutate.mock.calls[0]?.[1]).toContain('Setup pending');
   });
 }
 
 it('discards unsaved secrets when the Meta form is closed', async () => {
   const { toggle } = await render();
   const panel = await toggle('whatsapp-business');
-  fill(panel);
+  const input = panel.querySelector<HTMLInputElement>('[name="verifyToken"]');
+  if (!input) throw new Error('Missing verify token field');
+  input.value = 'synthetic-verify-secret';
   await toggle('whatsapp-business');
   expect(panel.querySelector('input')).toBeNull();
   await toggle('whatsapp-business');
-  expect(panel.querySelector<HTMLInputElement>('[name="accessToken"]')?.value).toBe('');
+  expect(panel.querySelector<HTMLInputElement>('[name="verifyToken"]')?.value).toBe('');
 });
 
 it('shows configured rather than connected, with the signed Meta URL and no group setup', async () => {
@@ -129,7 +138,9 @@ it('shows configured rather than connected, with the signed Meta URL and no grou
     },
   ]);
   const panel = await toggle('whatsapp-business');
-  expect(panel.textContent).toContain('/v1/whatsapp-business/meta-channel');
+  expect(panel.querySelector<HTMLTextAreaElement>('textarea')?.value).toContain(
+    '/v1/whatsapp-business/meta-channel',
+  );
   expect(panel.textContent).not.toContain('/v1/ingress/');
   expect(panel.querySelector('input')).toBeNull();
   expect(panel.querySelector('[role="switch"]')).toBeNull();
@@ -139,6 +150,107 @@ it('shows configured rather than connected, with the signed Meta URL and no grou
   expect(panel.textContent).toContain('16 MB');
   expect(panel.closest('article')?.querySelector('.badge')?.textContent).toBe('Configured');
   expect(element.textContent).toContain('WhatsApp (Baileys)');
+});
+
+const pendingChannel: Channel = {
+  id: 'generated-meta-channel',
+  profileId: 'profile',
+  type: 'whatsapp-business',
+  createdAt: '2026-10-23T12:00:00Z',
+  allowAllContacts: false,
+  whatsappBusinessStatus: 'pending',
+};
+
+for (const fail of [false, true]) {
+  it(`completes pending setup with four fields on ${fail ? 'failure' : 'success'}, preserving the callback and verify token`, async () => {
+    const { toggle, createChannel, updateChannel, connect } = await render([pendingChannel], fail);
+    const panel = await toggle('whatsapp-business');
+    expect(panel.closest('article')?.querySelector('.badge')?.textContent).toBe('Setup pending');
+    expect(panel.textContent).toContain('Messaging is unavailable');
+    expect(panel.querySelectorAll('input')).toHaveLength(4);
+    expect(panel.querySelector('[name="verifyToken"]')).toBeNull();
+    expect(panel.querySelectorAll('input[type="password"]')).toHaveLength(2);
+    const callback = panel.querySelector<HTMLTextAreaElement>('textarea')?.value;
+    expect(callback).toBe(`${window.location.origin}/v1/whatsapp-business/generated-meta-channel`);
+    expect(callback).not.toContain('<channelId>');
+    const storage = vi.spyOn(Storage.prototype, 'setItem');
+    fill(panel);
+    await act(async () => {
+      panel
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(updateChannel).toHaveBeenCalledWith(profiles[0]?.id, pendingChannel.id, {
+      whatsappBusiness: credentials,
+    });
+    expect(createChannel).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
+    expect(storage).not.toHaveBeenCalled();
+    for (const input of panel.querySelectorAll('input')) expect(input.value).toBe('');
+    expect(panel.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe(callback);
+  });
+}
+
+it('shows the returned callback immediately after creation, then configured after completion refresh', async () => {
+  const { toggle, refresh, createChannel, updateChannel } = await render();
+  const panel = await toggle('whatsapp-business');
+  const input = panel.querySelector<HTMLInputElement>('[name="verifyToken"]');
+  if (!input) throw new Error('Missing verify token');
+  input.value = 'synthetic-verify-secret';
+  await act(async () => {
+    panel
+      .querySelector('form')
+      ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+  expect(createChannel).toHaveBeenCalledOnce();
+  await refresh([pendingChannel]);
+  expect(panel.hidden).toBe(false);
+  const callback = panel.querySelector<HTMLTextAreaElement>('textarea')?.value;
+  expect(callback).toBe(`${window.location.origin}/v1/whatsapp-business/${pendingChannel.id}`);
+  fill(panel);
+  await act(async () => {
+    panel
+      .querySelector('form')
+      ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+  expect(updateChannel).toHaveBeenCalledWith(profiles[0]?.id, pendingChannel.id, {
+    whatsappBusiness: credentials,
+  });
+  await refresh([{ ...pendingChannel, whatsappBusinessStatus: 'configured' }]);
+  expect(panel.closest('article')?.querySelector('.badge')?.textContent).toBe('Configured');
+  expect(panel.querySelector('form')).toBeNull();
+  expect(panel.querySelector('input')).toBeNull();
+  expect(panel.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe(callback);
+});
+
+it('unmounts pending credential fields on close and opens empty on return', async () => {
+  const { toggle } = await render([pendingChannel]);
+  const panel = await toggle('whatsapp-business');
+  fill(panel);
+  await toggle('whatsapp-business');
+  expect(panel.querySelector('input')).toBeNull();
+  await toggle('whatsapp-business');
+  for (const input of panel.querySelectorAll('input')) expect(input.value).toBe('');
+});
+
+it('copies the generated callback and offers manual copying if clipboard access is refused', async () => {
+  const { toggle } = await render([pendingChannel]);
+  const panel = await toggle('whatsapp-business');
+  const writeText = vi
+    .spyOn(navigator.clipboard, 'writeText')
+    .mockRejectedValueOnce(new Error('Denied'));
+  const copy = Array.from(panel.querySelectorAll('button')).find((button) =>
+    button.textContent?.includes('Copy callback URL'),
+  );
+  await act(async () => copy?.click());
+  expect(panel.querySelector('[role="alert"]')?.textContent).toContain('copy it by hand');
+  writeText.mockResolvedValueOnce();
+  await act(async () => copy?.click());
+  expect(writeText).toHaveBeenLastCalledWith(
+    `${window.location.origin}/v1/whatsapp-business/generated-meta-channel`,
+  );
+  expect(copy?.textContent).toContain('Copied');
+  expect(panel.querySelector('[role="alert"]')).toBeNull();
 });
 
 it('still starts QR pairing only for Baileys', async () => {

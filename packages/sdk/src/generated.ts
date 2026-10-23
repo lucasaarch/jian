@@ -6855,6 +6855,8 @@ export interface operations {
                         type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
                         /** @default false */
                         allowAllContacts: boolean;
+                        /** @enum {string} */
+                        whatsappBusinessStatus?: "pending" | "configured";
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -6979,6 +6981,8 @@ export interface operations {
                     type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
                     botToken?: string;
                     whatsappBusiness?: {
+                        verifyToken: string;
+                    } | {
                         accessToken: string;
                         appSecret: string;
                         verifyToken: string;
@@ -7004,6 +7008,8 @@ export interface operations {
                         type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
                         /** @default false */
                         allowAllContacts: boolean;
+                        /** @enum {string} */
+                        whatsappBusinessStatus?: "pending" | "configured";
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -7142,6 +7148,8 @@ export interface operations {
                         type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
                         /** @default false */
                         allowAllContacts: boolean;
+                        /** @enum {string} */
+                        whatsappBusinessStatus?: "pending" | "configured";
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -7264,6 +7272,13 @@ export interface operations {
             content: {
                 "application/json": {
                     allowAllContacts: boolean;
+                } | {
+                    whatsappBusiness: {
+                        accessToken: string;
+                        appSecret: string;
+                        phoneNumberId: string;
+                        businessAccountId: string;
+                    };
                 };
             };
         };
@@ -7283,6 +7298,8 @@ export interface operations {
                         type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
                         /** @default false */
                         allowAllContacts: boolean;
+                        /** @enum {string} */
+                        whatsappBusinessStatus?: "pending" | "configured";
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
