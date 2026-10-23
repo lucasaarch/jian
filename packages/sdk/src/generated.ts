@@ -488,6 +488,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/profiles/{profileId}/contacts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Required permission: admin. */
+        patch: operations["updateContact"];
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/contacts/{contactId}/approve": {
         parameters: {
             query?: never;
@@ -6853,6 +6870,8 @@ export interface operations {
                         profileId: string;
                         /** @enum {string} */
                         type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        /** @default true */
+                        enabled: boolean;
                         /** @default false */
                         allowAllContacts: boolean;
                         /** @enum {string} */
@@ -7006,6 +7025,8 @@ export interface operations {
                         profileId: string;
                         /** @enum {string} */
                         type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        /** @default true */
+                        enabled: boolean;
                         /** @default false */
                         allowAllContacts: boolean;
                         /** @enum {string} */
@@ -7146,6 +7167,8 @@ export interface operations {
                         profileId: string;
                         /** @enum {string} */
                         type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        /** @default true */
+                        enabled: boolean;
                         /** @default false */
                         allowAllContacts: boolean;
                         /** @enum {string} */
@@ -7271,6 +7294,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    enabled: boolean;
+                } | {
                     allowAllContacts: boolean;
                 } | {
                     whatsappBusiness: {
@@ -7296,6 +7321,8 @@ export interface operations {
                         profileId: string;
                         /** @enum {string} */
                         type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        /** @default true */
+                        enabled: boolean;
                         /** @default false */
                         allowAllContacts: boolean;
                         /** @enum {string} */
@@ -7444,6 +7471,8 @@ export interface operations {
                         displayName?: string;
                         /** @enum {string} */
                         status: "pending" | "approved" | "blocked";
+                        /** @default true */
+                        aiEnabled: boolean;
                         /** Format: uuid */
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
@@ -7455,6 +7484,165 @@ export interface operations {
                         /** Format: date-time */
                         updatedAt: string;
                     }[];
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    updateContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    aiEnabled: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        /** Format: uuid */
+                        channelId: string;
+                        /** @enum {string} */
+                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        /**
+                         * @default direct
+                         * @enum {string}
+                         */
+                        scope: "direct" | "group";
+                        actorId: string;
+                        chatId: string;
+                        displayName?: string;
+                        /** @enum {string} */
+                        status: "pending" | "approved" | "blocked";
+                        /** @default true */
+                        aiEnabled: boolean;
+                        /** Format: uuid */
+                        sessionId?: string;
+                        /** @description The message held until the owner decides. */
+                        message?: string;
+                        /** @description The picture the contact or group uses on its channel, as a data URL. */
+                        avatar?: string;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                    };
                 };
             };
             /** @description Error */
@@ -7595,6 +7783,8 @@ export interface operations {
                         displayName?: string;
                         /** @enum {string} */
                         status: "pending" | "approved" | "blocked";
+                        /** @default true */
+                        aiEnabled: boolean;
                         /** Format: uuid */
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
@@ -7746,6 +7936,8 @@ export interface operations {
                         displayName?: string;
                         /** @enum {string} */
                         status: "pending" | "approved" | "blocked";
+                        /** @default true */
+                        aiEnabled: boolean;
                         /** Format: uuid */
                         sessionId?: string;
                         /** @description The message held until the owner decides. */

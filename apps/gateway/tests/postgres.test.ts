@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import { PgBoss } from 'pg-boss';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { Channels } from '../src/channels/service.js';
 import { MetaInbox } from '../src/channels/whatsapp-business-inbox.js';
@@ -52,6 +52,169 @@ afterAll(async () => {
 });
 
 describe('PostgreSQL durability', () => {
+  it('atomically pauses channel runs across pools and rejects ingress overtaken by pause/resume', async () => {
+    const profile = await services.profiles.createProfile(input);
+    const fetcher = (() => {
+      throw new Error('No network allowed');
+    }) as typeof fetch;
+    const ingress = new Channels(services, fetcher);
+    const channel = await ingress.connect(profile.id, { type: 'api' });
+    const other = new PostgresStore(connectionString);
+    const remote = buildServices({
+      store: other,
+      vault: new Vault(other, box),
+      gatewayVault: new GatewayVault(other, box),
+    });
+    const controls = new Channels({ ...remote, store: other }, fetcher);
+    const warm = vi.spyOn(services.providers, 'warmCatalog').mockResolvedValue(undefined);
+    let release!: () => void;
+    let entered!: () => void;
+    const began = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const receive = (actorId: string, requestKey: string) =>
+      ingress.receive(channel.id, {
+        type: 'api',
+        headers: { 'x-jian-channel-token': channel.webhookToken },
+        payload: { actorId, chatId: actorId, text: requestKey, requestKey },
+      });
+    let racing: ReturnType<typeof receive> | undefined;
+    try {
+      // Approval creates one independent conversation/run for each status under test.
+      for (const actor of ['queued', 'running', 'waiting']) {
+        await receive(actor, `initial-${actor}`);
+        const contact = (await ingress.contacts(profile.id)).find((item) => item.actorId === actor);
+        if (!contact) throw new Error('Contact missing');
+        await ingress.approveContact(profile.id, contact.id);
+      }
+      const initial = await runRows(store, profile.id);
+      expect(initial).toHaveLength(3);
+      const people = await ingress.contacts(profile.id);
+      const byActor = (actor: string) => {
+        const sessionId = people.find((item) => item.actorId === actor)?.sessionId;
+        const run = initial.find((item) => item.sessionId === sessionId);
+        if (!run) throw new Error(`Missing ${actor} run`);
+        return run;
+      };
+      const running = byActor('running');
+      const waiting = byActor('waiting');
+      expect(await services.lifecycle.claim(running.id, profile.id, 'running-worker')).toBeTruthy();
+      expect(await services.lifecycle.claim(waiting.id, profile.id, 'waiting-worker')).toBeTruthy();
+      await services.lifecycle.wait(profile.id, waiting.id, 'waiting-worker', {
+        id: randomUUID(),
+        prompt: 'Continue?',
+        askedAt: new Date().toISOString(),
+      });
+      expect((await runRows(other, profile.id)).map((run) => run.status).sort()).toEqual([
+        'queued',
+        'running',
+        'waiting',
+      ]);
+
+      // A failure after cancelling one run must roll back both the flag and all cancellations.
+      const cancel = remote.runs.cancel.bind(remote.runs);
+      const failingCancel = vi
+        .spyOn(remote.runs, 'cancel')
+        .mockImplementationOnce(async (...args) => {
+          await cancel(...args);
+          throw new Error('Pause transaction interrupted');
+        });
+      try {
+        await expect(controls.update(profile.id, channel.id, { enabled: false })).rejects.toThrow(
+          'Pause transaction interrupted',
+        );
+      } finally {
+        failingCancel.mockRestore();
+      }
+      const [unchanged] = await store.db.select().from(channels).where(eq(channels.id, channel.id));
+      expect(unchanged?.enabled).toBe(true);
+      expect(unchanged?.automationPausedAt).toBeNull();
+      expect((await runRows(store, profile.id)).map((run) => run.status).sort()).toEqual([
+        'queued',
+        'running',
+        'waiting',
+      ]);
+
+      // This turn read the old channel/contact, but holds no profile transaction while warming.
+      warm.mockImplementationOnce(async () => {
+        entered();
+        await gate;
+      });
+      racing = receive('queued', 'overtaken-by-pause');
+      await began;
+      await controls.update(profile.id, channel.id, { enabled: false });
+      const [paused] = await other.db.select().from(channels).where(eq(channels.id, channel.id));
+      expect(paused?.enabled).toBe(false);
+      expect(paused?.automationPausedAt).toBeInstanceOf(Date);
+      expect((await runRows(other, profile.id)).map((run) => run.status)).toEqual([
+        'cancelled',
+        'cancelled',
+        'cancelled',
+      ]);
+      expect(await receive('queued', 'ignored-while-paused')).toMatchObject({ accepted: false });
+      await controls.update(profile.id, channel.id, { enabled: true });
+      release();
+      expect(await racing).toMatchObject({ accepted: false });
+      expect(await runRows(other, profile.id)).toHaveLength(3);
+    } finally {
+      release();
+      try {
+        await racing;
+      } finally {
+        warm.mockRestore();
+        await other.close();
+      }
+    }
+
+    // A fresh pool and service graph must not resurrect cancelled work or replay paused input.
+    const reopenedStore = new PostgresStore(connectionString);
+    try {
+      const reopened = buildServices({
+        store: reopenedStore,
+        vault: new Vault(reopenedStore, box),
+        gatewayVault: new GatewayVault(reopenedStore, box),
+      });
+      const reopenedChannels = new Channels({ ...reopened, store: reopenedStore }, fetcher);
+      const [persisted] = await reopenedStore.db
+        .select()
+        .from(channels)
+        .where(eq(channels.id, channel.id));
+      expect(persisted?.enabled).toBe(true);
+      expect(persisted?.automationPausedAt).toBeInstanceOf(Date);
+      expect((await runRows(reopenedStore, profile.id)).map((run) => run.status)).toEqual([
+        'cancelled',
+        'cancelled',
+        'cancelled',
+      ]);
+      expect(
+        (await reopenedChannels.contacts(profile.id)).every((contact) => contact.aiEnabled),
+      ).toBe(true);
+      expect(
+        await reopenedChannels.receive(channel.id, {
+          type: 'api',
+          headers: { 'x-jian-channel-token': channel.webhookToken },
+          payload: {
+            actorId: 'queued',
+            chatId: 'queued',
+            text: 'fresh-after-resume',
+            requestKey: 'fresh-after-resume',
+          },
+        }),
+      ).toMatchObject({ accepted: true });
+      expect((await runRows(reopenedStore, profile.id)).map((run) => run.status).sort()).toEqual([
+        'cancelled',
+        'cancelled',
+        'cancelled',
+        'queued',
+      ]);
+    } finally {
+      await reopenedStore.close();
+    }
+  }, 30_000);
+
   it('keeps Meta FIFO across workers, retry leases and a crashed head', async () => {
     const profile = await services.profiles.createProfile(input);
     const channelId = randomUUID();

@@ -4,7 +4,7 @@ import { ShieldOff, UserCheck, UserX } from 'lucide-react';
 import type { Channel, Contact } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionProps } from '../props';
-import { Badge, Button, Face } from '../ui';
+import { Badge, Button, Face, Switch } from '../ui';
 import { kinds } from './kinds';
 
 const agents = (count: number) => (count === 1 ? '1 agent' : `${count} agents`);
@@ -33,11 +33,13 @@ export function Conversations({
   const approve = (contact: Contact, name: string) =>
     mutate(
       () => api.approveContact(profile.id, contact.id),
-      contact.status === 'pending'
-        ? channel.type === 'whatsapp-business'
-          ? `${name} approved. Replies still require an open customer-service window.`
-          : `${name} approved. What they wrote went to the agent.`
-        : `${name} approved again.`,
+      channel.enabled === false || contact.aiEnabled === false
+        ? `${name} approved. Automation remains paused; no paused messages will be replayed.`
+        : contact.status === 'pending'
+          ? channel.type === 'whatsapp-business'
+            ? `${name} approved. Replies still require an open customer-service window.`
+            : `${name} approved. What they wrote went to the agent.`
+          : `${name} approved again.`,
     );
   const refuse = (contact: Contact, name: string) =>
     mutate(
@@ -45,6 +47,26 @@ export function Conversations({
       contact.status === 'pending'
         ? `${name} declined.`
         : `${name} revoked. The agent no longer answers there.`,
+    );
+
+  const aiControl = (contact: Contact) =>
+    channel.type === 'whatsapp-business' && (
+      <div className="flex items-center gap-3">
+        <span>{contact.aiEnabled === false ? 'AI paused' : 'AI replies'}</span>
+        <Switch
+          label={`AI replies for ${contact.displayName ?? contact.actorId}`}
+          checked={contact.aiEnabled ?? true}
+          disabled={busy}
+          onChange={(aiEnabled) =>
+            void mutate(
+              () => api.updateContact(profile.id, contact.id, { aiEnabled }),
+              aiEnabled
+                ? 'AI enabled for this chat. Approval and channel automation still apply; no replay.'
+                : 'AI paused for this chat, including queued replies.',
+            )
+          }
+        />
+      </div>
     );
 
   // A request is a decision, not a row: it gets room for who wrote, what they said, and the
@@ -78,13 +100,16 @@ export function Conversations({
         ) : (
           <p className="request-note">They have not written anything yet.</p>
         )}
+        {aiControl(contact)}
         <footer>
           <p>
-            {contact.scope === 'group'
-              ? 'Until you approve, the agent reads nothing there.'
-              : channel.type === 'whatsapp-business'
-                ? 'Approving hands this message to the agent. An expired reply window blocks delivery.'
-                : 'Approving hands this message to the agent, and it answers.'}
+            {channel.enabled === false || contact.aiEnabled === false
+              ? 'Approval does not resume paused automation or replay paused messages.'
+              : contact.scope === 'group'
+                ? 'Until you approve, the agent reads nothing there.'
+                : channel.type === 'whatsapp-business'
+                  ? 'Approving hands this message to the agent. An expired reply window blocks delivery.'
+                  : 'Approving hands this message to the agent, and it answers.'}
           </p>
           <Button
             variant="quiet"
@@ -118,6 +143,7 @@ export function Conversations({
           <strong>{name}</strong>
           {detail !== name && <small>{detail}</small>}
         </div>
+        {aiControl(contact)}
         {contact.status === 'approved' ? (
           <>
             <Badge tone="good">Approved</Badge>
@@ -177,6 +203,14 @@ export function Conversations({
       )}
       <section>
         <h3>Contacts</h3>
+        {channel.type === 'whatsapp-business' && (
+          <p className="note">
+            AI replies is separate from contact approval. Pausing stops AI runs and output,
+            including queued replies. Incoming messages are ignored while paused and never replayed
+            automatically when resumed. A network request already in flight may finish. The channel
+            must also be enabled for AI replies to resume.
+          </p>
+        )}
         {people.length ? (
           people.map((contact) => row(contact, contact.actorId))
         ) : (

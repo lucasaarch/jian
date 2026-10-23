@@ -159,6 +159,7 @@ export class Runs {
         : await this.fallback?.pick().catch(() => null);
 
     const write = async (tx: Queryable) => {
+      await options.beforeSubmit?.(tx);
       const profile = await this.profiles.profile(profileId, tx);
 
       if (continuationOf) {
@@ -450,8 +451,8 @@ export class Runs {
     return resume;
   }
 
-  async cancel(profileId: string, runId: string) {
-    return this.store.transaction(profileId, async (tx) => {
+  async cancel(profileId: string, runId: string, transaction?: Queryable) {
+    const write = async (tx: Queryable) => {
       const run = await this.run(profileId, runId, tx);
       if (run.subagent) throw new GatewayError(403, 'Subagents are managed by the agent');
 
@@ -472,7 +473,8 @@ export class Runs {
       await recordEvent(tx, this.clock, profileId, 'run.cancelled', {}, runId);
 
       return final;
-    });
+    };
+    return transaction ? write(transaction) : this.store.transaction(profileId, write);
   }
 
   /**

@@ -435,6 +435,13 @@
       "when": 1792776500000,
       "tag": "0061_meta-causal-delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1792780000000,
+      "tag": "0062_channel-automation",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { channelPatchSchema } from '@jian/contracts';
+import { channelPatchSchema, contactPatchSchema } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import { GatewayError } from '../core/errors.js';
 import type { ChannelParams, ContactParams, ProfileParams, SessionParams } from '../http/params.js';
@@ -69,6 +69,18 @@ export function registerChannelRoutes(app: FastifyInstance, deps: ChannelRouteSe
 
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/contacts', async (request) =>
     channels().contacts(request.params.profileId),
+  );
+
+  app.patch<{ Params: ProfileParams & { id: string } }>(
+    '/v1/profiles/:profileId/contacts/:id',
+    {
+      // Validate before AJV can coerce strings into an automation setting.
+      preValidation: async (request) => {
+        contactPatchSchema.parse(request.body);
+      },
+    },
+    async (request) =>
+      channels().updateContact(request.params.profileId, request.params.id, request.body),
   );
 
   app.post<{ Params: ContactParams }>(

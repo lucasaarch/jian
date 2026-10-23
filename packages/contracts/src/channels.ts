@@ -55,6 +55,7 @@ export const channelInputSchema = z
   );
 
 export const channelPatchSchema = z.union([
+  z.strictObject({ enabled: z.boolean() }),
   z.strictObject({ allowAllContacts: z.boolean() }),
   z.strictObject({ whatsappBusiness: whatsappBusinessCompletionSchema }),
 ]);
@@ -63,6 +64,7 @@ export const channelSchema = z.strictObject({
   id: z.uuid(),
   profileId: z.uuid(),
   type: channelTypeSchema,
+  enabled: z.boolean().default(true),
   allowAllContacts: z.boolean().default(false),
   whatsappBusinessStatus: z.enum(['pending', 'configured']).optional(),
   createdAt: z.iso.datetime(),
@@ -84,6 +86,7 @@ export const contactSchema = z.strictObject({
   chatId: z.string().min(1).max(100),
   displayName: z.string().max(100).optional(),
   status: z.enum(['pending', 'approved', 'blocked']),
+  aiEnabled: z.boolean().default(true),
   sessionId: z.uuid().optional(),
   message: z.string().max(8000).optional().describe('The message held until the owner decides.'),
   avatar: z
@@ -94,6 +97,8 @@ export const contactSchema = z.strictObject({
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
+
+export const contactPatchSchema = z.strictObject({ aiEnabled: z.boolean() });
 
 export const ingressSchema = z.strictObject({
   actorId: z.string().min(1).max(100),
