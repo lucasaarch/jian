@@ -4,7 +4,7 @@ import { ShieldOff, UserCheck, UserX } from 'lucide-react';
 import type { Channel, Contact } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionProps } from '../props';
-import { Badge, Button, Face, Switch } from '../ui';
+import { Badge, Button, Face } from '../ui';
 import { kinds } from './kinds';
 
 const agents = (count: number) => (count === 1 ? '1 agent' : `${count} agents`);
@@ -49,26 +49,6 @@ export function Conversations({
         : `${name} revoked. The agent no longer answers there.`,
     );
 
-  const aiControl = (contact: Contact) =>
-    channel.type === 'whatsapp-business' && (
-      <div className="flex items-center gap-3">
-        <span>{contact.aiEnabled === false ? 'AI paused' : 'AI replies'}</span>
-        <Switch
-          label={`AI replies for ${contact.displayName ?? contact.actorId}`}
-          checked={contact.aiEnabled ?? true}
-          disabled={busy}
-          onChange={(aiEnabled) =>
-            void mutate(
-              () => api.updateContact(profile.id, contact.id, { aiEnabled }),
-              aiEnabled
-                ? 'AI enabled for this chat. Approval and channel automation still apply; no replay.'
-                : 'AI paused for this chat, including queued replies.',
-            )
-          }
-        />
-      </div>
-    );
-
   // A request is a decision, not a row: it gets room for who wrote, what they said, and the
   // two answers, with the one that approves last and strongest.
   const request = (contact: Contact, detail: string) => {
@@ -100,7 +80,6 @@ export function Conversations({
         ) : (
           <p className="request-note">They have not written anything yet.</p>
         )}
-        {aiControl(contact)}
         <footer>
           <p>
             {channel.enabled === false || contact.aiEnabled === false
@@ -143,7 +122,6 @@ export function Conversations({
           <strong>{name}</strong>
           {detail !== name && <small>{detail}</small>}
         </div>
-        {aiControl(contact)}
         {contact.status === 'approved' ? (
           <>
             <Badge tone="good">Approved</Badge>
@@ -203,14 +181,6 @@ export function Conversations({
       )}
       <section>
         <h3>Contacts</h3>
-        {channel.type === 'whatsapp-business' && (
-          <p className="note">
-            AI replies is separate from contact approval. Pausing stops AI runs and output,
-            including queued replies. Incoming messages are ignored while paused and never replayed
-            automatically when resumed. A network request already in flight may finish. The channel
-            must also be enabled for AI replies to resume.
-          </p>
-        )}
         {people.length ? (
           people.map((contact) => row(contact, contact.actorId))
         ) : (

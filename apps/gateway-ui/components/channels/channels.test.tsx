@@ -160,34 +160,6 @@ for (const type of ['whatsapp', 'whatsapp-business'] as const) {
   });
 }
 
-for (const aiEnabled of [undefined, true, false]) {
-  it(`keeps chat AI ${aiEnabled} separate from approval and channel pause`, async () => {
-    const { aiEnabled: _aiEnabled, ...legacyContact } = customer;
-    // Deliberately omit the required field to exercise pre-automation API payloads.
-    const contact =
-      aiEnabled === undefined ? (legacyContact as Contact) : { ...customer, aiEnabled };
-    const { toggle, updateContact, approveContact, blockContact, updateChannel } = await render(
-      [{ ...business, enabled: false }],
-      false,
-      [contact],
-    );
-    const panel = await toggle('whatsapp-business');
-    const control = panel.querySelector<HTMLButtonElement>(
-      '[aria-label="AI replies for Customer"]',
-    );
-    expect(control?.getAttribute('aria-checked')).toBe(String(aiEnabled ?? true));
-    expect(panel.textContent).toContain('Approved');
-    expect(panel.textContent).toContain('never replayed automatically');
-    await act(async () => control?.click());
-    expect(updateContact).toHaveBeenCalledExactlyOnceWith(profiles[0]?.id, customer.id, {
-      aiEnabled: !(aiEnabled ?? true),
-    });
-    expect(approveContact).not.toHaveBeenCalled();
-    expect(blockContact).not.toHaveBeenCalled();
-    expect(updateChannel).not.toHaveBeenCalled();
-  });
-}
-
 it('keeps controls unchanged when saving fails and disables them while busy', async () => {
   const failed = await render([business], true, [customer]);
   const panel = await failed.toggle('whatsapp-business');
@@ -205,14 +177,14 @@ it('keeps controls unchanged when saving fails and disables them while busy', as
   expect(busy.updateChannel).not.toHaveBeenCalled();
 });
 
-it('shows the AI control for pending and blocked Business contacts but not Baileys', async () => {
+it('keeps AI controls out of Channels for all contact statuses', async () => {
   const pending = await render([business], false, [
     { ...customer, status: 'pending', aiEnabled: false },
   ]);
-  expect(pending.element.querySelector('[aria-label="AI replies for Customer"]')).not.toBeNull();
+  expect(pending.element.querySelector('[aria-label="AI replies for Customer"]')).toBeNull();
   expect(pending.element.textContent).toContain('Approval does not resume paused automation');
   const blocked = await render([business], false, [{ ...customer, status: 'blocked' }]);
-  expect(blocked.element.querySelector('[aria-label="AI replies for Customer"]')).not.toBeNull();
+  expect(blocked.element.querySelector('[aria-label="AI replies for Customer"]')).toBeNull();
   const baileys = await render([{ ...business, type: 'whatsapp' }], false, [
     { ...customer, type: 'whatsapp' },
   ]);

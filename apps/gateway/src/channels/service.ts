@@ -1961,13 +1961,17 @@ export class Channels {
     return undefined;
   }
 
-  /** Common egress policy for finals, commentary, notices, media and typing. A schedule,
-   * cross-session tool, or late task can have an open window but has no causal authority. */
+  /** Common send-time window and approval policy for every Meta delivery path. */
   private async metaDeliveryError(channel: ChannelRecord, delivery: DeliveryRecord) {
     if (channel.type !== 'whatsapp-business') return undefined;
     if (!(await metaCanSend(this.services.store.db, channel.id, delivery.chatId)))
       return 'WhatsApp replies require an inbound message within 24 hours';
+    const contact = await findContactByChat(this.services.store.db, channel.id, delivery.chatId);
+    if (contact?.status === 'approved') return undefined;
+    // Pending contacts may only receive the gateway's approval notice for their own inbound.
     if (
+      delivery.runId ||
+      delivery.sourceRunId ||
       !(await metaCausalInbound(
         this.services.store.db,
         channel.id,
@@ -1975,7 +1979,7 @@ export class Channels {
         delivery.inboundEventId,
       ))
     )
-      return 'WhatsApp Business is receptive-only: no causal inbound for this delivery';
+      return 'WhatsApp Business requires an approved contact for agent messages';
     return undefined;
   }
 

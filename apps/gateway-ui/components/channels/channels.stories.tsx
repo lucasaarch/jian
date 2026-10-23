@@ -186,7 +186,7 @@ function BusinessControls({ paused = false }: { paused?: boolean }) {
     enabled: !paused,
     allowAllContacts: false,
   });
-  const [contact, setContact] = useState<Contact>({
+  const [contact] = useState<Contact>({
     id: 'business-customer',
     profileId: ids.zero,
     channelId: ids.whatsapp,
@@ -213,11 +213,6 @@ function BusinessControls({ paused = false }: { paused?: boolean }) {
           setChannel(updated);
           return updated;
         },
-        updateContact: async (_profileId, _id, body) => {
-          const updated = { ...contact, ...body };
-          setContact(updated);
-          return updated;
-        },
       }}
     />
   );
@@ -229,16 +224,13 @@ export const BusinessAutomationControls: Story = {
     await open('whatsapp-business')(context);
     const canvas = within(context.canvasElement);
     const channel = canvas.getByRole('switch', { name: 'Channel automation' });
-    const chat = canvas.getByRole('switch', { name: 'AI replies for Customer' });
+    await expect(canvas.queryByRole('switch', { name: 'AI replies for Customer' })).toBeNull();
     await expect(channel).toHaveAttribute('aria-checked', 'true');
-    await expect(chat).toHaveAttribute('aria-checked', 'true');
     await userEvent.click(canvas.getByRole('switch', { name: 'Allow all contacts' }));
     await expect(canvas.getByRole('switch', { name: 'Allow all contacts' })).toHaveAttribute(
       'aria-checked',
       'true',
     );
-    await userEvent.click(chat);
-    await expect(chat).toHaveAttribute('aria-checked', 'false');
     await expect(canvas.getByText('Approved', { exact: true })).toBeVisible();
     await expect(channel).toHaveAttribute('aria-checked', 'true');
     await userEvent.click(channel);
@@ -253,14 +245,10 @@ export const BusinessAutomationPaused: Story = {
     await open('whatsapp-business')(context);
     const canvas = within(context.canvasElement);
     const channel = canvas.getByRole('switch', { name: 'Channel automation' });
-    const chat = canvas.getByRole('switch', { name: 'AI replies for Customer' });
+    await expect(canvas.queryByRole('switch', { name: 'AI replies for Customer' })).toBeNull();
     await expect(channel).toHaveAttribute('aria-checked', 'false');
-    await expect(chat).toHaveAttribute('aria-checked', 'false');
     await userEvent.click(channel);
     await expect(channel).toHaveAttribute('aria-checked', 'true');
-    await expect(chat).toHaveAttribute('aria-checked', 'false');
-    await userEvent.click(chat);
-    await expect(chat).toHaveAttribute('aria-checked', 'true');
   },
 };
 

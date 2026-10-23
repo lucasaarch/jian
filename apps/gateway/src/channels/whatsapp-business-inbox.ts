@@ -54,8 +54,8 @@ export async function metaCanSend(
   return windowOpen(row?.lastInbound);
 }
 
-/** The window alone is not permission to initiate a conversation. Only signed individual
- * messages persisted by receive() can authorize the delivery created by their intake. */
+/** Approval notices to pending contacts require their own signed inbound event.
+ * Approved contacts instead use the recipient's open window at send time. */
 export async function metaCausalInbound(
   db: Queryable,
   channelId: string,
@@ -153,9 +153,10 @@ export class MetaInbox {
           for (const message of change.value.messages ?? []) {
             if (
               message.group_id !== undefined ||
-              !['text', 'audio'].includes(message.type) ||
+              !['text', 'audio', 'image'].includes(message.type) ||
               (message.type === 'text' && !message.text?.body.trim()) ||
-              (message.type === 'audio' && !message.audio)
+              (message.type === 'audio' && !message.audio) ||
+              (message.type === 'image' && !message.image)
             )
               continue;
             const timestamp = Number(message.timestamp) * 1000;
