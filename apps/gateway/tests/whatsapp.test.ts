@@ -354,6 +354,7 @@ describe('WhatsApp linked device', () => {
         'completed',
         'First answer',
       );
+      await f.services.lifecycle.releaseExecution(first.id, 'worker');
       await Promise.all([f.channels.dispatch(), f.channels.dispatch()]);
 
       expect(f.sent.filter((item) => item.text === 'First answer')).toEqual([
@@ -384,6 +385,7 @@ describe('WhatsApp linked device', () => {
         'completed',
         'Old account reply',
       );
+      await f.services.lifecycle.releaseExecution(second.id, 'worker');
       await f.channels.dispatch();
       expect(f.sent.some((item) => item.text === 'Old account reply')).toBe(false);
       expect(
@@ -448,6 +450,7 @@ describe('WhatsApp linked device', () => {
       if (!run) throw new Error('Run missing');
       await f.services.lifecycle.claim(run.id, f.profile.id, 'worker');
       await f.services.lifecycle.finish(f.profile.id, run.id, 'worker', 'completed', 'Answer');
+      await f.services.lifecycle.releaseExecution(run.id, 'worker');
       await f.channels.dispatch();
       await f.channels.dispatch();
 
@@ -487,6 +490,7 @@ describe('WhatsApp linked device', () => {
         'completed',
         'Opening the board now.\n\nTwelve open.',
       );
+      await f.services.lifecycle.releaseExecution(run.id, 'worker');
       await f.channels.dispatch();
       await f.channels.dispatch();
 
@@ -521,6 +525,7 @@ describe('WhatsApp linked device', () => {
         'completed',
         'Done on the remote.',
       );
+      await f.services.lifecycle.releaseExecution(run.id, 'worker');
       await f.channels.dispatch();
       await f.channels.dispatch();
 

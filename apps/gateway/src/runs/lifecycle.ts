@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Checkpoint, Message, Run, RunProgress, RunQuestion } from '@jian/contracts';
+import { and, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { formatQuestionText } from '../agent/ask-user.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { insertMessage } from '../sessions/repository.js';
 import type { Store } from '../storage/database.js';
+import { runs as runRows } from '../storage/schema.js';
+import { admitsRun, EXECUTION_LEASE_MS } from './drain.js';
 import type { RunReader } from './port.js';
 import {
   appendCommentary,
@@ -16,6 +19,7 @@ import {
   updateRun,
   writeProgress,
 } from './repository.js';
+import { consumeSessionEffects } from './session-effects.js';
 
 /** The lease is the right to apply external effects, so a stale owner must never write. */
 function assertOwned(run: Run, owner: string, clock: Clock): void {
@@ -35,9 +39,22 @@ export class RunLifecycle {
     return this.store.transaction(profileId, async (tx) => {
       const run = await this.runs.run(profileId, runId, tx);
 
-      if (run.status !== 'queued') {
+      if (run.status !== 'queued' || !(await admitsRun(tx, run))) {
         return null;
       }
+      // A drain can accumulate several queued messages in one session instead of steering.
+      // Its profile lock serializes this check with every other claim in that session.
+      const [inFlight] = await tx
+        .select({ id: runRows.id })
+        .from(runRows)
+        .where(
+          and(
+            eq(runRows.sessionId, run.sessionId),
+            or(eq(runRows.status, 'running'), isNotNull(runRows.executionOwner)),
+          ),
+        )
+        .limit(1);
+      if (inFlight) return null;
 
       const claimed: Run = {
         ...run,
@@ -47,7 +64,20 @@ export class RunLifecycle {
         updatedAt: nowIso(this.clock),
       };
 
+      // A marker survives terminal status and lease expiry until its execute tail closes.
+      // Never overwrite one, including a marker on this queued run itself.
+      const marked = await tx
+        .update(runRows)
+        .set({
+          executionOwner: owner,
+          // Initial deadline for diagnostics only, never authority to reclaim or release.
+          executionUntil: sql`clock_timestamp() + ${EXECUTION_LEASE_MS} * interval '1 millisecond'`,
+        })
+        .where(and(eq(runRows.id, runId), isNull(runRows.executionOwner)))
+        .returning({ id: runRows.id });
+      if (!marked.length) return null;
       await updateRun(tx, claimed);
+      await consumeSessionEffects(tx, profileId, runId, run.sessionId, this.clock);
 
       await recordEvent(
         tx,
@@ -74,6 +104,14 @@ export class RunLifecycle {
         updatedAt: nowIso(this.clock),
       });
     });
+  }
+
+  /** Called only after the execute tail and every owned resource have closed successfully. */
+  async releaseExecution(runId: string, owner: string): Promise<void> {
+    await this.store.db
+      .update(runRows)
+      .set({ executionOwner: null, executionUntil: null })
+      .where(and(eq(runRows.id, runId), eq(runRows.executionOwner, owner)));
   }
 
   /**
@@ -278,7 +316,8 @@ export class RunLifecycle {
     });
   }
 
-  // Expired ownership interrupts a run: replaying it could repeat completed external effects.
+  // Expired run leases interrupt, never replay. The execution marker is deliberately retained:
+  // a lease timeout does not prove external effects or the previous execute tail have ended.
   async recover() {
     const expired = await listExpiredRuns(this.store.db, this.clock(), 1000);
 

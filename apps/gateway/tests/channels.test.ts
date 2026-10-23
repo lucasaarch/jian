@@ -236,6 +236,7 @@ describe('Telegram transport', () => {
         'completed',
         'Deploy moved to Friday.',
       );
+      await f.services.lifecycle.releaseExecution(run.id, 'worker');
       await f.channels.dispatch();
 
       const answer = (await f.channels.deliveries(f.profile.id)).find(
@@ -382,6 +383,7 @@ describe('Telegram transport', () => {
         'failed',
         'The provider refused with 429: quota exhausted for gemini-3.8-flash',
       );
+      await f.services.lifecycle.releaseExecution(run.id, 'worker');
       await f.channels.dispatch();
 
       expect(sent.at(-1)).toContain('quota exhausted for gemini-3.8-flash');
@@ -407,6 +409,7 @@ describe('Telegram transport', () => {
       if (!first) throw new Error('Run missing');
       await f.services.lifecycle.claim(first.id, f.profile.id, 'worker');
       await f.services.lifecycle.finish(f.profile.id, first.id, 'worker', 'completed', 'Hi');
+      await f.services.lifecycle.releaseExecution(first.id, 'worker');
 
       // The model the profile answered with is gone, and no provider is left to pick one from.
       await f.services.profiles.updateProfile(f.profile.id, {
@@ -563,6 +566,7 @@ describe('Telegram transport', () => {
       const runId = runs[0]?.id as string;
       await f.services.lifecycle.claim(runId, f.profile.id, 'worker');
       await f.services.lifecycle.finish(f.profile.id, runId, 'worker', 'completed', 'Hi');
+      await f.services.lifecycle.releaseExecution(runId, 'worker');
       await Promise.all([f.channels.dispatch(), f.channels.dispatch()]);
 
       expect(sent.map((body) => JSON.parse(body).text)).toEqual([
@@ -691,6 +695,7 @@ describe('Telegram transport', () => {
           'completed',
           'x'.repeat(4001),
         );
+        await f.services.lifecycle.releaseExecution(run.id, 'worker');
         await f.channels.dispatch();
         await f.channels.dispatch();
 
@@ -853,6 +858,7 @@ describe('what a chat sees while the agent is still working', () => {
         'completed',
         'Verifiquei aqui.\n\nEstá tudo certo, pode seguir.',
       );
+      await f.services.lifecycle.releaseExecution(run.id, 'worker');
       await f.channels.dispatch();
 
       const sends = calls
@@ -921,6 +927,7 @@ describe('when Telegram refuses for flood control', () => {
 
       await f.services.lifecycle.claim(run.id, f.profile.id, 'worker');
       await f.services.lifecycle.finish(f.profile.id, run.id, 'worker', 'completed', 'A resposta.');
+      await f.services.lifecycle.releaseExecution(run.id, 'worker');
 
       // Refused: nothing left the gateway, so the answer stays queued instead of being lost.
       await f.channels.dispatch();
@@ -986,6 +993,7 @@ it('delivers a conversation subagent handoff to the Telegram chat once', async (
       'completed',
       'Worker queued.',
     );
+    await f.services.lifecycle.releaseExecution(principal.id, 'principal');
     await f.channels.dispatch();
 
     await f.services.lifecycle.claim(worker.runId, f.profile.id, 'worker');
@@ -996,6 +1004,7 @@ it('delivers a conversation subagent handoff to the Telegram chat once', async (
       'completed',
       'Review needs more evidence.',
     );
+    await f.services.lifecycle.releaseExecution(worker.runId, 'worker');
     f.services.work.useDeliveries(f.channels);
     await f.services.work.reportWorker(f.profile.id, worker.runId);
     await f.services.work.reportWorker(f.profile.id, worker.runId);
@@ -1018,6 +1027,7 @@ it('delivers a conversation subagent handoff to the Telegram chat once', async (
       'completed',
       'The review is still pending.',
     );
+    await f.services.lifecycle.releaseExecution(followUp.id, 'principal');
     await f.channels.dispatch();
     expect(sent.filter((text) => text === 'The review is still pending.')).toHaveLength(1);
   } finally {
@@ -1058,6 +1068,7 @@ describe('markdown in a bubble that cannot draw it', () => {
         'completed',
         '## Planos\n\n| Plano | Preco |\n| --- | --- |\n| Pro | R$ 90 |\n\nO **Pro** vale mais.',
       );
+      await f.services.lifecycle.releaseExecution(run.id, 'worker');
       await f.channels.dispatch();
 
       const answer = sends.join('\n\n');
@@ -1106,6 +1117,7 @@ it('sends what the agent says on its way to a tool, once, while the run is still
 
     await f.services.lifecycle.say(f.profile.id, runId, 'worker', 'Found it.');
     await f.services.lifecycle.finish(f.profile.id, runId, 'worker', 'completed', 'Twelve open.');
+    await f.services.lifecycle.releaseExecution(runId, 'worker');
     await f.channels.dispatch();
     await f.channels.dispatch();
 
@@ -1146,6 +1158,7 @@ it('does not resend a flushed commentary paragraph when the final restates it', 
       'completed',
       'Opening the board now.\n\nTwelve open.',
     );
+    await f.services.lifecycle.releaseExecution(runId, 'worker');
     await f.channels.dispatch();
     await f.channels.dispatch();
 
@@ -1214,6 +1227,7 @@ describe('agents in the same Telegram group', () => {
       if (!run) throw new Error('Run missing');
       await services.lifecycle.claim(run.id, profileId, 'worker');
       await services.lifecycle.finish(profileId, run.id, 'worker', 'completed', output);
+      await services.lifecycle.releaseExecution(run.id, 'worker');
       await channels.dispatch();
     };
 
@@ -1242,6 +1256,7 @@ describe('agents in the same Telegram group', () => {
       'completed',
       '#300 Aliases',
     );
+    await services.lifecycle.releaseExecution(working.id, 'worker');
     await channels.dispatch();
 
     const [zeroRoom] = await channels.contacts(zero.profile.id);

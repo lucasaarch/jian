@@ -165,6 +165,7 @@ async function setup(jev?: (state: { message: string }) => number) {
 
       await services.lifecycle.claim(run.id, profileId, 'worker');
       await services.lifecycle.finish(profileId, run.id, 'worker', 'completed', output);
+      await services.lifecycle.releaseExecution(run.id, 'worker');
 
       return run;
     },

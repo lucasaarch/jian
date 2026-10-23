@@ -233,6 +233,29 @@ export const sessions = pgTable(
   ],
 );
 
+/** Consumed generations cannot be reused by delayed/repeated deployment hooks. */
+export const deploymentDrainGenerations = pgTable('deployment_drain_generations', {
+  id: text('id').primaryKey(),
+  requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+  releasedAt: timestamp('released_at', { withTimezone: true }),
+});
+
+/** Installation-wide admission fence, independent of any profile's transaction lock. */
+export const deploymentDrain = pgTable(
+  'deployment_drain',
+  {
+    id: integer('id').primaryKey(),
+    owner: text('owner'),
+    phase: text('phase').$type<'draining' | 'holding'>(),
+    // Diagnostic heartbeat deadline only: expiration NEVER releases admission.
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+  },
+  (table) => [
+    check('deployment_drain_singleton', sql`${table.id} = 1`),
+    check('deployment_drain_phase', sql`${table.phase} IN ('draining', 'holding')`),
+  ],
+);
+
 export const runStatus = pgEnum('run_status', [
   'queued',
   'running',
@@ -281,6 +304,14 @@ export const runs = pgTable(
     steer: text('steer'),
     leaseOwner: text('lease_owner'),
     leaseUntil: bigint('lease_until', { mode: 'number' }),
+    // Covers execute() through its finally block, including post-terminal handoffs/cleanup.
+    executionOwner: text('execution_owner'),
+    executionUntil: timestamp('execution_until', { withTimezone: true }),
+    // Authorized ingress intent, consumed atomically only by an admitted claim.
+    pendingSessionEffects:
+      jsonb('pending_session_effects').$type<
+        import('../runs/session-effects.js').PendingSessionEffects
+      >(),
     createdAt,
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -291,6 +322,9 @@ export const runs = pgTable(
     // Recovery sweeps every profile's running rows, so this one is not scoped by profile.
     index('runs_running').on(table.status).where(sql`${table.status} = 'running'`),
     index('runs_queued').on(table.status).where(sql`${table.status} = 'queued'`),
+    index('runs_execution_owner')
+      .on(table.executionOwner)
+      .where(sql`${table.executionOwner} IS NOT NULL`),
     index('runs_session').on(table.profileId, table.sessionId, table.createdAt.desc()),
     uniqueIndex('runs_subagent_spawn')
       .on(

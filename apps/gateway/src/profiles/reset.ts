@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, or } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { events, memories, runs, sessions } from '../storage/schema.js';
 
@@ -7,7 +7,12 @@ export async function hasActiveRun(db: Queryable, profileId: string): Promise<bo
   const [row] = await db
     .select({ id: runs.id })
     .from(runs)
-    .where(and(eq(runs.profileId, profileId), inArray(runs.status, ['queued', 'running'])))
+    .where(
+      and(
+        eq(runs.profileId, profileId),
+        or(inArray(runs.status, ['queued', 'running']), isNotNull(runs.executionOwner)),
+      ),
+    )
     .limit(1);
 
   return row !== undefined;

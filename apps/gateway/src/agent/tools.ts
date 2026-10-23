@@ -21,6 +21,7 @@ import type { PeerAgents } from '../peers/port.js';
 import type { ProfileAdmin } from '../profiles/port.js';
 import type { Remote } from '../remote/service.js';
 import type { RunExecution, RunReader } from '../runs/port.js';
+import { deferredRunIds } from '../runs/visibility.js';
 import type { Schedules } from '../schedules/service.js';
 import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions/port.js';
 import type { Sessions } from '../sessions/service.js';
@@ -133,16 +134,17 @@ export function profileTools(
 
     list_activities: tool({
       description:
-        'Read the actual queued, running, and waiting tasks across this profile’s sessions.',
+        'Read the actual queued, running, and waiting tasks across this profile’s sessions. Other queued runs show metadata only; their input is deferred until admission.',
       inputSchema: z.object({}),
       execute: async () =>
         (await services.runs.activities(run.profileId)).map((r) => ({
           id: r.id,
           sessionId: r.sessionId,
           status: r.status,
-          input: r.input.slice(0, 500),
           updatedAt: r.updatedAt,
-          ...(r.question ? { question: r.question } : {}),
+          ...(r.status !== 'queued' || r.id === run.id
+            ? { input: r.input.slice(0, 500), ...(r.question ? { question: r.question } : {}) }
+            : {}),
         })),
     }),
 
@@ -356,12 +358,17 @@ export function profileTools(
     read_session: tool({
       description: 'Read recent messages in one of this profile’s sessions.',
       inputSchema: z.object({ sessionId: z.string().uuid() }),
-      execute: async ({ sessionId }) =>
-        (await services.sessions.messages(run.profileId, sessionId, 20)).map((m) => ({
-          role: m.role,
-          content: m.content.slice(0, 2000),
-          createdAt: m.createdAt,
-        })),
+      execute: async ({ sessionId }) => {
+        const messages = await services.sessions.messages(run.profileId, sessionId, 20);
+        const deferred = await deferredRunIds(services.store.db, run);
+        return messages
+          .filter((message) => !message.runId || !deferred.has(message.runId))
+          .map((m) => ({
+            role: m.role,
+            content: m.content.slice(0, 2000),
+            createdAt: m.createdAt,
+          }));
+      },
     }),
 
     load_skill: tool({
@@ -411,10 +418,17 @@ export function profileTools(
       }),
       execute: async ({ sessionId, ...query }) => {
         const page = await coordination.history(run.profileId, sessionId, query);
+        const deferred = await deferredRunIds(services.store.db, run);
 
         // Where another agent answered is the panel's to show; to this agent it is the other
-        // side of the wall, so its ids never reach the model.
-        return { ...page, items: page.items.map(({ call: _call, ...message }) => message) };
+        // side of the wall, so its ids never reach the model. Preserve the original cursor even
+        // for a hidden page: the agent may continue to older, admitted history.
+        return {
+          ...page,
+          items: page.items
+            .filter((message) => !message.runId || !deferred.has(message.runId))
+            .map(({ call: _call, ...message }) => message),
+        };
       },
     }),
 

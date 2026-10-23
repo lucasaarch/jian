@@ -58,6 +58,7 @@ async function answerOnce(
 
   await services.lifecycle.claim(queued.id, profileId, owner);
   await services.lifecycle.finish(profileId, queued.id, owner, status, text);
+  await services.lifecycle.releaseExecution(queued.id, owner);
 
   return services.runs.run(profileId, queued.id);
 }
@@ -76,6 +77,7 @@ function answering(services: Services, profileIds: string[]) {
 
           await services.lifecycle.claim(queued.id, profileId, owner);
           await services.lifecycle.finish(profileId, queued.id, owner, 'completed', 'Respondido.');
+          await services.lifecycle.releaseExecution(queued.id, owner);
         }
       }
 
@@ -471,9 +473,11 @@ it('stops waiting on a slow colleague and carries the answer back when it lands'
   // answer joins it as a redirect instead, which is the same door the owner writes through.
   await services.lifecycle.claim(asking.id, caller.id, 'caller');
   await services.lifecycle.finish(caller.id, asking.id, 'caller', 'completed', 'Perguntei.');
+  await services.lifecycle.releaseExecution(asking.id, 'caller');
 
   await services.lifecycle.claim(pending.id, callee.id, 'worker');
   await services.lifecycle.finish(callee.id, pending.id, 'worker', 'completed', 'Entregue ontem.');
+  await services.lifecycle.releaseExecution(pending.id, 'worker');
   await impatient.deliverLate(callee.id, pending.id);
 
   const carried = (await services.runs.activities(caller.id)).find((item) => item.id !== asking.id);
@@ -498,6 +502,7 @@ it('carries saved progress when a colleague fails before its final report', asyn
   const pending = await queuedRun(services, callee.id);
   await services.lifecycle.claim(asking.id, caller.id, 'caller');
   await services.lifecycle.finish(caller.id, asking.id, 'caller', 'completed', 'Waiting.');
+  await services.lifecycle.releaseExecution(asking.id, 'caller');
   await services.lifecycle.claim(pending.id, callee.id, 'worker');
   await services.lifecycle.say(
     callee.id,
@@ -506,6 +511,7 @@ it('carries saved progress when a colleague fails before its final report', asyn
     `${'x'.repeat(3950)}\nFour changes were merged.`,
   );
   await services.lifecycle.finish(callee.id, pending.id, 'worker', 'failed', 'No final response.');
+  await services.lifecycle.releaseExecution(pending.id, 'worker');
 
   await peers.deliverLate(callee.id, pending.id);
 

@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { Client, Pool } from 'pg';
+import { Client, Pool, type PoolConfig } from 'pg';
 import type { Database, Queryable, Store } from './database.js';
 import { MIGRATION_LOCK, migrationsFolder } from './database.js';
 import * as schema from './schema.js';
@@ -14,9 +14,15 @@ export class PostgresStore implements Store {
   private readonly client: ReturnType<typeof drizzle<typeof schema>>;
   readonly db: Database;
 
-  constructor(connectionString: string) {
-    this.pool = new Pool({ connectionString, max: 10 });
-    this.listener = new Client({ connectionString });
+  constructor(
+    connectionString: string,
+    timeouts: Pick<
+      PoolConfig,
+      'connectionTimeoutMillis' | 'statement_timeout' | 'lock_timeout'
+    > = {},
+  ) {
+    this.pool = new Pool({ connectionString, max: 10, ...timeouts });
+    this.listener = new Client({ connectionString, ...timeouts });
     this.listener.on('error', () => {});
     this.listening = this.listen();
     void this.listening.catch(() => {});

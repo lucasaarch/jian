@@ -5,6 +5,7 @@ import type { Judge } from '../decisions/service.js';
 import { findMemories, searchMemories, withLinks } from '../memories/repository.js';
 import type { RunReader } from '../runs/port.js';
 import { listContextToolCheckpoints } from '../runs/repository.js';
+import { deferredRunIds } from '../runs/visibility.js';
 import type { SessionReader } from '../sessions/port.js';
 import { findGatewaySession } from '../sessions/repository.js';
 import { availableSkills } from '../skills/builtin/index.js';
@@ -52,7 +53,7 @@ export class Contexts {
     // Independent reads: whatever the request mentions, what the profile is busy with, whom it
     // talks to on its channels, and the turns since the record of what was compacted away.
     // `buildContext` is what decides how much of each survives.
-    const [matched, activities, gateway, conversations, history] = await Promise.all([
+    const [matched, activities, gateway, conversations, historyRows] = await Promise.all([
       worker ? [] : searchMemories(this.store.db, run.profileId, words, 100),
       worker ? [] : this.runs.activities(run.profileId),
       worker ? null : findGatewaySession(this.store.db, run.profileId),
@@ -67,6 +68,12 @@ export class Contexts {
         session.summarizedThroughId ? undefined : session.summarizedUpTo,
       ),
     ]);
+
+    // Read AFTER history: any newly queued message present in that snapshot must be excluded.
+    // Otherwise claim-before-context can perform deferred ingress now and again after release.
+    // Same-run steer/handoff messages retain their owning run and are intentionally visible.
+    const deferred = await deferredRunIds(this.store.db, run);
+    const history = historyRows.filter((message) => !message.runId || !deferred.has(message.runId));
 
     // One step out from what matched: the memories linked to it, which the request may not
     // mention at all.
@@ -103,7 +110,7 @@ export class Contexts {
       ...(this.settings ? { timeZone: await this.settings.timeZone() } : {}),
       memories,
       linked,
-      activities,
+      activities: activities.filter((activity) => !deferred.has(activity.id)),
       // The owner's own conversation, from the panel, comes first: it is where they reach the
       // agent directly, and without it the agent believes the conversation it is in is missing.
       conversations: [
