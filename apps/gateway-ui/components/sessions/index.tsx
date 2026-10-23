@@ -19,7 +19,7 @@ import type { Contact, Profile, Run, Session } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
 import { useWorkspace } from '../../lib/workspace';
 import type { SectionProps } from '../props';
-import { Badge, Empty, Face, Orb, TelegramLogo, WhatsAppLogo } from '../ui';
+import { Badge, Empty, Face, Orb, Switch, TelegramLogo, WhatsAppLogo } from '../ui';
 import { plainText } from '../ui/markdown';
 import { Composer } from './composer';
 import { History } from './history';
@@ -177,6 +177,8 @@ export function Sessions({
   data,
   api,
   initialSession,
+  mutate,
+  busy,
 }: SectionProps & { initialSession?: string }) {
   const [selected, setSelected] = useState(initialSession);
   // On a phone the list and the conversation take turns; this is which one is showing.
@@ -187,7 +189,9 @@ export function Sessions({
 
   const { profiles, refresh } = useWorkspace();
   const contactOf = (session: Session) =>
-    data.contacts.find((contact) => contact.sessionId === session.id);
+    data.contacts.find(
+      (contact) => contact.sessionId === session.id && contact.profileId === profile.id,
+    );
   const peerOf = (session: Session) =>
     session.peerProfileId ? profiles.find((item) => item.id === session.peerProfileId) : undefined;
   // A person or group by the name it uses, another agent by its own, and an API conversation by
@@ -344,6 +348,38 @@ export function Sessions({
                   ) : null}
                 </p>
               )}
+              {active.channel === 'whatsapp-business' &&
+                activeContact?.type === 'whatsapp-business' && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span>{activeContact.aiEnabled === false ? 'AI paused' : 'AI replies'}</span>
+                    <Switch
+                      label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
+                      checked={activeContact.aiEnabled ?? true}
+                      disabled={busy}
+                      onChange={(aiEnabled) =>
+                        void mutate(
+                          () => api.updateContact(profile.id, activeContact.id, { aiEnabled }),
+                          aiEnabled
+                            ? 'AI enabled for this chat. Approval and channel automation still apply; no replay.'
+                            : 'AI paused for this chat, including queued replies.',
+                        )
+                      }
+                    />
+                    {data.channels.some(
+                      (channel) =>
+                        channel.id === activeContact.channelId &&
+                        channel.profileId === profile.id &&
+                        channel.enabled === false,
+                    ) && <Badge tone="warn">Channel automation paused</Badge>}
+                    {activeContact.status !== 'approved' && (
+                      <Badge>Contact {activeContact.status}</Badge>
+                    )}
+                    <p className="w-full text-xs text-muted">
+                      Separate from approval and channel automation. Paused messages are never
+                      replayed; queued replies stop. A request already in flight may finish.
+                    </p>
+                  </div>
+                )}
               <SessionListeners api={api} profileId={profile.id} sessionId={active.id} />
             </div>
             {kindOf(active) !== 'learning' && (

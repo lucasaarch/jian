@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { type InlineMedia, ingressSchema, whatsappBusinessInputSchema } from '@jian/contracts';
+import sharp from 'sharp';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
 import type { Channel, DeliveryContext, DeliveryOutcome, OutgoingMessage } from './channel.js';
@@ -17,6 +18,14 @@ const messageSchema = z.object({
   type: z.string().max(80),
   text: z.object({ body: z.string().max(8000) }).optional(),
   audio: z.object({ id: digits, mime_type: z.string().max(120).optional() }).optional(),
+  image: z
+    .object({
+      id: digits,
+      mime_type: z.string().max(120).optional(),
+      caption: z.string().max(8000).optional(),
+      sha256: z.string().max(128).optional(),
+    })
+    .optional(),
   context: z.object({ id: remoteId.optional() }).optional(),
   // Do not silently turn a Groups API event into an individual conversation.
   group_id: z.unknown().optional(),
@@ -195,11 +204,21 @@ export class WhatsAppBusinessChannel implements Channel {
 
   receive(payload: unknown) {
     const message = messageSchema.parse(payload);
-    if (message.group_id !== undefined || !['text', 'audio'].includes(message.type)) return null;
+    if (
+      message.group_id !== undefined ||
+      !['text', 'audio', 'image'].includes(message.type) ||
+      (message.type === 'image' && !message.image)
+    )
+      return null;
     return ingressSchema.parse({
       actorId: message.from,
       chatId: message.from,
-      text: message.type === 'audio' ? '[Voice message]' : message.text?.body?.trim(),
+      text:
+        message.type === 'audio'
+          ? '[Voice message]'
+          : message.type === 'image'
+            ? message.image?.caption?.trim() || '[Photo]'
+            : message.text?.body?.trim(),
       requestKey: `meta:${createHash('sha256').update(message.id).digest('hex')}`,
       ...(message.context?.id ? { target: message.context.id } : {}),
     });
@@ -210,22 +229,23 @@ export class WhatsAppBusinessChannel implements Channel {
     context: DeliveryContext,
   ): Promise<{ media?: InlineMedia[]; note?: string }> {
     const message = messageSchema.parse(payload);
-    if (message.type !== 'audio' || !message.audio) return {};
+    const attachment =
+      message.type === 'audio'
+        ? message.audio
+        : message.type === 'image'
+          ? message.image
+          : undefined;
+    if (!attachment) return {};
     try {
       const credentials = metaCredentials(context.credential);
-      const response = await graph(
-        context.fetch,
-        credentials,
-        message.audio.id,
-        {},
-        context.signal,
-      );
+      const response = await graph(context.fetch, credentials, attachment.id, {}, context.signal);
       if (!response.ok) throw new Error('Media lookup failed');
       const metadata = z
         .object({
           url: z.string().max(4000),
           file_size: z.number().int().nonnegative(),
           sha256: z.string().optional(),
+          mime_type: z.string().max(120).optional(),
         })
         .parse(await response.json());
       if (metadata.file_size > META_MEDIA_LIMIT) throw new Error('Media exceeds 16 MB');
@@ -242,11 +262,50 @@ export class WhatsAppBusinessChannel implements Channel {
         createHash('sha256').update(bytes).digest('base64') !== metadata.sha256
       )
         throw new Error('Media hash mismatch');
+      if (message.type === 'image') {
+        if (bytes.length !== metadata.file_size) throw new Error('Media size mismatch');
+        if (message.image?.sha256) {
+          const hash = createHash('sha256').update(bytes);
+          if (
+            hash.copy().digest('hex') !== message.image.sha256.toLowerCase() &&
+            hash.digest('base64') !== message.image.sha256
+          )
+            throw new Error('Media hash mismatch');
+        }
+        // Metadata alone accepts truncated files. Decode as well, with a pixel ceiling,
+        // before giving any sender-supplied bytes to the shared vision pipeline.
+        const image = sharp(bytes, { limitInputPixels: 40_000_000, failOn: 'warning' });
+        const { format } = await image.metadata();
+        const mimeType =
+          format === 'jpeg'
+            ? 'image/jpeg'
+            : format === 'png'
+              ? 'image/png'
+              : format === 'webp'
+                ? 'image/webp'
+                : format === 'gif'
+                  ? 'image/gif'
+                  : undefined;
+        if (!mimeType) throw new Error('Unsupported image format');
+        const contentType = result.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
+        for (const reported of [
+          attachment.mime_type,
+          metadata.mime_type,
+          contentType === 'application/octet-stream' ? undefined : contentType,
+        ]) {
+          if (reported && reported !== mimeType) throw new Error('Image MIME mismatch');
+        }
+        await image.stats();
+        return { media: [{ mimeType, data: bytes.toString('base64') }] };
+      }
       if (!opusMono(bytes)) throw new Error('Only Ogg/Opus mono voice messages are supported');
       return { media: [{ mimeType: 'audio/ogg', data: bytes.toString('base64'), voice: true }] };
     } catch {
       return {
-        note: '[Audio could not be downloaded or was not a supported Ogg/Opus mono voice message.]',
+        note:
+          message.type === 'image'
+            ? '[The image could not be downloaded or was not a supported image within 16 MB. Ask the sender to send it again.]'
+            : '[Audio could not be downloaded or was not a supported Ogg/Opus mono voice message.]',
       };
     }
   }
@@ -261,7 +320,7 @@ export class WhatsAppBusinessChannel implements Channel {
       status: 'failed',
       remoteMessageIds: [],
       error:
-        'WhatsApp Business requires a message from this recipient within the last 24 hours. Templates and proactive sends are not supported.',
+        'WhatsApp Business requires a message from this recipient within the last 24 hours. Templates and sends outside this window are not supported.',
     };
     if (!/^\d{1,40}$/.test(message.chatId)) return failed;
     if (!(await context.canReply?.(message.chatId))) return expired;
