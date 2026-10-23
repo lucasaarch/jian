@@ -3,7 +3,7 @@ import type { contactSchema } from '@jian/contracts';
 import { and, eq } from 'drizzle-orm';
 import type { z } from 'zod';
 import { type Clock, nowIso } from '../core/clock.js';
-import { assertFound } from '../core/errors.js';
+import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { SessionWriter } from '../sessions/port.js';
@@ -11,6 +11,7 @@ import type { Queryable, Store } from '../storage/database.js';
 import { mediaAssets } from '../storage/schema.js';
 import type { ChannelType, IncomingMessage } from './channel.js';
 import {
+  findChannel,
   findContact,
   findContactByIdentity,
   insertContact,
@@ -28,6 +29,7 @@ export type ContactRecord = z.infer<typeof contactSchema> & {
   agentTurns?: number;
   seen?: string[];
   avatarCheckedAt?: string;
+  aiPausedAt?: string;
 };
 
 export type Contact = z.infer<typeof contactSchema>;
@@ -70,6 +72,7 @@ export class Contacts {
     agentTurns: _turns,
     seen: _seen,
     avatarCheckedAt: _checked,
+    aiPausedAt: _paused,
     ...contact
   }: ContactRecord): Contact {
     return contact;
@@ -113,7 +116,10 @@ export class Contacts {
 
     if (!existing) {
       const name = group ? message.groupName : message.displayName;
-      const allow = channel.type === 'whatsapp' && !group && channel.allowAllContacts === true;
+      const allow =
+        ['whatsapp', 'whatsapp-business'].includes(channel.type) &&
+        !group &&
+        channel.allowAllContacts === true;
 
       const contact: ContactRecord = {
         id: randomUUID(),
@@ -125,6 +131,7 @@ export class Contacts {
         chatId: message.chatId,
         ...(name ? { displayName: name } : {}),
         status: allow ? 'approved' : 'pending',
+        aiEnabled: true,
         // Nothing is held for a room. Releasing it on approval would answer a message that
         // named nobody, which is exactly what a group with several agents must not do.
         ...(group || allow ? {} : { message: message.text, requestKey: message.requestKey }),
@@ -226,6 +233,31 @@ export class Contacts {
           Number(b.status === 'pending') - Number(a.status === 'pending') ||
           b.updatedAt.localeCompare(a.updatedAt),
       );
+  }
+
+  async setAiEnabled(
+    profileId: string,
+    id: string,
+    aiEnabled: boolean,
+    tx: Queryable,
+  ): Promise<ContactRecord> {
+    const current = await this.read(profileId, id, tx);
+    const channel = await findChannel(tx, current.channelId);
+    if (!channel || channel.revokedAt)
+      throw new GatewayError(409, 'The channel of this contact is disconnected');
+    if (channel.type !== 'whatsapp-business')
+      throw new GatewayError(400, 'Per-conversation AI controls require WhatsApp Business');
+    const now = nowIso(this.clock);
+    const contact: ContactRecord = {
+      ...current,
+      aiEnabled,
+      updatedAt: now,
+      ...(current.aiEnabled !== aiEnabled ? { aiPausedAt: now } : {}),
+      ...(!aiEnabled ? { message: undefined, requestKey: undefined } : {}),
+    };
+    await updateContact(tx, contact);
+    await recordEvent(tx, this.clock, profileId, 'contact.updated', this.view(contact));
+    return contact;
   }
 
   async approve(profileId: string, id: string): Promise<ContactRecord> {

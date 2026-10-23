@@ -651,6 +651,8 @@ export const channels = pgTable(
     // The profile picture last put on the account, as `<address>:<hash>` or `<address>:none`.
     pictureSynced: text('picture_synced'),
     allowAllContacts: boolean('allow_all_contacts').notNull().default(false),
+    enabled: boolean('enabled').notNull().default(true),
+    automationPausedAt: timestamp('automation_paused_at', { withTimezone: true }),
     webhookTokenHash: text('webhook_token_hash').notNull(),
     createdAt,
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
@@ -742,6 +744,8 @@ export const contacts = pgTable(
     actorId: text('actor_id').notNull(),
     title: text('title'),
     status: contactStatus('status').notNull(),
+    aiEnabled: boolean('ai_enabled').notNull().default(true),
+    aiPausedAt: timestamp('ai_paused_at', { withTimezone: true }),
     sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'set null' }),
     // The first message, kept until approval releases it exactly once.
     heldMessage: jsonb('held_message'),
@@ -843,6 +847,8 @@ export const deliveries = pgTable(
       .references(() => channels.id, { onDelete: 'cascade' }),
     // A notice to a stranger has no run behind it.
     runId: uuid('run_id').references(() => runs.id, { onDelete: 'cascade' }),
+    // Producer of a media share/errand; does not supply its text or final-answer identity.
+    sourceRunId: uuid('source_run_id').references(() => runs.id, { onDelete: 'cascade' }),
     chatId: text('chat_id').notNull(),
     // Gateway-authored text sent without a run, such as the approval notice.
     notice: text('notice'),

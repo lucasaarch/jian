@@ -130,6 +130,7 @@ export function Channels(props: SectionProps) {
                         ? 'Connected'
                         : 'Not connected'}
                   </Badge>
+                  {channel?.enabled === false && <Badge>Paused</Badge>}
                   {channel && waiting(channel) > 0 && (
                     <Badge tone="accent">{waiting(channel)} pending</Badge>
                   )}
@@ -216,6 +217,36 @@ export function Channels(props: SectionProps) {
                         )}
                       </>
                     )}
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-medium">Channel automation</p>
+                        <p className="note">
+                          Pause automated incoming processing and all outgoing deliveries, including
+                          queued replies, without disconnecting or clearing setup. Incoming messages
+                          are ignored while paused and never replayed on resume. A network request
+                          already in flight may finish.
+                        </p>
+                        {kind.type === 'whatsapp-business' && (
+                          <p className="note">
+                            Manual service in the WhatsApp Business app is untouched if your account
+                            already supports it. Jian does not enable app/API coexistence.
+                          </p>
+                        )}
+                      </div>
+                      <Switch
+                        label="Channel automation"
+                        checked={channel.enabled ?? true}
+                        disabled={busy}
+                        onChange={(enabled) =>
+                          void mutate(
+                            () => api.updateChannel(profile.id, channel.id, { enabled }),
+                            enabled
+                              ? 'Channel resumed. No paused messages will be replayed.'
+                              : 'Channel paused.',
+                          )
+                        }
+                      />
+                    </div>
                     <div className="flex flex-wrap items-center gap-3">
                       <Button
                         variant="quiet"
@@ -226,7 +257,7 @@ export function Channels(props: SectionProps) {
                         Disconnect
                       </Button>
                     </div>
-                    {kind.type === 'whatsapp' && (
+                    {(kind.type === 'whatsapp' || kind.type === 'whatsapp-business') && (
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <p className="font-medium">Allow all contacts</p>

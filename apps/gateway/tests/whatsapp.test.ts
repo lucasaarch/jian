@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { InlineMedia } from '@jian/contracts';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { IncomingMessage } from '../src/channels/channel.js';
@@ -15,6 +16,7 @@ import type {
 import { Media } from '../src/media/service.js';
 import { SecretBox } from '../src/security/crypto.js';
 import { cavemanMode } from '../src/sessions/repository.js';
+import { channelInbox } from '../src/storage/schema.js';
 import { authRow, connectionRow, pendingInbox } from './helpers/rows.js';
 import { testServices } from './helpers/services.js';
 
@@ -94,6 +96,75 @@ async function setup(send?: (chatId: string, text: string) => Promise<string>) {
 }
 
 describe('WhatsApp linked device', () => {
+  it('keeps the linked device and auth while discarding inbox work before and during a pause', async () => {
+    const f = await setup();
+    try {
+      await f.channels.update(f.profile.id, f.binding.id, { allowAllContacts: true });
+      await f.whatsapp.connect(f.profile.id, f.binding.id);
+      await f.whatsapp.tick(f.receive);
+      const device = f.devices[0];
+      if (!device) throw new Error('Device missing');
+      await device.callbacks.ready('5511888888888@c.us');
+      const archive = Buffer.from('synthetic-linked-session');
+      await device.store.save(archive);
+      const connection = await connectionRow(f.store, f.binding.id);
+      const auth = await authRow(f.store, f.binding.id);
+
+      await device.callbacks.message({ ...message, requestKey: 'before-pause' });
+      expect(await pendingInbox(f.store)).toHaveLength(1);
+      await f.channels.update(f.profile.id, f.binding.id, { enabled: false });
+      expect(await pendingInbox(f.store)).toHaveLength(0);
+      await device.callbacks.message({ ...message, requestKey: 'during-pause' });
+      await f.whatsapp.tick(f.receive);
+      expect(await pendingInbox(f.store)).toHaveLength(0);
+      expect(await f.channels.contacts(f.profile.id)).toHaveLength(0);
+      expect(await f.services.runs.activities(f.profile.id)).toHaveLength(0);
+
+      await f.channels.update(f.profile.id, f.binding.id, { enabled: true });
+      // Duplicate callbacks must not resurrect discarded work after the owner resumes.
+      await device.callbacks.message({ ...message, requestKey: 'before-pause' });
+      await device.callbacks.message({ ...message, requestKey: 'during-pause' });
+      await f.whatsapp.tick(f.receive);
+      await f.channels.dispatch();
+      expect(await pendingInbox(f.store)).toHaveLength(0);
+      expect(await f.channels.contacts(f.profile.id)).toHaveLength(0);
+      expect(await f.services.runs.activities(f.profile.id)).toHaveLength(0);
+      expect(f.sent).toHaveLength(0);
+      const discarded = await f.store.db
+        .select()
+        .from(channelInbox)
+        .where(eq(channelInbox.channelId, f.binding.id));
+      expect(discarded).toHaveLength(2);
+      for (const row of discarded) {
+        expect(row.status).toBe('discarded');
+        expect((row.message as { text?: string }).text ?? '').toBe('');
+        expect(row.message).not.toHaveProperty('media');
+      }
+      expect(f.devices).toHaveLength(1);
+      expect(await connectionRow(f.store, f.binding.id)).toMatchObject({
+        desired: connection?.desired,
+        generation: connection?.generation,
+        status: 'connected',
+      });
+      expect(await authRow(f.store, f.binding.id)).toEqual(auth);
+      expect(await device.store.load()).toEqual(archive);
+
+      await device.callbacks.message({
+        ...message,
+        requestKey: 'fresh-after-resume',
+        text: 'Fresh',
+      });
+      await f.whatsapp.tick(f.receive);
+      const [fresh] = await f.services.runs.activities(f.profile.id);
+      expect(fresh).toMatchObject({ input: 'Fresh', status: 'queued' });
+      expect(await f.services.runs.activities(f.profile.id)).toHaveLength(1);
+    } finally {
+      await f.channels.stop();
+      await f.whatsapp.stop();
+      await f.app.close();
+    }
+  });
+
   it('persists the owner-only allow-all setting and validates its boundary', async () => {
     const f = await setup();
     const patch = (

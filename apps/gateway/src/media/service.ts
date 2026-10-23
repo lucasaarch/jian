@@ -832,6 +832,7 @@ export class Media {
             : undefined;
         await insertDelivery(tx, {
           id: deliveryId,
+          sourceRunId: run.id,
           profileId: run.profileId,
           channelId: contact.channelId,
           chatId: contact.chatId,

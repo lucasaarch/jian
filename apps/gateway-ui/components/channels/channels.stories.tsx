@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
+import { useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import type { Channel, Contact } from '../../lib/api';
 import * as fixtures from '../../stories/fixtures';
 import { ids } from '../../stories/fixtures';
 import { emptyHandlers } from '../../stories/handlers';
@@ -49,7 +51,7 @@ const whatsapp = profileData.channels.find((channel) => channel.type === 'whatsa
 if (!whatsapp) throw new Error('No WhatsApp channel in the fixtures');
 const updateChannel = fn(async () => ({ ...whatsapp, allowAllContacts: true }));
 
-/** The opt-in is WhatsApp-only and saves through the channel settings API. */
+/** The opt-in is shared by Baileys and Meta, not Telegram. */
 export const AllowAllContacts: Story = {
   render: () => <Channels {...permissionsProps} api={{ ...permissionsProps.api, updateChannel }} />,
   play: async (context) => {
@@ -114,6 +116,7 @@ export const MetaConfigured: Story = {
               id: ids.whatsapp,
               profileId: ids.zero,
               type: 'whatsapp-business',
+              enabled: true,
               whatsappBusinessStatus: 'configured',
               createdAt: '2026-10-23T12:00:00Z',
               allowAllContacts: false,
@@ -148,6 +151,7 @@ export const MetaPending: Story = {
               id: ids.whatsapp,
               profileId: ids.zero,
               type: 'whatsapp-business',
+              enabled: true,
               whatsappBusinessStatus: 'pending',
               createdAt: '2026-10-23T12:00:00Z',
               allowAllContacts: false,
@@ -169,6 +173,94 @@ export const MetaPending: Story = {
     await expect(canvas.getByRole('textbox', { name: 'Meta callback URL' })).toHaveValue(
       `${window.location.origin}/v1/whatsapp-business/${ids.whatsapp}`,
     );
+  },
+};
+
+function BusinessControls({ paused = false }: { paused?: boolean }) {
+  const [channel, setChannel] = useState<Channel>({
+    id: ids.whatsapp,
+    profileId: ids.zero,
+    type: 'whatsapp-business',
+    createdAt: '2026-10-23T12:00:00Z',
+    whatsappBusinessStatus: 'configured',
+    enabled: !paused,
+    allowAllContacts: false,
+  });
+  const [contact, setContact] = useState<Contact>({
+    id: 'business-customer',
+    profileId: ids.zero,
+    channelId: ids.whatsapp,
+    type: 'whatsapp-business',
+    actorId: '5511999999999',
+    chatId: '5511999999999',
+    displayName: 'Customer',
+    status: 'approved',
+    scope: 'direct',
+    createdAt: '2026-10-23T12:00:00Z',
+    updatedAt: '2026-10-23T12:00:00Z',
+    aiEnabled: !paused,
+  });
+  const props = sectionProps({
+    data: { ...profileData, channels: [channel], contacts: [contact], groups: [] },
+  });
+  return (
+    <Channels
+      {...props}
+      api={{
+        ...props.api,
+        updateChannel: async (_profileId, _channelId, body) => {
+          const updated = { ...channel, ...body };
+          setChannel(updated);
+          return updated;
+        },
+        updateContact: async (_profileId, _id, body) => {
+          const updated = { ...contact, ...body };
+          setContact(updated);
+          return updated;
+        },
+      }}
+    />
+  );
+}
+
+export const BusinessAutomationControls: Story = {
+  render: () => <BusinessControls />,
+  play: async (context) => {
+    await open('whatsapp-business')(context);
+    const canvas = within(context.canvasElement);
+    const channel = canvas.getByRole('switch', { name: 'Channel automation' });
+    const chat = canvas.getByRole('switch', { name: 'AI replies for Customer' });
+    await expect(channel).toHaveAttribute('aria-checked', 'true');
+    await expect(chat).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(canvas.getByRole('switch', { name: 'Allow all contacts' }));
+    await expect(canvas.getByRole('switch', { name: 'Allow all contacts' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await userEvent.click(chat);
+    await expect(chat).toHaveAttribute('aria-checked', 'false');
+    await expect(canvas.getByText('Approved', { exact: true })).toBeVisible();
+    await expect(channel).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(channel);
+    await expect(channel).toHaveAttribute('aria-checked', 'false');
+    await expect(canvas.getByText('Paused', { exact: true })).toBeVisible();
+  },
+};
+
+export const BusinessAutomationPaused: Story = {
+  render: () => <BusinessControls paused />,
+  play: async (context) => {
+    await open('whatsapp-business')(context);
+    const canvas = within(context.canvasElement);
+    const channel = canvas.getByRole('switch', { name: 'Channel automation' });
+    const chat = canvas.getByRole('switch', { name: 'AI replies for Customer' });
+    await expect(channel).toHaveAttribute('aria-checked', 'false');
+    await expect(chat).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(channel);
+    await expect(channel).toHaveAttribute('aria-checked', 'true');
+    await expect(chat).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(chat);
+    await expect(chat).toHaveAttribute('aria-checked', 'true');
   },
 };
 

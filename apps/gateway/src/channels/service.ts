@@ -3,13 +3,14 @@ import {
   channelInputSchema,
   channelPatchSchema,
   type channelSchema,
+  contactPatchSchema,
   type deliverySchema,
   type Group,
   type GroupTurn,
   type ingressResultSchema,
   whatsappBusinessSetupSchema,
 } from '@jian/contracts';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { assertFound, GatewayError, NoModelAvailable } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -28,7 +29,14 @@ import type { SessionWriter } from '../sessions/port.js';
 import { insertMessage } from '../sessions/repository.js';
 import type { Stickers } from '../stickers/service.js';
 import type { Queryable, Store } from '../storage/database.js';
-import { metaBindings } from '../storage/schema.js';
+import {
+  channelInbox,
+  contacts,
+  mediaAssets,
+  metaBindings,
+  metaInbox,
+  runs,
+} from '../storage/schema.js';
 import {
   type ChannelRequest,
   type ChannelType,
@@ -53,6 +61,7 @@ import { plainText } from './plain.js';
 import { ChannelRegistry } from './registry.js';
 import {
   findChannel,
+  findContactByChat,
   findContactByIdentity,
   findContactBySession,
   findDelivery,
@@ -70,6 +79,7 @@ import {
   markChannelRevoked,
   markPictureSynced,
   setAllowAllContacts,
+  setChannelEnabled,
   setContactAvatar,
   updateDelivery,
 } from './repository.js';
@@ -84,6 +94,8 @@ import { MetaInbox, metaCanSend, metaCausalInbound } from './whatsapp-business-i
  */
 export type ChannelRecord = z.infer<typeof channelSchema> & {
   tokenHash: string;
+  /** Pause/resume cutoff invalidates old automation, including work created while paused. */
+  automationPausedAt?: string;
   address?: string;
   handle?: string;
 };
@@ -95,7 +107,11 @@ export type DeliveryRecord = z.infer<typeof deliverySchema> & {
   connectionGeneration?: number;
   /** Internal authority, never accepted from an outbound tool or public API. */
   inboundEventId?: string;
+  /** The producer of media/notices, whose text must not replace their caption. */
+  sourceRunId?: string;
 };
+
+class AutomationPaused extends Error {}
 
 const DISPATCH_INTERVAL_MS = 2000;
 /** How often channels are compared with their profile's picture: a change shows within this. */
@@ -268,6 +284,7 @@ export class Channels {
 
   private metadata({
     tokenHash: _hash,
+    automationPausedAt: _paused,
     address: _address,
     handle: _handle,
     ...channel
@@ -362,6 +379,7 @@ export class Channels {
       profileId,
       type: data.type,
       allowAllContacts: false,
+      enabled: true,
       ...(whatsappBusiness
         ? { whatsappBusinessStatus: configured ? ('configured' as const) : ('pending' as const) }
         : {}),
@@ -481,8 +499,15 @@ export class Channels {
         }
         await this.services.vault.put(profileId, channelSecret(id), JSON.stringify(credential), tx);
         updated = { ...channel, whatsappBusinessStatus: 'configured' };
+      } else if ('enabled' in data) {
+        await setChannelEnabled(tx, id, data.enabled);
+        updated = assertFound(await findChannel(tx, id), 'Channel');
+        if (!data.enabled || !channel.enabled) {
+          await this.discardInbox(tx, id);
+          await this.cancelAutomationRuns(tx, profileId, id);
+        }
       } else {
-        if (channel.type !== 'whatsapp')
+        if (channel.type !== 'whatsapp' && channel.type !== 'whatsapp-business')
           throw new GatewayError(400, 'Only WhatsApp supports allowing all contacts');
         await setAllowAllContacts(tx, id, data.allowAllContacts);
         updated = { ...channel, ...data };
@@ -492,6 +517,80 @@ export class Channels {
     });
 
     return this.metadata(record);
+  }
+
+  /** A pause acknowledges old inbound work rather than replaying it on resume. */
+  private async discardInbox(tx: Queryable, channelId: string, chatId?: string) {
+    const affected = and(
+      eq(contacts.channelId, channelId),
+      ...(chatId ? [eq(contacts.chatId, chatId)] : []),
+    );
+    await tx.update(contacts).set({ heldMessage: null, heldMessageId: null }).where(affected);
+    await tx
+      .update(mediaAssets)
+      .set({ held: false })
+      .where(
+        inArray(
+          mediaAssets.contactId,
+          tx.select({ id: contacts.id }).from(contacts).where(affected),
+        ),
+      );
+    await tx
+      .update(channelInbox)
+      .set({ status: 'discarded', message: {} })
+      .where(
+        and(
+          eq(channelInbox.channelId, channelId),
+          eq(channelInbox.status, 'pending'),
+          ...(chatId ? [sql`${channelInbox.message}->>'chatId' = ${chatId}`] : []),
+        ),
+      );
+    await tx
+      .update(metaInbox)
+      .set({ processedAt: new Date() })
+      .where(
+        and(
+          eq(metaInbox.channelId, channelId),
+          isNull(metaInbox.processedAt),
+          sql`${metaInbox.payload}->>'kind' = 'message'`,
+          ...(chatId ? [sql`${metaInbox.payload}->'message'->>'from' = ${chatId}`] : []),
+        ),
+      );
+  }
+
+  private async cancelAutomationRuns(
+    tx: Queryable,
+    profileId: string,
+    channelId: string,
+    chatId?: string,
+  ) {
+    const active = await tx
+      .select({ id: runs.id })
+      .from(runs)
+      .innerJoin(contacts, eq(contacts.sessionId, runs.sessionId))
+      .where(
+        and(
+          eq(runs.profileId, profileId),
+          eq(contacts.channelId, channelId),
+          inArray(runs.status, ['queued', 'running', 'waiting']),
+          isNull(runs.subagent),
+          ...(chatId ? [eq(contacts.chatId, chatId)] : []),
+        ),
+      );
+    for (const run of active) await this.services.runs.cancel(profileId, run.id, tx);
+  }
+
+  async updateContact(profileId: string, id: string, input: unknown) {
+    const { aiEnabled } = contactPatchSchema.parse(input);
+    return this.services.store.transaction(profileId, async (tx) => {
+      const previous = await this.people.read(profileId, id, tx);
+      const contact = await this.people.setAiEnabled(profileId, id, aiEnabled, tx);
+      if (!aiEnabled || !previous.aiEnabled) {
+        await this.discardInbox(tx, contact.channelId, contact.chatId);
+        await this.cancelAutomationRuns(tx, profileId, contact.channelId, contact.chatId);
+      }
+      return this.people.view(contact);
+    });
   }
 
   private async revokeWithin(profileId: string, id: string, tx: Queryable): Promise<ChannelRecord> {
@@ -582,7 +681,7 @@ export class Channels {
       const adapter = this.registry.get(channel.type);
       const account = channel.address ?? '';
 
-      if (!adapter.setPicture || !account) continue;
+      if (!channel.enabled || !adapter.setPicture || !account) continue;
 
       const want = avatar
         ? `${account}:${createHash('sha256').update(avatar).digest('hex').slice(0, 32)}`
@@ -623,7 +722,7 @@ export class Channels {
     for (const contact of stale) {
       const channel = await findChannel(this.services.store.db, contact.channelId);
 
-      if (channel && !channel.revokedAt) {
+      if (channel?.enabled && !channel.revokedAt) {
         await this.refreshAvatar(channel, contact);
       }
     }
@@ -777,6 +876,7 @@ export class Channels {
     if (!channel || channel.revokedAt) {
       throw new GatewayError(409, 'The channel of this contact is disconnected');
     }
+    if (!channel.enabled || !contact.aiEnabled) return this.people.view(contact);
 
     const mediaIds = await this.services.store.transaction(profileId, (tx) =>
       releaseHeldMedia(
@@ -832,6 +932,8 @@ export class Channels {
       return { accepted: false };
     }
 
+    if (!channel.enabled) return { accepted: false };
+
     if (adapter.download) {
       const files = await adapter.download(request.payload, {
         channelId: channel.id,
@@ -867,6 +969,8 @@ export class Channels {
       throw new GatewayError(403, 'Linked channel unavailable');
     }
 
+    if (!channel.enabled) return { accepted: false };
+
     const data = adapter.receive(input);
 
     if (!data) {
@@ -885,6 +989,7 @@ export class Channels {
     data: IncomingMessage,
     connectionGeneration?: number,
   ): Promise<IngressResult> {
+    if (!channel.enabled || channel.revokedAt) return { accepted: false };
     // A message this connection wrote itself is not a turn someone took in the conversation.
     if (channel.address && data.actorId === channel.address) {
       return { accepted: false };
@@ -929,10 +1034,42 @@ export class Channels {
     const mediaIds: string[] = [];
     const intake = await this.services.store.transaction(
       channel.profileId,
-      async (tx): Promise<Intake & { decision?: GroupDecision }> => {
+      async (tx): Promise<(Intake & { decision?: GroupDecision }) | null> => {
         // Settings and intake share the profile lock, so disabling the option takes effect
         // even for a message whose channel was loaded before the owner's PATCH.
         const current = assertFound(await findChannel(tx, channel.id), 'Channel');
+        if (
+          !current.enabled ||
+          current.revokedAt ||
+          current.automationPausedAt !== channel.automationPausedAt
+        )
+          return null;
+        const existing = await findContactByIdentity(
+          tx,
+          channel.id,
+          data.chatId,
+          data.scope === 'group' ? data.chatId : data.actorId,
+        );
+        if (existing && !existing.aiEnabled) return null;
+        if (connectionGeneration !== undefined) {
+          const id = createHash('sha256')
+            .update(JSON.stringify([channel.id, data.requestKey]))
+            .digest('hex');
+          const [event] = await tx
+            .select({ status: channelInbox.status })
+            .from(channelInbox)
+            .where(eq(channelInbox.id, id))
+            .limit(1);
+          if (event?.status !== 'pending') return null;
+        }
+        if (channel.type === 'whatsapp-business') {
+          const [event] = await tx
+            .select({ processedAt: metaInbox.processedAt })
+            .from(metaInbox)
+            .where(and(eq(metaInbox.channelId, channel.id), eq(metaInbox.eventId, data.requestKey)))
+            .limit(1);
+          if (!event || event.processedAt) return null;
+        }
         const outcome = await this.people.intake(tx, current, data);
         if (outcome.status === 'approved' && outcome.duplicate) return outcome;
         if (outcome.status === 'pending' && outcome.announce)
@@ -1028,6 +1165,7 @@ export class Channels {
         return { ...outcome, ...(decision ? { decision } : {}) };
       },
     );
+    if (!intake) return { accepted: false };
     // Every sticker from a conversation the owner approved joins the agent's collection, sent to
     // it or not: that is how the collection grows with the people it talks to.
     if (intake.status === 'approved' && this.services.stickers) {
@@ -1101,6 +1239,7 @@ export class Channels {
       return { accepted: false, contact: 'approved' as const, silence: 'no-model' as const };
     }
 
+    if (!run) return { accepted: false, contact: 'approved' as const };
     return { accepted: true, runId: run.id, contact: 'approved' as const };
   }
 
@@ -1124,6 +1263,12 @@ export class Channels {
     const tell = now - (this.toldNoModel.get(key) ?? 0) >= NO_MODEL_NOTICE_MS;
 
     await this.services.store.transaction(channel.profileId, async (tx) => {
+      try {
+        await this.assertAutomation(tx, channel, contact);
+      } catch (error) {
+        if (error instanceof AutomationPaused) return;
+        throw error;
+      }
       await insertMessage(
         tx,
         {
@@ -1183,7 +1328,15 @@ export class Channels {
         group ? data.chatId : data.actorId,
       );
 
-      if (contact?.status !== 'approved' || !contact.sessionId) {
+      const current = await findChannel(tx, channel.id);
+      if (
+        !current?.enabled ||
+        current.revokedAt ||
+        current.automationPausedAt !== channel.automationPausedAt ||
+        contact?.status !== 'approved' ||
+        !contact.aiEnabled ||
+        !contact.sessionId
+      ) {
         return { accepted: false };
       }
 
@@ -1245,7 +1398,7 @@ export class Channels {
             .update(JSON.stringify(['errand', errand.id, data.requestKey]))
             .digest('hex'),
         },
-        { activity: 'channel' },
+        { activity: 'channel', beforeSubmit: (tx) => this.assertAutomation(tx, channel, contact) },
       );
 
       // The answer arrived in their conversation; it is recorded there as well as carried
@@ -1280,6 +1433,20 @@ export class Channels {
     }
   }
 
+  private async assertAutomation(tx: Queryable, channel: ChannelRecord, contact: ContactRecord) {
+    const current = await findChannel(tx, channel.id);
+    const person = await this.people.read(channel.profileId, contact.id, tx);
+    if (
+      !current?.enabled ||
+      current.revokedAt ||
+      !person.aiEnabled ||
+      person.status !== 'approved' ||
+      current.automationPausedAt !== channel.automationPausedAt ||
+      person.aiPausedAt !== contact.aiPausedAt
+    )
+      throw new AutomationPaused();
+  }
+
   /** The binding, not the inbound payload, chooses the profile and session. */
   private async submit(
     channel: ChannelRecord,
@@ -1293,18 +1460,29 @@ export class Channels {
   ) {
     const sessionId = assertFound(contact.sessionId ?? null, 'Session');
 
-    const run = await this.services.runs.submit(
-      channel.profileId,
-      sessionId,
-      {
-        text,
-        mediaIds,
-        requestKey: createHash('sha256')
-          .update(JSON.stringify([channel.id, contact.chatId, contact.actorId, requestKey]))
-          .digest('hex'),
-      },
-      { activity: 'channel', ...(group ? { group } : {}), ...(author ? { author } : {}) },
-    );
+    const run = await this.services.runs
+      .submit(
+        channel.profileId,
+        sessionId,
+        {
+          text,
+          mediaIds,
+          requestKey: createHash('sha256')
+            .update(JSON.stringify([channel.id, contact.chatId, contact.actorId, requestKey]))
+            .digest('hex'),
+        },
+        {
+          activity: 'channel',
+          ...(group ? { group } : {}),
+          ...(author ? { author } : {}),
+          beforeSubmit: (tx) => this.assertAutomation(tx, channel, contact),
+        },
+      )
+      .catch((error) => {
+        if (error instanceof AutomationPaused) return null;
+        throw error;
+      });
+    if (!run) return null;
 
     if (this.registry.get(channel.type).send) {
       await this.services.store.transaction(channel.profileId, async (tx) => {
@@ -1480,6 +1658,22 @@ export class Channels {
         return;
       }
 
+      const currentChannel = await findChannel(this.services.store.db, delivery.channelId);
+      const paused =
+        currentChannel && (await this.automationDeliveryError(currentChannel, delivery));
+      if (paused) {
+        await this.services.store.transaction(delivery.profileId, async (tx) => {
+          const current = await findDelivery(tx, delivery.id);
+          if (current?.status === 'pending')
+            await updateDelivery(tx, {
+              ...current,
+              status: 'failed',
+              error: paused,
+              updatedAt: new Date().toISOString(),
+            });
+        });
+        continue;
+      }
       let text = delivery.notice ?? '';
       let commentary: string[] = [];
       // What the room received from the agent itself, not a failure notice the gateway wrote.
@@ -1699,7 +1893,12 @@ export class Channels {
   private async showProgress(delivery: DeliveryRecord): Promise<void> {
     const channel = await findChannel(this.services.store.db, delivery.channelId);
 
-    if (!channel || channel.revokedAt || (await this.metaDeliveryError(channel, delivery))) {
+    if (
+      !channel ||
+      channel.revokedAt ||
+      (await this.automationDeliveryError(channel, delivery)) ||
+      (await this.metaDeliveryError(channel, delivery))
+    ) {
       return;
     }
 
@@ -1709,11 +1908,16 @@ export class Channels {
       return;
     }
 
+    const credential = await this.services.vault.read(
+      delivery.profileId,
+      channelSecret(channel.id),
+    );
+    if (await this.automationDeliveryError(channel, delivery)) return;
     await adapter
       .typing(delivery.chatId, {
         channelId: delivery.channelId,
         connectionGeneration: delivery.connectionGeneration,
-        credential: await this.services.vault.read(delivery.profileId, channelSecret(channel.id)),
+        credential,
         fetch: this.fetcher,
         signal: this.abort.signal,
       })
@@ -1737,6 +1941,24 @@ export class Channels {
 
       return true;
     });
+  }
+
+  /** Also checked between chunks: pausing never replays an old reply after a resume. */
+  private async automationDeliveryError(channel: ChannelRecord, delivery: DeliveryRecord) {
+    const current = await findChannel(this.services.store.db, channel.id);
+    if (!current?.enabled || current.revokedAt) return 'Channel automation is paused';
+    const person = await findContactByChat(this.services.store.db, channel.id, delivery.chatId);
+    if (person && !person.aiEnabled) return 'AI is paused for this conversation';
+    const source = delivery.runId ?? delivery.sourceRunId;
+    const run = source ? await this.services.runs.run(delivery.profileId, source) : undefined;
+    if (run?.status === 'cancelled') return 'The source run was cancelled';
+    const at = run?.createdAt ?? delivery.createdAt;
+    if (
+      (current.automationPausedAt && at <= current.automationPausedAt) ||
+      (person?.aiPausedAt && at <= person.aiPausedAt)
+    )
+      return 'Delivery predates an automation pause';
+    return undefined;
   }
 
   /** Common egress policy for finals, commentary, notices, media and typing. A schedule,
@@ -1771,7 +1993,9 @@ export class Channels {
         throw new Error('Channel unavailable');
       }
 
-      const denied = await this.metaDeliveryError(channel, delivery);
+      const denied =
+        (await this.automationDeliveryError(channel, delivery)) ??
+        (await this.metaDeliveryError(channel, delivery));
       if (denied) return { status: 'failed', remoteMessageIds: [], error: denied };
 
       if (delivery.connectionGeneration !== undefined) {
@@ -1802,13 +2026,17 @@ export class Channels {
         fetch: this.fetcher,
         signal: this.abort.signal,
         canReply: async (chatId: string) =>
-          chatId === delivery.chatId && !(await this.metaDeliveryError(channel, delivery)),
+          chatId === delivery.chatId &&
+          !(await this.automationDeliveryError(channel, delivery)) &&
+          !(await this.metaDeliveryError(channel, delivery)),
       };
       const people = await this.groupPeople(delivery);
 
       if (delivery.mediaId) {
         if (!this.services.media) throw new Error('Media delivery is unavailable');
         const media = await this.services.media.read(delivery.profileId, delivery.mediaId);
+        const paused = await this.automationDeliveryError(channel, delivery);
+        if (paused) return { status: 'failed', remoteMessageIds: [], error: paused };
         return adapter.send(
           {
             chatId: delivery.chatId,
@@ -1832,13 +2060,20 @@ export class Channels {
       const remoteMessageIds: Array<string | number> = [];
 
       for (const [index, part] of parts.entries()) {
-        if (index > 0) {
+        if (index > 0 && !(await this.automationDeliveryError(channel, delivery))) {
           // Between messages the bubble goes back to composing, and the pause is what keeps a
           // three-part answer from landing as one burst of notifications.
           await adapter.typing?.(delivery.chatId, context).catch(() => undefined);
           await pause(Math.min(BETWEEN_MESSAGES_MS, 200 + part.length * 8), this.abort.signal);
         }
 
+        const paused = await this.automationDeliveryError(channel, delivery);
+        if (paused)
+          return {
+            status: remoteMessageIds.length ? 'unknown' : 'failed',
+            remoteMessageIds,
+            error: paused,
+          };
         const outcome = await adapter.send(
           {
             chatId: delivery.chatId,
