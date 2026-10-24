@@ -35,7 +35,7 @@ const developerCapabilities: Capability[] = [
   'media.image',
 ];
 
-/** Definitions only: no profession is assignable until end-to-end enforcement ships. */
+/** The fixed catalog used by assignment and runtime enforcement. */
 export const professionCatalog: readonly ProfessionDefinition[] = [
   {
     id: 'developer',

@@ -241,6 +241,9 @@ export class Schedules {
     );
 
     for (const schedule of await dueSchedules(this.store.db, now)) {
+      // Keep the due time intact while its profile awaits profession assignment. It will be
+      // enqueued once after assignment rather than silently consumed during an upgrade.
+      if ((await this.profiles.profile(schedule.profileId)).professionId === null) continue;
       const dueAt = new Date(schedule.nextRunAt ?? now);
       let run: Run | undefined;
       let failure: string | undefined;

@@ -8,8 +8,7 @@ export function registerProfessionRoutes(
   app: FastifyInstance,
   deps: { profiles: ProfileReader },
 ): void {
-  // Read-only planning surface. No assignment/classification endpoint until enforcement ships.
-  app.get('/v1/professions', async () => ({ assignable: false, professions: professionCatalog }));
+  app.get('/v1/professions', async () => ({ assignable: true, professions: professionCatalog }));
 
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/profession', async (request) =>
     effectiveProfession(await deps.profiles.profile(request.params.profileId)),

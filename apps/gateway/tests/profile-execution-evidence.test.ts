@@ -9,6 +9,7 @@ async function setup() {
   const profile = await services.profiles.createProfile({
     name: 'Evidence',
     instructions: 'Help.',
+    professionId: null,
   });
   const session = await services.sessions.gatewaySession(profile.id);
   return { services, profile, session };

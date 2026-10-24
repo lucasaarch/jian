@@ -32,7 +32,10 @@ const message: IncomingMessage = {
   mentions: [],
 };
 
-async function setup(send?: (chatId: string, text: string) => Promise<string>) {
+async function setup(
+  send?: (chatId: string, text: string) => Promise<string>,
+  legacyProfile = false,
+) {
   let now = Date.now();
   const services = await testServices();
   const store = services.store;
@@ -64,6 +67,7 @@ async function setup(send?: (chatId: string, text: string) => Promise<string>) {
     name: 'WhatsApp',
     instructions: 'Help.',
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    ...(legacyProfile ? { professionId: null } : {}),
   });
   const binding = await channels.connect(profile.id, { type: 'whatsapp' });
   const app = createApp({ ...services, channels, whatsapp, token, logger: false });
@@ -222,7 +226,10 @@ describe('WhatsApp linked device', () => {
   });
 
   it('allows new private contacts without granting owner rights, but keeps blocks and groups manual', async () => {
-    const f = await setup();
+    const f = await setup(undefined, true);
+    const submit = f.services.runs.submit.bind(f.services.runs);
+    f.services.runs.submit = (profileId, sessionId, input, options) =>
+      submit(profileId, sessionId, input, { ...options, ownerMessage: false });
     try {
       await f.whatsapp.connect(f.profile.id, f.binding.id);
       await f.whatsapp.tick(f.receive);
@@ -271,7 +278,10 @@ describe('WhatsApp linked device', () => {
       expect(await cavemanMode(f.store.db, f.profile.id, approved.sessionId)).toBe('off');
       const runs = await f.services.runs.activities(f.profile.id);
       expect(runs).toHaveLength(1);
-      expect(runs[0]).toMatchObject({ sessionId: approved.sessionId, input: '/caveman ultra' });
+      expect(runs[0]).toMatchObject({
+        sessionId: approved.sessionId,
+        input: '/caveman ultra',
+      });
       expect(
         (await f.channels.deliveries(f.profile.id)).filter(
           (d) => d.chatId === newcomer && d.notice,

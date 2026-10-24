@@ -61,7 +61,7 @@ export function effectiveProfession(profile: Profile): EffectiveProfession {
   if (!authority) {
     return {
       status: 'legacy_unclassified',
-      assignable: false,
+      assignable: true,
       scope: 'configuration',
       profession: null,
       ceilingCapabilities: null,

@@ -11,7 +11,7 @@ import { migrationsFolder } from '../src/storage/database.js';
 import { events, profileRevisions, profiles } from '../src/storage/schema.js';
 import { testServices } from './helpers/services.js';
 
-const input = { name: 'Legacy', instructions: 'Help with engineering.' };
+const input = { name: 'Legacy', instructions: 'Help with engineering.', professionId: null };
 
 // Only trusted SQL in these tests simulates classification. There is intentionally no service,
 // HTTP or agent operation that can do this while profession enforcement is inactive.
@@ -86,18 +86,16 @@ describe('inactive profession foundation', () => {
   });
 
   it.each(['developer', 'attendant'])(
-    'rejects explicit %s creation before any writes',
+    'creates a profile already assigned to %s with its initial revision',
     async (professionId) => {
       const services = await testServices();
-      await expect(
-        services.profiles.createProfile({ ...input, professionId }),
-      ).rejects.toMatchObject({
-        statusCode: 400,
-        message: 'Professions are not available for profile creation yet',
-      });
-      expect(await services.profiles.profiles()).toEqual([]);
-      expect(await services.store.db.select().from(profileRevisions)).toEqual([]);
-      expect(await services.store.db.select().from(events)).toEqual([]);
+      const profile = await services.profiles.createProfile({ ...input, professionId });
+      expect(profile.professionId).toBe(professionId);
+      expect((await services.profiles.profile(profile.id)).professionId).toBe(professionId);
+      expect((await findRevision(services.store.db, profile.id, 1))?.professionId).toBe(
+        professionId,
+      );
+      expect(await services.store.db.select().from(events)).toHaveLength(1);
     },
   );
 
@@ -162,7 +160,7 @@ describe('inactive profession foundation', () => {
     expect((await services.profiles.profile(profile.id)).professionId).toBe('developer');
   });
 
-  it('enforces the inactive creation and immutable patch guards over HTTP', async () => {
+  it('allows supported profession creation and keeps assignment immutable over HTTP', async () => {
     const services = await testServices();
     const token = 'synthetic-profession-test-admin-token';
     const headers = { authorization: `Bearer ${token}` };
@@ -171,15 +169,23 @@ describe('inactive profession foundation', () => {
     });
     const app = createApp({ ...services, channels, token, logger: false });
     try {
-      for (const professionId of ['developer', 'attendant', 'unknown']) {
+      for (const professionId of ['developer', 'attendant']) {
         const response = await app.inject({
           method: 'POST',
           url: '/v1/profiles',
           headers,
           payload: { ...input, professionId },
         });
-        expect(response.statusCode).toBe(400);
+        expect(response.statusCode).toBe(201);
+        expect(response.json().professionId).toBe(professionId);
       }
+      const unsupported = await app.inject({
+        method: 'POST',
+        url: '/v1/profiles',
+        headers,
+        payload: { ...input, professionId: 'unknown' },
+      });
+      expect(unsupported.statusCode).toBe(400);
       const created = await app.inject({
         method: 'POST',
         url: '/v1/profiles',

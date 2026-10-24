@@ -173,6 +173,7 @@ describe('the skills an agent writes for itself', () => {
     const profile = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
     const { fetcher } = repository({ 'skills/deploy/SKILL.md': document });
@@ -258,11 +259,13 @@ describe('the skills every profile carries', () => {
     const plain = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
     const equipped = await services.profiles.createProfile({
       name: 'Zero',
       instructions: 'Help.',
+      professionId: null,
       model,
       allowShell: true,
       allowWebSearch: true,
@@ -308,6 +311,7 @@ describe('the skills every profile carries', () => {
     const profile = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
 
@@ -369,11 +373,13 @@ describe('the skills every profile carries', () => {
     const plain = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
     const managing = await services.profiles.createProfile({
       name: 'Zero',
       instructions: 'Help.',
+      professionId: null,
       model,
       allowSelfManagement: true,
     });
@@ -392,6 +398,7 @@ describe('the skills every profile carries', () => {
     const plain = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
 
@@ -404,6 +411,7 @@ describe('the skills every profile carries', () => {
     const profile = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
     const session = await services.sessions.createSession(profile.id, { title: 'Test' });
@@ -431,6 +439,7 @@ describe('the skills every profile carries', () => {
     const profile = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
 

@@ -110,12 +110,6 @@ export class Profiles {
   async createProfile(input: unknown) {
     const data = profileSchema.parse(input);
 
-    // Do not label an agent before the profession ceiling is enforced everywhere. Legacy
-    // creation stays unclassified during this additive foundation, with no runtime changes.
-    if (data.professionId !== null) {
-      throw new GatewayError(400, 'Professions are not available for profile creation yet');
-    }
-
     const profile: Profile = {
       ...data,
       id: randomUUID(),

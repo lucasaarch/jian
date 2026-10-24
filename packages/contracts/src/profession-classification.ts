@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { capabilitySchema, professionIdSchema } from './professions.js';
 
-/** Read-only planning input, not consent to classify or a token accepted by a later write. */
+/** Selection and expected profile version for a preview or one-time classification request. */
 export const professionPreviewInputSchema = z.strictObject({
   professionId: professionIdSchema,
   expectedVersion: z.number().int().positive(),
@@ -15,8 +15,8 @@ export const professionPreviewSchema = z.strictObject({
   profileVersion: z.number().int().positive(),
   professionId: professionIdSchema,
   policyVersion: z.number().int().positive(),
-  assignable: z.literal(false),
-  blockers: z.array(z.enum(['unavailable', 'already_classified', 'unsettled_work'])),
+  assignable: z.boolean(),
+  blockers: z.array(z.enum(['already_classified', 'unsettled_work'])),
   configurationCapabilities: z.array(capabilitySchema),
   incompatibleMcpServers: z.array(z.string()),
   affected: z.strictObject({
@@ -27,6 +27,7 @@ export const professionPreviewSchema = z.strictObject({
     pendingWorkerReports: count,
     historicalRunsWithoutAuthority: count,
     pendingRemoteTasks: count,
+    runningRemoteTasks: count,
     enabledSchedules: count,
     enabledSubscriptions: count,
     liveChannels: count,

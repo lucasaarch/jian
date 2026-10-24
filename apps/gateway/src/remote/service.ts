@@ -383,6 +383,9 @@ export class Remote {
         // the same lock as the queued -> running transition.
         const liveMachine = await this.authenticate(machineId, authorization, tx, true);
         if (!liveMachine.allowedProfileIds.includes(task.profileId)) return undefined;
+        // A queued remote command belongs to the profile's durable work queue. Do not fail it
+        // during upgrade; leave it queued until the owner chooses a profession.
+        if ((await findProfile(tx, task.profileId))?.professionId === null) return undefined;
         try {
           await this.requireRemoteCapability(task.profileId, tx);
         } catch (error) {

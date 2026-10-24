@@ -3,7 +3,7 @@ import { professionPreviewSchema } from '@jian/contracts';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
-import { previewProfession } from '../src/professions/classification.js';
+import { assignProfession, previewProfession } from '../src/professions/classification.js';
 import {
   channels,
   events,
@@ -22,6 +22,7 @@ async function setup() {
   const profile = await services.profiles.createProfile({
     name: 'Preview',
     instructions: 'Help.',
+    professionId: null,
     mcpServers: [{ name: 'local', transport: 'stdio', command: 'never-executed' }],
     skills: [{ name: 'custom', description: 'Custom guidance', instructions: 'Help.' }],
   });
@@ -45,8 +46,8 @@ describe('read-only classification impact preview', () => {
       profileId: profile.id,
       profileVersion: 1,
       professionId: 'attendant',
-      assignable: false,
-      blockers: ['unavailable'],
+      assignable: true,
+      blockers: [],
       incompatibleMcpServers: ['local'],
       affected: { customSkills: 1, queuedRuns: 0, runningRuns: 0, waitingRuns: 0 },
     });
@@ -144,13 +145,14 @@ describe('read-only classification impact preview', () => {
       })
       .where(eq(sessions.id, session.id));
     const result = await previewProfession(services, profile.id, target);
-    expect(result.blockers).toEqual(['unavailable', 'unsettled_work']);
+    expect(result.blockers).toEqual(['unsettled_work']);
     expect(result.affected).toMatchObject({
       queuedRuns: 1,
       runningRuns: 1,
       waitingRuns: 1,
       historicalRunsWithoutAuthority: 1,
       pendingRemoteTasks: 1,
+      runningRemoteTasks: 1,
       enabledSchedules: 1,
       enabledSubscriptions: 1,
       liveChannels: 1,
@@ -195,7 +197,7 @@ describe('read-only classification impact preview', () => {
         await previewProfession(services, profile.id, target),
       );
       expect(result.assignable).toBe(false);
-      expect(result.blockers).toEqual(['unavailable', 'unsettled_work']);
+      expect(result.blockers).toEqual(['unsettled_work']);
       expect(result.affected).toMatchObject({
         queuedRuns: 0,
         runningRuns: 0,
@@ -224,10 +226,61 @@ describe('read-only classification impact preview', () => {
       .set({ professionId: 'developer' })
       .where(eq(profiles.id, profile.id));
     expect((await previewProfession(services, profile.id, target)).blockers).toEqual([
-      'unavailable',
       'already_classified',
     ]);
     expect((await services.profiles.profile(profile.id)).professionId).toBe('developer');
+  });
+
+  it('keeps queued work paused before assignment and resumes it with the selected authority', async () => {
+    const { services, profile, session } = await setup();
+    const id = randomUUID();
+    await services.store.db.insert(runs).values({
+      id,
+      profileId: profile.id,
+      sessionId: session.id,
+      profileVersion: profile.version,
+      requestKey: 'queued-before-selection',
+      input: 'Preserved queued request',
+      status: 'queued',
+    });
+    const subscriptionId = randomUUID();
+    await services.store.db.insert(subscriptions).values({
+      id: subscriptionId,
+      profileId: profile.id,
+      sessionId: session.id,
+      name: 'CI',
+      instruction: 'Review the check',
+      source: 'github',
+      filter: {
+        owner: 'test',
+        repo: 'test',
+        pullNumber: 1,
+        events: ['check_suite.completed'],
+        pollIntervalSeconds: 30,
+      },
+      createdBy: 'owner',
+      secretHash: 'private-subscription-secret',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    expect(await services.lifecycle.claim(id, profile.id, 'before-selection')).toBeNull();
+    const preview = await previewProfession(services, profile.id, target);
+    expect(preview.assignable).toBe(true);
+    expect(preview.affected.queuedRuns).toBe(1);
+
+    await assignProfession(services, profile.id, target);
+    const [pausedSubscription] = await services.store.db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.id, subscriptionId));
+    expect(pausedSubscription).toMatchObject({
+      enabled: false,
+      lastError: 'Classified subscription authority requires owner review',
+    });
+    const claimed = await services.lifecycle.claim(id, profile.id, 'after-selection');
+    expect(claimed?.profile.professionId).toBe('attendant');
+    expect(claimed?.authority?.professionId).toBe('attendant');
+    expect(claimed?.input).toBe('Preserved queued request');
   });
 
   it('requires owner authentication over HTTP and exposes no classification write', async () => {
@@ -243,7 +296,7 @@ describe('read-only classification impact preview', () => {
       const headers = { authorization: 'Bearer synthetic-preview-owner-token-at-least-32' };
       const response = await app.inject({ method: 'POST', url, headers, payload: target });
       expect(response.statusCode).toBe(200);
-      expect(response.json().assignable).toBe(false);
+      expect(response.json().assignable).toBe(true);
       expect(
         (
           await app.inject({

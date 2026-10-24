@@ -23,7 +23,7 @@ describe('profession catalog API', () => {
     expect(response.statusCode).toBe(401);
   });
 
-  it('returns versioned definitions with assignment explicitly unavailable', async () => {
+  it('returns versioned definitions with assignment available', async () => {
     const response = await app.inject({
       method: 'GET',
       url: '/v1/professions',
@@ -31,7 +31,7 @@ describe('profession catalog API', () => {
     });
     expect(response.statusCode).toBe(200);
     const body = professionCatalogSchema.parse(response.json());
-    expect(body.assignable).toBe(false);
+    expect(body.assignable).toBe(true);
     expect(body.professions.map((item) => item.id)).toEqual(['developer', 'attendant']);
   });
 });

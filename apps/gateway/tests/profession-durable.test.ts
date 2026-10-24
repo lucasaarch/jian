@@ -13,6 +13,7 @@ async function setup(classify = true) {
   let profile = await services.profiles.createProfile({
     name: 'Durable',
     instructions: 'Help.',
+    professionId: classify ? 'developer' : null,
     allowWebSearch: true,
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
   });
@@ -64,9 +65,9 @@ describe('durable profession authority', () => {
     expect(legacy.authority).toBeUndefined();
 
     const { services, profile, session } = await setup();
-    await expect(services.runs.submit(profile.id, session.id, message('job'))).rejects.toThrow(
-      'owner review',
-    );
+    await expect(
+      services.runs.submit(profile.id, session.id, message('job'), { ownerMessage: false }),
+    ).rejects.toThrow('owner review');
     const channelRun = await services.runs.submit(profile.id, session.id, message('external'), {
       ownerMessage: true,
       activity: 'channel',

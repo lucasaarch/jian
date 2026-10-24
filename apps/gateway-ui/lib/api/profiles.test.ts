@@ -5,7 +5,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const legacy = {
   status: 'legacy_unclassified',
-  assignable: false,
+  assignable: true,
   scope: 'configuration',
   profession: null,
   ceilingCapabilities: null,
@@ -22,9 +22,14 @@ it('keeps explicit unresolved legacy fields from the authenticated descriptor re
   expect(request.headers.get('x-jian-panel')).toBe('1');
 });
 
-it('rejects inconsistent or assignment-enabled descriptors rather than inventing defaults', async () => {
+it('accepts assignment-enabled legacy descriptors and rejects inconsistent shapes', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json(legacy)),
+  );
+  expect(await gatewayApi().profileProfession('profile')).toEqual(legacy);
   for (const descriptor of [
-    { ...legacy, assignable: true },
+    { ...legacy, assignable: false },
     { ...legacy, ceilingCapabilities: [] },
     { status: 'legacy_unclassified', assignable: false, scope: 'configuration' },
   ]) {

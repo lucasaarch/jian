@@ -140,6 +140,7 @@ describe('MCP probe effect boundary', () => {
     const saved = await services.profiles.createProfile({
       name: 'Attendant',
       instructions: 'Help.',
+      professionId: null,
       mcpServers: [{ name: 'local', transport: 'stdio', command: 'must-not-run' }],
     });
     await services.store.db
@@ -168,6 +169,7 @@ describe('remote live profession ceiling', () => {
     const saved = await services.profiles.createProfile({
       name: 'Attendant',
       instructions: 'Help.',
+      professionId: null,
     });
     const machine = await services.remote.create({
       name: 'Synthetic',
@@ -200,12 +202,13 @@ describe('remote live profession ceiling', () => {
       const saved = await services.profiles.createProfile({
         name: 'Reclassified',
         instructions: 'Help.',
+        professionId: null,
       });
       const legacy = await services.profiles.createProfile({
-        name: 'Legacy',
+        name: 'Developer',
         instructions: 'Help.',
       });
-      // Legacy work was allowed when queued; first classification must constrain dispatch too.
+      // Developer work was allowed when queued; first classification must constrain dispatch too.
       const machine = await services.remote.create({
         name: 'Synthetic',
         allowedProfileIds: [saved.id, legacy.id],

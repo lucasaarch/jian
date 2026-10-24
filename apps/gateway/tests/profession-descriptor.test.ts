@@ -23,7 +23,7 @@ describe('read-only configuration profession descriptor', () => {
     const descriptor = effectiveProfession(fixture(null));
     expect(descriptor).toEqual({
       status: 'legacy_unclassified',
-      assignable: false,
+      assignable: true,
       scope: 'configuration',
       profession: null,
       ceilingCapabilities: null,
@@ -57,17 +57,21 @@ describe('read-only configuration profession descriptor', () => {
         profileAuthority(profile)?.capabilities,
       );
       expect(descriptor.configurationEffectiveCapabilities).not.toContain('profiles.create');
-      expect(descriptor.configurationEffectiveCapabilities).not.toContain('web.browse');
+      if (definition?.capabilities.includes('web.browse')) {
+        expect(descriptor.configurationEffectiveCapabilities).toContain('web.browse');
+      } else {
+        expect(descriptor.configurationEffectiveCapabilities).not.toContain('web.browse');
+      }
     },
   );
 
-  it('reflects live enables without identity text granting powers or crossing the ceiling', () => {
+  it('keeps profession capabilities fixed despite legacy switches or identity text', () => {
     const developer = fixture('developer');
     expect(
       effectiveProfession({ ...developer, allowWebSearch: true })
         .configurationEffectiveCapabilities,
     ).toContain('web.browse');
-    expect(effectiveProfession(developer).configurationEffectiveCapabilities).not.toContain(
+    expect(effectiveProfession(developer).configurationEffectiveCapabilities).toContain(
       'web.browse',
     );
     const attendant = effectiveProfession({
@@ -180,7 +184,7 @@ describe('GET profile profession subresource', () => {
       expect(response.statusCode).toBe(200);
       const descriptor = effectiveProfessionSchema.parse(response.json());
       expect(descriptor.status).toBe('classified');
-      expect(descriptor.configurationEffectiveCapabilities?.includes('web.browse')).toBe(enabled);
+      expect(descriptor.configurationEffectiveCapabilities?.includes('web.browse')).toBe(true);
       expect(descriptor).toEqual(effectiveProfession(await services.profiles.profile(id)));
     }
   });

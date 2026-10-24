@@ -239,9 +239,8 @@ const summaryText = z.string().trim().max(280);
 export const summarySchema = summaryText.default('');
 
 export const profileSchema = z.strictObject({
-  // Inactive foundation: legacy documents read as unclassified. Creation rejects non-null
-  // professions until authorization and the rest of the feature are ready together. Final
-  // activation will require an explicit profession on creation, not this temporary null default.
+  // Existing API clients may omit this to create a legacy unclassified profile; the panel
+  // requires an explicit profession when creating an agent.
   professionId: professionIdSchema.nullable().default(null),
   name: z.string().trim().min(1).max(100),
   instructions: z.string().trim().min(1).max(8_000),

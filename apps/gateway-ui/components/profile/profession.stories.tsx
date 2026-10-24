@@ -16,7 +16,7 @@ type Story = StoryObj<typeof meta>;
 const legacyProfession: EffectiveProfession = {
   status: 'legacy_unclassified',
   scope: 'configuration',
-  assignable: false,
+  assignable: true,
   profession: null,
   ceilingCapabilities: null,
   configurationEffectiveCapabilities: null,
@@ -36,7 +36,7 @@ export const LegacyUnclassified: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Legacy / unclassified')).toBeVisible();
-    await expect(canvas.getByText(/Existing behavior is unchanged/)).toBeVisible();
+    await expect(canvas.getByText(/work is held until you choose one/)).toBeVisible();
     await expect(canvas.queryByRole('button')).not.toBeInTheDocument();
     await expect(canvas.queryByRole('checkbox')).not.toBeInTheDocument();
   },
@@ -46,7 +46,7 @@ export const ClassifiedUnavailable: Story = {
   args: { descriptor: classified },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText('Profession assignment unavailable')).toBeVisible();
+    await expect(canvas.getByText('Immutable assignment')).toBeVisible();
     await expect(canvas.getByText(/not authorization to run/)).toBeVisible();
     await userEvent.click(canvas.getByText('Configuration capability details'));
     await expect(canvas.getByRole('heading', { name: 'Profession ceiling' })).toBeVisible();

@@ -150,6 +150,14 @@ export const cursorSchema = z.strictObject({
 export const operations: Operation[] = [
   {
     method: 'POST',
+    path: `${profile}/profession/assign`,
+    operationId: 'assignProfileProfession',
+    access: 'admin',
+    body: professionPreviewInputSchema,
+    response: profileRecordSchema,
+  },
+  {
+    method: 'POST',
     path: `${profile}/profession/preview`,
     operationId: 'previewProfessionClassification',
     access: 'admin',

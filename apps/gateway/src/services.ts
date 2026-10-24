@@ -144,7 +144,7 @@ export function buildServices({
       fetcher ?? createSafeFetch().fetch,
     ),
     settings,
-    lifecycle: new RunLifecycle(store, runs, clock),
+    lifecycle: new RunLifecycle(store, runs, profiles, clock),
     contexts: new Contexts(store, runs, sessions, settings, decisions.judge),
     errands: new Errands(store, clock),
     work: new Work(store, sessions, runs, clock),

@@ -27,6 +27,30 @@ export function NewProfileDialog({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [professions, setProfessions] = useState<
+    { id: 'developer' | 'attendant'; label: string }[]
+  >([]);
+  const [loadingProfessions, setLoadingProfessions] = useState(true);
+
+  useEffect(() => {
+    let current = true;
+    void api
+      .professions()
+      .then(
+        ({ professions: values }) => {
+          if (current) setProfessions(values);
+        },
+        () => {
+          if (current) setError('Could not load professions. Try again before creating the agent.');
+        },
+      )
+      .finally(() => {
+        if (current) setLoadingProfessions(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [api]);
 
   return (
     <Modal
@@ -38,7 +62,12 @@ export function NewProfileDialog({
           <Button variant="secondary" onClick={close}>
             Cancel
           </Button>
-          <Button type="submit" form="new-profile-form" busy={busy}>
+          <Button
+            type="submit"
+            form="new-profile-form"
+            busy={busy}
+            disabled={loadingProfessions || !professions.length}
+          >
             <Plus size={16} />
             Create agent
           </Button>
@@ -62,6 +91,7 @@ export function NewProfileDialog({
                 name: String(form.get('name')),
                 instructions: String(form.get('instructions')),
                 avatar: String(form.get('avatar')) || null,
+                professionId: String(form.get('professionId')) as 'developer' | 'attendant',
               }),
             );
           } catch (error) {
@@ -72,6 +102,23 @@ export function NewProfileDialog({
         }}
       >
         <AvatarField name="avatar" />
+        <Field label="Profession" hint="The profession sets the agent's fixed authority ceiling.">
+          <select
+            name="professionId"
+            required
+            disabled={loadingProfessions || !professions.length}
+            defaultValue=""
+          >
+            <option value="" disabled>
+              {loadingProfessions ? 'Loading professions…' : 'Choose a profession'}
+            </option>
+            {professions.map((profession) => (
+              <option key={profession.id} value={profession.id}>
+                {profession.label}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="Name">
           <input name="name" required maxLength={100} placeholder="e.g. Personal assistant" />
         </Field>

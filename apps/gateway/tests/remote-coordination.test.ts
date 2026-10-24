@@ -15,9 +15,13 @@ const barrier = () => {
 
 afterEach(() => vi.restoreAllMocks());
 
-async function fixture(clock?: () => number) {
+async function fixture(clock?: () => number, professionId: 'developer' | null = 'developer') {
   const services = await testServices(clock);
-  const profile = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+  const profile = await services.profiles.createProfile({
+    name: 'Owner',
+    instructions: 'Help.',
+    professionId,
+  });
   const machine = await services.remote.create({ name: 'Worker', allowedProfileIds: [profile.id] });
   const authorization = `Bearer ${machine.token}`;
   await services.remote.poll(machine.id, authorization, 'linux-x64', 'computer-linux-v1');
@@ -56,7 +60,7 @@ function holdNextTransaction(f: Awaited<ReturnType<typeof fixture>>) {
 it.each(['shell', 'computer'] as const)(
   'revalidates stale %s admission under the profile lock',
   async (kind) => {
-    const f = await fixture();
+    const f = await fixture(undefined, null);
     const gate = holdNextTransaction(f);
     const pending = (
       kind === 'shell'
@@ -92,7 +96,7 @@ it('rechecks machine ACL at admission instead of trusting the preliminary check'
 it.each(['profession', 'acl'] as const)(
   'revalidates stale poll %s before claim',
   async (change) => {
-    const f = await fixture();
+    const f = await fixture(undefined, change === 'profession' ? null : 'developer');
     const taskId = await queue(f);
     const gate = holdNextTransaction(f);
     const pending = f.remote.poll(f.machine.id, f.authorization);

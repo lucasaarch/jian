@@ -7,7 +7,7 @@ import { ProfessionDescriptor, ProfileProfession } from './profession';
 
 const legacy: EffectiveProfession = {
   status: 'legacy_unclassified',
-  assignable: false,
+  assignable: true,
   scope: 'configuration',
   profession: null,
   ceilingCapabilities: null,
@@ -40,9 +40,9 @@ it('honestly describes legacy behavior without treating null lists as all or non
   const element = setup();
   await act(async () => root.render(<ProfessionDescriptor descriptor={legacy} />));
   expect(element.textContent).toContain('Legacy / unclassified');
-  expect(element.textContent).toContain('Existing behavior is unchanged');
-  expect(element.textContent).toContain('not mean all capabilities or no capabilities');
-  expect(element.textContent).toContain('Profession assignment unavailable');
+  expect(element.textContent).toContain('work is held until you choose one');
+  expect(element.textContent).toContain('does not delete profile data');
+  expect(element.textContent).toContain('Assignment required');
   expect(element.querySelector('details, button, input')).toBeNull();
 });
 
@@ -52,7 +52,7 @@ it('distinguishes configuration from authorization and keeps raw capabilities in
   expect(element.textContent).toContain('Developer');
   expect(element.textContent).toContain('Policy version 2');
   expect(element.textContent).toContain('not authorization to run or access a resource');
-  expect(element.textContent).toContain('Profession assignment unavailable');
+  expect(element.textContent).toContain('Immutable assignment');
   expect(element.querySelector('details')?.open).toBe(false);
   expect(element.querySelector('summary')?.textContent).toBe('Configuration capability details');
   expect(Array.from(element.querySelectorAll('ul')).map((list) => list.textContent)).toEqual([

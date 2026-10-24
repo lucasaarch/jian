@@ -32,7 +32,7 @@ async function render(
   profileProfession: GatewayApi['profileProfession'] = vi.fn<GatewayApi['profileProfession']>(
     async () => ({
       status: 'legacy_unclassified',
-      assignable: false,
+      assignable: true,
       scope: 'configuration',
       profession: null,
       ceilingCapabilities: null,

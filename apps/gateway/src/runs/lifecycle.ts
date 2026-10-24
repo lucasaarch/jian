@@ -5,6 +5,7 @@ import { formatQuestionText } from '../agent/ask-user.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import type { ProfileReader } from '../profiles/port.js';
 import { insertMessage } from '../sessions/repository.js';
 import type { Store } from '../storage/database.js';
 import { runs } from '../storage/schema.js';
@@ -30,6 +31,7 @@ export class RunLifecycle {
   constructor(
     private readonly store: Store,
     private readonly runs: RunReader,
+    private readonly profiles: ProfileReader,
     private readonly clock: Clock = Date.now,
   ) {}
 
@@ -40,6 +42,9 @@ export class RunLifecycle {
       if (run.status !== 'queued') {
         return null;
       }
+      // Persisted work from legacy profiles is kept queued until the owner assigns a profession.
+      // This live check shares the profile lock with assignment, so restart/dispatch cannot race it.
+      if ((await this.profiles.profile(profileId, tx)).professionId === null) return null;
 
       const claimed: Run = {
         ...run,

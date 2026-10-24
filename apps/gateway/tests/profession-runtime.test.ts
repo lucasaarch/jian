@@ -30,6 +30,7 @@ async function fixture(
   const created = await services.profiles.createProfile({
     name: 'Support',
     instructions: 'Help.',
+    professionId,
     allowWebSearch,
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
   });
@@ -114,7 +115,7 @@ it('keeps profession tools available when the legacy web-search switch changes',
   expect(effect).toHaveBeenCalledOnce();
 });
 
-it('rechecks initially legacy work after Decisions awaits, before the executor', async () => {
+it('keeps legacy work paused before invoking Decisions or the executor', async () => {
   const { services, profile, run } = await fixture(null);
   const effect = vi.fn(async () => 'Sent');
   const judged = vi.fn(async () => {
@@ -170,9 +171,9 @@ it('rechecks initially legacy work after Decisions awaits, before the executor',
     },
     () => model,
   ).execute(profile.id, run.id);
-  expect(judged).toHaveBeenCalledTimes(1);
+  expect(judged).not.toHaveBeenCalled();
   expect(effect).not.toHaveBeenCalled();
-  expect((await services.runs.run(profile.id, run.id)).status).toBe('failed');
+  expect((await services.runs.run(profile.id, run.id)).status).toBe('queued');
 });
 
 it('fails closed before model or workspace use for a classified historical run without authority', async () => {

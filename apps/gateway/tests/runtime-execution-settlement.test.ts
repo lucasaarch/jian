@@ -401,7 +401,13 @@ it('covers setup failure after claim and settles only after successfully cleanin
       },
     };
   });
-  vi.spyOn(services.profiles, 'profile').mockRejectedValueOnce(new Error('setup failed'));
+  const profileLookup = services.profiles.profile.bind(services.profiles);
+  let profileCalls = 0;
+  vi.spyOn(services.profiles, 'profile').mockImplementation(async (...args) => {
+    // Claiming the run reads the profile once before execute's resource setup.
+    if (profileCalls++ === 0) return profileLookup(...args);
+    throw new Error('setup failed');
+  });
   const execution = new AgentRuntime(services, () =>
     mockModel({ doGenerate: async () => answer() }),
   ).execute(profile.id, run.id);

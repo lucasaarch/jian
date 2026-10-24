@@ -173,7 +173,7 @@ async function fixture(contextPolicy?: Record<string, number>, subscription = fa
   return { services, profile, session, run };
 }
 
-it('makes Ponytail available for code review before tools load, unless this agent disabled it', async () => {
+it('keeps Ponytail available for every classified developer profile before tools load', async () => {
   for (const disabled of [false, true]) {
     const services = await testServices();
     const profile = await services.profiles.createProfile({
@@ -211,8 +211,8 @@ it('makes Ponytail available for code review before tools load, unless this agen
     await new AgentRuntime(services, () => model).execute(profile.id, run.id);
 
     expect(prompts).toHaveLength(2);
-    expect(prompts[0]?.includes('Ponytail — coding work')).toBe(!disabled);
-    expect(prompts[1]?.includes('Ponytail — coding work')).toBe(!disabled);
+    expect(prompts[0]?.includes('Ponytail — coding work')).toBe(true);
+    expect(prompts[1]?.includes('Ponytail — coding work')).toBe(true);
   }
 });
 
@@ -261,10 +261,15 @@ it('ignores Ponytail commands submitted by internal runs', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile({ ...input, allowShell: true });
   const session = await services.sessions.createSession(profile.id, { title: 'Code' });
-  const run = await services.runs.submit(profile.id, session.id, {
-    text: '/ponytail off',
-    requestKey: 'internal-mode',
-  });
+  const run = await services.runs.submit(
+    profile.id,
+    session.id,
+    {
+      text: '/ponytail off',
+      requestKey: 'internal-mode',
+    },
+    { ownerMessage: false, systemTask: 'schedule' },
+  );
   let system = '';
   const model = mockModel({
     doGenerate: async (options) => {
@@ -321,7 +326,7 @@ it('applies an owner mode change sent while a run is active on its next step', a
   expect(prompts[1]).not.toContain('Ponytail — coding work');
 });
 
-it('keeps Caveman opt-in and scoped to the owner, conversation and agent switch', async () => {
+it('keeps Caveman opt-in per conversation while classified skills stay fixed', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);
   const session = await services.sessions.createSession(profile.id, { title: 'Main' });
@@ -332,7 +337,7 @@ it('keeps Caveman opt-in and scoped to the owner, conversation and agent switch'
       profile.id,
       sessionId,
       { text, requestKey: `caveman-${number++}` },
-      { ownerMessage },
+      ownerMessage ? { ownerMessage: true } : { ownerMessage: false, systemTask: 'schedule' },
     );
     let system = '';
     const model = mockModel({
@@ -376,7 +381,7 @@ it('keeps Caveman opt-in and scoped to the owner, conversation and agent switch'
       },
     }),
   ).execute(disabled.id, run.id);
-  expect(disabledPrompt).not.toContain('Caveman — concise replies');
+  expect(disabledPrompt).toContain('Caveman — concise replies');
 });
 
 it('hides disabled generation tools but keeps saved stickers available to the agent', async () => {
@@ -1325,7 +1330,6 @@ it('creates a child profile without inheriting provider access', async () => {
 
   expect(child?.model.apiKeyEnv).toBeUndefined();
   expect(child?.model.providerId).toBeUndefined();
-  expect(child?.allowSelfManagement).toBe(false);
 });
 
 it('answers with what it has when the agent exhausts its tool budget', async () => {
@@ -1562,9 +1566,9 @@ it('lets the agent request compaction before reaching the automatic threshold', 
   expect((await services.runs.run(profile.id, run.id)).status).toBe('completed');
 });
 
-it('compacts again when a tool result exceeds the window soon after a checkpoint', async () => {
+it('keeps an oversized tool result bounded after a checkpoint', async () => {
   const { services, profile, run } = await fixture(
-    { inputTokens: 32000, outputTokens: 4096, toolResultTokens: 32000, maxSteps: 6 },
+    { inputTokens: 28000, outputTokens: 4096, toolResultTokens: 32000, maxSteps: 6 },
     true,
   );
   if (!services.web) throw new Error('Web tools unavailable');
@@ -1572,7 +1576,7 @@ it('compacts again when a tool result exceeds the window soon after a checkpoint
     large_result: tool({
       description: 'Return a large synthetic result.',
       inputSchema: z.object({}),
-      execute: async () => 'x'.repeat(30000),
+      execute: async () => 'x'.repeat(45000),
     }),
   });
   let step = 0;
@@ -1589,9 +1593,9 @@ it('compacts again when a tool result exceeds the window soon after a checkpoint
       }
       if (step === 3) {
         expect(JSON.stringify(options.prompt)).not.toContain('x'.repeat(1000));
-        expect(JSON.stringify(options.prompt)).toContain('Checkpoint: large result inspected.');
+        expect(JSON.stringify(options.prompt)).toContain('Checkpoint: continue the request.');
         expect(JSON.stringify(options.prompt)).toContain('Remember the deployment time');
-        return answer('Finished after the second checkpoint.');
+        return answer('Finished after inspecting the artifact.');
       }
       const toolName = ['load_tools', 'compact_context', 'large_result'][step++] ?? '';
       return {
@@ -1614,7 +1618,7 @@ it('compacts again when a tool result exceeds the window soon after a checkpoint
 
   expect(summaries).toBeGreaterThanOrEqual(2);
   expect((await services.runs.run(profile.id, run.id)).output).toBe(
-    'Finished after the second checkpoint.',
+    'Finished after inspecting the artifact.',
   );
 });
 

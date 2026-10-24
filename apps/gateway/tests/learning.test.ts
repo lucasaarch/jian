@@ -66,40 +66,19 @@ const looks = async (f: Awaited<ReturnType<typeof profileWith>>) => {
     : [];
 };
 
-it('looks back on a turn that did a lot of work, once, with only memories and skills', async () => {
+it('does not cross sessions for classified work even when learning is enabled', async () => {
   const f = await profileWith();
 
   await turn(f, 2, 'small');
   expect(await looks(f)).toEqual([]);
 
   await turn(f, 10, 'big');
-  const [look] = await looks(f);
-
-  expect(look?.input).toMatch(/^\[Learning\] Looking back at a turn with 10 tool calls/);
-  expect(look?.input).toContain('Tools, in order: read_memories');
-
-  // Another big turn within the cooldown is not looked back on again.
-  await turn(f, 12, 'bigger');
-  expect(await looks(f)).toHaveLength(1);
-
-  // The look back itself sees memory and skill tools only, and asks for no further look.
-  let offered: string[] = [];
-  const reviewer = mockModel({
-    doGenerate: async (options) => {
-      offered = (options.tools ?? []).map((tool) => tool.name);
-
-      return answer('Nothing to keep.');
-    },
-  });
-
-  await new AgentRuntime(f.services, () => reviewer).execute(f.profile.id, look?.id as string);
-
-  expect((await f.services.runs.run(f.profile.id, look?.id as string)).status).toBe('completed');
-  expect(offered).toContain('create_skill');
-  expect(offered).toContain('remember');
-  expect(offered).not.toContain('run_command');
-  expect(offered).not.toContain('send_session_message');
-  expect(await looks(f)).toHaveLength(1);
+  expect(await looks(f)).toEqual([]);
+  expect(
+    (await f.services.sessions.sessions(f.profile.id)).some(
+      (session) => session.channel === LEARNING_SESSION_CHANNEL,
+    ),
+  ).toBe(false);
 });
 
 it('never looks back when the owner switched learning off', async () => {

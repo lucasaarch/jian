@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** Stable product IDs, not mutable identity text. Activation is a separate rollout step. */
+/** Stable product IDs, not mutable identity text. */
 export const professionIdSchema = z.enum(['developer', 'attendant']);
 export type ProfessionId = z.infer<typeof professionIdSchema>;
 
@@ -59,12 +59,13 @@ export type ProfessionAuthority = z.infer<typeof professionAuthoritySchema>;
 /**
  * Read-only configuration summary, NOT resource ACLs, context/inherited restrictions,
  * model/service availability or authorization to run. null lists mean unresolved legacy
- * semantics, never deny-all or all-capabilities. Assignment remains unavailable.
+ * semantics, never deny-all or all-capabilities. A legacy profile may receive one profession
+ * assignment; classified professions remain immutable.
  */
 export const effectiveProfessionSchema = z.discriminatedUnion('status', [
   z.strictObject({
     status: z.literal('legacy_unclassified'),
-    assignable: z.literal(false),
+    assignable: z.literal(true),
     scope: z.literal('configuration'),
     profession: z.null(),
     ceilingCapabilities: z.null(),

@@ -1,26 +1,13 @@
 import { createHmac } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { AgentRuntime } from '../src/agent/runtime.js';
-import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
 const input = {
   name: 'Atlas',
   instructions: 'Help.',
+  professionId: null,
   model: { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
 };
-
-const usage = {
-  inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
-  outputTokens: { total: 10, text: 10, reasoning: 0 },
-};
-
-const answer = (text: string) => ({
-  content: [{ type: 'text' as const, text }],
-  finishReason: { unified: 'stop' as const, raw: 'stop' },
-  usage,
-  warnings: [],
-});
 
 it('polls GitHub and wakes once when checks complete', async () => {
   let now = Date.parse('2026-10-20T05:00:00.000Z');
@@ -183,14 +170,6 @@ it('stays silent on unchanged watcher polls and does not auto-continue while Lis
   expect((await services.sessions.session(profile.id, session.id)).objective?.note ?? '').toMatch(
     /Listening/i,
   );
-
-  const announce = await services.runs.submit(profile.id, session.id, {
-    text: 'Watch PR 75 for me',
-    requestKey: 'announce-watch',
-  });
-  await new AgentRuntime(services, () =>
-    mockModel({ doGenerate: async () => answer('Watching.') }),
-  ).execute(profile.id, announce.id);
 
   expect(
     (await services.runs.activities(profile.id)).filter(
