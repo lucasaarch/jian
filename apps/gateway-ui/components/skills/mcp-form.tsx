@@ -186,31 +186,43 @@ export function McpForm({
               <>
                 <p className="note">
                   Save the server, then use <strong>Test the connection</strong> — it answers with
-                  the link to sign in. Needs <code>JIAN_PUBLIC_URL</code>.
+                  the link to sign in. Needs <code>JIAN_PUBLIC_URL</code>. For GitHub Copilot MCP (
+                  <code>https://api.githubcopilot.com/mcp/</code>), set{' '}
+                  <code>JIAN_GITHUB_OAUTH_CLIENT_ID</code> and{' '}
+                  <code>JIAN_GITHUB_OAUTH_CLIENT_SECRET</code> on the gateway once — do not paste
+                  them here.
                 </p>
-                <Field
-                  label="OAuth client id"
-                  hint="Required when the auth server has no dynamic registration (for example GitHub Copilot MCP). Create an OAuth App whose callback is this gateway MCP OAuth callback, then paste the client id. Leave blank when the server registers Jian itself."
-                >
-                  <input
-                    value={draft.oauthClientId}
-                    autoComplete="off"
-                    placeholder="Iv1.… or OAuth App client id"
-                    onChange={(event) => change({ oauthClientId: event.target.value })}
-                  />
-                </Field>
-                <Field
-                  label="OAuth client secret"
-                  hint="Required by GitHub OAuth Apps. Public PKCE clients leave this blank."
-                >
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={draft.oauthClientSecret}
-                    placeholder={secretSaved ? 'Saved — leave blank to keep' : 'Client secret'}
-                    onChange={(event) => change({ oauthClientSecret: event.target.value })}
-                  />
-                </Field>
+                <details className="login-help">
+                  <summary>Advanced OAuth client</summary>
+                  <p className="note">
+                    Only when the auth server has no dynamic registration and install credentials do
+                    not apply. Leave blank for GitHub Copilot MCP and for servers that register Jian
+                    themselves.
+                  </p>
+                  <Field
+                    label="OAuth client id"
+                    hint="Pre-registered client id for a non-DCR auth server."
+                  >
+                    <input
+                      value={draft.oauthClientId}
+                      autoComplete="off"
+                      placeholder="OAuth App client id"
+                      onChange={(event) => change({ oauthClientId: event.target.value })}
+                    />
+                  </Field>
+                  <Field
+                    label="OAuth client secret"
+                    hint="When the app has a secret. Public PKCE clients leave this blank."
+                  >
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={draft.oauthClientSecret}
+                      placeholder={secretSaved ? 'Saved — leave blank to keep' : 'Client secret'}
+                      onChange={(event) => change({ oauthClientSecret: event.target.value })}
+                    />
+                  </Field>
+                </details>
               </>
             )}
           </>

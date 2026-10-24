@@ -683,12 +683,12 @@ export const operations: Operation[] = [
   },
   {
     // The authorization server sends the owner's browser here, so it answers HTML and carries
-    // its proof in the query rather than in a header the redirect could not add.
+    // its proof in the query rather than in a header the redirect could not add. One path for
+    // the install: profile and server are in `state`, so a single OAuth App callback works.
     method: 'GET',
-    path: `${profile}/mcp-servers/:name/oauth/callback`,
+    path: '/v1/mcp/oauth/callback',
     operationId: 'completeMcpLogin',
     access: 'public',
-    params: z.strictObject({ profileId: z.uuid(), name: z.string().regex(/^[a-z0-9_]{1,30}$/) }),
     query: z.looseObject({ code: z.string().optional(), state: z.string().optional() }),
     response: z.string(),
   },

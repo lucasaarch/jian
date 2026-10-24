@@ -881,7 +881,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/mcp-servers/{name}/oauth/callback": {
+    "/v1/mcp/oauth/callback": {
         parameters: {
             query?: never;
             header?: never;
@@ -11186,10 +11186,7 @@ export interface operations {
                 state?: string;
             };
             header?: never;
-            path: {
-                profileId: string;
-                name: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
