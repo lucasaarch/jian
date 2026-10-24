@@ -53,3 +53,26 @@ it('offers retry if the first stats load fails', async () => {
 
   await act(async () => root.unmount());
 });
+
+it('shows the WhatsApp Business Cloud API message count for Sales Attendant in Usage', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const salesProfile = { ...profile, professionId: 'attendant' as const };
+  const api = {
+    stats: async () => ({
+      ...statsFor(30),
+      salesAttendant: { whatsappBusinessCloudApiMessagesSent: 47 },
+    }),
+    activityCalendar: async () => [],
+  } as unknown as GatewayApi;
+  const element = document.createElement('div');
+  const root = createRoot(element);
+
+  await act(async () =>
+    root.render(<Overview profile={salesProfile} data={{} as ProfileData} api={api} />),
+  );
+  expect(element.textContent).toContain('WhatsApp Business Cloud API messages sent');
+  expect(element.textContent).toContain('47');
+  expect(element.querySelector('[aria-label="Period"]')).not.toBeNull();
+
+  await act(async () => root.unmount());
+});

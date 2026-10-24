@@ -87,6 +87,7 @@ export const contactSchema = z.strictObject({
   displayName: z.string().max(100).optional(),
   status: z.enum(['pending', 'approved', 'blocked']),
   aiEnabled: z.boolean().default(true),
+  aiResumeAt: z.iso.datetime().optional(),
   sessionId: z.uuid().optional(),
   message: z.string().max(8000).optional().describe('The message held until the owner decides.'),
   avatar: z

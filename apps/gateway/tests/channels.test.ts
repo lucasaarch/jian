@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -7,6 +8,7 @@ import type { ChannelRequest } from '../src/channels/channel.js';
 import { ChannelRegistry } from '../src/channels/registry.js';
 import { Channels } from '../src/channels/service.js';
 import { TelegramChannel } from '../src/channels/telegram.js';
+import { contacts } from '../src/storage/schema.js';
 import { testServices } from './helpers/services.js';
 
 const token = 'synthetic-telegram-admin-token-32-chars';
@@ -72,7 +74,7 @@ function webhook(secret: string): ChannelRequest {
 }
 
 describe('Telegram transport', () => {
-  it('allows a manual reply from an approved contact while AI replies are paused', async () => {
+  it('pauses AI after a manual reply and resumes one hour after the latest reply', async () => {
     const sends: Array<Record<string, unknown>> = [];
     const f = await setup(async (url, options) => {
       if (String(url).endsWith('/sendMessage'))
@@ -86,18 +88,61 @@ describe('Telegram transport', () => {
       const contact = await f.channels.approveContact(f.profile.id, pending.id);
       const sessionId = contact.sessionId;
       if (!sessionId) throw new Error('Approved session missing');
-      await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: false });
-
       await f.channels.sendAsAgent(f.profile.id, sessionId, {
         text: 'A person will take over from here.',
         mediaIds: [],
         requestKey: 'owner-reply',
       });
+      const firstDeadline = (await f.channels.contacts(f.profile.id))[0]?.aiResumeAt;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await f.channels.sendAsAgent(f.profile.id, sessionId, {
+        text: 'One more detail before I hand this back.',
+        mediaIds: [],
+        requestKey: 'owner-follow-up',
+      });
+      const latestContact = (await f.channels.contacts(f.profile.id))[0];
+      expect(await f.channels.contacts(f.profile.id)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: contact.id,
+            aiEnabled: false,
+            aiResumeAt: expect.any(String),
+          }),
+        ]),
+      );
+      expect(Date.parse(latestContact?.aiResumeAt ?? '')).toBeGreaterThan(
+        Date.parse(firstDeadline ?? ''),
+      );
+      expect(await f.services.sessions.messages(f.profile.id, sessionId)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'assistant',
+            content: 'A person will take over from here.',
+          }),
+        ]),
+      );
       await f.channels.dispatch();
 
       expect(sends).toContainEqual(
         expect.objectContaining({ text: 'A person will take over from here.' }),
       );
+      const runsWhilePaused = await f.services.runs.activities(f.profile.id);
+      await f.channels.receive(f.channel.id, {
+        ...webhook(f.channel.webhookToken),
+        payload: later,
+      });
+      expect(await f.services.sessions.messages(f.profile.id, sessionId)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ role: 'user', content: 'Still there?' }),
+        ]),
+      );
+      expect(await f.services.runs.activities(f.profile.id)).toHaveLength(runsWhilePaused.length);
+      await f.services.store.db
+        .update(contacts)
+        .set({ aiResumeAt: new Date(Date.now() - 1) })
+        .where(eq(contacts.id, contact.id));
+      await f.channels.dispatch();
+      expect((await f.channels.contacts(f.profile.id))[0]?.aiEnabled).toBe(true);
     } finally {
       await f.app.close();
     }

@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { expect, it } from 'vitest';
 import { profileTools } from '../src/agent/tools.js';
 import { Stats } from '../src/stats/service.js';
-import { checkpoints, runs } from '../src/storage/schema.js';
+import { channels, checkpoints, deliveries, runs } from '../src/storage/schema.js';
 import { testServices } from './helpers/services.js';
 
 it('adds up tokens, list-price cost, days, models, channels and tools', async () => {
@@ -211,4 +211,75 @@ it('lets an agent read its own full activity without exposing another profile', 
   expect(page).toHaveLength(1);
   expect(page[0]).toMatchObject({ id: ownRun.id, tokens: { input: 10 } });
   expect(JSON.stringify(page)).not.toContain('Private');
+});
+
+it('counts only successfully sent WhatsApp Business Cloud messages in the selected period', async () => {
+  const services = await testServices();
+  const now = Date.parse('2026-10-24T12:00:00Z');
+  const profile = await services.profiles.createProfile({
+    name: 'Sales Attendant',
+    professionId: 'attendant',
+    instructions: 'Help customers.',
+    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  });
+  const channelIds = {
+    business: randomUUID(),
+    whatsapp: randomUUID(),
+    telegram: randomUUID(),
+  };
+  for (const [id, type] of [
+    [channelIds.business, 'whatsapp-business'],
+    [channelIds.whatsapp, 'whatsapp'],
+    [channelIds.telegram, 'telegram'],
+  ] as const) {
+    await services.store.db.insert(channels).values({
+      id,
+      profileId: profile.id,
+      type,
+      webhookTokenHash: `synthetic-webhook-hash-${id}`,
+      createdAt: new Date(now - 90 * 86_400_000),
+    });
+  }
+
+  const record = async (
+    channelId: string,
+    status: 'sent' | 'failed',
+    at: number,
+    remoteMessageIds: string[],
+  ) =>
+    services.store.db.insert(deliveries).values({
+      id: randomUUID(),
+      profileId: profile.id,
+      channelId,
+      chatId: 'synthetic-customer',
+      status,
+      remoteMessageIds,
+      createdAt: new Date(at),
+      updatedAt: new Date(at),
+    });
+
+  await record(channelIds.business, 'sent', now - 86_400_000, ['cloud-1', 'cloud-2']);
+  await record(channelIds.business, 'sent', now - 40 * 86_400_000, ['cloud-old']);
+  await record(channelIds.business, 'failed', now - 86_400_000, ['cloud-failed']);
+  await record(channelIds.whatsapp, 'sent', now - 86_400_000, ['personal-1', 'personal-2']);
+  await record(channelIds.telegram, 'sent', now - 86_400_000, ['telegram-1']);
+
+  const stats = new Stats(
+    services.store,
+    services.profiles,
+    { timeZone: async () => 'UTC' },
+    { prime: async () => {}, lookup: () => undefined },
+    () => now,
+  );
+
+  const result = await stats.stats(profile.id, { days: 30 });
+  expect(result.salesAttendant).toEqual({ whatsappBusinessCloudApiMessagesSent: 2 });
+
+  const developer = await services.profiles.createProfile({
+    name: 'Developer',
+    professionId: 'developer',
+    instructions: 'Help developers.',
+    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  });
+  expect(await stats.stats(developer.id, { days: 30 })).not.toHaveProperty('salesAttendant');
 });

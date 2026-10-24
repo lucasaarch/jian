@@ -232,8 +232,15 @@ describe('Meta automation controls', () => {
       expect(paused).not.toHaveProperty('aiPausedAt');
       expect((await f.services.runs.run(f.profile.id, runA.id)).status).toBe('cancelled');
       expect((await f.services.runs.run(f.profile.id, runB.id)).status).toBe('queued');
-      await f.post(batch([message('chat-a-off')]));
+      await f.post(batch([message('chat-a-off', 'Message during pause')]));
       expect(await metaCanSend(f.services.store.db, f.channel.id, a.chatId)).toBe(false);
+      await f.channels.dispatch();
+      expect(await f.services.sessions.messages(f.profile.id, a.sessionId as string)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ role: 'user', content: 'Message during pause' }),
+        ]),
+      );
+      f.fetcher.mockClear();
       await f.channels.updateContact(f.profile.id, a.id, { aiEnabled: true });
       await f.channels.dispatch();
       expect(sends(f)).toHaveLength(0);

@@ -249,6 +249,7 @@ export class Contacts {
     const contact: ContactRecord = {
       ...current,
       aiEnabled,
+      aiResumeAt: undefined,
       updatedAt: now,
       ...(current.aiEnabled !== aiEnabled ? { aiPausedAt: now } : {}),
       ...(!aiEnabled ? { message: undefined, requestKey: undefined } : {}),
@@ -256,6 +257,40 @@ export class Contacts {
     await updateContact(tx, contact);
     await recordEvent(tx, this.clock, profileId, 'contact.updated', this.view(contact));
     return contact;
+  }
+
+  async pauseForManualReply(
+    profileId: string,
+    id: string,
+    resumeAt: string,
+    tx: Queryable,
+  ): Promise<ContactRecord> {
+    const current = await this.read(profileId, id, tx);
+    const now = nowIso(this.clock);
+    const contact: ContactRecord = {
+      ...current,
+      aiEnabled: false,
+      aiPausedAt: now,
+      aiResumeAt: resumeAt,
+      updatedAt: now,
+      message: undefined,
+      requestKey: undefined,
+    };
+    await updateContact(tx, contact);
+    await recordEvent(tx, this.clock, profileId, 'contact.updated', this.view(contact));
+    return contact;
+  }
+
+  async resumeExpiredPause(
+    profileId: string,
+    id: string,
+    tx: Queryable,
+  ): Promise<ContactRecord | null> {
+    const current = await this.read(profileId, id, tx);
+    if (current.aiEnabled || !current.aiResumeAt || Date.parse(current.aiResumeAt) > this.clock())
+      return null;
+
+    return this.setAiEnabled(profileId, id, true, tx);
   }
 
   async approve(profileId: string, id: string): Promise<ContactRecord> {

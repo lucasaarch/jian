@@ -505,6 +505,12 @@
   .conversation-pane > header small {
     @apply block truncate text-xs text-muted;
   }
+  .conversation-ai-replies {
+    @apply ml-auto flex shrink-0 items-center gap-2 text-xs;
+  }
+  .conversation-pane > header .conversation-ai-replies small {
+    @apply inline whitespace-nowrap text-muted;
+  }
   .session-objective {
     @apply mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted;
   }

@@ -13,7 +13,7 @@ import {
   metaWindows,
 } from '../storage/schema.js';
 import type { IncomingMessage } from './channel.js';
-import { findChannel, findContactByIdentity, findDeliveryByRemoteId } from './repository.js';
+import { findChannel, findDeliveryByRemoteId } from './repository.js';
 import { type ChannelRecord, channelSecret } from './service.js';
 import {
   metaSignature,
@@ -162,8 +162,7 @@ export class MetaInbox {
             const timestamp = Number(message.timestamp) * 1000;
             if (!Number.isSafeInteger(timestamp) || timestamp > now + 300_000) continue;
             const at = new Date(Math.min(timestamp, now));
-            const person = await findContactByIdentity(tx, channelId, message.from, message.from);
-            const paused = !current.enabled || person?.aiEnabled === false;
+            const paused = !current.enabled;
             const inserted = await tx
               .insert(metaInbox)
               .values({
@@ -267,18 +266,6 @@ export class MetaInbox {
             const adapter = new WhatsAppBusinessChannel();
             const data = adapter.receive(payload.message);
             if (data) {
-              const person = await findContactByIdentity(
-                this.store.db,
-                channel.id,
-                data.chatId,
-                data.actorId,
-              );
-              if (person?.aiEnabled === false) {
-                await this.store.transaction(channel.profileId, async (tx) => {
-                  await tx.update(metaInbox).set({ processedAt: new Date() }).where(identity);
-                });
-                continue;
-              }
               data.requestKey = row.eventId;
               if (payload.name) data.displayName = payload.name;
               const downloaded = await adapter.download(payload.message, {

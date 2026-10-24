@@ -23,6 +23,11 @@
     background: transparent;
     box-shadow: none;
   }
+  .select-trigger.composer-select {
+    width: fit-content;
+    justify-content: flex-start;
+    flex: 0 0 auto;
+  }
   .select-trigger.composer-select:hover:not(:disabled),
   .select-trigger.composer-select[data-popup-open] {
     @apply bg-canvas;

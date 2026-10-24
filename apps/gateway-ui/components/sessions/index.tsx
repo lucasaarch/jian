@@ -224,6 +224,12 @@ export function Sessions({
   const active =
     data.sessions.find((session) => session.id === selected) ?? gateway ?? groups[0]?.sessions[0];
   const activeContact = active && contactOf(active);
+  const aiResumeTime = activeContact?.aiResumeAt
+    ? new Date(activeContact.aiResumeAt).toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : undefined;
 
   if (!data.sessions.length) {
     return (
@@ -313,7 +319,7 @@ export function Sessions({
               peer={peerOf(active)}
               self={profile}
             />
-            <div className="grow">
+            <div className="min-w-0 grow">
               <h2>{nameOf(active)}</h2>
               <small>
                 {isGateway(active)
@@ -341,41 +347,40 @@ export function Sessions({
                   ) : null}
                 </p>
               )}
-              {isMessaging(active) && activeContact && (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span>
-                    {activeContact.aiEnabled === false ? 'AI replies paused' : 'AI replies'}
-                  </span>
-                  <Switch
-                    label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
-                    checked={activeContact.aiEnabled ?? true}
-                    disabled={busy}
-                    onChange={(aiEnabled) =>
-                      void mutate(
-                        () => api.updateContact(profile.id, activeContact.id, { aiEnabled }),
-                        aiEnabled
-                          ? 'AI enabled for this chat. Approval and channel automation still apply; no replay.'
-                          : 'AI paused for this chat, including queued replies.',
-                      )
-                    }
-                  />
-                  {data.channels.some(
-                    (channel) =>
-                      channel.id === activeContact.channelId &&
-                      channel.profileId === profile.id &&
-                      channel.enabled === false,
-                  ) && <Badge tone="warn">Channel automation paused</Badge>}
-                  {activeContact.status !== 'approved' && (
-                    <Badge>Contact {activeContact.status}</Badge>
-                  )}
-                  <p className="w-full text-xs text-muted">
-                    Separate from approval and channel automation. Paused messages are never
-                    replayed; queued replies stop. A request already in flight may finish.
-                  </p>
-                </div>
-              )}
               <SessionListeners api={api} profileId={profile.id} sessionId={active.id} />
             </div>
+            {isMessaging(active) && activeContact && (
+              <div className="conversation-ai-replies">
+                <span>AI Replies</span>
+                <Switch
+                  label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}${aiResumeTime ? `; resumes at ${aiResumeTime} unless another manual reply is sent` : ''}`}
+                  checked={activeContact.aiEnabled ?? true}
+                  disabled={busy}
+                  onChange={(aiEnabled) =>
+                    void mutate(
+                      () => api.updateContact(profile.id, activeContact.id, { aiEnabled }),
+                      aiEnabled
+                        ? 'AI enabled for this chat. Approval and channel automation still apply; no replay.'
+                        : 'AI paused for this chat, including queued replies.',
+                    )
+                  }
+                />
+                {aiResumeTime && (
+                  <small title="Resumes after one hour without a manual reply">
+                    {aiResumeTime}
+                  </small>
+                )}
+                {data.channels.some(
+                  (channel) =>
+                    channel.id === activeContact.channelId &&
+                    channel.profileId === profile.id &&
+                    channel.enabled === false,
+                ) && <Badge tone="warn">Channel automation paused</Badge>}
+                {activeContact.status !== 'approved' && (
+                  <Badge>Contact {activeContact.status}</Badge>
+                )}
+              </div>
+            )}
           </header>
           <History
             key={active.id}

@@ -498,6 +498,13 @@
       "when": 1792833140108,
       "tag": "0070_gigantic_leopardon",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1792834101338,
+      "tag": "0071_powerful_bloodstorm",
+      "breakpoints": true
     }
   ]
 }

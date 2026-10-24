@@ -11,7 +11,14 @@ import type { ProviderKind } from '../providers/catalog.js';
 import type { CatalogEntry } from '../providers/catalog-source.js';
 import type { SubscriptionUsageReader } from '../providers/subscription-usage.js';
 import type { Store } from '../storage/database.js';
-import { checkpoints, memories, runs, sessions } from '../storage/schema.js';
+import {
+  channels as channelRecords,
+  checkpoints,
+  deliveries,
+  memories,
+  runs,
+  sessions,
+} from '../storage/schema.js';
 
 type Mix = { input: number; cached: number; output: number };
 type Price = NonNullable<CatalogEntry['price']>;
@@ -287,6 +294,27 @@ export class Stats {
       .orderBy(sql`2 desc`);
     const tools = await (allTools ? toolQuery : toolQuery.limit(TOP_TOOLS));
 
+    const salesAttendant =
+      profile.professionId === 'attendant'
+        ? await db
+            .select({
+              sent: sql<string>`coalesce(sum(jsonb_array_length(${deliveries.remoteMessageIds})), 0)`,
+            })
+            .from(deliveries)
+            .innerJoin(channelRecords, eq(channelRecords.id, deliveries.channelId))
+            .where(
+              and(
+                eq(deliveries.profileId, profileId),
+                eq(channelRecords.type, 'whatsapp-business'),
+                eq(deliveries.status, 'sent'),
+                gte(deliveries.updatedAt, from),
+              ),
+            )
+            .then(([result]) => ({
+              whatsappBusinessCloudApiMessagesSent: Number(result?.sent ?? 0),
+            }))
+        : undefined;
+
     return profileStatsSchema.parse({
       since: profile.createdAt,
       subscriptions: this.subscriptionUsage ? await this.subscriptionUsage.read() : [],
@@ -318,6 +346,7 @@ export class Stats {
         calls: Number(tool.calls),
         failed: Number(tool.failed),
       })),
+      ...(salesAttendant ? { salesAttendant } : {}),
     });
   }
 }

@@ -8831,6 +8831,8 @@ export interface operations {
                         status: "pending" | "approved" | "blocked";
                         /** @default true */
                         aiEnabled: boolean;
+                        /** Format: date-time */
+                        aiResumeAt?: string;
                         /** Format: uuid */
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
@@ -8990,6 +8992,8 @@ export interface operations {
                         status: "pending" | "approved" | "blocked";
                         /** @default true */
                         aiEnabled: boolean;
+                        /** Format: date-time */
+                        aiResumeAt?: string;
                         /** Format: uuid */
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
@@ -9143,6 +9147,8 @@ export interface operations {
                         status: "pending" | "approved" | "blocked";
                         /** @default true */
                         aiEnabled: boolean;
+                        /** Format: date-time */
+                        aiResumeAt?: string;
                         /** Format: uuid */
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
@@ -9296,6 +9302,8 @@ export interface operations {
                         status: "pending" | "approved" | "blocked";
                         /** @default true */
                         aiEnabled: boolean;
+                        /** Format: date-time */
+                        aiResumeAt?: string;
                         /** Format: uuid */
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
@@ -20655,6 +20663,9 @@ export interface operations {
                             calls: number;
                             failed: number;
                         }[];
+                        salesAttendant?: {
+                            whatsappBusinessCloudApiMessagesSent: number;
+                        };
                     };
                 };
             };

@@ -834,6 +834,7 @@ export const contacts = pgTable(
     status: contactStatus('status').notNull(),
     aiEnabled: boolean('ai_enabled').notNull().default(true),
     aiPausedAt: timestamp('ai_paused_at', { withTimezone: true }),
+    aiResumeAt: timestamp('ai_resume_at', { withTimezone: true }),
     sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'set null' }),
     // The first message, kept until approval releases it exactly once.
     heldMessage: jsonb('held_message'),

@@ -134,7 +134,9 @@ for (const aiEnabled of [true, false]) {
     expect(result.control?.getAttribute('aria-label')).toBe('AI replies for Customer');
     expect(result.control?.getAttribute('aria-checked')).toBe(String(aiEnabled));
     expect(result.element.textContent).toContain('Channel automation paused');
-    expect(result.element.textContent).toContain('never replayed');
+    expect(result.element.textContent).not.toContain(
+      'Separate from approval and channel automation.',
+    );
     await act(async () => result.control?.click());
     expect(result.updateContact).toHaveBeenCalledExactlyOnceWith(profile.id, contact.id, {
       aiEnabled: !aiEnabled,
@@ -170,6 +172,10 @@ it('offers AI controls and a manual composer on messaging channels, but not API 
   for (const channel of ['whatsapp', 'whatsapp-business', 'telegram']) {
     const view = await render({ channel, aiEnabled: false });
     expect(view.control).not.toBeNull();
+    expect(view.control?.parentElement?.classList.contains('conversation-ai-replies')).toBe(true);
+    expect(view.element.textContent).not.toContain(
+      'Separate from approval and channel automation.',
+    );
     expect(view.element.querySelector('[aria-label="Send as agent"]')).not.toBeNull();
     expect(view.element.querySelector('.session-model')).toBeNull();
   }
@@ -207,4 +213,13 @@ it('sends a message directly as the agent while chat AI is paused', async () => 
     'A person will take over from here.',
     [],
   );
+});
+
+it('shows when AI replies will resume after a manual reply', async () => {
+  const view = await render({
+    aiEnabled: false,
+    contacts: [{ ...contact, aiEnabled: false, aiResumeAt: '2026-10-24T16:30:00.000Z' }],
+  });
+  expect(view.control?.getAttribute('aria-label')).toContain('resumes at');
+  expect(view.element.querySelector('.conversation-ai-replies small')).not.toBeNull();
 });

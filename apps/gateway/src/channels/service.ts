@@ -12,7 +12,7 @@ import {
   manualReplyResultSchema,
   whatsappBusinessSetupSchema,
 } from '@jian/contracts';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { assertFound, GatewayError, NoModelAvailable } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -35,6 +35,7 @@ import {
   channelInbox,
   contacts,
   mediaAssets,
+  messages,
   metaBindings,
   metaInbox,
   runs,
@@ -171,6 +172,7 @@ const NO_MODEL_NOTICE =
 
 /** One notice per chat in this window, so a person who writes five times is told once. */
 const NO_MODEL_NOTICE_MS = 10 * 60_000;
+const MANUAL_REPLY_PAUSE_MS = 60 * 60_000;
 
 /** Resolves after the wait, or at once when the gateway is shutting down. */
 function pause(ms: number, signal: AbortSignal): Promise<void> {
@@ -1052,7 +1054,11 @@ export class Channels {
           data.chatId,
           data.scope === 'group' ? data.chatId : data.actorId,
         );
-        if (existing && !existing.aiEnabled) return null;
+        if (existing && !existing.aiEnabled) {
+          if (existing.status === 'approved' && existing.sessionId)
+            await this.rememberPausedInbound(tx, channel, existing, data);
+          return null;
+        }
         if (connectionGeneration !== undefined) {
           const id = createHash('sha256')
             .update(JSON.stringify([channel.id, data.requestKey]))
@@ -1243,6 +1249,60 @@ export class Channels {
 
     if (!run) return { accepted: false, contact: 'approved' as const };
     return { accepted: true, runId: run.id, contact: 'approved' as const };
+  }
+
+  /** Keep the customer side of a paused chat in history without creating an AI run. */
+  private async rememberPausedInbound(
+    tx: Queryable,
+    channel: ChannelRecord,
+    contact: ContactRecord,
+    data: IncomingMessage,
+  ) {
+    const sessionId = contact.sessionId;
+    if (!sessionId) return;
+    const id = stableUuid(`paused-inbound:${channel.id}:${sessionId}:${data.requestKey}`);
+    const [previous] = await tx
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.id, id))
+      .limit(1);
+    if (previous) return;
+
+    const files: string[] = [];
+    for (const [index, media] of (data.media ?? []).entries()) {
+      const mediaId = await this.services.media
+        ?.keepHeard(
+          tx,
+          channel.profileId,
+          sessionId,
+          `heard:${channel.id}:${data.requestKey}:${index}`,
+          media,
+        )
+        .catch(() => undefined);
+      files.push(
+        mediaId
+          ? `[File not opened, it was not sent to you: ${media.name ?? media.mimeType}, media ID ${mediaId}. Open it with analyze_media if it matters.]`
+          : '[File not kept: it was not sent to you.]',
+      );
+    }
+
+    await insertMessage(
+      tx,
+      {
+        id,
+        profileId: channel.profileId,
+        sessionId,
+        role: 'user',
+        content: [
+          data.scope === 'group' ? `${data.displayName ?? data.actorId}: ${data.text}` : data.text,
+          ...files,
+        ].join('\n'),
+        ...(data.scope === 'group' ? { author: authorOf(data) } : {}),
+        createdAt: new Date().toISOString(),
+      },
+      true,
+    );
+    await recordEvent(tx, Date.now, channel.profileId, 'session.message', { sessionId });
   }
 
   /**
@@ -1654,6 +1714,15 @@ export class Channels {
       if (!['whatsapp', 'whatsapp-business', 'telegram'].includes(channel.type))
         throw new GatewayError(409, 'Manual replies are not available for this channel');
 
+      await this.people.pauseForManualReply(
+        profileId,
+        contact.id,
+        new Date(Date.now() + MANUAL_REPLY_PAUSE_MS).toISOString(),
+        tx,
+      );
+      await this.discardInbox(tx, contact.channelId, contact.chatId);
+      await this.cancelAutomationRuns(tx, profileId, contact.channelId, contact.chatId);
+
       await bindMedia(tx, profileId, sessionId, data.mediaIds);
       const messageId = stableUuid(`manual-message:${profileId}:${sessionId}:${data.requestKey}`);
       const content = [data.text, ...data.mediaIds.map(mediaMarker)].filter(Boolean).join('\n');
@@ -1713,6 +1782,7 @@ export class Channels {
   }
 
   private async dispatchOutbound() {
+    await this.resumeExpiredAiPauses();
     await this.recoverUncertainDeliveries();
 
     const deliveries = await listDeliveriesByPhase(this.services.store.db, 'pending', 20);
@@ -1850,6 +1920,23 @@ export class Channels {
           }),
         );
       }
+    }
+  }
+
+  private async resumeExpiredAiPauses() {
+    const due = await this.services.store.db
+      .select({ profileId: contacts.profileId, id: contacts.id })
+      .from(contacts)
+      .where(and(eq(contacts.aiEnabled, false), lte(contacts.aiResumeAt, new Date())))
+      .limit(100);
+
+    for (const { profileId, id } of due) {
+      await this.services.store.transaction(profileId, async (tx) => {
+        const contact = await this.people.resumeExpiredPause(profileId, id, tx);
+        if (!contact) return;
+        await this.discardInbox(tx, contact.channelId, contact.chatId);
+        await this.cancelAutomationRuns(tx, profileId, contact.channelId, contact.chatId);
+      });
     }
   }
 

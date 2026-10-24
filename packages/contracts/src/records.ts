@@ -294,6 +294,11 @@ export const profileStatsSchema = z.strictObject({
       failed: z.number().int().nonnegative(),
     }),
   ),
+  salesAttendant: z
+    .strictObject({
+      whatsappBusinessCloudApiMessagesSent: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 
 export type ProfileStats = z.infer<typeof profileStatsSchema>;

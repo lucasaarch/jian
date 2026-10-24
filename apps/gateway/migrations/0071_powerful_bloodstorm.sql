@@ -1,0 +1,1 @@
+ALTER TABLE "contacts" ADD COLUMN "ai_resume_at" timestamp with time zone;

@@ -138,6 +138,16 @@ export function Overview({
           />
         </header>
         <UsageSummary stats={stats} />
+        {profile.professionId === 'attendant' && stats.salesAttendant && (
+          <div className="stat-tiles">
+            <Tile
+              icon={<MessagesSquare size={18} />}
+              label="WhatsApp Business Cloud API messages sent"
+            >
+              <CountUp value={stats.salesAttendant.whatsappBusinessCloudApiMessagesSent} />
+            </Tile>
+          </div>
+        )}
       </section>
 
       {stats.channels.length > 0 && (
