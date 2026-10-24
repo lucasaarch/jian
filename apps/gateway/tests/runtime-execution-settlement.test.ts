@@ -26,12 +26,13 @@ function gate() {
   });
   return { promise, release };
 }
-async function fixture() {
+async function fixture(mcpServers: { name: string; url: string }[] = []) {
   const services = await testServices();
   const profile = await services.profiles.createProfile({
     name: 'Worker',
     instructions: 'Help.',
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    mcpServers,
   });
   const session = await services.sessions.createSession(profile.id, {});
   const run = await services.runs.submit(profile.id, session.id, {
@@ -200,19 +201,32 @@ it('drains an already-running interval heartbeat before settlement', async () =>
 it.each(['unavailable', 'invoked'] as const)(
   'settles known MCP success, but retains unknown discovery failures: %s',
   async (mode) => {
-    const { services, profile, run, marker } = await fixture();
-    const discover = mcpModule.connectMcpTools;
+    const { services, profile, run, marker } = await fixture([
+      { name: 'test', url: 'http://127.0.0.1:4311/mcp' },
+    ]);
     const called = vi.fn(async () => 'Known successful result');
-    vi.spyOn(mcpModule, 'connectMcpTools').mockImplementation(async (current, tools, context) => {
-      const result = await discover(current, tools, context);
-      if (mode === 'unavailable')
-        return { ...result, unavailable: [{ name: 'test', reason: 'discovery failed' }] };
+    vi.spyOn(mcpModule, 'connectMcpTools').mockImplementation(async (_current, tools) => {
+      if (mode === 'unavailable') {
+        return {
+          mcpToolNames: [],
+          selectedMcpTools: new Set<string>(),
+          unavailable: [{ name: 'test', reason: 'discovery failed' }],
+          catalog: [],
+          revalidateMcpTools: async () => {},
+        };
+      }
       tools.mcp_test = tool({
         description: 'Test MCP tool',
         inputSchema: z.object({}),
         execute: called,
       });
-      return { ...result, mcpToolNames: ['mcp_test'], selectedMcpTools: new Set(['mcp_test']) };
+      return {
+        mcpToolNames: ['mcp_test'],
+        selectedMcpTools: new Set(['mcp_test']),
+        unavailable: [],
+        catalog: [{ name: 'mcp_test', server: 'test', tool: 'test', description: 'Test tool' }],
+        revalidateMcpTools: async () => {},
+      };
     });
     let step = 0;
     const model = mockModel({

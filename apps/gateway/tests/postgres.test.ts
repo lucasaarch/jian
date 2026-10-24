@@ -82,10 +82,25 @@ const services = {
   store,
 };
 
+const submitRun = services.runs.submit.bind(services.runs);
+services.runs.submit = (profileId, sessionId, runInput, options) =>
+  submitRun(profileId, sessionId, runInput, {
+    ...options,
+    ...(options?.ownerMessage === undefined &&
+    !options?.systemTask &&
+    !options?.authorityFrom &&
+    !options?.call &&
+    !options?.subagent &&
+    !options?.continuationOf
+      ? { ownerMessage: true }
+      : {}),
+  });
+
 const input = {
   name: 'CI',
   instructions: 'Help.',
   model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  professionId: 'developer',
 };
 
 beforeAll(async () => {
@@ -585,13 +600,9 @@ describe('PostgreSQL durability', () => {
   );
 
   it('persists classified run authority without granting newly enabled permissions on continuation', async () => {
-    const legacy = await services.profiles.createProfile(input);
-    await store.db
-      .update(profiles)
-      .set({ professionId: 'developer' })
-      .where(eq(profiles.id, legacy.id));
-    const profile = await services.profiles.updateProfile(legacy.id, {
-      expectedVersion: legacy.version,
+    const created = await services.profiles.createProfile({ ...input, professionId: 'attendant' });
+    const profile = await services.profiles.updateProfile(created.id, {
+      expectedVersion: created.version,
       name: 'Classified durability',
       allowWebSearch: false,
     });
@@ -602,7 +613,7 @@ describe('PostgreSQL durability', () => {
       { text: 'Work', requestKey: 'original' },
       { ownerMessage: true },
     );
-    expect(original.authority?.professionId).toBe('developer');
+    expect(original.authority?.professionId).toBe('attendant');
     expect(original.authority?.capabilities).not.toContain('web.browse');
     expect((await services.runs.run(profile.id, original.id)).authority).toEqual(
       original.authority,
@@ -1027,6 +1038,11 @@ describe('PostgreSQL durability', () => {
     const queue = new RunQueue(new PgBoss(connectionString), services, runtime, () => {});
     const caller = await services.profiles.createProfile({ ...input, name: 'Caller' });
     const callee = await services.profiles.createProfile({ ...input, name: 'Callee' });
+    await services.teams.create({
+      name: 'Concurrent agent calls',
+      description: 'Shared team for the peer call integration test.',
+      profileIds: [caller.id, callee.id],
+    });
     const session = await services.sessions.createSession(caller.id, { title: 'Owner' });
     const peers = new Peers(services, Date.now, { answerWithin: 25_000, pollEvery: 100 });
 
