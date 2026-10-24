@@ -605,6 +605,7 @@ it('reconnects after a closed MCP client instead of treating the call as uncerta
   const run = {
     profileId: 'p',
     profile: {
+      professionId: null,
       mcpServers: [{ name: 'github', url: `${origin}/mcp` }],
     },
   } as unknown as Run;

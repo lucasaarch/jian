@@ -6412,6 +6412,12 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                         };
+                        authority?: {
+                            /** @enum {string} */
+                            professionId: "developer" | "attendant";
+                            policyVersion: number;
+                            capabilities: ("conversation.control" | "conversation.read" | "conversation.send" | "memory.use" | "skills.read" | "skills.write" | "activity.read" | "decisions.query" | "schedules.manage" | "subscriptions.github" | "workspace.files" | "process.exec" | "ssh.manage" | "web.browse" | "remote.control" | "mcp.http" | "mcp.stdio" | "tasks.delegate" | "peers.call" | "identity.manage" | "profiles.create" | "media.use" | "media.image" | "coordination.lease")[];
+                        };
                         requestKey: string;
                         input: string;
                         /** @enum {string} */
@@ -6658,6 +6664,12 @@ export interface operations {
                             spawnKey: string;
                             inputHash: string;
                             repositories?: string[];
+                        };
+                        authority?: {
+                            /** @enum {string} */
+                            professionId: "developer" | "attendant";
+                            policyVersion: number;
+                            capabilities: ("conversation.control" | "conversation.read" | "conversation.send" | "memory.use" | "skills.read" | "skills.write" | "activity.read" | "decisions.query" | "schedules.manage" | "subscriptions.github" | "workspace.files" | "process.exec" | "ssh.manage" | "web.browse" | "remote.control" | "mcp.http" | "mcp.stdio" | "tasks.delegate" | "peers.call" | "identity.manage" | "profiles.create" | "media.use" | "media.image" | "coordination.lease")[];
                         };
                         requestKey: string;
                         input: string;
@@ -15195,6 +15207,12 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                         };
+                        authority?: {
+                            /** @enum {string} */
+                            professionId: "developer" | "attendant";
+                            policyVersion: number;
+                            capabilities: ("conversation.control" | "conversation.read" | "conversation.send" | "memory.use" | "skills.read" | "skills.write" | "activity.read" | "decisions.query" | "schedules.manage" | "subscriptions.github" | "workspace.files" | "process.exec" | "ssh.manage" | "web.browse" | "remote.control" | "mcp.http" | "mcp.stdio" | "tasks.delegate" | "peers.call" | "identity.manage" | "profiles.create" | "media.use" | "media.image" | "coordination.lease")[];
+                        };
                         requestKey: string;
                         input: string;
                         /** @enum {string} */
@@ -17805,6 +17823,12 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                         };
+                        authority?: {
+                            /** @enum {string} */
+                            professionId: "developer" | "attendant";
+                            policyVersion: number;
+                            capabilities: ("conversation.control" | "conversation.read" | "conversation.send" | "memory.use" | "skills.read" | "skills.write" | "activity.read" | "decisions.query" | "schedules.manage" | "subscriptions.github" | "workspace.files" | "process.exec" | "ssh.manage" | "web.browse" | "remote.control" | "mcp.http" | "mcp.stdio" | "tasks.delegate" | "peers.call" | "identity.manage" | "profiles.create" | "media.use" | "media.image" | "coordination.lease")[];
+                        };
                         requestKey: string;
                         input: string;
                         /** @enum {string} */
@@ -19584,6 +19608,12 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                         };
+                        authority?: {
+                            /** @enum {string} */
+                            professionId: "developer" | "attendant";
+                            policyVersion: number;
+                            capabilities: ("conversation.control" | "conversation.read" | "conversation.send" | "memory.use" | "skills.read" | "skills.write" | "activity.read" | "decisions.query" | "schedules.manage" | "subscriptions.github" | "workspace.files" | "process.exec" | "ssh.manage" | "web.browse" | "remote.control" | "mcp.http" | "mcp.stdio" | "tasks.delegate" | "peers.call" | "identity.manage" | "profiles.create" | "media.use" | "media.image" | "coordination.lease")[];
+                        };
                         requestKey: string;
                         input: string;
                         /** @enum {string} */
@@ -19824,6 +19854,12 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                         };
+                        authority?: {
+                            /** @enum {string} */
+                            professionId: "developer" | "attendant";
+                            policyVersion: number;
+                            capabilities: ("conversation.control" | "conversation.read" | "conversation.send" | "memory.use" | "skills.read" | "skills.write" | "activity.read" | "decisions.query" | "schedules.manage" | "subscriptions.github" | "workspace.files" | "process.exec" | "ssh.manage" | "web.browse" | "remote.control" | "mcp.http" | "mcp.stdio" | "tasks.delegate" | "peers.call" | "identity.manage" | "profiles.create" | "media.use" | "media.image" | "coordination.lease")[];
+                        };
                         requestKey: string;
                         input: string;
                         /** @enum {string} */
@@ -20063,6 +20099,12 @@ export interface operations {
                             spawnKey: string;
                             inputHash: string;
                             repositories?: string[];
+                        };
+                        authority?: {
+                            /** @enum {string} */
+                            professionId: "developer" | "attendant";
+                            policyVersion: number;
+                            capabilities: ("conversation.control" | "conversation.read" | "conversation.send" | "memory.use" | "skills.read" | "skills.write" | "activity.read" | "decisions.query" | "schedules.manage" | "subscriptions.github" | "workspace.files" | "process.exec" | "ssh.manage" | "web.browse" | "remote.control" | "mcp.http" | "mcp.stdio" | "tasks.delegate" | "peers.call" | "identity.manage" | "profiles.create" | "media.use" | "media.image" | "coordination.lease")[];
                         };
                         requestKey: string;
                         input: string;

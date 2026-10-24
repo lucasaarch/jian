@@ -62,6 +62,7 @@ it('never offers the agent a tool the owner switched off, not even to search for
   const run = {
     profileId: 'p',
     profile: {
+      professionId: null,
       mcpServers: [
         {
           name: 'docs',

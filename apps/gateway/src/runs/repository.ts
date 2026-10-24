@@ -51,6 +51,7 @@ function toRun(row: RunRow, document: Profile): Run {
   return {
     id: row.id,
     profileId: row.profileId,
+    ...(row.authority ? { authority: row.authority } : {}),
     sessionId: row.sessionId,
     ...(row.subagent ? { subagent: row.subagent } : {}),
     requestKey: row.requestKey,
@@ -82,6 +83,7 @@ function toRow(run: Run): typeof runs.$inferInsert {
   return {
     id: run.id,
     profileId: run.profileId,
+    authority: run.authority ?? null,
     sessionId: run.sessionId,
     subagent: run.subagent ?? null,
     profileVersion: run.profile.version,

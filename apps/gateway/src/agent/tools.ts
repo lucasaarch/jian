@@ -18,6 +18,7 @@ import type { Outreach } from '../errands/port.js';
 import { sameSubject } from '../memories/duplicates.js';
 import type { MemoryWriter } from '../memories/port.js';
 import type { PeerAgents } from '../peers/port.js';
+import { currentRunAuthority } from '../professions/effective.js';
 import type { ProfileAdmin } from '../profiles/port.js';
 import type { Remote } from '../remote/service.js';
 import type { RunExecution, RunReader } from '../runs/port.js';
@@ -368,7 +369,12 @@ export function profileTools(
       description: 'Load instructions for a skill enabled on this profile.',
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
-        const skill = findSkill(run.profile, name);
+        const authority = currentRunAuthority(
+          run.profile,
+          await services.profiles.profile(run.profileId),
+          run.authority,
+        );
+        const skill = findSkill(run.profile, name, authority);
 
         if (!skill) {
           throw new GatewayError(404, 'Skill not found');

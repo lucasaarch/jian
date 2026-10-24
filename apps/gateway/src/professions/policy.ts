@@ -16,7 +16,7 @@ export type AuthorityConstraints = {
   inherited?: ProfessionAuthority;
 };
 
-/** Pure foundation for later enforcement; not yet connected to the running agent. */
+/** Shared pure policy used by runtime and service-layer authorization. */
 export function resolveProfessionAuthority(
   professionId: unknown,
   constraints: AuthorityConstraints,

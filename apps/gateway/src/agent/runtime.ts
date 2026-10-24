@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { MCPClient } from '@ai-sdk/mcp';
-import { LEARNING_SESSION_CHANNEL, type ModelConfig, type Run } from '@jian/contracts';
+import {
+  LEARNING_SESSION_CHANNEL,
+  type McpServer,
+  type ModelConfig,
+  type Run,
+} from '@jian/contracts';
 import {
   generateText,
   type LanguageModel,
@@ -16,8 +21,17 @@ import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../contex
 import { compactPrompt, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
 import { nowIso } from '../core/clock.js';
+import { GatewayError } from '../core/errors.js';
 import type { Learning } from '../learning/service.js';
 import type { Media } from '../media/service.js';
+import { currentRunAuthority } from '../professions/effective.js';
+import { requireCapability } from '../professions/policy.js';
+import {
+  type AdditionalToolCapabilities,
+  filterToolSet,
+  guardToolSet,
+  requireToolCapabilities,
+} from '../professions/tools.js';
 import { anthropicCredential, withClaudeCodeIdentity } from '../providers/claude-subscription.js';
 import { lightEffort, reasoningProviderOptions } from '../providers/effort.js';
 import { resolveModel } from '../providers/models.js';
@@ -206,6 +220,29 @@ export class AgentRuntime {
     pulse.unref();
 
     try {
+      const authorityNow = async () =>
+        currentRunAuthority(
+          run.profile,
+          await this.services.profiles.profile(profileId),
+          run.authority,
+        );
+      const authority = await authorityNow();
+      const authorizeMcp = async (server: McpServer, toolName?: string) => {
+        const current = await this.services.profiles.profile(profileId);
+        const effective = currentRunAuthority(run.profile, current, run.authority);
+        if (effective === undefined) return;
+        requireCapability(effective, server.transport === 'stdio' ? 'mcp.stdio' : 'mcp.http');
+        const configured = current.mcpServers.find((entry) => entry.name === server.name);
+        // A connection is tied to the exact configuration authorized at submission. Do not
+        // silently reuse credentials/transports after an owner edit; a new run can reconnect.
+        if (
+          !configured ||
+          JSON.stringify(configured) !== JSON.stringify(server) ||
+          (toolName && configured.disabledTools?.includes(toolName))
+        ) {
+          throw new GatewayError(403, 'MCP configuration changed; start a new run');
+        }
+      };
       const defaults = await this.services.providers?.modelDefaults?.(profileId);
       const policy = run.contextPolicy ?? run.profile.contextPolicy;
       const config = run.model ?? run.profile.model;
@@ -247,9 +284,19 @@ export class AgentRuntime {
       const learning =
         (await this.services.sessions.session(profileId, run.sessionId)).channel ===
         LEARNING_SESSION_CHANNEL;
-      const gitAccess = run.subagent
-        ? await prepareWorkerWorkspace(run)
-        : await prepareProfileGitAccess(run.profileId);
+      const workspaceAuthority = await authorityNow();
+      const canPrepareWorkspace =
+        workspaceAuthority === undefined ||
+        ['process.exec', 'workspace.files', 'ssh.manage'].every((capability) =>
+          workspaceAuthority.capabilities.includes(
+            capability as 'process.exec' | 'workspace.files' | 'ssh.manage',
+          ),
+        );
+      const gitAccess = canPrepareWorkspace
+        ? run.subagent
+          ? await prepareWorkerWorkspace(run)
+          : await prepareProfileGitAccess(run.profileId)
+        : { readOnly: [], writable: [] };
       const tools: ToolSet = {
         ...profileTools(this.services, run, gitAccess),
         ...this.services.media?.tools(run, async (usage) => {
@@ -289,23 +336,49 @@ export class AgentRuntime {
       if (learning) {
         for (const name of Object.keys(tools)) if (!LEARNING_TOOLS.has(name)) delete tools[name];
       }
+      if (authority !== undefined) {
+        const permitted = filterToolSet(tools, authority);
+        for (const name of Object.keys(tools)) if (!(name in permitted)) delete tools[name];
+      }
       // Loaded within the run and never across runs: a turn states what it needs. A look back
       // has only a handful, all loaded from the start.
       const loadedTools = new Set<string>(learning ? Object.keys(tools) : []);
       const { gated } = deferTools(tools, loadedTools);
-      const { mcpToolNames, selectedMcpTools, unavailable, catalog } = await connectMcpTools(
-        learning ? { ...run, profile: { ...run.profile, mcpServers: [] } } : run,
-        tools,
-        {
-          vault: this.options.vault,
-          secrets,
-          clients,
-          fetcher: outbound.fetch,
-          signal,
-          ...(this.options.mcpOAuth ? { oauth: this.options.mcpOAuth } : {}),
-        },
-      );
+      const { mcpToolNames, selectedMcpTools, unavailable, catalog, revalidateMcpTools } =
+        await connectMcpTools(
+          {
+            ...run,
+            profile: {
+              ...run.profile,
+              mcpServers: learning
+                ? []
+                : run.profile.mcpServers.filter(
+                    (server) =>
+                      authority === undefined ||
+                      authority.capabilities.includes(
+                        server.transport === 'stdio' ? 'mcp.stdio' : 'mcp.http',
+                      ),
+                  ),
+            },
+          },
+          tools,
+          {
+            vault: this.options.vault,
+            secrets,
+            clients,
+            fetcher: outbound.fetch,
+            signal,
+            authorize: authorizeMcp,
+            ...(this.options.mcpOAuth ? { oauth: this.options.mcpOAuth } : {}),
+          },
+        );
 
+      const dynamicCapabilities: AdditionalToolCapabilities = Object.fromEntries(
+        catalog.map((entry) => {
+          const server = run.profile.mcpServers.find((item) => item.name === entry.server);
+          return [entry.name, [server?.transport === 'stdio' ? 'mcp.stdio' : 'mcp.http']];
+        }),
+      );
       const mcpNote = [availableNote(catalog), unavailableNote(unavailable)]
         .filter(Boolean)
         .join('\n\n');
@@ -315,7 +388,7 @@ export class AgentRuntime {
       }
 
       const context = await this.services.contexts.context(run);
-      const cavemanSkill = findSkill(run.profile, 'caveman');
+      const cavemanSkill = findSkill(run.profile, 'caveman', authority);
       let currentCavemanMode: CavemanMode = cavemanSkill
         ? await cavemanMode(this.services.store.db, profileId, run.sessionId)
         : 'off';
@@ -325,6 +398,9 @@ export class AgentRuntime {
       const judge = this.services.decisions?.judge;
       const localHolds = new WeakSet<object>();
 
+      // Always check inside Decisions too: even a legacy run can become classified while
+      // approval is pending. Only a still-legacy live decision preserves compatibility.
+      Object.assign(tools, guardToolSet(tools, authorityNow, dynamicCapabilities));
       if (judge) {
         guardTools(
           tools,
@@ -367,6 +443,10 @@ export class AgentRuntime {
 
               signal.throwIfAborted();
               await this.services.lifecycle.heartbeat(profileId, runId, owner);
+              const liveAuthority = await authorityNow();
+              if (liveAuthority !== undefined) {
+                requireToolCapabilities(liveAuthority, name, input, dynamicCapabilities);
+              }
 
               await this.services.lifecycle.checkpoint(profileId, runId, owner, {
                 phase: 'tool-started',
@@ -520,7 +600,7 @@ export class AgentRuntime {
       };
 
       const instructions = dress(context.system);
-      const codingSkill = findSkill(run.profile, 'ponytail');
+      const codingSkill = findSkill(run.profile, 'ponytail', authority);
       const instructionsForMode = (mode: PonytailMode) =>
         !codingSkill
           ? instructions
@@ -593,7 +673,13 @@ export class AgentRuntime {
             );
           });
 
-          const activeNames = Object.keys(guarded).filter((name) =>
+          await revalidateMcpTools();
+          const liveAuthority = await authorityNow();
+          const permitted =
+            liveAuthority === undefined
+              ? guarded
+              : filterToolSet(guarded, liveAuthority, dynamicCapabilities);
+          const activeNames = Object.keys(permitted).filter((name) =>
             mcpToolNames.includes(name)
               ? selectedMcpTools.has(name)
               : !gated.has(name) || loadedTools.has(name),
@@ -1103,6 +1189,11 @@ function executionFailureMessage(
   if (budget) {
     return budget.message;
   }
+
+  const denied = causes(error).find(
+    (cause) => cause instanceof GatewayError && cause.statusCode === 403,
+  );
+  if (denied) return `Execution denied: ${reason(denied, secrets)}`;
 
   // Redacted, because a refusal can quote back what was sent.
   const { status, said } = providerRefusal(error);

@@ -12,6 +12,7 @@ import { mcpOauthClientSecretKey, mcpValueSecret } from '../agent/mcp-connect.js
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { requireProfessionCeiling } from '../professions/effective.js';
 import { environmentProvider, type ProviderKind, providerCatalog } from '../providers/catalog.js';
 import type { Vault } from '../security/vault.js';
 import type { Queryable, Store } from '../storage/database.js';
@@ -310,6 +311,8 @@ export class Profiles {
         continue;
       }
 
+      // Validate before reading/copying any source credentials, not only at the final update.
+      requireProfessionCeiling(target, server.transport === 'stdio' ? 'mcp.stdio' : 'mcp.http');
       const copy = async (kind: 'header' | 'env', list: McpServer['headers']) =>
         Promise.all(
           list.map(async (value) => {
@@ -384,6 +387,14 @@ export class Profiles {
         updatedAt: nowIso(this.clock),
       };
 
+      if (patch.mcpServers) {
+        for (const server of patch.mcpServers) {
+          requireProfessionCeiling(
+            current,
+            server.transport === 'stdio' ? 'mcp.stdio' : 'mcp.http',
+          );
+        }
+      }
       await this.validateReferences(patched, tx);
       const profile = await this.storeMcpTokens(patched, current, tx);
 

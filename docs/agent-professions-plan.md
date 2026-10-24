@@ -1,6 +1,6 @@
 # Profissões de agentes — plano técnico
 
-Status: plano do produto completo, com fundação B inativa implementada nesta branch. Profissões ainda não disponíveis para uso.
+Status: plano do produto completo, com fundação B e integração inicial de autorização ao runtime nesta branch. Profissões ainda não disponíveis para uso.
 Base inspecionada: `8f1d637` (main após PR #88). Data: 23/10/2026.
 
 ### Etapa B — fundação de dados e política inativa
@@ -11,7 +11,13 @@ A migration `0063_profile-profession-foundation` adiciona `profiles.profession_i
 
 O [inventário de capacidades](agent-capability-inventory.md) relaciona 73 ferramentas nativas e os caminhos indiretos, HTTP e background. O catálogo tipado define 24 capacidades reutilizáveis. `GET /v1/professions`, autenticado pelo dono, retorna definições e `assignable: false`; não concede acesso nem substitui autorização. O resolvedor puro calcula teto ∩ habilitações ∩ contexto ∩ autoridade original, com negação explícita e sem fallback para profissão desconhecida. Schema de autoridade não é credencial nem input aceito de ferramenta/cliente.
 
-Antes de concluir B e ativar C/D: integrar autoridade persistida aos jobs e configuração efetiva, operação administrativa de classificação com concorrência/impacto e descritor efetivo por perfil. Esses caminhos ficam deliberadamente indisponíveis na fundação para não classificar um Atendente que ainda teria o runtime antigo. O inventário é mapa para enforcement, não certificação de isolamento já existente. Nenhuma migration foi aplicada ao banco da instalação.
+### Integração inicial de execução — ainda sem ativação
+
+A migration `0064_run-profession-authority` adiciona autoridade nullable aos runs, derivada exclusivamente pelo servidor. Não há backfill permissivo: runs classificados sem autoridade original falham fechados; perfis legados nulos preservam o comportamento anterior. O runtime intersecta perfil congelado, configuração atual e autoridade original, filtra ferramentas/grupos/skills antes da oferta e revalida antes de executar, inclusive após Decisions. A tabela de capacidades inclui todas as ferramentas nativas e exige `workspace.files` no ramo path de `send_file`. Preparação de Git/SSH/workspace, transporte MCP, probes/OAuth, SSH e Remote têm verificações próprias. Revogar configuração não cancela retroativamente um efeito já iniciado.
+
+Retomadas e workers do mesmo perfil preservam o teto original e as restrições atuais. Como ainda falta proveniência durável multiperfil e isolamento de contexto por origem, chamadas classificadas entre perfis, criação de perfis por agente classificada, canais externos/grupos, agendas, inscrições, auto-continuação de objetivos e Learning continuam bloqueados ou ignorados de forma explícita. Isso é contenção, não integração completa desses fluxos. Configuração MCP e cópia de credenciais também respeitam o teto; descoberta, aliases, seleção e execução usam revalidação da configuração.
+
+Antes da ativação final: concluir autoridade durável dos fluxos bloqueados, isolamento por origem, operação administrativa de classificação com concorrência/impacto, descritor efetivo por perfil e UI. Criação explícita de Developer/Atendente permanece rejeitada e o catálogo continua `assignable: false`. Não há flag de ativação. O inventário descreve a base anterior e os gaps; não certifica isolamento completo. Nenhuma migration foi aplicada ao banco da instalação.
 
 ## 1. Objetivo e limites
 
@@ -244,4 +250,4 @@ Definição de pronto: todas as fronteiras inventariadas possuem autorização/t
 
 ## 14. Resultado desta etapa
 
-A etapa A produziu o plano; a mesma branch/PR agora inclui a fundação B inativa descrita no início, contratos/SDK, migration aditiva e testes. Não modifica o executor nem ativa a separação de profissões. Perfis atuais permanecem sem classificação e conservam seu comportamento até a ativação coordenada. Branch de trabalho: `docs/agent-professions-plan`, PR #89. Merge e deploy não autorizados. As provas de aceitação completas da seção 12 são metas da entrega final, não alegações de enforcement já implementado.
+A etapa A produziu o plano; a mesma branch/PR inclui a fundação B inativa e a integração inicial de execução descritas no início, contratos/SDK, migrations aditivas e testes. O executor agora contém verificações para perfis classificados, mas a classificação e criação com profissão seguem indisponíveis. Perfis atuais permanecem sem classificação e conservam seu comportamento até a ativação coordenada. Branch de trabalho: `docs/agent-professions-plan`, PR #89. Merge e deploy não autorizados. As provas de aceitação completas da seção 12 são metas da entrega final, não alegações de enforcement já implementado.

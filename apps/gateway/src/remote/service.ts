@@ -10,6 +10,8 @@ import {
 } from '@jian/contracts';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { GatewayError } from '../core/errors.js';
+import { requireProfileCapability } from '../professions/effective.js';
+import { findProfile } from '../profiles/repository.js';
 import type { Store } from '../storage/database.js';
 import { profiles, remoteMachines, remoteTasks } from '../storage/schema.js';
 
@@ -152,6 +154,7 @@ export class Remote {
   }
 
   async listForProfile(profileId: string) {
+    await this.requireRemoteCapability(profileId);
     const rows = await this.store.db
       .select()
       .from(remoteMachines)
@@ -225,6 +228,7 @@ export class Remote {
     },
     signal?: AbortSignal,
   ) {
+    await this.requireRemoteCapability(profileId);
     const taskId = randomUUID();
     const now = new Date(this.clock());
     await this.store.db.insert(remoteTasks).values({
@@ -348,7 +352,32 @@ export class Remote {
       )
       .orderBy(asc(remoteTasks.createdAt))
       .limit(20);
-    const next = tasks.find((task) => machine.allowedProfileIds.includes(task.profileId));
+    let next: (typeof tasks)[number] | undefined;
+    for (const task of tasks) {
+      if (!machine.allowedProfileIds.includes(task.profileId)) continue;
+      try {
+        // Queued work is not a grant: the live profile may have lost this capability.
+        await this.requireRemoteCapability(task.profileId);
+        next = task;
+        break;
+      } catch (error) {
+        if (!(error instanceof GatewayError)) throw error;
+        await this.store.db
+          .update(remoteTasks)
+          .set({
+            status: 'failed',
+            result: {
+              taskId: task.id,
+              exitCode: null,
+              stdout: '',
+              stderr: error.message,
+              timedOut: false,
+            },
+            updatedAt: new Date(this.clock()),
+          })
+          .where(and(eq(remoteTasks.id, task.id), eq(remoteTasks.status, 'queued')));
+      }
+    }
     if (!next) return { task: null };
     const [claimed] = await this.store.db
       .update(remoteTasks)
@@ -421,7 +450,14 @@ export class Remote {
     return { ok: true as const };
   }
 
+  private async requireRemoteCapability(profileId: string) {
+    const profile = await findProfile(this.store.db, profileId);
+    if (!profile) throw new GatewayError(404, 'Profile not found');
+    requireProfileCapability(profile, 'remote.control');
+  }
+
   private async machineForProfile(profileId: string, machineId: string) {
+    await this.requireRemoteCapability(profileId);
     const [machine] = await this.store.db
       .select()
       .from(remoteMachines)

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { groupTurnSchema } from './channels.js';
 import { agentCallOriginSchema } from './peers.js';
+import { professionAuthoritySchema } from './professions.js';
 import {
   contextPolicySchema,
   modelSchema,
@@ -152,6 +153,8 @@ export const runRecordSchema = z.strictObject({
   profileId: uuid,
   sessionId: uuid,
   subagent: subagentSchema.optional(),
+  /** Server-derived authority; never an accepted submission field. */
+  authority: professionAuthoritySchema.optional(),
   requestKey: z.string(),
   input: z.string(),
   status: z.enum([

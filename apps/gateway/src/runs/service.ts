@@ -15,6 +15,8 @@ import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError, NoModelAvailable } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { bindMedia, mediaMarker } from '../media/repository.js';
+import { currentRunAuthority, profileAuthority } from '../professions/effective.js';
+import { requireCapability } from '../professions/policy.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { ModelFallback } from '../providers/fallback.js';
 import type { ProviderSelection } from '../providers/port.js';
@@ -161,9 +163,51 @@ export class Runs {
     const write = async (tx: Queryable) => {
       await options.beforeSubmit?.(tx);
       const profile = await this.profiles.profile(profileId, tx);
+      let authority = profileAuthority(profile);
+      const source =
+        options.authorityFrom ??
+        (subagent
+          ? { profileId, runId: subagent.parentRunId }
+          : call
+            ? { profileId: call.fromProfileId, runId: call.fromRunId }
+            : undefined);
+      if (source) {
+        const original = await this.run(source.profileId, source.runId, tx);
+        const live = await this.profiles.profile(source.profileId, tx);
+        const inherited = currentRunAuthority(original.profile, live, original.authority);
+        // Cross-profile revocation needs durable multi-profile provenance at execution too.
+        // Until then, do not start classified peer work with a transferable snapshot alone.
+        if (source.profileId !== profileId && (inherited || authority)) {
+          throw new GatewayError(403, 'Classified peer authority requires owner review');
+        }
+        if (inherited && subagent) requireCapability(inherited, 'tasks.delegate');
+        if (inherited && call) requireCapability(inherited, 'peers.call');
+        if (!inherited && authority)
+          throw new GatewayError(403, 'Delegation authority requires owner review');
+        authority = profileAuthority(profile, inherited);
+      }
+      if (authority && !options.ownerMessage && !source && !continuationOf) {
+        throw new GatewayError(403, 'Background authority requires owner review');
+      }
+      // Profile-global context is not yet isolated for external classified conversations.
+      if (authority && (activity === 'channel' || group)) {
+        throw new GatewayError(403, 'Classified external conversations require context isolation');
+      }
 
       if (continuationOf) {
         const parent = await this.run(profileId, continuationOf, tx);
+        const continued = currentRunAuthority(parent.profile, profile, parent.authority);
+        authority = profileAuthority(
+          profile,
+          continued && authority
+            ? {
+                ...continued,
+                capabilities: continued.capabilities.filter((capability) =>
+                  authority?.capabilities.includes(capability),
+                ),
+              }
+            : continued,
+        );
 
         if (
           parent.sessionId !== sessionId ||
@@ -174,6 +218,9 @@ export class Runs {
       }
 
       const session = await this.sessions.session(profileId, sessionId, tx);
+      if (authority && !['api', 'gateway', 'task', 'agent'].includes(session.channel)) {
+        throw new GatewayError(403, 'Classified conversation context requires owner review');
+      }
       if (session.channel === TASK_SESSION_CHANNEL && !subagent) {
         throw new GatewayError(403, 'Subagent sessions cannot receive direct messages');
       }
@@ -187,9 +234,15 @@ export class Runs {
       }
 
       const waiting = await findWaitingSessionRun(tx, profileId, sessionId);
+      // An explicit continuation must never answer or steer unrelated work, even for legacy runs.
+      if (continuationOf && waiting) {
+        throw new GatewayError(409, 'Another run is waiting in this session');
+      }
 
       // Answering a mid-run question resumes work; it is not a steer and not a bare "continue".
       if (waiting?.question) {
+        if (authority && source)
+          throw new GatewayError(409, 'Classified delegated work requires a separate turn');
         const resumeKey = `ask-answer:${waiting.id}`;
         const answered = await findRunByRequestKey(tx, profileId, sessionId, resumeKey);
         if (answered) return this.sameRequest(answered, data.text, data.model);
@@ -223,6 +276,12 @@ export class Runs {
       // they are changing what this one should be about. The message joins the run in flight
       // and is read between its steps, so nothing waits for a turn that already began.
       if (inFlight) {
+        if (continuationOf) {
+          throw new GatewayError(409, 'Another run is active in this session');
+        }
+        const runningAuthority = currentRunAuthority(inFlight.profile, profile, inFlight.authority);
+        if (runningAuthority && source)
+          throw new GatewayError(409, 'Classified delegated work requires a separate turn');
         await bindMedia(tx, profileId, sessionId, data.mediaIds ?? [], inFlight.id);
         await insertMessage(tx, {
           id: randomUUID(),
@@ -299,6 +358,7 @@ export class Runs {
         requestKey: data.requestKey,
         input: data.text,
         profile,
+        ...(authority ? { authority } : {}),
         ...(chosen ? { model: chosen.config, contextPolicy: chosen.policy } : {}),
         ...(selection ? { modelSelection: selection } : {}),
         ...(call ? { call } : {}),
@@ -419,6 +479,7 @@ export class Runs {
     if (waiting.subagent) throw new GatewayError(403, 'Subagents are managed by the agent');
 
     const session = await this.sessions.session(profileId, waiting.sessionId);
+    const internal = ['api', 'gateway', 'learning'].includes(session.channel);
     const resume = await this.store.transaction(profileId, async (tx) => {
       const requestKey = data.requestKey ?? `ask-answer:${waiting.id}`;
       const duplicate = await findRunByRequestKey(tx, profileId, waiting.sessionId, requestKey);
@@ -438,13 +499,11 @@ export class Runs {
         requestKey,
         undefined,
         undefined,
-        session.channel === 'gateway' || session.channel === 'learning'
-          ? 'conversation'
-          : 'channel',
+        internal ? 'conversation' : 'channel',
       );
     });
 
-    if (session.channel !== 'gateway' && session.channel !== 'learning') {
+    if (!internal) {
       await this.deliveries?.deliverRun(profileId, resume.sessionId, resume.id);
     }
 
@@ -521,6 +580,14 @@ export class Runs {
     // Model fallback was resolved before the outer transaction when possible; here reuse the
     // waiting run's frozen model so the resume stays on the same choice.
     const profile = waiting.profile;
+    const current = await this.profiles.profile(profileId, tx);
+    const authority = currentRunAuthority(profile, current, waiting.authority);
+    if (
+      authority &&
+      (activity === 'channel' || !['api', 'gateway', 'task', 'agent'].includes(session.channel))
+    ) {
+      throw new GatewayError(403, 'Classified external conversations require context isolation');
+    }
     const defaults = await readModelDefaults(tx, profileId, nowIso(this.clock));
     const candidates = [
       waiting.modelSelection,
@@ -560,6 +627,7 @@ export class Runs {
       requestKey,
       input: text,
       profile,
+      ...(authority ? { authority } : {}),
       ...(chosen ? { model: chosen.config, contextPolicy: chosen.policy } : {}),
       ...(selection ? { modelSelection: selection } : {}),
       ...(waiting.call ? { call: waiting.call } : {}),

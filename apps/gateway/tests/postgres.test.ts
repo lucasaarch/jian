@@ -15,7 +15,7 @@ import { Vault } from '../src/security/vault.js';
 import { buildServices } from '../src/services.js';
 import { pageMessages } from '../src/sessions/repository.js';
 import { PostgresStore } from '../src/storage/postgres.js';
-import { channels, metaInbox } from '../src/storage/schema.js';
+import { channels, metaInbox, profiles, runs } from '../src/storage/schema.js';
 import { mockModel } from './helpers/model.js';
 import { events, runRows } from './helpers/rows.js';
 
@@ -52,6 +52,43 @@ afterAll(async () => {
 });
 
 describe('PostgreSQL durability', () => {
+  it('persists classified run authority without granting newly enabled permissions on continuation', async () => {
+    const legacy = await services.profiles.createProfile(input);
+    await store.db
+      .update(profiles)
+      .set({ professionId: 'developer' })
+      .where(eq(profiles.id, legacy.id));
+    const profile = await services.profiles.updateProfile(legacy.id, {
+      expectedVersion: legacy.version,
+      name: 'Classified durability',
+      allowWebSearch: false,
+    });
+    const session = await services.sessions.gatewaySession(profile.id);
+    const original = await services.runs.submit(
+      profile.id,
+      session.id,
+      { text: 'Work', requestKey: 'original' },
+      { ownerMessage: true },
+    );
+    expect(original.authority?.professionId).toBe('developer');
+    expect(original.authority?.capabilities).not.toContain('web.browse');
+    expect((await services.runs.run(profile.id, original.id)).authority).toEqual(
+      original.authority,
+    );
+    await store.db.update(runs).set({ status: 'interrupted' }).where(eq(runs.id, original.id));
+    await services.profiles.updateProfile(profile.id, {
+      expectedVersion: profile.version,
+      allowWebSearch: true,
+    });
+    const continued = await services.runs.submit(
+      profile.id,
+      session.id,
+      { text: 'Continue', requestKey: 'continued' },
+      { continuationOf: original.id },
+    );
+    expect(continued.authority?.capabilities).not.toContain('web.browse');
+  });
+
   it('atomically pauses channel runs across pools and rejects ingress overtaken by pause/resume', async () => {
     const profile = await services.profiles.createProfile(input);
     const fetcher = (() => {

@@ -286,7 +286,7 @@ export class Peers implements PeerAgents {
         ].join('\n\n'),
         requestKey: `peer-answer:${runId}`,
       },
-      { activity: 'channel' },
+      { activity: 'channel', authorityFrom: { profileId: run.profileId, runId: run.id } },
     );
 
     // Without this the answer reaches the transcript and stops there: nothing on the chat is

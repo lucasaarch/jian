@@ -6,6 +6,7 @@ import type {
   McpServer,
   ModelConfig,
   ModelSelection,
+  ProfessionAuthority,
   Profile,
   ProviderCredential,
   ReasoningEffort,
@@ -256,6 +257,7 @@ export const runs = pgTable(
       .notNull()
       .references(() => sessions.id, { onDelete: 'cascade' }),
     subagent: jsonb('subagent').$type<Subagent>(),
+    authority: jsonb('authority').$type<ProfessionAuthority>(),
     subagentReportedAt: timestamp('subagent_reported_at', { withTimezone: true }),
     // The profile this run froze. The snapshot is read from the revision, never copied here.
     profileVersion: integer('profile_version').notNull(),

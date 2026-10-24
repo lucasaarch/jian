@@ -81,7 +81,13 @@ export class Schedules {
     this.validate(data, now);
 
     return this.store.transaction(profileId, async (tx) => {
-      await this.profiles.profile(profileId, tx);
+      const profile = await this.profiles.profile(profileId, tx);
+      if (profile.professionId !== null) {
+        throw new GatewayError(
+          403,
+          'Schedules for classified profiles require durable origin authority',
+        );
+      }
       await this.sessions.session(profileId, data.sessionId, tx);
 
       if ((await listSchedules(tx, profileId)).length >= SCHEDULE_LIMIT) {
@@ -117,6 +123,13 @@ export class Schedules {
     const now = new Date(this.clock());
 
     return this.store.transaction(profileId, async (tx) => {
+      if ((await this.profiles.profile(profileId, tx)).professionId !== null) {
+        throw new GatewayError(
+          403,
+          'Classified jobs require durable origin authority and owner review',
+        );
+      }
+
       const current = assertFound(await findSchedule(tx, profileId, id), 'Schedule');
 
       if (patch.sessionId) await this.sessions.session(profileId, patch.sessionId, tx);
@@ -280,6 +293,9 @@ export class Schedules {
   }
 
   private async start(schedule: Schedule, requestKey: string) {
+    if ((await this.profiles.profile(schedule.profileId)).professionId !== null) {
+      throw new GatewayError(403, 'Classified schedule authority requires owner review');
+    }
     const run = await this.runs.submit(schedule.profileId, schedule.sessionId, {
       text: scheduledText(schedule),
       requestKey,

@@ -1,6 +1,7 @@
 import { auth } from '@ai-sdk/mcp';
 import type { McpStatus, Profile } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
+import { requireProfileCapability } from '../professions/effective.js';
 import type { Vault } from '../security/vault.js';
 import { McpOAuth } from './mcp-oauth.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
@@ -55,6 +56,7 @@ export class McpLogins {
       throw new GatewayError(404, 'MCP server not found');
     }
 
+    requireProfileCapability(profile, 'mcp.http');
     const result = await auth(this.provider(profile.id, server, mcpOauthClient(configured)), {
       serverUrl: configured.url,
       authorizationCode: code,

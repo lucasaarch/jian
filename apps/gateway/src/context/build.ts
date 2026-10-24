@@ -1,4 +1,5 @@
 import {
+  type Capability,
   GROUP_AGENT_TURN_LIMIT,
   type Memory,
   type Message,
@@ -6,6 +7,7 @@ import {
   type SessionObjective,
 } from '@jian/contracts';
 import { gatewayTimeZone } from '../core/time-zone.js';
+import { profileAuthority } from '../professions/effective.js';
 import { sanitizeObjectiveText } from '../sessions/objective.js';
 import { availableSkills } from '../skills/builtin/index.js';
 import { tokenCounter } from './budget.js';
@@ -73,6 +75,9 @@ export function buildContext(
   const policy = run.contextPolicy ?? run.profile.contextPolicy;
   const model = run.model ?? run.profile.model;
   const worker = Boolean(run.subagent);
+  const authority = profileAuthority(run.profile, run.authority);
+  const can = (capability: Capability) =>
+    authority === undefined || authority.capabilities.includes(capability);
   const count = tokenCounter(model.provider, model.modelId);
   const relevance = sources.relevance ?? {};
   const judged = (key: string) => relevance[key] ?? -1;
@@ -155,7 +160,7 @@ export function buildContext(
     }));
 
   // Skill bodies are loaded on demand; the prompt carries only their discovery catalog.
-  const skills = availableSkills(run.profile).map(({ name, description }) => ({
+  const skills = availableSkills(run.profile, authority).map(({ name, description }) => ({
     name,
     description,
   }));
@@ -187,9 +192,17 @@ export function buildContext(
       : []),
     // The tools are deferred like any other group, and a model that cannot see them answers
     // that it has no access instead of asking for them.
-    'You can run commands and read, edit, find and search files in your workspace on the machine this gateway runs on: load the shell and files tool groups when a task needs them.',
-    'Remote Control machines on your access list support shell and (on macOS) computer use via the remote tool group — gated by machine access, not a separate shell switch.',
-    ...(run.profile.allowWebSearch
+    ...(can('process.exec') && can('workspace.files')
+      ? [
+          'You can run commands and read, edit, find and search files in your workspace on the machine this gateway runs on: load the shell and files tool groups when a task needs them.',
+        ]
+      : []),
+    ...(can('remote.control')
+      ? [
+          'Remote Control machines on your access list support shell and (on macOS) computer use via the remote tool group — gated by machine access, not a separate shell switch.',
+        ]
+      : []),
+    ...(run.profile.allowWebSearch && can('web.browse')
       ? [
           'You can search the web and read public pages: load the web tool group when a question needs current or outside information, and say where an answer came from.',
         ]
@@ -289,9 +302,10 @@ export function buildContext(
   const share = Math.min(100, Math.round((used / policy.inputTokens) * 100));
 
   // Said after the part a provider caches, like the context line: it changes every turn.
-  const hint = sources.suggestedSkill
-    ? `A quick check suggests the skill ${JSON.stringify(sources.suggestedSkill)} fits this turn. Load it if it matches what was actually asked; otherwise ignore this.\n\n`
-    : '';
+  const hint =
+    sources.suggestedSkill && skills.some((skill) => skill.name === sources.suggestedSkill)
+      ? `A quick check suggests the skill ${JSON.stringify(sources.suggestedSkill)} fits this turn. Load it if it matches what was actually asked; otherwise ignore this.\n\n`
+      : '';
 
   return {
     system: `${system}\n\n${hint}Context: this turn starts at about ${used.toLocaleString('en')} of ${policy.inputTokens.toLocaleString('en')} tokens (${share}%). Tool results add to it as you work; near the limit the older part is summarised automatically. See managing-context.`,

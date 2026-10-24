@@ -1,5 +1,6 @@
 import type { McpStatus, Profile } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
+import { requireProfileCapability } from '../professions/effective.js';
 import { createSafeFetch } from '../security/outbound.js';
 import type { Vault } from '../security/vault.js';
 import { connectMcp, MissingMcpValue } from './mcp-connect.js';
@@ -22,7 +23,7 @@ export function clarifyOauthError(message: string): string {
 /**
  * Connects to one configured server and reports what it answered. This is the owner asking
  * "does this work", so a refusal is a result to show, not an error to raise — the only failure
- * is a server that is not configured at all.
+ * is an unconfigured server or a transport forbidden by the profile's profession.
  */
 export async function probeMcpServer(
   profile: Profile,
@@ -36,6 +37,8 @@ export async function probeMcpServer(
   if (!server) {
     throw new GatewayError(404, 'MCP server not found');
   }
+
+  requireProfileCapability(profile, server.transport === 'stdio' ? 'mcp.stdio' : 'mcp.http');
 
   const checkedAt = new Date().toISOString();
   const outbound = fetcher ? undefined : createSafeFetch();

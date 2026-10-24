@@ -90,7 +90,7 @@ export class Contexts {
             request: run.input,
             ...(before ? { before } : {}),
             memories: rankMemories(run.input, memories).map(({ memory }) => memory),
-            skills: availableSkills(run.profile).map(({ name, description }) => ({
+            skills: availableSkills(run.profile, run.authority).map(({ name, description }) => ({
               name,
               description,
             })),

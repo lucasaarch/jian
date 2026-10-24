@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
 import { workspaceOf } from '../src/agent/workspace.js';
 import { testServices } from './helpers/services.js';
 
-const root = realpathSync(mkdtempSync(join('/tmp', 'jian-ssh-')));
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'jian-ssh-')));
 const previous = process.env.JIAN_WORKSPACES;
 process.env.JIAN_WORKSPACES = root;
 

@@ -13,6 +13,8 @@ import type { Queryable } from '../storage/database.js';
 export type SubmitOptions = {
   /** Set only by the authenticated owner-facing message route. */
   ownerMessage?: boolean;
+  /** Internal provenance: re-read stored source and intersect its frozen + live authority. */
+  authorityFrom?: { profileId: string; runId: string };
   continuationOf?: string;
   activity?: 'conversation' | 'channel';
   call?: AgentCallOrigin;
