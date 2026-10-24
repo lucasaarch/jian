@@ -206,7 +206,14 @@ export class Runs {
             : inherited;
         authority = profileAuthority(profile, delegated);
       }
-      if (authority && !options.ownerMessage && !options.systemTask && !source && !continuationOf) {
+      if (
+        authority &&
+        !options.ownerMessage &&
+        !options.systemTask &&
+        activity !== 'channel' &&
+        !source &&
+        !continuationOf
+      ) {
         throw new GatewayError(403, 'Background authority requires owner review');
       }
       if (continuationOf) {

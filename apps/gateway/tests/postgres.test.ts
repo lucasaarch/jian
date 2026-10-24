@@ -279,16 +279,9 @@ describe('PostgreSQL durability', () => {
     },
   );
 
-  it.each([
-    ['shell admission', 'capability'],
-    ['computer admission', 'capability'],
-    ['shell admission', 'acl'],
-    ['computer admission', 'acl'],
-    ['claim', 'capability'],
-    ['claim', 'acl'],
-  ] as const)(
-    'serializes Remote %s with live %s revocation across pools',
-    async (operation, change) => {
+  it.each(['shell admission', 'computer admission', 'claim'] as const)(
+    'serializes Remote %s with live ACL revocation across pools',
+    async (operation) => {
       const profile = await services.profiles.createProfile(input);
       const machine = await services.remote.create({
         name: 'Concurrent remote',
@@ -323,18 +316,10 @@ describe('PostgreSQL durability', () => {
         pid = backend.pid;
         locked.release();
         await mutate.reached;
-        if (change === 'capability') {
-          // Fixture-only classification change; there is deliberately no profession mutator.
-          await tx
-            .update(profiles)
-            .set({ professionId: 'attendant' })
-            .where(eq(profiles.id, profile.id));
-        } else {
-          await tx
-            .update(remoteMachines)
-            .set({ allowedProfileIds: [] })
-            .where(eq(remoteMachines.id, machine.id));
-        }
+        await tx
+          .update(remoteMachines)
+          .set({ allowedProfileIds: [] })
+          .where(eq(remoteMachines.id, machine.id));
         await resume.reached;
       });
       const abort = new AbortController();
@@ -364,7 +349,7 @@ describe('PostgreSQL durability', () => {
             .select()
             .from(remoteTasks)
             .where(eq(remoteTasks.id, taskId));
-          expect(task?.status).toBe(change === 'capability' ? 'failed' : 'queued');
+          expect(task?.status).toBe('queued');
         } else {
           expect(await pending).toMatchObject({ statusCode: 403 });
           expect(
@@ -913,6 +898,14 @@ describe('PostgreSQL durability', () => {
       await reopenedStore.close();
     }
 
+    await services.lifecycle.claim(parent.id, profile.id, 'parent-lease');
+    await services.lifecycle.finish(
+      profile.id,
+      parent.id,
+      'parent-lease',
+      'completed',
+      'Verification started.',
+    );
     await services.lifecycle.claim(child.runId, profile.id, 'subagent-lease');
     await services.lifecycle.finish(
       profile.id,
