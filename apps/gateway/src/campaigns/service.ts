@@ -1,14 +1,35 @@
 import { randomUUID } from 'node:crypto';
-import { type SalesCampaign, salesCampaignInputSchema } from '@jian/contracts';
-import { and, asc, desc, eq, ilike, isNull, or } from 'drizzle-orm';
+import {
+  type SalesCampaign,
+  type SalesCampaignOutcome,
+  type SalesCampaignReport,
+  salesCampaignInputSchema,
+  salesCampaignPlaybookSchema,
+  salesCampaignReportQuerySchema,
+  salesCampaignReportSchema,
+  salesCampaignRulesSchema,
+} from '@jian/contracts';
+import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql } from 'drizzle-orm';
 import { GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { Store } from '../storage/database.js';
-import { channels, contacts, salesCampaigns, sessions } from '../storage/schema.js';
+import {
+  channels,
+  contacts,
+  salesCampaignMetrics,
+  salesCampaigns,
+  sessions,
+} from '../storage/schema.js';
+
+const GENERAL_CAMPAIGN_ID = '00000000-0000-0000-0000-000000000000';
+const metricFields = ['lookups', 'qualified', 'notQualified', 'escalated'] as const;
+type MetricField = (typeof metricFields)[number];
 
 const record = (row: typeof salesCampaigns.$inferSelect): SalesCampaign => ({
   ...row,
+  rules: salesCampaignRulesSchema.parse(row.rules),
+  playbook: salesCampaignPlaybookSchema.parse(row.playbook),
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
 });
@@ -31,24 +52,159 @@ export class SalesCampaigns {
   }
 
   async searchForAgent(profileId: string, query?: string): Promise<SalesCampaign[]> {
+    return this.store.transaction(profileId, async (tx) => {
+      await this.profiles.profile(profileId, tx);
+      const search = query?.trim();
+      const today = new Date(this.clock()).toISOString().slice(0, 10);
+      const filters = [
+        eq(salesCampaigns.profileId, profileId),
+        eq(salesCampaigns.active, true),
+        or(isNull(salesCampaigns.startsOn), lte(salesCampaigns.startsOn, today)),
+        or(isNull(salesCampaigns.endsOn), gte(salesCampaigns.endsOn, today)),
+        ...(search
+          ? [
+              or(
+                ilike(salesCampaigns.name, `%${search}%`),
+                ilike(salesCampaigns.description, `%${search}%`),
+                sql`${salesCampaigns.rules}::text ilike ${`%${search}%`}`,
+              ),
+            ]
+          : []),
+      ];
+      const rows = await tx
+        .select()
+        .from(salesCampaigns)
+        .where(and(...filters))
+        .orderBy(desc(salesCampaigns.updatedAt), asc(salesCampaigns.name))
+        .limit(5);
+      const campaigns = rows.map(record);
+      for (const campaign of campaigns)
+        await this.increment(tx, profileId, campaign.id, campaign.name, 'lookups');
+      if (campaigns.length)
+        await recordEvent(tx, this.clock, profileId, 'campaign.metrics', {
+          campaignIds: campaigns.map(({ id }) => id),
+          metric: 'lookups',
+        });
+      return campaigns;
+    });
+  }
+
+  async report(profileId: string, input: unknown): Promise<SalesCampaignReport> {
+    const { days } = salesCampaignReportQuerySchema.parse(input);
     await this.profiles.profile(profileId);
-    const search = query?.trim();
-    const where = search
-      ? and(
-          eq(salesCampaigns.profileId, profileId),
-          or(
-            ilike(salesCampaigns.name, `%${search}%`),
-            ilike(salesCampaigns.description, `%${search}%`),
-          ),
-        )
-      : eq(salesCampaigns.profileId, profileId);
+    const through = new Date(this.clock()).toISOString().slice(0, 10);
+    const first = new Date(`${through}T00:00:00.000Z`);
+    first.setUTCDate(first.getUTCDate() - days + 1);
+    const since = first.toISOString().slice(0, 10);
     const rows = await this.store.db
-      .select()
+      .select({
+        campaignId: salesCampaignMetrics.campaignId,
+        campaignName: salesCampaignMetrics.campaignName,
+        latestDay: sql<string>`max(${salesCampaignMetrics.day})`,
+        lookups: sql<number>`sum(${salesCampaignMetrics.lookups})`.mapWith(Number),
+        qualified: sql<number>`sum(${salesCampaignMetrics.qualified})`.mapWith(Number),
+        notQualified: sql<number>`sum(${salesCampaignMetrics.notQualified})`.mapWith(Number),
+        escalated: sql<number>`sum(${salesCampaignMetrics.escalated})`.mapWith(Number),
+      })
+      .from(salesCampaignMetrics)
+      .where(
+        and(
+          eq(salesCampaignMetrics.profileId, profileId),
+          gte(salesCampaignMetrics.day, since),
+          lte(salesCampaignMetrics.day, through),
+        ),
+      )
+      .groupBy(salesCampaignMetrics.campaignId, salesCampaignMetrics.campaignName);
+    const totals = new Map<
+      string,
+      {
+        campaignId: string | null;
+        campaignName: string;
+        lookups: number;
+        qualified: number;
+        notQualified: number;
+        escalated: number;
+        latestDay: string;
+      }
+    >();
+    for (const row of rows) {
+      const total = totals.get(row.campaignId) ?? {
+        campaignId: row.campaignId === GENERAL_CAMPAIGN_ID ? null : row.campaignId,
+        campaignName: row.campaignName,
+        lookups: 0,
+        qualified: 0,
+        notQualified: 0,
+        escalated: 0,
+        latestDay: row.latestDay,
+      };
+      total.lookups += row.lookups;
+      total.qualified += row.qualified;
+      total.notQualified += row.notQualified;
+      total.escalated += row.escalated;
+      if (row.latestDay > total.latestDay) {
+        total.latestDay = row.latestDay;
+        total.campaignName = row.campaignName;
+      }
+      totals.set(row.campaignId, total);
+    }
+    const campaigns = await this.store.db
+      .select({ id: salesCampaigns.id, name: salesCampaigns.name })
       .from(salesCampaigns)
-      .where(where)
-      .orderBy(desc(salesCampaigns.updatedAt), asc(salesCampaigns.name))
-      .limit(5);
-    return rows.map(record);
+      .where(eq(salesCampaigns.profileId, profileId));
+    for (const campaign of campaigns) {
+      const total = totals.get(campaign.id);
+      if (total) total.campaignName = campaign.name;
+      else
+        totals.set(campaign.id, {
+          campaignId: campaign.id,
+          campaignName: campaign.name,
+          latestDay: through,
+          lookups: 0,
+          qualified: 0,
+          notQualified: 0,
+          escalated: 0,
+        });
+    }
+    return salesCampaignReportSchema.parse({
+      days,
+      since,
+      through,
+      campaigns: [...totals.values()]
+        .map(({ latestDay: _latestDay, ...campaign }) => campaign)
+        .sort((a, b) => b.qualified - a.qualified),
+    });
+  }
+
+  /** Stores counts by campaign/day only. Conversation and customer identifiers never enter the row. */
+  async recordOutcome(
+    profileId: string,
+    campaignId: string | undefined,
+    outcome: SalesCampaignOutcome,
+  ): Promise<void> {
+    await this.store.transaction(profileId, async (tx) => {
+      await this.profiles.profile(profileId, tx);
+      const [campaign] = campaignId
+        ? await tx
+            .select({ id: salesCampaigns.id, name: salesCampaigns.name })
+            .from(salesCampaigns)
+            .where(and(eq(salesCampaigns.profileId, profileId), eq(salesCampaigns.id, campaignId)))
+            .limit(1)
+        : [];
+      if (campaignId && !campaign) throw new GatewayError(404, 'Sales campaign not found');
+      const id = campaign?.id ?? GENERAL_CAMPAIGN_ID;
+      const name = campaign?.name ?? 'General sales';
+      await this.increment(
+        tx,
+        profileId,
+        id,
+        name,
+        outcome === 'not_qualified' ? 'notQualified' : outcome,
+      );
+      await recordEvent(tx, this.clock, profileId, 'campaign.metrics', {
+        campaignId: campaign?.id ?? null,
+        metric: outcome,
+      });
+    });
   }
 
   async create(profileId: string, input: unknown): Promise<SalesCampaign> {
@@ -175,6 +331,40 @@ export class SalesCampaigns {
       .returning();
     if (!row) throw new GatewayError(500, 'Sales campaign could not be created');
     return record(row);
+  }
+
+  private async increment(
+    tx: Store['db'],
+    profileId: string,
+    campaignId: string,
+    campaignName: string,
+    metric: MetricField,
+  ): Promise<void> {
+    const values = {
+      profileId,
+      campaignId,
+      campaignName,
+      day: new Date(this.clock()).toISOString().slice(0, 10),
+      lookups: 0,
+      qualified: 0,
+      notQualified: 0,
+      escalated: 0,
+      [metric]: 1,
+    };
+    await tx
+      .insert(salesCampaignMetrics)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [
+          salesCampaignMetrics.profileId,
+          salesCampaignMetrics.campaignId,
+          salesCampaignMetrics.day,
+        ],
+        set: {
+          campaignName,
+          [metric]: sql`${salesCampaignMetrics[metric]} + 1`,
+        },
+      });
   }
 
   private async updateRecord(

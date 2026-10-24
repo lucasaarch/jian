@@ -6,6 +6,10 @@ import {
   memoryKeySchema,
   memorySchema,
   type Run,
+  salesCampaignAgentUpdateSchema,
+  salesCampaignEscalationInputSchema,
+  salesCampaignInputSchema,
+  salesCampaignOutcomeInputSchema,
 } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
@@ -103,7 +107,7 @@ export type ToolServices = {
   remote?: Pick<Remote, 'listForProfile' | 'execute' | 'executeComputer'>;
   salesCampaigns?: Pick<
     SalesCampaigns,
-    'searchForAgent' | 'createForAgent' | 'updateForAgent' | 'removeForAgent'
+    'searchForAgent' | 'createForAgent' | 'updateForAgent' | 'removeForAgent' | 'recordOutcome'
   >;
 };
 
@@ -120,31 +124,44 @@ export function profileTools(
       ? {
           list_sales_campaigns: tool({
             description:
-              'Find this agent’s sales campaigns. Search campaign names and full offer details, then use the owner-provided campaign information accurately. Never invent prices, benefits, availability, or terms that the campaign does not state.',
+              'Find active sales campaigns by name or details. Returns product rules, offer dates and the campaign playbook. Follow those facts; never invent prices, benefits, eligibility, availability, or terms.',
             inputSchema: z.object({ query: z.string().trim().min(1).max(200).optional() }),
             execute: async ({ query }) =>
               services.salesCampaigns?.searchForAgent(run.profileId, query),
           }),
           create_sales_campaign: tool({
             description:
-              'Create a campaign only when the owner or a directly approved contact asks. Include complete, factual product, offer, pricing, audience and terms details; do not infer missing terms.',
-            inputSchema: z.object({
-              name: z.string().trim().min(1).max(100),
-              description: z.string().trim().min(1).max(12_000),
-            }),
+              'Create a campaign only when the owner or a directly approved contact asks. Include structured product rules, validity dates, and a conversation playbook when provided. Do not infer facts.',
+            inputSchema: salesCampaignInputSchema,
             execute: async (input) =>
               services.salesCampaigns?.createForAgent(run.profileId, run.sessionId, input),
           }),
           update_sales_campaign: tool({
             description:
-              'Update a campaign only when the owner or a directly approved contact asks. Use its id from the campaign list, and provide the complete replacement name and description.',
-            inputSchema: z.object({
-              id: z.uuid(),
-              name: z.string().trim().min(1).max(100),
-              description: z.string().trim().min(1).max(12_000),
-            }),
+              'Update a campaign only when the owner or a directly approved contact asks. Use its id and provide the complete replacement campaign including rules, playbook, and active dates.',
+            inputSchema: salesCampaignAgentUpdateSchema,
             execute: async ({ id, ...input }) =>
               services.salesCampaigns?.updateForAgent(run.profileId, run.sessionId, id, input),
+          }),
+          record_sales_outcome: tool({
+            description:
+              'Record one clear campaign outcome as an aggregate count only. Never include customer answers, names, contact details, or conversation text. Use only after the conversation reaches a clear outcome.',
+            inputSchema: salesCampaignOutcomeInputSchema.extend({
+              outcome: z.enum(['qualified', 'not_qualified']),
+            }),
+            execute: async ({ campaignId, outcome }) => {
+              await services.salesCampaigns?.recordOutcome(run.profileId, campaignId, outcome);
+              return { recorded: true, storedCustomerData: false };
+            },
+          }),
+          escalate_sales_to_owner: tool({
+            description:
+              'Pause this conversation and ask the owner to help with a sales question or exception. Include only the decision needed, not customer identity or unnecessary transcript. The owner’s answer resumes this conversation.',
+            inputSchema: salesCampaignEscalationInputSchema,
+            execute: async ({ campaignId, reason }): Promise<{ paused: true }> => {
+              await services.salesCampaigns?.recordOutcome(run.profileId, campaignId, 'escalated');
+              throw new AskUserPause({ prompt: `Sales conversation needs owner help: ${reason}` });
+            },
           }),
           delete_sales_campaign: tool({
             description:

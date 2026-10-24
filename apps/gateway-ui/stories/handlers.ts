@@ -426,8 +426,31 @@ export const handlers = [
   http.get('*/v1/profiles/:profileId/campaigns', ({ params }) =>
     ok(byProfile(data.salesCampaigns, String(params.profileId))),
   ),
+  http.get('*/v1/profiles/:profileId/campaigns/report', ({ params, request }) => {
+    const days = Number(new URL(request.url).searchParams.get('days') ?? 30);
+    const through = new Date().toISOString().slice(0, 10);
+    const start = new Date(`${through}T00:00:00.000Z`);
+    start.setUTCDate(start.getUTCDate() - days + 1);
+    const profileCampaigns = byProfile(data.salesCampaigns, String(params.profileId));
+    return ok({
+      days,
+      since: start.toISOString().slice(0, 10),
+      through,
+      campaigns: profileCampaigns.map((campaign) => ({
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        lookups: 18,
+        qualified: 6,
+        notQualified: 4,
+        escalated: 2,
+      })),
+    });
+  }),
   http.post('*/v1/profiles/:profileId/campaigns', async ({ params, request }) => {
-    const body = (await request.json()) as { name: string; description: string };
+    const body = (await request.json()) as Omit<
+      (typeof data.salesCampaigns)[number],
+      'id' | 'profileId' | 'createdAt' | 'updatedAt'
+    >;
     const now = new Date().toISOString();
     const campaign = {
       ...body,

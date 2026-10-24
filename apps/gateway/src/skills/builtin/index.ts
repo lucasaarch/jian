@@ -19,6 +19,7 @@ import { media } from './media.js';
 import { memoryKeeping } from './memory-keeping.js';
 import { ownerAndContacts } from './owner-and-contacts.js';
 import { remoteControl } from './remote-control.js';
+import { salesAttendant } from './sales-attendant.js';
 import { schedules } from './schedules.js';
 import { skillCreator } from './skill-creator.js';
 import { sshKeys } from './ssh-keys.js';
@@ -67,9 +68,10 @@ const SHELL: readonly Skill[] = [machineTools, codingWork, remoteControl, ...pon
 const WEB: readonly Skill[] = [webResearch];
 const MCP: readonly Skill[] = [mcpServers, githubMcp];
 const STICKERS: readonly Skill[] = [stickers];
+const SALES: readonly Skill[] = [salesAttendant];
 
 export const builtinSkillNames: ReadonlySet<string> = new Set(
-  [...ALWAYS, ...AGENTS, ...SELF_MANAGED, ...SHELL, ...WEB, ...MCP, ...STICKERS].map(
+  [...ALWAYS, ...AGENTS, ...SELF_MANAGED, ...SHELL, ...WEB, ...MCP, ...STICKERS, ...SALES].map(
     (skill) => skill.name,
   ),
 );
@@ -106,6 +108,7 @@ const skillCapabilities: Readonly<Record<string, readonly Capability[]>> = {
   [mcpServers.name]: ['mcp.http', 'mcp.stdio'],
   [githubMcp.name]: ['mcp.http', 'mcp.stdio'],
   [stickers.name]: ['media.use'],
+  [salesAttendant.name]: ['campaigns.read'],
 };
 
 function skillAllowed(name: string, authority: ProfessionAuthority | undefined): boolean {
@@ -148,6 +151,7 @@ export function builtinSkills(
   };
   return [
     ...ALWAYS,
+    ...(hasProfessionField && profile.professionId === 'attendant' ? SALES : []),
     ...(classified ? (permits('peers.call') ? AGENTS : []) : AGENTS),
     ...(classified
       ? permits('identity.manage')

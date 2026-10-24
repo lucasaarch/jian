@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { gatewayApi } from '../../lib/api';
-import { currentSection, groupLabels, navigation } from '../../lib/navigation';
+import { currentSection, navigation, navigationGroups } from '../../lib/navigation';
 import { useWorkspace } from '../../lib/workspace';
 import { useReleaseNotes, useReleaseUpdate } from '../releases/dialog';
 import { GitHubLogo, Mark } from '../ui';
@@ -26,6 +26,7 @@ export function Sidebar({
   const pathname = usePathname();
   const active = currentSection(pathname);
   const { data, loading, profile, signOut } = useWorkspace();
+  const groups = navigationGroups(profile?.professionId);
   const releaseNotes = useReleaseNotes();
   const releaseUpdate = useReleaseUpdate();
   // Requests waiting on the owner, shown wherever they are in the panel.
@@ -52,17 +53,14 @@ export function Sidebar({
       </Link>
       <ProfileSwitcher onCreate={onCreateProfile} onAssignProfession={onAssignProfession} />
       <nav className="sidebar-nav" aria-label="Main navigation">
-        {(['global', 'agent'] as const).map((group) => (
-          <div className="nav-group" key={group}>
-            <span className="nav-label">{groupLabels[group]}</span>
+        {groups.map((group) => (
+          <div className="nav-group" key={group.id}>
+            <span className="nav-label">{group.label}</span>
             {navigation
               .filter(
                 (item) =>
-                  item.group === group &&
-                  (item.group === 'global' ||
-                    (profile !== undefined && profile.professionId !== null)) &&
-                  (item.href !== '/ssh-keys' || profile?.professionId === 'developer') &&
-                  (item.href !== '/campaigns' || profile?.professionId === 'attendant'),
+                  item.group === group.id &&
+                  (item.group !== 'profession' || item.profession === profile?.professionId),
               )
               .map((item) => (
                 <Link

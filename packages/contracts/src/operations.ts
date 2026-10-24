@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { salesCampaignInputSchema, salesCampaignSchema } from './campaigns.js';
+import {
+  salesCampaignInputSchema,
+  salesCampaignReportQuerySchema,
+  salesCampaignReportSchema,
+  salesCampaignSchema,
+} from './campaigns.js';
 import {
   channelConnectionSchema,
   channelInputSchema,
@@ -150,6 +155,14 @@ export const cursorSchema = z.strictObject({
 });
 
 export const operations: Operation[] = [
+  {
+    method: 'GET',
+    path: `${profile}/campaigns/report`,
+    operationId: 'getSalesCampaignReport',
+    access: 'admin',
+    query: salesCampaignReportQuerySchema,
+    response: salesCampaignReportSchema,
+  },
   {
     method: 'GET',
     path: `${profile}/campaigns`,

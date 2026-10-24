@@ -61,6 +61,8 @@ export const toolCapabilities: Record<string, readonly Capability[]> = {
   create_sales_campaign: ['campaigns.manage'],
   update_sales_campaign: ['campaigns.manage'],
   delete_sales_campaign: ['campaigns.manage'],
+  record_sales_outcome: ['campaigns.manage'],
+  escalate_sales_to_owner: ['campaigns.manage'],
   create_subscription: ['subscriptions.github'],
   update_subscription: ['subscriptions.github'],
   delete_subscription: ['subscriptions.github'],

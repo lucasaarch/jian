@@ -12,6 +12,7 @@ import type {
   ReasoningEffort,
   RunProgress,
   RunQuestion,
+  SalesCampaign,
   SessionObjective,
   Skill,
   Subagent,
@@ -24,6 +25,7 @@ import {
   bigserial,
   boolean,
   check,
+  date,
   foreignKey,
   index,
   integer,
@@ -107,10 +109,50 @@ export const salesCampaigns = pgTable(
       .references(() => profiles.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     description: text('description').notNull(),
+    rules: jsonb('rules').$type<SalesCampaign['rules']>().notNull().default(sql`'{}'::jsonb`),
+    playbook: jsonb('playbook')
+      .$type<SalesCampaign['playbook']>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    active: boolean('active').notNull().default(true),
+    startsOn: date('starts_on', { mode: 'string' }),
+    endsOn: date('ends_on', { mode: 'string' }),
     createdAt,
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('sales_campaigns_profile_updated').on(table.profileId, table.updatedAt.desc())],
+  (table) => [
+    index('sales_campaigns_profile_updated').on(table.profileId, table.updatedAt.desc()),
+    check(
+      'sales_campaigns_valid_dates',
+      sql`${table.startsOn} is null or ${table.endsOn} is null or ${table.endsOn} >= ${table.startsOn}`,
+    ),
+  ],
+);
+
+/** Daily counters only; no session, contact or run identifier is retained. */
+export const salesCampaignMetrics = pgTable(
+  'sales_campaign_metrics',
+  {
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    // Not a foreign key: campaign deletion must not erase aggregate reporting history.
+    campaignId: uuid('campaign_id').notNull(),
+    campaignName: text('campaign_name').notNull(),
+    day: date('day', { mode: 'string' }).notNull(),
+    lookups: integer('lookups').notNull().default(0),
+    qualified: integer('qualified').notNull().default(0),
+    notQualified: integer('not_qualified').notNull().default(0),
+    escalated: integer('escalated').notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.campaignId, table.day] }),
+    index('sales_campaign_metrics_profile_day').on(table.profileId, table.day.desc()),
+    check(
+      'sales_campaign_metrics_nonnegative',
+      sql`${table.lookups} >= 0 and ${table.qualified} >= 0 and ${table.notQualified} >= 0 and ${table.escalated} >= 0`,
+    ),
+  ],
 );
 
 /** One row per version. A run points at the version it froze instead of copying the profile. */

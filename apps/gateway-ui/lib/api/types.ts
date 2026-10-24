@@ -48,6 +48,7 @@ export type SchedulePatch = RequestBody<'updateSchedule'>;
 export type Schedule = JsonResponse<'listSchedules', 200>[number];
 export type SalesCampaign = JsonResponse<'listSalesCampaigns', 200>[number];
 export type SalesCampaignInput = RequestBody<'createSalesCampaign'>;
+export type SalesCampaignReport = JsonResponse<'getSalesCampaignReport', 200>;
 export type ScheduleRun = JsonResponse<'listScheduleRuns', 200>[number];
 export type Subscription = JsonResponse<'listSubscriptions', 200>[number];
 export type ProfilePatch = RequestBody<'updateProfile'>;

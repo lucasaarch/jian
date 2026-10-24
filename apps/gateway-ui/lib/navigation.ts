@@ -1,3 +1,4 @@
+import type { ProfessionId } from '@jian/contracts';
 import {
   AlarmClock,
   BookOpen,
@@ -19,12 +20,13 @@ export type NavigationItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  group: 'global' | 'agent';
+  group: 'global' | 'profession' | 'agent';
+  profession?: ProfessionId;
 };
 
 /**
- * The sections of the panel, in the order the sidebar shows them. A section is a route. The
- * Global holds what belongs to the installation; Agent holds the open agent's own sections.
+ * Global is installation-wide; profession routes only apply to that profession; Agent holds
+ * sections shared by every agent.
  */
 export const navigation: NavigationItem[] = [
   { href: '/providers', label: 'Providers', icon: Plug, group: 'global' },
@@ -32,21 +34,41 @@ export const navigation: NavigationItem[] = [
   { href: '/teams', label: 'Teams', icon: UsersRound, group: 'global' },
   { href: '/', label: 'Overview', icon: LayoutDashboard, group: 'agent' },
   { href: '/identity', label: 'Identity', icon: Fingerprint, group: 'agent' },
-  { href: '/ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'agent' },
+  {
+    href: '/ssh-keys',
+    label: 'SSH keys',
+    icon: KeyRound,
+    group: 'profession',
+    profession: 'developer',
+  },
   { href: '/sessions', label: 'Chats', icon: MessageSquare, group: 'agent' },
   { href: '/models', label: 'Model defaults', icon: Cpu, group: 'agent' },
   { href: '/channels', label: 'Channels', icon: Smartphone, group: 'agent' },
   { href: '/schedules', label: 'Schedules', icon: AlarmClock, group: 'agent' },
   { href: '/memories', label: 'Memories', icon: BookOpen, group: 'agent' },
   { href: '/skills', label: 'Skills', icon: Sparkles, group: 'agent' },
-  { href: '/campaigns', label: 'Campaigns', icon: Megaphone, group: 'agent' },
+  {
+    href: '/campaigns',
+    label: 'Campaigns',
+    icon: Megaphone,
+    group: 'profession',
+    profession: 'attendant',
+  },
   { href: '/mcp', label: 'MCP servers', icon: Plug, group: 'agent' },
 ];
 
-export const groupLabels = {
-  global: 'Global',
-  agent: 'Agent',
-} as const;
+const professionLabels: Record<ProfessionId, string> = {
+  developer: 'Developer',
+  attendant: 'Sales Attendant',
+};
+
+export function navigationGroups(professionId: ProfessionId | null | undefined) {
+  return [
+    { id: 'global', label: 'Global' },
+    ...(professionId ? [{ id: 'profession', label: professionLabels[professionId] }] : []),
+    ...(professionId ? [{ id: 'agent', label: 'Agent' }] : []),
+  ] as const;
+}
 
 /** The deepest section whose route prefixes the current one, so a child route stays marked. */
 export function currentSection(pathname: string): NavigationItem | undefined {

@@ -5,6 +5,10 @@ import type { SalesCampaigns } from './service.js';
 type CampaignParams = ProfileParams & { campaignId: string };
 
 export function registerSalesCampaignRoutes(app: FastifyInstance, campaigns: SalesCampaigns): void {
+  app.get<{ Params: ProfileParams; Querystring: unknown }>(
+    '/v1/profiles/:profileId/campaigns/report',
+    async (request) => campaigns.report(request.params.profileId, request.query),
+  );
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/campaigns', async (request) =>
     campaigns.list(request.params.profileId),
   );

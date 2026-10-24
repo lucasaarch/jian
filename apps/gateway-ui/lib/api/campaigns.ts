@@ -5,6 +5,12 @@ import type { SalesCampaignInput } from './types';
 export const campaignCalls = (client: Client) => ({
   campaigns: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/campaigns', { params: profile(profileId) })),
+  campaignReport: (profileId: string, days: 7 | 30 | 90) =>
+    result(
+      client.GET('/v1/profiles/{profileId}/campaigns/report', {
+        params: { path: { profileId }, query: { days } },
+      }),
+    ),
   createCampaign: (profileId: string, body: SalesCampaignInput) =>
     result(client.POST('/v1/profiles/{profileId}/campaigns', { params: profile(profileId), body })),
   updateCampaign: (profileId: string, campaignId: string, body: SalesCampaignInput) =>

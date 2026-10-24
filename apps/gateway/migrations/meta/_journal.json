@@ -477,6 +477,13 @@
       "when": 1792828975024,
       "tag": "0067_sales_campaigns",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1792830617741,
+      "tag": "0068_sales_campaign_playbook_reports",
+      "breakpoints": true
     }
   ]
 }

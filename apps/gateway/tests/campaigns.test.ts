@@ -58,9 +58,65 @@ describe('sales campaigns', () => {
     const updated = await campaigns.updateForAgent(profile.id, contactSessionId, created.id, {
       name: 'Spring offer updated',
       description: 'The starter bundle costs $45 through October 31.',
+      rules: {
+        productOrService: 'Starter bundle',
+        offer: '20% off',
+        price: '$45',
+        audience: 'New customers',
+        benefits: 'Onboarding included',
+        eligibility: 'First-time customers only',
+        terms: 'Cannot combine with another offer',
+        callToAction: 'Ask if they want to order',
+      },
+      playbook: {
+        opening: 'Ask what they are looking for.',
+        discoveryQuestions: ['What do you need?'],
+        qualificationCriteria: ['The customer is new.'],
+        objectionHandling: 'Explain the value without pressure.',
+        closing: 'Offer to help place an order.',
+      },
+      active: true,
+      startsOn: '2026-10-01',
+      endsOn: '2026-10-31',
     });
     expect(await campaigns.list(profile.id)).toEqual([updated]);
+    expect(await campaigns.searchForAgent(profile.id, 'first-time')).toEqual([updated]);
+    await campaigns.recordOutcome(profile.id, updated.id, 'qualified');
     await campaigns.removeForAgent(profile.id, contactSessionId, updated.id);
     expect(await campaigns.list(profile.id)).toEqual([]);
+    const report = await campaigns.report(profile.id, { days: 30 });
+    expect(report.campaigns).toEqual([
+      {
+        campaignId: updated.id,
+        campaignName: updated.name,
+        lookups: 2,
+        qualified: 1,
+        notQualified: 0,
+        escalated: 0,
+      },
+    ]);
+    expect(JSON.stringify(report)).not.toMatch(/sessionId|contactId|customer/i);
+  });
+
+  it('retrieves only enabled campaigns inside their validity dates', async () => {
+    const now = Date.parse('2026-10-24T12:00:00.000Z');
+    const services = await testServices(() => now);
+    const profile = await services.profiles.createProfile(profileInput);
+    const campaigns = services.salesCampaigns;
+    const add = (name: string, input: Record<string, unknown> = {}) =>
+      campaigns.create(profile.id, {
+        name,
+        description: `${name} offer`,
+        ...input,
+      });
+
+    await add('Current', { startsOn: '2026-10-01', endsOn: '2026-10-31' });
+    await add('Paused', { active: false });
+    await add('Expired', { endsOn: '2026-10-23' });
+    await add('Future', { startsOn: '2026-10-25' });
+
+    expect((await campaigns.searchForAgent(profile.id)).map(({ name }) => name)).toEqual([
+      'Current',
+    ]);
   });
 });
