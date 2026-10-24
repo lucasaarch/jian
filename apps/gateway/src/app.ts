@@ -14,6 +14,7 @@ import { configureSecurity } from './http/security.js';
 import { registerGatewayUi } from './http/ui.js';
 import { registerMediaRoutes } from './media/routes.js';
 import { registerMemoryRoutes } from './memories/routes.js';
+import { registerProfessionRoutes } from './professions/routes.js';
 import { registerProfileRoutes } from './profiles/routes.js';
 import type { CodexLogin } from './providers/codex/login.js';
 import type { ProviderModels } from './providers/discovery.js';
@@ -116,6 +117,7 @@ export function createApp(
   registerSshRoutes(app, options);
   registerRemoteRoutes(app, options);
   registerSkillRoutes(app, options);
+  registerProfessionRoutes(app);
   registerProfileRoutes(app, options);
   registerSessionRoutes(app, { ...options, coordination });
   registerMemoryRoutes(app, options);

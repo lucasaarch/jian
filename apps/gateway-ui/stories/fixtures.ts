@@ -47,6 +47,7 @@ export const ids = {
 };
 
 const profileBase = {
+  professionId: null,
   avatar: null,
   model: { provider: 'openai' as const, modelId: 'unconfigured' },
   contextPolicy: {

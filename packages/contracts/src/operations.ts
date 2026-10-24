@@ -35,6 +35,7 @@ import {
   stickerSchema,
   stickerTagsSchema,
 } from './media.js';
+import { professionCatalogSchema } from './professions.js';
 import {
   builtinSkillSchema,
   mcpImportResultSchema,
@@ -722,6 +723,13 @@ export const operations: Operation[] = [
     access: 'admin',
     body: skillImportSchema,
     response: profileRecordSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/professions',
+    operationId: 'listProfessions',
+    access: 'admin',
+    response: professionCatalogSchema,
   },
   {
     method: 'GET',

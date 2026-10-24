@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MAX_MESSAGE_MEDIA } from './media.js';
+import { professionIdSchema } from './professions.js';
 import {
   modelSelectionSchema,
   providerCredentialSchema,
@@ -238,6 +239,10 @@ const summaryText = z.string().trim().max(280);
 export const summarySchema = summaryText.default('');
 
 export const profileSchema = z.strictObject({
+  // Inactive foundation: legacy documents read as unclassified. Creation rejects non-null
+  // professions until authorization and the rest of the feature are ready together. Final
+  // activation will require an explicit profession on creation, not this temporary null default.
+  professionId: professionIdSchema.nullable().default(null),
   name: z.string().trim().min(1).max(100),
   instructions: z.string().trim().min(1).max(8_000),
   summary: summarySchema,
@@ -282,26 +287,29 @@ export const profileSchema = z.strictObject({
   reachableByAgents: z.boolean().default(true),
 });
 
-export const profilePatchSchema = profileSchema.partial().extend({
-  expectedVersion: z.number().int().positive(),
-  // Without the default: a patch that does not mention the summary was filling one in, and
-  // every edit made elsewhere — a skill switched off, an MCP server added — erased it.
-  summary: summaryText.optional(),
-  // Absent keeps the current picture; an explicit null removes it.
-  avatar: avatarSchema.nullable().optional(),
-  model: modelSchema.optional(),
-  identity: identitySchema.optional(),
-  contextPolicy: contextPolicySchema.optional(),
-  skills: z.array(skillSchema).max(20).optional(),
-  disabledSkills: z.array(skillNameSchema).max(20).optional(),
-  mcpServers: z.array(mcpSchema).optional(),
-  allowSelfManagement: z.boolean().optional(),
-  allowShell: z.boolean().optional(),
-  allowWebSearch: z.boolean().optional(),
-  learnFromWork: z.boolean().optional(),
-  useStickers: z.boolean().optional(),
-  reachableByAgents: z.boolean().optional(),
-});
+export const profilePatchSchema = profileSchema
+  .omit({ professionId: true })
+  .partial()
+  .extend({
+    expectedVersion: z.number().int().positive(),
+    // Without the default: a patch that does not mention the summary was filling one in, and
+    // every edit made elsewhere — a skill switched off, an MCP server added — erased it.
+    summary: summaryText.optional(),
+    // Absent keeps the current picture; an explicit null removes it.
+    avatar: avatarSchema.nullable().optional(),
+    model: modelSchema.optional(),
+    identity: identitySchema.optional(),
+    contextPolicy: contextPolicySchema.optional(),
+    skills: z.array(skillSchema).max(20).optional(),
+    disabledSkills: z.array(skillNameSchema).max(20).optional(),
+    mcpServers: z.array(mcpSchema).optional(),
+    allowSelfManagement: z.boolean().optional(),
+    allowShell: z.boolean().optional(),
+    allowWebSearch: z.boolean().optional(),
+    learnFromWork: z.boolean().optional(),
+    useStickers: z.boolean().optional(),
+    reachableByAgents: z.boolean().optional(),
+  });
 
 /**
  * The channel of the one conversation the owner holds with a profile through the panel. The

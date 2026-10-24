@@ -46,6 +46,8 @@ const createdAt = timestamp('created_at', { withTimezone: true }).notNull().defa
 
 export const profiles = pgTable('profiles', {
   id: uuid('id').primaryKey(),
+  // Nullable while professions are inactive. Non-null values are immutable in PostgreSQL.
+  professionId: text('profession_id').$type<Profile['professionId']>(),
   name: text('name').notNull(),
   instructions: text('instructions').notNull(),
   // What other agents of the installation see; never the instructions.

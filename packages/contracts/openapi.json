@@ -21655,6 +21655,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "professionId": {
+                      "default": null,
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "developer",
+                        "attendant"
+                      ]
+                    },
                     "name": {
                       "type": "string",
                       "minLength": 1,
@@ -22118,6 +22129,7 @@
                     }
                   },
                   "required": [
+                    "professionId",
                     "name",
                     "instructions",
                     "summary",
@@ -22318,6 +22330,312 @@
         }
       }
     },
+    "/v1/professions": {
+      "get": {
+        "operationId": "listProfessions",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Required permission: admin.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "assignable": {
+                      "type": "boolean"
+                    },
+                    "professions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "developer",
+                              "attendant"
+                            ]
+                          },
+                          "label": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "description": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "policyVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "capabilities": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "conversation.control",
+                                "conversation.read",
+                                "conversation.send",
+                                "memory.use",
+                                "skills.read",
+                                "skills.write",
+                                "activity.read",
+                                "decisions.query",
+                                "schedules.manage",
+                                "subscriptions.github",
+                                "workspace.files",
+                                "process.exec",
+                                "ssh.manage",
+                                "web.browse",
+                                "remote.control",
+                                "mcp.http",
+                                "mcp.stdio",
+                                "tasks.delegate",
+                                "peers.call",
+                                "identity.manage",
+                                "profiles.create",
+                                "media.use",
+                                "media.image",
+                                "coordination.lease"
+                              ]
+                            }
+                          },
+                          "defaultCapabilities": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "conversation.control",
+                                "conversation.read",
+                                "conversation.send",
+                                "memory.use",
+                                "skills.read",
+                                "skills.write",
+                                "activity.read",
+                                "decisions.query",
+                                "schedules.manage",
+                                "subscriptions.github",
+                                "workspace.files",
+                                "process.exec",
+                                "ssh.manage",
+                                "web.browse",
+                                "remote.control",
+                                "mcp.http",
+                                "mcp.stdio",
+                                "tasks.delegate",
+                                "peers.call",
+                                "identity.manage",
+                                "profiles.create",
+                                "media.use",
+                                "media.image",
+                                "coordination.lease"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "description",
+                          "policyVersion",
+                          "capabilities",
+                          "defaultCapabilities"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "assignable",
+                    "professions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/profiles": {
       "get": {
         "operationId": "listProfiles",
@@ -22338,6 +22656,17 @@
                   "items": {
                     "type": "object",
                     "properties": {
+                      "professionId": {
+                        "default": null,
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "developer",
+                          "attendant"
+                        ]
+                      },
                       "name": {
                         "type": "string",
                         "minLength": 1,
@@ -22801,6 +23130,7 @@
                       }
                     },
                     "required": [
+                      "professionId",
                       "name",
                       "instructions",
                       "summary",
@@ -23017,6 +23347,17 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "professionId": {
+                    "default": null,
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "developer",
+                      "attendant"
+                    ]
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -23456,6 +23797,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "professionId": {
+                      "default": null,
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "developer",
+                        "attendant"
+                      ]
+                    },
                     "name": {
                       "type": "string",
                       "minLength": 1,
@@ -23919,6 +24271,7 @@
                     }
                   },
                   "required": [
+                    "professionId",
                     "name",
                     "instructions",
                     "summary",
@@ -24148,6 +24501,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "professionId": {
+                      "default": null,
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "developer",
+                        "attendant"
+                      ]
+                    },
                     "name": {
                       "type": "string",
                       "minLength": 1,
@@ -24611,6 +24975,7 @@
                     }
                   },
                   "required": [
+                    "professionId",
                     "name",
                     "instructions",
                     "summary",
@@ -25249,6 +25614,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "professionId": {
+                      "default": null,
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "developer",
+                        "attendant"
+                      ]
+                    },
                     "name": {
                       "type": "string",
                       "minLength": 1,
@@ -25712,6 +26088,7 @@
                     }
                   },
                   "required": [
+                    "professionId",
                     "name",
                     "instructions",
                     "summary",
@@ -26398,6 +26775,17 @@
                       "profile": {
                         "type": "object",
                         "properties": {
+                          "professionId": {
+                            "default": null,
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "developer",
+                              "attendant"
+                            ]
+                          },
                           "name": {
                             "type": "string",
                             "minLength": 1,
@@ -26861,6 +27249,7 @@
                           }
                         },
                         "required": [
+                          "professionId",
                           "name",
                           "instructions",
                           "summary",

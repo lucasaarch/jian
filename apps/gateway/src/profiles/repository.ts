@@ -41,7 +41,11 @@ export async function insertProfile(db: Queryable, profile: Profile): Promise<vo
 }
 
 export async function updateProfileRow(db: Queryable, profile: Profile): Promise<void> {
-  await db.update(profiles).set(toRow(profile)).where(eq(profiles.id, profile.id));
+  // Normal document updates never classify or change a profession, even for an internal
+  // caller passing a full profile. Classification is deliberately not exposed in this stage.
+  const { professionId: _professionId, ...changes } = toRow(profile);
+
+  await db.update(profiles).set(changes).where(eq(profiles.id, profile.id));
 }
 
 /** Every child row cascades from the foreign key; this is the one statement that removes them all. */

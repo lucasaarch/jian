@@ -966,6 +966,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/professions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["listProfessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles": {
         parameters: {
             query?: never;
@@ -11725,6 +11742,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /**
+                         * @default null
+                         * @enum {string|null}
+                         */
+                        professionId: "developer" | "attendant" | null;
                         name: string;
                         instructions: string;
                         /** @default  */
@@ -11978,6 +12000,136 @@ export interface operations {
             };
         };
     };
+    listProfessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        assignable: boolean;
+                        professions: {
+                            /** @enum {string} */
+                            id: "developer" | "attendant";
+                            label: string;
+                            description: string;
+                            policyVersion: number;
+                            capabilities: ("conversation.control" | "conversation.read" | "conversation.send" | "memory.use" | "skills.read" | "skills.write" | "activity.read" | "decisions.query" | "schedules.manage" | "subscriptions.github" | "workspace.files" | "process.exec" | "ssh.manage" | "web.browse" | "remote.control" | "mcp.http" | "mcp.stdio" | "tasks.delegate" | "peers.call" | "identity.manage" | "profiles.create" | "media.use" | "media.image" | "coordination.lease")[];
+                            defaultCapabilities: ("conversation.control" | "conversation.read" | "conversation.send" | "memory.use" | "skills.read" | "skills.write" | "activity.read" | "decisions.query" | "schedules.manage" | "subscriptions.github" | "workspace.files" | "process.exec" | "ssh.manage" | "web.browse" | "remote.control" | "mcp.http" | "mcp.stdio" | "tasks.delegate" | "peers.call" | "identity.manage" | "profiles.create" | "media.use" | "media.image" | "coordination.lease")[];
+                        }[];
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
     listProfiles: {
         parameters: {
             query?: never;
@@ -11994,6 +12146,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /**
+                         * @default null
+                         * @enum {string|null}
+                         */
+                        professionId: "developer" | "attendant" | null;
                         name: string;
                         instructions: string;
                         /** @default  */
@@ -12257,6 +12414,11 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    professionId?: "developer" | "attendant" | null;
                     name: string;
                     instructions: string;
                     /** @default  */
@@ -12410,6 +12572,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /**
+                         * @default null
+                         * @enum {string|null}
+                         */
+                        professionId: "developer" | "attendant" | null;
                         name: string;
                         instructions: string;
                         /** @default  */
@@ -12681,6 +12848,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /**
+                         * @default null
+                         * @enum {string|null}
+                         */
+                        professionId: "developer" | "attendant" | null;
                         name: string;
                         instructions: string;
                         /** @default  */
@@ -13185,6 +13357,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /**
+                         * @default null
+                         * @enum {string|null}
+                         */
+                        professionId: "developer" | "attendant" | null;
                         name: string;
                         instructions: string;
                         /** @default  */
@@ -13586,6 +13763,11 @@ export interface operations {
                         /** Format: uuid */
                         profileId: string;
                         profile: {
+                            /**
+                             * @default null
+                             * @enum {string|null}
+                             */
+                            professionId: "developer" | "attendant" | null;
                             name: string;
                             instructions: string;
                             /** @default  */

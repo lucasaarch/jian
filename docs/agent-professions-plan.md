@@ -1,7 +1,17 @@
 # Profissões de agentes — plano técnico
 
-Status: proposta baseada no código, não funcionalidades implementadas.
+Status: plano do produto completo, com fundação B inativa implementada nesta branch. Profissões ainda não disponíveis para uso.
 Base inspecionada: `8f1d637` (main após PR #88). Data: 23/10/2026.
+
+### Etapa B — fundação de dados e política inativa
+
+A fundação aditiva não ativa profissões: criação existente continua aceitando profissão ausente ou `null`, e qualquer criação explícita com `developer` ou `attendant` é rejeitada pelo serviço, inclusive via HTTP. Essa compatibilidade é temporária: a ativação final descrita abaixo exigirá profissão explícita na criação, sem default silencioso.
+
+A migration `0063_profile-profession-foundation` adiciona `profiles.profession_id` como texto nullable, sem backfill nem alteração dos documentos históricos. Registros/revisões antigos são lidos com `professionId: null`; uma revisão antiga não herda classificação do perfil vivo. Patch rejeita o campo, updates normais do repository não o escrevem e um trigger impede alterar ou limpar uma profissão já não nula. Não há operação de classificação nesta etapa; nulo → profissão fica reservado a uma futura operação administrativa validada, não exposta aqui. Perfis legados continuam executando como antes, sem bloqueio ou mudança de privilégios. Não há flag de ambiente/configuração para ativar essa fundação.
+
+O [inventário de capacidades](agent-capability-inventory.md) relaciona 73 ferramentas nativas e os caminhos indiretos, HTTP e background. O catálogo tipado define 24 capacidades reutilizáveis. `GET /v1/professions`, autenticado pelo dono, retorna definições e `assignable: false`; não concede acesso nem substitui autorização. O resolvedor puro calcula teto ∩ habilitações ∩ contexto ∩ autoridade original, com negação explícita e sem fallback para profissão desconhecida. Schema de autoridade não é credencial nem input aceito de ferramenta/cliente.
+
+Antes de concluir B e ativar C/D: integrar autoridade persistida aos jobs e configuração efetiva, operação administrativa de classificação com concorrência/impacto e descritor efetivo por perfil. Esses caminhos ficam deliberadamente indisponíveis na fundação para não classificar um Atendente que ainda teria o runtime antigo. O inventário é mapa para enforcement, não certificação de isolamento já existente. Nenhuma migration foi aplicada ao banco da instalação.
 
 ## 1. Objetivo e limites
 
@@ -234,4 +244,4 @@ Definição de pronto: todas as fronteiras inventariadas possuem autorização/t
 
 ## 14. Resultado desta etapa
 
-Somente planejamento e inspeção de código. Não modifica executores, banco, API, UI ou comportamento de agentes. Branch de trabalho: `docs/agent-professions-plan`, sem commit/push/deploy nesta etapa. Aprovação deste desenho não é autorização de merge/deploy e nenhuma prova de implementação acima está sendo alegada como executada agora.
+A etapa A produziu o plano; a mesma branch/PR agora inclui a fundação B inativa descrita no início, contratos/SDK, migration aditiva e testes. Não modifica o executor nem ativa a separação de profissões. Perfis atuais permanecem sem classificação e conservam seu comportamento até a ativação coordenada. Branch de trabalho: `docs/agent-professions-plan`, PR #89. Merge e deploy não autorizados. As provas de aceitação completas da seção 12 são metas da entrega final, não alegações de enforcement já implementado.
