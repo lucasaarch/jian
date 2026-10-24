@@ -10,6 +10,7 @@ import {
 import { type ToolSet, tool } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
+import type { SalesCampaigns } from '../campaigns/service.js';
 import { Coordination } from '../coordination/service.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { gatewayTimeZone } from '../core/time-zone.js';
@@ -100,6 +101,10 @@ export type ToolServices = {
   work?: Pick<Work, 'spawnInConversation'>;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove'>;
   remote?: Pick<Remote, 'listForProfile' | 'execute' | 'executeComputer'>;
+  salesCampaigns?: Pick<
+    SalesCampaigns,
+    'searchForAgent' | 'createForAgent' | 'updateForAgent' | 'removeForAgent'
+  >;
 };
 
 export function profileTools(
@@ -111,6 +116,45 @@ export function profileTools(
   const rechecked = new Set<string>();
 
   const tools: ToolSet = {
+    ...(services.salesCampaigns
+      ? {
+          list_sales_campaigns: tool({
+            description:
+              'Find this agent’s sales campaigns. Search campaign names and full offer details, then use the owner-provided campaign information accurately. Never invent prices, benefits, availability, or terms that the campaign does not state.',
+            inputSchema: z.object({ query: z.string().trim().min(1).max(200).optional() }),
+            execute: async ({ query }) =>
+              services.salesCampaigns?.searchForAgent(run.profileId, query),
+          }),
+          create_sales_campaign: tool({
+            description:
+              'Create a campaign only when the owner or a directly approved contact asks. Include complete, factual product, offer, pricing, audience and terms details; do not infer missing terms.',
+            inputSchema: z.object({
+              name: z.string().trim().min(1).max(100),
+              description: z.string().trim().min(1).max(12_000),
+            }),
+            execute: async (input) =>
+              services.salesCampaigns?.createForAgent(run.profileId, run.sessionId, input),
+          }),
+          update_sales_campaign: tool({
+            description:
+              'Update a campaign only when the owner or a directly approved contact asks. Use its id from the campaign list, and provide the complete replacement name and description.',
+            inputSchema: z.object({
+              id: z.uuid(),
+              name: z.string().trim().min(1).max(100),
+              description: z.string().trim().min(1).max(12_000),
+            }),
+            execute: async ({ id, ...input }) =>
+              services.salesCampaigns?.updateForAgent(run.profileId, run.sessionId, id, input),
+          }),
+          delete_sales_campaign: tool({
+            description:
+              'Delete a campaign only after an explicit request from the owner or a directly approved contact. If the request is ambiguous, ask for confirmation first.',
+            inputSchema: z.object({ id: z.uuid() }),
+            execute: async ({ id }) =>
+              services.salesCampaigns?.removeForAgent(run.profileId, run.sessionId, id),
+          }),
+        }
+      : {}),
     list_ssh_keys: tool({
       description:
         'List this profile’s SSH keys. Returns names, public keys and fingerprints only; private keys never leave the workspace.',

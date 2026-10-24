@@ -2,6 +2,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { operationSchema, operations } from '@jian/contracts';
 import Fastify, { LogController } from 'fastify';
+import { registerSalesCampaignRoutes } from './campaigns/routes.js';
 import { registerChannelRoutes } from './channels/routes.js';
 import type { Channels } from './channels/service.js';
 import type { WhatsAppConnections } from './channels/whatsapp/connections.js';
@@ -135,6 +136,7 @@ export function createApp(
   registerRunRoutes(app, options);
   registerCoordinationRoutes(app, { coordination });
   registerChannelRoutes(app, options);
+  registerSalesCampaignRoutes(app, options.salesCampaigns);
   registerWebRoutes(app, options);
   registerReleaseRoutes(app, options);
   registerDecisionRoutes(app, options);

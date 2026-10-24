@@ -98,6 +98,21 @@ export const teamMembers = pgTable(
   ],
 );
 
+export const salesCampaigns = pgTable(
+  'sales_campaigns',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description').notNull(),
+    createdAt,
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('sales_campaigns_profile_updated').on(table.profileId, table.updatedAt.desc())],
+);
+
 /** One row per version. A run points at the version it froze instead of copying the profile. */
 export const profileRevisions = pgTable(
   'profile_revisions',

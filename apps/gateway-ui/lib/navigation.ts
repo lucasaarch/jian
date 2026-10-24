@@ -6,6 +6,7 @@ import {
   KeyRound,
   LayoutDashboard,
   type LucideIcon,
+  Megaphone,
   MessageSquare,
   Monitor,
   Plug,
@@ -38,6 +39,7 @@ export const navigation: NavigationItem[] = [
   { href: '/schedules', label: 'Schedules', icon: AlarmClock, group: 'agent' },
   { href: '/memories', label: 'Memories', icon: BookOpen, group: 'agent' },
   { href: '/skills', label: 'Skills', icon: Sparkles, group: 'agent' },
+  { href: '/campaigns', label: 'Campaigns', icon: Megaphone, group: 'agent' },
   { href: '/mcp', label: 'MCP servers', icon: Plug, group: 'agent' },
 ];
 

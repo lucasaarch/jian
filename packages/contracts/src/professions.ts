@@ -30,6 +30,8 @@ export const capabilitySchema = z.enum([
   'media.use',
   'media.image',
   'coordination.lease',
+  'campaigns.read',
+  'campaigns.manage',
 ]);
 export type Capability = z.infer<typeof capabilitySchema>;
 

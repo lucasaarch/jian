@@ -124,6 +124,8 @@ export function RemoteMachines({ api }: Props) {
   const [gatewayOrigin, setGatewayOrigin] = useState('https://YOUR-JIAN-GATEWAY');
   /** npm dist-tag or exact version matching this gateway release when known. */
   const [packageTag, setPackageTag] = useState('latest');
+  const remoteProfiles = profiles.filter((profile) => profile.professionId === 'developer');
+  const remoteProfileIds = new Set(remoteProfiles.map((profile) => profile.id));
 
   const refresh = useCallback(
     async (opts?: { quiet?: boolean }) => {
@@ -186,7 +188,7 @@ export function RemoteMachines({ api }: Props) {
       const label = name.trim();
       const response = await api.createRemoteMachine({
         name: label,
-        allowedProfileIds: allowed,
+        allowedProfileIds: allowed.filter((profileId) => remoteProfileIds.has(profileId)),
       });
       setReveal({ id: response.id, name: label, token: response.token, kind: 'created' });
       setName('');
@@ -204,7 +206,10 @@ export function RemoteMachines({ api }: Props) {
     setBusy(true);
     setError('');
     try {
-      await api.setRemoteMachineAccess(machineId, access[machineId] ?? []);
+      await api.setRemoteMachineAccess(
+        machineId,
+        (access[machineId] ?? []).filter((profileId) => remoteProfileIds.has(profileId)),
+      );
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not update access.');
@@ -298,9 +303,12 @@ export function RemoteMachines({ api }: Props) {
         <div className="resource-list">
           {machines.map((machine) => {
             const authorized = access[machine.id] ?? [];
-            const names = profiles
+            const names = remoteProfiles
               .filter((profile) => authorized.includes(profile.id))
               .map((profile) => profile.name);
+            const unavailableCount = authorized.filter(
+              (profileId) => !remoteProfileIds.has(profileId),
+            ).length;
             const open = openId === machine.id;
 
             return (
@@ -336,7 +344,12 @@ export function RemoteMachines({ api }: Props) {
                     )}
                   </>
                 }
-                facts={[machine.id]}
+                facts={[
+                  machine.id,
+                  ...(unavailableCount
+                    ? [`${unavailableCount} non-Developer access grant(s) are unavailable`]
+                    : []),
+                ]}
                 action="Access"
                 open={open}
                 busy={busy}
@@ -356,15 +369,15 @@ export function RemoteMachines({ api }: Props) {
                 <div className="connection-form">
                   <Field
                     label="Agents allowed to execute commands"
-                    hint="Only these agents may run shell commands on this computer. Leave empty for none."
+                    hint="Only Developer agents can run shell commands on this computer. Leave empty for none."
                   >
                     <ProfileAllowList
-                      profiles={profiles}
-                      selected={authorized}
+                      profiles={remoteProfiles}
+                      selected={authorized.filter((profileId) => remoteProfileIds.has(profileId))}
                       onChange={(next) =>
                         setAccess((current) => ({ ...current, [machine.id]: next }))
                       }
-                      empty="Create an agent before granting access."
+                      empty="Create a Developer agent before granting access."
                     />
                   </Field>
                   <div className="remote-access-actions">
@@ -429,13 +442,13 @@ export function RemoteMachines({ api }: Props) {
             </Field>
             <Field
               label="Agents allowed to execute commands"
-              hint="Leave empty to create the machine with no access. You can change this later."
+              hint="Only Developer agents can run commands. Leave empty to create the machine with no access."
             >
               <ProfileAllowList
-                profiles={profiles}
+                profiles={remoteProfiles}
                 selected={allowed}
                 onChange={setAllowed}
-                empty="No agents yet. You can still create the machine and grant access later."
+                empty="No Developer agents yet. You can still create the machine and grant access later."
               />
             </Field>
           </form>

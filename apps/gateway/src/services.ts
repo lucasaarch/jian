@@ -1,3 +1,4 @@
+import { SalesCampaigns } from './campaigns/service.js';
 import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
 import { Decisions } from './decisions/service.js';
@@ -34,6 +35,7 @@ import { WebSearch } from './web/service.js';
 export type Services = {
   profiles: Profiles;
   teams: Teams;
+  salesCampaigns: SalesCampaigns;
   providers: Providers;
   sessions: Sessions;
   memories: Memories;
@@ -81,6 +83,7 @@ export function buildServices({
   timeZone?: string;
 }): Services {
   const profiles = new Profiles(store, vault, clock);
+  const salesCampaigns = new SalesCampaigns(store, profiles, clock);
   const providers = new Providers(store, profiles, gatewayVault, clock, catalog);
   const sessions = new Sessions(store, profiles, clock);
   providers.useSessionReader(sessions);
@@ -105,6 +108,7 @@ export function buildServices({
   const services = {
     profiles,
     teams: new Teams(store, clock),
+    salesCampaigns,
     providers,
     sessions,
     memories,

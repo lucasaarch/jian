@@ -63,9 +63,15 @@ export class Learning {
     const profile = await this.services.profiles.profile(run.profileId);
 
     if (!profile.learnFromWork) return undefined;
-    // Cross-session learning lacks scoped provenance; classified work cannot enter it yet.
-    if (profile.professionId !== null || run.profile.professionId !== null || run.authority)
+    const classified = profile.professionId !== null;
+    if (
+      classified &&
+      (run.profile.professionId !== profile.professionId ||
+        run.authority?.professionId !== profile.professionId)
+    ) {
       return undefined;
+    }
+    if (!classified && (run.profile.professionId !== null || run.authority)) return undefined;
 
     // Read, not opened: a profile gets its Learning conversation on its first look back.
     const learning = await findOwnSession(
@@ -101,26 +107,35 @@ export class Learning {
 
     const periodic = work.tools.length < MANY_TOOLS && !failed.length;
     const yours = profile.skills.filter((skill) => skill.writtenBy === 'agent');
-    const material = periodic
+    const material = classified
       ? [
-          'Recent turns, oldest first:',
-          ...since
-            .slice(0, REVIEW_EVERY)
-            .reverse()
-            .map(
-              (item) =>
-                `- Asked: ${quote(item.input, 300)}\n  Answered: ${quote(item.output ?? '', 300)}`,
-            ),
+          'This review is restricted to workflow metadata. Customer messages, answers, campaign contents, and tool error text are not available.',
+          `Tool sequence and outcomes: ${
+            work.tools
+              .map((tool) => `${tool.name} (${tool.error ? 'failed' : 'succeeded'})`)
+              .join(', ') || 'No tools used.'
+          }`,
         ]
-      : [
-          `Request: ${quote(run.input)}`,
-          `Tools, in order: ${work.tools
-            .map((tool) =>
-              tool.error ? `${tool.name} (failed: ${quote(tool.error, 160)})` : tool.name,
-            )
-            .join(', ')}`,
-          `Answer: ${quote(work.answer)}`,
-        ];
+      : periodic
+        ? [
+            'Recent turns, oldest first:',
+            ...since
+              .slice(0, REVIEW_EVERY)
+              .reverse()
+              .map(
+                (item) =>
+                  `- Asked: ${quote(item.input, 300)}\n  Answered: ${quote(item.output ?? '', 300)}`,
+              ),
+          ]
+        : [
+            `Request: ${quote(run.input)}`,
+            `Tools, in order: ${work.tools
+              .map((tool) =>
+                tool.error ? `${tool.name} (failed: ${quote(tool.error, 160)})` : tool.name,
+              )
+              .join(', ')}`,
+            `Answer: ${quote(work.answer)}`,
+          ];
 
     if (this.services.judge) {
       const answers = await this.services.judge(
@@ -143,21 +158,30 @@ export class Learning {
       if (yes !== undefined && yes < NOTHING_TO_KEEP) return undefined;
     }
 
-    const brief = [
-      `[Learning] Looking back at ${reason}: "${quote(run.input, 80)}"`,
-      'This is your own review, not a message from anyone. Look back at the work below and decide whether something in it will help you next time:',
-      '- a way of doing a kind of task — steps, an order, a format, a check that caught a mistake — becomes a skill: update one of yours if it covers the task, otherwise create one (see skill-creator);',
-      '- a fact about a person, a decision or a preference that you learned becomes a memory, if you do not keep it already;',
-      '- a correction from the owner is the strongest signal: keep what they wanted, and how to tell next time.',
-      'Most turns teach nothing new. Then change nothing. Never keep what is private to one conversation in a skill: skills are how you work everywhere.',
-      'End with one or two lines for the owner: what you kept and why, or "Nothing to keep."',
-      '',
-      ...material,
-      '',
-      yours.length
-        ? `Skills you wrote: ${yours.map((skill) => `${skill.name} — ${skill.description}`).join('; ')}`
-        : 'You have not written any skill yet.',
-    ].join('\n');
+    const brief = classified
+      ? [
+          `[Learning] Reviewing a reusable workflow: ${reason}.`,
+          'This review sees only tool names and success/failure outcomes. It cannot see customer messages, personal data, answers, campaign contents, or tool error text.',
+          'Keep only a general procedure that could help any customer. Never infer or store facts about an individual, their request, purchase, contact details, or preferences. Do not create memories. Create a skill only when this metadata clearly supports a reusable workflow; otherwise change nothing.',
+          'End with one or two lines for the owner: what general procedure you kept and why, or "Nothing to keep."',
+          '',
+          ...material,
+        ].join('\n')
+      : [
+          `[Learning] Looking back at ${reason}: "${quote(run.input, 80)}"`,
+          'This is your own review, not a message from anyone. Look back at the work below and decide whether something in it will help you next time:',
+          '- a way of doing a kind of task — steps, an order, a format, a check that caught a mistake — becomes a skill: update one of yours if it covers the task, otherwise create one (see skill-creator);',
+          '- a fact about a person, a decision or a preference that you learned becomes a memory, if you do not keep it already;',
+          '- a correction from the owner is the strongest signal: keep what they wanted, and how to tell next time.',
+          'Most turns teach nothing new. Then change nothing. Never keep what is private to one conversation in a skill: skills are how you work everywhere.',
+          'End with one or two lines for the owner: what you kept and why, or "Nothing to keep."',
+          '',
+          ...material,
+          '',
+          yours.length
+            ? `Skills you wrote: ${yours.map((skill) => `${skill.name} — ${skill.description}`).join('; ')}`
+            : 'You have not written any skill yet.',
+        ].join('\n');
 
     const session = learning ?? (await this.services.sessions.learningSession(run.profileId));
 

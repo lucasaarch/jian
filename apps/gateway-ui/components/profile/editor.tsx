@@ -1,14 +1,15 @@
 'use client';
 
+import type { ProfessionDefinition, ProfessionId } from '@jian/contracts';
 import { Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { GatewayApi, Profile } from '../../lib/api';
 import { useAutosave } from '../../lib/autosave';
 import { useWorkspace } from '../../lib/workspace';
+import { ProfessionSelect } from '../professions/select';
 import { Button, Confirm, Field, Modal, SectionHeading } from '../ui';
 import { AvatarField } from './avatar-field';
-import { ProfileProfession } from './profession';
 
 const lines = (value: string) =>
   value
@@ -27,9 +28,8 @@ export function NewProfileDialog({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [professions, setProfessions] = useState<
-    { id: 'developer' | 'attendant'; label: string }[]
-  >([]);
+  const [professions, setProfessions] = useState<ProfessionDefinition[]>([]);
+  const [professionId, setProfessionId] = useState<ProfessionId | ''>('');
   const [loadingProfessions, setLoadingProfessions] = useState(true);
 
   useEffect(() => {
@@ -84,6 +84,11 @@ export function NewProfileDialog({
           setError('');
 
           const form = new FormData(event.currentTarget);
+          if (!professionId) {
+            setError('Choose a profession before creating this agent.');
+            setBusy(false);
+            return;
+          }
 
           try {
             done(
@@ -91,7 +96,7 @@ export function NewProfileDialog({
                 name: String(form.get('name')),
                 instructions: String(form.get('instructions')),
                 avatar: String(form.get('avatar')) || null,
-                professionId: String(form.get('professionId')) as 'developer' | 'attendant',
+                professionId,
               }),
             );
           } catch (error) {
@@ -102,22 +107,14 @@ export function NewProfileDialog({
         }}
       >
         <AvatarField name="avatar" />
-        <Field label="Profession" hint="The profession sets the agent's fixed authority ceiling.">
-          <select
-            name="professionId"
-            required
+        <Field label="Profession" hint="The profession sets the agent’s fixed authority ceiling.">
+          <ProfessionSelect
+            id="new-profession"
+            professions={professions}
+            value={professionId}
             disabled={loadingProfessions || !professions.length}
-            defaultValue=""
-          >
-            <option value="" disabled>
-              {loadingProfessions ? 'Loading professions…' : 'Choose a profession'}
-            </option>
-            {professions.map((profession) => (
-              <option key={profession.id} value={profession.id}>
-                {profession.label}
-              </option>
-            ))}
-          </select>
+            onValueChange={setProfessionId}
+          />
         </Field>
         <Field label="Name">
           <input name="name" required maxLength={100} placeholder="e.g. Personal assistant" />
@@ -209,8 +206,6 @@ export function ProfileEditor({
         .join('\n\n'),
       summary: profile.summary ?? '',
       boundaries: profile.identity.boundaries.join('\n'),
-      learn: profile.learnFromWork,
-      agents: profile.reachableByAgents,
     };
 
     for (const [name, value] of Object.entries(values)) {
@@ -243,8 +238,6 @@ export function ProfileEditor({
         goals: [] as string[],
         boundaries: lines(String(data.get('boundaries'))),
       },
-      learnFromWork: data.get('learn') === 'on',
-      reachableByAgents: data.get('agents') === 'on',
     };
     const snapshot = JSON.stringify(patch);
 
@@ -279,7 +272,6 @@ export function ProfileEditor({
 
   return (
     <>
-      <ProfileProfession profile={profile} api={api} />
       <SectionHeading
         title="Identity"
         description="Instructions shared by every session of this agent."
@@ -338,27 +330,6 @@ export function ProfileEditor({
                 rows={3}
               />
             </Field>
-            <label className="check-row">
-              <input name="agents" type="checkbox" defaultChecked={profile.reachableByAgents} />
-              <span>
-                <strong>Talk with other agents</strong>
-                <small>
-                  Other agents can find this one and ask it things, and it can ask them. Off, it
-                  leaves their list and loses contact with all of them.
-                </small>
-              </span>
-            </label>
-            <label className="check-row">
-              <input name="learn" type="checkbox" defaultChecked={profile.learnFromWork} />
-              <span>
-                <strong>Learn from its work</strong>
-                <small>
-                  After a long turn, an error it recovered from, or every fifteen turns, the agent
-                  looks back and keeps what helps as a skill or a memory. What it kept, and why, is
-                  under Chats › Learning.
-                </small>
-              </span>
-            </label>
           </div>
         </div>
       </form>

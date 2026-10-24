@@ -108,7 +108,11 @@ export class Profiles {
   }
 
   async createProfile(input: unknown) {
-    const data = profileSchema.parse(input);
+    const data = {
+      ...profileSchema.parse(input),
+      learnFromWork: true,
+      reachableByAgents: true,
+    };
 
     const profile: Profile = {
       ...data,
@@ -377,6 +381,8 @@ export class Profiles {
       const patched: Profile = {
         ...current,
         ...patch,
+        learnFromWork: true,
+        reachableByAgents: true,
         version: current.version + 1,
         updatedAt: nowIso(this.clock),
       };

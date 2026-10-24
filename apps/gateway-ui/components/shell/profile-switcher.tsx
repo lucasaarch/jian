@@ -1,11 +1,17 @@
 'use client';
 
-import { Plus } from 'lucide-react';
+import { BriefcaseBusiness, Plus } from 'lucide-react';
 import { useWorkspace } from '../../lib/workspace';
 import { Avatar } from '../profile/avatar-field';
 import { Select } from '../ui/select';
 
-export function ProfileSwitcher({ onCreate }: { onCreate: () => void }) {
+export function ProfileSwitcher({
+  onCreate,
+  onAssignProfession,
+}: {
+  onCreate: () => void;
+  onAssignProfession: () => void;
+}) {
   const { profiles, profile, selected, select, busy } = useWorkspace();
   return (
     <div className="profile-selector">
@@ -31,16 +37,30 @@ export function ProfileSwitcher({ onCreate }: { onCreate: () => void }) {
           </>
         )}
         footer={(close) => (
-          <button
-            type="button"
-            onClick={() => {
-              close();
-              onCreate();
-            }}
-          >
-            <Plus size={16} />
-            New agent
-          </button>
+          <>
+            {profile?.professionId === null && (
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  onAssignProfession();
+                }}
+              >
+                <BriefcaseBusiness size={16} />
+                Assign profession
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                close();
+                onCreate();
+              }}
+            >
+              <Plus size={16} />
+              New agent
+            </button>
+          </>
         )}
       />
     </div>

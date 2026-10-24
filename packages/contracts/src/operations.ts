@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { salesCampaignInputSchema, salesCampaignSchema } from './campaigns.js';
 import {
   channelConnectionSchema,
   channelInputSchema,
@@ -141,6 +142,7 @@ export type Operation = {
 
 const profile = '/v1/profiles/:profileId';
 const team = '/v1/teams/:teamId';
+const campaign = `${profile}/campaigns/:campaignId`;
 const session = `${profile}/sessions/:sessionId`;
 
 export const cursorSchema = z.strictObject({
@@ -148,6 +150,39 @@ export const cursorSchema = z.strictObject({
 });
 
 export const operations: Operation[] = [
+  {
+    method: 'GET',
+    path: `${profile}/campaigns`,
+    operationId: 'listSalesCampaigns',
+    access: 'admin',
+    response: z.array(salesCampaignSchema),
+  },
+  {
+    method: 'POST',
+    path: `${profile}/campaigns`,
+    operationId: 'createSalesCampaign',
+    access: 'admin',
+    body: salesCampaignInputSchema,
+    response: salesCampaignSchema,
+    status: 201,
+  },
+  {
+    method: 'PATCH',
+    path: campaign,
+    operationId: 'updateSalesCampaign',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), campaignId: z.uuid() }),
+    body: salesCampaignInputSchema,
+    response: salesCampaignSchema,
+  },
+  {
+    method: 'DELETE',
+    path: campaign,
+    operationId: 'deleteSalesCampaign',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), campaignId: z.uuid() }),
+    response: z.strictObject({ id: z.uuid() }),
+  },
   {
     method: 'POST',
     path: `${profile}/profession/assign`,
