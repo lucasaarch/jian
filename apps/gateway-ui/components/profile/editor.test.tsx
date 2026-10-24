@@ -28,13 +28,25 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-async function render() {
+async function render(
+  profileProfession: GatewayApi['profileProfession'] = vi.fn<GatewayApi['profileProfession']>(
+    async () => ({
+      status: 'legacy_unclassified',
+      assignable: false,
+      scope: 'configuration',
+      profession: null,
+      ceilingCapabilities: null,
+      configurationEffectiveCapabilities: null,
+    }),
+  ),
+) {
   vi.useFakeTimers();
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
   let version = profile.version;
   const saves: Array<Record<string, unknown>> = [];
   const api = {
+    profileProfession,
     updateProfile: vi.fn(async (_id: string, body: Record<string, unknown>) => {
       saves.push(body);
       version += 1;
@@ -104,4 +116,28 @@ it('saves a switch at once, and never an empty name', async () => {
   await type('name', '');
   await wait(1000);
   expect(saves).toHaveLength(1);
+});
+
+it('keeps identity autosave working when profession loading fails', async () => {
+  const { element, saves, type, wait } = await render(
+    vi.fn(async () => {
+      throw new Error('Unavailable');
+    }),
+  );
+
+  expect(element.querySelector('[role="alert"]')?.textContent).toContain(
+    'Could not load profession details',
+  );
+  await type('name', 'Still editable');
+  await wait(900);
+  expect(saves[0]).toMatchObject({ name: 'Still editable' });
+});
+
+it('keeps identity autosave working while profession details are loading', async () => {
+  const { element, saves, type, wait } = await render(vi.fn(() => new Promise<never>(() => {})));
+
+  expect(element.querySelector('[role="status"]')?.textContent).toContain('Loading profession');
+  await type('name', 'Editable while loading');
+  await wait(900);
+  expect(saves[0]).toMatchObject({ name: 'Editable while loading' });
 });

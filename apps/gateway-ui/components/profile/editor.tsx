@@ -8,6 +8,7 @@ import { useAutosave } from '../../lib/autosave';
 import { useWorkspace } from '../../lib/workspace';
 import { Button, Confirm, Field, Modal, SectionHeading } from '../ui';
 import { AvatarField } from './avatar-field';
+import { ProfileProfession } from './profession';
 
 const lines = (value: string) =>
   value
@@ -235,6 +236,7 @@ export function ProfileEditor({
 
   return (
     <>
+      <ProfileProfession profile={profile} api={api} />
       <SectionHeading
         title="Identity"
         description="Instructions shared by every session of this agent."

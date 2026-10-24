@@ -4,6 +4,7 @@ export * from './decisions.js';
 export * from './media.js';
 export * from './operations.js';
 export * from './peers.js';
+export * from './profession-classification.js';
 export * from './professions.js';
 export * from './profile.js';
 export * from './providers.js';

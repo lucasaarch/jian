@@ -1,4 +1,9 @@
-import type { Capability, ProfessionAuthority, Profile } from '@jian/contracts';
+import type {
+  Capability,
+  EffectiveProfession,
+  ProfessionAuthority,
+  Profile,
+} from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
 import { findProfession } from './catalog.js';
 import { requireCapability, resolveProfessionAuthority } from './policy.js';
@@ -66,6 +71,35 @@ export function profileAuthority(
   });
   if (!authority) throw new GatewayError(403, 'Profession authority is unavailable');
   return authority;
+}
+
+/** Presentation only: reuse live configuration policy, without claiming run/resource authority. */
+export function effectiveProfession(profile: Profile): EffectiveProfession {
+  const authority = profileAuthority(profile);
+  if (!authority) {
+    return {
+      status: 'legacy_unclassified',
+      assignable: false,
+      scope: 'configuration',
+      profession: null,
+      ceilingCapabilities: null,
+      configurationEffectiveCapabilities: null,
+    };
+  }
+  const definition = findProfession(authority.professionId);
+  if (!definition) throw new GatewayError(403, 'Profession authority is unavailable');
+  return {
+    status: 'classified',
+    assignable: false,
+    scope: 'configuration',
+    profession: {
+      id: definition.id,
+      label: definition.label,
+      policyVersion: definition.policyVersion,
+    },
+    ceilingCapabilities: [...definition.capabilities],
+    configurationEffectiveCapabilities: authority.capabilities,
+  };
 }
 
 /** Run snapshots preserve content, not privileges. Both the original and live limits apply. */

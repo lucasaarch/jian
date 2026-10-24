@@ -41,6 +41,16 @@ const decisions = (configured: boolean) => ({
 export const handlers = [
   http.get('*/v1/profiles/:profileId/sessions/:sessionId/subagents', () => ok([])),
   http.get('*/v1/profiles', () => ok(data.profiles)),
+  http.get('*/v1/profiles/:profileId/profession', () =>
+    ok({
+      status: 'legacy_unclassified',
+      scope: 'configuration',
+      assignable: false,
+      profession: null,
+      ceilingCapabilities: null,
+      configurationEffectiveCapabilities: null,
+    }),
+  ),
   http.get('*/v1/profiles/:profileId', ({ params }) =>
     ok(data.profiles.find((profile) => profile.id === params.profileId) ?? data.profiles[0]),
   ),

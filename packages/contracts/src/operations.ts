@@ -35,7 +35,11 @@ import {
   stickerSchema,
   stickerTagsSchema,
 } from './media.js';
-import { professionCatalogSchema } from './professions.js';
+import {
+  professionPreviewInputSchema,
+  professionPreviewSchema,
+} from './profession-classification.js';
+import { effectiveProfessionSchema, professionCatalogSchema } from './professions.js';
 import {
   builtinSkillSchema,
   mcpImportResultSchema,
@@ -142,6 +146,21 @@ export const cursorSchema = z.strictObject({
 });
 
 export const operations: Operation[] = [
+  {
+    method: 'POST',
+    path: `${profile}/profession/preview`,
+    operationId: 'previewProfessionClassification',
+    access: 'admin',
+    body: professionPreviewInputSchema,
+    response: professionPreviewSchema,
+  },
+  {
+    method: 'GET',
+    path: `${profile}/profession`,
+    operationId: 'getEffectiveProfession',
+    access: 'admin',
+    response: effectiveProfessionSchema,
+  },
   {
     method: 'GET',
     path: '/v1/remote/machines',

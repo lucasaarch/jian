@@ -56,3 +56,28 @@ export const professionAuthoritySchema = z.strictObject({
   capabilities: z.array(capabilitySchema),
 });
 export type ProfessionAuthority = z.infer<typeof professionAuthoritySchema>;
+
+/**
+ * Read-only configuration summary, NOT resource ACLs, context/inherited restrictions,
+ * model/service availability or authorization to run. null lists mean unresolved legacy
+ * semantics, never deny-all or all-capabilities. Assignment remains unavailable.
+ */
+export const effectiveProfessionSchema = z.discriminatedUnion('status', [
+  z.strictObject({
+    status: z.literal('legacy_unclassified'),
+    assignable: z.literal(false),
+    scope: z.literal('configuration'),
+    profession: z.null(),
+    ceilingCapabilities: z.null(),
+    configurationEffectiveCapabilities: z.null(),
+  }),
+  z.strictObject({
+    status: z.literal('classified'),
+    assignable: z.literal(false),
+    scope: z.literal('configuration'),
+    profession: professionDefinitionSchema.pick({ id: true, label: true, policyVersion: true }),
+    ceilingCapabilities: z.array(capabilitySchema),
+    configurationEffectiveCapabilities: z.array(capabilitySchema),
+  }),
+]);
+export type EffectiveProfession = z.infer<typeof effectiveProfessionSchema>;
