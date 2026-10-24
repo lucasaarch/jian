@@ -579,8 +579,6 @@ export const modelDefaults: ModelDefaults = {
   image: 'disabled',
   vision: 'disabled',
   audio: 'disabled',
-  speech: 'disabled',
-  voice: 'disabled',
   transcription: null,
   sticker: 'disabled',
 };
@@ -611,7 +609,7 @@ export const builtinSkills: BuiltinSkill[] = [
   ),
   builtin(
     'media',
-    'Use when someone sends an image, voice note, PDF or file, or asks for an image or a voice reply.',
+    'Use when someone sends an image, voice note, PDF or file, or asks for an image.',
   ),
   builtin(
     'coding-work',

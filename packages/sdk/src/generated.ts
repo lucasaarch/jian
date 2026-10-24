@@ -437,40 +437,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/voice/token": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Required permission: admin. */
-        post: operations["createVoiceToken"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/profiles/{profileId}/voice/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Required permission: admin. */
-        post: operations["summarizeVoiceTranscript"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -7025,7 +6991,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | null;
                         /** @default null */
                         channel: {
@@ -7034,7 +6999,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | null;
                         /** @default null */
                         compaction: {
@@ -7043,7 +7007,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | null;
                         /** @default disabled */
                         image: ({
@@ -7052,7 +7015,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
                         vision: ({
@@ -7061,7 +7023,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
                         audio: ({
@@ -7070,16 +7031,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
-                        } | "disabled") | null;
-                        /** @default disabled */
-                        speech: ({
-                            /** Format: uuid */
-                            providerId: string;
-                            modelId: string;
-                            /** @enum {string} */
-                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
                         sticker: ({
@@ -7088,19 +7039,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
-                        } | "disabled") | null;
-                        /**
-                         * @description Real-time voice model used by calls.
-                         * @default disabled
-                         */
-                        voice: ({
-                            /** Format: uuid */
-                            providerId: string;
-                            modelId: string;
-                            /** @enum {string} */
-                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | "disabled") | null;
                         /**
                          * @description Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.
@@ -7112,7 +7050,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | null;
                         /** Format: uuid */
                         id: string;
@@ -7243,7 +7180,6 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
                     } | null;
                     /** @default null */
                     channel?: {
@@ -7252,7 +7188,6 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
                     } | null;
                     /** @default null */
                     compaction?: {
@@ -7261,7 +7196,6 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
                     } | null;
                     /** @default disabled */
                     image?: ({
@@ -7270,7 +7204,6 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
                     } | "disabled") | null;
                     /** @default disabled */
                     vision?: ({
@@ -7279,7 +7212,6 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
                     } | "disabled") | null;
                     /** @default disabled */
                     audio?: ({
@@ -7288,16 +7220,6 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
-                    } | "disabled") | null;
-                    /** @default disabled */
-                    speech?: ({
-                        /** Format: uuid */
-                        providerId: string;
-                        modelId: string;
-                        /** @enum {string} */
-                        reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
                     } | "disabled") | null;
                     /** @default disabled */
                     sticker?: ({
@@ -7306,19 +7228,6 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
-                    } | "disabled") | null;
-                    /**
-                     * @description Real-time voice model used by calls.
-                     * @default disabled
-                     */
-                    voice?: ({
-                        /** Format: uuid */
-                        providerId: string;
-                        modelId: string;
-                        /** @enum {string} */
-                        reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
                     } | "disabled") | null;
                     /**
                      * @description Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.
@@ -7330,7 +7239,6 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
                     } | null;
                 };
             };
@@ -7350,7 +7258,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | null;
                         /** @default null */
                         channel: {
@@ -7359,7 +7266,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | null;
                         /** @default null */
                         compaction: {
@@ -7368,7 +7274,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | null;
                         /** @default disabled */
                         image: ({
@@ -7377,7 +7282,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
                         vision: ({
@@ -7386,7 +7290,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
                         audio: ({
@@ -7395,16 +7298,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
-                        } | "disabled") | null;
-                        /** @default disabled */
-                        speech: ({
-                            /** Format: uuid */
-                            providerId: string;
-                            modelId: string;
-                            /** @enum {string} */
-                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
                         sticker: ({
@@ -7413,19 +7306,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
-                        } | "disabled") | null;
-                        /**
-                         * @description Real-time voice model used by calls.
-                         * @default disabled
-                         */
-                        voice: ({
-                            /** Format: uuid */
-                            providerId: string;
-                            modelId: string;
-                            /** @enum {string} */
-                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | "disabled") | null;
                         /**
                          * @description Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.
@@ -7437,7 +7317,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         } | null;
                         /** Format: uuid */
                         id: string;
@@ -7445,271 +7324,6 @@ export interface operations {
                         profileId: string;
                         /** Format: date-time */
                         updatedAt: string;
-                    };
-                };
-            };
-            /** @description Error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-        };
-    };
-    createVoiceToken: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                profileId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** Format: uuid */
-                    sessionId?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        token: string;
-                        model: string;
-                        /** @enum {string} */
-                        provider: "google" | "openai";
-                        voiceName?: string;
-                        /** Format: date-time */
-                        expiresAt?: string;
-                    };
-                };
-            };
-            /** @description Error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-            /** @description Error */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: string;
-                    };
-                };
-            };
-        };
-    };
-    summarizeVoiceTranscript: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                profileId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    transcript: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        summary: string;
                     };
                 };
             };
@@ -8159,7 +7773,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         contextPolicy?: {
                             /** @default 32000 */
@@ -8412,7 +8025,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         contextPolicy?: {
                             /** @default 32000 */
@@ -16176,7 +15788,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         objective?: {
                             text: string;
@@ -16349,7 +15960,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         objective?: {
                             text: string;
@@ -16514,7 +16124,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         objective?: {
                             text: string;
@@ -16651,7 +16260,6 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
                     } | null;
                 };
             };
@@ -16686,7 +16294,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         objective?: {
                             text: string;
@@ -16854,7 +16461,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         objective?: {
                             text: string;
@@ -17277,7 +16883,6 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                        voiceName?: string;
                     };
                 };
             };
@@ -17354,7 +16959,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         contextPolicy?: {
                             /** @default 32000 */
@@ -19970,7 +19574,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         contextPolicy?: {
                             /** @default 32000 */
@@ -21755,7 +21358,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         contextPolicy?: {
                             /** @default 32000 */
@@ -22001,7 +21603,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         contextPolicy?: {
                             /** @default 32000 */
@@ -22247,7 +21848,6 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            voiceName?: string;
                         };
                         contextPolicy?: {
                             /** @default 32000 */

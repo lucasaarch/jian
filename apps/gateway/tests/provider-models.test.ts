@@ -305,8 +305,6 @@ it('lets the owner change one model default while a stored role is no longer off
       image: 'disabled',
       vision: selection,
       audio: 'disabled',
-      speech: 'disabled',
-      voice: 'disabled',
       transcription: null,
       sticker: 'disabled',
     },
@@ -320,8 +318,6 @@ it('lets the owner change one model default while a stored role is no longer off
     image: 'disabled',
     vision: selection,
     audio: 'disabled',
-    speech: 'disabled',
-    voice: 'disabled',
     sticker: 'disabled',
   });
   expect(saved.conversation?.reasoningEffort).toBe('high');
@@ -336,8 +332,6 @@ it('lets the owner change one model default while a stored role is no longer off
       image: 'disabled',
       vision: { ...selection, reasoningEffort: 'low' },
       audio: 'disabled',
-      speech: 'disabled',
-      voice: 'disabled',
       sticker: 'disabled',
     }),
   ).rejects.toMatchObject({

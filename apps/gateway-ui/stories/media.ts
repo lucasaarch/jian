@@ -200,7 +200,6 @@ export const assets = {
     ),
   },
   ownerVoice: { mimeType: 'audio/wav', name: 'Voice note.webm', data: voice(7, 190) },
-  agentVoice: { mimeType: 'audio/wav', data: voice(11, 240, 2.8) },
   mayaVoice: { mimeType: 'audio/wav', data: voice(5, 260, 3.1) },
   memberVoice: { mimeType: 'audio/wav', data: voice(9, 150, 2) },
   statusPage: {

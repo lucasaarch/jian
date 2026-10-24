@@ -706,61 +706,58 @@ describe('deleting a profile with a live WhatsApp connection', () => {
   });
 });
 
-it.each(['image', 'speech'] as const)(
-  'delivers generated %s to WhatsApp once without substituting a text link',
-  async (kind) => {
-    const f = await setup();
-    try {
-      await f.whatsapp.connect(f.profile.id, f.binding.id);
-      await f.whatsapp.tick(f.receive);
-      await f.devices[0]?.callbacks.ready('5511888888888@c.us');
-      await f.devices[0]?.callbacks.message(message);
-      await f.whatsapp.tick(f.receive);
-      await f.approve();
-      const provider = await f.services.providers.createProvider({
-        name: 'OpenAI',
-        kind: 'openai',
-        secret: 'synthetic-openai-media-key-1234567890',
-      });
-      await f.services.providers.setModelDefaults(f.profile.id, {
-        [kind]: {
-          providerId: provider.id,
-          modelId: kind === 'image' ? 'gpt-image-2' : 'gpt-4o-mini-tts',
-        },
-      });
-      let requests = 0;
-      f.services.media = new Media(
-        f.store,
-        f.services.providers,
-        f.services.gatewayVault,
-        async () => {
-          requests++;
-          return kind === 'image'
-            ? Response.json({ data: [{ b64_json: Buffer.from('png fixture').toString('base64') }] })
-            : new Response('OggS synthetic fixture');
-        },
-      );
-      const [run] = await f.services.runs.recent(f.profile.id);
-      if (!run) throw new Error('Missing run');
-      const first = await f.services.media.generate(run, kind, 'Hello', undefined, 'media-call');
-      expect(
-        await f.services.media.generate(run, kind, 'Hello', undefined, 'media-call'),
-      ).toMatchObject({ mediaId: first.mediaId });
-      await f.channels.dispatch();
-      await f.channels.dispatch();
-      expect(requests).toBe(1);
-      const mediaMessages = f.sent.filter((message) => message.media);
-      expect(mediaMessages).toHaveLength(1);
-      expect(mediaMessages[0]?.media?.mimeType).toBe(kind === 'image' ? 'image/png' : 'audio/ogg');
-      expect(mediaMessages[0]?.chatId).toBe(actorId);
-      expect(
-        (await f.channels.deliveries(f.profile.id)).find(
-          (delivery) => delivery.mediaId === first.mediaId,
-        )?.status,
-      ).toBe('sent');
-    } finally {
-      await f.whatsapp.stop();
-      await f.app.close();
-    }
-  },
-);
+it('delivers generated images to WhatsApp once without substituting a text link', async () => {
+  const f = await setup();
+  try {
+    await f.whatsapp.connect(f.profile.id, f.binding.id);
+    await f.whatsapp.tick(f.receive);
+    await f.devices[0]?.callbacks.ready('5511888888888@c.us');
+    await f.devices[0]?.callbacks.message(message);
+    await f.whatsapp.tick(f.receive);
+    await f.approve();
+    const provider = await f.services.providers.createProvider({
+      name: 'OpenAI',
+      kind: 'openai',
+      secret: 'synthetic-openai-media-key-1234567890',
+    });
+    await f.services.providers.setModelDefaults(f.profile.id, {
+      image: {
+        providerId: provider.id,
+        modelId: 'gpt-image-2',
+      },
+    });
+    let requests = 0;
+    f.services.media = new Media(
+      f.store,
+      f.services.providers,
+      f.services.gatewayVault,
+      async () => {
+        requests++;
+        return Response.json({
+          data: [{ b64_json: Buffer.from('png fixture').toString('base64') }],
+        });
+      },
+    );
+    const [run] = await f.services.runs.recent(f.profile.id);
+    if (!run) throw new Error('Missing run');
+    const first = await f.services.media.generate(run, 'image', 'Hello', 'media-call');
+    expect(await f.services.media.generate(run, 'image', 'Hello', 'media-call')).toMatchObject({
+      mediaId: first.mediaId,
+    });
+    await f.channels.dispatch();
+    await f.channels.dispatch();
+    expect(requests).toBe(1);
+    const mediaMessages = f.sent.filter((message) => message.media);
+    expect(mediaMessages).toHaveLength(1);
+    expect(mediaMessages[0]?.media?.mimeType).toBe('image/png');
+    expect(mediaMessages[0]?.chatId).toBe(actorId);
+    expect(
+      (await f.channels.deliveries(f.profile.id)).find(
+        (delivery) => delivery.mediaId === first.mediaId,
+      )?.status,
+    ).toBe('sent');
+  } finally {
+    await f.whatsapp.stop();
+    await f.app.close();
+  }
+});

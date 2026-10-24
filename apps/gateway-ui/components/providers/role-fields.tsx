@@ -10,7 +10,6 @@ export type RoleValue = {
   providerId: string;
   modelId: string;
   reasoningEffort: string;
-  voiceName?: string;
   disabled: boolean;
 };
 
@@ -53,91 +52,6 @@ export function describeRole(value: RoleValue, data: ProfileData, configured: Pr
   const allowed = efforts.filter((effort) => selected?.reasoningEfforts.includes(effort.value));
 
   return { provider, list, selected, allowed };
-}
-
-const geminiLiveVoices = [
-  'Achernar',
-  'Achird',
-  'Algenib',
-  'Algieba',
-  'Alnilam',
-  'Aoede',
-  'Autonoe',
-  'Callirrhoe',
-  'Charon',
-  'Despina',
-  'Enceladus',
-  'Erinome',
-  'Fenrir',
-  'Gacrux',
-  'Iapetus',
-  'Kore',
-  'Laomedeia',
-  'Leda',
-  'Orus',
-  'Puck',
-  'Pulcherrima',
-  'Rasalgethi',
-  'Sadachbia',
-  'Sadaltager',
-  'Schedar',
-  'Sulafat',
-  'Umbriel',
-  'Vindemiatrix',
-  'Zephyr',
-  'Zubenelgenubi',
-];
-
-const gptLiveVoices = [
-  'alloy',
-  'ash',
-  'ballad',
-  'beacon',
-  'bossa',
-  'brise',
-  'cedar',
-  'cinder',
-  'coral',
-  'delta',
-  'echo',
-  'flitz',
-  'gleam',
-  'harema',
-  'juni',
-  'marin',
-  'meridian',
-  'nira',
-  'noeul',
-  'nuri',
-  'quartz',
-  'ripple',
-  'sage',
-  'shimmer',
-  'shitan',
-  'sillage',
-  'stone',
-  'tempo',
-  'verse',
-  'vesper',
-  'willow',
-];
-
-function voiceOptions(provider: string, speech = false): SelectOption[] {
-  const voices = speech
-    ? provider === 'google'
-      ? geminiLiveVoices
-      : provider === 'openai'
-        ? ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer']
-        : []
-    : provider === 'google'
-      ? geminiLiveVoices
-      : provider === 'openai'
-        ? gptLiveVoices
-        : [];
-  return [
-    { value: '', label: 'Default voice' },
-    ...voices.map((voice) => ({ value: voice, label: voice })),
-  ];
 }
 
 export function RoleFields({
@@ -195,7 +109,6 @@ export function RoleFields({
                   providerId: choice.slice(0, split),
                   modelId: choice.slice(split + 1),
                   reasoningEffort: '',
-                  voiceName: undefined,
                   disabled: false,
                 });
               }
@@ -224,21 +137,6 @@ export function RoleFields({
             does not authorize image generation.
           </p>
         )}
-        {(role.key === 'voice' || role.key === 'speech') &&
-          !value.disabled &&
-          provider &&
-          value.modelId && (
-            <Field label="Voice">
-              <Select
-                value={value.voiceName ?? ''}
-                disabled={busy}
-                onValueChange={(voiceName) =>
-                  change(role.key, { voiceName: voiceName || undefined })
-                }
-                options={voiceOptions(provider.kind, role.key === 'speech')}
-              />
-            </Field>
-          )}
         {role.tools && !value.disabled && (
           <Field label="Effort">
             <Select

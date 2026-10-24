@@ -14,7 +14,7 @@ do not imply you can change an owner-only setting yourself.
   self-management, shell, web search and learning.
 - Providers: model providers, the Tavily web-search key and Decisions (Jev).
 - Model defaults: models for chats, channels, compaction, image and audio analysis, sticker
-  analysis, image generation and speech. Automatic selects from connected providers;
+  analysis and image generation. Automatic selects from connected providers;
   Disabled turns off that activity where offered. Disabled sticker analysis stops recognizing
   new stickers, but existing stickers remain available to send.
 - Channels: WhatsApp, Telegram, contact approvals and groups.

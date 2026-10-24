@@ -21,7 +21,13 @@ export const sessionCalls = (client: Client) => ({
         params: { path: { profileId, sessionId } },
       }),
     ),
-  send: (profileId: string, sessionId: string, text: string, mediaIds: string[] = []) =>
+  send: (
+    profileId: string,
+    sessionId: string,
+    text: string,
+    mediaIds: string[] = [],
+    model?: ModelSelection,
+  ) =>
     result(
       client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/messages', {
         params: { path: { profileId, sessionId } },
@@ -30,6 +36,7 @@ export const sessionCalls = (client: Client) => ({
           text,
           requestKey: crypto.randomUUID(),
           ...(mediaIds.length ? { mediaIds } : {}),
+          ...(model ? { model } : {}),
         },
       }),
     ),

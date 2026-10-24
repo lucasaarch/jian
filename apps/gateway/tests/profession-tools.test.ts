@@ -104,13 +104,7 @@ describe('native profession tool authorization', () => {
   );
 
   it('requires all conjunctive capabilities, not just one', () => {
-    for (const name of [
-      'send_file',
-      'save_attachment',
-      'generate_image',
-      'generate_speech',
-      'send_sticker',
-    ]) {
+    for (const name of ['send_file', 'save_attachment', 'generate_image', 'send_sticker']) {
       const required = toolCapabilities[name];
       if (!required) throw new Error('Missing tool');
       for (const missing of required) {

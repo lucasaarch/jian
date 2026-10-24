@@ -14,14 +14,6 @@ const conflicts: Record<string, string> = {
     'This model does not accept the selected reasoning effort.',
   'Reasoning effort is not catalogued for this model':
     'The reasoning levels of this model are not catalogued on this gateway.',
-  'Choose a Gemini Live model under Model defaults › Voice calls first':
-    'Choose a Gemini Live model under Model defaults › Voice calls first.',
-  'OpenAI Live voice calls are not available yet. Choose a Gemini Live model under Voice calls.':
-    'OpenAI Live voice calls are not available yet. Choose a Gemini Live model under Voice calls.',
-  'Voice calls currently require an active Google API provider':
-    'Voice calls currently require an active Google API provider.',
-  'Voice calls require an active provider for the selected model':
-    'Voice calls require an active provider for the selected model.',
   'Google API key is not configured': 'Google API key is not configured.',
 };
 

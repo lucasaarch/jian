@@ -17,125 +17,12 @@ describe('media providers', () => {
     });
     expect(
       await client.generate(
-        'image',
         { provider: 'openai', modelId: 'gpt-image-2' },
         'synthetic-key',
         'A blue square',
-        undefined,
         signal,
       ),
     ).toMatchObject({ mimeType: 'image/png', data: png });
-  });
-
-  it('wraps Gemini PCM speech in a playable WAV file', async () => {
-    const client = new MediaProviders(async (_url, options) => {
-      const body = JSON.parse(String(options?.body));
-      expect(body.generationConfig.responseModalities).toEqual(['AUDIO']);
-      expect(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe(
-        'Leda',
-      );
-      expect(body.contents[0].parts[0].text).toContain('Speaking style: Meiga e alegre.');
-      expect(body.contents[0].parts[0].text).toMatch(/text aloud.*Olá$/s);
-      return Response.json({
-        candidates: [
-          {
-            content: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: 'audio/L16;codec=pcm;rate=24000',
-                    data: Buffer.alloc(480).toString('base64'),
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      });
-    });
-    const audio = await client.generate(
-      'speech',
-      { provider: 'google', modelId: 'gemini-2.5-flash-preview-tts' },
-      'synthetic-key',
-      'Olá',
-      'leda',
-      signal,
-      undefined,
-      'Meiga e alegre.',
-    );
-    expect(audio.mimeType).toBe('audio/wav');
-    expect(Buffer.from(audio.data, 'base64').subarray(0, 4).toString()).toBe('RIFF');
-  });
-
-  it('rejects voices from another provider with usable Gemini choices before sending text', async () => {
-    let sent = false;
-    const client = new MediaProviders(async () => {
-      sent = true;
-      return Response.json({});
-    });
-    await expect(
-      client.generate(
-        'speech',
-        { provider: 'google', modelId: 'gemini-2.5-flash-preview-tts' },
-        'synthetic-key',
-        'Olá',
-        'shimmer',
-        signal,
-      ),
-    ).rejects.toThrow(/Gemini.*Kore.*Leda/);
-    expect(sent).toBe(false);
-  });
-
-  it('keeps speaking instructions separate from the text with OpenAI speech', async () => {
-    const client = new MediaProviders(async (_url, options) => {
-      expect(JSON.parse(String(options?.body))).toMatchObject({
-        input: 'Olá',
-        voice: 'nova',
-        instructions: 'Speak cheerfully.',
-      });
-      return new Response('OggS-test');
-    });
-    const result = await client.generate(
-      'speech',
-      { provider: 'openai', modelId: 'gpt-4o-mini-tts' },
-      'synthetic-key',
-      'Olá',
-      'Nova',
-      signal,
-      undefined,
-      'Speak cheerfully.',
-    );
-    expect(result.mimeType).toBe('audio/ogg');
-  });
-
-  it('refuses unsupported voices on legacy OpenAI speech models', async () => {
-    const client = new MediaProviders(async () => Response.json({}));
-    await expect(
-      client.generate(
-        'speech',
-        { provider: 'openai', modelId: 'tts-1' },
-        'synthetic-key',
-        'Olá',
-        'marin',
-        signal,
-      ),
-    ).rejects.toThrow(/tts-1.*nova/);
-  });
-
-  it('explains when a legacy speech model cannot honor style instructions', async () => {
-    const client = new MediaProviders(async () => Response.json({}));
-    await expect(
-      client.generate(
-        'speech',
-        { provider: 'openai', modelId: 'tts-1-hd' },
-        'synthetic-key',
-        'Olá',
-        undefined,
-        signal,
-        undefined,
-        'Speak cheerfully.',
-      ),
-    ).rejects.toThrow('does not support style instructions');
   });
 
   it('does not treat a blocked image response as successful generation', async () => {
@@ -146,11 +33,9 @@ describe('media providers', () => {
     );
     await expect(
       client.generate(
-        'image',
         { provider: 'google', modelId: 'gemini-2.5-flash-image' },
         'synthetic-key',
         'A picture',
-        undefined,
         signal,
       ),
     ).rejects.toThrow('did not return');
@@ -164,11 +49,9 @@ describe('media providers', () => {
     });
     await expect(
       client.generate(
-        'image',
         { provider: 'openai-codex', modelId: 'gpt-image-2' },
         'synthetic-login',
         'A picture',
-        undefined,
         signal,
       ),
     ).rejects.toThrow('API key');
@@ -226,120 +109,6 @@ async function mediaFixture(catalog?: ModelCatalog) {
     });
   return { services, profile, channels, incoming };
 }
-
-it('issues one Gemini Live token restricted to the configured voice model', async () => {
-  const f = await mediaFixture();
-  const provider = await f.services.providers.createProvider({
-    name: 'Google voice',
-    kind: 'google',
-    secret: 'synthetic-google-key',
-  });
-  await f.services.providers.setModelDefaults(f.profile.id, {
-    voice: { providerId: provider.id, modelId: 'gemini-3.8-live', voiceName: 'Aoede' },
-  });
-  expect((await f.services.providers.modelDefaults(f.profile.id)).voice).toEqual({
-    providerId: provider.id,
-    modelId: 'gemini-3.8-live',
-    voiceName: 'Aoede',
-  });
-  let headers: Headers | undefined;
-  let body: Record<string, unknown> | undefined;
-  f.services.providers.useSessionReader({
-    messages: async () =>
-      [{ role: 'user', content: 'Earlier request: remember my preference.' }] as never,
-  });
-  const sessionId = '00000000-0000-4000-8000-000000000001';
-  const token = await f.services.providers.createVoiceToken(
-    f.profile.id,
-    async (input, init) => {
-      expect(String(input)).toBe('https://generativelanguage.googleapis.com/v1beta/auth_tokens');
-      headers = new Headers(init?.headers);
-      body = JSON.parse(String(init?.body));
-      return Response.json({
-        name: 'ephemeral-only',
-        expireTime: new Date(Date.now() + 60_000).toISOString(),
-      });
-    },
-    sessionId,
-  );
-
-  expect(headers?.get('x-goog-api-key')).toBe('synthetic-google-key');
-  expect(body).toMatchObject({
-    uses: 1,
-    bidiGenerateContentSetup: {
-      systemInstruction: {
-        parts: [{ text: expect.stringContaining('Earlier request: remember my preference.') }],
-      },
-      tools: [
-        {
-          functionDeclarations: expect.arrayContaining([
-            expect.objectContaining({ name: 'delegate_to_jian' }),
-            expect.objectContaining({ name: 'read_recent_conversation' }),
-          ]),
-        },
-      ],
-      model: 'models/gemini-3.8-live',
-      generationConfig: {
-        responseModalities: ['AUDIO'],
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Aoede' } } },
-      },
-      inputAudioTranscription: {},
-      outputAudioTranscription: {},
-    },
-  });
-  expect(body).not.toHaveProperty('liveConnectConstraints');
-  expect(token).toMatchObject({
-    token: 'ephemeral-only',
-    model: 'gemini-3.8-live',
-    provider: 'google',
-    voiceName: 'Aoede',
-  });
-});
-
-it('preserves Gemini token issuance error status and message for diagnosis', async () => {
-  const f = await mediaFixture();
-  const provider = await f.services.providers.createProvider({
-    name: 'Google voice',
-    kind: 'google',
-    secret: 'synthetic-google-key',
-  });
-  await f.services.providers.setModelDefaults(f.profile.id, {
-    voice: { providerId: provider.id, modelId: 'gemini-3.8-live' },
-  });
-
-  await expect(
-    f.services.providers.createVoiceToken(f.profile.id, async () =>
-      Response.json(
-        {
-          error: {
-            code: 403,
-            message: 'API key does not have permission',
-            status: 'PERMISSION_DENIED',
-          },
-        },
-        { status: 403 },
-      ),
-    ),
-  ).rejects.toThrow(
-    'Gemini could not issue a temporary voice token (HTTP 403): API key does not have permission',
-  );
-});
-
-it('refuses OpenAI Live tokens until the browser path ships', async () => {
-  const f = await mediaFixture();
-  const provider = await f.services.providers.createProvider({
-    name: 'OpenAI voice',
-    kind: 'openai',
-    secret: 'synthetic-openai-key-1234567890',
-  });
-  await f.services.providers.setModelDefaults(f.profile.id, {
-    voice: { providerId: provider.id, modelId: 'gpt-live-1' },
-  });
-  await expect(f.services.providers.createVoiceToken(f.profile.id)).rejects.toMatchObject({
-    statusCode: 409,
-    message: expect.stringMatching(/OpenAI Live voice calls are not available yet/i),
-  });
-});
 
 it('holds an incoming image until approval and keeps it isolated to its profile', async () => {
   const f = await mediaFixture();
@@ -591,34 +360,6 @@ it('preserves a legacy transcription selection as the incoming audio default', a
   expect((await f.services.providers.modelDefaults(f.profile.id)).audio).toEqual(selection);
   await f.services.providers.setModelDefaults(f.profile.id, { audio: null });
   expect((await f.services.providers.modelDefaults(f.profile.id)).audio).toBeNull();
-});
-
-it('discovers voices for the profile speech provider instead of its conversation provider', async () => {
-  const f = await mediaFixture();
-  const provider = await f.services.providers.createProvider({
-    name: 'Gemini',
-    kind: 'google',
-    secret: 'synthetic-google-key-1234567890',
-  });
-  await f.services.providers.setModelDefaults(f.profile.id, {
-    speech: { providerId: provider.id, modelId: 'gemini-2.5-flash-preview-tts' },
-  });
-  await f.incoming('Choose a voice', 'voices');
-  const [contact] = await f.channels.contacts(f.profile.id);
-  if (!contact) throw new Error('Missing contact');
-  await f.channels.approveContact(f.profile.id, contact.id);
-  const [run] = await f.services.runs.recent(f.profile.id);
-  if (!run) throw new Error('Missing run');
-  const tool = f.services.media.tools(run).list_speech_voices;
-  if (!tool?.execute) throw new Error('Missing voice discovery');
-  const result = await tool.execute({}, { toolCallId: 'voices', messages: [], context: {} });
-  expect(result).toMatchObject({
-    provider: 'Gemini',
-    defaultVoice: 'Kore',
-    supportsInstructions: true,
-    voices: expect.arrayContaining([{ name: 'Leda', character: 'Youthful' }]),
-  });
-  expect(JSON.stringify(result)).not.toContain('shimmer');
 });
 
 it('recovers an auxiliary image analysis after temporary provider overload', async () => {

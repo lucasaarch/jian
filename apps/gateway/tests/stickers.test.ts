@@ -100,7 +100,7 @@ it('starts optional media activities disabled and enables sticker collection onl
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
   });
   const first = await services.providers.modelDefaults(profile.id);
-  for (const role of ['sticker', 'audio', 'speech', 'image', 'vision'] as const)
+  for (const role of ['sticker', 'audio', 'image', 'vision'] as const)
     expect(first[role]).toBe('disabled');
 
   const sticker = { mimeType: 'image/webp' as const, data: webp('laugh'), sticker: true };

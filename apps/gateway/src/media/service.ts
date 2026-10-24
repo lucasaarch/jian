@@ -26,13 +26,11 @@ import type { GatewayVault } from '../security/gateway-vault.js';
 import { findSession, insertMessage } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { mediaAssets } from '../storage/schema.js';
-import { voiceNote } from './audio.js';
 import { isOfficeDocument, officeText } from './documents.js';
 import { type MediaMeter, MediaProviders } from './providers.js';
 import { findMedia, type MediaAsset, mediaIdsIn, mediaMarker } from './repository.js';
-import { speechVoices } from './voices.js';
 
-type MediaRole = 'vision' | 'audio' | 'image' | 'speech' | 'sticker';
+type MediaRole = 'vision' | 'audio' | 'image' | 'sticker';
 
 /**
  * How much of a text document enters the prompt. Past this the agent reads the start and is
@@ -430,12 +428,7 @@ export class Media {
       if (!google) throw new Error(`Choose a model for ${role} under Model defaults`);
       selected = {
         providerId: google.id,
-        modelId:
-          role === 'image'
-            ? 'gemini-2.5-flash-image'
-            : role === 'speech'
-              ? 'gemini-2.5-flash-preview-tts'
-              : 'gemini-flash-latest',
+        modelId: role === 'image' ? 'gemini-2.5-flash-image' : 'gemini-flash-latest',
       };
     }
     const { config } = await this.providers.selectedModel(selected, this.store.db);
@@ -673,49 +666,9 @@ export class Media {
             run,
             'image',
             prompt,
-            undefined,
             options.toolCallId,
             options.abortSignal,
             account,
-            undefined,
-            sessionId,
-          ),
-      }),
-      list_speech_voices: tool({
-        description:
-          'List voices, their characteristics, the default voice and style support for this profile’s configured speech provider. Call before selecting a voice; providers use different names.',
-        inputSchema: z.object({}),
-        execute: async () => {
-          const { config } = await this.selection(run.profileId, 'speech');
-          return speechVoices(config);
-        },
-      }),
-      generate_speech: tool({
-        description:
-          'Speak text using the configured speech model and queue the audio for this conversation. Use when the user requests an audio/voice reply. Omit voice to use the provider default, or call list_speech_voices first and choose a returned name. Never guess a voice from another provider. Put tone, accent and pace in instructions; text contains only words to speak.',
-        inputSchema: z.object({
-          text: z.string().min(1).max(4000),
-          voice: z.string().min(1).max(80).optional(),
-          instructions: z
-            .string()
-            .min(1)
-            .max(1000)
-            .optional()
-            .describe(
-              'Speaking style, such as gentle and cheerful Brazilian Portuguese. Use only when list_speech_voices reports supportsInstructions.',
-            ),
-          sessionId: elsewhere,
-        }),
-        execute: async ({ text, voice, instructions, sessionId }, options) =>
-          this.generate(
-            run,
-            'speech',
-            text,
-            voice,
-            options.toolCallId,
-            options.abortSignal,
-            account,
-            instructions,
             sessionId,
           ),
       }),
@@ -724,13 +677,11 @@ export class Media {
 
   async generate(
     run: Run,
-    kind: 'image' | 'speech',
+    kind: 'image',
     prompt: string,
-    voice: string | undefined,
     toolCallId: string,
     signal?: AbortSignal,
     account?: MediaMeter,
-    instructions?: string,
     sessionId?: string,
   ) {
     const target = await this.destination(run, sessionId);
@@ -745,30 +696,14 @@ export class Media {
     // A retry after a crash between storing and sharing finishes the sharing, once.
     if (existing) return this.share(run, existing.id, existing.id, undefined, target);
     const { config, key } = await this.selection(run.profileId, kind);
-    const speechDefault =
-      kind === 'speech' && voice === undefined
-        ? (await this.providers.modelDefaults(run.profileId)).speech
-        : undefined;
-    const selectedVoice =
-      speechDefault && speechDefault !== 'disabled' ? speechDefault.voiceName : voice;
     const deadline = AbortSignal.any([
       signal ?? new AbortController().signal,
       AbortSignal.timeout(180_000),
     ]);
     const generated = inlineMediaSchema.parse(
-      await this.client.generate(
-        kind,
-        config,
-        key,
-        prompt,
-        selectedVoice,
-        deadline,
-        account,
-        instructions,
-      ),
+      await this.client.generate(config, key, prompt, deadline, account),
     );
-    const media = kind === 'speech' ? await voiceNote(generated, deadline) : generated;
-    const bytes = Buffer.from(media.data, 'base64').length;
+    const bytes = Buffer.from(generated.data, 'base64').length;
     if (bytes > MAX_MEDIA_BYTES) throw new Error('Generated media exceeds the 16 MB limit');
     const id = randomUUID();
 
@@ -778,13 +713,13 @@ export class Media {
       sessionId: target,
       runId: run.id,
       sourceKey,
-      ...media,
+      ...generated,
       bytes,
     });
 
     return {
       ...(await this.share(run, id, id, undefined, target)),
-      mimeType: media.mimeType,
+      mimeType: generated.mimeType,
       url: `/v1/profiles/${run.profileId}/media/${id}`,
     };
   }

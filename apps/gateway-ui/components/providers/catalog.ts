@@ -70,7 +70,7 @@ export const anthropicCredentials = [
 /**
  * Each activity selects a model independently; empty selections use the stated fallback.
  * `tools` marks the activities that run the model as an agent, where its context window and
- * reasoning levels set the limits; generating images or speech and transcribing audio use
+ * reasoning levels set the limits; generating images and transcribing audio use
  * neither, so what is not catalogued about their models does not matter.
  */
 export const roles = [
@@ -120,20 +120,6 @@ export const roles = [
     key: 'audio',
     label: 'Incoming audio',
     hint: 'Voice notes and audio files share this model. Gemini also describes relevant sounds; Whisper, from OpenAI, Groq or your own server, transcribes the speech. Unset, it uses Gemini.',
-    runtime: true,
-    tools: false,
-  },
-  {
-    key: 'speech',
-    label: 'Text to speech',
-    hint: 'Generates voice replies with OpenAI or Gemini. Unset, it uses Gemini with the Kore voice.',
-    runtime: true,
-    tools: false,
-  },
-  {
-    key: 'voice',
-    label: 'Voice calls',
-    hint: 'Gemini Live calls work in the gateway conversation today. OpenAI gpt-live / gpt-realtime models appear for API-key providers and can be saved, but starting a call still needs Gemini Live until the OpenAI path ships. ChatGPT OAuth is not offered. Tool-using turns stay on the conversation model.',
     runtime: true,
     tools: false,
   },

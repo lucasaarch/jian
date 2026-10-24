@@ -62,7 +62,7 @@ API Server conversation goes to a program: answer in plain Markdown, without cha
 
 On WhatsApp and Telegram an image, a voice note or a document is delivered as it is. When one
 is the answer, keep the words around it to a line. See \`media\` for how to send files and
-when to make an image or a voice reply.
+when to make an image.
 
 ## In a group
 

@@ -101,7 +101,6 @@ export const modelSelectionSchema = z.strictObject({
   providerId: z.uuid(),
   modelId: z.string().trim().min(1).max(160),
   reasoningEffort: reasoningEffortSchema.optional(),
-  voiceName: z.string().trim().min(1).max(40).optional(),
 });
 
 export const modelRoleSchema = z.enum([
@@ -111,8 +110,6 @@ export const modelRoleSchema = z.enum([
   'image',
   'vision',
   'audio',
-  'speech',
-  'voice',
   'transcription',
   'sticker',
 ]);
@@ -122,8 +119,6 @@ export const optionalModelRoles: ReadonlySet<ModelRole> = new Set([
   'image',
   'vision',
   'audio',
-  'speech',
-  'voice',
   'sticker',
 ]);
 
@@ -142,10 +137,8 @@ export const modelDefaultsInputSchema = z.strictObject({
   image: optionalRoleSelection,
   vision: optionalRoleSelection,
   audio: optionalRoleSelection,
-  speech: optionalRoleSelection,
   // Describes and tags the stickers the agent keeps. Unset, it is the image-analysis model.
   sticker: optionalRoleSelection,
-  voice: optionalRoleSelection.describe('Real-time voice model used by calls.'),
   transcription: roleSelection.describe(
     'Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.',
   ),
@@ -156,23 +149,6 @@ export const modelDefaultsRecordSchema = modelDefaultsInputSchema.extend({
   profileId: z.uuid(),
   updatedAt: z.iso.datetime(),
 });
-
-export const voiceTokenSchema = z.strictObject({
-  token: z.string().min(1),
-  model: z.string().min(1),
-  /** Which Live backend minted the ephemeral token. The browser dials that vendor directly. */
-  provider: z.enum(['google', 'openai']),
-  voiceName: z.string().min(1).max(40).optional(),
-  expiresAt: z.iso.datetime().optional(),
-});
-
-export const voiceTokenInputSchema = z.strictObject({ sessionId: z.uuid().optional() });
-
-export const voiceTranscriptSchema = z.strictObject({
-  transcript: z.string().trim().min(1).max(20_000),
-});
-
-export const voiceSummarySchema = z.strictObject({ summary: z.string().min(1).max(1200) });
 
 export type ProviderCredential = z.infer<typeof providerCredentialSchema>;
 export type ProviderRecord = z.infer<typeof providerRecordSchema>;
@@ -189,9 +165,7 @@ export function supportsProviderRole(
   provider: Pick<ProviderRecord, 'kind' | 'authMode'>,
   role: ModelRole,
 ): boolean {
-  if (role === 'voice')
-    return provider.authMode !== 'codex' && ['openai', 'google'].includes(provider.kind);
-  if (['image', 'speech'].includes(role))
+  if (role === 'image')
     return provider.authMode !== 'codex' && ['openai', 'google'].includes(provider.kind);
   if (['transcription', 'audio'].includes(role))
     return (
@@ -209,12 +183,6 @@ export function supportsModelRole(
 ): boolean {
   if (!supportsProviderRole(provider, role)) return false;
   const id = model.id.toLowerCase();
-  if (role === 'voice')
-    return (
-      provider.authMode !== 'codex' &&
-      ((provider.kind === 'openai' && /^(gpt-live|gpt-realtime)/.test(id)) ||
-        (provider.kind === 'google' && /gemini-.*live/.test(id)))
-    );
   if (role === 'image')
     return (
       provider.authMode !== 'codex' &&
@@ -222,12 +190,6 @@ export function supportsModelRole(
         (provider.kind === 'google' &&
           id.startsWith('gemini-') &&
           (model.outputModalities?.includes('image') || id.includes('-image'))))
-    );
-  if (role === 'speech')
-    return (
-      provider.authMode !== 'codex' &&
-      ((provider.kind === 'google' && id.includes('tts')) ||
-        (provider.kind === 'openai' && /(^tts-|tts)/.test(id)))
     );
   // The OpenAI transcription endpoint, at OpenAI, at Groq, or on a server the owner runs.
   if (

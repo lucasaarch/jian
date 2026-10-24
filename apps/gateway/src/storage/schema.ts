@@ -275,7 +275,6 @@ export const modelDefaults = pgTable(
     providerId: uuid('provider_id'),
     modelId: text('model_id'),
     reasoningEffort: text('reasoning_effort').$type<ReasoningEffort>(),
-    voiceName: text('voice_name'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.profileId, table.role] })],

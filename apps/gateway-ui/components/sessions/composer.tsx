@@ -1,19 +1,8 @@
 'use client';
 
-import {
-  ArrowUp,
-  FileText,
-  LoaderCircle,
-  Mic,
-  Phone,
-  PhoneOff,
-  Plus,
-  Square,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { ArrowUp, Bot, FileText, LoaderCircle, Mic, Plus, Square, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { MediaUpload } from '../../lib/api';
+import type { MediaUpload, ModelSelection, Profile, ProviderModelList } from '../../lib/api';
 import {
   type AttachmentKind,
   base64,
@@ -22,8 +11,9 @@ import {
   PASTE_AS_FILE_CHARS,
 } from '../../lib/attachments';
 import { useRecorder } from '../../lib/recorder';
+import { efforts } from '../providers/catalog';
 import { AudioPlayer } from '../ui';
-import { connectLiveVoice } from './live-voice';
+import { Select } from '../ui/select';
 import { size } from './media';
 
 type Attachment = {
@@ -47,109 +37,79 @@ const clock = (seconds: number) =>
  */
 export function Composer({
   name,
+  profileId,
+  agents,
   sessionId,
+  model,
+  providerModels,
+  resolveAgent,
   upload,
   send,
-  createVoiceToken,
-  executeVoiceTool,
   onSent,
   placeholder,
 }: {
   name: string;
+  profileId: string;
+  agents: Profile[];
   sessionId: string;
-  upload: (file: MediaUpload) => Promise<{ id: string }>;
-  send: (text: string, mediaIds: string[]) => Promise<unknown>;
-  createVoiceToken: (sessionId: string) => Promise<{
-    token: string;
-    model: string;
-    provider: 'google' | 'openai';
-    voiceName?: string;
-  }>;
-  executeVoiceTool: (name: string, args: unknown) => Promise<unknown>;
-  onSent: () => void;
+  model?: ModelSelection;
+  providerModels: Record<string, ProviderModelList>;
+  resolveAgent: (profileId: string) => Promise<{ sessionId: string; model?: ModelSelection }>;
+  upload: (profileId: string, sessionId: string, file: MediaUpload) => Promise<{ id: string }>;
+  send: (
+    profileId: string,
+    sessionId: string,
+    text: string,
+    mediaIds: string[],
+    model?: ModelSelection,
+  ) => Promise<unknown>;
+  onSent: (profileId: string) => void;
   placeholder?: string;
 }) {
-  const [live, setLive] = useState(false);
-  const [liveBusy, setLiveBusy] = useState(false);
-  const liveBusyRef = useRef(false);
-  const liveSession = useRef<{ close: () => void } | undefined>(undefined);
-  // Transcript stays local during the Live call and is submitted through the normal run on hang-up.
-  const liveTranscript = useRef<string[]>([]);
-  const liveStartedAt = useRef(0);
-  const liveLabel = useRef('Gemini Live');
-
-  const toggleLive = async () => {
-    if (liveBusy || liveBusyRef.current) return;
-    liveBusyRef.current = true;
-    if (liveSession.current) {
-      liveSession.current.close();
-      liveSession.current = undefined;
-      setLive(false);
-      setLiveBusy(true);
-      try {
-        // Leave room for the call label within the gateway's 8,000-character message limit.
-        const transcript = liveTranscript.current.join(' ').slice(0, 7_500);
-        liveTranscript.current = [];
-        if (!transcript.trim()) return;
-        const duration = Math.max(1, Math.round((Date.now() - liveStartedAt.current) / 1000));
-        // Submit the verbatim transcript as a normal owner message so the usual Jian runtime,
-        // identity, conversation context, skills and tools handle it. Do not call a provider
-        // directly here: that bypasses runtime behavior and can surface provider 401s as panel auth.
-        await send(`[Voice call · ${clock(duration)} · ${liveLabel.current}]\n${transcript}`, []);
-        onSent();
-      } catch (failure) {
-        setError(
-          failure instanceof Error
-            ? failure.message
-            : 'Could not submit the voice-call transcript.',
-        );
-      } finally {
-        liveBusyRef.current = false;
-        setLiveBusy(false);
-      }
-      return;
-    }
-    setLiveBusy(true);
-    try {
-      setError('');
-      const { token, model, provider, voiceName } = await createVoiceToken(sessionId);
-      liveLabel.current = provider === 'openai' ? 'OpenAI Live' : 'Gemini Live';
-      liveTranscript.current = [];
-      liveStartedAt.current = Date.now();
-      liveSession.current = await connectLiveVoice(
-        token,
-        model,
-        (text, speaker) => {
-          // Only the owner's speech becomes a user message; do not re-submit Gemini's reply as owner input.
-          if (speaker !== 'user') return;
-          const room = 7_500 - liveTranscript.current.join(' ').length;
-          if (room > 0) liveTranscript.current.push(text.slice(0, room));
-        },
-        voiceName,
-        executeVoiceTool,
-      );
-      setLive(true);
-    } catch (failure) {
-      liveSession.current?.close();
-      liveSession.current = undefined;
-      liveTranscript.current = [];
-      setError(failure instanceof Error ? failure.message : 'Could not start the voice call.');
-    } finally {
-      liveBusyRef.current = false;
-      setLiveBusy(false);
-    }
-  };
-
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [agentId, setAgentId] = useState(profileId);
+  const [targetSessionId, setTargetSessionId] = useState(sessionId);
+  const [targetModel, setTargetModel] = useState(model);
+  const [targetLoading, setTargetLoading] = useState(false);
+  const [reasoningEffort, setReasoningEffort] = useState(model?.reasoningEffort ?? '');
   const picker = useRef<HTMLInputElement>(null);
   const recorder = useRecorder();
   const pastes = useRef(0);
 
-  useEffect(() => () => liveSession.current?.close(), []);
+  useEffect(() => {
+    let current = true;
+    if (agentId === profileId) {
+      setTargetSessionId(sessionId);
+      setTargetModel(model);
+      setReasoningEffort(model?.reasoningEffort ?? '');
+      setTargetLoading(false);
+      return;
+    }
+    setTargetLoading(true);
+    setTargetSessionId('');
+    void resolveAgent(agentId)
+      .then((target) => {
+        if (!current) return;
+        setTargetSessionId(target.sessionId);
+        setTargetModel(target.model);
+        setReasoningEffort(target.model?.reasoningEffort ?? '');
+        setError('');
+      })
+      .catch((failure: unknown) => {
+        if (current)
+          setError(failure instanceof Error ? failure.message : 'Could not open this agent.');
+      })
+      .finally(() => {
+        if (current) setTargetLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [agentId, model, profileId, resolveAgent, sessionId]);
 
   // Local previews hold memory until released; the last ones go with the composer.
   const previews = useRef(new Set<string>());
@@ -166,6 +126,10 @@ export function Composer({
     );
 
   const attach = (files: File[], voice = false) => {
+    if (targetLoading || !targetSessionId) {
+      setError('Wait for the selected agent to load before attaching files.');
+      return;
+    }
     const room = MAX_MESSAGE_MEDIA - attachments.length;
     const problems: string[] = [];
 
@@ -192,7 +156,7 @@ export function Composer({
       if (preview) previews.current.add(preview);
       void base64(file)
         .then((data) =>
-          upload({
+          upload(agentId, targetSessionId, {
             mimeType: verdict.mimeType as MediaUpload['mimeType'],
             data,
             name: file.name,
@@ -223,23 +187,47 @@ export function Composer({
 
   const ready = attachments.filter((item) => item.state === 'ready');
   const uploading = attachments.some((item) => item.state === 'uploading');
+  const selectedAgent = agents.find((agent) => agent.id === agentId);
+  const listedModel = targetModel
+    ? providerModels[targetModel.providerId]?.models.find((item) => item.id === targetModel.modelId)
+    : undefined;
+  const availableEfforts = efforts.filter((effort) =>
+    listedModel?.reasoningEfforts.includes(effort.value),
+  );
   const canSend =
-    !sending && !uploading && !recorder.recording && Boolean(text.trim() || ready.length);
+    !sending &&
+    !targetLoading &&
+    Boolean(targetSessionId) &&
+    !uploading &&
+    !recorder.recording &&
+    Boolean(text.trim() || ready.length);
 
   const submit = async () => {
     if (!canSend) return;
     setSending(true);
     setError('');
     try {
+      const selectedModel = targetModel
+        ? {
+            providerId: targetModel.providerId,
+            modelId: targetModel.modelId,
+            ...(reasoningEffort
+              ? { reasoningEffort: reasoningEffort as ModelSelection['reasoningEffort'] }
+              : {}),
+          }
+        : undefined;
       await send(
+        agentId,
+        targetSessionId,
         text.trim(),
         ready.map((item) => item.id ?? ''),
+        selectedModel,
       );
       for (const item of attachments) if (item.preview) URL.revokeObjectURL(item.preview);
       previews.current.clear();
       setText('');
       setAttachments([]);
-      onSent();
+      onSent(agentId);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'The message could not be sent.');
     } finally {
@@ -343,8 +331,8 @@ export function Composer({
           </div>
         ) : (
           <textarea
-            aria-label={`Message to ${name}`}
-            placeholder={placeholder ?? `Message ${name}`}
+            aria-label={`Message to ${selectedAgent?.name ?? name}`}
+            placeholder={placeholder ?? `Message ${selectedAgent?.name ?? name}`}
             rows={1}
             maxLength={8000}
             value={text}
@@ -414,21 +402,31 @@ export function Composer({
               />
             </>
           )}
-          <button
-            type="button"
-            className={`composer-tool ${live ? 'recording' : ''}`}
-            aria-label={live ? 'End voice call' : 'Start voice call'}
-            title={
-              live
-                ? 'End voice call'
-                : 'Start a Live voice call (needs a Gemini Live model under Voice calls)'
-            }
-            disabled={liveBusy}
-            onClick={() => void toggleLive()}
-          >
-            {live ? <PhoneOff size={16} /> : <Phone size={16} />}
-          </button>
           <span className="grow" />
+          <Select
+            aria-label="Agent for this message"
+            className="composer-select composer-agent-select"
+            value={agentId}
+            disabled={
+              sending || targetLoading || uploading || attachments.length > 0 || recorder.recording
+            }
+            onValueChange={setAgentId}
+            searchThreshold={5}
+            options={agents.map((agent) => ({
+              value: agent.id,
+              label: agent.name,
+              detail: agent.professionId ?? undefined,
+              icon: <Bot size={15} />,
+            }))}
+          />
+          <Select
+            aria-label="Reasoning effort for this message"
+            className="composer-select composer-effort-select"
+            value={reasoningEffort}
+            disabled={sending || targetLoading || !targetModel || availableEfforts.length === 0}
+            onValueChange={setReasoningEffort}
+            options={[{ value: '', label: 'Default effort' }, ...availableEfforts]}
+          />
           {recorder.recording ? (
             <button
               type="button"
@@ -443,6 +441,7 @@ export function Composer({
               type="button"
               className="composer-tool"
               aria-label="Record a voice note"
+              disabled={targetLoading}
               onClick={() => void record()}
             >
               <Mic size={18} />

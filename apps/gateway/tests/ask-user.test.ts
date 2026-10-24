@@ -47,7 +47,7 @@ it('parks the run as waiting and resumes when the owner answers', async () => {
               toolName: 'ask_user',
               input: JSON.stringify({
                 prompt: 'Which provider should I wire first?',
-                choices: ['Gemini Live', 'OpenAI Realtime'],
+                choices: ['Continue', 'Cancel'],
               }),
             },
           ],
@@ -66,7 +66,7 @@ it('parks the run as waiting and resumes when the owner answers', async () => {
   expect(parked.status).toBe('waiting');
   expect(parked.question).toMatchObject({
     prompt: 'Which provider should I wire first?',
-    choices: ['Gemini Live', 'OpenAI Realtime'],
+    choices: ['Continue', 'Cancel'],
   });
   expect(parked.leaseOwner).toBeUndefined();
   expect(
@@ -77,13 +77,13 @@ it('parks the run as waiting and resumes when the owner answers', async () => {
   const resume = await services.runs.submit(
     profile.id,
     session.id,
-    { text: 'Gemini Live', requestKey: 'reply' },
+    { text: 'Continue', requestKey: 'reply' },
     { ownerMessage: true },
   );
 
   expect(resume.status).toBe('queued');
   expect(resume.continuationOf).toBe(run.id);
-  expect(resume.input).toContain('Gemini Live');
+  expect(resume.input).toContain('Continue');
   expect(resume.input).toContain('Which provider should I wire first?');
 
   const closed = await services.runs.run(profile.id, run.id);
@@ -94,7 +94,7 @@ it('parks the run as waiting and resumes when the owner answers', async () => {
   const again = await services.runs.submit(
     profile.id,
     session.id,
-    { text: 'Gemini Live', requestKey: 'reply-again' },
+    { text: 'Continue', requestKey: 'reply-again' },
     { ownerMessage: true },
   );
   expect(again.id).toBe(resume.id);

@@ -3,7 +3,7 @@ import type { Skill } from '@jian/contracts';
 export const media: Skill = {
   name: 'media',
   description:
-    'Use when someone sends an image, voice note, audio, document, sticker or any file, asks you to look at one, or asks you to make or send a file, a sticker, an image or a voice reply.',
+    'Use when someone sends an image, voice note, audio, document, sticker or any file, asks you to look at one, or asks you to make or send a file, sticker or image.',
   instructions: `# Files, images, audio and documents
 
 Files travel both ways on every channel: WhatsApp, Telegram, the panel and the API. Anyone
@@ -60,8 +60,7 @@ Set \`source\` to the one you use: \`mediaId\`, \`path\` or \`content\`. Leave t
 out; with \`source\` set, anything in them is ignored.
 
 Add \`sessionId\` to send it in another of your conversations instead of this one — a file,
-an image or a voice note asked for here and meant for someone there. \`generate_image\` and
-\`generate_speech\` take it too.
+an image or a voice note asked for here and meant for someone there. \`generate_image\` takes it too.
 
 Send a file when the answer is a file: a spreadsheet, a report someone will keep or forward,
 anything too long to read comfortably in a chat. A short answer is still just a message.
@@ -78,18 +77,14 @@ Files go up to 16 MB each.
 People's stickers become your own collection, to send back as stickers. See \`stickers\` for
 when one fits and how to choose it.
 
-## Making images and voice
+## Making images
 
 - \`generate_image\` — only when someone asks for an image. Describe it fully in the prompt:
   subject, style, framing, text in it.
-- \`generate_speech\` — only when someone asks for audio, or clearly cannot read (they said
-  they are driving). Call \`list_speech_voices\` first: voices differ by provider, and a name
-  from another provider is refused. Put tone and accent in \`instructions\`; \`text\` is only
-  the words to say.
 
 ## Delivery
 
-Files, images and voice are queued to this conversation and delivered after. Say a file is on
+Files and images are queued to this conversation and delivered after. Say a file is on
 its way, never that it arrived, until the tool confirms. If generation is refused because no
 provider is set up for it, say so and where to set one: Model defaults.
 

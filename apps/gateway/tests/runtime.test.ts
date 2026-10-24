@@ -405,8 +405,6 @@ it('hides disabled generation tools but keeps saved stickers available to the ag
         };
       const names = options.tools?.map((tool) => tool.name) ?? [];
       expect(names).not.toContain('generate_image');
-      expect(names).not.toContain('generate_speech');
-      expect(names).not.toContain('list_speech_voices');
       expect(names).toContain('find_stickers');
       expect(names).toContain('send_sticker');
       return answer('Done.');

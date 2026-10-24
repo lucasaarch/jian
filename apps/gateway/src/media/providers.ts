@@ -5,7 +5,6 @@ import {
   type ModelConfig,
 } from '@jian/contracts';
 import { z } from 'zod';
-import { speechVoice, speechVoices } from './voices.js';
 
 export type MediaUsage = { inputTokens: number; outputTokens: number; cachedInputTokens: number };
 export type MediaMeter = (usage: MediaUsage) => Promise<void>;
@@ -75,23 +74,6 @@ export async function readMediaBody(
     await reader.cancel().catch(() => {});
   }
   return Buffer.concat(chunks);
-}
-
-function wav(pcm: Buffer, rate: number): Buffer {
-  const header = Buffer.alloc(44);
-  header.write('RIFF');
-  header.writeUInt32LE(pcm.length + 36, 4);
-  header.write('WAVEfmt ', 8);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(rate, 24);
-  header.writeUInt32LE(rate * 2, 28);
-  header.writeUInt16LE(2, 32);
-  header.writeUInt16LE(16, 34);
-  header.write('data', 36);
-  header.writeUInt32LE(pcm.length, 40);
-  return Buffer.concat([header, pcm]);
 }
 
 /**
@@ -243,90 +225,47 @@ export class MediaProviders {
   }
 
   async generate(
-    kind: 'image' | 'speech',
     config: ModelConfig,
     key: string,
     prompt: string,
-    voice: string | undefined,
     signal: AbortSignal,
     account?: MediaMeter,
-    instructions?: string,
   ): Promise<InlineMedia> {
     if (config.provider === 'openai-codex')
-      throw new Error('Image and speech generation require an OpenAI API key, not a ChatGPT login');
-    const selectedVoice = kind === 'speech' ? speechVoice(config, voice) : undefined;
-    if (kind === 'speech' && instructions && !speechVoices(config).supportsInstructions)
-      throw new Error(
-        'This speech model does not support style instructions. Omit instructions or choose a newer speech model.',
-      );
+      throw new Error('Image generation requires an OpenAI API key, not a ChatGPT login');
     if (config.provider === 'google') {
       const parts = await this.google(
         config,
         key,
         [
           {
-            text:
-              kind === 'speech' && instructions
-                ? `Speaking style: ${instructions}\nRead only the following text aloud, without reading these instructions:\n${prompt}`
-                : prompt,
+            text: prompt,
           },
         ],
-        kind === 'image'
-          ? { responseModalities: ['TEXT', 'IMAGE'] }
-          : {
-              responseModalities: ['AUDIO'],
-              speechConfig: {
-                voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } },
-              },
-            },
+        { responseModalities: ['TEXT', 'IMAGE'] },
         signal,
         account,
       );
       const result = parts.find((part) =>
-        part.inlineData?.mimeType.startsWith(kind === 'image' ? 'image/' : 'audio/'),
+        part.inlineData?.mimeType.startsWith('image/'),
       )?.inlineData;
-      if (!result)
-        throw new Error(`Media provider did not return ${kind === 'image' ? 'an image' : 'audio'}`);
-      if (result.mimeType.startsWith('audio/L16')) {
-        const rate = Number(/rate=(\d+)/.exec(result.mimeType)?.[1] ?? 24000);
-        if (rate < 8000 || rate > 96000) throw new Error('Unsupported speech sample rate');
-        return {
-          mimeType: 'audio/wav',
-          data: wav(Buffer.from(result.data, 'base64'), rate).toString('base64'),
-          voice: true,
-        };
-      }
-      return inlineMediaSchema.parse({ ...result, ...(kind === 'speech' ? { voice: true } : {}) });
+      if (!result) throw new Error('Media provider did not return an image');
+      return inlineMediaSchema.parse(result);
     }
     if (config.provider !== 'openai')
       throw new Error('Select an OpenAI API or Gemini model for media generation');
-    const response = await this.request(
-      `https://api.openai.com/v1/${kind === 'image' ? 'images/generations' : 'audio/speech'}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-        signal,
-        body: JSON.stringify(
-          kind === 'image'
-            ? {
-                model: config.modelId,
-                prompt,
-                n: 1,
-                ...(config.modelId.startsWith('dall-e') ? { response_format: 'b64_json' } : {}),
-              }
-            : {
-                model: config.modelId,
-                input: prompt,
-                voice: selectedVoice,
-                ...(instructions ? { instructions } : {}),
-                response_format: 'opus',
-              },
-        ),
-      },
-    );
+    const response = await this.request('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      signal,
+      body: JSON.stringify({
+        model: config.modelId,
+        prompt,
+        n: 1,
+        ...(config.modelId.startsWith('dall-e') ? { response_format: 'b64_json' } : {}),
+      }),
+    });
     const data = await readMediaBody(response);
-    if (kind === 'speech')
-      return { mimeType: 'audio/ogg', data: data.toString('base64'), voice: true };
     const body: unknown = JSON.parse(data.toString());
     await meter(body, false, account);
     const parsed = z

@@ -16,8 +16,6 @@ export const toolLabels: Record<string, string> = {
   compact_context: 'compacting its context',
   load_tools: 'loading tools',
   generate_image: 'drawing an image',
-  generate_speech: 'recording a voice reply',
-  list_speech_voices: 'choosing a voice',
   create_checkpoint: 'saving its progress',
   read_memories: 'reading its memories',
   remember: 'saving a memory',

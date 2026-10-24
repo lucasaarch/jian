@@ -112,7 +112,7 @@ export const BusinessChannelPaused: Story = {
 
 /** The gateway conversation: images, documents, voice notes both ways, and many tool calls. */
 export const List = open();
-/** WhatsApp, one person: her voice note, a photo, a PDF, and a voice reply from the agent. */
+/** WhatsApp, one person: her voice note, a photo and a PDF. */
 export const WhatsAppContact = open(ids.mayaChat);
 /** WhatsApp group: members with and without names or pictures, one known only by an internal id. */
 export const WhatsAppGroup = open(ids.launchGroup);

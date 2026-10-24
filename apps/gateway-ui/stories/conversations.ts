@@ -202,13 +202,6 @@ script(zero, ids.gatewayChat, [
     'Good morning. Yesterday: the venue contract is read and saved, and Maya confirmed Thursday. Today: the deposit is due by 18:00 and the payment review is still open.',
     [tool('search_history', 1.1), tool('read_memories', 0.4)],
   ),
-  user(62, 'Can you send me a summary as audio? I am driving.'),
-  agent(
-    61,
-    'Here it is, under a minute.',
-    [tool('list_speech_voices', 0.3), tool('generate_speech', 5.8)],
-    ['agentVoice'],
-  ),
   user(30, 'Venue options from the scout, pick the best for 120 people.', [
     'venue1',
     'venue2',
@@ -237,7 +230,7 @@ script(zero, ids.mayaChat, [
   user(60 * 7, '', ['mayaVoice']),
   agent(60 * 7 - 1, 'Heard you. I will send the receipt to finance today.'),
   user(60 * 7 - 3, 'Here it is', ['receipt']),
-  agent(60 * 6 - 5, 'The beta review moved to Thursday, same time.', undefined, ['agentVoice']),
+  agent(60 * 6 - 5, 'The beta review moved to Thursday, same time.'),
   user(60 * 6 - 8, 'Perfect, thanks 🙏'),
 ]);
 

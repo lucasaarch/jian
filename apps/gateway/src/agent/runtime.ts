@@ -397,10 +397,6 @@ export class AgentRuntime {
           }),
         };
         if (defaults?.image === 'disabled') delete tools.generate_image;
-        if (defaults?.speech === 'disabled') {
-          delete tools.generate_speech;
-          delete tools.list_speech_voices;
-        }
         if (learning) {
           const allowedLearningTools =
             run.profile.professionId === null ? LEARNING_TOOLS : CLASSIFIED_LEARNING_TOOLS;

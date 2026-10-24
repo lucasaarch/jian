@@ -84,8 +84,6 @@ export const toolCapabilities: Record<string, readonly Capability[]> = {
   send_file: ['media.use', 'conversation.send'],
   save_attachment: ['media.use', 'workspace.files'],
   generate_image: ['media.image', 'conversation.send'],
-  list_speech_voices: ['media.use'],
-  generate_speech: ['media.use', 'conversation.send'],
   find_stickers: ['media.use'],
   send_sticker: ['media.use', 'conversation.send'],
   tag_sticker: ['media.use'],
