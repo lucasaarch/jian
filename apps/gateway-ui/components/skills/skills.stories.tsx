@@ -4,7 +4,6 @@ import * as fixtures from '../../stories/fixtures';
 import { sectionProps } from '../../stories/section';
 import { Capabilities } from '.';
 import { BuiltinSkills } from './built-in';
-import { SkillCatalog } from './catalog';
 import { SkillImport } from './import';
 import { McpResult } from './mcp-check';
 import { McpForm } from './mcp-form';
@@ -26,7 +25,6 @@ export const McpServers: Story = {
   render: () => <Capabilities kind="mcpServers" {...props()} others={fixtures.profiles} />,
 };
 export const BuiltIn: Story = { render: () => <BuiltinSkills {...props()} /> };
-export const Catalog: Story = { render: () => <SkillCatalog {...props()} /> };
 export const ImportFromUrl: Story = { render: () => <SkillImport {...props()} /> };
 
 export const NewSkill: Story = {

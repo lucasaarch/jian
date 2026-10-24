@@ -1,16 +1,37 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, or } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
-import { events, memories, runs, sessions } from '../storage/schema.js';
+import { events, memories, remoteTasks, runs, sessions } from '../storage/schema.js';
 
-/** An answer still being written would lose the conversation it is writing into. */
-export async function hasActiveRun(db: Queryable, profileId: string): Promise<boolean> {
+/** Terminal status is not execution settlement: preserve evidence through late cleanup. */
+export async function hasUnsettledExecution(db: Queryable, profileId: string): Promise<boolean> {
   const [row] = await db
     .select({ id: runs.id })
     .from(runs)
-    .where(and(eq(runs.profileId, profileId), inArray(runs.status, ['queued', 'running'])))
+    .where(
+      and(
+        eq(runs.profileId, profileId),
+        or(
+          inArray(runs.status, ['queued', 'running']),
+          isNotNull(runs.executionOwner),
+          and(
+            isNotNull(runs.subagent),
+            isNull(runs.subagentReportedAt),
+            inArray(runs.status, ['completed', 'failed', 'interrupted']),
+          ),
+        ),
+      ),
+    )
     .limit(1);
 
-  return row !== undefined;
+  if (row) return true;
+  const [remote] = await db
+    .select({ id: remoteTasks.id })
+    .from(remoteTasks)
+    .where(
+      and(eq(remoteTasks.profileId, profileId), inArray(remoteTasks.status, ['queued', 'running'])),
+    )
+    .limit(1);
+  return remote !== undefined;
 }
 
 /**

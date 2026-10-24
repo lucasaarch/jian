@@ -603,7 +603,11 @@ export function profileTools(
   // writes is marked as its own, shown to the owner under Skills, and only it can change it.
   Object.assign(tools, skillTools(services.profiles, run));
 
-  if (run.profile.allowSelfManagement) {
+  if (
+    run.profile.professionId === null
+      ? run.profile.allowSelfManagement
+      : run.authority?.capabilities.includes('identity.manage') === true
+  ) {
     tools.update_identity = tool({
       description:
         'Version an update to your own identity. Applies to new runs. Cannot change permissions, keys or providers.',
@@ -621,9 +625,14 @@ export function profileTools(
           .optional(),
       }),
       execute: async (input) => {
-        if (!(await services.profiles.profile(run.profileId)).allowSelfManagement) {
-          throw new GatewayError(403, 'Self-management is disabled');
-        }
+        const current = await services.profiles.profile(run.profileId);
+        const authorized =
+          current.professionId === null
+            ? current.allowSelfManagement
+            : currentRunAuthority(run.profile, current, run.authority)?.capabilities.includes(
+                'identity.manage',
+              ) === true;
+        if (!authorized) throw new GatewayError(403, 'Identity management is unavailable');
 
         const updated = await services.profiles.updateProfile(run.profileId, input);
 
@@ -647,24 +656,26 @@ export function profileTools(
       },
     });
 
-    tools.create_profile = tool({
-      description:
-        'Create a separate profile without provider access. An administrator must configure its provider key before it can run.',
-      inputSchema: z.object({
-        name: z.string().min(1).max(100),
-        instructions: z.string().min(1).max(8000),
-      }),
-      execute: async (input) => {
-        if (!(await services.profiles.profile(run.profileId)).allowSelfManagement) {
-          throw new GatewayError(403, 'Self-management is disabled');
-        }
+    if (run.profile.professionId === null) {
+      tools.create_profile = tool({
+        description:
+          'Create a separate profile without provider access. An administrator must configure its provider key before it can run.',
+        inputSchema: z.object({
+          name: z.string().min(1).max(100),
+          instructions: z.string().min(1).max(8000),
+        }),
+        execute: async (input) => {
+          if (!(await services.profiles.profile(run.profileId)).allowSelfManagement) {
+            throw new GatewayError(403, 'Self-management is disabled');
+          }
 
-        const { apiKeyEnv: _env, providerId: _provider, ...model } = run.profile.model;
-        const created = await services.profiles.createProfile({ ...input, model });
+          const { apiKeyEnv: _env, providerId: _provider, ...model } = run.profile.model;
+          const created = await services.profiles.createProfile({ ...input, model });
 
-        return { id: created.id, name: created.name };
-      },
-    });
+          return { id: created.id, name: created.name };
+        },
+      });
+    }
   }
 
   return tools;

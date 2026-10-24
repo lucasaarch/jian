@@ -29,7 +29,8 @@ ask for more information. A run ends with an answer, cancellation or a resource 
 person's later reply starts another run.
 
 Jian supports conversations, memory, scheduled work, media, connected services and agent
-collaboration. The owner controls which optional capabilities each profile can use. The
-panel lets the owner configure agents and inspect their activity. For instructions on a
-specific capability, load its dedicated skill from the catalog.`,
+collaboration. Every agent has base tools; for classified profiles, profession determines the
+fixed set of additional capabilities and built-in skills. The panel lets the owner configure
+agents and inspect their activity. For instructions on a specific capability, load its
+dedicated skill by name.`,
 };

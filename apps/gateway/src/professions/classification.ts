@@ -1,5 +1,5 @@
 import { type ProfessionPreview, professionPreviewInputSchema } from '@jian/contracts';
-import { and, count, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { GatewayError } from '../core/errors.js';
 import type { ProfileParams } from '../http/params.js';
@@ -53,6 +53,21 @@ export async function previewProfession(
           inArray(runs.status, ['completed', 'failed', 'interrupted', 'cancelled']),
         ),
       );
+    const [executing] = await tx
+      .select({ count: count() })
+      .from(runs)
+      .where(and(eq(runs.profileId, profileId), isNotNull(runs.executionOwner)));
+    const [reports] = await tx
+      .select({ count: count() })
+      .from(runs)
+      .where(
+        and(
+          eq(runs.profileId, profileId),
+          isNotNull(runs.subagent),
+          isNull(runs.subagentReportedAt),
+          inArray(runs.status, ['completed', 'failed', 'interrupted']),
+        ),
+      );
     const [remote] = await tx
       .select({ count: count() })
       .from(remoteTasks)
@@ -92,6 +107,8 @@ export async function previewProfession(
       queuedRuns: forStatus('queued'),
       runningRuns: forStatus('running'),
       waitingRuns: forStatus('waiting'),
+      unsettledExecutions: executing?.count ?? 0,
+      pendingWorkerReports: reports?.count ?? 0,
       historicalRunsWithoutAuthority: historical?.count ?? 0,
       pendingRemoteTasks: remote?.count ?? 0,
       enabledSchedules: scheduled?.count ?? 0,
@@ -109,6 +126,8 @@ export async function previewProfession(
       affected.queuedRuns +
         affected.runningRuns +
         affected.waitingRuns +
+        affected.unsettledExecutions +
+        affected.pendingWorkerReports +
         affected.pendingRemoteTasks >
       0
     ) {

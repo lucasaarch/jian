@@ -18,7 +18,7 @@ const common: Capability[] = [
   'media.use',
 ];
 
-const developerDefaults: Capability[] = [
+const developerCapabilities: Capability[] = [
   ...common,
   'subscriptions.github',
   'coordination.lease',
@@ -26,6 +26,13 @@ const developerDefaults: Capability[] = [
   'process.exec',
   'ssh.manage',
   'tasks.delegate',
+  'web.browse',
+  'remote.control',
+  'mcp.http',
+  'mcp.stdio',
+  'peers.call',
+  'identity.manage',
+  'media.image',
 ];
 
 /** Definitions only: no profession is assignable until end-to-end enforcement ships. */
@@ -33,20 +40,9 @@ export const professionCatalog: readonly ProfessionDefinition[] = [
   {
     id: 'developer',
     label: 'Developer',
-    description: 'Software development with workspace tools and explicitly enabled integrations.',
+    description: 'Software development with every capability defined for the profession.',
     policyVersion: 1,
-    capabilities: [
-      ...developerDefaults,
-      'web.browse',
-      'remote.control',
-      'mcp.http',
-      'mcp.stdio',
-      'peers.call',
-      'identity.manage',
-      'profiles.create',
-      'media.image',
-    ],
-    defaultCapabilities: developerDefaults,
+    capabilities: developerCapabilities,
   },
   {
     id: 'attendant',
@@ -54,7 +50,6 @@ export const professionCatalog: readonly ProfessionDefinition[] = [
     description: 'Customer service within authorized conversations and business integrations.',
     policyVersion: 1,
     capabilities: [...common, 'mcp.http', 'media.image'],
-    defaultCapabilities: common,
   },
 ];
 
@@ -65,16 +60,8 @@ export function validateProfessionCatalog(definitions: readonly ProfessionDefini
     professionDefinitionSchema.parse(definition);
     if (ids.has(definition.id)) throw new Error(`Duplicate profession: ${definition.id}`);
     ids.add(definition.id);
-    for (const values of [definition.capabilities, definition.defaultCapabilities]) {
-      if (new Set(values).size !== values.length)
-        throw new Error(`Duplicate capabilities: ${definition.id}`);
-    }
-    if (
-      definition.defaultCapabilities.some(
-        (capability) => !definition.capabilities.includes(capability),
-      )
-    )
-      throw new Error(`Defaults exceed profession ceiling: ${definition.id}`);
+    if (new Set(definition.capabilities).size !== definition.capabilities.length)
+      throw new Error(`Duplicate capabilities: ${definition.id}`);
   }
 }
 

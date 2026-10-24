@@ -104,18 +104,15 @@ it('saves once typing pauses, each save sending the version the last one returne
   expect(saves[1]).toMatchObject({ summary: 'Assistant', expectedVersion: 4 });
 });
 
-it('saves a switch at once, and never an empty name', async () => {
+it('does not expose legacy capability switches, and never saves an empty name', async () => {
   const { element, saves, type, wait } = await render();
-  const webSearch = element.querySelector<HTMLInputElement>('[name="webSearch"]');
 
-  await act(async () => webSearch?.click());
-  await wait(10);
-  expect(saves).toHaveLength(1);
-  expect(saves[0]).toMatchObject({ allowWebSearch: true });
+  expect(element.querySelector('[name="webSearch"]')).toBeNull();
+  expect(element.querySelector('[name="selfManagement"]')).toBeNull();
 
   await type('name', '');
   await wait(1000);
-  expect(saves).toHaveLength(1);
+  expect(saves).toEqual([]);
 });
 
 it('keeps identity autosave working when profession loading fails', async () => {

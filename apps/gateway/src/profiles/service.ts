@@ -26,7 +26,7 @@ import {
   listRevisions,
   updateProfileRow,
 } from './repository.js';
-import { forget, hasActiveRun } from './reset.js';
+import { forget, hasUnsettledExecution } from './reset.js';
 
 /** One value on its way to the vault, still carrying which server and which slot it came from. */
 type TypedMcpValue = { server: string; kind: 'header' | 'env'; name: string; value: string };
@@ -426,6 +426,12 @@ export class Profiles {
     await this.profile(id);
 
     await this.store.transaction(id, async (tx) => {
+      if (await hasUnsettledExecution(tx, id)) {
+        throw new GatewayError(
+          409,
+          'Work is not settled. Wait for execution and Remote completion before deleting.',
+        );
+      }
       await this.beforeDelete?.(id, tx);
       await deleteProfileRow(tx, id);
     });
@@ -443,10 +449,10 @@ export class Profiles {
     await this.profile(id);
 
     return this.store.transaction(id, async (tx) => {
-      if (await hasActiveRun(tx, id)) {
+      if (await hasUnsettledExecution(tx, id)) {
         throw new GatewayError(
           409,
-          'An answer is still running. Wait for it to finish, or cancel it, then reset.',
+          'Work is not settled. Wait for execution and Remote completion before resetting.',
         );
       }
 

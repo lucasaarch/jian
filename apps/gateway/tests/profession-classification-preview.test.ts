@@ -165,6 +165,49 @@ describe('read-only classification impact preview', () => {
     expect((await db.select().from(runs)).every((run) => run.authority === null)).toBe(true);
   });
 
+  it.each(['execution', 'handoff'] as const)(
+    'reports an unsettled terminal %s without exposing private details',
+    async (mode) => {
+      const { services, profile, session } = await setup();
+      const id = randomUUID();
+      await services.store.db.insert(runs).values({
+        id,
+        profileId: profile.id,
+        sessionId: session.id,
+        profileVersion: profile.version,
+        requestKey: id,
+        input: 'Private worker',
+        status: 'completed',
+        ...(mode === 'execution'
+          ? { executionOwner: 'private-owner' }
+          : {
+              subagent: {
+                role: 'review' as const,
+                name: 'Private reviewer',
+                identity: 'Review.',
+                parentRunId: randomUUID(),
+                spawnKey: id,
+                inputHash: 'a'.repeat(64),
+              },
+            }),
+      });
+      const result = professionPreviewSchema.parse(
+        await previewProfession(services, profile.id, target),
+      );
+      expect(result.assignable).toBe(false);
+      expect(result.blockers).toEqual(['unavailable', 'unsettled_work']);
+      expect(result.affected).toMatchObject({
+        queuedRuns: 0,
+        runningRuns: 0,
+        waitingRuns: 0,
+        unsettledExecutions: mode === 'execution' ? 1 : 0,
+        pendingWorkerReports: mode === 'handoff' ? 1 : 0,
+      });
+      expect(JSON.stringify(result)).not.toMatch(/Private|private/);
+      expect((await services.store.db.select().from(runs))[0]?.status).toBe('completed');
+    },
+  );
+
   it('rejects stale versions, unknown targets and authority injection', async () => {
     const { services, profile } = await setup();
     await expect(

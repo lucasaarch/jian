@@ -202,7 +202,7 @@ export function buildContext(
           'Remote Control machines on your access list support shell and (on macOS) computer use via the remote tool group — gated by machine access, not a separate shell switch.',
         ]
       : []),
-    ...(run.profile.allowWebSearch && can('web.browse')
+    ...((run.profile.professionId !== null || run.profile.allowWebSearch) && can('web.browse')
       ? [
           'You can search the web and read public pages: load the web tool group when a question needs current or outside information, and say where an answer came from.',
         ]

@@ -72,7 +72,7 @@ it('answers as a classified attendant without exposing machine tools or preparin
   await expect(access(join(workspacesRoot(), profile.id))).rejects.toThrow();
 });
 
-it('rechecks a loaded tool after revocation while the model was generating a forged call', async () => {
+it('keeps profession tools available when the legacy web-search switch changes', async () => {
   const { services, profile, run } = await fixture('developer', true);
   const effect = vi.fn(async () => 'Fetched');
   let step = 0;
@@ -111,7 +111,7 @@ it('rechecks a loaded tool after revocation while the model was generating a for
     () => model,
   ).execute(profile.id, run.id);
   expect(step).toBeGreaterThanOrEqual(2);
-  expect(effect).not.toHaveBeenCalled();
+  expect(effect).toHaveBeenCalledOnce();
 });
 
 it('rechecks initially legacy work after Decisions awaits, before the executor', async () => {

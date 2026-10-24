@@ -14,7 +14,7 @@ export function requireProfileCapability(profile: Profile, capability: Capabilit
   if (authority !== undefined) requireCapability(authority, capability);
 }
 
-/** Owner configuration may enable an optional grant, never exceed the profession ceiling. */
+/** A profession grants its complete fixed capability set; profile switches cannot change it. */
 export function requireProfessionCeiling(profile: Profile, capability: Capability): void {
   if (profile.professionId === null) return;
   const definition = findProfession(profile.professionId);
@@ -30,27 +30,9 @@ export function requireProfessionCeiling(profile: Profile, capability: Capabilit
   );
 }
 
-/** Configuration enables an optional capability; identity/instructions never do. */
+/** The profession is the fixed source of tool authority; resource checks stay in their services. */
 export function enabledCapabilities(profile: Profile): Capability[] {
-  const definition = findProfession(profile.professionId);
-  if (!definition) return [];
-  return [
-    ...definition.defaultCapabilities,
-    ...(profile.allowWebSearch ? ['web.browse' as const] : []),
-    // Creating an unclassified child would escape the creator's ceiling. Keep classified
-    // profile creation unavailable until the server can persist bounded child authority.
-    ...(profile.allowSelfManagement ? ['identity.manage' as const] : []),
-    ...(profile.reachableByAgents ? ['peers.call' as const] : []),
-    ...(profile.mcpServers.some((server) => server.transport === 'http')
-      ? ['mcp.http' as const]
-      : []),
-    ...(profile.mcpServers.some((server) => server.transport === 'stdio')
-      ? ['mcp.stdio' as const]
-      : []),
-    // Machine ACLs and media model settings remain independent checks in their services.
-    'remote.control',
-    'media.image',
-  ];
+  return [...(findProfession(profile.professionId)?.capabilities ?? [])];
 }
 
 /** null is a legacy *profile*, never an authorization fallback for an unknown profession. */

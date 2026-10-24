@@ -14,6 +14,8 @@ interface McpContext {
   vault: SecretReader | undefined;
   secrets: Set<string>;
   clients: MCPClient[];
+  /** A failed initialization/close whose cleanup cannot be certified by the client list. */
+  onCleanupUncertain?: () => void;
   fetcher: typeof globalThis.fetch;
   signal: AbortSignal;
   /** Live runtime authority, including the persisted original ceiling and server/tool config. */
@@ -166,12 +168,14 @@ async function openServer(
   config: McpServer,
   context: McpContext,
 ): Promise<{ live: LiveServer; failure?: undefined } | { live?: undefined; failure: string }> {
+  let connecting = false;
   try {
     requireProfileCapability(run.profile, config.transport === 'stdio' ? 'mcp.stdio' : 'mcp.http');
     if (run.profile.professionId !== null && !context.authorize) {
       throw new GatewayError(403, 'MCP requires live profession authority');
     }
     await context.authorize?.(config);
+    connecting = true;
     const client = await connectMcp({
       profileId: run.profileId,
       server: config,
@@ -188,8 +192,12 @@ async function openServer(
         : {}),
     });
 
+    // Register before discovery: tools() can fail after a transport/child already exists.
+    context.clients.push(client);
+    connecting = false;
     return { live: { config, client, offered: await client.tools() } };
   } catch (error) {
+    if (connecting) context.onCleanupUncertain?.();
     context.signal.throwIfAborted();
 
     return { failure: connectionFailure(error) };
@@ -215,15 +223,20 @@ async function reconnectServer(
         );
       }
 
-      const index = context.clients.indexOf(previous);
-
-      if (index >= 0) {
-        context.clients[index] = reopened.live.client;
-      } else {
-        context.clients.push(reopened.live.client);
+      // openServer already registered the replacement. Keep the old receipt until close
+      // succeeds; if it fails, the runtime must still own and clean up both clients.
+      try {
+        await previous.close();
+      } catch (error) {
+        context.onCleanupUncertain?.();
+        // No replacement call was sent. Preserve that fact without losing the failed
+        // client's cleanup receipt; runtime cleanup will retry it alongside the new client.
+        throw new Error(`MCP previous client cleanup failed: ${connectionFailure(error)}`, {
+          cause,
+        });
       }
-
-      await previous.close().catch(() => {});
+      const index = context.clients.indexOf(previous);
+      if (index >= 0) context.clients.splice(index, 1);
       live.client = reopened.live.client;
       live.offered = reopened.live.offered;
     })().finally(() => {
@@ -368,7 +381,6 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
     }
 
     const { live } = result;
-    context.clients.push(live.client);
 
     // Everything the server offers. A long catalog costs nothing per turn: only the tools the
     // agent has loaded are sent with a request, so a server with a hundred of them is no

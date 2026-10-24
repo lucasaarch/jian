@@ -23,6 +23,8 @@ export const professionPreviewSchema = z.strictObject({
     queuedRuns: count,
     runningRuns: count,
     waitingRuns: count,
+    unsettledExecutions: count,
+    pendingWorkerReports: count,
     historicalRunsWithoutAuthority: count,
     pendingRemoteTasks: count,
     enabledSchedules: count,

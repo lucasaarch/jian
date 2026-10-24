@@ -467,23 +467,6 @@ export const handlers = [
   }),
 
   http.get('*/v1/profiles/:profileId/built-in-skills', () => ok(data.builtinSkills)),
-  http.get('*/v1/profiles/:profileId/skill-catalog', () =>
-    ok({
-      marketplace: 'example-skills',
-      entries: [
-        {
-          name: 'concise',
-          description: 'Answer in the first sentence.',
-          url: 'https://github.com/example/skills/tree/main/concise',
-        },
-        {
-          name: 'code-review',
-          description: 'Review a diff for correctness.',
-          url: 'https://github.com/example/skills/tree/main/code-review',
-        },
-      ],
-    }),
-  ),
   http.post('*/v1/profiles/:profileId/skills/import', ({ params }) =>
     ok(data.profiles.find((profile) => profile.id === params.profileId)),
   ),

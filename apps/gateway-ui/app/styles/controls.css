@@ -580,9 +580,6 @@
   .search-field input {
     @apply pl-10;
   }
-  .catalog-loading {
-    @apply flex min-h-40 items-center justify-center gap-3 text-sm text-muted;
-  }
   .message-history.loading {
     @apply grid place-items-center;
   }
@@ -603,63 +600,6 @@
   }
   .skill-import .button {
     @apply min-h-[46px];
-  }
-  .skill-marketplace {
-    @apply mt-10 border-t border-line pt-8;
-  }
-  .catalog-toolbar {
-    @apply mb-4 flex flex-wrap items-center justify-between gap-4;
-  }
-  .catalog-toolbar .search-field {
-    @apply w-full sm:w-64;
-  }
-  .catalog-sources {
-    @apply m-0 flex gap-2 border-0 p-0;
-  }
-  .catalog-sources button {
-    @apply flex items-center gap-2 rounded-md border border-line px-4 py-2 text-sm text-muted;
-  }
-  .catalog-sources button[aria-pressed="true"] {
-    @apply border-accent bg-accent-soft text-accent;
-  }
-  .catalog-sources strong {
-    @apply font-medium;
-  }
-  .catalog-sources small {
-    @apply text-[10px];
-  }
-  .catalog-note {
-    @apply mb-5 text-xs text-muted;
-  }
-  .skill-catalog-grid {
-    @apply grid gap-3 sm:grid-cols-2 min-[1300px]:grid-cols-3;
-  }
-  .skill-catalog-card {
-    @apply flex min-w-0 flex-col rounded-md bg-surface/70 p-4;
-  }
-  .skill-catalog-title {
-    @apply flex items-start justify-between gap-3;
-  }
-  .skill-catalog-title h3 {
-    @apply break-words font-mono text-xs;
-  }
-  .skill-catalog-title a {
-    @apply text-muted hover:text-accent;
-  }
-  .skill-catalog-card p {
-    @apply mt-3 text-xs;
-  }
-  .skill-catalog-card footer {
-    @apply mt-auto flex items-center justify-between gap-2 pt-4;
-  }
-  .skill-catalog-card footer > span {
-    @apply text-[11px] text-muted;
-  }
-  .skill-catalog-card .catalog-actions {
-    @apply flex items-center gap-1;
-  }
-  .catalog-publisher {
-    @apply inline-flex items-center gap-1.5;
   }
   /* Servers to import: a row card each, the whole card is the choice. */
   .import-servers {

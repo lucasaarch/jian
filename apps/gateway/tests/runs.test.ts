@@ -1,4 +1,7 @@
+import { eq } from 'drizzle-orm';
 import { afterEach, expect, it, vi } from 'vitest';
+import { updateRun } from '../src/runs/repository.js';
+import { runs } from '../src/storage/schema.js';
 import { testServices } from './helpers/services.js';
 
 const profileInput = {
@@ -306,6 +309,11 @@ it('marks expired leases interrupted without replaying uncertain work', async ()
   expect((await services.runs.run(profile.id, run.id)).status).toBe('interrupted');
   expect(await services.lifecycle.claim(run.id, profile.id, 'two')).toBeNull();
   expect(await services.sessions.messages(profile.id, session.id)).toHaveLength(1);
+  const [row] = await services.store.db.select().from(runs).where(eq(runs.id, run.id));
+  expect(row?.executionOwner).toBe('one');
+  await services.lifecycle.settleExecution(profile.id, run.id, 'one');
+  const [settled] = await services.store.db.select().from(runs).where(eq(runs.id, run.id));
+  expect(settled?.executionOwner).toBeNull();
 
   await expect(
     services.lifecycle.finish(profile.id, run.id, 'one', 'completed', 'Late'),
@@ -352,4 +360,104 @@ it('continues only reconciled stopped runs and preserves checkpoints without rep
   expect(next.status).toBe('queued');
   expect(await services.lifecycle.checkpoints(profile.id, run.id)).toHaveLength(1);
   expect((await services.runs.run(profile.id, run.id)).status).toBe('interrupted');
+});
+
+it('keeps internal execution ownership across finish and ordinary stale Run writes', async () => {
+  const { services, profile, session } = await setup();
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Hello',
+    requestKey: 'a',
+  });
+  const marker = async () =>
+    (await services.store.db.select().from(runs).where(eq(runs.id, run.id)))[0]?.executionOwner;
+  expect(await marker()).toBeNull();
+  const claimed = await services.lifecycle.claim(run.id, profile.id, 'worker');
+  expect(await marker()).toBe('worker');
+  expect(claimed).not.toHaveProperty('executionOwner');
+  await services.lifecycle.finish(profile.id, run.id, 'worker', 'completed', 'Done');
+  expect(await marker()).toBe('worker');
+  await services.lifecycle.settleExecution(profile.id, run.id, 'wrong');
+  expect(await marker()).toBe('worker');
+  // A stale public Run write neither erases a live marker nor resurrects a settled one.
+  await updateRun(services.store.db, run);
+  expect(await marker()).toBe('worker');
+  expect(await services.lifecycle.claim(run.id, profile.id, 'another')).toBeNull();
+  await services.lifecycle.settleExecution(profile.id, run.id, 'worker');
+  await updateRun(services.store.db, run);
+  expect(await marker()).toBeNull();
+  expect(await services.lifecycle.claim(run.id, profile.id, 'another')).not.toBeNull();
+  await services.lifecycle.settleExecution(profile.id, run.id, 'worker');
+  expect(await marker()).toBe('another');
+});
+
+it.each(['cancel', 'wait'] as const)('preserves execution ownership on %s', async (transition) => {
+  const { services, profile, session } = await setup();
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Hello',
+    requestKey: 'a',
+  });
+  await services.lifecycle.claim(run.id, profile.id, 'worker');
+  if (transition === 'cancel') await services.runs.cancel(profile.id, run.id);
+  else
+    await services.lifecycle.wait(profile.id, run.id, 'worker', {
+      id: run.id,
+      prompt: 'Which one?',
+      askedAt: new Date().toISOString(),
+    });
+  const [row] = await services.store.db.select().from(runs).where(eq(runs.id, run.id));
+  expect(row?.executionOwner).toBe('worker');
+  expect(row?.leaseOwner).toBeNull();
+  await services.lifecycle.settleExecution(profile.id, run.id, 'worker');
+  const [settled] = await services.store.db.select().from(runs).where(eq(runs.id, run.id));
+  expect(settled?.executionOwner).toBeNull();
+});
+
+it.each(['claim', 'settlement'] as const)(
+  'preserves execution evidence when the %s transaction rolls back',
+  async (operation) => {
+    const { services, profile, session } = await setup();
+    const run = await services.runs.submit(profile.id, session.id, {
+      text: 'Hello',
+      requestKey: 'rollback',
+    });
+    if (operation === 'settlement') await services.lifecycle.claim(run.id, profile.id, 'worker');
+    const transaction = services.store.transaction.bind(services.store);
+    const fault = vi.spyOn(services.store, 'transaction').mockImplementationOnce((id, work) =>
+      transaction(id, async (tx) => {
+        await work(tx);
+        throw new Error('Synthetic transaction failure before commit');
+      }),
+    );
+    try {
+      await expect(
+        operation === 'claim'
+          ? services.lifecycle.claim(run.id, profile.id, 'worker')
+          : services.lifecycle.settleExecution(profile.id, run.id, 'worker'),
+      ).rejects.toThrow('Synthetic transaction failure before commit');
+    } finally {
+      fault.mockRestore();
+    }
+    const [row] = await services.store.db.select().from(runs).where(eq(runs.id, run.id));
+    expect(row?.executionOwner).toBe(operation === 'claim' ? null : 'worker');
+    expect(row?.status).toBe(operation === 'claim' ? 'queued' : 'running');
+    if (operation === 'claim') {
+      expect(await services.lifecycle.claim(run.id, profile.id, 'worker')).not.toBeNull();
+    } else {
+      await services.lifecycle.settleExecution(profile.id, run.id, 'worker');
+      const [settled] = await services.store.db.select().from(runs).where(eq(runs.id, run.id));
+      expect(settled?.executionOwner).toBeNull();
+    }
+  },
+);
+
+it('does not create an execution marker when cancelling queued work', async () => {
+  const { services, profile, session } = await setup();
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Hello',
+    requestKey: 'a',
+  });
+  await services.runs.cancel(profile.id, run.id);
+  expect(await services.lifecycle.claim(run.id, profile.id, 'worker')).toBeNull();
+  const [row] = await services.store.db.select().from(runs).where(eq(runs.id, run.id));
+  expect(row?.executionOwner).toBeNull();
 });

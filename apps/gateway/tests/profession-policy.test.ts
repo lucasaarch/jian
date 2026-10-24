@@ -21,15 +21,15 @@ function authority(id: string): ProfessionAuthority {
 }
 
 describe('profession policy foundation (not activated in the runtime)', () => {
-  it('has stable validated definitions and defaults within each ceiling', () => {
+  it('has stable validated definitions with fixed capability sets', () => {
     expect(() => validateProfessionCatalog(professionCatalog)).not.toThrow();
     expect(professionCatalog.map((item) => item.id)).toEqual(['developer', 'attendant']);
-    expect(findProfession('developer')?.defaultCapabilities).not.toContain('web.browse');
-    expect(findProfession('attendant')?.defaultCapabilities).not.toContain('mcp.http');
-    expect(new Set(professionCatalog.flatMap((item) => item.capabilities))).toEqual(new Set(all));
+    expect(new Set(professionCatalog.flatMap((item) => item.capabilities))).toEqual(
+      new Set(all.filter((capability) => capability !== 'profiles.create')),
+    );
   });
 
-  it('rejects duplicate definitions, capabilities and defaults outside the ceiling', () => {
+  it('rejects duplicate definitions and capabilities', () => {
     const definition = professionCatalog[0];
     if (!definition) throw new Error('Missing definition');
     expect(() => validateProfessionCatalog([definition, definition])).toThrow(
@@ -40,11 +40,6 @@ describe('profession policy foundation (not activated in the runtime)', () => {
         { ...definition, capabilities: [...definition.capabilities, 'process.exec'] },
       ]),
     ).toThrow('Duplicate capabilities');
-    expect(() =>
-      validateProfessionCatalog([
-        { ...definition, capabilities: [], defaultCapabilities: ['process.exec'] },
-      ]),
-    ).toThrow('Defaults exceed');
   });
 
   it.each([null, undefined, '', 'designer', '__proto__', 'DEVELOPER'])(

@@ -283,6 +283,8 @@ export const runs = pgTable(
     question: jsonb('question').$type<RunQuestion>(),
     // What the person said while this run was already going. Read and cleared between steps.
     steer: text('steer'),
+    // Internal worker lifetime, independent of status/lease. Only explicit settlement clears it.
+    executionOwner: text('execution_owner'),
     leaseOwner: text('lease_owner'),
     leaseUntil: bigint('lease_until', { mode: 'number' }),
     createdAt,

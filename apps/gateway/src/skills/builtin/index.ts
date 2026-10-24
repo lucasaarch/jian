@@ -58,10 +58,8 @@ const ALWAYS: readonly Skill[] = [
   discernmentNudge,
 ];
 
-/**
- * Each of these describes tools that exist only behind one of the profile's switches, or only
- * with servers configured. Offered without them, a skill would teach tools the agent does not
- * have, and it would say it cannot do what the skill promised.
+/** Profession-specific guidance follows the profession's fixed capabilities. MCP guidance also
+ * requires a configured server: profession authority does not create an external integration.
  */
 const SELF_MANAGED: readonly Skill[] = [managingYourself];
 const AGENTS: readonly Skill[] = [workingWithAgents];
@@ -98,7 +96,7 @@ const skillCapabilities: Readonly<Record<string, readonly Capability[]>> = {
   [jevJudgment.name]: ['decisions.query'],
   [caveman.name]: [],
   [discernmentNudge.name]: [],
-  [managingYourself.name]: ['identity.manage', 'profiles.create'],
+  [managingYourself.name]: ['identity.manage'],
   [workingWithAgents.name]: ['peers.call'],
   [machineTools.name]: ['process.exec'],
   [codingWork.name]: ['process.exec'],
@@ -133,15 +131,49 @@ export function builtinSkills(
     | Pick<Profile, 'allowSelfManagement' | 'allowWebSearch' | 'mcpServers' | 'reachableByAgents'>,
   authority?: ProfessionAuthority,
 ): readonly Skill[] {
-  // Keep the historical switches-only API for callers without a classified profile.
-  const effective = 'professionId' in profile ? profileAuthority(profile, authority) : authority;
+  const hasProfessionField = 'professionId' in profile;
+  const classified = hasProfessionField && profile.professionId !== null;
+  const effective = hasProfessionField
+    ? profileAuthority(profile as Profile, authority)
+    : authority;
+  const permits = (capability: Capability) => {
+    if (effective === undefined) return false;
+    try {
+      requireCapability(effective, capability);
+      return true;
+    } catch (error) {
+      if (!(error instanceof CapabilityDenied)) throw error;
+      return false;
+    }
+  };
   return [
     ...ALWAYS,
-    ...(profile.reachableByAgents ? AGENTS : []),
-    ...(profile.allowSelfManagement ? SELF_MANAGED : []),
-    ...SHELL,
-    ...(profile.allowWebSearch ? WEB : []),
-    ...(profile.mcpServers.length ? MCP : []),
+    ...(classified
+      ? permits('peers.call')
+        ? AGENTS
+        : []
+      : profile.reachableByAgents
+        ? AGENTS
+        : []),
+    ...(classified
+      ? permits('identity.manage')
+        ? SELF_MANAGED
+        : []
+      : profile.allowSelfManagement
+        ? SELF_MANAGED
+        : []),
+    ...(classified
+      ? [
+          ...(permits('process.exec') ? [machineTools, codingWork, ...ponytailSkills] : []),
+          ...(permits('remote.control') ? [remoteControl] : []),
+        ]
+      : SHELL),
+    ...(classified ? (permits('web.browse') ? WEB : []) : profile.allowWebSearch ? WEB : []),
+    ...(profile.mcpServers.some(
+      (server) => !classified || permits(server.transport === 'http' ? 'mcp.http' : 'mcp.stdio'),
+    )
+      ? MCP
+      : []),
     ...STICKERS,
   ].filter((skill) => skillAllowed(skill.name, effective));
 }
@@ -154,10 +186,11 @@ export function availableSkills(profile: Profile, authority?: ProfessionAuthorit
   const effective = profileAuthority(profile, authority);
   const own = new Set(profile.skills.map((skill) => skill.name));
   const disabled = new Set(profile.disabledSkills);
+  const classified = profile.professionId !== null;
 
   return [
     ...builtinSkills(profile, effective).filter(
-      (skill) => !own.has(skill.name) && !disabled.has(skill.name),
+      (skill) => !own.has(skill.name) && (classified || !disabled.has(skill.name)),
     ),
     ...profile.skills.filter((skill) => skillAllowed(skill.name, effective)),
   ];

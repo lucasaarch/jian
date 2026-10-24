@@ -107,23 +107,30 @@ describe('profession skill surfaces', () => {
     expect(names(builtinSkills(current)).sort()).toEqual([...builtinSkillNames].sort());
     const { allowSelfManagement, allowWebSearch, mcpServers, reachableByAgents } = current;
     expect(
-      names(builtinSkills({ allowSelfManagement, allowWebSearch, mcpServers, reachableByAgents })),
-    ).toEqual(names(builtinSkills(current)));
+      names(
+        builtinSkills({ allowSelfManagement, allowWebSearch, mcpServers, reachableByAgents }),
+      ).sort(),
+    ).toEqual(names(builtinSkills(current)).sort());
   });
 
-  it('preserves enabled Developer skills and explicit legacy behavior', () => {
-    for (const profession of ['developer', null] as const) {
-      const current = profile(profession);
-      expect(names(availableSkills(current))).toEqual(
-        expect.arrayContaining([...restricted, 'web-research', 'github-mcp']),
-      );
-      current.disabledSkills = ['coding-work'];
-      expect(findSkill(current, 'coding-work')).toBeUndefined();
-      current.skills = [{ name: 'coding-work', description: 'Custom', instructions: 'Override.' }];
-      expect(findSkill(current, 'coding-work')?.instructions).toBe('Override.');
-      current.allowWebSearch = false;
-      expect(findSkill(current, 'web-research')).toBeUndefined();
-    }
+  it('keeps builtins fixed for professions while legacy profiles retain their old switches', () => {
+    const developer = profile('developer');
+    expect(names(availableSkills(developer))).toEqual(
+      expect.arrayContaining([...restricted, 'web-research', 'github-mcp']),
+    );
+    developer.disabledSkills = ['coding-work'];
+    expect(findSkill(developer, 'coding-work')).toBeDefined();
+    developer.skills = [{ name: 'coding-work', description: 'Custom', instructions: 'Override.' }];
+    expect(findSkill(developer, 'coding-work')?.instructions).toBe('Override.');
+    developer.disabledSkills = ['coding-work', 'web-research', 'managing-yourself'];
+    developer.allowWebSearch = false;
+    developer.allowSelfManagement = false;
+    expect(findSkill(developer, 'web-research')).toBeDefined();
+    expect(findSkill(developer, 'managing-yourself')).toBeDefined();
+
+    const legacy = profile(null);
+    legacy.allowWebSearch = false;
+    expect(findSkill(legacy, 'web-research')).toBeUndefined();
   });
 
   it('intersects inherited authority for listing, custom bodies and optional web access', () => {

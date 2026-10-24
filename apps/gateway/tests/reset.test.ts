@@ -33,6 +33,7 @@ async function setup() {
     for (const run of await services.runs.activities(profile.id)) {
       await services.lifecycle.claim(run.id, profile.id, 'worker');
       await services.lifecycle.finish(profile.id, run.id, 'worker', 'completed', 'Oi.');
+      await services.lifecycle.settleExecution(profile.id, run.id, 'worker');
     }
   };
 

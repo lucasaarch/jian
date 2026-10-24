@@ -249,7 +249,7 @@ export class WebSearch {
   }
 
   tools(run: Run): ToolSet {
-    if (!run.profile.allowWebSearch) {
+    if (run.profile.professionId === null && !run.profile.allowWebSearch) {
       return {};
     }
 

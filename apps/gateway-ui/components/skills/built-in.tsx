@@ -4,19 +4,14 @@ import { Eye, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { BuiltinSkill } from '../../lib/api';
 import type { SectionProps } from '../props';
-import { Button, ResourceRow, Switch } from '../ui';
+import { Badge, Button, ResourceRow } from '../ui';
 import { SkillView } from './skill-view';
 
 /**
  * Skills that ship with the gateway. The owner cannot edit one, so the instructions are shown
  * in full: what an agent was told has to be readable by the person answering for it.
  */
-export function BuiltinSkills({
-  profile,
-  api,
-  mutate,
-  busy,
-}: Pick<SectionProps, 'profile' | 'api' | 'mutate' | 'busy'>) {
+export function BuiltinSkills({ profile, api }: Pick<SectionProps, 'profile' | 'api'>) {
   const [skills, setSkills] = useState<BuiltinSkill[]>();
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string>();
@@ -38,18 +33,6 @@ export function BuiltinSkills({
     };
   }, [api, profile.id, profile.version]);
 
-  const toggle = (skill: BuiltinSkill) =>
-    mutate(
-      () =>
-        api.updateProfile(profile.id, {
-          expectedVersion: profile.version,
-          disabledSkills: skill.enabled
-            ? [...profile.disabledSkills, skill.name]
-            : profile.disabledSkills.filter((name) => name !== skill.name),
-        }),
-      skill.enabled ? `${skill.name} switched off.` : `${skill.name} switched on.`,
-    );
-
   if (error) {
     return (
       <p className="form-error" role="alert">
@@ -63,7 +46,9 @@ export function BuiltinSkills({
   return (
     <section className="row-group" aria-labelledby="skills-built-in">
       <h2 id="skills-built-in">Built in</h2>
-      <p>They ship with the gateway and teach the agent to use what Jian gives it.</p>
+      <p>
+        They ship with the gateway and are included automatically based on the agent's profession.
+      </p>
       <div className="resource-list">
         {(skills ?? []).map((skill) => (
           <ResourceRow
@@ -79,12 +64,7 @@ export function BuiltinSkills({
                   <Eye size={16} />
                   View
                 </Button>
-                <Switch
-                  checked={skill.enabled}
-                  label={`${skill.name} ${skill.enabled ? 'on' : 'off'}`}
-                  disabled={busy}
-                  onChange={() => void toggle(skill)}
-                />
+                <Badge dot={false}>{skill.enabled ? 'Included' : 'Not included'}</Badge>
               </>
             }
           />

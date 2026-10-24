@@ -39,7 +39,6 @@ export const professionDefinitionSchema = z.strictObject({
   description: z.string().min(1),
   policyVersion: z.number().int().positive(),
   capabilities: z.array(capabilitySchema),
-  defaultCapabilities: z.array(capabilitySchema),
 });
 export type ProfessionDefinition = z.infer<typeof professionDefinitionSchema>;
 

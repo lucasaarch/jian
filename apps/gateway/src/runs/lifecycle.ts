@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { Checkpoint, Message, Run, RunProgress, RunQuestion } from '@jian/contracts';
+import { and, eq, isNull } from 'drizzle-orm';
 import { formatQuestionText } from '../agent/ask-user.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { insertMessage } from '../sessions/repository.js';
 import type { Store } from '../storage/database.js';
+import { runs } from '../storage/schema.js';
 import type { RunReader } from './port.js';
 import {
   appendCommentary,
@@ -47,6 +49,15 @@ export class RunLifecycle {
         updatedAt: nowIso(this.clock),
       };
 
+      // The profile transaction holds the lock. Status alone is not proof that the previous
+      // worker ended: recovery, cancellation and finish all leave execution ownership intact.
+      const marked = await tx
+        .update(runs)
+        .set({ executionOwner: owner })
+        .where(and(eq(runs.id, runId), eq(runs.profileId, profileId), isNull(runs.executionOwner)))
+        .returning({ id: runs.id });
+      if (marked.length === 0) return null;
+
       await updateRun(tx, claimed);
 
       await recordEvent(
@@ -59,6 +70,18 @@ export class RunLifecycle {
       );
 
       return claimed;
+    });
+  }
+
+  /** Worker-lifetime acknowledgement, not a lease/status transition. Wrong owners are a no-op. */
+  async settleExecution(profileId: string, runId: string, owner: string): Promise<void> {
+    await this.store.transaction(profileId, async (tx) => {
+      await tx
+        .update(runs)
+        .set({ executionOwner: null })
+        .where(
+          and(eq(runs.id, runId), eq(runs.profileId, profileId), eq(runs.executionOwner, owner)),
+        );
     });
   }
 
