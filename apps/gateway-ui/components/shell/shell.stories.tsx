@@ -20,7 +20,7 @@ type Story = StoryObj<typeof meta>;
 export const Navigation: Story = {
   render: () => (
     <div className="app-shell">
-      <Sidebar open onNavigate={fn()} onCreateProfile={fn()} />
+      <Sidebar open onNavigate={fn()} onCreateProfile={fn()} onAssignProfession={fn()} />
     </div>
   ),
 };
@@ -31,5 +31,5 @@ export const TopBar: Story = {
 
 export const AgentSelector: Story = {
   parameters: { layout: 'padded' },
-  render: () => <ProfileSwitcher onCreate={fn()} />,
+  render: () => <ProfileSwitcher onCreate={fn()} onAssignProfession={fn()} />,
 };

@@ -148,13 +148,7 @@ export function builtinSkills(
   };
   return [
     ...ALWAYS,
-    ...(classified
-      ? permits('peers.call')
-        ? AGENTS
-        : []
-      : profile.reachableByAgents
-        ? AGENTS
-        : []),
+    ...(classified ? (permits('peers.call') ? AGENTS : []) : AGENTS),
     ...(classified
       ? permits('identity.manage')
         ? SELF_MANAGED

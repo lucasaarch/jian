@@ -33,6 +33,8 @@ const developerCapabilities: Capability[] = [
   'peers.call',
   'identity.manage',
   'media.image',
+  'campaigns.read',
+  'campaigns.manage',
 ];
 
 /** The fixed catalog used by assignment and runtime enforcement. */
@@ -46,10 +48,17 @@ export const professionCatalog: readonly ProfessionDefinition[] = [
   },
   {
     id: 'attendant',
-    label: 'Attendant',
+    label: 'Sales Attendant',
     description: 'Customer service within authorized conversations and business integrations.',
     policyVersion: 1,
-    capabilities: [...common, 'mcp.http', 'media.image'],
+    capabilities: [
+      ...common,
+      'mcp.http',
+      'media.image',
+      'peers.call',
+      'campaigns.read',
+      'campaigns.manage',
+    ],
   },
 ];
 

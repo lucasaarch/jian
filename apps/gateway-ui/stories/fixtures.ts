@@ -12,6 +12,7 @@ import type {
   Provider,
   ProviderModelList,
   Run,
+  SalesCampaign,
   Schedule,
   Session,
 } from '../lib/api';
@@ -47,7 +48,7 @@ export const ids = {
 };
 
 const profileBase = {
-  professionId: null,
+  professionId: 'developer' as const,
   avatar: null,
   model: { provider: 'openai' as const, modelId: 'unconfigured' },
   contextPolicy: {
@@ -156,6 +157,7 @@ export const profiles: Profile[] = [
   {
     ...profileBase,
     id: ids.ichigo,
+    professionId: 'attendant',
     name: 'Ichigo',
     summary: '',
     instructions: 'You are Ichigo.',
@@ -272,6 +274,18 @@ export const schedules: Schedule[] = [
     lastRunAt: at(60 * 6),
     lastError: 'The provider key is not configured. Add one under Providers.',
   }),
+];
+
+export const salesCampaigns: SalesCampaign[] = [
+  {
+    id: '1e08b386-0384-45f7-80b5-f4c06bab7550',
+    profileId: ids.ichigo,
+    name: 'Spring Starter Bundle',
+    description:
+      'A starter bundle for new customers. Includes the core product and onboarding support for $49. Available through October 31. Explain the 20% saving compared with buying items separately. The offer is for first-time customers and cannot be combined with other discounts. Invite interested customers to place an order or ask for help choosing a bundle.',
+    createdAt: at(60 * 24 * 14),
+    updatedAt: at(60 * 24),
+  },
 ];
 
 export const channels: Channel[] = [

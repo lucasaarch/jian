@@ -16,14 +16,16 @@ export function Sidebar({
   open,
   onNavigate,
   onCreateProfile,
+  onAssignProfession,
 }: {
   open: boolean;
   onNavigate: () => void;
   onCreateProfile: () => void;
+  onAssignProfession: () => void;
 }) {
   const pathname = usePathname();
   const active = currentSection(pathname);
-  const { data, loading, signOut } = useWorkspace();
+  const { data, loading, profile, signOut } = useWorkspace();
   const releaseNotes = useReleaseNotes();
   const releaseUpdate = useReleaseUpdate();
   // Requests waiting on the owner, shown wherever they are in the panel.
@@ -48,13 +50,20 @@ export function Sidebar({
         <Mark className={loading ? 'connecting' : data ? 'connected' : ''} />
         <span>Jian</span>
       </Link>
-      <ProfileSwitcher onCreate={onCreateProfile} />
+      <ProfileSwitcher onCreate={onCreateProfile} onAssignProfession={onAssignProfession} />
       <nav className="sidebar-nav" aria-label="Main navigation">
         {(['global', 'agent'] as const).map((group) => (
           <div className="nav-group" key={group}>
             <span className="nav-label">{groupLabels[group]}</span>
             {navigation
-              .filter((item) => item.group === group)
+              .filter(
+                (item) =>
+                  item.group === group &&
+                  (item.group === 'global' ||
+                    (profile !== undefined && profile.professionId !== null)) &&
+                  (item.href !== '/ssh-keys' || profile?.professionId === 'developer') &&
+                  (item.href !== '/campaigns' || profile?.professionId === 'attendant'),
+              )
               .map((item) => (
                 <Link
                   key={item.href}

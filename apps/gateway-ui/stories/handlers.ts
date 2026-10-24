@@ -41,6 +41,109 @@ const decisions = (configured: boolean) => ({
 export const handlers = [
   http.get('*/v1/profiles/:profileId/sessions/:sessionId/subagents', () => ok([])),
   http.get('*/v1/profiles', () => ok(data.profiles)),
+  http.get('*/v1/professions', () =>
+    ok({
+      assignable: true,
+      professions: [
+        {
+          id: 'developer',
+          label: 'Developer',
+          description: 'Software development with every capability defined for the profession.',
+          policyVersion: 1,
+          capabilities: [
+            'conversation.control',
+            'conversation.read',
+            'conversation.send',
+            'memory.use',
+            'skills.read',
+            'skills.write',
+            'activity.read',
+            'decisions.query',
+            'schedules.manage',
+            'media.use',
+            'subscriptions.github',
+            'coordination.lease',
+            'workspace.files',
+            'process.exec',
+            'ssh.manage',
+            'tasks.delegate',
+            'web.browse',
+            'remote.control',
+            'mcp.http',
+            'mcp.stdio',
+            'peers.call',
+            'identity.manage',
+            'media.image',
+            'campaigns.read',
+            'campaigns.manage',
+          ],
+        },
+        {
+          id: 'attendant',
+          label: 'Sales Attendant',
+          description:
+            'Customer service within authorized conversations and business integrations.',
+          policyVersion: 1,
+          capabilities: [
+            'conversation.control',
+            'conversation.read',
+            'conversation.send',
+            'memory.use',
+            'skills.read',
+            'skills.write',
+            'activity.read',
+            'decisions.query',
+            'schedules.manage',
+            'media.use',
+            'mcp.http',
+            'media.image',
+            'peers.call',
+            'campaigns.read',
+            'campaigns.manage',
+          ],
+        },
+      ],
+    }),
+  ),
+  http.post('*/v1/profiles/:profileId/profession/preview', async ({ request, params }) => {
+    const { professionId, expectedVersion } = (await request.json()) as {
+      professionId: 'developer' | 'attendant';
+      expectedVersion: number;
+    };
+    return ok({
+      profileId: String(params.profileId),
+      profileVersion: expectedVersion,
+      professionId,
+      policyVersion: 1,
+      assignable: true,
+      blockers: [],
+      configurationCapabilities: [],
+      incompatibleMcpServers: [],
+      affected: {
+        queuedRuns: 0,
+        runningRuns: 0,
+        waitingRuns: 0,
+        unsettledExecutions: 0,
+        pendingWorkerReports: 0,
+        historicalRunsWithoutAuthority: 0,
+        pendingRemoteTasks: 0,
+        runningRemoteTasks: 0,
+        enabledSchedules: 0,
+        enabledSubscriptions: 0,
+        liveChannels: 0,
+        openObjectives: 0,
+        customSkills: 0,
+        remoteMachines: 0,
+        learning: false,
+        peerCalls: false,
+      },
+    });
+  }),
+  http.post('*/v1/profiles/:profileId/profession/assign', async ({ request, params }) => {
+    const { professionId } = (await request.json()) as { professionId: 'developer' | 'attendant' };
+    const current = data.profiles.find((profile) => profile.id === params.profileId);
+    return ok({ ...current, professionId, version: (current?.version ?? 0) + 1 });
+  }),
   http.get('*/v1/profiles/:profileId/profession', () =>
     ok({
       status: 'legacy_unclassified',
@@ -320,6 +423,36 @@ export const handlers = [
   http.get('*/v1/profiles/:profileId/schedules', ({ params }) =>
     ok(byProfile(data.schedules, String(params.profileId))),
   ),
+  http.get('*/v1/profiles/:profileId/campaigns', ({ params }) =>
+    ok(byProfile(data.salesCampaigns, String(params.profileId))),
+  ),
+  http.post('*/v1/profiles/:profileId/campaigns', async ({ params, request }) => {
+    const body = (await request.json()) as { name: string; description: string };
+    const now = new Date().toISOString();
+    const campaign = {
+      ...body,
+      id: crypto.randomUUID(),
+      profileId: String(params.profileId),
+      createdAt: now,
+      updatedAt: now,
+    };
+    data.salesCampaigns.push(campaign);
+    return HttpResponse.json(campaign as never, { status: 201 });
+  }),
+  http.patch('*/v1/profiles/:profileId/campaigns/:campaignId', async ({ params, request }) => {
+    const campaign = data.salesCampaigns.find(
+      (item) => item.id === params.campaignId && item.profileId === params.profileId,
+    );
+    if (!campaign) return HttpResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    Object.assign(campaign, await request.json(), { updatedAt: new Date().toISOString() });
+    return ok(campaign);
+  }),
+  http.delete('*/v1/profiles/:profileId/campaigns/:campaignId', ({ params }) => {
+    const index = data.salesCampaigns.findIndex(
+      (item) => item.id === params.campaignId && item.profileId === params.profileId,
+    );
+    return ok(index >= 0 ? data.salesCampaigns.splice(index, 1)[0] : { id: params.campaignId });
+  }),
   http.post('*/v1/profiles/:profileId/schedules', async ({ params, request }) => {
     const body = (await request.json()) as Record<string, unknown>;
     const created = {

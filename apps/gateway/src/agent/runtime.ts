@@ -99,6 +99,8 @@ const LEARNING_TOOLS = new Set([
   'delete_skill',
   'load_skill',
 ]);
+/** Classified reviews see only generic workflow metadata and can write skills, never memories. */
+const CLASSIFIED_LEARNING_TOOLS = new Set(['create_skill']);
 /** A look back is short: a few reads and a write or two. */
 const LEARNING_STEPS = 8;
 
@@ -400,7 +402,11 @@ export class AgentRuntime {
           delete tools.list_speech_voices;
         }
         if (learning) {
-          for (const name of Object.keys(tools)) if (!LEARNING_TOOLS.has(name)) delete tools[name];
+          const allowedLearningTools =
+            run.profile.professionId === null ? LEARNING_TOOLS : CLASSIFIED_LEARNING_TOOLS;
+          for (const name of Object.keys(tools)) {
+            if (!allowedLearningTools.has(name)) delete tools[name];
+          }
         }
         if (authority !== undefined) {
           const permitted = filterToolSet(tools, authority);

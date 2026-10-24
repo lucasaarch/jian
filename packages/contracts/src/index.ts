@@ -1,3 +1,4 @@
+export * from './campaigns.js';
 export * from './channels.js';
 export * from './coordination.js';
 export * from './decisions.js';

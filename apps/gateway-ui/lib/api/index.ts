@@ -1,4 +1,5 @@
 import { createJianClient } from '@jian/sdk';
+import { campaignCalls } from './campaigns';
 import { channelCalls } from './channels';
 import { readEvents } from './events';
 import { profileCalls } from './profiles';
@@ -34,6 +35,7 @@ export function gatewayApi() {
     ...sessionCalls(client),
     ...channelCalls(client),
     ...resourceCalls(client),
+    ...campaignCalls(client),
     ...teamCalls(client),
     events: readEvents,
   };

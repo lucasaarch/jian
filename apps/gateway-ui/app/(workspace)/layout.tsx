@@ -2,7 +2,8 @@
 
 import { Plus } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { ProfessionAssignmentDialog } from '../../components/professions/assignment-dialog';
 import { NewProfileDialog } from '../../components/profile/editor';
 import { ReleaseNotes } from '../../components/releases/dialog';
 import { NoticeBar } from '../../components/shell/notice';
@@ -52,9 +53,21 @@ function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // The one screen that is an app of its own: it takes the whole area and scrolls inside.
   const fill = pathname.startsWith('/sessions');
-  const { profiles, profile, data, loading, refresh, adopt } = useWorkspace();
+  const { api, profiles, profile, data, loading, refresh, adopt } = useWorkspace();
   const [mobile, setMobile] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [assigningProfession, setAssigningProfession] = useState(false);
+  const promptedProfiles = useRef(new Set<string>());
+  const professionRequired = profile?.professionId === null;
+
+  useEffect(() => {
+    if (professionRequired && profile && !promptedProfiles.current.has(profile.id)) {
+      promptedProfiles.current.add(profile.id);
+      setAssigningProfession(true);
+    } else if (!professionRequired) {
+      setAssigningProfession(false);
+    }
+  }, [profile, professionRequired]);
 
   useEffect(() => {
     if (!mobile) {
@@ -117,6 +130,7 @@ function Shell({ children }: { children: ReactNode }) {
         <Sidebar
           open={mobile}
           onNavigate={() => setMobile(false)}
+          onAssignProfession={() => setAssigningProfession(true)}
           onCreateProfile={() => {
             setMobile(false);
             setCreating(true);
@@ -126,7 +140,16 @@ function Shell({ children }: { children: ReactNode }) {
           <Topbar navigationOpen={mobile} onOpenNavigation={() => setMobile(true)} />
           <main id="main-content" tabIndex={-1} className={`main-content ${fill ? 'fill' : ''}`}>
             <NoticeBar />
-            {!profiles.length ? (
+            {professionRequired ? (
+              <Empty
+                title="Profession required"
+                action={
+                  <Button onClick={() => setAssigningProfession(true)}>Choose a profession</Button>
+                }
+              >
+                This agent’s pages and actions are unavailable until you assign a profession.
+              </Empty>
+            ) : !profiles.length ? (
               <Empty
                 title="Bring your first agent to life"
                 action={
@@ -160,11 +183,21 @@ function Shell({ children }: { children: ReactNode }) {
         </div>
         {creating && (
           <NewProfileDialog
-            api={gatewayApi()}
+            api={api}
             close={() => setCreating(false)}
             done={(created) => {
               adopt(created);
               setCreating(false);
+            }}
+          />
+        )}
+        {assigningProfession && professionRequired && profile && (
+          <ProfessionAssignmentDialog
+            profile={profile}
+            api={api}
+            close={() => setAssigningProfession(false)}
+            assigned={async () => {
+              await refresh();
             }}
           />
         )}

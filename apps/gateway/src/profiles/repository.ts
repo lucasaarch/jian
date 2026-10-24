@@ -10,6 +10,8 @@ type Row = typeof profiles.$inferSelect;
 export function toProfile(row: Row): Profile {
   return profileRecordSchema.parse({
     ...row,
+    learnFromWork: true,
+    reachableByAgents: true,
     avatar: row.avatar ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -19,6 +21,8 @@ export function toProfile(row: Row): Profile {
 export function toRow(profile: Profile): typeof profiles.$inferInsert {
   return {
     ...profile,
+    learnFromWork: true,
+    reachableByAgents: true,
     createdAt: new Date(profile.createdAt),
     updatedAt: new Date(profile.updatedAt),
   };

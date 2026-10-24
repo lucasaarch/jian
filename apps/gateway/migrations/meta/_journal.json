@@ -470,6 +470,13 @@
       "when": 1792816050684,
       "tag": "0066_global-teams",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1792828975024,
+      "tag": "0067_sales_campaigns",
+      "breakpoints": true
     }
   ]
 }
