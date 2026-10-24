@@ -577,10 +577,10 @@
     @apply flex items-center gap-1;
   }
   .composer-select {
-    @apply h-9 min-h-9 w-auto gap-1 rounded-full border-transparent bg-transparent px-2 py-1 text-xs;
+    @apply h-9 min-h-9 w-auto gap-1 rounded-full px-2 py-1 text-xs;
   }
-  .composer-agent-select {
-    @apply max-w-36;
+  .composer-model-select {
+    @apply max-w-52;
   }
   .composer-effort-select {
     @apply max-w-32;

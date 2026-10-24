@@ -58,6 +58,7 @@ async function render({
   const updateContact = vi.fn(async () => {
     if (fail) throw new Error('Owner session required');
   });
+  const sendAsAgent = vi.fn(async () => ({ accepted: true, deliveryIds: ['delivery'] }));
   const updateChannel = vi.fn();
   const approveContact = vi.fn();
   const blockContact = vi.fn();
@@ -85,10 +86,20 @@ async function render({
             activities: [],
             contacts: contacts.map((item) => ({ ...item, aiEnabled, status })),
             channels: [{ id: 'business', profileId: profile.id, enabled: false } as Channel],
+            providers: [],
+            providerModels: {},
+            modelDefaults: { conversation: null, channel: null },
           } as unknown as ProfileData
         }
         api={
-          { updateContact, updateChannel, approveContact, blockContact } as unknown as GatewayApi
+          {
+            updateContact,
+            updateChannel,
+            approveContact,
+            blockContact,
+            sendAsAgent,
+            setSessionModel: vi.fn(async () => ({ ...session, channel })),
+          } as unknown as GatewayApi
         }
         mutate={mutate}
         busy={busy}
@@ -97,7 +108,16 @@ async function render({
     ),
   );
   const control = element.querySelector<HTMLButtonElement>('[role="switch"]');
-  return { element, control, updateContact, updateChannel, approveContact, blockContact, notices };
+  return {
+    element,
+    control,
+    updateContact,
+    updateChannel,
+    approveContact,
+    blockContact,
+    sendAsAgent,
+    notices,
+  };
 }
 
 for (const aiEnabled of [true, false]) {
@@ -146,12 +166,45 @@ it('disables while busy and leaves the flag unchanged on authorization/save erro
   expect(failed.control?.getAttribute('aria-checked')).toBe('true');
 });
 
-it('does not offer AI controls for other channels or unmatched contacts', async () => {
-  for (const channel of ['whatsapp', 'telegram', 'api', 'agent', 'learning']) {
-    expect((await render({ channel })).control).toBeNull();
+it('offers AI controls and a manual composer on messaging channels, but not API chats', async () => {
+  for (const channel of ['whatsapp', 'whatsapp-business', 'telegram']) {
+    const view = await render({ channel, aiEnabled: false });
+    expect(view.control).not.toBeNull();
+    expect(view.element.querySelector('[aria-label="Send as agent"]')).not.toBeNull();
+    expect(view.element.querySelector('.session-model')).toBeNull();
   }
+  for (const channel of ['api', 'agent', 'learning'])
+    expect((await render({ channel })).control).toBeNull();
   expect((await render({ contacts: [] })).control).toBeNull();
   expect(
     (await render({ contacts: [{ ...contact, profileId: 'another-profile' }] })).control,
   ).toBeNull();
+});
+
+it('sends a message directly as the agent while chat AI is paused', async () => {
+  const view = await render({ aiEnabled: false });
+  const field = view.element.querySelector<HTMLTextAreaElement>(
+    '[aria-label="Message to Customer"]',
+  );
+  if (!field) throw new Error('Message composer is missing');
+  const setter = Object.getOwnPropertyDescriptor(
+    Object.getPrototypeOf(field) as object,
+    'value',
+  )?.set;
+
+  await act(async () => {
+    setter?.call(field, 'A person will take over from here.');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    field.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await act(async () => {
+    view.element.querySelector<HTMLButtonElement>('[aria-label="Send as agent"]')?.click();
+  });
+
+  expect(view.sendAsAgent).toHaveBeenCalledExactlyOnceWith(
+    profile.id,
+    session.id,
+    'A person will take over from here.',
+    [],
+  );
 });

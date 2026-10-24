@@ -940,6 +940,7 @@ export const deliveries = pgTable(
     chatId: text('chat_id').notNull(),
     // Gateway-authored text sent without a run, such as the approval notice.
     notice: text('notice'),
+    manual: boolean('manual').notNull().default(false),
     mediaId: uuid('media_id'),
     // Only direct inbound intake can grant a Meta delivery its causal authority.
     inboundEventId: text('inbound_event_id'),

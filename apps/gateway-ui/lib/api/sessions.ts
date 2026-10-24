@@ -40,6 +40,13 @@ export const sessionCalls = (client: Client) => ({
         },
       }),
     ),
+  sendAsAgent: (profileId: string, sessionId: string, text: string, mediaIds: string[] = []) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/manual-reply', {
+        params: { path: { profileId, sessionId } },
+        body: { text, mediaIds, requestKey: crypto.randomUUID() },
+      }),
+    ),
   /** Null puts the conversation back on the profile's model defaults. */
   setSessionModel: (profileId: string, sessionId: string, model: ModelSelection | null) =>
     result(

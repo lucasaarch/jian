@@ -11,7 +11,7 @@ vi.mock('../ui', () => ({ AudioPlayer: () => null }));
 
 import { Composer } from './composer';
 
-describe('Gateway composer controls', () => {
+describe('Composer controls', () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
 
@@ -28,16 +28,14 @@ describe('Gateway composer controls', () => {
     container.remove();
   });
 
-  it('offers agent and effort controls while keeping microphone recording', async () => {
+  it('offers model and effort controls while keeping microphone recording', async () => {
     await act(async () => {
       root.render(
         createElement(Composer, {
           name: 'Mia',
-          profileId: 'agent-a',
-          agents: [{ id: 'agent-a', name: 'Mia' } as never],
-          sessionId: 'session-a',
+          modelOptions: [],
           providerModels: {},
-          resolveAgent: vi.fn(),
+          saveModel: vi.fn(),
           upload: vi.fn(),
           send: vi.fn(),
           onSent: vi.fn(),
@@ -45,9 +43,9 @@ describe('Gateway composer controls', () => {
       );
     });
 
-    expect(container.querySelector('[aria-label="Agent for this message"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Model for this conversation"]')).not.toBeNull();
     expect(
-      container.querySelector('[aria-label="Reasoning effort for this message"]'),
+      container.querySelector('[aria-label="Reasoning effort for this conversation"]'),
     ).not.toBeNull();
     expect(container.querySelector('[aria-label="Start voice call"]')).toBeNull();
 

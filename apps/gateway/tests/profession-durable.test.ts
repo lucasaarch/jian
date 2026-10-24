@@ -282,7 +282,7 @@ describe('durable profession authority', () => {
     },
   );
 
-  it('blocks automatic objectives and skips cross-session learning for classified work', async () => {
+  it('blocks automatic objectives and limits classified learning to workflow metadata', async () => {
     const { services, profile, session } = await setup();
     const run = await services.runs.submit(profile.id, session.id, message('parent'), {
       ownerMessage: true,
@@ -296,12 +296,12 @@ describe('durable profession authority', () => {
       status: 'blocked',
       note: expect.stringContaining('owner review'),
     });
-    expect(
-      await services.learning.consider(run, {
-        tools: Array.from({ length: 12 }, () => ({ name: 'read_file' })),
-        answer: 'Done.',
-      }),
-    ).toBeUndefined();
+    const review = await services.learning.consider(run, {
+      tools: Array.from({ length: 12 }, () => ({ name: 'read_file' })),
+      answer: 'A customer shared private details.',
+    });
+    expect(review?.input).toContain('Tool sequence and outcomes:');
+    expect(review?.input).not.toContain('A customer shared private details.');
   });
 
   it('requires a shared team and preserves classified authority across peer runs', async () => {

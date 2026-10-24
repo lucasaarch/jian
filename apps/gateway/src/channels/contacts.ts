@@ -245,8 +245,6 @@ export class Contacts {
     const channel = await findChannel(tx, current.channelId);
     if (!channel || channel.revokedAt)
       throw new GatewayError(409, 'The channel of this contact is disconnected');
-    if (channel.type !== 'whatsapp-business')
-      throw new GatewayError(400, 'Per-conversation AI controls require WhatsApp Business');
     const now = nowIso(this.clock);
     const contact: ContactRecord = {
       ...current,

@@ -8,6 +8,8 @@ import {
   type Group,
   type GroupTurn,
   type ingressResultSchema,
+  manualReplyInputSchema,
+  manualReplyResultSchema,
   whatsappBusinessSetupSchema,
 } from '@jian/contracts';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
@@ -18,7 +20,7 @@ import { stableUuid } from '../core/ids.js';
 import type { Decisions } from '../decisions/service.js';
 import { Errands } from '../errands/service.js';
 import { pictureOf } from '../media/picture.js';
-import { bindMedia, releaseHeldMedia } from '../media/repository.js';
+import { bindMedia, mediaMarker, releaseHeldMedia } from '../media/repository.js';
 import type { Media } from '../media/service.js';
 import type { ProfileReader } from '../profiles/port.js';
 import { isUniqueViolation } from '../providers/repository.js';
@@ -1638,6 +1640,68 @@ export class Channels {
     return listDeliveries(this.services.store.db, profileId);
   }
 
+  async sendAsAgent(profileId: string, sessionId: string, input: unknown) {
+    const data = manualReplyInputSchema.parse(input);
+    const now = new Date().toISOString();
+
+    return this.services.store.transaction(profileId, async (tx) => {
+      const contact = await findContactBySession(tx, profileId, sessionId);
+      if (contact?.status !== 'approved')
+        throw new GatewayError(403, 'Only an approved channel conversation can receive a reply');
+
+      const channel = await findChannel(tx, contact.channelId);
+      if (!channel || channel.revokedAt) throw new GatewayError(409, 'Channel is unavailable');
+      if (!['whatsapp', 'whatsapp-business', 'telegram'].includes(channel.type))
+        throw new GatewayError(409, 'Manual replies are not available for this channel');
+
+      await bindMedia(tx, profileId, sessionId, data.mediaIds);
+      const messageId = stableUuid(`manual-message:${profileId}:${sessionId}:${data.requestKey}`);
+      const content = [data.text, ...data.mediaIds.map(mediaMarker)].filter(Boolean).join('\n');
+      await insertMessage(
+        tx,
+        {
+          id: messageId,
+          profileId,
+          sessionId,
+          role: 'assistant',
+          content,
+          createdAt: now,
+        },
+        true,
+      );
+      await recordEvent(tx, Date.now, profileId, 'session.message', { sessionId });
+
+      const connection = await findConnection(tx, channel.id);
+      const media = data.mediaIds.length ? data.mediaIds : [undefined];
+      const deliveryIds = media.map((_, index) =>
+        stableUuid(`manual-delivery:${profileId}:${sessionId}:${data.requestKey}:${index}`),
+      );
+
+      for (const [index, mediaId] of media.entries()) {
+        const delivery = {
+          id: deliveryIds[index] as string,
+          profileId,
+          channelId: channel.id,
+          chatId: contact.chatId,
+          notice: index === 0 ? data.text : undefined,
+          ...(mediaId ? { mediaId } : {}),
+          manual: true,
+          status: 'pending' as const,
+          createdAt: now,
+          updatedAt: now,
+          remoteMessageIds: [],
+          saidCount: 0,
+          ...(connection ? { connectionGeneration: connection.generation } : {}),
+        } satisfies DeliveryRecord;
+        const denied = await this.metaDeliveryError(channel, delivery);
+        if (denied) throw new GatewayError(409, denied);
+        await insertDelivery(tx, delivery);
+      }
+
+      return manualReplyResultSchema.parse({ accepted: true, deliveryIds });
+    });
+  }
+
   /** A complete manual tick; the running worker uses independent intake/outbox clocks. */
   async dispatch() {
     await Promise.all([
@@ -1946,8 +2010,11 @@ export class Channels {
   /** Also checked between chunks: pausing never replays an old reply after a resume. */
   private async automationDeliveryError(channel: ChannelRecord, delivery: DeliveryRecord) {
     const current = await findChannel(this.services.store.db, channel.id);
-    if (!current?.enabled || current.revokedAt) return 'Channel automation is paused';
+    if (!current || current.revokedAt) return 'Channel unavailable';
     const person = await findContactByChat(this.services.store.db, channel.id, delivery.chatId);
+    if (delivery.manual)
+      return person?.status === 'approved' ? undefined : 'The channel contact is not approved';
+    if (!current.enabled) return 'Channel automation is paused';
     if (person && !person.aiEnabled) return 'AI is paused for this conversation';
     const source = delivery.runId ?? delivery.sourceRunId;
     const run = source ? await this.services.runs.run(delivery.profileId, source) : undefined;

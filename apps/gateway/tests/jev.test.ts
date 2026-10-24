@@ -44,11 +44,12 @@ const call = async (definition: unknown, input: unknown) =>
     messages: [],
   });
 
-async function fixture(text = 'When is the dentist appointment?') {
+async function fixture(text = 'When is the dentist appointment?', professionId?: 'attendant') {
   const services = await testServices();
   const profile = await services.profiles.createProfile({
     name: 'Atlas',
     instructions: 'Help.',
+    professionId,
     model: {
       provider: 'openai',
       modelId: 'gpt-4o',
@@ -448,12 +449,12 @@ describe('a memory on a subject already kept', () => {
 });
 
 describe('looking back on work', () => {
-  it('does not cross sessions for classified work even when Jev finds something to keep', async () => {
+  it('uses workflow metadata only for classified work', async () => {
     for (const [teaches, expected] of [
       [0.02, false],
-      [0.8, false],
+      [0.8, true],
     ] as const) {
-      const f = await fixture('Prepare the weekly report');
+      const f = await fixture('Prepare the weekly report', 'attendant');
       const { judge } = fakeJudge(() => yes(teaches));
       const learning = new Learning({ ...f.services, judge });
       const work = {
@@ -461,7 +462,13 @@ describe('looking back on work', () => {
         answer: 'Report ready.',
       };
 
-      expect(Boolean(await learning.consider(f.run, work))).toBe(expected);
+      const review = await learning.consider(f.run, work);
+      expect(Boolean(review)).toBe(expected);
+      if (review) {
+        expect(review.input).toContain('Tool sequence and outcomes:');
+        expect(review.input).not.toContain('Prepare the weekly report');
+        expect(review.input).not.toContain('Report ready.');
+      }
     }
   });
 });

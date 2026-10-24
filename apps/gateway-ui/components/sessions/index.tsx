@@ -5,26 +5,19 @@ import {
   GATEWAY_SESSION_CHANNEL,
   LEARNING_SESSION_CHANNEL,
 } from '@jian/contracts';
-import {
-  ArrowLeft,
-  Bot,
-  CheckCheck,
-  GraduationCap,
-  Search,
-  SlidersHorizontal,
-  Terminal,
-} from 'lucide-react';
-import { type ComponentType, useCallback, useState } from 'react';
+import { ArrowLeft, Bot, CheckCheck, GraduationCap, Search, Terminal } from 'lucide-react';
+import { type ComponentType, useState } from 'react';
 import type { Contact, Profile, Run, Session } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
 import { useWorkspace } from '../../lib/workspace';
 import type { SectionProps } from '../props';
+import { usableProviders } from '../providers/catalog';
+import { modelChoices } from '../providers/role-fields';
 import { Badge, Empty, Face, Orb, Switch, TelegramLogo, WhatsAppLogo } from '../ui';
 import { plainText } from '../ui/markdown';
 import { Composer } from './composer';
 import { History } from './history';
 import { SessionListeners } from './listeners';
-import { SessionModel } from './model-picker';
 import { statusOf } from './progress';
 
 const objectiveTone = {
@@ -187,22 +180,7 @@ export function Sessions({
   // Bumped by a sent message, so the open history reads again instead of waiting for its poll.
   const [sent, setSent] = useState(0);
 
-  const { profiles, refresh, select } = useWorkspace();
-  const resolveAgent = useCallback(
-    async (profileId: string) => {
-      const [sessions, defaults] = await Promise.all([
-        api.sessions(profileId),
-        api.modelDefaults(profileId),
-      ]);
-      const gatewaySession = sessions.find(isGateway);
-      if (!gatewaySession) throw new Error('The selected agent has no Gateway conversation.');
-      return {
-        sessionId: gatewaySession.id,
-        model: gatewaySession.model ?? defaults.conversation ?? undefined,
-      };
-    },
-    [api],
-  );
+  const { profiles, refresh } = useWorkspace();
   const contactOf = (session: Session) =>
     data.contacts.find(
       (contact) => contact.sessionId === session.id && contact.profileId === profile.id,
@@ -363,70 +341,41 @@ export function Sessions({
                   ) : null}
                 </p>
               )}
-              {active.channel === 'whatsapp-business' &&
-                activeContact?.type === 'whatsapp-business' && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span>{activeContact.aiEnabled === false ? 'AI paused' : 'AI replies'}</span>
-                    <Switch
-                      label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
-                      checked={activeContact.aiEnabled ?? true}
-                      disabled={busy}
-                      onChange={(aiEnabled) =>
-                        void mutate(
-                          () => api.updateContact(profile.id, activeContact.id, { aiEnabled }),
-                          aiEnabled
-                            ? 'AI enabled for this chat. Approval and channel automation still apply; no replay.'
-                            : 'AI paused for this chat, including queued replies.',
-                        )
-                      }
-                    />
-                    {data.channels.some(
-                      (channel) =>
-                        channel.id === activeContact.channelId &&
-                        channel.profileId === profile.id &&
-                        channel.enabled === false,
-                    ) && <Badge tone="warn">Channel automation paused</Badge>}
-                    {activeContact.status !== 'approved' && (
-                      <Badge>Contact {activeContact.status}</Badge>
-                    )}
-                    <p className="w-full text-xs text-muted">
-                      Separate from approval and channel automation. Paused messages are never
-                      replayed; queued replies stop. A request already in flight may finish.
-                    </p>
-                  </div>
-                )}
+              {isMessaging(active) && activeContact && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span>
+                    {activeContact.aiEnabled === false ? 'AI replies paused' : 'AI replies'}
+                  </span>
+                  <Switch
+                    label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
+                    checked={activeContact.aiEnabled ?? true}
+                    disabled={busy}
+                    onChange={(aiEnabled) =>
+                      void mutate(
+                        () => api.updateContact(profile.id, activeContact.id, { aiEnabled }),
+                        aiEnabled
+                          ? 'AI enabled for this chat. Approval and channel automation still apply; no replay.'
+                          : 'AI paused for this chat, including queued replies.',
+                      )
+                    }
+                  />
+                  {data.channels.some(
+                    (channel) =>
+                      channel.id === activeContact.channelId &&
+                      channel.profileId === profile.id &&
+                      channel.enabled === false,
+                  ) && <Badge tone="warn">Channel automation paused</Badge>}
+                  {activeContact.status !== 'approved' && (
+                    <Badge>Contact {activeContact.status}</Badge>
+                  )}
+                  <p className="w-full text-xs text-muted">
+                    Separate from approval and channel automation. Paused messages are never
+                    replayed; queued replies stop. A request already in flight may finish.
+                  </p>
+                </div>
+              )}
               <SessionListeners api={api} profileId={profile.id} sessionId={active.id} />
             </div>
-            {kindOf(active) !== 'learning' && (
-              <>
-                <div className="session-model-desktop">
-                  <SessionModel
-                    key={`model-desktop-${active.id}`}
-                    api={api}
-                    profileId={profile.id}
-                    session={active}
-                    data={data}
-                    channel={isMessaging(active)}
-                    saved={() => void refresh()}
-                  />
-                </div>
-                <details key={`model-mobile-${active.id}`} className="session-model-mobile">
-                  <summary className="icon-button" aria-label="Chat model settings">
-                    <SlidersHorizontal size={18} />
-                  </summary>
-                  <div className="session-model-mobile-panel">
-                    <SessionModel
-                      api={api}
-                      profileId={profile.id}
-                      session={active}
-                      data={data}
-                      channel={isMessaging(active)}
-                      saved={() => void refresh()}
-                    />
-                  </div>
-                </details>
-              </>
-            )}
           </header>
           <History
             key={active.id}
@@ -449,16 +398,26 @@ export function Sessions({
               void refresh();
             }}
           />
-          {isGateway(active) && (
+          {(isGateway(active) || (isMessaging(active) && activeContact)) && (
             <Composer
               key={`composer-${active.id}`}
-              name={profile.name}
-              profileId={profile.id}
-              agents={profiles}
-              sessionId={active.id}
-              model={active.model ?? data.modelDefaults.conversation ?? undefined}
+              name={isMessaging(active) ? nameOf(active) : profile.name}
+              model={
+                active.model ??
+                (isMessaging(active)
+                  ? (data.modelDefaults.channel ?? data.modelDefaults.conversation)
+                  : data.modelDefaults.conversation) ??
+                undefined
+              }
+              modelOverride={active.model ?? undefined}
+              modelOptions={modelChoices('conversation', data, usableProviders(data))}
               providerModels={data.providerModels}
-              resolveAgent={resolveAgent}
+              saveModel={async (model) => {
+                await api.setSessionModel(profile.id, active.id, model ?? null);
+                void refresh();
+              }}
+              manual={isMessaging(active)}
+              contactApproved={isGateway(active) ? undefined : activeContact?.status === 'approved'}
               placeholder={
                 data.activities.some(
                   (run) => run.sessionId === active.id && run.status === 'waiting',
@@ -466,15 +425,13 @@ export function Sessions({
                   ? 'Answer to continue…'
                   : undefined
               }
-              upload={(profileId, sessionId, file) => api.upload(profileId, sessionId, file)}
-              send={(profileId, sessionId, text, mediaIds, model) =>
-                api.send(profileId, sessionId, text, mediaIds, model)
+              upload={(file) => api.upload(profile.id, active.id, file)}
+              send={(text, mediaIds, model) =>
+                isMessaging(active)
+                  ? api.sendAsAgent(profile.id, active.id, text, mediaIds)
+                  : api.send(profile.id, active.id, text, mediaIds, model)
               }
-              onSent={(sentProfileId) => {
-                if (sentProfileId !== profile.id) {
-                  select(sentProfileId);
-                  return;
-                }
+              onSent={() => {
                 setSent((value) => value + 1);
                 void refresh();
               }}

@@ -1,0 +1,1 @@
+ALTER TABLE "deliveries" ADD COLUMN "manual" boolean DEFAULT false NOT NULL;

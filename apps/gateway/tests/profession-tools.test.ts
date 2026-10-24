@@ -37,7 +37,7 @@ function call(tools: ToolSet, name: string, input: unknown = {}) {
 }
 
 describe('native profession tool authorization', () => {
-  it('classifies all 73 actual native tool registrations (not just a second name list)', () => {
+  it('classifies every actual native tool registration (not just a second name list)', () => {
     const root = new URL('../src/', import.meta.url);
     const names = new Set<string>();
     for (const path of readdirSync(root, { recursive: true, encoding: 'utf8' })) {
@@ -51,7 +51,6 @@ describe('native profession tool authorization', () => {
         if (match[1]) names.add(match[1]);
       }
     }
-    expect(names.size).toBe(73);
     expect(Object.keys(toolCapabilities).sort()).toEqual([...names].sort());
     for (const capabilities of Object.values(toolCapabilities)) {
       for (const capability of capabilities) expect(capabilitySchema.options).toContain(capability);

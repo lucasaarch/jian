@@ -706,6 +706,46 @@ describe('deleting a profile with a live WhatsApp connection', () => {
   });
 });
 
+it('sends an owner-written reply from an approved conversation while AI replies are paused', async () => {
+  const f = await setup();
+  try {
+    await f.whatsapp.connect(f.profile.id, f.binding.id);
+    await f.whatsapp.tick(f.receive);
+    const callbacks = f.devices[0]?.callbacks;
+    if (!callbacks) throw new Error('Device missing');
+    await callbacks.ready('5511888888888@c.us');
+    await callbacks.message(message);
+    await f.whatsapp.tick(f.receive);
+    const contact = await f.approve();
+    const sessionId = contact.sessionId;
+    if (!sessionId) throw new Error('Approved session missing');
+    await f.channels.dispatch();
+    f.sent.length = 0;
+    await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: false });
+
+    const queued = await f.channels.sendAsAgent(f.profile.id, sessionId, {
+      text: 'I will take care of this for you.',
+      mediaIds: [],
+      requestKey: 'owner-reply',
+    });
+    await f.channels.dispatch();
+
+    expect(queued.accepted).toBe(true);
+    expect(f.sent).toEqual([{ chatId: actorId, text: 'I will take care of this for you.' }]);
+    const delivery = (await f.channels.deliveries(f.profile.id)).find(
+      (item) => item.id === queued.deliveryIds[0],
+    );
+    expect(delivery).toMatchObject({ manual: true, status: 'sent' });
+    expect((await f.services.sessions.messages(f.profile.id, sessionId)).at(-1)).toMatchObject({
+      role: 'assistant',
+      content: 'I will take care of this for you.',
+    });
+  } finally {
+    await f.whatsapp.stop();
+    await f.app.close();
+  }
+});
+
 it('delivers generated images to WhatsApp once without substituting a text link', async () => {
   const f = await setup();
   try {

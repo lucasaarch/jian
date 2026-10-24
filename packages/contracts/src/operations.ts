@@ -17,6 +17,8 @@ import {
   groupSchema,
   ingressResultSchema,
   ingressSchema,
+  manualReplyInputSchema,
+  manualReplyResultSchema,
   telegramUpdateSchema,
 } from './channels.js';
 import {
@@ -958,6 +960,15 @@ export const operations: Operation[] = [
     access: 'admin',
     body: submitSchema,
     response: runRecordSchema,
+    status: 202,
+  },
+  {
+    method: 'POST',
+    path: `${session}/manual-reply`,
+    operationId: 'sendAsAgent',
+    access: 'admin',
+    body: manualReplyInputSchema,
+    response: manualReplyResultSchema,
     status: 202,
   },
   {

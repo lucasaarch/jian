@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import type { Channels } from '../channels/service.js';
 import type { Coordination } from '../coordination/service.js';
+import { GatewayError } from '../core/errors.js';
 import type { ProfileParams, SessionParams } from '../http/params.js';
 import type { RunWriter } from '../runs/port.js';
 import type { SessionWriter } from './port.js';
@@ -9,6 +11,7 @@ type SessionRouteServices = {
   sessions: SessionWriter &
     Pick<Sessions, 'renameSession' | 'setModel' | 'setObjective' | 'overview' | 'timeline'>;
   runs: RunWriter;
+  channels?: Pick<Channels, 'sendAsAgent'>;
   // History spans every message of a profile or a session, so it comes from coordination.
   coordination: Pick<Coordination, 'history'>;
 };
@@ -53,6 +56,22 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
           ownerMessage: true,
         }),
       ),
+  );
+
+  app.post<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/manual-reply',
+    async (request, reply) => {
+      if (!deps.channels) throw new GatewayError(503, 'Channels are not configured');
+      return reply
+        .code(202)
+        .send(
+          await deps.channels.sendAsAgent(
+            request.params.profileId,
+            request.params.sessionId,
+            request.body,
+          ),
+        );
+    },
   );
 
   app.get<{ Params: SessionParams }>(

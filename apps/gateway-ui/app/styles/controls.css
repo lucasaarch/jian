@@ -15,6 +15,22 @@
     outline: none;
     box-shadow: none;
   }
+  .select-trigger.composer-select,
+  .select-trigger.composer-select:hover:not(:disabled),
+  .select-trigger.composer-select:focus-visible,
+  .select-trigger.composer-select[data-popup-open] {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .select-trigger.composer-select:hover:not(:disabled),
+  .select-trigger.composer-select[data-popup-open] {
+    @apply bg-canvas;
+  }
+  .select-trigger.composer-select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
   .select-value {
     @apply flex min-w-0 items-center gap-3;
   }

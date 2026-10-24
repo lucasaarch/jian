@@ -104,7 +104,7 @@ it('keeps a saved channel override visible until changing the shared default upd
     setModelDefaults,
   );
   try {
-    expect(view.element.querySelectorAll('.model-card')).toHaveLength(8);
+    expect(view.element.querySelectorAll('.model-card')).toHaveLength(6);
     expect(view.card.textContent).toContain('A separate channel default is saved');
     const option = Array.from(document.querySelectorAll('[role="option"]')).find((item) =>
       item.textContent?.includes('claude-sonnet-5'),

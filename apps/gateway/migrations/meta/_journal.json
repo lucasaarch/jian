@@ -491,6 +491,13 @@
       "when": 1792832248253,
       "tag": "0069_redundant_omega_red",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1792833140108,
+      "tag": "0070_gigantic_leopardon",
+      "breakpoints": true
     }
   ]
 }

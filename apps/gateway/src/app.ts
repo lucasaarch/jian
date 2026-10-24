@@ -124,7 +124,7 @@ export function createApp(
   registerProfessionPreviewRoutes(app, options);
   registerProfileRoutes(app, options);
   registerTeamRoutes(app, options.teams);
-  registerSessionRoutes(app, { ...options, coordination });
+  registerSessionRoutes(app, { ...options, coordination, channels: options.channels });
   registerMemoryRoutes(app, options);
   registerStickerRoutes(app, options);
   registerStatsRoutes(app, options);

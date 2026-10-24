@@ -100,6 +100,22 @@ export const contactSchema = z.strictObject({
 
 export const contactPatchSchema = z.strictObject({ aiEnabled: z.boolean() });
 
+export const manualReplyInputSchema = z
+  .strictObject({
+    text: z.string().trim().max(8_000),
+    mediaIds: z.array(z.uuid()).max(4).default([]),
+    requestKey: z.string().min(1).max(120),
+  })
+  .refine((input) => input.text.length > 0 || input.mediaIds.length > 0, {
+    message: 'A message needs text or an attachment',
+    path: ['text'],
+  });
+
+export const manualReplyResultSchema = z.strictObject({
+  accepted: z.literal(true),
+  deliveryIds: z.array(z.uuid()),
+});
+
 export const ingressSchema = z.strictObject({
   actorId: z.string().min(1).max(100),
   chatId: z.string().min(1).max(100),
@@ -297,6 +313,7 @@ export const deliverySchema = z.strictObject({
     .string()
     .optional()
     .describe('Text sent without a delivery run, such as an approval notice or a contact message.'),
+  manual: z.boolean().optional().describe('This message was written by the owner.'),
 });
 
 /** Linking a device grants account access, so these endpoints are administrator-only. */

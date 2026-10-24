@@ -72,6 +72,37 @@ function webhook(secret: string): ChannelRequest {
 }
 
 describe('Telegram transport', () => {
+  it('allows a manual reply from an approved contact while AI replies are paused', async () => {
+    const sends: Array<Record<string, unknown>> = [];
+    const f = await setup(async (url, options) => {
+      if (String(url).endsWith('/sendMessage'))
+        sends.push(JSON.parse(String(options?.body)) as Record<string, unknown>);
+      return Response.json({ ok: true, result: { message_id: sends.length + 1 } });
+    });
+    try {
+      await f.channels.receive(f.channel.id, webhook(f.channel.webhookToken));
+      const [pending] = await f.channels.contacts(f.profile.id);
+      if (!pending) throw new Error('Contact request missing');
+      const contact = await f.channels.approveContact(f.profile.id, pending.id);
+      const sessionId = contact.sessionId;
+      if (!sessionId) throw new Error('Approved session missing');
+      await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: false });
+
+      await f.channels.sendAsAgent(f.profile.id, sessionId, {
+        text: 'A person will take over from here.',
+        mediaIds: [],
+        requestKey: 'owner-reply',
+      });
+      await f.channels.dispatch();
+
+      expect(sends).toContainEqual(
+        expect.objectContaining({ text: 'A person will take over from here.' }),
+      );
+    } finally {
+      await f.app.close();
+    }
+  });
+
   it('does not call the adapter when channel automation pauses and resumes during media read', async () => {
     const f = await setup(async () => Response.json({ ok: true, result: { message_id: 5 } }));
     let release = () => {};

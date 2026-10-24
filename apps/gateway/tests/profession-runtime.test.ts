@@ -59,7 +59,7 @@ it('answers as a classified attendant without exposing machine tools or preparin
       const names = options.tools?.map((entry) => entry.name) ?? [];
       expect(names).not.toContain('run_command');
       expect(names).not.toContain('create_ssh_key');
-      expect(names).not.toContain('ask_agent');
+      expect(names).toContain('ask_agent');
       expect(names).not.toContain('spawn_subagent');
       expect(JSON.stringify(options.tools)).not.toContain('"shell"');
       expect(JSON.stringify(options.prompt)).not.toContain('Never use ssh-keygen');

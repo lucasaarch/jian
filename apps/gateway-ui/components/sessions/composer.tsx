@@ -1,8 +1,8 @@
 'use client';
 
-import { ArrowUp, Bot, FileText, LoaderCircle, Mic, Plus, Square, Trash2, X } from 'lucide-react';
+import { ArrowUp, FileText, LoaderCircle, Mic, Plus, Square, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { MediaUpload, ModelSelection, Profile, ProviderModelList } from '../../lib/api';
+import type { MediaUpload, ModelSelection, ProviderModelList } from '../../lib/api';
 import {
   type AttachmentKind,
   base64,
@@ -12,8 +12,9 @@ import {
 } from '../../lib/attachments';
 import { useRecorder } from '../../lib/recorder';
 import { efforts } from '../providers/catalog';
+import { choiceOf } from '../providers/role-fields';
 import { AudioPlayer } from '../ui';
-import { Select } from '../ui/select';
+import { Select, type SelectOption } from '../ui/select';
 import { size } from './media';
 
 type Attachment = {
@@ -37,33 +38,29 @@ const clock = (seconds: number) =>
  */
 export function Composer({
   name,
-  profileId,
-  agents,
-  sessionId,
   model,
+  modelOverride,
+  modelOptions,
   providerModels,
-  resolveAgent,
+  saveModel,
+  manual,
+  contactApproved,
   upload,
   send,
   onSent,
   placeholder,
 }: {
   name: string;
-  profileId: string;
-  agents: Profile[];
-  sessionId: string;
   model?: ModelSelection;
+  modelOverride?: ModelSelection;
+  modelOptions: SelectOption[];
   providerModels: Record<string, ProviderModelList>;
-  resolveAgent: (profileId: string) => Promise<{ sessionId: string; model?: ModelSelection }>;
-  upload: (profileId: string, sessionId: string, file: MediaUpload) => Promise<{ id: string }>;
-  send: (
-    profileId: string,
-    sessionId: string,
-    text: string,
-    mediaIds: string[],
-    model?: ModelSelection,
-  ) => Promise<unknown>;
-  onSent: (profileId: string) => void;
+  saveModel: (model?: ModelSelection) => Promise<void>;
+  manual?: boolean;
+  contactApproved?: boolean;
+  upload: (file: MediaUpload) => Promise<{ id: string }>;
+  send: (text: string, mediaIds: string[], model?: ModelSelection) => Promise<unknown>;
+  onSent: () => void;
   placeholder?: string;
 }) {
   const [text, setText] = useState('');
@@ -71,45 +68,17 @@ export function Composer({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
-  const [agentId, setAgentId] = useState(profileId);
-  const [targetSessionId, setTargetSessionId] = useState(sessionId);
-  const [targetModel, setTargetModel] = useState(model);
-  const [targetLoading, setTargetLoading] = useState(false);
-  const [reasoningEffort, setReasoningEffort] = useState(model?.reasoningEffort ?? '');
+  const [selectedOverride, setSelectedOverride] = useState(modelOverride);
+  const [selectedModel, setSelectedModel] = useState(modelOverride ?? model);
+  const [savingModel, setSavingModel] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const recorder = useRecorder();
   const pastes = useRef(0);
 
   useEffect(() => {
-    let current = true;
-    if (agentId === profileId) {
-      setTargetSessionId(sessionId);
-      setTargetModel(model);
-      setReasoningEffort(model?.reasoningEffort ?? '');
-      setTargetLoading(false);
-      return;
-    }
-    setTargetLoading(true);
-    setTargetSessionId('');
-    void resolveAgent(agentId)
-      .then((target) => {
-        if (!current) return;
-        setTargetSessionId(target.sessionId);
-        setTargetModel(target.model);
-        setReasoningEffort(target.model?.reasoningEffort ?? '');
-        setError('');
-      })
-      .catch((failure: unknown) => {
-        if (current)
-          setError(failure instanceof Error ? failure.message : 'Could not open this agent.');
-      })
-      .finally(() => {
-        if (current) setTargetLoading(false);
-      });
-    return () => {
-      current = false;
-    };
-  }, [agentId, model, profileId, resolveAgent, sessionId]);
+    setSelectedOverride(modelOverride);
+    setSelectedModel(modelOverride ?? model);
+  }, [model, modelOverride]);
 
   // Local previews hold memory until released; the last ones go with the composer.
   const previews = useRef(new Set<string>());
@@ -126,10 +95,6 @@ export function Composer({
     );
 
   const attach = (files: File[], voice = false) => {
-    if (targetLoading || !targetSessionId) {
-      setError('Wait for the selected agent to load before attaching files.');
-      return;
-    }
     const room = MAX_MESSAGE_MEDIA - attachments.length;
     const problems: string[] = [];
 
@@ -156,7 +121,7 @@ export function Composer({
       if (preview) previews.current.add(preview);
       void base64(file)
         .then((data) =>
-          upload(agentId, targetSessionId, {
+          upload({
             mimeType: verdict.mimeType as MediaUpload['mimeType'],
             data,
             name: file.name,
@@ -187,47 +152,60 @@ export function Composer({
 
   const ready = attachments.filter((item) => item.state === 'ready');
   const uploading = attachments.some((item) => item.state === 'uploading');
-  const selectedAgent = agents.find((agent) => agent.id === agentId);
-  const listedModel = targetModel
-    ? providerModels[targetModel.providerId]?.models.find((item) => item.id === targetModel.modelId)
+  const listedModel = selectedModel
+    ? providerModels[selectedModel.providerId]?.models.find(
+        (item) => item.id === selectedModel.modelId,
+      )
     : undefined;
   const availableEfforts = efforts.filter((effort) =>
     listedModel?.reasoningEfforts.includes(effort.value),
   );
-  const canSend =
+  const modelValue = selectedOverride
+    ? choiceOf(selectedOverride.providerId, selectedOverride.modelId)
+    : '';
+  const defaultModelName = model
+    ? (providerModels[model.providerId]?.models.find((item) => item.id === model.modelId)
+        ?.displayName ?? model.modelId)
+    : 'Agent default';
+  const persistModel = async (
+    nextOverride: ModelSelection | undefined,
+    nextModel: ModelSelection | undefined,
+  ) => {
+    setSavingModel(true);
+    setError('');
+    try {
+      await saveModel(nextOverride);
+      setSelectedOverride(nextOverride);
+      setSelectedModel(nextModel);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'The model could not be changed.');
+    } finally {
+      setSavingModel(false);
+    }
+  };
+  const canSubmit =
     !sending &&
-    !targetLoading &&
-    Boolean(targetSessionId) &&
+    !savingModel &&
+    contactApproved !== false &&
     !uploading &&
     !recorder.recording &&
     Boolean(text.trim() || ready.length);
 
   const submit = async () => {
-    if (!canSend) return;
+    if (!canSubmit) return;
     setSending(true);
     setError('');
     try {
-      const selectedModel = targetModel
-        ? {
-            providerId: targetModel.providerId,
-            modelId: targetModel.modelId,
-            ...(reasoningEffort
-              ? { reasoningEffort: reasoningEffort as ModelSelection['reasoningEffort'] }
-              : {}),
-          }
-        : undefined;
       await send(
-        agentId,
-        targetSessionId,
         text.trim(),
         ready.map((item) => item.id ?? ''),
-        selectedModel,
+        selectedOverride,
       );
       for (const item of attachments) if (item.preview) URL.revokeObjectURL(item.preview);
       previews.current.clear();
       setText('');
       setAttachments([]);
-      onSent(agentId);
+      onSent();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'The message could not be sent.');
     } finally {
@@ -331,8 +309,8 @@ export function Composer({
           </div>
         ) : (
           <textarea
-            aria-label={`Message to ${selectedAgent?.name ?? name}`}
-            placeholder={placeholder ?? `Message ${selectedAgent?.name ?? name}`}
+            aria-label={`Message to ${name}`}
+            placeholder={placeholder ?? `Message ${name}`}
             rows={1}
             maxLength={8000}
             value={text}
@@ -404,27 +382,49 @@ export function Composer({
           )}
           <span className="grow" />
           <Select
-            aria-label="Agent for this message"
-            className="composer-select composer-agent-select"
-            value={agentId}
-            disabled={
-              sending || targetLoading || uploading || attachments.length > 0 || recorder.recording
-            }
-            onValueChange={setAgentId}
-            searchThreshold={5}
-            options={agents.map((agent) => ({
-              value: agent.id,
-              label: agent.name,
-              detail: agent.professionId ?? undefined,
-              icon: <Bot size={15} />,
-            }))}
+            aria-label="Model for this conversation"
+            className="composer-select composer-model-select"
+            value={modelValue}
+            disabled={sending || savingModel}
+            onValueChange={(choice) => {
+              if (!choice) return void persistModel(undefined, model);
+              const split = choice.indexOf(':');
+              const next = { providerId: choice.slice(0, split), modelId: choice.slice(split + 1) };
+              void persistModel(next, next);
+            }}
+            renderValue={(option) => (
+              <span>
+                {selectedOverride ? (option?.label ?? selectedOverride.modelId) : defaultModelName}
+              </span>
+            )}
+            options={[
+              { value: '', label: 'Agent default', detail: defaultModelName },
+              ...modelOptions,
+              ...(modelValue && !modelOptions.some((option) => option.value === modelValue)
+                ? [
+                    {
+                      value: modelValue,
+                      label: selectedOverride?.modelId ?? modelValue,
+                      detail: 'No longer offered',
+                    },
+                  ]
+                : []),
+            ]}
           />
           <Select
-            aria-label="Reasoning effort for this message"
+            aria-label="Reasoning effort for this conversation"
             className="composer-select composer-effort-select"
-            value={reasoningEffort}
-            disabled={sending || targetLoading || !targetModel || availableEfforts.length === 0}
-            onValueChange={setReasoningEffort}
+            value={selectedModel?.reasoningEffort ?? ''}
+            disabled={sending || savingModel || !selectedModel || availableEfforts.length === 0}
+            onValueChange={(effort) => {
+              if (!selectedModel) return;
+              const next = {
+                providerId: selectedModel.providerId,
+                modelId: selectedModel.modelId,
+                ...(effort ? { reasoningEffort: effort as ModelSelection['reasoningEffort'] } : {}),
+              };
+              void persistModel(next, next);
+            }}
             options={[{ value: '', label: 'Default effort' }, ...availableEfforts]}
           />
           {recorder.recording ? (
@@ -441,13 +441,18 @@ export function Composer({
               type="button"
               className="composer-tool"
               aria-label="Record a voice note"
-              disabled={targetLoading}
+              disabled={contactApproved === false}
               onClick={() => void record()}
             >
               <Mic size={18} />
             </button>
           )}
-          <button type="submit" className="composer-send" aria-label="Send" disabled={!canSend}>
+          <button
+            type="submit"
+            className="composer-send"
+            aria-label={manual ? 'Send as agent' : 'Send'}
+            disabled={!canSubmit}
+          >
             {sending ? <LoaderCircle size={18} className="spin" /> : <ArrowUp size={18} />}
           </button>
         </div>
