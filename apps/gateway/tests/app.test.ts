@@ -43,7 +43,7 @@ describe('HTTP services', () => {
 
   it('serves the built-in skills of a profile with their instructions', async () => {
     const { app, services } = await setup();
-    const profile = await services.profiles.createProfile(input);
+    const profile = await services.profiles.createProfile({ ...input, professionId: null });
 
     const response = await app.inject({
       method: 'GET',

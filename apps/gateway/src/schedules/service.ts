@@ -28,7 +28,12 @@ import {
 import { assertCron, nextRun } from './timing.js';
 
 type RunSubmitter = {
-  submit(profileId: string, sessionId: string, input: unknown): Promise<Run>;
+  submit(
+    profileId: string,
+    sessionId: string,
+    input: unknown,
+    options?: { systemTask: 'schedule' },
+  ): Promise<Run>;
 };
 
 /** The way a run reaches a person when its conversation is a chat on a channel. */
@@ -117,6 +122,13 @@ export class Schedules {
     const now = new Date(this.clock());
 
     return this.store.transaction(profileId, async (tx) => {
+      if ((await this.profiles.profile(profileId, tx)).professionId !== null) {
+        throw new GatewayError(
+          403,
+          'Classified jobs require durable origin authority and owner review',
+        );
+      }
+
       const current = assertFound(await findSchedule(tx, profileId, id), 'Schedule');
 
       if (patch.sessionId) await this.sessions.session(profileId, patch.sessionId, tx);
@@ -229,6 +241,9 @@ export class Schedules {
     );
 
     for (const schedule of await dueSchedules(this.store.db, now)) {
+      // Keep the due time intact while its profile awaits profession assignment. It will be
+      // enqueued once after assignment rather than silently consumed during an upgrade.
+      if ((await this.profiles.profile(schedule.profileId)).professionId === null) continue;
       const dueAt = new Date(schedule.nextRunAt ?? now);
       let run: Run | undefined;
       let failure: string | undefined;
@@ -280,10 +295,12 @@ export class Schedules {
   }
 
   private async start(schedule: Schedule, requestKey: string) {
-    const run = await this.runs.submit(schedule.profileId, schedule.sessionId, {
-      text: scheduledText(schedule),
-      requestKey,
-    });
+    const run = await this.runs.submit(
+      schedule.profileId,
+      schedule.sessionId,
+      { text: scheduledText(schedule), requestKey },
+      { systemTask: 'schedule' },
+    );
 
     await this.deliveries?.deliverRun(schedule.profileId, schedule.sessionId, run.id);
 

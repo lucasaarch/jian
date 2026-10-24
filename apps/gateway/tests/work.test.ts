@@ -27,6 +27,14 @@ it('runs a scoped subagent in its parent conversation and delivers one durable h
     text: 'Research the release.',
     requestKey: 'parent',
   });
+  await services.lifecycle.claim(parent.id, profile.id, 'parent-lease');
+  await services.lifecycle.finish(
+    profile.id,
+    parent.id,
+    'parent-lease',
+    'completed',
+    'Started research.',
+  );
   const image = await services.media.upload(profile.id, session.id, {
     mimeType: 'image/png',
     data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=',
@@ -164,6 +172,14 @@ it('executes a conversation subagent through the agent loop and retains its tran
       text: 'Check the release.',
       requestKey: 'parent',
     });
+    await services.lifecycle.claim(parent.id, profile.id, 'parent-lease');
+    await services.lifecycle.finish(
+      profile.id,
+      parent.id,
+      'parent-lease',
+      'completed',
+      'Started check.',
+    );
     const child = await services.work.spawnInConversation(
       parent,
       {

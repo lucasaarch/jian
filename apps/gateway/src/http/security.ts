@@ -62,7 +62,10 @@ export function configureSecurity(app: FastifyInstance, options: { token: string
     }
 
     if (error instanceof GatewayError) {
-      return reply.code(error.statusCode).send({ error: error.message });
+      return reply.code(error.statusCode).send({
+        error: error.message,
+        ...('code' in error && typeof error.code === 'string' ? { code: error.code } : {}),
+      });
     }
 
     const status =

@@ -442,6 +442,34 @@
       "when": 1792780000000,
       "tag": "0062_channel-automation",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1792803290792,
+      "tag": "0063_profile-profession-foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1792804841853,
+      "tag": "0064_run-profession-authority",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1792808562938,
+      "tag": "0065_run-execution-settlement",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1792816050684,
+      "tag": "0066_global-teams",
+      "breakpoints": true
     }
   ]
 }

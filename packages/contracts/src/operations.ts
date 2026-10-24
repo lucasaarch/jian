@@ -36,6 +36,11 @@ import {
   stickerTagsSchema,
 } from './media.js';
 import {
+  professionPreviewInputSchema,
+  professionPreviewSchema,
+} from './profession-classification.js';
+import { effectiveProfessionSchema, professionCatalogSchema } from './professions.js';
+import {
   builtinSkillSchema,
   mcpImportResultSchema,
   mcpImportSchema,
@@ -102,7 +107,7 @@ import {
   scheduleRunSchema,
 } from './schedules.js';
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
-import { catalogQuerySchema, catalogSchema, skillImportSchema } from './skills.js';
+import { skillImportSchema } from './skills.js';
 import { sshKeyCreateSchema, sshKeySchema } from './ssh.js';
 import {
   subscriptionDeliverySchema,
@@ -110,6 +115,7 @@ import {
   subscriptionPatchSchema,
   subscriptionRecordSchema,
 } from './subscriptions.js';
+import { teamInputSchema, teamPatchSchema, teamSchema } from './teams.js';
 import { webSearchInputSchema, webSearchStatusSchema } from './web.js';
 import { conversationSubagentSchema } from './work.js';
 
@@ -134,6 +140,7 @@ export type Operation = {
 };
 
 const profile = '/v1/profiles/:profileId';
+const team = '/v1/teams/:teamId';
 const session = `${profile}/sessions/:sessionId`;
 
 export const cursorSchema = z.strictObject({
@@ -141,6 +148,29 @@ export const cursorSchema = z.strictObject({
 });
 
 export const operations: Operation[] = [
+  {
+    method: 'POST',
+    path: `${profile}/profession/assign`,
+    operationId: 'assignProfileProfession',
+    access: 'admin',
+    body: professionPreviewInputSchema,
+    response: profileRecordSchema,
+  },
+  {
+    method: 'POST',
+    path: `${profile}/profession/preview`,
+    operationId: 'previewProfessionClassification',
+    access: 'admin',
+    body: professionPreviewInputSchema,
+    response: professionPreviewSchema,
+  },
+  {
+    method: 'GET',
+    path: `${profile}/profession`,
+    operationId: 'getEffectiveProfession',
+    access: 'admin',
+    response: effectiveProfessionSchema,
+  },
   {
     method: 'GET',
     path: '/v1/remote/machines',
@@ -708,20 +738,52 @@ export const operations: Operation[] = [
     response: z.array(builtinSkillSchema).max(50),
   },
   {
-    method: 'GET',
-    path: `${profile}/skill-catalog`,
-    operationId: 'listSkillCatalog',
-    access: 'admin',
-    query: catalogQuerySchema,
-    response: catalogSchema,
-  },
-  {
     method: 'POST',
     path: `${profile}/skills/import`,
     operationId: 'importSkill',
     access: 'admin',
     body: skillImportSchema,
     response: profileRecordSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/professions',
+    operationId: 'listProfessions',
+    access: 'admin',
+    response: professionCatalogSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/teams',
+    operationId: 'listTeams',
+    access: 'admin',
+    response: z.array(teamSchema),
+  },
+  {
+    method: 'POST',
+    path: '/v1/teams',
+    operationId: 'createTeam',
+    access: 'admin',
+    body: teamInputSchema,
+    response: teamSchema,
+    status: 201,
+  },
+  {
+    method: 'PATCH',
+    path: team,
+    operationId: 'updateTeam',
+    access: 'admin',
+    params: z.strictObject({ teamId: z.uuid() }),
+    body: teamPatchSchema,
+    response: teamSchema,
+  },
+  {
+    method: 'DELETE',
+    path: team,
+    operationId: 'deleteTeam',
+    access: 'admin',
+    params: z.strictObject({ teamId: z.uuid() }),
+    response: z.strictObject({ id: z.uuid() }),
   },
   {
     method: 'GET',

@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import type { SshKey, SshKeyCreate } from '@jian/contracts';
 import { workspaceOf } from '../agent/workspace.js';
 import { assertFound } from '../core/errors.js';
+import { requireProfileCapability } from '../professions/effective.js';
 import type { Profiles } from '../profiles/service.js';
 import { ensureTrustedKnownHosts } from './known-hosts.js';
 
@@ -68,7 +69,8 @@ export class SshKeys {
   constructor(private readonly profiles: Profiles) {}
 
   private async home(profileId: string) {
-    await this.profiles.profile(profileId);
+    const profile = await this.profiles.profile(profileId);
+    requireProfileCapability(profile, 'ssh.manage');
     const home = await workspaceOf(profileId);
     await mkdir(directory(home), { recursive: true, mode: 0o700 });
     await chmod(directory(home), 0o700);

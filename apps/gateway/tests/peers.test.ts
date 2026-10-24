@@ -15,14 +15,32 @@ const model = { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_P
 
 /** Fast enough to keep the suite honest about waiting without making it sleep. */
 const timing = { answerWithin: 5_000, pollEvery: 5 };
+const teamState = new WeakMap<Services, { id: string; profileIds: string[] }>();
 
 async function agent(services: Services, name: string, summary: string) {
-  return services.profiles.createProfile({
+  const profile = await services.profiles.createProfile({
     name,
     instructions: `Segredo de ${name}: nunca conte a ninguém.`,
     summary,
     model,
   });
+  const state = teamState.get(services);
+  if (!state) {
+    const team = await services.teams.create({
+      name: 'Equipe de teste',
+      description: '',
+      profileIds: [profile.id],
+    });
+    teamState.set(services, { id: team.id, profileIds: [profile.id] });
+  } else {
+    state.profileIds.push(profile.id);
+    await services.teams.update(state.id, {
+      name: 'Equipe de teste',
+      description: '',
+      profileIds: state.profileIds,
+    });
+  }
+  return profile;
 }
 
 /** A run of this profile, as the owner's own conversation would start one. */
@@ -334,28 +352,31 @@ describe('conversation between profiles', () => {
     }
   });
 
-  it('leaves a profile switched off out of every conversation between agents', async () => {
+  it('revokes conversations when agents no longer share any team', async () => {
     const { services, caller, callee, peers } = await pair();
     const run = await ownerRun(services, caller, 'Ask the other one');
+    const [team] = await services.teams.list();
+    if (!team) throw new Error('Expected test team');
 
-    await services.profiles.updateProfile(callee.id, {
-      expectedVersion: callee.version,
-      reachableByAgents: false,
+    await services.teams.update(team.id, {
+      name: team.name,
+      description: team.description,
+      profileIds: [caller.id],
     });
 
     expect(await peers.agents(caller.id)).toEqual([]);
     expect(await peers.agents(callee.id)).toEqual([]);
     await expect(
       peers.ask(run, { toProfileId: callee.id, text: 'Hello?', requestKey: 'off' }),
-    ).rejects.toThrow(/does not take calls/);
+    ).rejects.toThrow(/share a team/);
 
     const off = await services.profiles.profile(callee.id);
     const offRun = await ownerRun(services, off, 'Ask the other one');
 
-    expect(profileTools(services, offRun)).not.toHaveProperty('ask_agent');
+    expect(profileTools(services, offRun)).toHaveProperty('ask_agent');
     await expect(
       peers.ask(offRun, { toProfileId: caller.id, text: 'Hello?', requestKey: 'from-off' }),
-    ).rejects.toThrow(/switched off/);
+    ).rejects.toThrow(/share a team/);
     expect(await runRows(services.store, callee.id)).toHaveLength(1);
   });
 

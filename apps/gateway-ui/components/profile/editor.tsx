@@ -8,6 +8,7 @@ import { useAutosave } from '../../lib/autosave';
 import { useWorkspace } from '../../lib/workspace';
 import { Button, Confirm, Field, Modal, SectionHeading } from '../ui';
 import { AvatarField } from './avatar-field';
+import { ProfileProfession } from './profession';
 
 const lines = (value: string) =>
   value
@@ -26,6 +27,30 @@ export function NewProfileDialog({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [professions, setProfessions] = useState<
+    { id: 'developer' | 'attendant'; label: string }[]
+  >([]);
+  const [loadingProfessions, setLoadingProfessions] = useState(true);
+
+  useEffect(() => {
+    let current = true;
+    void api
+      .professions()
+      .then(
+        ({ professions: values }) => {
+          if (current) setProfessions(values);
+        },
+        () => {
+          if (current) setError('Could not load professions. Try again before creating the agent.');
+        },
+      )
+      .finally(() => {
+        if (current) setLoadingProfessions(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [api]);
 
   return (
     <Modal
@@ -37,7 +62,12 @@ export function NewProfileDialog({
           <Button variant="secondary" onClick={close}>
             Cancel
           </Button>
-          <Button type="submit" form="new-profile-form" busy={busy}>
+          <Button
+            type="submit"
+            form="new-profile-form"
+            busy={busy}
+            disabled={loadingProfessions || !professions.length}
+          >
             <Plus size={16} />
             Create agent
           </Button>
@@ -61,6 +91,7 @@ export function NewProfileDialog({
                 name: String(form.get('name')),
                 instructions: String(form.get('instructions')),
                 avatar: String(form.get('avatar')) || null,
+                professionId: String(form.get('professionId')) as 'developer' | 'attendant',
               }),
             );
           } catch (error) {
@@ -71,6 +102,23 @@ export function NewProfileDialog({
         }}
       >
         <AvatarField name="avatar" />
+        <Field label="Profession" hint="The profession sets the agent's fixed authority ceiling.">
+          <select
+            name="professionId"
+            required
+            disabled={loadingProfessions || !professions.length}
+            defaultValue=""
+          >
+            <option value="" disabled>
+              {loadingProfessions ? 'Loading professions…' : 'Choose a profession'}
+            </option>
+            {professions.map((profession) => (
+              <option key={profession.id} value={profession.id}>
+                {profession.label}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="Name">
           <input name="name" required maxLength={100} placeholder="e.g. Personal assistant" />
         </Field>
@@ -161,8 +209,6 @@ export function ProfileEditor({
         .join('\n\n'),
       summary: profile.summary ?? '',
       boundaries: profile.identity.boundaries.join('\n'),
-      selfManagement: profile.allowSelfManagement,
-      webSearch: profile.allowWebSearch,
       learn: profile.learnFromWork,
       agents: profile.reachableByAgents,
     };
@@ -197,8 +243,6 @@ export function ProfileEditor({
         goals: [] as string[],
         boundaries: lines(String(data.get('boundaries'))),
       },
-      allowSelfManagement: data.get('selfManagement') === 'on',
-      allowWebSearch: data.get('webSearch') === 'on',
       learnFromWork: data.get('learn') === 'on',
       reachableByAgents: data.get('agents') === 'on',
     };
@@ -235,6 +279,7 @@ export function ProfileEditor({
 
   return (
     <>
+      <ProfileProfession profile={profile} api={api} />
       <SectionHeading
         title="Identity"
         description="Instructions shared by every session of this agent."
@@ -300,30 +345,6 @@ export function ProfileEditor({
                 <small>
                   Other agents can find this one and ask it things, and it can ask them. Off, it
                   leaves their list and loses contact with all of them.
-                </small>
-              </span>
-            </label>
-            <label className="check-row">
-              <input
-                name="selfManagement"
-                type="checkbox"
-                defaultChecked={profile.allowSelfManagement}
-              />
-              <span>
-                <strong>Allow self-management</strong>
-                <small>
-                  The agent may rewrite its own identity and skills. Providers and permissions stay
-                  yours.
-                </small>
-              </span>
-            </label>
-            <label className="check-row">
-              <input name="webSearch" type="checkbox" defaultChecked={profile.allowWebSearch} />
-              <span>
-                <strong>Allow web search</strong>
-                <small>
-                  The agent may search the internet and read public pages, through the search key
-                  under Providers. Pages are written by strangers and can try to steer it.
                 </small>
               </span>
             </label>

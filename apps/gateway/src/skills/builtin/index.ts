@@ -1,4 +1,6 @@
-import type { Profile, Skill } from '@jian/contracts';
+import type { Capability, ProfessionAuthority, Profile, Skill } from '@jian/contracts';
+import { profileAuthority } from '../../professions/effective.js';
+import { CapabilityDenied, requireCapability } from '../../professions/policy.js';
 import { aboutJian } from './about-jian.js';
 import { activity } from './activity.js';
 import { channelReplies } from './channel-replies.js';
@@ -56,10 +58,8 @@ const ALWAYS: readonly Skill[] = [
   discernmentNudge,
 ];
 
-/**
- * Each of these describes tools that exist only behind one of the profile's switches, or only
- * with servers configured. Offered without them, a skill would teach tools the agent does not
- * have, and it would say it cannot do what the skill promised.
+/** Profession-specific guidance follows the profession's fixed capabilities. MCP guidance also
+ * requires a configured server: profession authority does not create an external integration.
  */
 const SELF_MANAGED: readonly Skill[] = [managingYourself];
 const AGENTS: readonly Skill[] = [workingWithAgents];
@@ -74,37 +74,132 @@ export const builtinSkillNames: ReadonlySet<string> = new Set(
   ),
 );
 
+/** Any listed capability suffices; an empty list needs only skills.read. Names, not
+ * owner-supplied bodies, determine requirements, including imported replacements.
+ */
+const skillCapabilities: Readonly<Record<string, readonly Capability[]>> = {
+  [aboutJian.name]: [],
+  [jianConfiguration.name]: [],
+  [activity.name]: ['activity.read'],
+  [ownerAndContacts.name]: ['conversation.read'],
+  [channelReplies.name]: [],
+  [memoryKeeping.name]: ['memory.use'],
+  [conversations.name]: ['conversation.read'],
+  [schedules.name]: ['schedules.manage'],
+  [subscriptions.name]: ['subscriptions.github'],
+  [skillCreator.name]: ['skills.write'],
+  [media.name]: ['media.use'],
+  [sshKeys.name]: ['ssh.manage'],
+  [longRunningWork.name]: ['tasks.delegate'],
+  [managingContext.name]: ['conversation.control'],
+  [handlingErrors.name]: [],
+  [jevJudgment.name]: ['decisions.query'],
+  [caveman.name]: [],
+  [discernmentNudge.name]: [],
+  [managingYourself.name]: ['identity.manage'],
+  [workingWithAgents.name]: ['peers.call'],
+  [machineTools.name]: ['process.exec'],
+  [codingWork.name]: ['process.exec'],
+  [remoteControl.name]: ['remote.control'],
+  ...Object.fromEntries(ponytailSkills.map((skill) => [skill.name, ['process.exec'] as const])),
+  [webResearch.name]: ['web.browse'],
+  [mcpServers.name]: ['mcp.http', 'mcp.stdio'],
+  [githubMcp.name]: ['mcp.http', 'mcp.stdio'],
+  [stickers.name]: ['media.use'],
+};
+
+function skillAllowed(name: string, authority: ProfessionAuthority | undefined): boolean {
+  if (authority === undefined) return true;
+  const permits = (capability: Capability) => {
+    try {
+      requireCapability(authority, capability);
+      return true;
+    } catch (error) {
+      if (!(error instanceof CapabilityDenied)) throw error;
+      return false;
+    }
+  };
+  if (!permits('skills.read')) return false;
+  if (!builtinSkillNames.has(name)) return true;
+  const required = skillCapabilities[name];
+  return required !== undefined && (required.length === 0 || required.some(permits));
+}
+
 export function builtinSkills(
-  profile: Pick<
-    Profile,
-    'allowSelfManagement' | 'allowWebSearch' | 'mcpServers' | 'reachableByAgents'
-  >,
+  profile:
+    | Profile
+    | Pick<Profile, 'allowSelfManagement' | 'allowWebSearch' | 'mcpServers' | 'reachableByAgents'>,
+  authority?: ProfessionAuthority,
 ): readonly Skill[] {
+  const hasProfessionField = 'professionId' in profile;
+  const classified = hasProfessionField && profile.professionId !== null;
+  const effective = hasProfessionField
+    ? profileAuthority(profile as Profile, authority)
+    : authority;
+  const permits = (capability: Capability) => {
+    if (effective === undefined) return false;
+    try {
+      requireCapability(effective, capability);
+      return true;
+    } catch (error) {
+      if (!(error instanceof CapabilityDenied)) throw error;
+      return false;
+    }
+  };
   return [
     ...ALWAYS,
-    ...(profile.reachableByAgents ? AGENTS : []),
-    ...(profile.allowSelfManagement ? SELF_MANAGED : []),
-    ...SHELL,
-    ...(profile.allowWebSearch ? WEB : []),
-    ...(profile.mcpServers.length ? MCP : []),
+    ...(classified
+      ? permits('peers.call')
+        ? AGENTS
+        : []
+      : profile.reachableByAgents
+        ? AGENTS
+        : []),
+    ...(classified
+      ? permits('identity.manage')
+        ? SELF_MANAGED
+        : []
+      : profile.allowSelfManagement
+        ? SELF_MANAGED
+        : []),
+    ...(classified
+      ? [
+          ...(permits('process.exec') ? [machineTools, codingWork, ...ponytailSkills] : []),
+          ...(permits('remote.control') ? [remoteControl] : []),
+        ]
+      : SHELL),
+    ...(classified ? (permits('web.browse') ? WEB : []) : profile.allowWebSearch ? WEB : []),
+    ...(profile.mcpServers.some(
+      (server) => !classified || permits(server.transport === 'http' ? 'mcp.http' : 'mcp.stdio'),
+    )
+      ? MCP
+      : []),
     ...STICKERS,
-  ];
+  ].filter((skill) => skillAllowed(skill.name, effective));
 }
 
 /**
  * What the profile can load this run. An imported skill wins over a built-in of the same
  * name, so an owner who disagrees with a default replaces it by importing over it.
  */
-export function availableSkills(profile: Profile): Skill[] {
+export function availableSkills(profile: Profile, authority?: ProfessionAuthority): Skill[] {
+  const effective = profileAuthority(profile, authority);
   const own = new Set(profile.skills.map((skill) => skill.name));
   const disabled = new Set(profile.disabledSkills);
+  const classified = profile.professionId !== null;
 
   return [
-    ...builtinSkills(profile).filter((skill) => !own.has(skill.name) && !disabled.has(skill.name)),
-    ...profile.skills,
+    ...builtinSkills(profile, effective).filter(
+      (skill) => !own.has(skill.name) && (classified || !disabled.has(skill.name)),
+    ),
+    ...profile.skills.filter((skill) => skillAllowed(skill.name, effective)),
   ];
 }
 
-export function findSkill(profile: Profile, name: string): Skill | undefined {
-  return availableSkills(profile).find((skill) => skill.name === name);
+export function findSkill(
+  profile: Profile,
+  name: string,
+  authority?: ProfessionAuthority,
+): Skill | undefined {
+  return availableSkills(profile, authority).find((skill) => skill.name === name);
 }

@@ -6,6 +6,7 @@ import type {
   McpServer,
   ModelConfig,
   ModelSelection,
+  ProfessionAuthority,
   Profile,
   ProviderCredential,
   ReasoningEffort,
@@ -46,6 +47,8 @@ const createdAt = timestamp('created_at', { withTimezone: true }).notNull().defa
 
 export const profiles = pgTable('profiles', {
   id: uuid('id').primaryKey(),
+  // Nullable while professions are inactive. Non-null values are immutable in PostgreSQL.
+  professionId: text('profession_id').$type<Profile['professionId']>(),
   name: text('name').notNull(),
   instructions: text('instructions').notNull(),
   // What other agents of the installation see; never the instructions.
@@ -68,6 +71,32 @@ export const profiles = pgTable('profiles', {
   createdAt,
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Global teams gate only agent-to-agent communication; they do not grant permissions. */
+export const teams = pgTable('teams', {
+  id: uuid('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  createdAt,
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const teamMembers = pgTable(
+  'team_members',
+  {
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.teamId, table.profileId] }),
+    index('team_members_profile').on(table.profileId, table.teamId),
+  ],
+);
 
 /** One row per version. A run points at the version it froze instead of copying the profile. */
 export const profileRevisions = pgTable(
@@ -254,6 +283,7 @@ export const runs = pgTable(
       .notNull()
       .references(() => sessions.id, { onDelete: 'cascade' }),
     subagent: jsonb('subagent').$type<Subagent>(),
+    authority: jsonb('authority').$type<ProfessionAuthority>(),
     subagentReportedAt: timestamp('subagent_reported_at', { withTimezone: true }),
     // The profile this run froze. The snapshot is read from the revision, never copied here.
     profileVersion: integer('profile_version').notNull(),
@@ -279,6 +309,8 @@ export const runs = pgTable(
     question: jsonb('question').$type<RunQuestion>(),
     // What the person said while this run was already going. Read and cleared between steps.
     steer: text('steer'),
+    // Internal worker lifetime, independent of status/lease. Only explicit settlement clears it.
+    executionOwner: text('execution_owner'),
     leaseOwner: text('lease_owner'),
     leaseUntil: bigint('lease_until', { mode: 'number' }),
     createdAt,

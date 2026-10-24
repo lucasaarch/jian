@@ -18,6 +18,7 @@ import type { Outreach } from '../errands/port.js';
 import { sameSubject } from '../memories/duplicates.js';
 import type { MemoryWriter } from '../memories/port.js';
 import type { PeerAgents } from '../peers/port.js';
+import { currentRunAuthority } from '../professions/effective.js';
 import type { ProfileAdmin } from '../profiles/port.js';
 import type { Remote } from '../remote/service.js';
 import type { RunExecution, RunReader } from '../runs/port.js';
@@ -368,7 +369,12 @@ export function profileTools(
       description: 'Load instructions for a skill enabled on this profile.',
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
-        const skill = findSkill(run.profile, name);
+        const authority = currentRunAuthority(
+          run.profile,
+          await services.profiles.profile(run.profileId),
+          run.authority,
+        );
+        const skill = findSkill(run.profile, name, authority);
 
         if (!skill) {
           throw new GatewayError(404, 'Skill not found');
@@ -568,23 +574,21 @@ export function profileTools(
     }),
   };
 
-  if (run.profile.reachableByAgents) {
-    Object.assign(tools, {
-      list_agents: tool({
-        description:
-          'List the other agents of this installation: their id, name and what each one does. Their instructions, memories and conversations are not readable — here or anywhere else.',
-        inputSchema: z.object({}),
-        execute: async () => services.peers.agents(run.profileId),
-      }),
+  Object.assign(tools, {
+    list_agents: tool({
+      description:
+        'List the other agents of this installation: their id, name and what each one does. Their instructions, memories and conversations are not readable — here or anywhere else.',
+      inputSchema: z.object({}),
+      execute: async () => services.peers.agents(run.profileId),
+    }),
 
-      ask_agent: tool({
-        description:
-          'Ask another agent of this installation and wait for its written answer. Only text crosses: they never read your memories, sessions or history, and you never read theirs. The two of you keep one shared thread. A chain of calls is bounded — you cannot ask yourself, nor an agent that already spoke in this conversation, and the depth budget is shared by everyone in the chain.',
-        inputSchema: agentCallSchema,
-        execute: async (input, { abortSignal }) => services.peers.ask(run, input, abortSignal),
-      }),
-    });
-  }
+    ask_agent: tool({
+      description:
+        'Ask another agent of this installation and wait for its written answer. Only text crosses: they never read your memories, sessions or history, and you never read theirs. The two of you keep one shared thread. A chain of calls is bounded — you cannot ask yourself, nor an agent that already spoke in this conversation, and the depth budget is shared by everyone in the chain.',
+      inputSchema: agentCallSchema,
+      execute: async (input, { abortSignal }) => services.peers.ask(run, input, abortSignal),
+    }),
+  });
 
   // Workspace-confined shell/files are always available. Remote Control is gated only by
   // each machine’s allowedProfileIds — not by the deprecated allowShell profile flag.
@@ -597,7 +601,11 @@ export function profileTools(
   // writes is marked as its own, shown to the owner under Skills, and only it can change it.
   Object.assign(tools, skillTools(services.profiles, run));
 
-  if (run.profile.allowSelfManagement) {
+  if (
+    run.profile.professionId === null
+      ? run.profile.allowSelfManagement
+      : run.authority?.capabilities.includes('identity.manage') === true
+  ) {
     tools.update_identity = tool({
       description:
         'Version an update to your own identity. Applies to new runs. Cannot change permissions, keys or providers.',
@@ -615,9 +623,14 @@ export function profileTools(
           .optional(),
       }),
       execute: async (input) => {
-        if (!(await services.profiles.profile(run.profileId)).allowSelfManagement) {
-          throw new GatewayError(403, 'Self-management is disabled');
-        }
+        const current = await services.profiles.profile(run.profileId);
+        const authorized =
+          current.professionId === null
+            ? current.allowSelfManagement
+            : currentRunAuthority(run.profile, current, run.authority)?.capabilities.includes(
+                'identity.manage',
+              ) === true;
+        if (!authorized) throw new GatewayError(403, 'Identity management is unavailable');
 
         const updated = await services.profiles.updateProfile(run.profileId, input);
 
@@ -641,24 +654,26 @@ export function profileTools(
       },
     });
 
-    tools.create_profile = tool({
-      description:
-        'Create a separate profile without provider access. An administrator must configure its provider key before it can run.',
-      inputSchema: z.object({
-        name: z.string().min(1).max(100),
-        instructions: z.string().min(1).max(8000),
-      }),
-      execute: async (input) => {
-        if (!(await services.profiles.profile(run.profileId)).allowSelfManagement) {
-          throw new GatewayError(403, 'Self-management is disabled');
-        }
+    if (run.profile.professionId === null) {
+      tools.create_profile = tool({
+        description:
+          'Create a separate profile without provider access. An administrator must configure its provider key before it can run.',
+        inputSchema: z.object({
+          name: z.string().min(1).max(100),
+          instructions: z.string().min(1).max(8000),
+        }),
+        execute: async (input) => {
+          if (!(await services.profiles.profile(run.profileId)).allowSelfManagement) {
+            throw new GatewayError(403, 'Self-management is disabled');
+          }
 
-        const { apiKeyEnv: _env, providerId: _provider, ...model } = run.profile.model;
-        const created = await services.profiles.createProfile({ ...input, model });
+          const { apiKeyEnv: _env, providerId: _provider, ...model } = run.profile.model;
+          const created = await services.profiles.createProfile({ ...input, model });
 
-        return { id: created.id, name: created.name };
-      },
-    });
+          return { id: created.id, name: created.name };
+        },
+      });
+    }
   }
 
   return tools;

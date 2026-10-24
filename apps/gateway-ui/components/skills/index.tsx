@@ -7,7 +7,6 @@ import type { Profile } from '../../lib/api';
 import type { SectionProps } from '../props';
 import { Badge, Button, Confirm, Empty, ProviderLogo, ResourceRow, SectionHeading } from '../ui';
 import { BuiltinSkills } from './built-in';
-import { SkillCatalog } from './catalog';
 import { SkillImport } from './import';
 import { McpForm } from './mcp-form';
 import { McpImport } from './mcp-import';
@@ -102,7 +101,7 @@ export function Capabilities({
           </div>
         }
       />
-      {isSkill && <BuiltinSkills profile={profile} api={api} mutate={mutate} busy={busy} />}
+      {isSkill && <BuiltinSkills profile={profile} api={api} />}
       {isSkill ? (
         <section className="row-group" aria-labelledby="skills-installed">
           <h2 id="skills-installed">Installed</h2>
@@ -160,7 +159,7 @@ export function Capabilities({
             </div>
           ) : (
             <p className="rounded-md bg-surface px-5 py-4 text-sm">
-              No skill installed. Pick one from the catalogs below, or import from your repository.
+              No skill installed. Import one from a repository or write a new one.
             </p>
           )}
         </section>
@@ -232,7 +231,6 @@ export function Capabilities({
           close={() => setOpen(undefined)}
         />
       )}
-      {isSkill && <SkillCatalog profile={profile} api={api} mutate={mutate} busy={busy} />}
       {editing !== undefined &&
         (isSkill ? (
           <SkillForm

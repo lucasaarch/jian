@@ -130,32 +130,27 @@ describe('importing a skill', () => {
   });
 });
 
-describe('reading a catalog', () => {
-  it.each(['skills', 'skills/.curated'])(
-    'lists and imports a skill from the %s directory',
-    async (path) => {
-      const { services, profile } = await profileWith();
-      const { fetcher } = repository({
-        [`contents/${path}?ref=main`]: JSON.stringify([
-          { name: 'deploy', type: 'dir' },
-          { name: 'README.md', type: 'file' },
-        ]),
-        [`${path}/deploy/SKILL.md`]: document,
-      });
-      const skills = new Skills(services.profiles, fetcher);
-      const catalog = await skills.catalog({
-        url: `https://github.com/acme/tools/tree/main/${path}`,
-      });
-      expect(catalog.entries).toHaveLength(1);
-      const imported = await skills.importSkill(profile.id, { url: catalog.entries[0]?.url });
-      expect(imported.skills[0]?.instructions).toBe(
-        'Check the release notes, then run the pipeline.',
-      );
-      expect(imported.skills[0]?.origin?.url).toBe(
-        `https://github.com/acme/tools/tree/main/${path}/deploy`,
-      );
-    },
-  );
+describe('importing skill collections', () => {
+  it.each(['skills', 'skills/.curated'])('imports skills from the %s directory', async (path) => {
+    const { services, profile } = await profileWith();
+    const { fetcher } = repository({
+      [`contents/${path}?ref=main`]: JSON.stringify([
+        { name: 'deploy', type: 'dir' },
+        { name: 'README.md', type: 'file' },
+      ]),
+      [`${path}/deploy/SKILL.md`]: document,
+    });
+    const imported = await new Skills(services.profiles, fetcher).importSkill(profile.id, {
+      url: `https://github.com/acme/tools/tree/main/${path}`,
+    });
+
+    expect(imported.skills[0]?.instructions).toBe(
+      'Check the release notes, then run the pipeline.',
+    );
+    expect(imported.skills[0]?.origin?.url).toBe(
+      `https://github.com/acme/tools/tree/main/${path}/deploy/SKILL.md`,
+    );
+  });
 
   it('imports a folder of skills without duplicating the skills path', async () => {
     const { services, profile } = await profileWith();
@@ -168,28 +163,6 @@ describe('reading a catalog', () => {
     });
     expect(imported.skills.map((skill) => skill.name)).toEqual(['deploy']);
   });
-
-  it('lists the plugins a marketplace announces', async () => {
-    const { services } = await profileWith();
-    const manifest = JSON.stringify({
-      name: 'acme-marketplace',
-      plugins: [
-        {
-          name: 'deploy-tools',
-          description: 'Release helpers',
-          source: { source: 'git-subdir', url: 'https://github.com/acme/tools.git', path: 'a/b' },
-        },
-      ],
-    });
-    const { fetcher } = repository({ '.claude-plugin/marketplace.json': manifest });
-
-    const catalog = await new Skills(services.profiles, fetcher).catalog({
-      url: 'https://github.com/acme/market',
-    });
-
-    expect(catalog.marketplace).toBe('acme-marketplace');
-    expect(catalog.entries[0]).toMatchObject({ name: 'deploy-tools', plugin: 'deploy-tools' });
-  });
 });
 
 describe('the skills an agent writes for itself', () => {
@@ -200,6 +173,7 @@ describe('the skills an agent writes for itself', () => {
     const profile = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
     const { fetcher } = repository({ 'skills/deploy/SKILL.md': document });
@@ -285,11 +259,13 @@ describe('the skills every profile carries', () => {
     const plain = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
     const equipped = await services.profiles.createProfile({
       name: 'Zero',
       instructions: 'Help.',
+      professionId: null,
       model,
       allowShell: true,
       allowWebSearch: true,
@@ -335,6 +311,7 @@ describe('the skills every profile carries', () => {
     const profile = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
 
@@ -396,11 +373,13 @@ describe('the skills every profile carries', () => {
     const plain = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
     const managing = await services.profiles.createProfile({
       name: 'Zero',
       instructions: 'Help.',
+      professionId: null,
       model,
       allowSelfManagement: true,
     });
@@ -419,6 +398,7 @@ describe('the skills every profile carries', () => {
     const plain = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
 
@@ -431,6 +411,7 @@ describe('the skills every profile carries', () => {
     const profile = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
     const session = await services.sessions.createSession(profile.id, { title: 'Test' });
@@ -458,6 +439,7 @@ describe('the skills every profile carries', () => {
     const profile = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
+      professionId: null,
       model,
     });
 

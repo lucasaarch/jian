@@ -26,6 +26,7 @@ async function setup(respond: (url: string, init?: RequestInit) => Response) {
     const profile = await services.profiles.createProfile({
       name: 'Zero Two',
       instructions: 'Help.',
+      professionId: null,
       model,
       allowWebSearch,
     });

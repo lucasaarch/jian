@@ -3,6 +3,8 @@ import type { MCPClient } from '@ai-sdk/mcp';
 import type { McpServer, Run } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
+import { GatewayError } from '../core/errors.js';
+import { requireProfileCapability } from '../professions/effective.js';
 import { connectMcp, type SecretReader } from './mcp-connect.js';
 import { mcpClientDisconnected } from './mcp-errors.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
@@ -12,8 +14,12 @@ interface McpContext {
   vault: SecretReader | undefined;
   secrets: Set<string>;
   clients: MCPClient[];
+  /** A failed initialization/close whose cleanup cannot be certified by the client list. */
+  onCleanupUncertain?: () => void;
   fetcher: typeof globalThis.fetch;
   signal: AbortSignal;
+  /** Live runtime authority, including the persisted original ceiling and server/tool config. */
+  authorize?: (server: McpServer, toolName?: string) => Promise<void>;
   /** Absent in a gateway without the OAuth store; a server needing it then fails to connect. */
   oauth?: McpOAuthProviders;
 }
@@ -162,7 +168,14 @@ async function openServer(
   config: McpServer,
   context: McpContext,
 ): Promise<{ live: LiveServer; failure?: undefined } | { live?: undefined; failure: string }> {
+  let connecting = false;
   try {
+    requireProfileCapability(run.profile, config.transport === 'stdio' ? 'mcp.stdio' : 'mcp.http');
+    if (run.profile.professionId !== null && !context.authorize) {
+      throw new GatewayError(403, 'MCP requires live profession authority');
+    }
+    await context.authorize?.(config);
+    connecting = true;
     const client = await connectMcp({
       profileId: run.profileId,
       server: config,
@@ -179,8 +192,12 @@ async function openServer(
         : {}),
     });
 
+    // Register before discovery: tools() can fail after a transport/child already exists.
+    context.clients.push(client);
+    connecting = false;
     return { live: { config, client, offered: await client.tools() } };
   } catch (error) {
+    if (connecting) context.onCleanupUncertain?.();
     context.signal.throwIfAborted();
 
     return { failure: connectionFailure(error) };
@@ -206,15 +223,20 @@ async function reconnectServer(
         );
       }
 
-      const index = context.clients.indexOf(previous);
-
-      if (index >= 0) {
-        context.clients[index] = reopened.live.client;
-      } else {
-        context.clients.push(reopened.live.client);
+      // openServer already registered the replacement. Keep the old receipt until close
+      // succeeds; if it fails, the runtime must still own and clean up both clients.
+      try {
+        await previous.close();
+      } catch (error) {
+        context.onCleanupUncertain?.();
+        // No replacement call was sent. Preserve that fact without losing the failed
+        // client's cleanup receipt; runtime cleanup will retry it alongside the new client.
+        throw new Error(`MCP previous client cleanup failed: ${connectionFailure(error)}`, {
+          cause,
+        });
       }
-
-      await previous.close().catch(() => {});
+      const index = context.clients.indexOf(previous);
+      if (index >= 0) context.clients.splice(index, 1);
       live.client = reopened.live.client;
       live.offered = reopened.live.offered;
     })().finally(() => {
@@ -245,6 +267,7 @@ function withClosedClientRetry(
     input: unknown,
     options: Parameters<NonNullable<typeof remote.execute>>[1],
   ) => {
+    await context.authorize?.(live.config, serverTool);
     const execute = live.offered[serverTool]?.execute;
 
     if (!execute) {
@@ -300,6 +323,42 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
   const catalog: McpEntry[] = [];
   const selectedMcpTools = new Set<string>();
   const unavailable: Array<{ name: string; reason: string }> = [];
+  const configs = new Map(run.profile.mcpServers.map((config) => [config.name, config]));
+
+  /**
+   * Call before prepareStep builds activeTools, even if no discovery tool was called.
+   * Prune in place: callers retain the catalog/selection references. Keep mcpToolNames as
+   * the identity list so already-wrapped schemas cannot become ordinary, ungated tools.
+   */
+  const revalidateMcpTools = async (): Promise<void> => {
+    if (!context.authorize) return;
+
+    const entries = [...catalog];
+    const allowed = await Promise.all(
+      entries.map(async (entry) => {
+        const config = configs.get(entry.server);
+        if (!config) return false;
+        try {
+          await context.authorize?.(config, entry.tool);
+          return true;
+        } catch {
+          context.signal.throwIfAborted();
+          return false;
+        }
+      }),
+    );
+
+    const denied = new Set(
+      entries.filter((_, index) => !allowed[index]).map((entry) => entry.name),
+    );
+    for (let index = catalog.length - 1; index >= 0; index--) {
+      const entry = catalog[index];
+      if (entry && denied.has(entry.name)) {
+        selectedMcpTools.delete(entry.name);
+        catalog.splice(index, 1);
+      }
+    }
+  };
 
   // All at once, each on its own clock: a turn waits for the slowest server, not for the sum
   // of them, and one that hangs is given up on without holding the others.
@@ -322,7 +381,6 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
     }
 
     const { live } = result;
-    context.clients.push(live.client);
 
     // Everything the server offers. A long catalog costs nothing per turn: only the tools the
     // agent has loaded are sent with a request, so a server with a hundred of them is no
@@ -350,6 +408,8 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
     }
   }
 
+  await revalidateMcpTools();
+
   if (catalog.length > 0) {
     const servers = [...new Set(catalog.map((entry) => entry.server))];
 
@@ -367,6 +427,16 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
         if (unknown.length > 0) {
           throw new Error(
             `No connected MCP server offers ${unknown.join(', ')}. Search with search_mcp_tools; connected servers: ${servers.join(', ')}`,
+          );
+        }
+
+        // Resolve every alias against the same catalog first, then authorize the actual
+        // server/tool pairs before changing the selection (never partially load a batch).
+        await revalidateMcpTools();
+        const denied = chosen.filter((item) => !catalog.includes(item.entry as McpEntry));
+        if (denied.length > 0) {
+          throw new Error(
+            `MCP tools are no longer authorized: ${denied.map((item) => item.name).join(', ')}`,
           );
         }
 
@@ -392,13 +462,16 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
         server: z.enum(servers as [string, ...string[]]).optional(),
       }),
       execute: async ({ query, server }) => {
+        await revalidateMcpTools();
         const results = searchCatalog(catalog, query, server);
 
         return results.length > 0
           ? { results: results.map(brief) }
           : {
               results: [],
-              hint: `Nothing matched. Try other words or the English terms, or list one server: ${servers
+              hint: `Nothing matched. Try other words or the English terms, or list one server: ${[
+                ...new Set(catalog.map((entry) => entry.server)),
+              ]
                 .map(
                   (name) =>
                     `${name} (${catalog.filter((entry) => entry.server === name).length} tools)`,
@@ -409,7 +482,7 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
     });
   }
 
-  return { mcpToolNames, selectedMcpTools, unavailable, catalog };
+  return { mcpToolNames, selectedMcpTools, unavailable, catalog, revalidateMcpTools };
 }
 
 /**

@@ -10,7 +10,9 @@ import {
 } from '@jian/contracts';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { GatewayError } from '../core/errors.js';
-import type { Store } from '../storage/database.js';
+import { requireProfileCapability } from '../professions/effective.js';
+import { findProfile } from '../profiles/repository.js';
+import type { Queryable, Store } from '../storage/database.js';
 import { profiles, remoteMachines, remoteTasks } from '../storage/schema.js';
 
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -143,15 +145,34 @@ export class Remote {
   }
 
   async remove(machineId: string) {
-    const [machine] = await this.store.db
-      .delete(remoteMachines)
-      .where(eq(remoteMachines.id, machineId))
-      .returning({ id: remoteMachines.id });
-    if (!machine) throw new GatewayError(404, 'Remote machine not found');
-    return machine;
+    // Never acquire profile locks here: admission holds its profile lock before
+    // taking the machine row lock. The row lock serializes its check/insert with deletion.
+    return this.store.transaction(`remote-machine:${machineId}`, async (tx) => {
+      const [machine] = await tx
+        .select({ id: remoteMachines.id })
+        .from(remoteMachines)
+        .where(eq(remoteMachines.id, machineId))
+        .limit(1)
+        .for('update');
+      if (!machine) throw new GatewayError(404, 'Remote machine not found');
+      const [pending] = await tx
+        .select({ id: remoteTasks.id })
+        .from(remoteTasks)
+        .where(
+          and(
+            eq(remoteTasks.machineId, machineId),
+            inArray(remoteTasks.status, ['queued', 'running']),
+          ),
+        )
+        .limit(1);
+      if (pending) throw new GatewayError(409, 'Remote machine has queued or running tasks');
+      await tx.delete(remoteMachines).where(eq(remoteMachines.id, machineId));
+      return machine;
+    });
   }
 
   async listForProfile(profileId: string) {
+    await this.requireRemoteCapability(profileId);
     const rows = await this.store.db
       .select()
       .from(remoteMachines)
@@ -226,20 +247,25 @@ export class Remote {
     signal?: AbortSignal,
   ) {
     const taskId = randomUUID();
-    const now = new Date(this.clock());
-    await this.store.db.insert(remoteTasks).values({
-      id: taskId,
-      machineId,
-      profileId,
-      kind: task.kind,
-      command: task.command,
-      cwd: task.cwd,
-      payload: task.payload,
-      timeoutMs: task.timeoutMs,
-      status: 'queued',
-      createdAt: now,
-      updatedAt: now,
+    await this.store.transaction(profileId, async (tx) => {
+      // Earlier checks are only a fast rejection, not authority to admit work.
+      await this.machineForProfile(profileId, machineId, tx, true);
+      const now = new Date(this.clock());
+      await tx.insert(remoteTasks).values({
+        id: taskId,
+        machineId,
+        profileId,
+        kind: task.kind,
+        command: task.command,
+        cwd: task.cwd,
+        payload: task.payload,
+        timeoutMs: task.timeoutMs,
+        status: 'queued',
+        createdAt: now,
+        updatedAt: now,
+      });
     });
+    // Waiting on a remote worker must never hold the profile lock.
 
     const deadline = this.clock() + task.timeoutMs + 30_000;
     while (this.clock() < deadline) {
@@ -308,7 +334,9 @@ export class Remote {
         },
         updatedAt: new Date(this.clock()),
       })
-      .where(and(eq(remoteTasks.id, taskId), inArray(remoteTasks.status, ['queued', 'running'])));
+      // A gateway timeout does not prove that the worker stopped. Keep running work
+      // unsettled until its authenticated completion, even after the caller has left.
+      .where(and(eq(remoteTasks.id, taskId), eq(remoteTasks.status, 'queued')));
     throw new GatewayError(504, 'Remote command timed out');
   }
 
@@ -348,13 +376,45 @@ export class Remote {
       )
       .orderBy(asc(remoteTasks.createdAt))
       .limit(20);
-    const next = tasks.find((task) => machine.allowedProfileIds.includes(task.profileId));
-    if (!next) return { task: null };
-    const [claimed] = await this.store.db
-      .update(remoteTasks)
-      .set({ status: 'running', updatedAt: new Date(this.clock()) })
-      .where(and(eq(remoteTasks.id, next.id), eq(remoteTasks.status, 'queued')))
-      .returning();
+    let claimed: (typeof tasks)[number] | undefined;
+    for (const task of tasks) {
+      claimed = await this.store.transaction(task.profileId, async (tx) => {
+        // The candidate snapshot is not a grant. Recheck live ACL and profile under
+        // the same lock as the queued -> running transition.
+        const liveMachine = await this.authenticate(machineId, authorization, tx, true);
+        if (!liveMachine.allowedProfileIds.includes(task.profileId)) return undefined;
+        // A queued remote command belongs to the profile's durable work queue. Do not fail it
+        // during upgrade; leave it queued until the owner chooses a profession.
+        if ((await findProfile(tx, task.profileId))?.professionId === null) return undefined;
+        try {
+          await this.requireRemoteCapability(task.profileId, tx);
+        } catch (error) {
+          if (!(error instanceof GatewayError)) throw error;
+          await tx
+            .update(remoteTasks)
+            .set({
+              status: 'failed',
+              result: {
+                taskId: task.id,
+                exitCode: null,
+                stdout: '',
+                stderr: error.message,
+                timedOut: false,
+              },
+              updatedAt: new Date(this.clock()),
+            })
+            .where(and(eq(remoteTasks.id, task.id), eq(remoteTasks.status, 'queued')));
+          return undefined;
+        }
+        const [row] = await tx
+          .update(remoteTasks)
+          .set({ status: 'running', updatedAt: new Date(this.clock()) })
+          .where(and(eq(remoteTasks.id, task.id), eq(remoteTasks.status, 'queued')))
+          .returning();
+        return row;
+      });
+      if (claimed) break;
+    }
     if (!claimed) return { task: null };
     const kind = claimed.kind ?? 'shell';
     if (kind === 'computer') {
@@ -403,43 +463,58 @@ export class Remote {
   }
 
   async complete(machineId: string, taskId: string, authorization: string, input: unknown) {
-    await this.authenticate(machineId, authorization);
-    const result = remoteResultSchema.parse(input);
-    if (result.taskId !== taskId) throw new GatewayError(400, 'Task id mismatch');
-    const [task] = await this.store.db
-      .update(remoteTasks)
-      .set({ status: 'completed', result, updatedAt: new Date(this.clock()) })
-      .where(
-        and(
-          eq(remoteTasks.id, taskId),
-          eq(remoteTasks.machineId, machineId),
-          eq(remoteTasks.status, 'running'),
-        ),
-      )
-      .returning({ id: remoteTasks.id });
-    if (!task) throw new GatewayError(404, 'Running remote task not found');
-    return { ok: true as const };
+    return this.store.transaction(`remote-machine:${machineId}`, async (tx) => {
+      // Token rotation must not overtake authentication before the completion write.
+      // ACL revocation is not a reason to discard a still-authenticated completion.
+      await this.authenticate(machineId, authorization, tx, true);
+      const result = remoteResultSchema.parse(input);
+      if (result.taskId !== taskId) throw new GatewayError(400, 'Task id mismatch');
+      const [task] = await tx
+        .update(remoteTasks)
+        .set({ status: 'completed', result, updatedAt: new Date(this.clock()) })
+        .where(
+          and(
+            eq(remoteTasks.id, taskId),
+            eq(remoteTasks.machineId, machineId),
+            eq(remoteTasks.status, 'running'),
+          ),
+        )
+        .returning({ id: remoteTasks.id });
+      if (!task) throw new GatewayError(404, 'Running remote task not found');
+      return { ok: true as const };
+    });
   }
 
-  private async machineForProfile(profileId: string, machineId: string) {
-    const [machine] = await this.store.db
-      .select()
-      .from(remoteMachines)
-      .where(eq(remoteMachines.id, machineId))
-      .limit(1);
+  private async requireRemoteCapability(profileId: string, db: Queryable = this.store.db) {
+    const profile = await findProfile(db, profileId);
+    if (!profile) throw new GatewayError(404, 'Profile not found');
+    requireProfileCapability(profile, 'remote.control');
+  }
+
+  private async machineForProfile(
+    profileId: string,
+    machineId: string,
+    db: Queryable = this.store.db,
+    lockForAdmission = false,
+  ) {
+    await this.requireRemoteCapability(profileId, db);
+    const query = db.select().from(remoteMachines).where(eq(remoteMachines.id, machineId)).limit(1);
+    const [machine] = await (lockForAdmission ? query.for('share') : query);
     if (!machine?.allowedProfileIds.includes(profileId))
       throw new GatewayError(403, 'This profile is not allowed to use that remote machine');
     return machine;
   }
 
-  private async authenticate(machineId: string, authorization: string) {
+  private async authenticate(
+    machineId: string,
+    authorization: string,
+    db: Queryable = this.store.db,
+    lockForMutation = false,
+  ) {
     const match = /^Bearer ([A-Za-z0-9_-]{40,100})$/.exec(authorization);
     const token = match?.[1];
-    const [machine] = await this.store.db
-      .select()
-      .from(remoteMachines)
-      .where(eq(remoteMachines.id, machineId))
-      .limit(1);
+    const query = db.select().from(remoteMachines).where(eq(remoteMachines.id, machineId)).limit(1);
+    const [machine] = await (lockForMutation ? query.for('share') : query);
     if (!machine || !token) throw new GatewayError(401, 'Unauthorized');
     const actual = Buffer.from(tokenHash(token));
     const expected = Buffer.from(machine.tokenHash);

@@ -231,7 +231,8 @@ export const BusinessAutomationControls: Story = {
       'aria-checked',
       'true',
     );
-    await expect(canvas.getByText('Approved', { exact: true })).toBeVisible();
+    // The disclosure fades in; updating a switch can finish before that animation does.
+    await waitFor(() => expect(canvas.getByText('Approved', { exact: true })).toBeVisible());
     await expect(channel).toHaveAttribute('aria-checked', 'true');
     await userEvent.click(channel);
     await expect(channel).toHaveAttribute('aria-checked', 'false');

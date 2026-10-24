@@ -6,6 +6,7 @@ import { providerCalls } from './providers';
 import { releaseCalls } from './releases';
 import { resourceCalls } from './resources';
 import { sessionCalls } from './sessions';
+import { teamCalls } from './teams';
 
 export * from './types';
 
@@ -33,6 +34,7 @@ export function gatewayApi() {
     ...sessionCalls(client),
     ...channelCalls(client),
     ...resourceCalls(client),
+    ...teamCalls(client),
     events: readEvents,
   };
 }

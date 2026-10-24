@@ -12,6 +12,7 @@ import { mcpOauthClientSecretKey, mcpValueSecret } from '../agent/mcp-connect.js
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { requireProfessionCeiling } from '../professions/effective.js';
 import { environmentProvider, type ProviderKind, providerCatalog } from '../providers/catalog.js';
 import type { Vault } from '../security/vault.js';
 import type { Queryable, Store } from '../storage/database.js';
@@ -25,7 +26,7 @@ import {
   listRevisions,
   updateProfileRow,
 } from './repository.js';
-import { forget, hasActiveRun } from './reset.js';
+import { forget, hasUnsettledExecution } from './reset.js';
 
 /** One value on its way to the vault, still carrying which server and which slot it came from. */
 type TypedMcpValue = { server: string; kind: 'header' | 'env'; name: string; value: string };
@@ -304,6 +305,8 @@ export class Profiles {
         continue;
       }
 
+      // Validate before reading/copying any source credentials, not only at the final update.
+      requireProfessionCeiling(target, server.transport === 'stdio' ? 'mcp.stdio' : 'mcp.http');
       const copy = async (kind: 'header' | 'env', list: McpServer['headers']) =>
         Promise.all(
           list.map(async (value) => {
@@ -378,6 +381,14 @@ export class Profiles {
         updatedAt: nowIso(this.clock),
       };
 
+      if (patch.mcpServers) {
+        for (const server of patch.mcpServers) {
+          requireProfessionCeiling(
+            current,
+            server.transport === 'stdio' ? 'mcp.stdio' : 'mcp.http',
+          );
+        }
+      }
       await this.validateReferences(patched, tx);
       const profile = await this.storeMcpTokens(patched, current, tx);
 
@@ -409,6 +420,12 @@ export class Profiles {
     await this.profile(id);
 
     await this.store.transaction(id, async (tx) => {
+      if (await hasUnsettledExecution(tx, id)) {
+        throw new GatewayError(
+          409,
+          'Work is not settled. Wait for execution and Remote completion before deleting.',
+        );
+      }
       await this.beforeDelete?.(id, tx);
       await deleteProfileRow(tx, id);
     });
@@ -426,10 +443,10 @@ export class Profiles {
     await this.profile(id);
 
     return this.store.transaction(id, async (tx) => {
-      if (await hasActiveRun(tx, id)) {
+      if (await hasUnsettledExecution(tx, id)) {
         throw new GatewayError(
           409,
-          'An answer is still running. Wait for it to finish, or cancel it, then reset.',
+          'Work is not settled. Wait for execution and Remote completion before resetting.',
         );
       }
 

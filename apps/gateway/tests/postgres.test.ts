@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { Pool } from 'pg';
 import { PgBoss } from 'pg-boss';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
@@ -14,8 +15,16 @@ import { GatewayVault } from '../src/security/gateway-vault.js';
 import { Vault } from '../src/security/vault.js';
 import { buildServices } from '../src/services.js';
 import { pageMessages } from '../src/sessions/repository.js';
+import type { Queryable } from '../src/storage/database.js';
 import { PostgresStore } from '../src/storage/postgres.js';
-import { channels, metaInbox } from '../src/storage/schema.js';
+import {
+  channels,
+  metaInbox,
+  profiles,
+  remoteMachines,
+  remoteTasks,
+  runs,
+} from '../src/storage/schema.js';
 import { mockModel } from './helpers/model.js';
 import { events, runRows } from './helpers/rows.js';
 
@@ -28,6 +37,42 @@ if (!databaseUrl) {
 const connectionString = databaseUrl;
 const box = new SecretBox({ activeKeyId: 'test', keys: { test: randomBytes(32) } });
 const store = new PostgresStore(connectionString);
+const observer = new Pool({ connectionString, max: 1 });
+
+function barrier() {
+  let release!: () => void;
+  const reached = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { reached, release };
+}
+
+function openPeer(peerConnectionString = connectionString) {
+  const store = new PostgresStore(peerConnectionString);
+  return {
+    ...buildServices({
+      store,
+      vault: new Vault(store, box),
+      gatewayVault: new GatewayVault(store, box),
+    }),
+    store,
+  };
+}
+
+async function waitForBlockedBy(pid: number, applicationName?: string) {
+  // Observe actual server contention, rather than treating a sleep/unresolved promise as proof.
+  await vi.waitFor(
+    async () => {
+      const result = await observer.query<{ blocked: boolean }>(
+        'SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)) AND ($2::text IS NULL OR application_name = $2)) AS blocked',
+        [pid, applicationName ?? null],
+      );
+      expect(result.rows[0]?.blocked).toBe(true);
+    },
+    { timeout: 5000 },
+  );
+}
+
 const services = {
   ...buildServices({
     store,
@@ -37,10 +82,25 @@ const services = {
   store,
 };
 
+const submitRun = services.runs.submit.bind(services.runs);
+services.runs.submit = (profileId, sessionId, runInput, options) =>
+  submitRun(profileId, sessionId, runInput, {
+    ...options,
+    ...(options?.ownerMessage === undefined &&
+    !options?.systemTask &&
+    !options?.authorityFrom &&
+    !options?.call &&
+    !options?.subagent &&
+    !options?.continuationOf
+      ? { ownerMessage: true }
+      : {}),
+  });
+
 const input = {
   name: 'CI',
   instructions: 'Help.',
   model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  professionId: 'developer',
 };
 
 beforeAll(async () => {
@@ -48,10 +108,515 @@ beforeAll(async () => {
 }, 30_000);
 
 afterAll(async () => {
+  await observer.end();
   await store.close();
 });
 
 describe('PostgreSQL durability', () => {
+  it.each(
+    (['shell admission', 'computer admission', 'claim', 'completion'] as const).flatMap(
+      (operation) =>
+        (['authorized operation first', 'revoker first'] as const).map((order) => ({
+          operation,
+          order,
+        })),
+    ),
+  )(
+    'serializes Remote $operation against its real writer: $order',
+    async ({ operation, order }) => {
+      const profile = await services.profiles.createProfile(input);
+      const machine = await services.remote.create({
+        name: 'Real writer contention',
+        allowedProfileIds: [profile.id],
+      });
+      const authorization = `Bearer ${machine.token}`;
+      await services.remote.poll(machine.id, authorization, 'linux-x64', 'computer-linux-v1');
+      const taskId = randomUUID();
+      if (operation === 'claim' || operation === 'completion') {
+        await store.db.insert(remoteTasks).values({
+          id: taskId,
+          machineId: machine.id,
+          profileId: profile.id,
+          command: 'printf ok',
+          timeoutMs: 1000,
+          status: operation === 'claim' ? 'queued' : 'running',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+      // A running worker's completion remains valid after the owner's ACL is revoked.
+      if (operation === 'completion') {
+        await services.remote.setAccess(machine.id, { allowedProfileIds: [] });
+      }
+      const applicationName = `remote-real-writer-${randomUUID()}`;
+      const peerUrl = new URL(connectionString);
+      peerUrl.searchParams.set('application_name', applicationName);
+      const peer = openPeer(peerUrl.toString());
+      const reached = barrier();
+      const resume = barrier();
+      let pid = 0;
+      // Observe the real authorization SELECT, not a profile lock or an already-written task.
+      // The cast exposes private methods only for this deterministic test seam.
+      const remote = services.remote as unknown as {
+        machineForProfile: (
+          profileId: string,
+          machineId: string,
+          db?: Queryable,
+          locked?: boolean,
+        ) => Promise<typeof remoteMachines.$inferSelect>;
+        authenticate: (
+          machineId: string,
+          authorization: string,
+          db?: Queryable,
+          locked?: boolean,
+        ) => Promise<typeof remoteMachines.$inferSelect>;
+      };
+      const method = operation.endsWith('admission') ? 'machineForProfile' : 'authenticate';
+      const authorize = remote[method].bind(remote);
+      const intercept = vi
+        .spyOn(remote, method)
+        .mockImplementation(async (first, second, db, locked) => {
+          if (!locked || !db) return authorize(first, second, db, locked);
+          if (order === 'revoker first') {
+            reached.release();
+            await resume.reached;
+            return authorize(first, second, db, locked);
+          }
+          const authorized = await authorize(first, second, db, locked);
+          const [backend] = await db
+            .select({ pid: sql<number>`pg_backend_pid()` })
+            .from(profiles)
+            .limit(1);
+          if (!backend) throw new Error('Missing PostgreSQL backend');
+          pid = backend.pid;
+          reached.release();
+          await resume.reached;
+          return authorized;
+        });
+      const abort = new AbortController();
+      const result = { taskId, exitCode: 0, stdout: 'ok', stderr: '', timedOut: false };
+      const pending = (
+        operation === 'claim'
+          ? services.remote.poll(machine.id, authorization)
+          : operation === 'completion'
+            ? services.remote.complete(machine.id, taskId, authorization, result)
+            : operation === 'computer admission'
+              ? services.remote.executeComputer(
+                  profile.id,
+                  machine.id,
+                  { action: 'screenshot' },
+                  abort.signal,
+                )
+              : services.remote.execute(
+                  profile.id,
+                  machine.id,
+                  { command: 'printf ok' },
+                  abort.signal,
+                )
+      ).catch((error: unknown) => error);
+      let writer: Promise<unknown> | undefined;
+      try {
+        await reached.reached;
+        writer = (
+          operation.endsWith('admission')
+            ? peer.remote.setAccess(machine.id, { allowedProfileIds: [] })
+            : peer.remote.rotate(machine.id)
+        ).catch((error: unknown) => error);
+        if (order === 'authorized operation first') {
+          // This is the independent pool running the actual UPDATE, not another advisory-lock waiter.
+          await waitForBlockedBy(pid, applicationName);
+        } else {
+          expect(await writer).toMatchObject({ id: machine.id });
+        }
+        resume.release();
+        const changed = await writer;
+        expect(changed).toMatchObject({ id: machine.id });
+        if (order === 'revoker first') {
+          expect(await pending).toMatchObject({
+            statusCode: operation.endsWith('admission') ? 403 : 401,
+          });
+          const tasks = await store.db
+            .select()
+            .from(remoteTasks)
+            .where(eq(remoteTasks.machineId, machine.id));
+          if (operation.endsWith('admission')) expect(tasks).toEqual([]);
+          else expect(tasks[0]?.status).toBe(operation === 'claim' ? 'queued' : 'running');
+          if (operation === 'completion') {
+            // The rotated token can settle the same running task despite the empty ACL.
+            const rotated = changed as { token: string };
+            expect(
+              await peer.remote.complete(machine.id, taskId, `Bearer ${rotated.token}`, result),
+            ).toEqual({ ok: true });
+          }
+        } else if (operation === 'claim') {
+          expect(await pending).toMatchObject({ task: { id: taskId } });
+          const [task] = await store.db
+            .select()
+            .from(remoteTasks)
+            .where(eq(remoteTasks.id, taskId));
+          expect(task?.status).toBe('running');
+        } else if (operation === 'completion') {
+          expect(await pending).toEqual({ ok: true });
+          const [task] = await store.db
+            .select()
+            .from(remoteTasks)
+            .where(eq(remoteTasks.id, taskId));
+          expect(task).toMatchObject({ status: 'completed', result });
+        } else {
+          const [task] = await store.db
+            .select()
+            .from(remoteTasks)
+            .where(eq(remoteTasks.machineId, machine.id));
+          expect(task?.status).toBe('queued');
+        }
+      } finally {
+        resume.release();
+        abort.abort();
+        await Promise.allSettled([pending, ...(writer ? [writer] : [])]);
+        intercept.mockRestore();
+        await peer.store.close();
+      }
+    },
+  );
+
+  it.each(['shell admission', 'computer admission', 'claim'] as const)(
+    'serializes Remote %s with live ACL revocation across pools',
+    async (operation) => {
+      const profile = await services.profiles.createProfile(input);
+      const machine = await services.remote.create({
+        name: 'Concurrent remote',
+        allowedProfileIds: [profile.id],
+      });
+      const authorization = `Bearer ${machine.token}`;
+      await services.remote.poll(machine.id, authorization, 'linux-x64', 'computer-linux-v1');
+      const taskId = randomUUID();
+      if (operation === 'claim') {
+        await store.db.insert(remoteTasks).values({
+          id: taskId,
+          machineId: machine.id,
+          profileId: profile.id,
+          command: 'printf ok',
+          timeoutMs: 1000,
+          status: 'queued',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+      const peer = openPeer();
+      const locked = barrier();
+      const resume = barrier();
+      const mutate = barrier();
+      let pid = 0;
+      const transition = store.transaction(profile.id, async (tx) => {
+        const [backend] = await tx
+          .select({ pid: sql<number>`pg_backend_pid()` })
+          .from(profiles)
+          .limit(1);
+        if (!backend) throw new Error('Missing PostgreSQL backend');
+        pid = backend.pid;
+        locked.release();
+        await mutate.reached;
+        await tx
+          .update(remoteMachines)
+          .set({ allowedProfileIds: [] })
+          .where(eq(remoteMachines.id, machine.id));
+        await resume.reached;
+      });
+      const abort = new AbortController();
+      let pending: Promise<unknown> | undefined;
+      try {
+        await locked.reached;
+        pending = (
+          operation === 'claim'
+            ? peer.remote.poll(machine.id, authorization)
+            : operation === 'computer admission'
+              ? peer.remote.executeComputer(
+                  profile.id,
+                  machine.id,
+                  { action: 'screenshot' },
+                  abort.signal,
+                )
+              : peer.remote.execute(profile.id, machine.id, { command: 'printf ok' }, abort.signal)
+        ).catch((error: unknown) => error);
+        // Preliminary authority/candidate reads happened, but the profile transaction is blocked.
+        await waitForBlockedBy(pid);
+        mutate.release();
+        resume.release();
+        await transition;
+        if (operation === 'claim') {
+          expect(await pending).toEqual({ task: null });
+          const [task] = await peer.store.db
+            .select()
+            .from(remoteTasks)
+            .where(eq(remoteTasks.id, taskId));
+          expect(task?.status).toBe('queued');
+        } else {
+          expect(await pending).toMatchObject({ statusCode: 403 });
+          expect(
+            await peer.store.db
+              .select()
+              .from(remoteTasks)
+              .where(eq(remoteTasks.machineId, machine.id)),
+          ).toEqual([]);
+        }
+      } finally {
+        mutate.release();
+        resume.release();
+        abort.abort();
+        await Promise.allSettled([transition, ...(pending ? [pending] : [])]);
+        await peer.store.close();
+      }
+    },
+  );
+
+  it('serializes machine removal after admission and preserves queued/running evidence across pools', async () => {
+    const profile = await services.profiles.createProfile(input);
+    const machine = await services.remote.create({
+      name: 'Admission wins',
+      allowedProfileIds: [profile.id],
+    });
+    const authorization = `Bearer ${machine.token}`;
+    await services.remote.poll(machine.id, authorization);
+    const peer = openPeer();
+    const admitted = barrier();
+    const resume = barrier();
+    const transaction = store.transaction.bind(store);
+    let pid = 0;
+    const intercept = vi.spyOn(store, 'transaction').mockImplementationOnce((id, body) =>
+      transaction(id, async (tx) => {
+        const result = await body(tx);
+        const [backend] = await tx
+          .select({ pid: sql<number>`pg_backend_pid()` })
+          .from(profiles)
+          .limit(1);
+        if (!backend) throw new Error('Missing PostgreSQL backend');
+        pid = backend.pid;
+        admitted.release();
+        await resume.reached;
+        return result;
+      }),
+    );
+    const abort = new AbortController();
+    const execution = services.remote
+      .execute(profile.id, machine.id, { command: 'printf ok' }, abort.signal)
+      .catch((error: unknown) => error);
+    let removal: Promise<unknown> | undefined;
+    try {
+      await admitted.reached;
+      removal = peer.remote.remove(machine.id).catch((error: unknown) => error);
+      await waitForBlockedBy(pid);
+      resume.release();
+      expect(await removal).toMatchObject({ statusCode: 409 });
+      const [queued] = await peer.store.db
+        .select()
+        .from(remoteTasks)
+        .where(eq(remoteTasks.machineId, machine.id));
+      expect(queued?.status).toBe('queued');
+      if (!queued) throw new Error('Missing admitted task');
+      expect(await peer.remote.poll(machine.id, authorization)).toMatchObject({
+        task: { id: queued.id },
+      });
+      await peer.remote.setAccess(machine.id, { allowedProfileIds: [] });
+      await expect(peer.remote.remove(machine.id)).rejects.toMatchObject({ statusCode: 409 });
+      const [running] = await store.db
+        .select()
+        .from(remoteTasks)
+        .where(eq(remoteTasks.id, queued.id));
+      expect(running?.status).toBe('running');
+      // Cancellation of the caller is not an acknowledgement that the worker stopped.
+      abort.abort();
+      expect(await execution).toMatchObject({ statusCode: 499 });
+      expect(
+        await peer.store.db.select().from(remoteTasks).where(eq(remoteTasks.id, queued.id)),
+      ).toEqual([running]);
+      await peer.remote.complete(machine.id, queued.id, authorization, {
+        taskId: queued.id,
+        exitCode: 0,
+        stdout: 'ok',
+        stderr: '',
+        timedOut: false,
+      });
+      await expect(peer.remote.remove(machine.id)).resolves.toEqual({ id: machine.id });
+    } finally {
+      resume.release();
+      abort.abort();
+      await Promise.allSettled([execution, ...(removal ? [removal] : [])]);
+      intercept.mockRestore();
+      await peer.store.close();
+    }
+  });
+
+  it('serializes admission after machine deletion without a foreign-key error or erased work', async () => {
+    const profile = await services.profiles.createProfile(input);
+    const machine = await services.remote.create({
+      name: 'Removal wins',
+      allowedProfileIds: [profile.id],
+    });
+    await services.remote.poll(machine.id, `Bearer ${machine.token}`);
+    const peer = openPeer();
+    const deleted = barrier();
+    const resume = barrier();
+    const transaction = peer.store.transaction.bind(peer.store);
+    let pid = 0;
+    const intercept = vi.spyOn(peer.store, 'transaction').mockImplementationOnce((id, body) =>
+      transaction(id, async (tx) => {
+        const result = await body(tx);
+        const [backend] = await tx
+          .select({ pid: sql<number>`pg_backend_pid()` })
+          .from(profiles)
+          .limit(1);
+        if (!backend) throw new Error('Missing PostgreSQL backend');
+        pid = backend.pid;
+        deleted.release();
+        await resume.reached;
+        return result;
+      }),
+    );
+    const removal = peer.remote.remove(machine.id);
+    const abort = new AbortController();
+    let execution: Promise<unknown> | undefined;
+    try {
+      await deleted.reached;
+      // The unlocked preliminary read still sees the machine; admission's row lock must wait.
+      execution = services.remote
+        .execute(profile.id, machine.id, { command: 'printf ok' }, abort.signal)
+        .catch((error: unknown) => error);
+      await waitForBlockedBy(pid);
+      resume.release();
+      expect(await removal).toEqual({ id: machine.id });
+      expect(await execution).toMatchObject({ statusCode: 403 });
+      expect(
+        await store.db.select().from(remoteTasks).where(eq(remoteTasks.machineId, machine.id)),
+      ).toEqual([]);
+    } finally {
+      resume.release();
+      abort.abort();
+      await Promise.allSettled([removal, ...(execution ? [execution] : [])]);
+      intercept.mockRestore();
+      await peer.store.close();
+    }
+  });
+
+  it('removes an idle machine without waiting on a profile advisory lock in another pool', async () => {
+    const profile = await services.profiles.createProfile(input);
+    const machine = await services.remote.create({
+      name: 'No inverse lock order',
+      allowedProfileIds: [profile.id],
+    });
+    const peer = openPeer();
+    const locked = barrier();
+    const resume = barrier();
+    const holding = store.transaction(profile.id, async () => {
+      locked.release();
+      await resume.reached;
+    });
+    let removal: Promise<unknown> | undefined;
+    try {
+      await locked.reached;
+      removal = peer.remote.remove(machine.id);
+      // A bounded wait keeps this a regression rather than deadlocking if remove takes profile locks.
+      let removed = false;
+      const done = removal.then(() => {
+        removed = true;
+      });
+      await vi.waitFor(() => expect(removed).toBe(true), { timeout: 5000 });
+      await done;
+    } finally {
+      resume.release();
+      await Promise.allSettled([holding, ...(removal ? [removal] : [])]);
+      await peer.store.close();
+    }
+  });
+
+  it.each(['completed', 'cancelled', 'expired'] as const)(
+    'retains unresolved executionOwner after %s and rejects cross-pool re-claim until owner settlement',
+    async (ending) => {
+      const profile = await services.profiles.createProfile(input);
+      const session = await services.sessions.gatewaySession(profile.id);
+      const run = await services.runs.submit(profile.id, session.id, {
+        text: 'Work',
+        requestKey: 'unsettled',
+      });
+      const peer = openPeer();
+      try {
+        expect(await services.lifecycle.claim(run.id, profile.id, 'original-worker')).toBeTruthy();
+        if (ending === 'completed') {
+          await services.lifecycle.finish(
+            profile.id,
+            run.id,
+            'original-worker',
+            'completed',
+            'Done',
+          );
+        } else if (ending === 'cancelled') {
+          await services.runs.cancel(profile.id, run.id);
+        } else {
+          await store.db.update(runs).set({ leaseUntil: 0 }).where(eq(runs.id, run.id));
+          await peer.lifecycle.recover();
+        }
+        const [unsettled] = await peer.store.db.select().from(runs).where(eq(runs.id, run.id));
+        expect(unsettled).toMatchObject({
+          status: ending === 'expired' ? 'interrupted' : ending,
+          executionOwner: 'original-worker',
+          leaseOwner: null,
+          leaseUntil: null,
+        });
+        expect(await peer.lifecycle.claim(run.id, profile.id, 'replacement')).toBeNull();
+        // Simulate a stale requeue: queued status/expired lease still cannot prove worker exit.
+        await store.db.update(runs).set({ status: 'queued' }).where(eq(runs.id, run.id));
+        await peer.lifecycle.settleExecution(profile.id, run.id, 'wrong-worker');
+        expect(await peer.lifecycle.claim(run.id, profile.id, 'replacement')).toBeNull();
+        await peer.lifecycle.settleExecution(profile.id, run.id, 'original-worker');
+        const claims = await Promise.all([
+          services.lifecycle.claim(run.id, profile.id, 'next-a'),
+          peer.lifecycle.claim(run.id, profile.id, 'next-b'),
+        ]);
+        expect(claims.filter(Boolean)).toHaveLength(1);
+        const owner = claims.find(Boolean)?.leaseOwner;
+        if (!owner) throw new Error('Missing replacement worker');
+        await services.lifecycle.settleExecution(profile.id, run.id, 'original-worker');
+        const [claimed] = await peer.store.db.select().from(runs).where(eq(runs.id, run.id));
+        expect(claimed?.executionOwner).toBe(owner);
+        await peer.lifecycle.settleExecution(profile.id, run.id, owner);
+      } finally {
+        await peer.store.close();
+      }
+    },
+  );
+
+  it('persists classified run authority without granting newly enabled permissions on continuation', async () => {
+    const created = await services.profiles.createProfile({ ...input, professionId: 'attendant' });
+    const profile = await services.profiles.updateProfile(created.id, {
+      expectedVersion: created.version,
+      name: 'Classified durability',
+      allowWebSearch: false,
+    });
+    const session = await services.sessions.gatewaySession(profile.id);
+    const original = await services.runs.submit(
+      profile.id,
+      session.id,
+      { text: 'Work', requestKey: 'original' },
+      { ownerMessage: true },
+    );
+    expect(original.authority?.professionId).toBe('attendant');
+    expect(original.authority?.capabilities).not.toContain('web.browse');
+    expect((await services.runs.run(profile.id, original.id)).authority).toEqual(
+      original.authority,
+    );
+    await store.db.update(runs).set({ status: 'interrupted' }).where(eq(runs.id, original.id));
+    await services.profiles.updateProfile(profile.id, {
+      expectedVersion: profile.version,
+      allowWebSearch: true,
+    });
+    const continued = await services.runs.submit(
+      profile.id,
+      session.id,
+      { text: 'Continue', requestKey: 'continued' },
+      { continuationOf: original.id },
+    );
+    expect(continued.authority?.capabilities).not.toContain('web.browse');
+  });
+
   it('atomically pauses channel runs across pools and rejects ingress overtaken by pause/resume', async () => {
     const profile = await services.profiles.createProfile(input);
     const fetcher = (() => {
@@ -333,6 +898,14 @@ describe('PostgreSQL durability', () => {
       await reopenedStore.close();
     }
 
+    await services.lifecycle.claim(parent.id, profile.id, 'parent-lease');
+    await services.lifecycle.finish(
+      profile.id,
+      parent.id,
+      'parent-lease',
+      'completed',
+      'Verification started.',
+    );
     await services.lifecycle.claim(child.runId, profile.id, 'subagent-lease');
     await services.lifecycle.finish(
       profile.id,
@@ -458,6 +1031,11 @@ describe('PostgreSQL durability', () => {
     const queue = new RunQueue(new PgBoss(connectionString), services, runtime, () => {});
     const caller = await services.profiles.createProfile({ ...input, name: 'Caller' });
     const callee = await services.profiles.createProfile({ ...input, name: 'Callee' });
+    await services.teams.create({
+      name: 'Concurrent agent calls',
+      description: 'Shared team for the peer call integration test.',
+      profileIds: [caller.id, callee.id],
+    });
     const session = await services.sessions.createSession(caller.id, { title: 'Owner' });
     const peers = new Peers(services, Date.now, { answerWithin: 25_000, pollEvery: 100 });
 

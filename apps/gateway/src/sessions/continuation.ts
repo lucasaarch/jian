@@ -48,6 +48,19 @@ export class ObjectiveContinuation {
 
       const objective = session.objective;
       if (objective?.status !== 'open') return null;
+      // No original authority is persisted on objectives yet. A later slice must not mint it.
+      if (run.profile.professionId !== null || run.authority) {
+        await setSessionObjective(
+          tx,
+          run.profileId,
+          run.sessionId,
+          objectiveAt(objective.text, 'blocked', nowIso(this.clock), {
+            continuations: objective.continuations,
+            note: 'Classified objective authority requires owner review before automatic continuation.',
+          }),
+        );
+        return null;
+      }
 
       // Listening owns resume while a watcher still expects a GitHub transition. Auto-continue
       // here only restates "still pending" on the channel; a real wake comes from poll/webhook.

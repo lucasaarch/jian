@@ -21,16 +21,13 @@ export function registerSkillRoutes(app: FastifyInstance, deps: SkillRouteServic
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/built-in-skills', async (request) => {
     const profile = await deps.profiles.profile(request.params.profileId);
     const disabled = new Set(profile.disabledSkills);
+    const fixedProfession = profile.professionId !== null;
 
     return builtinSkills(profile).map((skill) => ({
       ...skill,
-      enabled: !disabled.has(skill.name),
+      enabled: fixedProfession || !disabled.has(skill.name),
     }));
   });
-
-  app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/skill-catalog', async (request) =>
-    available(deps).catalog(request.query),
-  );
 
   app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/skills/import', async (request) =>
     available(deps).importSkill(request.params.profileId, request.body),

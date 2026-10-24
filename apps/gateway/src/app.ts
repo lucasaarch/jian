@@ -14,6 +14,8 @@ import { configureSecurity } from './http/security.js';
 import { registerGatewayUi } from './http/ui.js';
 import { registerMediaRoutes } from './media/routes.js';
 import { registerMemoryRoutes } from './memories/routes.js';
+import { registerProfessionPreviewRoutes } from './professions/classification.js';
+import { registerProfessionRoutes } from './professions/routes.js';
 import { registerProfileRoutes } from './profiles/routes.js';
 import type { CodexLogin } from './providers/codex/login.js';
 import type { ProviderModels } from './providers/discovery.js';
@@ -34,6 +36,7 @@ import { registerStickerRoutes } from './stickers/routes.js';
 import type { Store } from './storage/database.js';
 import { registerSubscriptionRoutes } from './subscriptions/routes.js';
 import { registerWorkRoutes } from './tasks/routes.js';
+import { registerTeamRoutes } from './teams/routes.js';
 import { registerWebRoutes } from './web/routes.js';
 
 export function createApp(
@@ -116,7 +119,10 @@ export function createApp(
   registerSshRoutes(app, options);
   registerRemoteRoutes(app, options);
   registerSkillRoutes(app, options);
+  registerProfessionRoutes(app, options);
+  registerProfessionPreviewRoutes(app, options);
   registerProfileRoutes(app, options);
+  registerTeamRoutes(app, options.teams);
   registerSessionRoutes(app, { ...options, coordination });
   registerMemoryRoutes(app, options);
   registerStickerRoutes(app, options);

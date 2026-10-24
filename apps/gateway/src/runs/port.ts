@@ -13,6 +13,10 @@ import type { Queryable } from '../storage/database.js';
 export type SubmitOptions = {
   /** Set only by the authenticated owner-facing message route. */
   ownerMessage?: boolean;
+  /** Internal trusted trigger for an owner-configured schedule; never accepted from HTTP input. */
+  systemTask?: 'schedule';
+  /** Internal provenance: re-read stored source and intersect its frozen + live authority. */
+  authorityFrom?: { profileId: string; runId: string };
   continuationOf?: string;
   activity?: 'conversation' | 'channel';
   call?: AgentCallOrigin;
@@ -41,9 +45,11 @@ export interface RunWriter extends RunReader {
   relayTo(profileId: string, runId: string, sessionId: string | null): Promise<void>;
 }
 
-/** The lease side of a run: every write here needs the owner that holds it. */
+/** Lease-bound writes plus an independent worker-lifetime acknowledgement. */
 export interface RunExecution {
   claim(runId: string, profileId: string, owner: string): Promise<Run | null>;
+  /** Clear only this worker's marker, after its actual lifetime (including cleanup) ends. */
+  settleExecution(profileId: string, runId: string, owner: string): Promise<void>;
   heartbeat(profileId: string, runId: string, owner: string): Promise<void>;
   checkpoint(profileId: string, runId: string, owner: string, data: unknown): Promise<void>;
   progress(runId: string, owner: string, progress: RunProgress | null): Promise<void>;

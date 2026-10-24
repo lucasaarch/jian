@@ -204,7 +204,7 @@ it('keeps an open objective text when the owner chats again', async () => {
   });
 });
 
-it('keeps queuing follow-up runs until the objective is completed', async () => {
+it('blocks classified objective continuation until owner review', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);
   const session = await services.sessions.createSession(profile.id, { channel: 'api' });
@@ -246,53 +246,19 @@ it('keeps queuing follow-up runs until the objective is completed', async () => 
   expect((await services.runs.run(profile.id, first.id)).status).toBe('completed');
 
   const afterFirst = await services.sessions.session(profile.id, session.id);
-  expect(afterFirst.objective).toMatchObject({ status: 'open', continuations: 1 });
-
-  const followUps = (await services.runs.activities(profile.id)).filter(
-    (run) => run.id !== first.id && run.status === 'queued',
-  );
-  expect(followUps).toHaveLength(1);
-  expect(followUps[0]?.input).toContain('Continue the open session objective');
-  expect(followUps[0]?.input).toContain('Goal: Ship the approved voice-call feature');
-  expect(followUps[0]?.input).not.toContain('Objective:');
-
-  let secondCalls = 0;
-  const finishing = mockModel({
-    doGenerate: async () => {
-      secondCalls++;
-      if (secondCalls === 1) {
-        return {
-          content: [
-            {
-              type: 'tool-call',
-              toolCallId: 'done',
-              toolName: 'complete_session_objective',
-              input: JSON.stringify({ note: 'All slices landed' }),
-            },
-          ],
-          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
-          usage,
-          warnings: [],
-        };
-      }
-      return answer('Voice calls are implemented.');
-    },
-  });
-
-  const followUp = followUps[0];
-  expect(followUp).toBeDefined();
-  if (!followUp) throw new Error('expected objective follow-up run');
-  await new AgentRuntime(services, () => finishing).execute(profile.id, followUp.id);
-  expect((await services.sessions.session(profile.id, session.id)).objective).toMatchObject({
-    status: 'done',
-    note: 'All slices landed',
+  expect(afterFirst.objective).toMatchObject({
+    status: 'blocked',
+    continuations: 0,
+    note: 'Classified objective authority requires owner review before automatic continuation.',
   });
   expect(
-    (await services.runs.activities(profile.id)).filter((run) => run.status === 'queued'),
+    (await services.runs.activities(profile.id)).filter(
+      (run) => run.id !== first.id && run.status === 'queued',
+    ),
   ).toEqual([]);
 });
 
-it('auto-continue does not reinject a stored terminal dump as the wake text', async () => {
+it('blocks classified auto-continuation of a stored terminal dump', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);
   const session = await services.sessions.createSession(profile.id, { channel: 'api' });
@@ -316,16 +282,13 @@ it('auto-continue does not reinject a stored terminal dump as the wake text', as
   const followUps = (await services.runs.activities(profile.id)).filter(
     (run) => run.id !== first.id && run.status === 'queued',
   );
-  expect(followUps).toHaveLength(1);
-  const wake = followUps[0]?.input ?? '';
-  expect(wake).toContain('Continue the open session objective');
-  expect(wake).toContain('Goal:');
-  expect(wake).not.toContain('Last login:');
-  expect(wake).not.toContain('ERR_UNKNOWN_FILE_EXTENSION');
-  expect(wake).not.toContain('node:internal');
-  expect(wake.length).toBeLessThan(600);
+  expect(followUps).toEqual([]);
 
   const stored = await services.sessions.session(profile.id, session.id);
+  expect(stored.objective).toMatchObject({
+    status: 'blocked',
+    note: 'Classified objective authority requires owner review before automatic continuation.',
+  });
   expect(stored.objective?.text).not.toContain('Last login:');
   expect(stored.objective?.text.length).toBeLessThanOrEqual(MAX_OBJECTIVE_TEXT);
 });

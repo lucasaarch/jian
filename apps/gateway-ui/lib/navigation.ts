@@ -11,6 +11,7 @@ import {
   Plug,
   Smartphone,
   Sparkles,
+  UsersRound,
 } from 'lucide-react';
 
 export type NavigationItem = {
@@ -27,6 +28,7 @@ export type NavigationItem = {
 export const navigation: NavigationItem[] = [
   { href: '/providers', label: 'Providers', icon: Plug, group: 'global' },
   { href: '/remote', label: 'Remote Control', icon: Monitor, group: 'global' },
+  { href: '/teams', label: 'Teams', icon: UsersRound, group: 'global' },
   { href: '/', label: 'Overview', icon: LayoutDashboard, group: 'agent' },
   { href: '/identity', label: 'Identity', icon: Fingerprint, group: 'agent' },
   { href: '/ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'agent' },

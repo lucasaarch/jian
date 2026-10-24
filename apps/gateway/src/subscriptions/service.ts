@@ -135,7 +135,13 @@ export class Subscriptions {
     const secret = randomBytes(32).toString('hex');
 
     return this.store.transaction(profileId, async (tx) => {
-      await this.profiles.profile(profileId, tx);
+      const profile = await this.profiles.profile(profileId, tx);
+      if (profile.professionId !== null) {
+        throw new GatewayError(
+          403,
+          'Subscriptions for classified profiles require durable origin authority',
+        );
+      }
       await this.sessions.session(profileId, data.sessionId, tx);
 
       if ((await listSubscriptions(tx, profileId)).length >= SUBSCRIPTION_LIMIT) {
@@ -181,6 +187,13 @@ export class Subscriptions {
     const data = subscriptionPatchSchema.parse(input);
 
     return this.store.transaction(profileId, async (tx) => {
+      if ((await this.profiles.profile(profileId, tx)).professionId !== null) {
+        throw new GatewayError(
+          403,
+          'Classified jobs require durable origin authority and owner review',
+        );
+      }
+
       const current = assertFound(await findSubscription(tx, profileId, id), 'Subscription');
       if (data.sessionId) await this.sessions.session(profileId, data.sessionId, tx);
 
@@ -265,6 +278,19 @@ export class Subscriptions {
     for (const subscription of await dueSubscriptions(this.store.db, now)) {
       const row = await findSubscriptionById(this.store.db, subscription.id);
       if (!row?.enabled) continue;
+      if ((await this.profiles.profile(subscription.profileId)).professionId !== null) {
+        await replaceSubscription(
+          this.store.db,
+          {
+            ...subscription,
+            enabled: false,
+            lastError: 'Classified subscription authority requires owner review',
+            updatedAt: nowIso(this.clock),
+          },
+          row.secretHash,
+        );
+        continue;
+      }
 
       if (isExpired(subscription, now)) {
         const { nextPollAt: _drop, ...kept } = subscription;
@@ -438,6 +464,8 @@ export class Subscriptions {
     const row = await findSubscriptionById(this.store.db, subscriptionId);
     if (!row) return { accepted: false };
     if (!row.enabled) return { accepted: false };
+    if ((await this.profiles.profile(row.profileId)).professionId !== null)
+      return { accepted: false };
     if (isExpired(toSubscription(row), new Date(this.clock()))) return { accepted: false };
 
     const secret = await this.vault.read(row.profileId, subscriptionSecret(subscriptionId));

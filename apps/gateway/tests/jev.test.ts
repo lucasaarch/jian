@@ -448,10 +448,10 @@ describe('a memory on a subject already kept', () => {
 });
 
 describe('looking back on work', () => {
-  it('is skipped when Jev finds nothing to keep, and happens when it finds something', async () => {
+  it('does not cross sessions for classified work even when Jev finds something to keep', async () => {
     for (const [teaches, expected] of [
       [0.02, false],
-      [0.8, true],
+      [0.8, false],
     ] as const) {
       const f = await fixture('Prepare the weekly report');
       const { judge } = fakeJudge(() => yes(teaches));

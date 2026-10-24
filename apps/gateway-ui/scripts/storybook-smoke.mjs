@@ -79,10 +79,22 @@ try {
         undefined,
         { timeout: 15_000 },
       );
-      // Pages load their data after the first paint; give that a moment to fail if it will.
-      await page.waitForTimeout(800);
     } catch {
       problems.push('rendered nothing within 15 s');
+    }
+
+    try {
+      // First paint does not mean the play assertions have completed. Storybook 10 marks
+      // the render finished after play and afterEach, including when a play has failed.
+      await page.waitForFunction(
+        () => window.__STORYBOOK_PREVIEW__?.currentRender?.phase === 'finished',
+        undefined,
+        { timeout: 30_000 },
+      );
+      // Keep the grace period for data requests and errors after the story finishes.
+      await page.waitForTimeout(800);
+    } catch {
+      problems.push('Storybook did not finish rendering and running play within 30 s');
     }
 
     // A page still on the session check never received its data.
