@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
+import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import type { GatewayApi, Run } from '../../lib/api';
+import type { Channel, Contact, GatewayApi, Run } from '../../lib/api';
 import { useWorkspace } from '../../lib/workspace';
 import * as fixtures from '../../stories/fixtures';
 import { ids } from '../../stories/fixtures';
@@ -44,6 +45,70 @@ const open = (sessionId?: string): Story => ({
     </div>
   ),
 });
+
+function BusinessChat({ paused = false }: { paused?: boolean }) {
+  const [aiEnabled, setAiEnabled] = useState(!paused);
+  const props = sectionProps();
+  const session = fixtures.sessions.find((item) => item.id === ids.mayaChat);
+  if (!session) throw new Error('Missing conversation fixture');
+  const customer = fixtures.contacts.find((item) => item.sessionId === session.id);
+  if (!customer) throw new Error('Missing contact fixture');
+  const contact = {
+    ...customer,
+    id: 'business-customer',
+    profileId: props.profile.id,
+    sessionId: session.id,
+    channelId: 'business',
+    type: 'whatsapp-business',
+    displayName: 'Customer',
+    status: 'approved',
+    aiEnabled,
+  } as Contact;
+  return (
+    <Sessions
+      {...props}
+      initialSession={session.id}
+      data={{
+        ...props.data,
+        sessions: [{ ...session, channel: 'whatsapp-business' }],
+        contacts: [contact],
+        channels: [{ id: 'business', profileId: props.profile.id, enabled: !paused } as Channel],
+      }}
+      api={{
+        ...props.api,
+        updateContact: async (_profileId, _id, body) => {
+          setAiEnabled(body.aiEnabled ?? true);
+          return { ...contact, ...body };
+        },
+      }}
+    />
+  );
+}
+
+export const BusinessAIReplies: Story = {
+  render: () => <BusinessChat />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const control = canvas.getByRole('switch', { name: 'AI replies for Customer' });
+    await expect(control).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(control);
+    await expect(control).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(control);
+    await expect(control).toHaveAttribute('aria-checked', 'true');
+  },
+};
+
+export const BusinessChannelPaused: Story = {
+  render: () => <BusinessChat paused />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Channel automation paused')).toBeVisible();
+    const control = canvas.getByRole('switch', { name: 'AI replies for Customer' });
+    await userEvent.click(control);
+    await expect(control).toHaveAttribute('aria-checked', 'true');
+    await expect(canvas.getByText('Channel automation paused')).toBeVisible();
+  },
+};
 
 /** The gateway conversation: images, documents, voice notes both ways, and many tool calls. */
 export const List = open();

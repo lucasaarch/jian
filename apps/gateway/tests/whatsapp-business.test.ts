@@ -1088,7 +1088,7 @@ describe('Meta replay and send-boundary regression', () => {
     }
   });
 
-  it('rejects autonomous runs and cross-session/contact tools even with an open window', async () => {
+  it('delivers schedules and cross-session/contact messages to approved contacts inside the window', async () => {
     const f = await setup();
     try {
       await f.post(batch([message('causal')]));
@@ -1108,6 +1108,7 @@ describe('Meta replay and send-boundary regression', () => {
       );
       await f.channels.dispatch();
       expect(await metaCanSend(f.services.store.db, f.channel.id, contact.chatId)).toBe(true);
+      const [originalWindow] = await f.services.store.db.select().from(metaWindows);
       const before = f.fetcher.mock.calls.length;
       // Schedules, late subagent results, contact relays and conversation writes all use
       // deliverRun: none is the original inbound, even when activity is marked channel.
@@ -1115,7 +1116,7 @@ describe('Meta replay and send-boundary regression', () => {
       const schedule = await f.services.schedules.create(
         f.profile.id,
         {
-          name: 'No proactive messages',
+          name: 'Customer follow-up',
           instruction: 'Send a scheduled message',
           sessionId: contact.sessionId,
           cron: '0 8 * * *',
@@ -1175,12 +1176,91 @@ describe('Meta replay and send-boundary regression', () => {
         'cross-session-file',
       );
       await f.channels.dispatch();
-      expect(f.fetcher.mock.calls).toHaveLength(before);
+      const sent = f.fetcher.mock.calls
+        .slice(before)
+        .filter(([url]) => String(url).endsWith('/messages'))
+        .map(
+          ([, init]) => JSON.parse(String(init?.body)) as { to: string; text: { body: string } },
+        );
+      expect(sent.map((item) => item.text.body)).toEqual([
+        'Autonomous progress',
+        'Autonomous final',
+        'Cross-session write',
+        'Contact send',
+      ]);
+      expect(sent.every((item) => item.to === contact.chatId)).toBe(true);
+      // Outgoing messages do not renew the customer's window.
+      const [window] = await f.services.store.db.select().from(metaWindows);
+      expect(window?.lastInbound).toEqual(originalWindow?.lastInbound);
       const failed = (await f.channels.deliveries(f.profile.id)).filter(
         (d) => d.status === 'failed',
       );
-      expect(failed).toHaveLength(4);
-      expect(failed.every((d) => d.error?.includes('receptive-only'))).toBe(true);
+      expect(failed).toHaveLength(1);
+      expect(failed[0]?.mediaId).toBeDefined(); // Documents are still unsupported by the adapter.
+    } finally {
+      await f.close();
+    }
+  });
+
+  it.each([
+    'expired',
+    'blocked',
+    'chat-paused',
+    'channel-paused',
+    'resumed',
+    'other-recipient',
+  ] as const)('blocks a queued proactive message when %s at send time', async (reason) => {
+    const f = await setup();
+    try {
+      await f.channels.update(f.profile.id, f.channel.id, { allowAllContacts: true });
+      await f.post(batch([message('customer')]));
+      await f.channels.dispatch();
+      const [contact] = await f.channels.contacts(f.profile.id);
+      const [inbound] = await f.services.runs.activities(f.profile.id);
+      if (!contact?.sessionId || !inbound) throw new Error('Conversation missing');
+      await f.services.lifecycle.claim(inbound.id, f.profile.id, 'worker');
+      await f.services.lifecycle.finish(
+        f.profile.id,
+        inbound.id,
+        'worker',
+        'completed',
+        'Initial reply',
+      );
+      await f.channels.dispatch();
+      const owner = await f.services.sessions.createSession(f.profile.id, { title: 'Owner' });
+      const run = await f.services.runs.submit(f.profile.id, owner.id, {
+        text: 'Follow up',
+        requestKey: 'follow-up',
+      });
+      await f.services.errands.write(
+        f.profile.id,
+        contact.sessionId,
+        run.id,
+        'Proactive message',
+        'proactive',
+      );
+      if (reason === 'expired') {
+        await f.services.store.db
+          .update(metaWindows)
+          .set({ lastInbound: new Date(Date.now() - META_WINDOW_MS) });
+      } else if (reason === 'blocked') {
+        await f.channels.blockContact(f.profile.id, contact.id);
+      } else if (reason === 'channel-paused') {
+        await f.channels.update(f.profile.id, f.channel.id, { enabled: false });
+      } else if (reason === 'chat-paused' || reason === 'resumed') {
+        await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: false });
+        if (reason === 'resumed')
+          await f.channels.updateContact(f.profile.id, contact.id, { aiEnabled: true });
+      } else {
+        // A different recipient's signed inbound cannot authorize this recipient's window.
+        await f.services.store.db.update(metaWindows).set({ chatId: '15559999999' });
+      }
+      const before = f.fetcher.mock.calls.length;
+      await f.channels.dispatch();
+      expect(f.fetcher.mock.calls).toHaveLength(before);
+      expect(
+        (await f.channels.deliveries(f.profile.id)).find((d) => d.notice === 'Proactive message'),
+      ).toMatchObject({ status: 'failed', remoteMessageIds: [] });
     } finally {
       await f.close();
     }
