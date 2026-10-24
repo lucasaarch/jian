@@ -115,6 +115,7 @@ import {
   subscriptionPatchSchema,
   subscriptionRecordSchema,
 } from './subscriptions.js';
+import { teamInputSchema, teamPatchSchema, teamSchema } from './teams.js';
 import { webSearchInputSchema, webSearchStatusSchema } from './web.js';
 import { conversationSubagentSchema } from './work.js';
 
@@ -139,6 +140,7 @@ export type Operation = {
 };
 
 const profile = '/v1/profiles/:profileId';
+const team = '/v1/teams/:teamId';
 const session = `${profile}/sessions/:sessionId`;
 
 export const cursorSchema = z.strictObject({
@@ -741,6 +743,39 @@ export const operations: Operation[] = [
     operationId: 'listProfessions',
     access: 'admin',
     response: professionCatalogSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/teams',
+    operationId: 'listTeams',
+    access: 'admin',
+    response: z.array(teamSchema),
+  },
+  {
+    method: 'POST',
+    path: '/v1/teams',
+    operationId: 'createTeam',
+    access: 'admin',
+    body: teamInputSchema,
+    response: teamSchema,
+    status: 201,
+  },
+  {
+    method: 'PATCH',
+    path: team,
+    operationId: 'updateTeam',
+    access: 'admin',
+    params: z.strictObject({ teamId: z.uuid() }),
+    body: teamPatchSchema,
+    response: teamSchema,
+  },
+  {
+    method: 'DELETE',
+    path: team,
+    operationId: 'deleteTeam',
+    access: 'admin',
+    params: z.strictObject({ teamId: z.uuid() }),
+    response: z.strictObject({ id: z.uuid() }),
   },
   {
     method: 'GET',

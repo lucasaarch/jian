@@ -36,6 +36,7 @@ import { registerStickerRoutes } from './stickers/routes.js';
 import type { Store } from './storage/database.js';
 import { registerSubscriptionRoutes } from './subscriptions/routes.js';
 import { registerWorkRoutes } from './tasks/routes.js';
+import { registerTeamRoutes } from './teams/routes.js';
 import { registerWebRoutes } from './web/routes.js';
 
 export function createApp(
@@ -121,6 +122,7 @@ export function createApp(
   registerProfessionRoutes(app, options);
   registerProfessionPreviewRoutes(app, options);
   registerProfileRoutes(app, options);
+  registerTeamRoutes(app, options.teams);
   registerSessionRoutes(app, { ...options, coordination });
   registerMemoryRoutes(app, options);
   registerStickerRoutes(app, options);

@@ -48,6 +48,7 @@ import {
 } from '../sessions/repository.js';
 import { findSkill } from '../skills/builtin/index.js';
 import type { Stickers } from '../stickers/service.js';
+import { lockTeamMembership, shareTeam } from '../teams/membership.js';
 import type { WebSearch } from '../web/service.js';
 import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
@@ -278,16 +279,23 @@ export class AgentRuntime {
       setupCompleted = true;
 
       try {
-        const authorityNow = async () =>
-          currentRunAuthority(
-            run.profile,
-            await this.services.profiles.profile(profileId),
-            run.authority,
-          );
+        const authorityNow = async () => {
+          const current = await this.services.profiles.profile(profileId);
+          const effective = currentRunAuthority(run.profile, current, run.authority);
+          if (run.call) {
+            const fromProfileId = run.call.fromProfileId;
+            const permitted = await this.services.store.db.transaction(async (tx) => {
+              await lockTeamMembership(tx);
+              return shareTeam(tx, fromProfileId, profileId);
+            });
+            if (!permitted) throw new GatewayError(403, 'Agent team membership was revoked');
+          }
+          return effective;
+        };
         const authority = await authorityNow();
         const authorizeMcp = async (server: McpServer, toolName?: string) => {
           const current = await this.services.profiles.profile(profileId);
-          const effective = currentRunAuthority(run.profile, current, run.authority);
+          const effective = await authorityNow();
           if (effective === undefined) return;
           requireCapability(effective, server.transport === 'stdio' ? 'mcp.stdio' : 'mcp.http');
           const configured = current.mcpServers.find((entry) => entry.name === server.name);

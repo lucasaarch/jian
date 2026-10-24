@@ -16,5 +16,6 @@ export * from './security.js';
 export * from './skills.js';
 export * from './ssh.js';
 export * from './subscriptions.js';
+export * from './teams.js';
 export * from './web.js';
 export * from './work.js';

@@ -574,23 +574,21 @@ export function profileTools(
     }),
   };
 
-  if (run.profile.reachableByAgents) {
-    Object.assign(tools, {
-      list_agents: tool({
-        description:
-          'List the other agents of this installation: their id, name and what each one does. Their instructions, memories and conversations are not readable — here or anywhere else.',
-        inputSchema: z.object({}),
-        execute: async () => services.peers.agents(run.profileId),
-      }),
+  Object.assign(tools, {
+    list_agents: tool({
+      description:
+        'List the other agents of this installation: their id, name and what each one does. Their instructions, memories and conversations are not readable — here or anywhere else.',
+      inputSchema: z.object({}),
+      execute: async () => services.peers.agents(run.profileId),
+    }),
 
-      ask_agent: tool({
-        description:
-          'Ask another agent of this installation and wait for its written answer. Only text crosses: they never read your memories, sessions or history, and you never read theirs. The two of you keep one shared thread. A chain of calls is bounded — you cannot ask yourself, nor an agent that already spoke in this conversation, and the depth budget is shared by everyone in the chain.',
-        inputSchema: agentCallSchema,
-        execute: async (input, { abortSignal }) => services.peers.ask(run, input, abortSignal),
-      }),
-    });
-  }
+    ask_agent: tool({
+      description:
+        'Ask another agent of this installation and wait for its written answer. Only text crosses: they never read your memories, sessions or history, and you never read theirs. The two of you keep one shared thread. A chain of calls is bounded — you cannot ask yourself, nor an agent that already spoke in this conversation, and the depth budget is shared by everyone in the chain.',
+      inputSchema: agentCallSchema,
+      execute: async (input, { abortSignal }) => services.peers.ask(run, input, abortSignal),
+    }),
+  });
 
   // Workspace-confined shell/files are always available. Remote Control is gated only by
   // each machine’s allowedProfileIds — not by the deprecated allowShell profile flag.

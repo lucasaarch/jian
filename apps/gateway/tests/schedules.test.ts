@@ -1,10 +1,12 @@
 import { scheduleInputSchema, schedulePatchSchema } from '@jian/contracts';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { ApiChannel } from '../src/channels/api.js';
 import { ChannelRegistry } from '../src/channels/registry.js';
 import { listDeliveries } from '../src/channels/repository.js';
 import { Channels } from '../src/channels/service.js';
 import { TelegramChannel } from '../src/channels/telegram.js';
+import { profiles } from '../src/storage/schema.js';
 import { testServices } from './helpers/services.js';
 
 const zone = 'America/Sao_Paulo';
@@ -125,6 +127,32 @@ async function setup() {
 }
 
 describe('schedules', () => {
+  it('runs an owner-configured schedule for a classified profile', async () => {
+    const f = await setup();
+    await f.services.store.db
+      .update(profiles)
+      .set({ professionId: 'developer' })
+      .where(eq(profiles.id, f.profile.id));
+    await f.services.profiles.updateProfile(f.profile.id, {
+      expectedVersion: f.profile.version,
+      name: f.profile.name,
+    });
+    const schedule = await f.services.schedules.create(
+      f.profile.id,
+      {
+        name: 'Classified reminder',
+        instruction: 'Review the update.',
+        sessionId: f.chat,
+        at: '2026-09-25T15:00:00-03:00',
+        timeZone: zone,
+      },
+      'owner',
+    );
+
+    const run = await f.services.schedules.runNow(f.profile.id, schedule.id);
+    expect(run.authority?.professionId).toBe('developer');
+  });
+
   it('runs a daily schedule at its time in the chat, delivers it, and waits for the next day', async () => {
     const f = await setup();
     const schedule = await f.services.schedules.create(

@@ -49,6 +49,16 @@ export type Schedule = JsonResponse<'listSchedules', 200>[number];
 export type ScheduleRun = JsonResponse<'listScheduleRuns', 200>[number];
 export type Subscription = JsonResponse<'listSubscriptions', 200>[number];
 export type ProfilePatch = RequestBody<'updateProfile'>;
+export type Team = {
+  id: string;
+  name: string;
+  description: string;
+  profileIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+export type NewTeam = Pick<Team, 'name' | 'description' | 'profileIds'>;
+export type TeamPatch = NewTeam;
 export type NewChannel = RequestBody<'createChannel'>;
 export type ChannelPatch = RequestBody<'updateChannel'>;
 export type NewProvider = RequestBody<'createProvider'>;

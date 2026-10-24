@@ -36,6 +36,7 @@ import {
   setSessionObjective,
 } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
+import { lockTeamMembership, shareTeam } from '../teams/membership.js';
 import type { SubmitOptions } from './port.js';
 import {
   appendSteer,
@@ -175,25 +176,39 @@ export class Runs {
         const original = await this.run(source.profileId, source.runId, tx);
         const live = await this.profiles.profile(source.profileId, tx);
         const inherited = currentRunAuthority(original.profile, live, original.authority);
-        // Cross-profile revocation needs durable multi-profile provenance at execution too.
-        // Until then, do not start classified peer work with a transferable snapshot alone.
-        if (source.profileId !== profileId && (inherited || authority)) {
-          throw new GatewayError(403, 'Classified peer authority requires owner review');
+
+        if (source.profileId !== profileId) {
+          await lockTeamMembership(tx);
+          if (!(await shareTeam(tx, source.profileId, profileId))) {
+            throw new GatewayError(403, 'Agents must share a team to communicate');
+          }
+          if (Boolean(inherited) !== Boolean(authority)) {
+            throw new GatewayError(
+              403,
+              'Agents with different authority classifications cannot collaborate',
+            );
+          }
         }
+
         if (inherited && subagent) requireCapability(inherited, 'tasks.delegate');
         if (inherited && call) requireCapability(inherited, 'peers.call');
         if (!inherited && authority)
           throw new GatewayError(403, 'Delegation authority requires owner review');
-        authority = profileAuthority(profile, inherited);
+
+        const delegated =
+          inherited && authority
+            ? {
+                ...authority,
+                capabilities: authority.capabilities.filter((capability) =>
+                  inherited.capabilities.includes(capability),
+                ),
+              }
+            : inherited;
+        authority = profileAuthority(profile, delegated);
       }
-      if (authority && !options.ownerMessage && !source && !continuationOf) {
+      if (authority && !options.ownerMessage && !options.systemTask && !source && !continuationOf) {
         throw new GatewayError(403, 'Background authority requires owner review');
       }
-      // Profile-global context is not yet isolated for external classified conversations.
-      if (authority && (activity === 'channel' || group)) {
-        throw new GatewayError(403, 'Classified external conversations require context isolation');
-      }
-
       if (continuationOf) {
         const parent = await this.run(profileId, continuationOf, tx);
         const continued = currentRunAuthority(parent.profile, profile, parent.authority);
@@ -218,9 +233,6 @@ export class Runs {
       }
 
       const session = await this.sessions.session(profileId, sessionId, tx);
-      if (authority && !['api', 'gateway', 'task', 'agent'].includes(session.channel)) {
-        throw new GatewayError(403, 'Classified conversation context requires owner review');
-      }
       if (session.channel === TASK_SESSION_CHANNEL && !subagent) {
         throw new GatewayError(403, 'Subagent sessions cannot receive direct messages');
       }
@@ -582,12 +594,6 @@ export class Runs {
     const profile = waiting.profile;
     const current = await this.profiles.profile(profileId, tx);
     const authority = currentRunAuthority(profile, current, waiting.authority);
-    if (
-      authority &&
-      (activity === 'channel' || !['api', 'gateway', 'task', 'agent'].includes(session.channel))
-    ) {
-      throw new GatewayError(403, 'Classified external conversations require context isolation');
-    }
     const defaults = await readModelDefaults(tx, profileId, nowIso(this.clock));
     const candidates = [
       waiting.modelSelection,

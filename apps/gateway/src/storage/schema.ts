@@ -72,6 +72,32 @@ export const profiles = pgTable('profiles', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Global teams gate only agent-to-agent communication; they do not grant permissions. */
+export const teams = pgTable('teams', {
+  id: uuid('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  createdAt,
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const teamMembers = pgTable(
+  'team_members',
+  {
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.teamId, table.profileId] }),
+    index('team_members_profile').on(table.profileId, table.teamId),
+  ],
+);
+
 /** One row per version. A run points at the version it froze instead of copying the profile. */
 export const profileRevisions = pgTable(
   'profile_revisions',

@@ -54,23 +54,24 @@ describe('durable profession authority', () => {
     expect(row?.authority).toEqual(run.authority);
   });
 
-  it('preserves legacy null behavior but blocks classified background and external context', async () => {
-    const { services, profile, session } = await setup(false);
-    const legacy = await services.runs.submit(profile.id, session.id, message('legacy'));
+  it('preserves legacy null behavior, blocks arbitrary background work, and accepts channel messages', async () => {
+    const legacySetup = await setup(false);
+    const legacy = await legacySetup.services.runs.submit(
+      legacySetup.profile.id,
+      legacySetup.session.id,
+      message('legacy'),
+    );
     expect(legacy.authority).toBeUndefined();
-    await services.store.db
-      .update(profiles)
-      .set({ professionId: 'developer' })
-      .where(eq(profiles.id, profile.id));
+
+    const { services, profile, session } = await setup();
     await expect(services.runs.submit(profile.id, session.id, message('job'))).rejects.toThrow(
       'owner review',
     );
-    await expect(
-      services.runs.submit(profile.id, session.id, message('external'), {
-        ownerMessage: true,
-        activity: 'channel',
-      }),
-    ).rejects.toThrow('context isolation');
+    const channelRun = await services.runs.submit(profile.id, session.id, message('external'), {
+      ownerMessage: true,
+      activity: 'channel',
+    });
+    expect(channelRun.authority?.professionId).toBe('developer');
   });
 
   it('intersects delegated authority with original, frozen and current configuration', async () => {
@@ -87,14 +88,14 @@ describe('durable profession authority', () => {
     const child = await services.runs.submit(profile.id, target.id, message('child'), {
       authorityFrom: { profileId: profile.id, runId: parent.id },
     });
-    expect(child.authority?.capabilities).not.toContain('web.browse');
+    expect(child.authority?.capabilities).toContain('web.browse');
     const current = await services.profiles.profile(profile.id);
     await services.profiles.updateProfile(profile.id, {
       expectedVersion: current.version,
       allowWebSearch: true,
     });
     const live = await services.profiles.profile(profile.id);
-    expect(currentRunAuthority(child.profile, live, child.authority)?.capabilities).not.toContain(
+    expect(currentRunAuthority(child.profile, live, child.authority)?.capabilities).toContain(
       'web.browse',
     );
   });
@@ -123,7 +124,7 @@ describe('durable profession authority', () => {
         },
         'owner',
       ),
-    ).rejects.toThrow('durable origin authority');
+    ).resolves.toMatchObject({ name: 'Later', profileId: profile.id });
     await expect(
       services.subscriptions.create(
         profile.id,
@@ -160,7 +161,7 @@ describe('durable profession authority', () => {
     const child = await services.runs.submit(profile.id, session.id, message('continue'), {
       continuationOf: parent.id,
     });
-    expect(child.authority?.capabilities).not.toContain('web.browse');
+    expect(child.authority?.capabilities).toContain('web.browse');
     await services.store.db
       .update(runs)
       .set({ status: 'interrupted', authority: null })
@@ -181,7 +182,7 @@ describe('durable profession authority', () => {
       const parent = await services.runs.submit(profile.id, session.id, message('parent'), {
         ownerMessage: true,
       });
-      expect(parent.authority?.capabilities).not.toContain('web.browse');
+      expect(parent.authority?.capabilities).toContain('web.browse');
       await services.store.db
         .update(runs)
         .set({ status: 'interrupted' })
@@ -222,7 +223,7 @@ describe('durable profession authority', () => {
   );
 
   it.each(['api', 'whatsapp'])(
-    'keeps the ask/answer authority ceiling and external boundary for %s sessions',
+    'keeps the ask/answer authority ceiling for %s sessions',
     async (channel) => {
       const { services, profile } = await setup();
       await services.profiles.updateProfile(profile.id, {
@@ -256,26 +257,17 @@ describe('durable profession authority', () => {
       const parked = await services.runs.run(profile.id, parent.id);
       expect(parked.status).toBe('waiting');
       expect(parked.question?.prompt).toBe('Proceed?');
-      expect(parked.authority?.capabilities).not.toContain('web.browse');
+      expect(parked.authority?.capabilities).toContain('web.browse');
       const current = await services.profiles.profile(profile.id);
       await services.profiles.updateProfile(profile.id, {
         expectedVersion: current.version,
         allowWebSearch: true,
       });
       if (channel !== 'api') {
-        // Even a previously internal run cannot be answered in an external context.
         await services.store.db
           .update(sessions)
           .set({ channel })
           .where(eq(sessions.id, session.id));
-        const before = await services.store.db.select().from(runs);
-        const messagesBefore = await services.sessions.messages(profile.id, session.id);
-        await expect(
-          services.runs.answerRun(profile.id, parent.id, { text: 'Yes' }),
-        ).rejects.toMatchObject({ statusCode: 403 });
-        expect(await services.store.db.select().from(runs)).toEqual(before);
-        expect(await services.sessions.messages(profile.id, session.id)).toEqual(messagesBefore);
-        return;
       }
       const resume = await services.runs.answerRun(profile.id, parent.id, { text: 'Yes' });
       expect(resume.status).toBe('queued');
@@ -283,7 +275,7 @@ describe('durable profession authority', () => {
       expect(resume.input).toContain('Proceed?');
       expect(resume.input).toContain('Yes');
       expect(resume.authority?.professionId).toBe('developer');
-      expect(resume.authority?.capabilities).not.toContain('web.browse');
+      expect(resume.authority?.capabilities).toContain('web.browse');
       expect((await services.runs.run(profile.id, resume.id)).authority).toEqual(resume.authority);
       expect((await services.runs.run(profile.id, parent.id)).status).toBe('completed');
     },
@@ -311,20 +303,43 @@ describe('durable profession authority', () => {
     ).toBeUndefined();
   });
 
-  it('blocks cross-profile classified delegation until live origin revocation is durable', async () => {
+  it('requires a shared team and preserves classified authority across peer runs', async () => {
     const { services, profile, session } = await setup();
     const parent = await services.runs.submit(profile.id, session.id, message('parent'), {
       ownerMessage: true,
     });
-    const target = await services.profiles.createProfile({
-      name: 'Legacy peer',
+    let target = await services.profiles.createProfile({
+      name: 'Classified peer',
       instructions: 'Help.',
+      model: profile.model,
+    });
+    await services.store.db
+      .update(profiles)
+      .set({ professionId: 'developer' })
+      .where(eq(profiles.id, target.id));
+    target = await services.profiles.updateProfile(target.id, {
+      expectedVersion: target.version,
+      name: 'Classified peer',
     });
     const thread = await services.sessions.createSession(target.id, {});
+
     await expect(
-      services.runs.submit(target.id, thread.id, message('peer'), {
+      services.runs.submit(target.id, thread.id, message('no-team'), {
         authorityFrom: { profileId: profile.id, runId: parent.id },
       }),
-    ).rejects.toThrow('Classified peer authority requires owner review');
+    ).rejects.toThrow('share a team');
+
+    await services.teams.create({
+      name: 'Shared',
+      description: '',
+      profileIds: [profile.id, target.id],
+    });
+    const delegated = await services.runs.submit(target.id, thread.id, message('shared-team'), {
+      authorityFrom: { profileId: profile.id, runId: parent.id },
+    });
+    expect(delegated.authority?.professionId).toBe('developer');
+    expect(delegated.authority?.capabilities).toEqual(
+      expect.arrayContaining(['peers.call', 'tasks.delegate']),
+    );
   });
 });

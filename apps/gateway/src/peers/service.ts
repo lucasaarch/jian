@@ -6,7 +6,7 @@ import {
   agentCallSchema,
   type Run,
 } from '@jian/contracts';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import type { Clock } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -14,7 +14,8 @@ import type { ProfileReader } from '../profiles/port.js';
 import type { RunWriter } from '../runs/port.js';
 import type { PeerSessions } from '../sessions/port.js';
 import type { Store } from '../storage/database.js';
-import { profiles } from '../storage/schema.js';
+import { profiles, teamMembers } from '../storage/schema.js';
+import { shareTeam } from '../teams/membership.js';
 import type { PeerAgents, RunDelivery } from './port.js';
 
 type PeerServices = {
@@ -88,12 +89,19 @@ export class Peers implements PeerAgents {
    * so nothing to hide ever reaches this side.
    */
   async agents(profileId: string): Promise<AgentCard[]> {
-    if (!(await this.services.profiles.profile(profileId)).reachableByAgents) return [];
+    const memberTeams = this.services.store.db
+      .select({ teamId: teamMembers.teamId })
+      .from(teamMembers)
+      .where(eq(teamMembers.profileId, profileId));
+    const teammates = this.services.store.db
+      .select({ profileId: teamMembers.profileId })
+      .from(teamMembers)
+      .where(inArray(teamMembers.teamId, memberTeams));
 
     return this.services.store.db
       .select({ id: profiles.id, name: profiles.name, summary: profiles.summary })
       .from(profiles)
-      .where(and(ne(profiles.id, profileId), eq(profiles.reachableByAgents, true)))
+      .where(and(ne(profiles.id, profileId), inArray(profiles.id, teammates)))
       .orderBy(profiles.createdAt)
       .limit(100);
   }
@@ -103,13 +111,8 @@ export class Peers implements PeerAgents {
     const origin = this.address(run, data.toProfileId);
     const callee = await this.services.profiles.profile(data.toProfileId);
 
-    // Read now, not from the frozen run: switching a profile off ends calls already underway.
-    if (!(await this.services.profiles.profile(run.profileId)).reachableByAgents) {
-      throw new GatewayError(403, 'The owner switched off conversations with other agents here.');
-    }
-
-    if (!callee.reachableByAgents) {
-      throw new GatewayError(403, `${callee.name} does not take calls from other agents.`);
+    if (!(await shareTeam(this.services.store.db, run.profileId, callee.id))) {
+      throw new GatewayError(403, 'Agents must share a team to communicate');
     }
 
     const session = await this.services.sessions.peerSession(

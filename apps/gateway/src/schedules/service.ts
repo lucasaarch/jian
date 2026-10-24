@@ -28,7 +28,12 @@ import {
 import { assertCron, nextRun } from './timing.js';
 
 type RunSubmitter = {
-  submit(profileId: string, sessionId: string, input: unknown): Promise<Run>;
+  submit(
+    profileId: string,
+    sessionId: string,
+    input: unknown,
+    options?: { systemTask: 'schedule' },
+  ): Promise<Run>;
 };
 
 /** The way a run reaches a person when its conversation is a chat on a channel. */
@@ -81,13 +86,7 @@ export class Schedules {
     this.validate(data, now);
 
     return this.store.transaction(profileId, async (tx) => {
-      const profile = await this.profiles.profile(profileId, tx);
-      if (profile.professionId !== null) {
-        throw new GatewayError(
-          403,
-          'Schedules for classified profiles require durable origin authority',
-        );
-      }
+      await this.profiles.profile(profileId, tx);
       await this.sessions.session(profileId, data.sessionId, tx);
 
       if ((await listSchedules(tx, profileId)).length >= SCHEDULE_LIMIT) {
@@ -293,13 +292,12 @@ export class Schedules {
   }
 
   private async start(schedule: Schedule, requestKey: string) {
-    if ((await this.profiles.profile(schedule.profileId)).professionId !== null) {
-      throw new GatewayError(403, 'Classified schedule authority requires owner review');
-    }
-    const run = await this.runs.submit(schedule.profileId, schedule.sessionId, {
-      text: scheduledText(schedule),
-      requestKey,
-    });
+    const run = await this.runs.submit(
+      schedule.profileId,
+      schedule.sessionId,
+      { text: scheduledText(schedule), requestKey },
+      { systemTask: 'schedule' },
+    );
 
     await this.deliveries?.deliverRun(schedule.profileId, schedule.sessionId, run.id);
 

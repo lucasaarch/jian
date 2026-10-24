@@ -13,6 +13,8 @@ import type { Queryable } from '../storage/database.js';
 export type SubmitOptions = {
   /** Set only by the authenticated owner-facing message route. */
   ownerMessage?: boolean;
+  /** Internal trusted trigger for an owner-configured schedule; never accepted from HTTP input. */
+  systemTask?: 'schedule';
   /** Internal provenance: re-read stored source and intersect its frozen + live authority. */
   authorityFrom?: { profileId: string; runId: string };
   continuationOf?: string;
