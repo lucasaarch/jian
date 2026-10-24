@@ -33,8 +33,6 @@ const developerCapabilities: Capability[] = [
   'peers.call',
   'identity.manage',
   'media.image',
-  'campaigns.read',
-  'campaigns.manage',
 ];
 
 /** The fixed catalog used by assignment and runtime enforcement. */
@@ -43,7 +41,7 @@ export const professionCatalog: readonly ProfessionDefinition[] = [
     id: 'developer',
     label: 'Developer',
     description: 'Software development with every capability defined for the profession.',
-    policyVersion: 1,
+    policyVersion: 2,
     capabilities: developerCapabilities,
   },
   {

@@ -61,22 +61,25 @@ export class SalesCampaigns {
         eq(salesCampaigns.active, true),
         or(isNull(salesCampaigns.startsOn), lte(salesCampaigns.startsOn, today)),
         or(isNull(salesCampaigns.endsOn), gte(salesCampaigns.endsOn, today)),
-        ...(search
-          ? [
-              or(
-                ilike(salesCampaigns.name, `%${search}%`),
-                ilike(salesCampaigns.description, `%${search}%`),
-                sql`${salesCampaigns.rules}::text ilike ${`%${search}%`}`,
-              ),
-            ]
-          : []),
       ];
-      const rows = await tx
-        .select()
-        .from(salesCampaigns)
-        .where(and(...filters))
-        .orderBy(desc(salesCampaigns.updatedAt), asc(salesCampaigns.name))
-        .limit(5);
+      const searchFilter = search
+        ? or(
+            ilike(salesCampaigns.name, `%${search}%`),
+            ilike(salesCampaigns.description, `%${search}%`),
+            sql`${salesCampaigns.rules}::text ilike ${`%${search}%`}`,
+            sql`${salesCampaigns.playbook}::text ilike ${`%${search}%`}`,
+          )
+        : undefined;
+      const find = (includeSearch: boolean) =>
+        tx
+          .select()
+          .from(salesCampaigns)
+          .where(and(...filters, ...(includeSearch && searchFilter ? [searchFilter] : [])))
+          .orderBy(desc(salesCampaigns.updatedAt), asc(salesCampaigns.name))
+          .limit(5);
+      let rows = await find(true);
+      // A literal miss should not hide the active campaign catalog from an agent.
+      if (search && rows.length === 0) rows = await find(false);
       const campaigns = rows.map(record);
       for (const campaign of campaigns)
         await this.increment(tx, profileId, campaign.id, campaign.name, 'lookups');

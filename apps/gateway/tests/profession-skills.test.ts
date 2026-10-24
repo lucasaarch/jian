@@ -61,7 +61,6 @@ const restricted = [
   'coding-work',
   'remote-control',
   'ssh-keys',
-  'working-with-agents',
   'managing-yourself',
   'subscriptions',
   'long-running-work',
@@ -104,13 +103,15 @@ describe('profession skill surfaces', () => {
 
   it('classifies every builtin and keeps the switches-only legacy API', () => {
     const current = profile();
-    expect(names(builtinSkills(current)).sort()).toEqual([...builtinSkillNames].sort());
+    const nonProfessionSkills = [...builtinSkillNames].filter((name) => name !== 'sales-attendant');
+    expect(names(builtinSkills(current)).sort()).toEqual(nonProfessionSkills.sort());
+    expect(names(builtinSkills(profile('attendant')))).toContain('sales-attendant');
     const { allowSelfManagement, allowWebSearch, mcpServers, reachableByAgents } = current;
     expect(
       names(
         builtinSkills({ allowSelfManagement, allowWebSearch, mcpServers, reachableByAgents }),
       ).sort(),
-    ).toEqual(names(builtinSkills(current)).sort());
+    ).toEqual(nonProfessionSkills.sort());
   });
 
   it('keeps builtins fixed for professions while legacy profiles retain their old switches', () => {
@@ -166,8 +167,13 @@ describe('profession skill surfaces', () => {
     expect(system).not.toContain('You can search the web');
     expect(system).not.toContain('coding-work');
     expect(system).toContain('"name":"media"');
+    expect(system).toContain('Profession-specific guidance (always apply):');
+    expect(system).toContain('Before recommending an offer, use list_sales_campaigns');
+    expect(system).toContain('no active campaign is available');
     const developer = profile();
     const normal = buildContext(run(developer), sources).system;
+    expect(normal).not.toContain('Profession-specific guidance (always apply):');
+    expect(normal).not.toContain('Before recommending an offer, use list_sales_campaigns');
     expect(normal).toContain('You can run commands');
     expect(normal).toContain('Remote Control machines');
     expect(normal).toContain('You can search the web');

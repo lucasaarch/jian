@@ -6,8 +6,10 @@ export const salesAttendant: Skill = {
     'Follow active campaign facts and playbooks, qualify within the current conversation, and involve the owner when needed.',
   instructions: `# Sales conversations
 
-Before recommending an offer, use list_sales_campaigns to retrieve active campaigns. Treat the
-campaign description and structured rules as the only source of product, price, eligibility,
+Before recommending an offer, use list_sales_campaigns to retrieve active campaigns. If a search
+returns no exact matches, the tool falls back to the active campaign list; if that is empty, say
+no active campaign is available and do not substitute remembered facts. Treat the campaign
+description, structured rules, and playbook as the only source of product, price, eligibility,
 validity, and terms. Never fill gaps with assumptions. If the campaign is outside its dates,
 paused, or missing a fact the customer needs, do not present it as available.
 

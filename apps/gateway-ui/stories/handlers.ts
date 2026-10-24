@@ -49,7 +49,7 @@ export const handlers = [
           id: 'developer',
           label: 'Developer',
           description: 'Software development with every capability defined for the profession.',
-          policyVersion: 1,
+          policyVersion: 2,
           capabilities: [
             'conversation.control',
             'conversation.read',
@@ -74,8 +74,6 @@ export const handlers = [
             'peers.call',
             'identity.manage',
             'media.image',
-            'campaigns.read',
-            'campaigns.manage',
           ],
         },
         {
@@ -114,7 +112,7 @@ export const handlers = [
       profileId: String(params.profileId),
       profileVersion: expectedVersion,
       professionId,
-      policyVersion: 1,
+      policyVersion: professionId === 'developer' ? 2 : 1,
       assignable: true,
       blockers: [],
       configurationCapabilities: [],

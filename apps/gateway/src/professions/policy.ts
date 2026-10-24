@@ -6,6 +6,17 @@ import {
 import { GatewayError } from '../core/errors.js';
 import { findProfession } from './catalog.js';
 
+// Developer policy v1 briefly included the Sales Attendant campaign grants. Allow already
+// running v1 executions to be intersected with the new policy, which strips those grants while
+// preserving their other authority.
+const retiredCapabilities: Partial<
+  Record<ProfessionAuthority['professionId'], Record<number, readonly Capability[]>>
+> = {
+  developer: {
+    1: ['campaigns.read', 'campaigns.manage'],
+  },
+};
+
 /** All sets must be derived by the server, not from tool inputs or a caller's brief. */
 export type AuthorityConstraints = {
   /** Currently enabled by the owner, including optional grants. No implicit enabling here. */
@@ -33,7 +44,12 @@ export function resolveProfessionAuthority(
     // The inherited version belongs to its own profession and must be understood locally.
     const origin = findProfession(inherited.professionId);
     if (!origin || inherited.policyVersion > origin.policyVersion) return null;
-    if (inherited.capabilities.some((capability) => !origin.capabilities.includes(capability)))
+    const retired = retiredCapabilities[inherited.professionId]?.[inherited.policyVersion] ?? [];
+    if (
+      inherited.capabilities.some(
+        (capability) => !origin.capabilities.includes(capability) && !retired.includes(capability),
+      )
+    )
       return null;
   }
 

@@ -119,4 +119,31 @@ describe('sales campaigns', () => {
       'Current',
     ]);
   });
+
+  it('searches playbooks and falls back to the active catalog after a literal miss', async () => {
+    const services = await testServices(() => Date.parse('2026-10-24T12:00:00.000Z'));
+    const profile = await services.profiles.createProfile(profileInput);
+    const campaigns = services.salesCampaigns;
+    const lenses = await campaigns.create(profile.id, {
+      name: 'DSP Lenses',
+      description: 'Lenses and frames offer.',
+      playbook: {
+        objectionHandling: 'There is no message catalog; more than ten thousand models in store.',
+      },
+    });
+    await campaigns.create(profile.id, {
+      name: 'DSP Solidarity Exam',
+      description: 'Exam offer with glasses purchase.',
+    });
+    await campaigns.create(profile.id, {
+      name: 'Paused campaign',
+      description: 'Not available.',
+      active: false,
+    });
+
+    expect(await campaigns.searchForAgent(profile.id, 'message catalog')).toEqual([lenses]);
+    expect(
+      (await campaigns.searchForAgent(profile.id, 'unmatched search term')).map(({ name }) => name),
+    ).toEqual(['DSP Lenses', 'DSP Solidarity Exam']);
+  });
 });

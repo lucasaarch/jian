@@ -160,10 +160,12 @@ export function buildContext(
     }));
 
   // Skill bodies are loaded on demand; the prompt carries only their discovery catalog.
-  const skills = availableSkills(run.profile, authority).map(({ name, description }) => ({
+  const available = availableSkills(run.profile, authority);
+  const skills = available.map(({ name, description }) => ({
     name,
     description,
   }));
+  const professionSkill = available.find((skill) => skill.name === 'sales-attendant');
   const zone = sources.timeZone ?? gatewayTimeZone();
   const sharedContextGuidance = [
     worker
@@ -248,6 +250,9 @@ export function buildContext(
       ? [`Identity: ${JSON.stringify(run.profile.identity)}`]
       : []),
     sharedContextGuidance,
+    ...(professionSkill
+      ? [`Profession-specific guidance (always apply):\n${professionSkill.instructions}`]
+      : []),
     ...(!worker
       ? [
           `Relevant shared memories: ${JSON.stringify(relevant)}`,

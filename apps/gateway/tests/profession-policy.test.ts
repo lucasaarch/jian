@@ -71,7 +71,6 @@ describe('profession policy foundation (not activated in the runtime)', () => {
       'remote.control',
       'ssh.manage',
       'tasks.delegate',
-      'peers.call',
       'profiles.create',
       'mcp.stdio',
       'coordination.lease',
@@ -79,7 +78,32 @@ describe('profession policy foundation (not activated in the runtime)', () => {
       expect(() => requireCapability(attendant, capability)).toThrow(CapabilityDenied);
     }
     expect(() => requireCapability(attendant, 'conversation.send')).not.toThrow();
+    expect(() => requireCapability(attendant, 'peers.call')).not.toThrow();
     expect(() => requireCapability(authority('developer'), 'process.exec')).not.toThrow();
+  });
+
+  it('keeps campaigns exclusive to Sales Attendant and narrows older Developer executions safely', () => {
+    const developer = authority('developer');
+    const attendant = authority('attendant');
+    expect(developer.policyVersion).toBe(2);
+    expect(developer.capabilities).not.toContain('campaigns.read');
+    expect(developer.capabilities).not.toContain('campaigns.manage');
+    expect(attendant.capabilities).toContain('campaigns.read');
+    expect(attendant.capabilities).toContain('campaigns.manage');
+
+    const previousExecution: ProfessionAuthority = {
+      ...developer,
+      policyVersion: 1,
+      capabilities: [...developer.capabilities, 'campaigns.read', 'campaigns.manage'],
+    };
+    const currentExecution = resolveProfessionAuthority('developer', {
+      ...unrestricted,
+      inherited: previousExecution,
+    });
+    expect(currentExecution?.policyVersion).toBe(2);
+    expect(currentExecution?.capabilities).toContain('process.exec');
+    expect(currentExecution?.capabilities).not.toContain('campaigns.read');
+    expect(currentExecution?.capabilities).not.toContain('campaigns.manage');
   });
 
   it('keeps the origin ceiling across cross-profession delegation and subsequent resumptions', () => {
