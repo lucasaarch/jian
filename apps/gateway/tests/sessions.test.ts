@@ -147,4 +147,17 @@ describe('the conversation list', () => {
     expect(list[0]).toMatchObject({ lastMessage: { role: 'assistant', text: 'Ok.' } });
     expect(list.find((session) => session.id === quiet.id)).not.toHaveProperty('lastMessage');
   });
+
+  it('lists more than 100 conversations for the profile', async () => {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({ name: 'Atlas', instructions: 'Help.' });
+
+    for (let index = 0; index < 101; index += 1) {
+      await services.sessions.createSession(profile.id, { title: `Conversation ${index}` });
+    }
+
+    const list = await services.sessions.overview(profile.id);
+
+    expect(list.filter((session) => session.channel !== GATEWAY_SESSION_CHANNEL)).toHaveLength(101);
+  });
 });

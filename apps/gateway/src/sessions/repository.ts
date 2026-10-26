@@ -161,19 +161,14 @@ export async function setPonytailMode(
     .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)));
 }
 
-export async function listSessions(
-  db: Queryable,
-  profileId: string,
-  limit: number,
-): Promise<Session[]> {
+export async function listSessions(db: Queryable, profileId: string): Promise<Session[]> {
   const rows = await db
     .select()
     .from(sessions)
     .where(
       and(eq(sessions.profileId, profileId), sql`${sessions.channel} <> ${TASK_SESSION_CHANNEL}`),
     )
-    .orderBy(desc(sessions.createdAt), desc(sessions.id))
-    .limit(limit);
+    .orderBy(desc(sessions.createdAt), desc(sessions.id));
 
   return rows.map(toSession);
 }
