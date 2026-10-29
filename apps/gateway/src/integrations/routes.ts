@@ -1,7 +1,37 @@
+import type { GitHubMergeMethod } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import type { GitHubIntegrations, GitHubReturnPath } from './github.js';
+import type { GitHubItems } from './github-items.js';
 
-export function registerIntegrationRoutes(app: FastifyInstance, github: GitHubIntegrations) {
+type ItemParams = { owner: string; repo: string; number: number };
+
+export function registerIntegrationRoutes(
+  app: FastifyInstance,
+  github: GitHubIntegrations,
+  items: GitHubItems,
+) {
+  app.get<{ Params: ItemParams }>('/v1/integrations/github/pulls/:owner/:repo/:number', (request) =>
+    items.pull(request.params),
+  );
+
+  app.get<{ Params: ItemParams }>(
+    '/v1/integrations/github/issues/:owner/:repo/:number',
+    (request) => items.issue(request.params),
+  );
+
+  app.post<{ Body: { urls: string[] } }>('/v1/integrations/github/links', (request) =>
+    items.links(request.body.urls),
+  );
+
+  app.post<{
+    Params: ItemParams;
+    Body: { method: GitHubMergeMethod; expectedHeadSha: string; profileId?: string };
+  }>('/v1/integrations/github/pulls/:owner/:repo/:number/merge', (request) =>
+    items.merge(request.params, request.body, (message, error) =>
+      request.log.warn({ err: error }, message),
+    ),
+  );
+
   app.get('/v1/integrations/github', async () => github.status());
 
   app.post<{ Body: { returnPath: GitHubReturnPath } }>(

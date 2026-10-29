@@ -1,6 +1,7 @@
 export * from './channels.js';
 export * from './coordination.js';
 export * from './decisions.js';
+export * from './github-items.js';
 export * from './integrations.js';
 export * from './media.js';
 export * from './operations.js';

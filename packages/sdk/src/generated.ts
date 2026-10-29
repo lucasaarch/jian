@@ -119,6 +119,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/integrations/github/pulls/{owner}/{repo}/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["getGithubPull"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/integrations/github/pulls/{owner}/{repo}/{number}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["mergeGithubPull"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/integrations/github/issues/{owner}/{repo}/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["getGithubIssue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/integrations/github/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["resolveGithubLinks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/remote/machines": {
         parameters: {
             query?: never;
@@ -2400,6 +2468,609 @@ export interface operations {
                         /** Format: uuid */
                         id: string;
                     };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getGithubPull: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner: string;
+                repo: string;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        owner: string;
+                        repo: string;
+                        number: number;
+                        /** Format: uri */
+                        url: string;
+                        title: string;
+                        /** @enum {string} */
+                        state: "open" | "closed" | "merged";
+                        draft: boolean;
+                        author?: {
+                            login: string;
+                            /** Format: uri */
+                            avatarUrl?: string;
+                        };
+                        base: {
+                            ref: string;
+                            sha: string;
+                        };
+                        head: {
+                            ref: string;
+                            sha: string;
+                        };
+                        body: string;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        /** Format: date-time */
+                        mergedAt?: string;
+                        additions: number;
+                        deletions: number;
+                        changedFiles: number;
+                        /** @enum {string} */
+                        mergeable: "clean" | "conflicts" | "blocked" | "behind" | "unknown";
+                        mergeMethods: ("merge" | "squash" | "rebase")[];
+                        reviews: {
+                            approved: number;
+                            changesRequested: number;
+                            commented: number;
+                            latest: {
+                                reviewer: {
+                                    login: string;
+                                    /** Format: uri */
+                                    avatarUrl?: string;
+                                };
+                                /** @enum {string} */
+                                state: "approved" | "changes_requested" | "commented" | "dismissed" | "pending";
+                                /** Format: date-time */
+                                submittedAt?: string;
+                            }[];
+                        };
+                        checks: {
+                            summary: {
+                                passing: number;
+                                failing: number;
+                                pending: number;
+                            };
+                            runs: {
+                                name: string;
+                                /** @enum {string} */
+                                status: "queued" | "in_progress" | "completed";
+                                conclusion?: string;
+                                /** Format: uri */
+                                url?: string;
+                                /** Format: date-time */
+                                startedAt?: string;
+                                /** Format: date-time */
+                                completedAt?: string;
+                            }[];
+                        };
+                        files: {
+                            path: string;
+                            status: string;
+                            additions: number;
+                            deletions: number;
+                            diff?: {
+                                path: string;
+                                language?: string;
+                                additions: number;
+                                deletions: number;
+                                created?: boolean;
+                                hunks: {
+                                    oldStart: number;
+                                    oldLines: number;
+                                    newStart: number;
+                                    newLines: number;
+                                    header?: string;
+                                    lines: {
+                                        /** @enum {string} */
+                                        kind: "context" | "add" | "del";
+                                        old?: number;
+                                        new?: number;
+                                        text: string;
+                                    }[];
+                                }[];
+                                truncated?: boolean;
+                            };
+                        }[];
+                        filesTruncated?: boolean;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    mergeGithubPull: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner: string;
+                repo: string;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    method: "merge" | "squash" | "rebase";
+                    expectedHeadSha: string;
+                    /** Format: uuid */
+                    profileId?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        merged: true;
+                        sha: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getGithubIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner: string;
+                repo: string;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        owner: string;
+                        repo: string;
+                        number: number;
+                        /** @enum {string} */
+                        kind: "issue" | "pull";
+                        /** Format: uri */
+                        url: string;
+                        title: string;
+                        /** @enum {string} */
+                        state: "open" | "closed";
+                        author?: {
+                            login: string;
+                            /** Format: uri */
+                            avatarUrl?: string;
+                        };
+                        labels: {
+                            name: string;
+                            color: string;
+                        }[];
+                        assignees: {
+                            login: string;
+                            /** Format: uri */
+                            avatarUrl?: string;
+                        }[];
+                        body: string;
+                        comments: {
+                            author?: {
+                                login: string;
+                                /** Format: uri */
+                                avatarUrl?: string;
+                            };
+                            body: string;
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        /** Format: date-time */
+                        closedAt?: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    resolveGithubLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    urls: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": ({
+                        url: string;
+                        /** @constant */
+                        reachable: true;
+                        /** @enum {string} */
+                        kind: "pull" | "issue";
+                        owner: string;
+                        repo: string;
+                        number: number;
+                        title: string;
+                        /** @enum {string} */
+                        state: "open" | "closed" | "merged";
+                        draft?: boolean;
+                        checks?: {
+                            passing: number;
+                            failing: number;
+                            pending: number;
+                        };
+                        /** @enum {string} */
+                        mergeable?: "clean" | "conflicts" | "blocked" | "behind" | "unknown";
+                    } | {
+                        url: string;
+                        /** @constant */
+                        reachable: false;
+                    })[];
                 };
             };
             /** @description Error */

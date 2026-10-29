@@ -218,6 +218,11 @@ account is connected, every agent conversation gets GitHub's MCP server: a chat 
 Project gets a token restricted to that Project's repository, and any other chat gets one token per
 connected account, covering the repositories the App was granted there. Tokens stay in the
 gateway's memory, reused until five minutes before GitHub expires them, and are never stored.
+The panel reads the pull requests and issues an agent links to through the same App, under
+`/v1/integrations/github/pulls`, `/issues` and `/links`, and merges from
+`/v1/integrations/github/pulls/{owner}/{repo}/{number}/merge` with the head commit the owner saw.
+Each request uses the installation on the account that owns the repository; a repository the App
+was not granted reads as not found, and no token is ever returned or logged.
 Each installed GitHub account is shared by all Jian agents, while Projects remain
 profile-specific: choosing a repository in a chat's composer opens the agent's project for it. GitHub requires existing App owners to update the App's permissions and
 approve the change for each installation; Integrations → Apps → GitHub shows any missing App
