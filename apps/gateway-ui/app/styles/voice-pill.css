@@ -21,9 +21,12 @@
     /* Set while a held press slides: how far, and how close to cancelling, from 0 to 1. */
     --vp-slide: 0px;
     --vp-cancel: 0;
-    --vp-accent: var(--color-ink);
-    --vp-icon: var(--color-muted);
-    --vp-bg: var(--color-canvas);
+    --vp-accent: var(--ink);
+    --vp-icon: var(--muted);
+    /* At rest the hover matches the composer's other tools; open, the capsule stands out from
+       the composer around it. */
+    --vp-hover: var(--canvas);
+    --vp-bg: var(--line);
 
     @apply relative isolate inline-grid shrink-0 cursor-pointer touch-none select-none place-items-center p-0;
     width: var(--vp-size);
@@ -69,7 +72,7 @@
       color: var(--vp-accent);
     }
     .voice-pill:enabled[data-state="idle"]:hover .voice-pill-surface {
-      background: var(--vp-bg);
+      background: var(--vp-hover);
     }
   }
 

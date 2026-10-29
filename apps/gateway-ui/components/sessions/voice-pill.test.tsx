@@ -23,8 +23,8 @@ afterEach(() => {
 });
 
 /** jsdom has no PointerEvent; React reads only these fields. */
-function pointer(type: string, clientX = 100) {
-  const event = new MouseEvent(type, { bubbles: true, clientX, button: 0 });
+function pointer(type: string, clientX = 100, buttons = type === 'pointerup' ? 0 : 1) {
+  const event = new MouseEvent(type, { bubbles: true, clientX, button: 0, buttons });
 
   return Object.assign(event, { pointerId: 1, isPrimary: true, pointerType: 'mouse' });
 }
@@ -87,4 +87,21 @@ it('Escape stops a recording as discarded, and a keyboard click toggles it', () 
 
   expect(onStop).toHaveBeenCalledWith('escape');
   expect(button.getAttribute('aria-pressed')).toBe('true');
+});
+
+it('a press whose release a permission prompt swallowed neither cancels nor blocks the next', () => {
+  const { button } = render(false);
+
+  // Pressed, then the prompt took the release; the microphone was granted afterwards.
+  act(() => button.dispatchEvent(pointer('pointerdown', 200)));
+  const { onStop } = render(true);
+  // The pointer comes back from the prompt, far to the left, with nothing held.
+  act(() => button.dispatchEvent(pointer('pointermove', 20, 0)));
+  expect(onStop).not.toHaveBeenCalled();
+
+  now = 5000;
+  act(() => button.dispatchEvent(pointer('pointerdown')));
+  now = 5100;
+  act(() => button.dispatchEvent(pointer('pointerup')));
+  expect(onStop).toHaveBeenCalledWith('tap');
 });
