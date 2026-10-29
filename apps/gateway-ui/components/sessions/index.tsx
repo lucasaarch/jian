@@ -732,8 +732,29 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                     aria-label="Agent settings for this conversation"
                   >
                     <div className="agent-toolbar-box">
+                      <SessionModel
+                        key={`toolbar-model-${active.id}`}
+                        api={api}
+                        profileId={profile.id}
+                        session={active}
+                        channel={isMessaging(active)}
+                        className="composer-model-control"
+                        menuAlign="start"
+                        saved={() => void refresh()}
+                      />
+                      <span className="grow" />
+                      {isMessaging(active) &&
+                        activeContact &&
+                        channels.some(
+                          (channel) =>
+                            channel.id === activeContact.channelId && channel.enabled === false,
+                        ) && <Badge tone="warn">Channel paused</Badge>}
+                      {activeContact && activeContact.status !== 'approved' && (
+                        <Badge>Contact {activeContact.status}</Badge>
+                      )}
                       {isMessaging(active) && activeContact && (
                         <div className="agent-toolbar-switch">
+                          <span>AI replies</span>
                           <Switch
                             label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
                             checked={activeContact.aiEnabled ?? true}
@@ -748,28 +769,8 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                               )
                             }
                           />
-                          <span>AI replies</span>
                         </div>
                       )}
-                      {isMessaging(active) &&
-                        activeContact &&
-                        channels.some(
-                          (channel) =>
-                            channel.id === activeContact.channelId && channel.enabled === false,
-                        ) && <Badge tone="warn">Channel paused</Badge>}
-                      {activeContact && activeContact.status !== 'approved' && (
-                        <Badge>Contact {activeContact.status}</Badge>
-                      )}
-                      <span className="grow" />
-                      <SessionModel
-                        key={`toolbar-model-${active.id}`}
-                        api={api}
-                        profileId={profile.id}
-                        session={active}
-                        channel={isMessaging(active)}
-                        className="composer-model-control"
-                        saved={() => void refresh()}
-                      />
                     </div>
                   </section>
                 )}

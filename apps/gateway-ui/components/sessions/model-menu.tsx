@@ -25,16 +25,21 @@ const same = (entry: ModelEntry, selection?: ModelSelection) =>
   entry.providerId === selection?.providerId && entry.modelId === selection?.modelId;
 
 /** A popup that opens above its trigger, as the composer sits at the bottom of the screen. */
+/** Which edge of its trigger a menu lines up with: the end on the right of a bar, the start on its left. */
+export type MenuAlign = 'start' | 'end';
+
 function Menu({
   label,
   trigger,
   disabled,
   open,
   onOpenChange,
+  align = 'end',
   children,
 }: {
   label: string;
   trigger: ReactNode;
+  align?: MenuAlign;
   disabled?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -50,7 +55,7 @@ function Menu({
         <Popover.Positioner
           className="select-positioner"
           side="top"
-          align="end"
+          align={align}
           sideOffset={8}
           positionMethod="fixed"
           collisionBoundary={[]}
@@ -73,12 +78,14 @@ export function ModelMenu({
   models,
   value,
   disabled,
+  align,
   onChange,
 }: {
   label: string;
   models: ModelEntry[];
   value?: ModelSelection;
   disabled?: boolean;
+  align?: MenuAlign;
   onChange: (next: ModelSelection) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -90,6 +97,7 @@ export function ModelMenu({
     <Menu
       label={label}
       disabled={disabled}
+      align={align}
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
@@ -152,11 +160,13 @@ export function EffortMenu({
   model,
   value,
   disabled,
+  align,
   onChange,
 }: {
   model?: ModelEntry;
   value?: ModelSelection;
   disabled?: boolean;
+  align?: MenuAlign;
   onChange: (next: ModelSelection) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -172,6 +182,7 @@ export function EffortMenu({
     <Menu
       label={`Effort for ${model.name}`}
       disabled={disabled}
+      align={align}
       open={open}
       onOpenChange={setOpen}
       trigger={<span className="model-trigger-name">{summary || 'Effort'}</span>}
