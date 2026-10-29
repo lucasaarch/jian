@@ -423,6 +423,7 @@ export const messages = pgTable(
     authorId: text('author_id'),
     authorName: text('author_name'),
     call: jsonb('call').$type<{ profileId: string; sessionId: string; runId: string }>(),
+    purpose: text('purpose').$type<'answer' | 'resume'>(),
     createdAt,
   },
   (table) => [

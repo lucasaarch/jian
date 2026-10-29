@@ -90,20 +90,106 @@ export function requestText(input: unknown): string {
   return text.length > REQUEST_CHARS ? `${text.slice(0, REQUEST_CHARS - 1)}…` : text;
 }
 
-const VERBS: Record<ActionKind, string> = {
+/** One argument of a call, as text, when it is there and is text. */
+const field = (input: unknown, name: string): string | undefined => {
+  const value =
+    input && typeof input === 'object' ? (input as Record<string, unknown>)[name] : undefined;
+
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+};
+
+/**
+ * What a card says for each kind of action when the model could not write it: what it does in
+ * plain words, and the one argument a person checks before saying yes, never the raw call.
+ */
+const PLAIN: Record<
+  string,
+  (input: unknown) => { title: string; detail?: string; confirm: string }
+> = {
+  run_command: (input) => ({
+    title: 'Run a command',
+    detail: field(input, 'command'),
+    confirm: 'Run',
+  }),
+  run_remote_command: (input) => ({
+    title: 'Run a command on a connected machine',
+    detail: field(input, 'command'),
+    confirm: 'Run',
+  }),
+  remote_computer: (input) => ({
+    title: 'Use a connected computer',
+    detail: [field(input, 'action'), field(input, 'text') ?? field(input, 'key')]
+      .filter(Boolean)
+      .join(': '),
+    confirm: 'Approve',
+  }),
+  write_file: (input) => ({
+    title: 'Write a file',
+    detail: field(input, 'path'),
+    confirm: 'Write',
+  }),
+  edit_file: (input) => ({ title: 'Edit a file', detail: field(input, 'path'), confirm: 'Edit' }),
+  pull_remote_file: (input) => ({
+    title: 'Copy a file from a connected machine',
+    detail: field(input, 'path'),
+    confirm: 'Copy',
+  }),
+  push_remote_file: (input) => ({
+    title: 'Copy a file to a connected machine',
+    detail: field(input, 'path'),
+    confirm: 'Copy',
+  }),
+  send_file: (input) => ({ title: 'Send a file', detail: field(input, 'path'), confirm: 'Send' }),
+  send_session_message: (input) => ({
+    title: 'Send a message',
+    detail: field(input, 'text'),
+    confirm: 'Send',
+  }),
+  message_contact: (input) => ({
+    title: 'Send a message',
+    detail: field(input, 'text'),
+    confirm: 'Send',
+  }),
+  ask_agent: (input) => ({
+    title: 'Ask another agent',
+    detail: field(input, 'text'),
+    confirm: 'Ask',
+  }),
+};
+
+const KINDS: Record<ActionKind, string> = {
   machine: 'Change the machine',
-  service: 'Act on a connected service',
+  service: 'Use a connected service',
   message: 'Send a message',
 };
 
-/** What a card says when the model could not write it: the tool, and what it was given. */
-export function plainDescription(call: Pick<PausedCall, 'toolName' | 'kind' | 'input'>) {
-  const input = JSON.stringify(call.input ?? null) ?? '';
+/**
+ * What a card says when the model could not write it. A connected service's tool is named by
+ * its server and its own name, which the call's exposed name only abbreviates.
+ */
+export function plainDescription(
+  call: Pick<PausedCall, 'toolName' | 'kind' | 'input'>,
+  service?: { server: string; tool: string },
+) {
+  const known = PLAIN[call.toolName]?.(call.input);
+  const title =
+    known?.title ?? (service ? `Use ${service.server}'s ${service.tool}` : KINDS[call.kind]);
+  const detail = known
+    ? (known.detail ?? '')
+    : (() => {
+        // An unknown tool: its first few text arguments, as name and value.
+        const input = call.input && typeof call.input === 'object' ? call.input : {};
+        return Object.entries(input as Record<string, unknown>)
+          .filter(([, value]) => typeof value === 'string' && value.trim())
+          .slice(0, 3)
+          .map(([name, value]) => `${name}: ${String(value).trim()}`)
+          .join('\n');
+      })();
 
   return {
-    title: `${VERBS[call.kind]}: ${call.toolName}`.slice(0, 140),
-    detail: input.length > 300 ? `${input.slice(0, 299)}…` : input,
-    confirmLabel: 'Approve',
+    title: title.slice(0, 140),
+    detail: detail.length > 600 ? `${detail.slice(0, 599)}…` : detail,
+    confirmLabel: known?.confirm ?? 'Approve',
   };
 }
 

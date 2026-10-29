@@ -72,6 +72,8 @@ export const sessionSummarySchema = sessionRecordSchema.extend({
     .optional(),
 });
 
+export const messagePurposeSchema = z.enum(['answer', 'resume']);
+
 export const messageRecordSchema = z.strictObject({
   id: uuid,
   profileId: uuid,
@@ -86,6 +88,13 @@ export const messageRecordSchema = z.strictObject({
   // In an agent conversation this profile started: the other agent's run that answers it, in
   // that agent's own session. The asking agent only carries the message; the other one works.
   call: z.strictObject({ profileId: uuid, sessionId: uuid, runId: uuid }).optional(),
+  /**
+   * A turn the gateway wrote around a pause, not something said in the conversation: `answer`
+   * is the reply to a question or a decision, which the panel shows in its card instead, and
+   * `resume` is the note that tells the agent to carry on. The agent reads both as written; a
+   * reader of the conversation needs neither.
+   */
+  purpose: messagePurposeSchema.optional(),
   createdAt: timestamp,
 });
 
@@ -132,7 +141,13 @@ export const runQuestionSchema = z.strictObject({
   id: uuid,
   prompt: z.string().trim().min(1).max(2000),
   choices: z.array(z.string().trim().min(1).max(100)).min(2).max(12).optional(),
+  /** The choice the agent would make, shown as such; always one of `choices`. */
+  recommended: z.string().trim().min(1).max(100).optional(),
   askedAt: timestamp,
+  // Kept once answered, so the question still reads as a question with its answer marked.
+  answer: z.string().max(8000).optional(),
+  answeredAt: timestamp.optional(),
+  answeredBy: z.enum(['owner', 'contact']).optional(),
 });
 
 /**

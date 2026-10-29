@@ -1,4 +1,5 @@
 import type { ChannelMessages, RunApproval, RunQuestion } from '@jian/contracts';
+import { numberedChoices } from '../agent/ask-user.js';
 import type { Judge } from '../decisions/service.js';
 
 /** A chat reply is waiting on this answer; past it the gateway reads the words itself. */
@@ -44,9 +45,10 @@ export function approvalMessage(wording: ChannelMessages, approval: RunApproval)
 }
 
 export function questionMessage(wording: ChannelMessages, question: RunQuestion): string {
-  const options = (question.choices ?? []).map((choice, index) => `${index + 1}. ${choice}`);
-
-  return fill(wording.question, { prompt: question.prompt, options: options.join('\n') });
+  return fill(wording.question, {
+    prompt: question.prompt,
+    options: numberedChoices(question).join('\n'),
+  });
 }
 
 /**

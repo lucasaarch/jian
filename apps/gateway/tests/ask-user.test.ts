@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { buildRunQuestion, formatQuestionText } from '../src/agent/ask-user.js';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
@@ -35,9 +36,11 @@ it('parks the run as waiting and resumes when the owner answers', async () => {
   });
 
   let step = 0;
+  let resumed = '';
   const model = mockModel({
-    doGenerate: async () => {
+    doGenerate: async (options) => {
       step++;
+      if (step === 2) resumed = JSON.stringify(options.prompt);
       if (step === 1) {
         return {
           content: [
@@ -48,6 +51,7 @@ it('parks the run as waiting and resumes when the owner answers', async () => {
               input: JSON.stringify({
                 prompt: 'Which provider should I wire first?',
                 choices: ['Gemini Live', 'OpenAI Realtime'],
+                recommended: 'Gemini Live',
               }),
             },
           ],
@@ -67,6 +71,7 @@ it('parks the run as waiting and resumes when the owner answers', async () => {
   expect(parked.question).toMatchObject({
     prompt: 'Which provider should I wire first?',
     choices: ['Gemini Live', 'OpenAI Realtime'],
+    recommended: 'Gemini Live',
   });
   expect(parked.leaseOwner).toBeUndefined();
   expect(
@@ -86,9 +91,20 @@ it('parks the run as waiting and resumes when the owner answers', async () => {
   expect(resume.input).toContain('Gemini Live');
   expect(resume.input).toContain('Which provider should I wire first?');
 
+  // The question stays with its answer, for the card that shows it answered.
   const closed = await services.runs.run(profile.id, run.id);
   expect(closed.status).toBe('completed');
-  expect(closed.question).toBeUndefined();
+  expect(closed.question).toMatchObject({
+    prompt: 'Which provider should I wire first?',
+    answer: 'Gemini Live',
+    answeredBy: 'owner',
+  });
+  expect(closed.question?.answeredAt).toBeDefined();
+
+  // The reply and the note to carry on are written for the agent, and say so.
+  const written = await services.sessions.messages(profile.id, session.id);
+  expect(written.find((message) => message.content === 'Gemini Live')?.purpose).toBe('answer');
+  expect(written.find((message) => message.runId === resume.id)?.purpose).toBe('resume');
 
   // Idempotent: a second answer does not open another resume.
   const again = await services.runs.submit(
@@ -98,6 +114,11 @@ it('parks the run as waiting and resumes when the owner answers', async () => {
     { ownerMessage: true },
   );
   expect(again.id).toBe(resume.id);
+
+  // The agent still reads both, exactly as before.
+  await new AgentRuntime(services, () => model).execute(profile.id, resume.id);
+  expect(resumed).toContain('Gemini Live');
+  expect(resumed).toContain('The owner answered the mid-run question');
 });
 
 it('answers a waiting run through the explicit answer API', async () => {
@@ -176,4 +197,16 @@ it('isolates waiting runs between profiles', async () => {
     statusCode: 404,
   });
   expect((await services.runs.run(a.id, run.id)).status).toBe('waiting');
+});
+
+it('keeps a recommendation only when it is one of the choices', () => {
+  const asked = (recommended: string) =>
+    buildRunQuestion(
+      { prompt: 'Which?', choices: ['A', 'B'], recommended },
+      new Date().toISOString(),
+    );
+
+  expect(asked('B').recommended).toBe('B');
+  expect(asked('C').recommended).toBeUndefined();
+  expect(formatQuestionText(asked('B'))).toContain('2. B (recommended)');
 });

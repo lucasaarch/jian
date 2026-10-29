@@ -9,6 +9,7 @@ import {
 } from '@jian/contracts';
 import {
   generateText,
+  type JSONValue,
   type LanguageModel,
   type LanguageModelUsage,
   type ModelMessage,
@@ -29,7 +30,11 @@ import type { Learning } from '../learning/service.js';
 import type { McpServerReader } from '../mcp/port.js';
 import type { Media } from '../media/service.js';
 import { anthropicCredential, withClaudeCodeIdentity } from '../providers/claude-subscription.js';
-import { lightEffort, reasoningProviderOptions } from '../providers/effort.js';
+import {
+  lightEffort,
+  reasoningProviderOptions,
+  takesAdaptiveThinking,
+} from '../providers/effort.js';
 import { resolveModel } from '../providers/models.js';
 import { readModelDefaults } from '../providers/repository.js';
 import type { Providers } from '../providers/service.js';
@@ -67,7 +72,7 @@ import {
   protectionFor,
   requestText,
 } from './guard.js';
-import { availableNote, connectMcpTools, unavailableNote } from './mcp.js';
+import { availableNote, connectMcpTools, type McpEntry, unavailableNote } from './mcp.js';
 import { mcpOutcomeUncertain } from './mcp-errors.js';
 import { Narrator } from './narrator.js';
 import { ProgressReporter } from './progress.js';
@@ -218,10 +223,11 @@ export class AgentRuntime {
     call: PausedCall,
     describer: Describer | undefined,
     secrets: Set<string>,
+    service?: { server: string; tool: string },
   ) {
     const input = redactOutput(call.input, secrets);
     const written = describer ? await describeAction(describer, run, call, input, secrets) : null;
-    const card = written ?? plainDescription({ ...call, input });
+    const card = written ?? plainDescription({ ...call, input }, service);
     const approval: RunApproval = {
       id: randomUUID(),
       toolCallId: call.toolCallId,
@@ -288,6 +294,8 @@ export class AgentRuntime {
     let approvedCallId: string | undefined;
     // What writes an approval's card: the run's own model, once it is known.
     let describer: Describer | undefined;
+    // The connected services' own names for their tools, for a card the model could not write.
+    let mcpCatalog: McpEntry[] = [];
     let lastCompactionAttempt = -4;
     let compactionRequested = false;
 
@@ -444,6 +452,7 @@ export class AgentRuntime {
           ...(this.options.mcpOAuth ? { oauth: this.options.mcpOAuth } : {}),
         },
       );
+      mcpCatalog = catalog;
       if (githubMcpFailure) unavailable.push(githubMcpFailure);
 
       const mcpNote = [availableNote(catalog), unavailableNote(unavailable)]
@@ -679,7 +688,7 @@ export class AgentRuntime {
         return { inputTokens, outputTokens, cachedInputTokens, estimated: !reported };
       };
 
-      describer = { model, subscription, account };
+      describer = { model, subscription, account, config };
 
       // Built once for the turn and held. Rebuilding it every step — the same memories, the
       // same skills, a different list of what the profile happens to be doing — changed the
@@ -1084,7 +1093,14 @@ export class AgentRuntime {
       await progress.flush();
 
       if (pausedCall) {
-        await this.park(run, owner, pausedCall, describer, secrets);
+        await this.park(
+          run,
+          owner,
+          pausedCall,
+          describer,
+          secrets,
+          mcpCatalog.find((entry) => entry.name === pausedCall?.toolName),
+        );
         await this.nameConversation(run, secrets);
         return;
       }
@@ -1186,7 +1202,14 @@ export class AgentRuntime {
         const call = pausedCall ?? (error instanceof ApprovalPause ? error.call : undefined);
         const current = await this.services.runs.run(profileId, runId).catch(() => null);
         if (call && current?.status === 'running' && current.leaseOwner === owner) {
-          await this.park(run, owner, call, describer, secrets).catch((waitError: unknown) =>
+          await this.park(
+            run,
+            owner,
+            call,
+            describer,
+            secrets,
+            mcpCatalog.find((entry) => entry.name === call.toolName),
+          ).catch((waitError: unknown) =>
             console.error(
               `jian: run ${runId} could not wait for approval — ${redactText(describe(waitError), secrets)}`,
             ),
@@ -1370,6 +1393,8 @@ function executionFailureMessage(
 type Describer = {
   model: LanguageModel;
   subscription: boolean;
+  /** The run's model as configured: its vendor decides how to ask for little thinking. */
+  config: ModelConfig;
   account: (
     usage: LanguageModelUsage,
     inputTokens: number,
@@ -1390,6 +1415,27 @@ const cardSchema = z.object({
   confirmLabel: z.string().min(1),
 });
 
+/**
+ * The least thinking the run's model takes for three short fields. A model that thinks by
+ * default and cannot be told not to (Claude Opus 5.5 among them) otherwise spends a small output
+ * budget, and the seconds the card is allowed, before it writes any of them.
+ */
+export function cardOptions(
+  config: ModelConfig,
+): Record<string, Record<string, JSONValue>> | undefined {
+  if (config.provider === 'anthropic' && takesAdaptiveThinking(config.modelId)) {
+    return { anthropic: { effort: 'low' } };
+  }
+  if (
+    (config.provider === 'openai' || config.provider === 'openai-codex') &&
+    config.reasoningEffort
+  ) {
+    return { openai: { reasoningEffort: 'low' } };
+  }
+
+  return undefined;
+}
+
 /** The card in the model's own words, or nothing when it cannot write one in time. */
 async function describeAction(
   describer: Describer,
@@ -1407,9 +1453,11 @@ async function describeAction(
         action: { tool: call.toolName, kind: call.kind, input: requestText(input) },
       }),
       output: Output.object({ schema: cardSchema }),
+      ...(cardOptions(describer.config) ? { providerOptions: cardOptions(describer.config) } : {}),
       maxRetries: 0,
-      maxOutputTokens: 400,
-      abortSignal: AbortSignal.timeout(8000),
+      // Room for whatever thinking the model still does before the three fields.
+      maxOutputTokens: 2000,
+      abortSignal: AbortSignal.timeout(15_000),
     });
 
     await describer.account(usage, 0, JSON.stringify(output), 0).catch(() => {});
@@ -1419,7 +1467,14 @@ async function describeAction(
       detail: redactText(output.detail, secrets).trim().slice(0, 600),
       confirmLabel: redactText(output.confirmLabel, secrets).trim().slice(0, 40) || 'Approve',
     };
-  } catch {
+  } catch (error) {
+    // Said once in the log: a plain card is a working fallback, but one that is always plain
+    // means the card call itself is wrong for this model.
+    console.warn(
+      `jian: the approval card for ${call.toolName} fell back to the plain one — ${
+        error instanceof Error ? error.message.slice(0, 300) : 'no answer'
+      }`,
+    );
     return null;
   }
 }

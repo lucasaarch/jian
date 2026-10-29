@@ -51,7 +51,7 @@ What the chat reads is the channel's wording, changed with `PATCH /v1/profiles/{
 | Field | Default | Fills in |
 | --- | --- | --- |
 | `approval` | `I need your approval to continue.` then the title, the detail and `Reply {yes} to {confirm}, or {no} to stop.` | `{title}` `{detail}` `{confirm}` `{yes}` `{no}` |
-| `question` | `{prompt}` then `{options}` | `{prompt}`, and `{options}` as a numbered list |
+| `question` | `{prompt}` then `{options}` | `{prompt}`, and `{options}` as a numbered list, the agent's recommended choice marked `(recommended)` |
 | `approveWords` | `yes`, `y`, `approve`, `ok`, `sim`, `s` | the first one is `{yes}` |
 | `rejectWords` | `no`, `n`, `reject`, `não`, `nao` | the first one is `{no}` |
 
@@ -59,7 +59,7 @@ Telegram adds a one-time keyboard under the last bubble: the approval's own butt
 
 A reply from a marked contact is read in three steps. One of the words or the button's label decides it, case and accents aside. Otherwise the `replies` use of Jev reads it as approve, reject or neither, and only an answer it gives with at least 0.6 counts, within a second and a half. Anything else rejects, and the reply goes to the agent as what the person said. A reply to a question is a choice when it is the choice's number, the choice itself or what Jev maps it to; otherwise it is the answer as written.
 
-The panel shows these approvals and questions, and their outcome, without deciding or answering them.
+The panel shows these approvals and questions, and their outcome, without deciding or answering them. A question keeps its answer once answered, so it still reads as a question with the answer marked; the reply that answered it and the note the gateway writes for the agent to carry on are stored as turns with a `purpose` (`answer`, `resume`), read by the agent as before and left out of the panel's conversation.
 
 ## A session per conversation
 

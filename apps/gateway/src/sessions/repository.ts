@@ -56,6 +56,7 @@ export function toMessage(row: MessageRow): Message {
       ? { author: { id: row.authorId, ...(row.authorName ? { name: row.authorName } : {}) } }
       : {}),
     ...(row.call ? { call: row.call } : {}),
+    ...(row.purpose ? { purpose: row.purpose } : {}),
     createdAt: row.createdAt.toISOString(),
   };
 }
