@@ -52,11 +52,8 @@ export type GitHubInstallation = GitHubIntegrationAccount & {
   installationId: number;
 };
 
-export type GitHubReturnPath =
-  | '/integrations'
-  | '/ui/integrations'
-  | '/integrations/github'
-  | '/ui/integrations/github';
+/** A panel path, `/agents/:id/integrations[/github]`; the route's schema has checked it. */
+export type GitHubReturnPath = string;
 
 const userInstallationsResponse = z.object({
   installations: z.array(z.object({ id: z.number().int().positive().safe() })),
@@ -367,9 +364,9 @@ export class GitHubIntegrations {
           return pending;
         })
       : undefined;
+    // Without its state there is no telling which agent started it; the panel's root opens one.
     const origin =
-      row?.returnOrigin ??
-      (this.publicUrl ? new URL('/integrations', this.publicUrl).toString() : '/integrations');
+      row?.returnOrigin ?? (this.publicUrl ? new URL('/', this.publicUrl).toString() : '/');
     return `${origin}?github=failed`;
   }
 
