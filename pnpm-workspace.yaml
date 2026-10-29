@@ -5,6 +5,8 @@ allowBuilds:
   baileys: false
   esbuild: true
   fsevents: false
+  # An optional peer of Vitest that stays in the lockfile; its install script is not needed.
+  msw: false
   protobufjs: false
 overrides:
   source-map-js: '>=1.2.2'
