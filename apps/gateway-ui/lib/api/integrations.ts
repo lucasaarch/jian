@@ -12,12 +12,8 @@ export const integrationCalls = (client: Client) => ({
     // The Integrations page that started it; the gateway sends the owner back there.
     returnPath: GithubReturnPath,
   ) => result(client.POST('/v1/integrations/github/manifest', { body: { returnPath } })),
-  githubRepositories: (accountId: string) =>
-    result(
-      client.GET('/v1/integrations/github/installations/{accountId}/repositories', {
-        params: { path: { accountId } },
-      }),
-    ),
+  // Every connected account's, in one list; each item names the account it comes through.
+  githubRepositories: () => result(client.GET('/v1/integrations/github/repositories')),
   disconnectGithubInstallation: (accountId: string) =>
     result(
       client.DELETE('/v1/integrations/github/installations/{accountId}', {

@@ -4,7 +4,6 @@ import {
   Cable,
   Cpu,
   Fingerprint,
-  FolderGit2,
   KeyRound,
   LayoutDashboard,
   type LucideIcon,
@@ -41,7 +40,6 @@ type NavigationGroup = (typeof navigationGroups)[number]['id'];
 export const navigation: NavigationItem[] = [
   { path: '', label: 'Overview', icon: LayoutDashboard, group: 'workspace' },
   { path: 'sessions', label: 'Chats', icon: MessageSquare, group: 'workspace' },
-  { path: 'projects', label: 'Projects', icon: FolderGit2, group: 'workspace' },
   { path: 'identity', label: 'Identity', icon: Fingerprint, group: 'agent-setup' },
   { path: 'memories', label: 'Memories', icon: BookOpen, group: 'agent-setup' },
   { path: 'skills', label: 'Skills', icon: Sparkles, group: 'agent-setup' },

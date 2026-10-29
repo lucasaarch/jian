@@ -69,8 +69,10 @@ gateway vault. Configure the gateway's `JIAN_PUBLIC_URL` before registering the 
 which repositories the App can access. Every chat then has GitHub's MCP tools and the `github`
 skill: a chat in a GitHub-backed Project reaches only that repository, and any other chat reaches
 each connected account (`github`, or `github_<login>` with several).
-**Projects** remain profile-specific; creating one selects a repository from any connected account
-and verifies that selection on the gateway. See
+**Projects** remain profile-specific and live in the composer: its project list starts with
+**New Project**, a dialog that takes a name and one repository from a single list of every
+connected account's repositories, named `owner/repo`; the gateway verifies that choice. Each
+project in the list shows its repository as `owner/repo`. See
 [`docs/deploy.md`](deploy.md#github-app) for App permissions and callback setup.
 
 ## Security and limits

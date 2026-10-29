@@ -35,11 +35,19 @@ export default function configuration() {
       return [{ source: '/:path*', headers: SECURITY_HEADERS }];
     },
     async redirects() {
-      return MOVED_TO_SETTINGS.map((section) => ({
-        source: `/agents/:profileId/${section}/:rest*`,
-        destination: `/settings/${section}/:rest*`,
-        permanent: false,
-      }));
+      return [
+        ...MOVED_TO_SETTINGS.map((section) => ({
+          source: `/agents/:profileId/${section}/:rest*`,
+          destination: `/settings/${section}/:rest*`,
+          permanent: false,
+        })),
+        // Projects are created and chosen in the composer; their screen is gone.
+        {
+          source: '/agents/:profileId/projects/:rest*',
+          destination: '/agents/:profileId/sessions',
+          permanent: false,
+        },
+      ];
     },
   };
 }

@@ -85,7 +85,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/integrations/github/installations/{accountId}/repositories": {
+    "/v1/integrations/github/repositories": {
         parameters: {
             query?: never;
             header?: never;
@@ -2217,9 +2217,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                accountId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -2242,6 +2240,8 @@ export interface operations {
                         cloneUrl: string;
                         defaultBranch?: string;
                         description?: string;
+                        /** Format: uuid */
+                        accountId: string;
                     }[];
                 };
             };

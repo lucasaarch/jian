@@ -1,5 +1,6 @@
 import { createHash, createPrivateKey, randomBytes, randomUUID, sign } from 'node:crypto';
 import {
+  type GitHubConnectedRepository,
   type GitHubIntegrationAccount,
   type GitHubRepository,
   githubIntegrationAccountSchema,
@@ -457,6 +458,22 @@ export class GitHubIntegrations {
         ? new URL('/settings/integrations', this.publicUrl).toString()
         : '/settings/integrations');
     return `${origin}?github=failed${reason ? `&reason=${reason}` : ''}`;
+  }
+
+  /**
+   * Every repository the App was granted, across every connected account, in one list: a
+   * project picks a repository, and the account it comes through follows from it.
+   */
+  async allRepositories(): Promise<GitHubConnectedRepository[]> {
+    const lists = await Promise.all(
+      (await this.accounts()).map(async (account) =>
+        (await this.repositories(account.id)).map((repository) => ({
+          ...repository,
+          accountId: account.id,
+        })),
+      ),
+    );
+    return lists.flat().sort((a, b) => a.fullName.localeCompare(b.fullName));
   }
 
   async repositories(accountId: string): Promise<GitHubRepository[]> {

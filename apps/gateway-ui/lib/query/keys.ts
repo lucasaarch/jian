@@ -12,8 +12,7 @@ export const keys = {
   sshKeys: ['ssh-keys'] as const,
   groups: ['groups'] as const,
   githubIntegration: ['integrations', 'github'] as const,
-  githubRepositories: (accountId: string) =>
-    ['integrations', 'github', accountId, 'repositories'] as const,
+  githubRepositories: ['integrations', 'github', 'repositories'] as const,
   remoteMachines: ['remote-machines'] as const,
   mcpServers: ['mcp-servers'] as const,
   releases: ['releases'] as const,
