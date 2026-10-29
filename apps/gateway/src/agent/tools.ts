@@ -351,7 +351,8 @@ export function profileTools(
     list_sessions: tool({
       description: 'Find other conversations belonging to this profile.',
       inputSchema: z.object({}),
-      execute: async () => services.sessions.sessions(run.profileId),
+      // The newest hundred: the whole list would crowd out the conversation it is read into.
+      execute: async () => (await services.sessions.sessions(run.profileId)).slice(0, 100),
     }),
 
     read_session: tool({
