@@ -91,6 +91,29 @@ export function fileDiff(
 
   const patch = structuredPatch(path, path, old, next, '', '', { context: CONTEXT });
   const oldLines = old.split('\n');
+
+  return boundedDiff(
+    path,
+    patch.hunks.map((hunk) => ({
+      ...hunk,
+      header: before === undefined ? undefined : headerOf(oldLines, hunk.oldStart - 1),
+    })),
+    before === undefined,
+  );
+}
+
+type RawHunk = {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  header?: string;
+  /** Unified diff lines, each led by ' ', '+' or '-'. */
+  lines: string[];
+};
+
+/** The hunks numbered line by line and cut to the size a person reads. */
+function boundedDiff(path: string, raw: RawHunk[], created: boolean): CodeDiff {
   let additions = 0;
   let deletions = 0;
   let kept = 0;
@@ -98,19 +121,19 @@ export function fileDiff(
   let truncated = false;
   const hunks: CodeDiff['hunks'] = [];
 
-  for (const hunk of patch.hunks) {
+  for (const hunk of raw) {
     let oldNo = hunk.oldStart;
     let newNo = hunk.newStart;
     const lines: CodeDiff['hunks'][number]['lines'] = [];
 
-    for (const raw of hunk.lines) {
-      const mark = raw[0];
+    for (const line of hunk.lines) {
+      const mark = line[0];
       // "\ No newline at end of file" says nothing a reader of the lines needs.
       if (mark !== ' ' && mark !== '+' && mark !== '-') continue;
       if (mark === '+') additions += 1;
       if (mark === '-') deletions += 1;
 
-      const full = raw.slice(1);
+      const full = line.slice(1);
       const text = full.length > LINE_CHARS ? `${full.slice(0, LINE_CHARS)} …` : full;
       const fits = kept < MAX_DIFF_LINES && bytes + text.length <= MAX_DIFF_BYTES;
 
@@ -133,14 +156,12 @@ export function fileDiff(
     }
 
     if (lines.length) {
-      const header = before === undefined ? undefined : headerOf(oldLines, hunk.oldStart - 1);
-
       hunks.push({
         oldStart: hunk.oldStart,
         oldLines: hunk.oldLines,
         newStart: hunk.newStart,
         newLines: hunk.newLines,
-        ...(header ? { header } : {}),
+        ...(hunk.header ? { header: hunk.header.slice(0, 120) } : {}),
         lines,
       });
     }
@@ -153,10 +174,42 @@ export function fileDiff(
     ...(language ? { language } : {}),
     additions,
     deletions,
-    ...(before === undefined ? { created: true } : {}),
+    ...(created ? { created: true } : {}),
     hunks,
     ...(truncated ? { truncated: true } : {}),
   };
+}
+
+/** `@@ -12,7 +12,9 @@ function name`: a count left out means one line. */
+const HUNK_HEAD = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$/;
+
+/**
+ * The patch GitHub gives for one file of a pull request (hunks only, no file header) in the same
+ * shape as a write's diff. Undefined when it holds no hunk to show.
+ */
+export function patchDiff(path: string, patch: string, created = false): CodeDiff | undefined {
+  const hunks: RawHunk[] = [];
+
+  for (const line of patch.replace(/\r\n/g, '\n').split('\n')) {
+    const head = HUNK_HEAD.exec(line);
+
+    if (head) {
+      hunks.push({
+        oldStart: Number(head[1]),
+        oldLines: head[2] === undefined ? 1 : Number(head[2]),
+        newStart: Number(head[3]),
+        newLines: head[4] === undefined ? 1 : Number(head[4]),
+        ...(head[5] ? { header: head[5].trimEnd() } : {}),
+        lines: [],
+      });
+    } else {
+      hunks.at(-1)?.lines.push(line);
+    }
+  }
+
+  const diff = boundedDiff(path, hunks, created);
+
+  return diff.hunks.length ? diff : undefined;
 }
 
 /** The tools whose result carries a diff. Anything else named `diff` is the tool's own data. */

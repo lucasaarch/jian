@@ -28,6 +28,15 @@ import {
   decisionsStatusSchema,
 } from './decisions.js';
 import {
+  githubIssueSchema,
+  githubItemParamsSchema,
+  githubLinkSummarySchema,
+  githubLinksInputSchema,
+  githubMergeInputSchema,
+  githubMergeResultSchema,
+  githubPullSchema,
+} from './github-items.js';
+import {
   githubConnectedRepositorySchema,
   githubInstallInputSchema,
   githubInstallSchema,
@@ -207,6 +216,39 @@ export const operations: Operation[] = [
     access: 'admin',
     params: z.strictObject({ accountId: z.uuid() }),
     response: z.strictObject({ id: z.uuid() }),
+  },
+  {
+    method: 'GET',
+    path: '/v1/integrations/github/pulls/:owner/:repo/:number',
+    operationId: 'getGithubPull',
+    access: 'admin',
+    params: githubItemParamsSchema,
+    response: githubPullSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/integrations/github/pulls/:owner/:repo/:number/merge',
+    operationId: 'mergeGithubPull',
+    access: 'admin',
+    params: githubItemParamsSchema,
+    body: githubMergeInputSchema,
+    response: githubMergeResultSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/integrations/github/issues/:owner/:repo/:number',
+    operationId: 'getGithubIssue',
+    access: 'admin',
+    params: githubItemParamsSchema,
+    response: githubIssueSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/integrations/github/links',
+    operationId: 'resolveGithubLinks',
+    access: 'admin',
+    body: githubLinksInputSchema,
+    response: z.array(githubLinkSummarySchema),
   },
   {
     method: 'GET',

@@ -13,6 +13,7 @@ import { registerMetaRoutes } from './http/meta.js';
 import { configureSecurity, isOwner } from './http/security.js';
 import { registerPanelNotice } from './http/ui.js';
 import type { GitHubIntegrations } from './integrations/github.js';
+import { GitHubItems } from './integrations/github-items.js';
 import { registerIntegrationRoutes } from './integrations/routes.js';
 import { registerMcpRoutes } from './mcp/routes.js';
 import { registerMediaRoutes } from './media/routes.js';
@@ -132,7 +133,13 @@ export function createApp(
   // it, unlimited; registering them as the next plugin puts them after it.
   void app.register(async (routes) => {
     registerProviderRoutes(routes, options);
-    if (options.github) registerIntegrationRoutes(routes, options.github);
+    if (options.github) {
+      registerIntegrationRoutes(
+        routes,
+        options.github,
+        new GitHubItems(options.github, options.store),
+      );
+    }
     registerMetaRoutes(routes);
     registerSecurityRoutes(routes, options);
     registerSshRoutes(routes, options);

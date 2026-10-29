@@ -541,6 +541,28 @@ export class GitHubIntegrations {
     }
   }
 
+  /**
+   * A request to the API of a repository `owner` holds, as the installation on that account.
+   * Undefined when no installation is on that account: nothing is ever asked with another
+   * account's token. The token stays in here, and GitHub's answer comes back whatever its status,
+   * so a caller can tell a repository the App cannot see (404) from a refusal (405, 409, 422).
+   */
+  async repoRequest(owner: string, path: string, init: RequestInit = {}) {
+    const token = await this.tokenFor(owner);
+
+    if (!token) return undefined;
+    return this.fetcher(new URL(path, API), {
+      ...init,
+      headers: {
+        accept: 'application/vnd.github+json',
+        authorization: `Bearer ${token}`,
+        'x-github-api-version': API_VERSION,
+        ...(init.body ? { 'content-type': 'application/json' } : {}),
+      },
+      signal: init.signal ?? AbortSignal.timeout(15_000),
+    });
+  }
+
   async repository(accountId: string, repositoryId: number) {
     const repository = (await this.repositories(accountId)).find(
       (item) => item.id === repositoryId,
