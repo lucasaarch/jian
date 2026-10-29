@@ -116,10 +116,8 @@ export class Contacts {
 
     if (!existing) {
       const name = group ? message.groupName : message.displayName;
-      const allow =
-        ['whatsapp', 'whatsapp-business'].includes(channel.type) &&
-        !group &&
-        channel.allowAllContacts === true;
+      // A room is still a decision of its own: allowing everyone covers private conversations.
+      const allow = !group && channel.allowAllContacts === true;
 
       const contact: ContactRecord = {
         id: randomUUID(),

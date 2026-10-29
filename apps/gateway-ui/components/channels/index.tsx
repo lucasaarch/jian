@@ -5,13 +5,16 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { useAgent, useChannels, useContacts } from '@/lib/query/agent';
 import type { Channel, ChannelType, NewChannel } from '../../lib/api';
-import { date } from '../../lib/format';
 import type { SectionActions } from '../props';
 import { Badge, Button, Confirm, Field, Secret, SectionHeading, Switch } from '../ui';
 import { Conversations } from './conversations';
 import { kinds } from './kinds';
 import { MetaCallback, MetaCredentials, MetaLimits } from './meta';
 import { Pairing } from './pairing';
+
+/** An API server's callers are senders of the owner's systems, not people's contacts. */
+const admitsAll = (type: ChannelType) =>
+  type === 'api' ? 'Allow all senders' : 'Allow all contacts';
 
 export function Channels(props: SectionActions) {
   const { api, mutate, busy } = props;
@@ -82,22 +85,6 @@ export function Channels(props: SectionActions) {
     contacts.filter((contact) => contact.channelId === channel.id && contact.status === 'pending')
       .length;
 
-  const reach = (channel: Channel) => {
-    const decided = contacts.filter(
-      (contact) => contact.channelId === channel.id && contact.status === 'approved',
-    );
-    const groups = decided.filter((contact) => contact.scope === 'group').length;
-    const people = decided.length - groups;
-
-    if (channel.type === 'whatsapp-business') {
-      return people === 1 ? '1 contact' : `${people} contacts`;
-    }
-
-    return `${people === 1 ? '1 contact' : `${people} contacts`} · ${
-      groups === 1 ? '1 group' : `${groups} groups`
-    }`;
-  };
-
   return (
     <>
       <SectionHeading
@@ -122,7 +109,7 @@ export function Channels(props: SectionActions) {
               <div className="grow">
                 <h3>
                   {kind.name}
-                  <Badge tone={channel && kind.type !== 'whatsapp-business' ? 'good' : 'neutral'}>
+                  <Badge tone={channel && !metaPending ? 'good' : 'neutral'}>
                     {kind.type === 'whatsapp-business'
                       ? channel
                         ? metaPending
@@ -133,21 +120,12 @@ export function Channels(props: SectionActions) {
                         ? 'Connected'
                         : 'Not connected'}
                   </Badge>
-                  {channel?.enabled === false && <Badge>Paused</Badge>}
+                  {channel?.enabled === false && <Badge>Disabled</Badge>}
                   {channel && waiting(channel) > 0 && (
                     <Badge tone="accent">{waiting(channel)} pending</Badge>
                   )}
                 </h3>
                 <p>{kind.description}</p>
-                {channel && (
-                  <div className="connection-meta">
-                    <span>{reach(channel)}</span>
-                    <span>
-                      {kind.type === 'whatsapp-business' ? 'Created' : 'Connected'} on{' '}
-                      {date(channel.createdAt)}
-                    </span>
-                  </div>
-                )}
               </div>
               <div className="row-actions">
                 <Button
@@ -222,12 +200,10 @@ export function Channels(props: SectionActions) {
                     )}
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <p className="font-medium">Channel automation</p>
+                        <p className="font-medium">Channel enabled</p>
                         <p className="note">
-                          Pause automated incoming processing and all outgoing deliveries, including
-                          queued replies, without disconnecting or clearing setup. Incoming messages
-                          are ignored while paused and never replayed on resume. A network request
-                          already in flight may finish.
+                          Off, the agent ignores what arrives here and sends nothing. The connection
+                          stays, and messages received meanwhile are not answered later.
                         </p>
                         {kind.type === 'whatsapp-business' && (
                           <p className="note">
@@ -237,22 +213,47 @@ export function Channels(props: SectionActions) {
                         )}
                       </div>
                       <Switch
-                        label="Channel automation"
+                        label="Channel enabled"
                         checked={channel.enabled ?? true}
                         disabled={busy}
                         onChange={(enabled) =>
                           void mutate(
                             () => api.updateChannel(profile.id, channel.id, { enabled }),
                             enabled
-                              ? 'Channel resumed. No paused messages will be replayed.'
-                              : 'Channel paused.',
+                              ? 'Channel enabled. Messages received while it was off are not answered.'
+                              : 'Channel disabled.',
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-medium">{admitsAll(kind.type)}</p>
+                        <p className="note">
+                          {kind.type === 'api'
+                            ? 'New senders reach the agent without your approval. Rooms still ask, and blocked senders stay blocked.'
+                            : kind.type === 'whatsapp-business'
+                              ? 'New people can chat without your approval. Blocked contacts stay blocked.'
+                              : 'New people can chat privately without your approval. Groups still ask, and blocked contacts stay blocked.'}
+                        </p>
+                      </div>
+                      <Switch
+                        label={admitsAll(kind.type)}
+                        checked={channel.allowAllContacts ?? false}
+                        disabled={busy}
+                        onChange={(allowAllContacts) =>
+                          void mutate(
+                            () => api.updateChannel(profile.id, channel.id, { allowAllContacts }),
+                            kind.type === 'api'
+                              ? 'Sender permissions updated.'
+                              : 'Contact permissions updated.',
                           )
                         }
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
                       <Button
-                        variant="quiet"
+                        variant="danger"
                         disabled={busy}
                         onClick={() => setDisconnecting(channel)}
                       >
@@ -260,29 +261,6 @@ export function Channels(props: SectionActions) {
                         Disconnect
                       </Button>
                     </div>
-                    {(kind.type === 'whatsapp' || kind.type === 'whatsapp-business') && (
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="font-medium">Allow all contacts</p>
-                          <p className="note">
-                            Let new contacts chat privately without manual approval. Blocked
-                            contacts stay blocked, groups still need approval, and contacts never
-                            receive owner access.
-                          </p>
-                        </div>
-                        <Switch
-                          label="Allow all contacts"
-                          checked={channel.allowAllContacts ?? false}
-                          disabled={busy}
-                          onChange={(allowAllContacts) =>
-                            void mutate(
-                              () => api.updateChannel(profile.id, channel.id, { allowAllContacts }),
-                              'Contact permissions updated.',
-                            )
-                          }
-                        />
-                      </div>
-                    )}
                     {!metaPending && <Conversations {...props} channel={channel} />}
                   </>
                 ) : (

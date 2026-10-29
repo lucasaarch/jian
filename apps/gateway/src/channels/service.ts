@@ -505,8 +505,6 @@ export class Channels {
           await this.cancelAutomationRuns(tx, profileId, id);
         }
       } else {
-        if (channel.type !== 'whatsapp' && channel.type !== 'whatsapp-business')
-          throw new GatewayError(400, 'Only WhatsApp supports allowing all contacts');
         await setAllowAllContacts(tx, id, data.allowAllContacts);
         updated = { ...channel, ...data };
       }

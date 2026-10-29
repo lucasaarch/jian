@@ -6,7 +6,7 @@ A profile has four possible channels — WhatsApp (Baileys), WhatsApp Business (
 
 ## Pause automation without disconnecting
 
-In **Channels → Manage**, **Channel automation** pauses/resumes a channel without revoking it, relinking it, or clearing credentials, configuration, contacts or history. The host-only `PATCH /v1/profiles/{profileId}/channels/{channelId}` accepts `{ "enabled": false }` to pause and `{ "enabled": true }` to resume. `channel.enabled` defaults to `true`, including existing channels where the field was absent.
+In **Channels → Manage**, **Channel enabled** turns a channel off and on without revoking it, relinking it, or clearing credentials, configuration, contacts or history. The host-only `PATCH /v1/profiles/{profileId}/channels/{channelId}` accepts `{ "enabled": false }` to pause and `{ "enabled": true }` to resume. `channel.enabled` defaults to `true`, including existing channels where the field was absent.
 
 A disabled channel starts no automated ingress/runs and sends no outbound deliveries, including queued replies. Queued, running and waiting runs in its contact sessions are cancelled; requests already in flight may still finish at their provider. Incoming messages are ignored while paused; resuming never replays a backlog. A network request already in flight may finish. **Disconnect** remains a separate destructive credential-removal action, not a pause control.
 
@@ -30,7 +30,7 @@ By default, the first message from an unknown sender does not enter the profile.
 
 All of them need the host token: approving is granting access to the agent.
 
-**Allow all contacts**, available for both WhatsApp (Baileys) and WhatsApp Business (Meta), is an opt-in channel setting (`PATCH` with `{ "allowAllContacts": true }`, default `false`). It allows new private contacts without manual approval; blocked contacts remain blocked, groups still require approval, and no contact gains owner access. This permission does not override channel/chat pauses or Meta reply-window rules.
+**Allow all contacts** — **Allow all senders** on the API server, whose callers are the owner's own systems — is an opt-in setting on every channel (`PATCH` with `{ "allowAllContacts": true }`, default `false`). It allows new private contacts without manual approval; blocked contacts remain blocked, groups still require approval, and no contact gains owner access. This permission does not override channel/chat pauses or Meta reply-window rules.
 
 Rules the implementation guarantees:
 

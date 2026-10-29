@@ -148,6 +148,63 @@ describe('public API contracts', () => {
     }
   });
 
+  it('lets every sender of an API channel through once the owner allows all senders', async () => {
+    const { app, profile } = await setup();
+
+    try {
+      const binding = (
+        await app.inject({
+          method: 'POST',
+          url: `/v1/profiles/${profile.id}/channels`,
+          headers: admin,
+          payload: { type: 'api' },
+        })
+      ).json();
+      const allowed = await app.inject({
+        method: 'PATCH',
+        url: `/v1/profiles/${profile.id}/channels/${binding.id}`,
+        headers: admin,
+        payload: { allowAllContacts: true },
+      });
+
+      expect(allowed.json()).toMatchObject({ allowAllContacts: true });
+
+      const headers = { 'x-jian-channel-token': binding.webhookToken };
+      const send = (payload: Record<string, unknown>) =>
+        app.inject({ method: 'POST', url: `/v1/ingress/${binding.id}`, headers, payload });
+      const direct = await send({ actorId: 'ada', chatId: 'ada', text: 'hi', requestKey: 'one' });
+
+      expect(direct.json()).toMatchObject({ contact: 'approved' });
+      // A room still asks the owner, whatever the private setting.
+      const room = await send({
+        actorId: 'ada',
+        chatId: 'room',
+        scope: 'group',
+        text: 'hi all',
+        requestKey: 'two',
+      });
+
+      expect(room.json()).toMatchObject({ accepted: false, contact: 'pending' });
+      const contacts = await app.inject({
+        url: `/v1/profiles/${profile.id}/contacts`,
+        headers: admin,
+      });
+
+      expect(
+        contacts
+          .json()
+          .map((contact: { chatId: string; status: string }) => [contact.chatId, contact.status]),
+      ).toEqual(
+        expect.arrayContaining([
+          ['ada', 'approved'],
+          ['room', 'pending'],
+        ]),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
   it('validates ingress with its binding token and holds an unknown sender for approval', async () => {
     const { app, services, profile } = await setup();
 

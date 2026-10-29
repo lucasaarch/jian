@@ -164,17 +164,8 @@
   .provider-row h3 {
     @apply flex flex-wrap items-center gap-2;
   }
-  .provider-row .connection-meta {
-    @apply mt-2;
-  }
   .provider-row .connection-form {
     @apply max-w-xl border-t border-line pt-5;
-  }
-  .connection-meta {
-    @apply mt-5 flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted;
-  }
-  .connection-meta > span:last-child:not(:first-child) {
-    @apply basis-full;
   }
   .connection-disclosure:not([hidden]) {
     @apply mt-5;

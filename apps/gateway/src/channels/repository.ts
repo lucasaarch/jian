@@ -40,8 +40,7 @@ export function toChannel(row: ChannelRow & { metaConfigured?: boolean }): Chann
       id: row.id,
       profileId: row.profileId,
       type: row.type,
-      allowAllContacts:
-        ['whatsapp', 'whatsapp-business'].includes(row.type) && row.allowAllContacts,
+      allowAllContacts: row.allowAllContacts,
       enabled: row.enabled,
       ...(row.type === 'whatsapp-business' && row.metaConfigured !== undefined
         ? { whatsappBusinessStatus: row.metaConfigured ? 'configured' : 'pending' }
