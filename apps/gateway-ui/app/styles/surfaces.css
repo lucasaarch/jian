@@ -612,6 +612,46 @@
   .conversation-pane .message-history {
     @apply px-6 py-4;
   }
+  /* The composer floats over the end of the conversation (dock.tsx), which keeps scrolling
+     beneath it: its last message gets room after it for the dock and the tray above it. */
+  .conversation-chat {
+    @apply relative;
+  }
+  .conversation-chat .message-history {
+    padding-bottom: calc(var(--dock-height, 0px) + var(--tray-height, 0px) + 1rem);
+  }
+  .conversation-chat .history-tray {
+    @apply absolute inset-x-0 z-[2] grid;
+    bottom: var(--dock-height, 0px);
+  }
+  .conversation-dock {
+    @apply absolute inset-x-0 bottom-0 z-[2];
+  }
+  /* Glass behind the dock: the blur comes in by degrees from above the project and machine
+     menus, light first and then deep, so the text going under it fades out of focus instead
+     of being cut. Two masked layers make the gradient; a backdrop blur cannot vary on its own. */
+  .conversation-glass {
+    @apply pointer-events-none absolute inset-x-0 bottom-0 z-[1];
+    height: calc(var(--dock-height, 0px) + var(--tray-height, 0px) + 2.5rem);
+  }
+  .conversation-glass::before,
+  .conversation-glass::after {
+    @apply absolute inset-0;
+    content: "";
+  }
+  .conversation-glass::before {
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 2.5rem);
+    mask-image: linear-gradient(to bottom, transparent, black 2.5rem);
+  }
+  .conversation-glass::after {
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    background: color-mix(in srgb, var(--canvas) 60%, transparent);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 1rem, black 5.5rem);
+    mask-image: linear-gradient(to bottom, transparent 1rem, black 5.5rem);
+  }
   .conversation-pane .run-status {
     @apply mx-auto mb-4;
     width: min(var(--chat-column), calc(100% - 3rem));
