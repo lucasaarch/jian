@@ -621,6 +621,7 @@
   /* Its column never grows past the screen for something wide inside it. */
   .composer-box {
     @apply grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-2xl border border-line bg-surface p-3 transition-colors;
+    container: composer / inline-size;
   }
   .composer-box[data-dragging="true"] {
     @apply border-dashed border-accent bg-accent-soft;
@@ -632,15 +633,29 @@
     box-shadow: none;
     field-sizing: content;
   }
+  /* One height and one gap for everything in the row: every control is a 36px target, the
+     size of send, and the same 8px sits between any two of them. */
   .composer-actions {
-    @apply flex items-center gap-1;
+    @apply flex items-center gap-2;
   }
   /* Above the box, on its left: what the turn works on and where it runs. */
   .composer-context {
     @apply flex min-w-0 flex-wrap items-center gap-1 px-1;
   }
   .composer-model-control.session-model {
-    @apply flex w-auto min-w-0 shrink;
+    @apply flex w-auto min-w-0 shrink gap-2;
+  }
+  /* Only the model's name gives up width; the effort beside it is a word and stays whole. */
+  .composer-model-control > .model-trigger + .model-trigger {
+    @apply shrink-0;
+  }
+  /* A narrow composer has no room for the recording capsule and the menus at once, and the
+     menus have nothing to do while it records: they step aside until it stops. Measured on the
+     composer, since a desktop pane beside the sidebar and the chat list can be as narrow. */
+  @container composer (max-width: 32rem) {
+    .composer-actions:has(.voice-pill[data-state="listening"]) .composer-model-control {
+      @apply hidden;
+    }
   }
   .composer-hint {
     @apply px-2 text-xs text-muted;
