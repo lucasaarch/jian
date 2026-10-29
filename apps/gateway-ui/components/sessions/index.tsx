@@ -10,7 +10,6 @@ import {
   ArrowLeft,
   Bot,
   CheckCheck,
-  ChevronDown,
   GraduationCap,
   MessagesSquare,
   Plus,
@@ -21,6 +20,7 @@ import {
 import { useParams, useRouter } from 'next/navigation';
 import { type ComponentType, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { Select } from '@/components/ui/select';
 import { agentPath } from '@/lib/navigation';
 import {
   useActivities,
@@ -196,7 +196,6 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
     );
   };
   const [channelFilter, setChannelFilter] = useState(() => channelOf(selected));
-  const [channelMenuOpen, setChannelMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     session: Session;
     left: number;
@@ -243,17 +242,6 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
     return () => document.removeEventListener('pointerdown', close);
   }, [contextMenu]);
 
-  useEffect(() => {
-    if (!channelMenuOpen) return;
-    const close = (event: PointerEvent) => {
-      if (!(event.target instanceof Element) || !event.target.closest('.chat-channel-select')) {
-        setChannelMenuOpen(false);
-      }
-    };
-    document.addEventListener('pointerdown', close);
-    return () => document.removeEventListener('pointerdown', close);
-  }, [channelMenuOpen]);
-
   const profiles = useAgents();
   const refresh = useRefresh();
   const deleteConversation = useDeleteConversation();
@@ -293,12 +281,18 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       (channel.type !== 'whatsapp-business' || channel.whatsappBusinessStatus === 'configured'),
   );
   const channelName = (type: string) => kinds.find((item) => item.kind === type)?.name ?? type;
-  const selectedChannelName =
-    channelFilter === GATEWAY_SESSION_CHANNEL
-      ? 'Chats'
-      : channelName(
-          connectedChannels.find((channel) => channel.id === channelFilter)?.type ?? 'Chats',
-        );
+  const channelOptions = [
+    { id: GATEWAY_SESSION_CHANNEL, name: 'Chats', icon: MessagesSquare },
+    ...connectedChannels.map((channel) => ({
+      id: channel.id,
+      name: channelName(channel.type),
+      icon: kinds.find((kind) => kind.kind === channel.type)?.icon ?? MessagesSquare,
+    })),
+  ].map((option) => ({
+    value: option.id,
+    label: option.name,
+    icon: <option.icon size={16} aria-hidden="true" />,
+  }));
   const matchesChannel = (session: Session) => {
     if (channelFilter === GATEWAY_SESSION_CHANNEL) return isGateway(session);
     const channel = connectedChannels.find((item) => item.id === channelFilter);
@@ -399,57 +393,19 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
     <div className="messenger" data-reading={reading}>
       <aside className="conversation-list" aria-label="Conversations">
         <header>
-          <div className="flex items-center justify-between">
+          <div className="chat-channel-bar">
             <div className="chat-channel-select">
-              <h1>
-                <button
-                  type="button"
-                  className="chat-channel-trigger"
-                  aria-haspopup="menu"
-                  aria-expanded={channelMenuOpen}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') setChannelMenuOpen(false);
-                  }}
-                  onClick={() => setChannelMenuOpen((open) => !open)}
-                >
-                  <span>{selectedChannelName}</span>
-                  <ChevronDown size={16} aria-hidden="true" />
-                </button>
-              </h1>
-              {channelMenuOpen && (
-                <div className="chat-channel-menu" role="menu" aria-label="Choose a channel">
-                  {[
-                    { id: GATEWAY_SESSION_CHANNEL, name: 'Chats', icon: MessagesSquare },
-                    ...connectedChannels.map((channel) => ({
-                      id: channel.id,
-                      name: channelName(channel.type),
-                      icon:
-                        kinds.find((kind) => kind.kind === channel.type)?.icon ?? MessagesSquare,
-                    })),
-                  ].map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={channelFilter === option.id}
-                      className="chat-channel-option"
-                      onKeyDown={(event) => {
-                        if (event.key === 'Escape') setChannelMenuOpen(false);
-                      }}
-                      onClick={() => {
-                        setChannelFilter(option.id);
-                        setDraft(false);
-                        draftSession.current = null;
-                        if (selected) open(undefined);
-                        setChannelMenuOpen(false);
-                      }}
-                    >
-                      <option.icon size={16} aria-hidden="true" />
-                      {option.name}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <Select
+                aria-label="Channel"
+                value={channelFilter}
+                options={channelOptions}
+                onValueChange={(channelId) => {
+                  setChannelFilter(channelId);
+                  setDraft(false);
+                  draftSession.current = null;
+                  if (selected) open(undefined);
+                }}
+              />
             </div>
             <button
               type="button"
