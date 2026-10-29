@@ -1,11 +1,18 @@
-import type { RunTimeline, ToolStep } from '@jian/contracts';
+import { codeDiffSchema, type RunTimeline, type ToolStep } from '@jian/contracts';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { checkpoints, runs } from '../storage/schema.js';
 
 /** How many recent turns a timeline covers; older answers show without their tools. */
 const TIMELINE_RUNS = 50;
-const phases = ['tool-started', 'step-completed', 'tool-failed', 'tool-refused', 'tool-uncertain'];
+const phases = [
+  'tool-started',
+  'step-completed',
+  'tool-failed',
+  'tool-refused',
+  'tool-uncertain',
+  'tool-diff',
+];
 
 /**
  * The tools of each recent turn of a conversation, rebuilt from the checkpoints the runtime
@@ -43,6 +50,8 @@ export async function sessionTimeline(
         string[] | null
       >`jsonb_path_query_array(${checkpoints.data}, '$.tools[*].toolCallId')`,
       reason: sql<string | null>`${checkpoints.data}->>'reason'`,
+      // Only a write's own diff checkpoint carries one; every other row reads null here.
+      diff: sql<unknown>`${checkpoints.data}->'diff'`,
     })
     .from(checkpoints)
     .where(
@@ -76,6 +85,16 @@ export async function sessionTimeline(
         status: 'running',
         startedAt: row.at.toISOString(),
       });
+      continue;
+    }
+
+    if (row.phase === 'tool-diff') {
+      const step = row.toolCallId ? steps.get(row.toolCallId) : undefined;
+      // Read back as the contract states it: a row written by another version is dropped,
+      // never passed through.
+      const diff = codeDiffSchema.safeParse(row.diff);
+
+      if (step && diff.success) step.diff = diff.data;
       continue;
     }
 

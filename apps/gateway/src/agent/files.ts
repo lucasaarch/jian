@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process';
 import { glob, readdir, stat } from 'node:fs/promises';
-import { basename, isAbsolute, resolve } from 'node:path';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
+import { fileDiff } from './diff.js';
 import { confine, confined, openToRead, workspaceOf, writeInWorkspace } from './workspace.js';
 
 /**
@@ -127,6 +128,14 @@ export function fileTools(profileId: string): ToolSet {
     seen.set(file, (await stat(file)).mtimeMs);
   };
 
+  /** The path as the owner knows it: inside the workspace, from its root. */
+  const shown = async (file: string) => {
+    const home = await workspaceOf(profileId);
+    const inside = relative(home, file);
+
+    return inside && !inside.startsWith(`..${sep}`) && !isAbsolute(inside) ? inside : file;
+  };
+
   return {
     read_file: tool({
       description:
@@ -226,10 +235,14 @@ export function fileTools(profileId: string): ToolSet {
         const lines = next.split('\n');
         const from = Math.max(1, line - 3);
 
+        // The whole change, for the owner's timeline; the runtime keeps it from the agent.
+        const diff = fileDiff(await shown(file), text, next);
+
         return {
           path: file,
           replacements,
           around: numbered(lines.slice(from - 1, line + 6), from),
+          ...(diff ? { diff } : {}),
         };
       },
     }),
@@ -242,10 +255,24 @@ export function fileTools(profileId: string): ToolSet {
         const file = await confine(profileId, path, 'write');
 
         await assertCurrent(file);
+        // What was there, so the owner sees the change and not only the new file. One that
+        // existed but is not text this can read (binary, huge) gets no diff rather than a
+        // false "created".
+        const existed = await stat(file).then(
+          () => true,
+          () => false,
+        );
+        const before = existed
+          ? await textOf(profileId, file).then(
+              (current) => current.text,
+              () => null,
+            )
+          : undefined;
         await writeInWorkspace(profileId, file, content);
         await remember(file);
+        const diff = before === null ? undefined : fileDiff(await shown(file), before, content);
 
-        return { path: file, bytes: Buffer.byteLength(content) };
+        return { path: file, bytes: Buffer.byteLength(content), ...(diff ? { diff } : {}) };
       },
     }),
 
