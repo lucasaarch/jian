@@ -56,7 +56,6 @@ export const profiles = pgTable('profiles', {
   contextPolicy: jsonb('context_policy').$type<ContextPolicy>().notNull(),
   skills: jsonb('skills').$type<Skill[]>().notNull().default([]),
   disabledSkills: jsonb('disabled_skills').$type<string[]>().notNull().default([]),
-  mcpServers: jsonb('mcp_servers').$type<McpServer[]>().notNull().default([]),
   // Deprecated product switch — always on; column kept for older rows / API compatibility.
   allowShell: boolean('allow_shell').notNull().default(true),
   version: integer('version').notNull(),
@@ -171,6 +170,36 @@ export const gatewaySecrets = pgTable('gateway_secrets', {
   createdAt,
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * The installation's MCP servers, reached by every agent. The document keeps no typed value:
+ * those live in `gateway_secrets`, addressed by the server's name. `position` is the owner's
+ * order, which is the order a run's tool catalog reads in.
+ */
+export const mcpServers = pgTable('mcp_servers', {
+  name: text('name').primaryKey(),
+  server: jsonb('server').$type<McpServer>().notNull(),
+  position: integer('position').notNull(),
+  createdAt,
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Per-agent MCP secrets still waiting to become the installation's. Migration 0071 records one
+ * row per server it kept; the gateway moves the secrets when it starts, because a ciphertext is
+ * bound to its profile and only code holding the key can re-encrypt it.
+ */
+export const mcpSecretMoves = pgTable(
+  'mcp_secret_moves',
+  {
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    fromName: text('from_name').notNull(),
+    toName: text('to_name').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.profileId, table.fromName] })],
+);
 
 /** GitHub App installations belong to the Jian installation, not an individual agent. */
 export const githubInstallations = pgTable(

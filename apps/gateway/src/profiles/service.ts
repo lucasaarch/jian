@@ -1,18 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import {
-  type McpServer,
-  mcpImportSchema,
-  type Profile,
-  profilePatchSchema,
-  profileSchema,
-} from '@jian/contracts';
+import { type Profile, profilePatchSchema, profileSchema } from '@jian/contracts';
 import { and, eq, isNull } from 'drizzle-orm';
-import { mcpOauthClientSecretKey, mcpValueSecret } from '../agent/mcp-connect.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { environmentProvider, type ProviderKind, providerCatalog } from '../providers/catalog.js';
-import type { Vault } from '../security/vault.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { providers } from '../storage/schema.js';
 import {
@@ -26,63 +18,9 @@ import {
 } from './repository.js';
 import { forget, hasActiveRun } from './reset.js';
 
-/** One value on its way to the vault, still carrying which server and which slot it came from. */
-type TypedMcpValue = { server: string; kind: 'header' | 'env'; name: string; value: string };
-
-/** A pre-registered OAuth client secret typed for one server. */
-type OauthClientSecret = { server: string; value: string };
-
-/** The profile as it will be stored, and the values that have to leave it. */
-function stripMcpValues(profile: Profile): {
-  stored: Profile;
-  values: TypedMcpValue[];
-  oauthSecrets: OauthClientSecret[];
-} {
-  const values: TypedMcpValue[] = [];
-  const oauthSecrets: OauthClientSecret[] = [];
-
-  const mcpServers: McpServer[] = profile.mcpServers.map((server) => {
-    const strip = (kind: 'header' | 'env', list: McpServer['headers']) =>
-      list.map((value) => {
-        if (value.value) {
-          values.push({ server: server.name, kind, name: value.name, value: value.value });
-        }
-
-        return { name: value.name, ...(value.fromEnv ? { fromEnv: value.fromEnv } : {}) };
-      });
-
-    const oauthClientSecret = server.oauthClientSecret
-      ? (() => {
-          if (server.oauthClientSecret.value) {
-            oauthSecrets.push({ server: server.name, value: server.oauthClientSecret.value });
-          }
-
-          return {
-            ...(server.oauthClientSecret.fromEnv
-              ? { fromEnv: server.oauthClientSecret.fromEnv }
-              : {}),
-          };
-        })()
-      : undefined;
-
-    return {
-      ...server,
-      headers: strip('header', server.headers),
-      env: strip('env', server.env),
-      ...(oauthClientSecret ? { oauthClientSecret } : {}),
-    };
-  });
-
-  return { stored: { ...profile, mcpServers }, values, oauthSecrets };
-}
-
-/** Where an MCP server's bearer token lives in the vault, addressed by the server's name. */
-export const mcpSecret = (name: string) => `mcp:${name}`;
-
 export class Profiles {
   constructor(
     private readonly store: Store,
-    private readonly vault: Vault,
     private readonly clock: Clock = Date.now,
   ) {}
 
@@ -118,128 +56,24 @@ export class Profiles {
 
     return this.store.transaction(profile.id, async (tx) => {
       await this.validateReferences(profile, tx);
+      await insertProfile(tx, profile);
+      await insertRevision(tx, profile);
 
-      // Stripped before the row exists and written after it: a secret references its profile,
-      // so there has to be one to reference.
-      const { stored, values, oauthSecrets } = stripMcpValues(profile);
-
-      await insertProfile(tx, stored);
-      await this.writeMcpValues(profile.id, values, tx);
-      await this.writeOauthClientSecrets(profile.id, oauthSecrets, tx);
-      await insertRevision(tx, stored);
-
-      await recordEvent(tx, this.clock, stored.id, 'profile.created', {
-        profileId: stored.id,
+      await recordEvent(tx, this.clock, profile.id, 'profile.created', {
+        profileId: profile.id,
         version: 1,
       });
 
-      return stored;
+      return profile;
     });
   }
 
-  /**
-   * A value typed for an MCP server is kept out of the profile document, which every client
-   * reads and every revision preserves. A patch that omits a value keeps the stored one, which
-   * is how an owner edits a server without retyping a credential the panel cannot show them.
-   */
-  private async storeMcpTokens(
-    profile: Profile,
-    previous: Profile | undefined,
-    tx: Queryable,
-  ): Promise<Profile> {
-    const { stored, values, oauthSecrets } = stripMcpValues(profile);
-
-    await this.writeMcpValues(profile.id, values, tx);
-    await this.writeOauthClientSecrets(profile.id, oauthSecrets, tx);
-
-    for (const server of stored.mcpServers) {
-      await this.discardStaleMcpValues(profile.id, server, previous, tx);
-    }
-
-    for (const stale of previous?.mcpServers ?? []) {
-      if (!stored.mcpServers.some((server) => server.name === stale.name)) {
-        await this.discardMcpValues(profile.id, stale, tx);
-      }
-    }
-
-    return stored;
-  }
-
-  private async writeMcpValues(
-    profileId: string,
-    values: TypedMcpValue[],
-    tx: Queryable,
-  ): Promise<void> {
-    for (const { server, kind, name, value } of values) {
-      await this.vault.put(profileId, mcpValueSecret(server, kind, name), value, tx);
-    }
-  }
-
-  private async writeOauthClientSecrets(
-    profileId: string,
-    secrets: OauthClientSecret[],
-    tx: Queryable,
-  ): Promise<void> {
-    for (const { server, value } of secrets) {
-      await this.vault.put(profileId, mcpOauthClientSecretKey(server), value, tx);
-    }
-  }
-
-  /** A header or variable the owner removed takes its secret with it. */
-  private async discardStaleMcpValues(
-    profileId: string,
-    server: McpServer,
-    previous: Profile | undefined,
-    tx: Queryable,
-  ): Promise<void> {
-    const before = previous?.mcpServers.find((item) => item.name === server.name);
-
-    if (!before) {
-      return;
-    }
-
-    for (const kind of ['header', 'env'] as const) {
-      const kept = new Set((kind === 'header' ? server.headers : server.env).map((v) => v.name));
-
-      for (const value of kind === 'header' ? before.headers : before.env) {
-        if (!kept.has(value.name)) {
-          await this.vault.discard(profileId, mcpValueSecret(server.name, kind, value.name), tx);
-        }
-      }
-    }
-
-    // Dropping the OAuth client-secret field (or leaving OAuth) clears the vault entry.
-    if (before.oauthClientSecret && !server.oauthClientSecret) {
-      await this.vault.discard(profileId, mcpOauthClientSecretKey(server.name), tx);
-    }
-  }
-
-  private async discardMcpValues(
-    profileId: string,
-    server: McpServer,
-    tx: Queryable,
-  ): Promise<void> {
-    // The legacy single-token entry and the sign-in share the server's own address.
-    await this.vault.discard(profileId, mcpSecret(server.name), tx);
-    await this.vault.discard(profileId, `${mcpSecret(server.name)}:oauth`, tx);
-    await this.vault.discard(profileId, mcpOauthClientSecretKey(server.name), tx);
-
-    for (const kind of ['header', 'env'] as const) {
-      for (const value of kind === 'header' ? server.headers : server.env) {
-        await this.vault.discard(profileId, mcpValueSecret(server.name, kind, value.name), tx);
-      }
-    }
-  }
-
-  /** A profile may only name its own live provider, and one capability per name. */
+  /** A profile may only name its own live provider, and one skill per name. */
   private async validateReferences(profile: Profile, reader: Queryable) {
-    for (const names of [
-      profile.skills.map((skill) => skill.name),
-      profile.mcpServers.map((server) => server.name),
-    ]) {
-      if (new Set(names).size !== names.length) {
-        throw new GatewayError(400, 'Skill and MCP names must be unique within a profile');
-      }
+    const names = profile.skills.map((skill) => skill.name);
+
+    if (new Set(names).size !== names.length) {
+      throw new GatewayError(400, 'Skill names must be unique within a profile');
     }
 
     const providerId = profile.model.providerId;
@@ -267,91 +101,6 @@ export class Profiles {
     }
   }
 
-  /**
-   * Copies MCP servers from another profile into this one, each as this profile's own: the
-   * definition, and a copy of every value typed for it, so the two are configured once and then
-   * live apart. A sign-in is not copied: it belongs to the profile that made it, and one refresh
-   * token shared by two would be spent by whichever refreshed first.
-   */
-  async importMcpServers(profileId: string, input: unknown) {
-    const { fromProfileId, servers: names } = mcpImportSchema.parse(input);
-
-    if (fromProfileId === profileId) {
-      throw new GatewayError(400, 'Choose another profile to import from');
-    }
-
-    const source = await this.profile(fromProfileId);
-    const target = await this.profile(profileId);
-    const chosen = source.mcpServers.filter((server) => !names || names.includes(server.name));
-    const skipped: Array<{ name: string; reason: string }> = [];
-    const added: McpServer[] = [];
-
-    for (const server of chosen) {
-      if (target.mcpServers.some((item) => item.name === server.name)) {
-        skipped.push({
-          name: server.name,
-          reason: 'This profile already has a server with this name',
-        });
-        continue;
-      }
-
-      const copy = async (kind: 'header' | 'env', list: McpServer['headers']) =>
-        Promise.all(
-          list.map(async (value) => {
-            if (value.fromEnv) return value;
-
-            const secret = await this.vault.read(
-              fromProfileId,
-              mcpValueSecret(server.name, kind, value.name),
-            );
-
-            return { name: value.name, ...(secret ? { value: secret } : {}) };
-          }),
-        );
-
-      let oauthClientSecret: McpServer['oauthClientSecret'];
-
-      if (server.oauthClientSecret?.fromEnv) {
-        oauthClientSecret = { fromEnv: server.oauthClientSecret.fromEnv };
-      } else if (server.oauthClientSecret) {
-        const secret = await this.vault.read(fromProfileId, mcpOauthClientSecretKey(server.name));
-
-        oauthClientSecret = secret ? { value: secret } : undefined;
-      }
-
-      const { oauthClientSecret: _ignored, ...definition } = server;
-
-      added.push({
-        ...definition,
-        headers: await copy('header', server.headers),
-        env: await copy('env', server.env),
-        ...(oauthClientSecret ? { oauthClientSecret } : {}),
-      });
-    }
-
-    if (added.length) {
-      // A value not typed here is kept as stored by the update, which is how the servers this
-      // profile already has keep their credentials while the new ones bring theirs.
-      await this.updateProfile(profileId, {
-        expectedVersion: target.version,
-        mcpServers: [...target.mcpServers, ...added],
-      });
-
-      // A single bearer token from before headers existed lives at the server's own address.
-      for (const server of added) {
-        const legacy = await this.vault.read(fromProfileId, mcpSecret(server.name));
-
-        if (legacy) await this.vault.put(profileId, mcpSecret(server.name), legacy);
-      }
-    }
-
-    return {
-      imported: added.map((server) => server.name),
-      skipped,
-      signIn: added.filter((server) => server.auth === 'oauth').map((server) => server.name),
-    };
-  }
-
   async updateProfile(id: string, input: unknown) {
     const { expectedVersion, ...patch } = profilePatchSchema.parse(input);
 
@@ -370,7 +119,7 @@ export class Profiles {
       };
 
       await this.validateReferences(patched, tx);
-      const profile = await this.storeMcpTokens(patched, current, tx);
+      const profile = patched;
 
       await updateProfileRow(tx, profile);
       await insertRevision(tx, profile);
@@ -409,8 +158,8 @@ export class Profiles {
 
   /**
    * The profile forgets everything it lived: sessions, memories and its activity. What the
-   * owner gave it stays — name, instructions, skills, MCP servers, permissions, model defaults,
-   * channels, contacts and secrets. Refused while an answer is running, which would otherwise
+   * owner gave it stays — name, instructions, skills, permissions, channels, contacts and
+   * secrets. Refused while an answer is running, which would otherwise
    * write into a conversation that no longer exists.
    */
   async resetProfile(id: string): Promise<{ id: string; sessions: number; memories: number }> {

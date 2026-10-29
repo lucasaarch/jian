@@ -932,24 +932,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/mcp-servers/import": {
+    "/v1/mcp-servers": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /** @description Required permission: admin. */
-        post: operations["importMcpServers"];
+        get: operations["listMcpServers"];
+        /** @description Required permission: admin. */
+        put: operations["replaceMcpServers"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/mcp-servers/{name}/check": {
+    "/v1/mcp-servers/{name}/check": {
         parameters: {
             query?: never;
             header?: never;
@@ -966,7 +967,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/mcp-servers/{name}/oauth/callback": {
+    "/v1/mcp-servers/{name}/oauth/callback": {
         parameters: {
             query?: never;
             header?: never;
@@ -1856,7 +1857,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    returnPath: string;
+                    /** @enum {string} */
+                    returnPath: "/settings/integrations" | "/settings/integrations/github";
                 };
             };
         };
@@ -1970,7 +1972,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    returnPath: string;
+                    /** @enum {string} */
+                    returnPath: "/settings/integrations" | "/settings/integrations/github";
                 };
             };
         };
@@ -10428,21 +10431,190 @@ export interface operations {
             };
         };
     };
-    importMcpServers: {
+    listMcpServers: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                profileId: string;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        /**
+                         * @default http
+                         * @enum {string}
+                         */
+                        transport: "http" | "stdio";
+                        /** Format: uri */
+                        url?: string;
+                        /**
+                         * @default none
+                         * @enum {string}
+                         */
+                        auth: "none" | "headers" | "oauth";
+                        /** @default [] */
+                        headers: {
+                            name: string;
+                            value?: string;
+                            fromEnv?: string;
+                        }[];
+                        command?: string;
+                        /** @default [] */
+                        args: string[];
+                        /** @default [] */
+                        env: {
+                            name: string;
+                            value?: string;
+                            fromEnv?: string;
+                        }[];
+                        oauthClientId?: string;
+                        oauthClientSecret?: {
+                            value?: string;
+                            fromEnv?: string;
+                        };
+                        /** @default [] */
+                        disabledTools: string[];
+                    }[];
+                };
             };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    replaceMcpServers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
                 "application/json": {
-                    /** Format: uuid */
-                    fromProfileId: string;
-                    servers?: string[];
+                    servers: {
+                        name: string;
+                        /**
+                         * @default http
+                         * @enum {string}
+                         */
+                        transport?: "http" | "stdio";
+                        /** Format: uri */
+                        url?: string;
+                        /**
+                         * @default none
+                         * @enum {string}
+                         */
+                        auth?: "none" | "headers" | "oauth";
+                        /** @default [] */
+                        headers?: {
+                            name: string;
+                            value?: string;
+                            fromEnv?: string;
+                        }[];
+                        command?: string;
+                        /** @default [] */
+                        args?: string[];
+                        /** @default [] */
+                        env?: {
+                            name: string;
+                            value?: string;
+                            fromEnv?: string;
+                        }[];
+                        oauthClientId?: string;
+                        oauthClientSecret?: {
+                            value?: string;
+                            fromEnv?: string;
+                        };
+                        /** @default [] */
+                        disabledTools?: string[];
+                    }[];
                 };
             };
         };
@@ -10454,13 +10626,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        imported: string[];
-                        skipped: {
+                        name: string;
+                        /**
+                         * @default http
+                         * @enum {string}
+                         */
+                        transport: "http" | "stdio";
+                        /** Format: uri */
+                        url?: string;
+                        /**
+                         * @default none
+                         * @enum {string}
+                         */
+                        auth: "none" | "headers" | "oauth";
+                        /** @default [] */
+                        headers: {
                             name: string;
-                            reason: string;
+                            value?: string;
+                            fromEnv?: string;
                         }[];
-                        signIn: string[];
-                    };
+                        command?: string;
+                        /** @default [] */
+                        args: string[];
+                        /** @default [] */
+                        env: {
+                            name: string;
+                            value?: string;
+                            fromEnv?: string;
+                        }[];
+                        oauthClientId?: string;
+                        oauthClientSecret?: {
+                            value?: string;
+                            fromEnv?: string;
+                        };
+                        /** @default [] */
+                        disabledTools: string[];
+                    }[];
                 };
             };
             /** @description Error */
@@ -10551,7 +10752,6 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                profileId: string;
                 name: string;
             };
             cookie?: never;
@@ -10671,7 +10871,6 @@ export interface operations {
             };
             header?: never;
             path: {
-                profileId: string;
                 name: string;
             };
             cookie?: never;
@@ -11229,44 +11428,6 @@ export interface operations {
                          *     ]
                          */
                         disabledSkills: string[];
-                        /** @default [] */
-                        mcpServers: {
-                            name: string;
-                            /**
-                             * @default http
-                             * @enum {string}
-                             */
-                            transport: "http" | "stdio";
-                            /** Format: uri */
-                            url?: string;
-                            /**
-                             * @default none
-                             * @enum {string}
-                             */
-                            auth: "none" | "headers" | "oauth";
-                            /** @default [] */
-                            headers: {
-                                name: string;
-                                value?: string;
-                                fromEnv?: string;
-                            }[];
-                            command?: string;
-                            /** @default [] */
-                            args: string[];
-                            /** @default [] */
-                            env: {
-                                name: string;
-                                value?: string;
-                                fromEnv?: string;
-                            }[];
-                            oauthClientId?: string;
-                            oauthClientSecret?: {
-                                value?: string;
-                                fromEnv?: string;
-                            };
-                            /** @default [] */
-                            disabledTools: string[];
-                        }[];
                         /** @default true */
                         allowShell: boolean;
                         /** Format: uuid */
@@ -11470,44 +11631,6 @@ export interface operations {
                          *     ]
                          */
                         disabledSkills: string[];
-                        /** @default [] */
-                        mcpServers: {
-                            name: string;
-                            /**
-                             * @default http
-                             * @enum {string}
-                             */
-                            transport: "http" | "stdio";
-                            /** Format: uri */
-                            url?: string;
-                            /**
-                             * @default none
-                             * @enum {string}
-                             */
-                            auth: "none" | "headers" | "oauth";
-                            /** @default [] */
-                            headers: {
-                                name: string;
-                                value?: string;
-                                fromEnv?: string;
-                            }[];
-                            command?: string;
-                            /** @default [] */
-                            args: string[];
-                            /** @default [] */
-                            env: {
-                                name: string;
-                                value?: string;
-                                fromEnv?: string;
-                            }[];
-                            oauthClientId?: string;
-                            oauthClientSecret?: {
-                                value?: string;
-                                fromEnv?: string;
-                            };
-                            /** @default [] */
-                            disabledTools: string[];
-                        }[];
                         /** @default true */
                         allowShell: boolean;
                         /** Format: uuid */
@@ -11705,44 +11828,6 @@ export interface operations {
                      *     ]
                      */
                     disabledSkills?: string[];
-                    /** @default [] */
-                    mcpServers?: {
-                        name: string;
-                        /**
-                         * @default http
-                         * @enum {string}
-                         */
-                        transport?: "http" | "stdio";
-                        /** Format: uri */
-                        url?: string;
-                        /**
-                         * @default none
-                         * @enum {string}
-                         */
-                        auth?: "none" | "headers" | "oauth";
-                        /** @default [] */
-                        headers?: {
-                            name: string;
-                            value?: string;
-                            fromEnv?: string;
-                        }[];
-                        command?: string;
-                        /** @default [] */
-                        args?: string[];
-                        /** @default [] */
-                        env?: {
-                            name: string;
-                            value?: string;
-                            fromEnv?: string;
-                        }[];
-                        oauthClientId?: string;
-                        oauthClientSecret?: {
-                            value?: string;
-                            fromEnv?: string;
-                        };
-                        /** @default [] */
-                        disabledTools?: string[];
-                    }[];
                     /** @default true */
                     allowShell?: boolean;
                 };
@@ -11848,44 +11933,6 @@ export interface operations {
                          *     ]
                          */
                         disabledSkills: string[];
-                        /** @default [] */
-                        mcpServers: {
-                            name: string;
-                            /**
-                             * @default http
-                             * @enum {string}
-                             */
-                            transport: "http" | "stdio";
-                            /** Format: uri */
-                            url?: string;
-                            /**
-                             * @default none
-                             * @enum {string}
-                             */
-                            auth: "none" | "headers" | "oauth";
-                            /** @default [] */
-                            headers: {
-                                name: string;
-                                value?: string;
-                                fromEnv?: string;
-                            }[];
-                            command?: string;
-                            /** @default [] */
-                            args: string[];
-                            /** @default [] */
-                            env: {
-                                name: string;
-                                value?: string;
-                                fromEnv?: string;
-                            }[];
-                            oauthClientId?: string;
-                            oauthClientSecret?: {
-                                value?: string;
-                                fromEnv?: string;
-                            };
-                            /** @default [] */
-                            disabledTools: string[];
-                        }[];
                         /** @default true */
                         allowShell: boolean;
                         /** Format: uuid */
@@ -12091,44 +12138,6 @@ export interface operations {
                          *     ]
                          */
                         disabledSkills: string[];
-                        /** @default [] */
-                        mcpServers: {
-                            name: string;
-                            /**
-                             * @default http
-                             * @enum {string}
-                             */
-                            transport: "http" | "stdio";
-                            /** Format: uri */
-                            url?: string;
-                            /**
-                             * @default none
-                             * @enum {string}
-                             */
-                            auth: "none" | "headers" | "oauth";
-                            /** @default [] */
-                            headers: {
-                                name: string;
-                                value?: string;
-                                fromEnv?: string;
-                            }[];
-                            command?: string;
-                            /** @default [] */
-                            args: string[];
-                            /** @default [] */
-                            env: {
-                                name: string;
-                                value?: string;
-                                fromEnv?: string;
-                            }[];
-                            oauthClientId?: string;
-                            oauthClientSecret?: {
-                                value?: string;
-                                fromEnv?: string;
-                            };
-                            /** @default [] */
-                            disabledTools: string[];
-                        }[];
                         /** @default true */
                         allowShell: boolean;
                         /** Format: uuid */
@@ -12402,43 +12411,6 @@ export interface operations {
                         writtenBy?: "agent";
                     }[];
                     disabledSkills?: string[];
-                    mcpServers?: {
-                        name: string;
-                        /**
-                         * @default http
-                         * @enum {string}
-                         */
-                        transport?: "http" | "stdio";
-                        /** Format: uri */
-                        url?: string;
-                        /**
-                         * @default none
-                         * @enum {string}
-                         */
-                        auth?: "none" | "headers" | "oauth";
-                        /** @default [] */
-                        headers?: {
-                            name: string;
-                            value?: string;
-                            fromEnv?: string;
-                        }[];
-                        command?: string;
-                        /** @default [] */
-                        args?: string[];
-                        /** @default [] */
-                        env?: {
-                            name: string;
-                            value?: string;
-                            fromEnv?: string;
-                        }[];
-                        oauthClientId?: string;
-                        oauthClientSecret?: {
-                            value?: string;
-                            fromEnv?: string;
-                        };
-                        /** @default [] */
-                        disabledTools?: string[];
-                    }[];
                     allowShell?: boolean;
                     expectedVersion: number;
                 };
@@ -12544,44 +12516,6 @@ export interface operations {
                          *     ]
                          */
                         disabledSkills: string[];
-                        /** @default [] */
-                        mcpServers: {
-                            name: string;
-                            /**
-                             * @default http
-                             * @enum {string}
-                             */
-                            transport: "http" | "stdio";
-                            /** Format: uri */
-                            url?: string;
-                            /**
-                             * @default none
-                             * @enum {string}
-                             */
-                            auth: "none" | "headers" | "oauth";
-                            /** @default [] */
-                            headers: {
-                                name: string;
-                                value?: string;
-                                fromEnv?: string;
-                            }[];
-                            command?: string;
-                            /** @default [] */
-                            args: string[];
-                            /** @default [] */
-                            env: {
-                                name: string;
-                                value?: string;
-                                fromEnv?: string;
-                            }[];
-                            oauthClientId?: string;
-                            oauthClientSecret?: {
-                                value?: string;
-                                fromEnv?: string;
-                            };
-                            /** @default [] */
-                            disabledTools: string[];
-                        }[];
                         /** @default true */
                         allowShell: boolean;
                         /** Format: uuid */
@@ -12899,44 +12833,6 @@ export interface operations {
                              *     ]
                              */
                             disabledSkills: string[];
-                            /** @default [] */
-                            mcpServers: {
-                                name: string;
-                                /**
-                                 * @default http
-                                 * @enum {string}
-                                 */
-                                transport: "http" | "stdio";
-                                /** Format: uri */
-                                url?: string;
-                                /**
-                                 * @default none
-                                 * @enum {string}
-                                 */
-                                auth: "none" | "headers" | "oauth";
-                                /** @default [] */
-                                headers: {
-                                    name: string;
-                                    value?: string;
-                                    fromEnv?: string;
-                                }[];
-                                command?: string;
-                                /** @default [] */
-                                args: string[];
-                                /** @default [] */
-                                env: {
-                                    name: string;
-                                    value?: string;
-                                    fromEnv?: string;
-                                }[];
-                                oauthClientId?: string;
-                                oauthClientSecret?: {
-                                    value?: string;
-                                    fromEnv?: string;
-                                };
-                                /** @default [] */
-                                disabledTools: string[];
-                            }[];
                             /** @default true */
                             allowShell: boolean;
                             /** Format: uuid */

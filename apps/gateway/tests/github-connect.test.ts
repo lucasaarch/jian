@@ -6,7 +6,7 @@ import { GatewayVault } from '../src/security/gateway-vault.js';
 import { TestStore } from './helpers/database.js';
 
 const panel = 'https://jian.example.test';
-const returnPath = '/agents/5c52c291-4620-4829-aa8b-6adf08d8c833/integrations/github';
+const returnPath = '/settings/integrations/github';
 const installationId = 176_441_029;
 
 /**

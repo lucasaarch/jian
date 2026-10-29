@@ -2,12 +2,12 @@
 
 import { Check, CheckCircle2, ChevronDown, EyeOff, LogIn, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
-import type { GatewayApi, McpStatus, Profile } from '../../lib/api';
+import type { GatewayApi, McpStatus } from '../../lib/api';
 
 /** Collapsed, the list says what the server offers without burying the row under it. */
 const PREVIEW = 12;
 
-export function useMcpCheck(profile: Profile, name: string, api: GatewayApi) {
+export function useMcpCheck(name: string, api: GatewayApi) {
   const [status, setStatus] = useState<McpStatus>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -21,7 +21,7 @@ export function useMcpCheck(profile: Profile, name: string, api: GatewayApi) {
       setError('');
 
       try {
-        setStatus(await api.checkMcpServer(profile.id, name));
+        setStatus(await api.checkMcpServer(name));
       } catch (failure) {
         setError(failure instanceof Error ? failure.message : 'The check could not run.');
       } finally {

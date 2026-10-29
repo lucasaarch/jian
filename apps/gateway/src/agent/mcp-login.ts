@@ -1,7 +1,7 @@
 import { auth } from '@ai-sdk/mcp';
-import type { McpStatus, Profile } from '@jian/contracts';
+import type { McpServer, McpStatus } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
-import type { Vault } from '../security/vault.js';
+import type { GatewayVault } from '../security/gateway-vault.js';
 import { McpOAuth } from './mcp-oauth.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
@@ -18,44 +18,33 @@ export class McpLogins {
   private readonly pending = new Map<string, string>();
 
   constructor(
-    private readonly vault: Vault,
+    private readonly vault: Pick<GatewayVault, 'read' | 'put' | 'discard'>,
     /** The address the owner reaches this gateway on; the redirect has to come back to it. */
     private readonly publicUrl: string,
     private readonly fetcher: typeof globalThis.fetch = fetch,
   ) {}
 
-  private callback(profileId: string, server: string): string {
-    return new URL(
-      `/v1/profiles/${profileId}/mcp-servers/${server}/oauth/callback`,
-      this.publicUrl,
-    ).toString();
+  private callback(server: string): string {
+    return new URL(`/v1/mcp-servers/${server}/oauth/callback`, this.publicUrl).toString();
   }
 
   /** Handed to the MCP client, which asks it for tokens and for somewhere to send the owner. */
-  readonly provider: McpOAuthProviders = (profileId, server, oauth) =>
-    new McpOAuth(
-      this.vault,
-      profileId,
-      server,
-      this.callback(profileId, server),
-      this.pending,
-      oauth,
-    );
+  readonly provider: McpOAuthProviders = (server, oauth) =>
+    new McpOAuth(this.vault, server, this.callback(server), this.pending, oauth);
 
   /** Where the owner has to go, if the last attempt decided they had to go somewhere. */
-  authorizationUrl(profileId: string, server: string): string | undefined {
-    return this.pending.get(`${profileId}:${server}`);
+  authorizationUrl(server: string): string | undefined {
+    return this.pending.get(server);
   }
 
   /** Finishes what the redirect brought back, and leaves the tokens where a run will find them. */
-  async complete(profile: Profile, server: string, code: string, state?: string): Promise<void> {
-    const configured = profile.mcpServers.find((item) => item.name === server);
-
-    if (!configured?.url || configured.auth !== 'oauth') {
+  async complete(configured: McpServer, code: string, state?: string): Promise<void> {
+    if (!configured.url || configured.auth !== 'oauth') {
       throw new GatewayError(404, 'MCP server not found');
     }
 
-    const result = await auth(this.provider(profile.id, server, mcpOauthClient(configured)), {
+    const server = configured.name;
+    const result = await auth(this.provider(server, mcpOauthClient(configured)), {
       serverUrl: configured.url,
       authorizationCode: code,
       fetchFn: this.fetcher,
@@ -66,12 +55,12 @@ export class McpLogins {
       throw new GatewayError(409, 'The authorization server did not complete the sign-in');
     }
 
-    this.pending.delete(`${profile.id}:${server}`);
+    this.pending.delete(server);
   }
 
   /** The authorization URL a check produced, so the panel can offer it next to the result. */
-  withAuthorization(profileId: string, status: McpStatus): McpStatus {
-    const authorizationUrl = this.authorizationUrl(profileId, status.name);
+  withAuthorization(status: McpStatus): McpStatus {
+    const authorizationUrl = this.authorizationUrl(status.name);
 
     return authorizationUrl && !status.reachable ? { ...status, authorizationUrl } : status;
   }

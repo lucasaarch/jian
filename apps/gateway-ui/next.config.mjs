@@ -20,7 +20,7 @@ const SECURITY_HEADERS = [
 
 // Screens that moved out of the agent to the gateway's own settings. A bookmark of the old
 // address lands on the new one.
-const MOVED_TO_SETTINGS = ['providers', 'models', 'remote'];
+const MOVED_TO_SETTINGS = ['providers', 'models', 'integrations', 'remote'];
 
 export default function configuration() {
   return {

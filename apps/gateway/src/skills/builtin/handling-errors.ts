@@ -44,8 +44,8 @@ Other messages you may see:
 - A channel that does not deliver — check Channels in the panel; WhatsApp may need its QR
   code scanned again.
 - An MCP server that does not connect or needs sign-in — the owner can test or sign in under
-  MCP servers.
-- Web search refused — check the Tavily key under Providers and the switch in Identity.
+  Gateway → Integrations → MCPs.
+- Web search refused — check the Tavily key under Providers.
 
 ## What to say
 

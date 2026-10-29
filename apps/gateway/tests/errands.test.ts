@@ -233,7 +233,7 @@ describe('writing into another conversation', () => {
   it('tells an agent which channel conversations it has, wherever it is reached', async () => {
     const { services, profile, moabe, asking } = await setup();
     await services.sessions.createGatewaySession(profile.id, {});
-    const { system } = await services.contexts.context(asking);
+    const { system } = await services.contexts.context(asking, []);
 
     expect(system).toContain('Your conversations');
     expect(system).toContain(
@@ -251,7 +251,7 @@ describe('writing into another conversation', () => {
       text: 'Who can you reach?',
       requestKey: 'from-the-panel',
     });
-    const { system } = await services.contexts.context(run);
+    const { system } = await services.contexts.context(run, []);
 
     expect(system).toContain(
       JSON.stringify({

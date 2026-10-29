@@ -4,6 +4,7 @@ import { Decisions } from './decisions/service.js';
 import { Errands } from './errands/service.js';
 import type { GitHubIntegrations } from './integrations/github.js';
 import { Learning } from './learning/service.js';
+import { McpServers } from './mcp/service.js';
 import { Media } from './media/service.js';
 import { Memories } from './memories/service.js';
 import { Peers } from './peers/service.js';
@@ -60,6 +61,7 @@ export type Services = {
   vault: Vault;
   gatewayVault: GatewayVault;
   sshKeys: SshKeys;
+  mcp: McpServers;
   remote: Remote;
 };
 
@@ -83,7 +85,7 @@ export function buildServices({
   timeZone?: string;
   github?: Pick<GitHubIntegrations, 'repository'>;
 }): Services {
-  const profiles = new Profiles(store, vault, clock);
+  const profiles = new Profiles(store, clock);
   const providers = new Providers(store, gatewayVault, clock, catalog);
   const sessions = new Sessions(store, profiles, clock);
   const projects = new Projects(store, profiles, clock, github);
@@ -155,6 +157,7 @@ export function buildServices({
     vault,
     gatewayVault,
     sshKeys: new SshKeys(profiles),
+    mcp: new McpServers(store, gatewayVault, clock),
     remote: new Remote(store, clock),
   };
 

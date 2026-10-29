@@ -16,7 +16,7 @@ async function setup() {
   const recalled = async (text: string, key: string) => {
     const run = await services.runs.submit(profile.id, session.id, { text, requestKey: key });
 
-    return (await services.contexts.context(run)).system;
+    return (await services.contexts.context(run, [])).system;
   };
 
   return { services, profile, other, note, recalled };

@@ -17,6 +17,7 @@ import { compactPrompt, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
 import { nowIso } from '../core/clock.js';
 import type { Learning } from '../learning/service.js';
+import type { McpServerReader } from '../mcp/port.js';
 import type { Media } from '../media/service.js';
 import { anthropicCredential, withClaudeCodeIdentity } from '../providers/claude-subscription.js';
 import { lightEffort, reasoningProviderOptions } from '../providers/effort.js';
@@ -68,6 +69,8 @@ export type { RuntimeOptions } from './types.js';
 /** The run services the runtime drives, plus what it hands to the tool set it builds. */
 export type RuntimeServices = ToolServices & {
   contexts: ContextSource;
+  /** The installation's MCP servers, which every run reaches. */
+  mcp: McpServerReader;
   providers?: Pick<Providers, 'selectedModel'> & Partial<Pick<Providers, 'modelDefaults'>>;
   media?: Pick<Media, 'prepare' | 'tools'>;
   web?: Pick<WebSearch, 'tools'>;
@@ -253,17 +256,20 @@ export class AgentRuntime {
       const model = await this.model(config, process.env, outbound.fetch, providerKey);
       const session = await this.services.sessions.session(profileId, run.sessionId);
       const learning = session.channel === LEARNING_SESSION_CHANNEL;
-      let mcpRun = learning ? { ...run, profile: { ...run.profile, mcpServers: [] } } : run;
-      let mcpVault = this.options.vault;
+      // The installation's servers, read now rather than frozen with the profile: one the owner
+      // connects is there from the next turn. A look back reaches none.
+      const installed = await this.services.mcp.list();
+      let servers = learning ? [] : installed;
+      let mcpVault = this.options.gatewayVault;
       let githubMcpFailure: { name: string; reason: string } | undefined;
       // GitHub is attached to every conversation once an account is connected: the project's
       // repository alone in a project bound to one, each connected account anywhere else.
       if (!learning && this.options.github) {
         try {
           const reach = await this.options.github.mcpAccess(profileId, session.projectId);
-          const taken = new Set(run.profile.mcpServers.map((server) => server.name));
+          const taken = new Set(installed.map((server) => server.name));
           const headers = new Map<string, string>();
-          const servers = reach.map((access) => {
+          const lent = reach.map((access) => {
             const name = githubMcpServerName(reach.length > 1 ? access.login : undefined, taken);
             taken.add(name);
             secrets.add(access.token);
@@ -271,17 +277,14 @@ export class AgentRuntime {
             headers.set(githubMcpToolsetsKey(name), GITHUB_MCP_TOOLSETS);
             return githubMcpServer(name);
           });
-          if (servers.length) {
-            mcpRun = {
-              ...run,
-              profile: { ...run.profile, mcpServers: [...run.profile.mcpServers, ...servers] },
-            };
-            const ordinaryVault = this.options.vault;
+          if (lent.length) {
+            servers = [...installed, ...lent];
+            const ordinaryVault = this.options.gatewayVault;
             mcpVault = {
-              read: (owner, key) =>
-                owner === profileId && headers.has(key)
+              read: (key) =>
+                headers.has(key)
                   ? Promise.resolve(headers.get(key))
-                  : (ordinaryVault?.read(owner, key) ?? Promise.resolve(undefined)),
+                  : (ordinaryVault?.read(key) ?? Promise.resolve(undefined)),
             };
           }
         } catch (error) {
@@ -295,12 +298,12 @@ export class AgentRuntime {
         }
       }
       // The skills a run offers follow the servers it has, GitHub's included.
-      const skillRun = learning ? run : mcpRun;
+      const skillServers = learning ? installed : servers;
       const gitAccess = run.subagent
         ? await prepareWorkerWorkspace(run)
         : await prepareProfileGitAccess(run.profileId);
       const tools: ToolSet = {
-        ...profileTools(this.services, skillRun, gitAccess, session.remoteMachineId),
+        ...profileTools(this.services, run, gitAccess, session.remoteMachineId, skillServers),
         ...this.services.media?.tools(run, async (usage) => {
           await account(
             {
@@ -343,7 +346,7 @@ export class AgentRuntime {
       const loadedTools = new Set<string>(learning ? Object.keys(tools) : []);
       const { gated } = deferTools(tools, loadedTools);
       const { mcpToolNames, selectedMcpTools, unavailable, catalog } = await connectMcpTools(
-        mcpRun,
+        servers,
         tools,
         {
           vault: mcpVault,
@@ -364,8 +367,8 @@ export class AgentRuntime {
         console.warn(`jian: MCP server ${server.name} is unavailable — ${server.reason}`);
       }
 
-      const context = await this.services.contexts.context(skillRun);
-      const cavemanSkill = findSkill(run.profile, 'caveman');
+      const context = await this.services.contexts.context(run, skillServers);
+      const cavemanSkill = findSkill(run.profile, skillServers, 'caveman');
       let currentCavemanMode: CavemanMode = cavemanSkill
         ? await cavemanMode(this.services.store.db, profileId, run.sessionId)
         : 'off';
@@ -573,7 +576,7 @@ export class AgentRuntime {
         ? `\n\nExecution target: Remote Control machine ${session.remoteMachineId}. Use only remote machine tools for project work; local machine tools are intentionally unavailable.`
         : '';
       const instructions = dress(`${context.system}${targetInstructions}`);
-      const codingSkill = findSkill(run.profile, 'ponytail');
+      const codingSkill = findSkill(run.profile, skillServers, 'ponytail');
       const instructionsForMode = (mode: PonytailMode) =>
         !codingSkill
           ? instructions

@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { OAuthClientInformation, OAuthClientProvider } from '@ai-sdk/mcp';
-import { mcpSecret } from '../profiles/service.js';
-import type { Vault } from '../security/vault.js';
-import { mcpOauthClientSecretKey } from './mcp-connect.js';
+import type { GatewayVault } from '../security/gateway-vault.js';
+import { mcpOauthClientSecretKey, mcpSecret } from './mcp-connect.js';
 import type { McpOAuthClient } from './types.js';
 
 /**
@@ -35,8 +34,7 @@ const owner = (server: string) => `${mcpSecret(server)}:oauth`;
  */
 export class McpOAuth implements OAuthClientProvider {
   constructor(
-    private readonly vault: Vault,
-    private readonly profileId: string,
+    private readonly vault: Pick<GatewayVault, 'read' | 'put' | 'discard'>,
     private readonly server: string,
     private readonly callbackUrl: string,
     /** Where a pending authorization URL is left for the panel to read. */
@@ -47,7 +45,7 @@ export class McpOAuth implements OAuthClientProvider {
   ) {}
 
   private async read(): Promise<Stored> {
-    const raw = await this.vault.read(this.profileId, owner(this.server));
+    const raw = await this.vault.read(owner(this.server));
 
     return raw ? (JSON.parse(raw) as Stored) : {};
   }
@@ -55,11 +53,7 @@ export class McpOAuth implements OAuthClientProvider {
   private async write(patch: Stored): Promise<void> {
     const current = await this.read();
 
-    await this.vault.put(
-      this.profileId,
-      owner(this.server),
-      JSON.stringify({ ...current, ...patch }),
-    );
+    await this.vault.put(owner(this.server), JSON.stringify({ ...current, ...patch }));
   }
 
   get redirectUrl() {
@@ -86,7 +80,7 @@ export class McpOAuth implements OAuthClientProvider {
   }
 
   async redirectToAuthorization(url: URL) {
-    this.pending.set(`${this.profileId}:${this.server}`, url.toString());
+    this.pending.set(this.server, url.toString());
   }
 
   async saveCodeVerifier(verifier: string) {
@@ -108,7 +102,7 @@ export class McpOAuth implements OAuthClientProvider {
       return this.env[this.oauth.secretFromEnv]?.trim() || undefined;
     }
 
-    return this.vault.read(this.profileId, mcpOauthClientSecretKey(this.server));
+    return this.vault.read(mcpOauthClientSecretKey(this.server));
   }
 
   async clientInformation(): Promise<OAuthClientInformation | undefined> {
@@ -168,7 +162,7 @@ export class McpOAuth implements OAuthClientProvider {
    */
   async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier') {
     if (scope === 'all') {
-      await this.vault.discard(this.profileId, owner(this.server));
+      await this.vault.discard(owner(this.server));
 
       return;
     }

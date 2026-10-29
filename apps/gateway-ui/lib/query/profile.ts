@@ -68,6 +68,8 @@ export const queries = {
     }),
   remoteMachines: () =>
     queryOptions({ queryKey: keys.remoteMachines, queryFn: () => panelApi().remoteMachines() }),
+  mcpServers: () =>
+    queryOptions({ queryKey: keys.mcpServers, queryFn: () => panelApi().mcpServers() }),
   sessions: (profileId: string) =>
     queryOptions({
       queryKey: keys.sessions(profileId),

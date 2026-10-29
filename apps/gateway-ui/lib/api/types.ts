@@ -13,7 +13,7 @@ type RequestBody<K extends keyof operations> = operations[K] extends {
   : never;
 
 export type Profile = JsonResponse<'getProfile', 200>;
-export type McpServer = Profile['mcpServers'][number];
+export type McpServer = JsonResponse<'listMcpServers', 200>[number];
 export type McpValue = McpServer['headers'][number];
 export type Skill = Profile['skills'][number];
 export type Session = JsonResponse<'listSessions', 200>[number];

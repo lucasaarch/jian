@@ -254,7 +254,10 @@
                 "properties": {
                   "returnPath": {
                     "type": "string",
-                    "pattern": "^\\/agents\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\/integrations(?:\\/github)?$"
+                    "enum": [
+                      "/settings/integrations",
+                      "/settings/integrations/github"
+                    ]
                   }
                 },
                 "required": [
@@ -411,7 +414,10 @@
                 "properties": {
                   "returnPath": {
                     "type": "string",
-                    "pattern": "^\\/agents\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\/integrations(?:\\/github)?$"
+                    "enum": [
+                      "/settings/integrations",
+                      "/settings/integrations/github"
+                    ]
                   }
                 },
                 "required": [
@@ -15550,27 +15556,270 @@
         }
       }
     },
-    "/v1/profiles/{profileId}/mcp-servers/import": {
-      "post": {
-        "operationId": "importMcpServers",
+    "/v1/mcp-servers": {
+      "get": {
+        "operationId": "listMcpServers",
         "security": [
           {
             "bearerAuth": []
           }
         ],
         "description": "Required permission: admin.",
-        "parameters": [
-          {
-            "name": "profileId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9_]{1,30}$"
+                      },
+                      "transport": {
+                        "default": "http",
+                        "type": "string",
+                        "enum": [
+                          "http",
+                          "stdio"
+                        ]
+                      },
+                      "url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "auth": {
+                        "default": "none",
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "headers",
+                          "oauth"
+                        ]
+                      },
+                      "headers": {
+                        "default": [],
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000,
+                              "writeOnly": true
+                            },
+                            "fromEnv": {
+                              "type": "string",
+                              "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "command": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400
+                      },
+                      "args": {
+                        "default": [],
+                        "maxItems": 30,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 400
+                        }
+                      },
+                      "env": {
+                        "default": [],
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000,
+                              "writeOnly": true
+                            },
+                            "fromEnv": {
+                              "type": "string",
+                              "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "oauthClientId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "oauthClientSecret": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000,
+                            "writeOnly": true
+                          },
+                          "fromEnv": {
+                            "type": "string",
+                            "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "disabledTools": {
+                        "default": [],
+                        "maxItems": 200,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        }
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "transport",
+                      "auth",
+                      "headers",
+                      "args",
+                      "env",
+                      "disabledTools"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
             }
           }
+        }
+      },
+      "put": {
+        "operationId": "replaceMcpServers",
+        "security": [
+          {
+            "bearerAuth": []
+          }
         ],
+        "description": "Required permission: admin.",
+        "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -15578,21 +15827,148 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "fromProfileId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "servers": {
+                    "maxItems": 50,
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "pattern": "^[a-z0-9_]{1,30}$"
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9_]{1,30}$"
+                        },
+                        "transport": {
+                          "default": "http",
+                          "type": "string",
+                          "enum": [
+                            "http",
+                            "stdio"
+                          ]
+                        },
+                        "url": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "auth": {
+                          "default": "none",
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "headers",
+                            "oauth"
+                          ]
+                        },
+                        "headers": {
+                          "default": [],
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                              },
+                              "value": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 16000,
+                                "writeOnly": true
+                              },
+                              "fromEnv": {
+                                "type": "string",
+                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "command": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400
+                        },
+                        "args": {
+                          "default": [],
+                          "maxItems": 30,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 400
+                          }
+                        },
+                        "env": {
+                          "default": [],
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                              },
+                              "value": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 16000,
+                                "writeOnly": true
+                              },
+                              "fromEnv": {
+                                "type": "string",
+                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "oauthClientId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "oauthClientSecret": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000,
+                              "writeOnly": true
+                            },
+                            "fromEnv": {
+                              "type": "string",
+                              "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "disabledTools": {
+                          "default": [],
+                          "maxItems": 200,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          }
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false
                     }
                   }
                 },
                 "required": [
-                  "fromProfileId"
+                  "servers"
                 ],
                 "additionalProperties": false
               }
@@ -15605,46 +15981,149 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "imported": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "skipped": {
-                      "type": "array",
-                      "items": {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9_]{1,30}$"
+                      },
+                      "transport": {
+                        "default": "http",
+                        "type": "string",
+                        "enum": [
+                          "http",
+                          "stdio"
+                        ]
+                      },
+                      "url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "auth": {
+                        "default": "none",
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "headers",
+                          "oauth"
+                        ]
+                      },
+                      "headers": {
+                        "default": [],
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000,
+                              "writeOnly": true
+                            },
+                            "fromEnv": {
+                              "type": "string",
+                              "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "command": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400
+                      },
+                      "args": {
+                        "default": [],
+                        "maxItems": 30,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 400
+                        }
+                      },
+                      "env": {
+                        "default": [],
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000,
+                              "writeOnly": true
+                            },
+                            "fromEnv": {
+                              "type": "string",
+                              "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "oauthClientId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "oauthClientSecret": {
                         "type": "object",
                         "properties": {
-                          "name": {
-                            "type": "string"
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000,
+                            "writeOnly": true
                           },
-                          "reason": {
-                            "type": "string"
+                          "fromEnv": {
+                            "type": "string",
+                            "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
                           }
                         },
-                        "required": [
-                          "name",
-                          "reason"
-                        ],
                         "additionalProperties": false
+                      },
+                      "disabledTools": {
+                        "default": [],
+                        "maxItems": 200,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        }
                       }
                     },
-                    "signIn": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "required": [
-                    "imported",
-                    "skipped",
-                    "signIn"
-                  ],
-                  "additionalProperties": false
+                    "required": [
+                      "name",
+                      "transport",
+                      "auth",
+                      "headers",
+                      "args",
+                      "env",
+                      "disabledTools"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               }
             }
@@ -15742,7 +16221,7 @@
         }
       }
     },
-    "/v1/profiles/{profileId}/mcp-servers/{name}/check": {
+    "/v1/mcp-servers/{name}/check": {
       "post": {
         "operationId": "checkMcpServer",
         "security": [
@@ -15752,16 +16231,6 @@
         ],
         "description": "Required permission: admin.",
         "parameters": [
-          {
-            "name": "profileId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            }
-          },
           {
             "name": "name",
             "in": "path",
@@ -15926,22 +16395,12 @@
         }
       }
     },
-    "/v1/profiles/{profileId}/mcp-servers/{name}/oauth/callback": {
+    "/v1/mcp-servers/{name}/oauth/callback": {
       "get": {
         "operationId": "completeMcpLogin",
         "security": [],
         "description": "Required permission: public.",
         "parameters": [
-          {
-            "name": "profileId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            }
-          },
           {
             "name": "name",
             "in": "path",
@@ -16922,151 +17381,6 @@
                         "pattern": "^[a-z0-9_-]{1,64}$"
                       }
                     },
-                    "mcpServers": {
-                      "default": [],
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9_]{1,30}$"
-                          },
-                          "transport": {
-                            "default": "http",
-                            "type": "string",
-                            "enum": [
-                              "http",
-                              "stdio"
-                            ]
-                          },
-                          "url": {
-                            "type": "string",
-                            "format": "uri"
-                          },
-                          "auth": {
-                            "default": "none",
-                            "type": "string",
-                            "enum": [
-                              "none",
-                              "headers",
-                              "oauth"
-                            ]
-                          },
-                          "headers": {
-                            "default": [],
-                            "maxItems": 10,
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 16000,
-                                  "writeOnly": true
-                                },
-                                "fromEnv": {
-                                  "type": "string",
-                                  "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                }
-                              },
-                              "required": [
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "command": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 400
-                          },
-                          "args": {
-                            "default": [],
-                            "maxItems": 30,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "maxLength": 400
-                            }
-                          },
-                          "env": {
-                            "default": [],
-                            "maxItems": 20,
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 16000,
-                                  "writeOnly": true
-                                },
-                                "fromEnv": {
-                                  "type": "string",
-                                  "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                }
-                              },
-                              "required": [
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "oauthClientId": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 200
-                          },
-                          "oauthClientSecret": {
-                            "type": "object",
-                            "properties": {
-                              "value": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 16000,
-                                "writeOnly": true
-                              },
-                              "fromEnv": {
-                                "type": "string",
-                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                              }
-                            },
-                            "additionalProperties": false
-                          },
-                          "disabledTools": {
-                            "default": [],
-                            "maxItems": 200,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 200
-                            }
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "transport",
-                          "auth",
-                          "headers",
-                          "args",
-                          "env",
-                          "disabledTools"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
                     "allowShell": {
                       "default": true,
                       "type": "boolean"
@@ -17102,7 +17416,6 @@
                     "contextPolicy",
                     "skills",
                     "disabledSkills",
-                    "mcpServers",
                     "allowShell",
                     "id",
                     "version",
@@ -17499,151 +17812,6 @@
                           "pattern": "^[a-z0-9_-]{1,64}$"
                         }
                       },
-                      "mcpServers": {
-                        "default": [],
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "pattern": "^[a-z0-9_]{1,30}$"
-                            },
-                            "transport": {
-                              "default": "http",
-                              "type": "string",
-                              "enum": [
-                                "http",
-                                "stdio"
-                              ]
-                            },
-                            "url": {
-                              "type": "string",
-                              "format": "uri"
-                            },
-                            "auth": {
-                              "default": "none",
-                              "type": "string",
-                              "enum": [
-                                "none",
-                                "headers",
-                                "oauth"
-                              ]
-                            },
-                            "headers": {
-                              "default": [],
-                              "maxItems": 10,
-                              "type": "array",
-                              "items": {
-                                "type": "object",
-                                "properties": {
-                                  "name": {
-                                    "type": "string",
-                                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                  },
-                                  "value": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": 16000,
-                                    "writeOnly": true
-                                  },
-                                  "fromEnv": {
-                                    "type": "string",
-                                    "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                  }
-                                },
-                                "required": [
-                                  "name"
-                                ],
-                                "additionalProperties": false
-                              }
-                            },
-                            "command": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 400
-                            },
-                            "args": {
-                              "default": [],
-                              "maxItems": 30,
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "maxLength": 400
-                              }
-                            },
-                            "env": {
-                              "default": [],
-                              "maxItems": 20,
-                              "type": "array",
-                              "items": {
-                                "type": "object",
-                                "properties": {
-                                  "name": {
-                                    "type": "string",
-                                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                  },
-                                  "value": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": 16000,
-                                    "writeOnly": true
-                                  },
-                                  "fromEnv": {
-                                    "type": "string",
-                                    "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                  }
-                                },
-                                "required": [
-                                  "name"
-                                ],
-                                "additionalProperties": false
-                              }
-                            },
-                            "oauthClientId": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 200
-                            },
-                            "oauthClientSecret": {
-                              "type": "object",
-                              "properties": {
-                                "value": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 16000,
-                                  "writeOnly": true
-                                },
-                                "fromEnv": {
-                                  "type": "string",
-                                  "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                }
-                              },
-                              "additionalProperties": false
-                            },
-                            "disabledTools": {
-                              "default": [],
-                              "maxItems": 200,
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 200
-                              }
-                            }
-                          },
-                          "required": [
-                            "name",
-                            "transport",
-                            "auth",
-                            "headers",
-                            "args",
-                            "env",
-                            "disabledTools"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
                       "allowShell": {
                         "default": true,
                         "type": "boolean"
@@ -17679,7 +17847,6 @@
                       "contextPolicy",
                       "skills",
                       "disabledSkills",
-                      "mcpServers",
                       "allowShell",
                       "id",
                       "version",
@@ -18058,145 +18225,6 @@
                       "pattern": "^[a-z0-9_-]{1,64}$"
                     }
                   },
-                  "mcpServers": {
-                    "default": [],
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9_]{1,30}$"
-                        },
-                        "transport": {
-                          "default": "http",
-                          "type": "string",
-                          "enum": [
-                            "http",
-                            "stdio"
-                          ]
-                        },
-                        "url": {
-                          "type": "string",
-                          "format": "uri"
-                        },
-                        "auth": {
-                          "default": "none",
-                          "type": "string",
-                          "enum": [
-                            "none",
-                            "headers",
-                            "oauth"
-                          ]
-                        },
-                        "headers": {
-                          "default": [],
-                          "maxItems": 10,
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string",
-                                "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                              },
-                              "value": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 16000,
-                                "writeOnly": true
-                              },
-                              "fromEnv": {
-                                "type": "string",
-                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                              }
-                            },
-                            "required": [
-                              "name"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "command": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 400
-                        },
-                        "args": {
-                          "default": [],
-                          "maxItems": 30,
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "maxLength": 400
-                          }
-                        },
-                        "env": {
-                          "default": [],
-                          "maxItems": 20,
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string",
-                                "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                              },
-                              "value": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 16000,
-                                "writeOnly": true
-                              },
-                              "fromEnv": {
-                                "type": "string",
-                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                              }
-                            },
-                            "required": [
-                              "name"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "oauthClientId": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
-                        },
-                        "oauthClientSecret": {
-                          "type": "object",
-                          "properties": {
-                            "value": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 16000,
-                              "writeOnly": true
-                            },
-                            "fromEnv": {
-                              "type": "string",
-                              "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                            }
-                          },
-                          "additionalProperties": false
-                        },
-                        "disabledTools": {
-                          "default": [],
-                          "maxItems": 200,
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 200
-                          }
-                        }
-                      },
-                      "required": [
-                        "name"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
                   "allowShell": {
                     "default": true,
                     "type": "boolean"
@@ -18491,151 +18519,6 @@
                         "pattern": "^[a-z0-9_-]{1,64}$"
                       }
                     },
-                    "mcpServers": {
-                      "default": [],
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9_]{1,30}$"
-                          },
-                          "transport": {
-                            "default": "http",
-                            "type": "string",
-                            "enum": [
-                              "http",
-                              "stdio"
-                            ]
-                          },
-                          "url": {
-                            "type": "string",
-                            "format": "uri"
-                          },
-                          "auth": {
-                            "default": "none",
-                            "type": "string",
-                            "enum": [
-                              "none",
-                              "headers",
-                              "oauth"
-                            ]
-                          },
-                          "headers": {
-                            "default": [],
-                            "maxItems": 10,
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 16000,
-                                  "writeOnly": true
-                                },
-                                "fromEnv": {
-                                  "type": "string",
-                                  "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                }
-                              },
-                              "required": [
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "command": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 400
-                          },
-                          "args": {
-                            "default": [],
-                            "maxItems": 30,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "maxLength": 400
-                            }
-                          },
-                          "env": {
-                            "default": [],
-                            "maxItems": 20,
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 16000,
-                                  "writeOnly": true
-                                },
-                                "fromEnv": {
-                                  "type": "string",
-                                  "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                }
-                              },
-                              "required": [
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "oauthClientId": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 200
-                          },
-                          "oauthClientSecret": {
-                            "type": "object",
-                            "properties": {
-                              "value": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 16000,
-                                "writeOnly": true
-                              },
-                              "fromEnv": {
-                                "type": "string",
-                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                              }
-                            },
-                            "additionalProperties": false
-                          },
-                          "disabledTools": {
-                            "default": [],
-                            "maxItems": 200,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 200
-                            }
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "transport",
-                          "auth",
-                          "headers",
-                          "args",
-                          "env",
-                          "disabledTools"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
                     "allowShell": {
                       "default": true,
                       "type": "boolean"
@@ -18671,7 +18554,6 @@
                     "contextPolicy",
                     "skills",
                     "disabledSkills",
-                    "mcpServers",
                     "allowShell",
                     "id",
                     "version",
@@ -19077,151 +18959,6 @@
                         "pattern": "^[a-z0-9_-]{1,64}$"
                       }
                     },
-                    "mcpServers": {
-                      "default": [],
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9_]{1,30}$"
-                          },
-                          "transport": {
-                            "default": "http",
-                            "type": "string",
-                            "enum": [
-                              "http",
-                              "stdio"
-                            ]
-                          },
-                          "url": {
-                            "type": "string",
-                            "format": "uri"
-                          },
-                          "auth": {
-                            "default": "none",
-                            "type": "string",
-                            "enum": [
-                              "none",
-                              "headers",
-                              "oauth"
-                            ]
-                          },
-                          "headers": {
-                            "default": [],
-                            "maxItems": 10,
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 16000,
-                                  "writeOnly": true
-                                },
-                                "fromEnv": {
-                                  "type": "string",
-                                  "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                }
-                              },
-                              "required": [
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "command": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 400
-                          },
-                          "args": {
-                            "default": [],
-                            "maxItems": 30,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "maxLength": 400
-                            }
-                          },
-                          "env": {
-                            "default": [],
-                            "maxItems": 20,
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 16000,
-                                  "writeOnly": true
-                                },
-                                "fromEnv": {
-                                  "type": "string",
-                                  "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                }
-                              },
-                              "required": [
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "oauthClientId": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 200
-                          },
-                          "oauthClientSecret": {
-                            "type": "object",
-                            "properties": {
-                              "value": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 16000,
-                                "writeOnly": true
-                              },
-                              "fromEnv": {
-                                "type": "string",
-                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                              }
-                            },
-                            "additionalProperties": false
-                          },
-                          "disabledTools": {
-                            "default": [],
-                            "maxItems": 200,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 200
-                            }
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "transport",
-                          "auth",
-                          "headers",
-                          "args",
-                          "env",
-                          "disabledTools"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
                     "allowShell": {
                       "default": true,
                       "type": "boolean"
@@ -19257,7 +18994,6 @@
                     "contextPolicy",
                     "skills",
                     "disabledSkills",
-                    "mcpServers",
                     "allowShell",
                     "id",
                     "version",
@@ -19622,144 +19358,6 @@
                       "pattern": "^[a-z0-9_-]{1,64}$"
                     }
                   },
-                  "mcpServers": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9_]{1,30}$"
-                        },
-                        "transport": {
-                          "default": "http",
-                          "type": "string",
-                          "enum": [
-                            "http",
-                            "stdio"
-                          ]
-                        },
-                        "url": {
-                          "type": "string",
-                          "format": "uri"
-                        },
-                        "auth": {
-                          "default": "none",
-                          "type": "string",
-                          "enum": [
-                            "none",
-                            "headers",
-                            "oauth"
-                          ]
-                        },
-                        "headers": {
-                          "default": [],
-                          "maxItems": 10,
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string",
-                                "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                              },
-                              "value": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 16000,
-                                "writeOnly": true
-                              },
-                              "fromEnv": {
-                                "type": "string",
-                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                              }
-                            },
-                            "required": [
-                              "name"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "command": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 400
-                        },
-                        "args": {
-                          "default": [],
-                          "maxItems": 30,
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "maxLength": 400
-                          }
-                        },
-                        "env": {
-                          "default": [],
-                          "maxItems": 20,
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string",
-                                "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                              },
-                              "value": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 16000,
-                                "writeOnly": true
-                              },
-                              "fromEnv": {
-                                "type": "string",
-                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                              }
-                            },
-                            "required": [
-                              "name"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "oauthClientId": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
-                        },
-                        "oauthClientSecret": {
-                          "type": "object",
-                          "properties": {
-                            "value": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 16000,
-                              "writeOnly": true
-                            },
-                            "fromEnv": {
-                              "type": "string",
-                              "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                            }
-                          },
-                          "additionalProperties": false
-                        },
-                        "disabledTools": {
-                          "default": [],
-                          "maxItems": 200,
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 200
-                          }
-                        }
-                      },
-                      "required": [
-                        "name"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
                   "allowShell": {
                     "type": "boolean"
                   },
@@ -20057,151 +19655,6 @@
                         "pattern": "^[a-z0-9_-]{1,64}$"
                       }
                     },
-                    "mcpServers": {
-                      "default": [],
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9_]{1,30}$"
-                          },
-                          "transport": {
-                            "default": "http",
-                            "type": "string",
-                            "enum": [
-                              "http",
-                              "stdio"
-                            ]
-                          },
-                          "url": {
-                            "type": "string",
-                            "format": "uri"
-                          },
-                          "auth": {
-                            "default": "none",
-                            "type": "string",
-                            "enum": [
-                              "none",
-                              "headers",
-                              "oauth"
-                            ]
-                          },
-                          "headers": {
-                            "default": [],
-                            "maxItems": 10,
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 16000,
-                                  "writeOnly": true
-                                },
-                                "fromEnv": {
-                                  "type": "string",
-                                  "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                }
-                              },
-                              "required": [
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "command": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 400
-                          },
-                          "args": {
-                            "default": [],
-                            "maxItems": 30,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "maxLength": 400
-                            }
-                          },
-                          "env": {
-                            "default": [],
-                            "maxItems": 20,
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 16000,
-                                  "writeOnly": true
-                                },
-                                "fromEnv": {
-                                  "type": "string",
-                                  "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                }
-                              },
-                              "required": [
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "oauthClientId": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 200
-                          },
-                          "oauthClientSecret": {
-                            "type": "object",
-                            "properties": {
-                              "value": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 16000,
-                                "writeOnly": true
-                              },
-                              "fromEnv": {
-                                "type": "string",
-                                "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                              }
-                            },
-                            "additionalProperties": false
-                          },
-                          "disabledTools": {
-                            "default": [],
-                            "maxItems": 200,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 200
-                            }
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "transport",
-                          "auth",
-                          "headers",
-                          "args",
-                          "env",
-                          "disabledTools"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
                     "allowShell": {
                       "default": true,
                       "type": "boolean"
@@ -20237,7 +19690,6 @@
                     "contextPolicy",
                     "skills",
                     "disabledSkills",
-                    "mcpServers",
                     "allowShell",
                     "id",
                     "version",
@@ -20938,151 +20390,6 @@
                               "pattern": "^[a-z0-9_-]{1,64}$"
                             }
                           },
-                          "mcpServers": {
-                            "default": [],
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "pattern": "^[a-z0-9_]{1,30}$"
-                                },
-                                "transport": {
-                                  "default": "http",
-                                  "type": "string",
-                                  "enum": [
-                                    "http",
-                                    "stdio"
-                                  ]
-                                },
-                                "url": {
-                                  "type": "string",
-                                  "format": "uri"
-                                },
-                                "auth": {
-                                  "default": "none",
-                                  "type": "string",
-                                  "enum": [
-                                    "none",
-                                    "headers",
-                                    "oauth"
-                                  ]
-                                },
-                                "headers": {
-                                  "default": [],
-                                  "maxItems": 10,
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "name": {
-                                        "type": "string",
-                                        "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                      },
-                                      "value": {
-                                        "type": "string",
-                                        "minLength": 1,
-                                        "maxLength": 16000,
-                                        "writeOnly": true
-                                      },
-                                      "fromEnv": {
-                                        "type": "string",
-                                        "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                      }
-                                    },
-                                    "required": [
-                                      "name"
-                                    ],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "command": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 400
-                                },
-                                "args": {
-                                  "default": [],
-                                  "maxItems": 30,
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string",
-                                    "maxLength": 400
-                                  }
-                                },
-                                "env": {
-                                  "default": [],
-                                  "maxItems": 20,
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "name": {
-                                        "type": "string",
-                                        "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                                      },
-                                      "value": {
-                                        "type": "string",
-                                        "minLength": 1,
-                                        "maxLength": 16000,
-                                        "writeOnly": true
-                                      },
-                                      "fromEnv": {
-                                        "type": "string",
-                                        "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                      }
-                                    },
-                                    "required": [
-                                      "name"
-                                    ],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "oauthClientId": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 200
-                                },
-                                "oauthClientSecret": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "minLength": 1,
-                                      "maxLength": 16000,
-                                      "writeOnly": true
-                                    },
-                                    "fromEnv": {
-                                      "type": "string",
-                                      "pattern": "^JIAN_MCP_[A-Z0-9_]+$"
-                                    }
-                                  },
-                                  "additionalProperties": false
-                                },
-                                "disabledTools": {
-                                  "default": [],
-                                  "maxItems": 200,
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": 200
-                                  }
-                                }
-                              },
-                              "required": [
-                                "name",
-                                "transport",
-                                "auth",
-                                "headers",
-                                "args",
-                                "env",
-                                "disabledTools"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
                           "allowShell": {
                             "default": true,
                             "type": "boolean"
@@ -21118,7 +20425,6 @@
                           "contextPolicy",
                           "skills",
                           "disabledSkills",
-                          "mcpServers",
                           "allowShell",
                           "id",
                           "version",

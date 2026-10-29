@@ -14,6 +14,7 @@ import { configureSecurity } from './http/security.js';
 import { registerPanelNotice } from './http/ui.js';
 import type { GitHubIntegrations } from './integrations/github.js';
 import { registerIntegrationRoutes } from './integrations/routes.js';
+import { registerMcpRoutes } from './mcp/routes.js';
 import { registerMediaRoutes } from './media/routes.js';
 import { registerMemoryRoutes } from './memories/routes.js';
 import { registerProfileRoutes } from './profiles/routes.js';
@@ -131,6 +132,7 @@ export function createApp(
     registerSshRoutes(routes, options);
     registerRemoteRoutes(routes, options);
     registerSkillRoutes(routes, options);
+    registerMcpRoutes(routes, options);
     registerProfileRoutes(routes, options);
     registerProjectRoutes(routes, options.projects);
     registerSessionRoutes(routes, { ...options, coordination });

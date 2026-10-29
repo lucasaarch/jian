@@ -48,18 +48,6 @@ export const profile: Profile = {
       origin: { url: 'https://github.com/example/skills', importedAt: at(60 * 24 * 7) },
     },
   ],
-  mcpServers: [
-    {
-      name: 'github',
-      transport: 'http',
-      url: 'https://api.githubcopilot.com/mcp/',
-      auth: 'headers',
-      headers: [{ name: 'Authorization' }],
-      args: [],
-      env: [],
-      disabledTools: ['create_issue'],
-    },
-  ],
 };
 
 export const statsFor = (days: number) => {

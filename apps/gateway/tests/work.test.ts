@@ -67,7 +67,7 @@ it('runs a scoped subagent in its parent conversation and delivers one durable h
   expect((await findMedia(services.store.db, profile.id, copiedImage ?? '')).mimeType).toBe(
     'image/png',
   );
-  const context = await services.contexts.context(worker);
+  const context = await services.contexts.context(worker, []);
   expect(context.messages.at(-1)?.content).toContain(assignment.brief);
   expect(context.system).not.toContain('Private deployment history.');
   expect(context.system).not.toContain('Research the release.');

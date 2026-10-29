@@ -3,6 +3,7 @@ import {
   conversationSubagentInputSchema,
   decisionUseSchema,
   MAX_OBJECTIVE_TEXT,
+  type McpServer,
   memoryKeySchema,
   memorySchema,
   type Run,
@@ -106,6 +107,8 @@ export function profileTools(
   run: Run,
   gitAccess: { readOnly: string[]; writable: string[] } = { readOnly: [], writable: [] },
   remoteTarget?: string,
+  /** The MCP servers the run reaches; the skills it may load follow them. */
+  servers: readonly McpServer[] = [],
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -370,7 +373,7 @@ export function profileTools(
       description: 'Load instructions for a skill enabled on this profile.',
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
-        const skill = findSkill(run.profile, name);
+        const skill = findSkill(run.profile, servers, name);
 
         if (!skill) {
           throw new GatewayError(404, 'Skill not found');

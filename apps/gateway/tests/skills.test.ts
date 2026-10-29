@@ -1,4 +1,4 @@
-import { skillSchema } from '@jian/contracts';
+import { type McpServer, mcpSchema, skillSchema } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
 import { githubMcpServer } from '../src/agent/github-mcp.js';
 import { profileTools } from '../src/agent/tools.js';
@@ -288,14 +288,13 @@ describe('the skills every profile carries', () => {
       instructions: 'Help.',
       model,
     });
-    const equipped = await services.profiles.createProfile({
-      name: 'Zero',
-      instructions: 'Help.',
-      model,
-      allowShell: true,
-      mcpServers: [{ name: 'docs', transport: 'http', url: 'https://mcp.example.test/mcp' }],
+    const docs = mcpSchema.parse({
+      name: 'docs',
+      transport: 'http',
+      url: 'https://mcp.example.test/mcp',
     });
-    const names = (profile: typeof plain) => availableSkills(profile).map((skill) => skill.name);
+    const names = (servers: McpServer[]) =>
+      availableSkills(plain, servers).map((skill) => skill.name);
 
     // Shell, remote-control and web skills are always on; MCP follows the configured servers.
     for (const skill of [
@@ -310,15 +309,15 @@ describe('the skills every profile carries', () => {
       'ponytail-gain',
       'ponytail-help',
     ]) {
-      expect(names(plain)).toContain(skill);
-      expect(names(equipped)).toContain(skill);
+      expect(names([])).toContain(skill);
+      expect(names([docs])).toContain(skill);
     }
     for (const skill of ['mcp-servers', 'github-mcp']) {
-      expect(names(plain)).not.toContain(skill);
-      expect(names(equipped)).toContain(skill);
+      expect(names([])).not.toContain(skill);
+      expect(names([docs])).toContain(skill);
     }
 
-    expect(names(plain)).toEqual(
+    expect(names([])).toEqual(
       expect.arrayContaining([
         'about-jian',
         'jian-configuration',
@@ -339,14 +338,16 @@ describe('the skills every profile carries', () => {
       model,
     });
 
-    expect(availableSkills(profile).map((skill) => skill.name)).not.toContain('discernment-nudge');
+    expect(availableSkills(profile, []).map((skill) => skill.name)).not.toContain(
+      'discernment-nudge',
+    );
 
     const on = await services.profiles.updateProfile(profile.id, {
       expectedVersion: profile.version,
       disabledSkills: [],
     });
 
-    expect(availableSkills(on).map((skill) => skill.name)).toContain('discernment-nudge');
+    expect(availableSkills(on, []).map((skill) => skill.name)).toContain('discernment-nudge');
   });
 
   it('teaches GitHub only to a run the integration attached its server to', async () => {
@@ -356,38 +357,33 @@ describe('the skills every profile carries', () => {
       instructions: 'Help.',
       model,
     });
-    const attached = { ...profile, mcpServers: [githubMcpServer('github')] };
-    const configured = {
-      ...profile,
-      mcpServers: [{ ...githubMcpServer('mine'), auth: 'oauth' as const, headers: [] }],
-    };
+    const attached = [githubMcpServer('github')];
+    const configured = [{ ...githubMcpServer('mine'), auth: 'oauth' as const, headers: [] }];
 
-    expect(findSkill(profile, 'github')).toBeUndefined();
-    expect(findSkill(configured, 'github')).toBeUndefined();
-    expect(findSkill(attached, 'github')?.instructions).toContain('search_mcp_tools');
+    expect(findSkill(profile, [], 'github')).toBeUndefined();
+    expect(findSkill(profile, configured, 'github')).toBeUndefined();
+    expect(findSkill(profile, attached, 'github')?.instructions).toContain('search_mcp_tools');
   });
 
   it('keeps every built-in skill within what a skill may be', () => {
-    for (const skill of builtinSkills({
-      mcpServers: [
-        {
-          name: 'x',
-          transport: 'http',
-          url: 'https://x.test',
-          auth: 'none',
-          headers: [],
-          args: [],
-          env: [],
-          disabledTools: [],
-        },
-      ],
-    })) {
+    for (const skill of builtinSkills([
+      {
+        name: 'x',
+        transport: 'http',
+        url: 'https://x.test',
+        auth: 'none',
+        headers: [],
+        args: [],
+        env: [],
+        disabledTools: [],
+      },
+    ])) {
       expect(() => skillSchema.parse(skill), skill.name).not.toThrow();
     }
   });
 
   it('keeps product identity separate from operational guidance', () => {
-    const skills = builtinSkills({ mcpServers: [] });
+    const skills = builtinSkills([]);
     const about = skills.find((skill) => skill.name === 'about-jian');
     const activity = skills.find((skill) => skill.name === 'activity');
     const configuration = skills.find((skill) => skill.name === 'jian-configuration');
@@ -411,7 +407,7 @@ describe('the skills every profile carries', () => {
     });
 
     expect(plain.skills).toEqual([]);
-    expect(availableSkills(plain).map((skill) => skill.name)).toEqual(
+    expect(availableSkills(plain, []).map((skill) => skill.name)).toEqual(
       expect.arrayContaining(['owner-and-contacts', 'managing-yourself']),
     );
   });
@@ -424,8 +420,8 @@ describe('the skills every profile carries', () => {
       model,
     });
 
-    expect(availableSkills(plain).map((skill) => skill.name)).toContain('machine-tools');
-    expect(availableSkills(plain).map((skill) => skill.name)).toContain('remote-control');
+    expect(availableSkills(plain, []).map((skill) => skill.name)).toContain('machine-tools');
+    expect(availableSkills(plain, []).map((skill) => skill.name)).toContain('remote-control');
   });
 
   it('loads a built-in body through the same tool as an imported one', async () => {
@@ -468,16 +464,18 @@ describe('the skills every profile carries', () => {
       disabledSkills: ['channel-replies'],
     });
 
-    expect(availableSkills(off).map((skill) => skill.name)).not.toContain('channel-replies');
+    expect(availableSkills(off, []).map((skill) => skill.name)).not.toContain('channel-replies');
 
     const replaced = await services.profiles.updateProfile(off.id, {
       expectedVersion: off.version,
       skills: [{ name: 'memory-keeping', description: 'Mine', instructions: 'Remember nothing.' }],
     });
 
-    const loaded = findSkill(replaced, 'memory-keeping');
+    const loaded = findSkill(replaced, [], 'memory-keeping');
 
     expect(loaded?.instructions).toBe('Remember nothing.');
-    expect(availableSkills(replaced).filter((s) => s.name === 'memory-keeping')).toHaveLength(1);
+    expect(availableSkills(replaced, []).filter((s) => s.name === 'memory-keeping')).toHaveLength(
+      1,
+    );
   });
 });

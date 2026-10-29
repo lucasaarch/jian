@@ -71,7 +71,7 @@ describe('context', () => {
       text: 'What was the invoice number?',
       requestKey: 'two',
     });
-    const context = await services.contexts.context(second);
+    const context = await services.contexts.context(second, []);
     const evidence = context.messages.find((message) =>
       message.content.includes('Recorded tool activity'),
     );
@@ -91,7 +91,7 @@ describe('context', () => {
       priorAnswer.createdAt,
       priorAnswer.id,
     );
-    const compacted = await services.contexts.context(second);
+    const compacted = await services.contexts.context(second, []);
     expect(compacted.system).toContain('invoice-47, paid');
     expect(
       compacted.messages.some((message) => message.content.includes('Recorded tool activity')),
@@ -165,14 +165,14 @@ describe('context', () => {
       text: 'What did Alice say?',
       requestKey: 'group-first',
     });
-    const full = await services.contexts.context(first);
+    const full = await services.contexts.context(first, []);
     expect(full.messages[0]?.content).toContain('group turn 0');
     expect(full.messages[0]?.content).toContain('group turn 51');
     expect(full.messages.at(-1)?.content).toContain('What did Alice say?');
 
     await services.sessions.summarize(profile.id, session.id, 'Legacy checkpoint', stamp);
     // Timestamp-only checkpoints (pre message-id cursor) must not reload the covered turns.
-    const legacy = await services.contexts.context(first);
+    const legacy = await services.contexts.context(first, []);
     expect(legacy.system).toContain('Legacy checkpoint');
     expect(legacy.messages[0]?.content).not.toContain('group turn 0');
     expect(legacy.messages.at(-1)?.content).toContain('What did Alice say?');
@@ -184,7 +184,7 @@ describe('context', () => {
       stamp,
       ids[49],
     );
-    const resumed = await services.contexts.context(first);
+    const resumed = await services.contexts.context(first, []);
     expect(resumed.system).toContain('Alice discussed the group.');
     expect(resumed.messages[0]?.content).not.toContain('group turn 49');
     expect(resumed.messages[0]?.content).toContain('group turn 50');
@@ -209,7 +209,7 @@ describe('context', () => {
       requestKey: 'current',
     });
 
-    const context = await services.contexts.context(run);
+    const context = await services.contexts.context(run, []);
 
     expect(context.messages).toEqual([{ role: 'user', content: 'Olá 世界 🌍' }]);
   });
@@ -230,6 +230,7 @@ describe('context', () => {
     });
 
     const context = buildContext(run, {
+      servers: [],
       memories: await services.memories.memories(profile.id),
       activities: [],
       history: await services.sessions.messages(profile.id, run.sessionId),

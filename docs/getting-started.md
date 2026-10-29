@@ -109,7 +109,8 @@ worker process executes four at a time.
 
 A secret is typed where the thing that uses it is configured: the provider key on the
 Providers screen, the MCP token with its server, the bot token with its channel. The
-gateway encrypts it per profile and never returns it; replacing it means sending another,
+gateway encrypts it — a provider key and an MCP token for the whole installation, a bot token
+for its profile — and never returns it; replacing it means sending another,
 and removing it means removing the thing that owns it.
 
 ## Using the SDK
