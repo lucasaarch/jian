@@ -17,6 +17,8 @@ const API_VERSION = '2022-11-28';
 const STATE_LIFETIME_MS = 10 * 60_000;
 const PAGE_SIZE = 100;
 const PAGE_LIMIT = 50;
+/** An installation token lasts an hour; one is reused until this long before it expires. */
+const TOKEN_MARGIN_MS = 5 * 60_000;
 /**
  * What the GitHub App asks for, by GitHub App permission name (the REST `app-permissions`
  * schema). GitHub refuses the whole manifest for one name outside that list, so a name that
@@ -149,7 +151,13 @@ function accountOf(row: typeof githubInstallations.$inferSelect): GitHubInstalla
   };
 }
 
-/** Global GitHub App installations with project-scoped MCP access tokens. */
+/** What one attached GitHub MCP server reaches: an account's installation, or one repository. */
+export type GitHubMcpAccess = { login: string; token: string; repository?: string };
+
+/**
+ * Global GitHub App installations, and the tokens that hand them to an agent's conversation:
+ * scoped to the repository in a project bound to one, to the whole installation elsewhere.
+ */
 export class GitHubIntegrations {
   constructor(
     private readonly store: Store,
@@ -158,6 +166,9 @@ export class GitHubIntegrations {
     private readonly fetcher: typeof fetch = fetch,
     private readonly clock: () => number = Date.now,
   ) {}
+
+  /** Keyed by installation and repository; `*` is a token for the whole installation. */
+  private readonly tokens = new Map<string, { token: string; expiresAt: number }>();
 
   async status() {
     const config = await this.config();
@@ -461,19 +472,35 @@ export class GitHubIntegrations {
     return output;
   }
 
-  /** Mints a one-hour token restricted to the repository bound to this profile's project. */
-  async mcpAccess(profileId: string, projectId: string) {
-    const [project] = await this.store.db
-      .select({ accountId: projects.githubAccountId, repositoryId: projects.githubRepositoryId })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.profileId, profileId)))
-      .limit(1);
-    if (!project?.accountId || !project.repositoryId) return undefined;
+  /**
+   * The GitHub one conversation reaches. A project bound to a repository gets a token for that
+   * repository alone; any other conversation gets one per connected account, covering every
+   * repository the owner granted the App there. Empty until an App is registered.
+   */
+  async mcpAccess(profileId: string, projectId?: string | null): Promise<GitHubMcpAccess[]> {
+    if (!(await this.config())) return [];
 
-    const account = await this.account(project.accountId);
-    const repository = await this.repository(project.accountId, project.repositoryId);
-    const token = await this.installationToken(account.installationId, project.repositoryId);
-    return { token, repository: repository.fullName };
+    if (projectId) {
+      const [project] = await this.store.db
+        .select({ accountId: projects.githubAccountId, repositoryId: projects.githubRepositoryId })
+        .from(projects)
+        .where(and(eq(projects.id, projectId), eq(projects.profileId, profileId)))
+        .limit(1);
+
+      if (project?.accountId && project.repositoryId) {
+        const account = await this.account(project.accountId);
+        const repository = await this.repository(project.accountId, project.repositoryId);
+        const token = await this.installationToken(account.installationId, project.repositoryId);
+        return [{ login: account.login, token, repository: repository.fullName }];
+      }
+    }
+
+    return Promise.all(
+      (await this.accounts()).map(async (account) => ({
+        login: account.login,
+        token: await this.installationToken(account.installationId),
+      })),
+    );
   }
 
   async repository(accountId: string, repositoryId: number) {
@@ -488,9 +515,15 @@ export class GitHubIntegrations {
     const [row] = await this.store.db
       .delete(githubInstallations)
       .where(eq(githubInstallations.id, accountId))
-      .returning({ id: githubInstallations.id });
+      .returning({
+        id: githubInstallations.id,
+        installationId: githubInstallations.installationId,
+      });
     if (!row) throw new GatewayError(404, 'GitHub account not found.');
-    return row;
+    for (const key of this.tokens.keys()) {
+      if (key.startsWith(`${row.installationId}:`)) this.tokens.delete(key);
+    }
+    return { id: row.id };
   }
 
   private async account(id: string) {
@@ -644,6 +677,10 @@ export class GitHubIntegrations {
   }
 
   private async installationToken(installationId: number, repositoryId?: number) {
+    const key = `${installationId}:${repositoryId ?? '*'}`;
+    const cached = this.tokens.get(key);
+    if (cached && cached.expiresAt - TOKEN_MARGIN_MS > this.clock()) return cached.token;
+
     const config = await this.requireConfig();
     const response = await this.githubFetch(
       new URL(`${API}/app/installations/${installationId}/access_tokens`),
@@ -653,10 +690,13 @@ export class GitHubIntegrations {
         ...(repositoryId ? { body: JSON.stringify({ repository_ids: [repositoryId] }) } : {}),
       },
     );
-    const token = (await response.json()) as { token?: unknown };
-    if (typeof token.token !== 'string' || !token.token) {
+    const issued = (await response.json()) as { token?: unknown; expires_at?: unknown };
+    if (typeof issued.token !== 'string' || !issued.token) {
       throw new GatewayError(502, 'GitHub did not issue an installation token.');
     }
-    return token.token;
+    const expiresAt = typeof issued.expires_at === 'string' ? Date.parse(issued.expires_at) : NaN;
+    // Without an expiry there is nothing safe to reuse it against.
+    if (Number.isFinite(expiresAt)) this.tokens.set(key, { token: issued.token, expiresAt });
+    return issued.token;
   }
 }

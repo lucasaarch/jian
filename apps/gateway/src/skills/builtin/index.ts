@@ -1,9 +1,11 @@
 import type { Profile, Skill } from '@jian/contracts';
+import { isGitHubIntegrationServer } from '../../agent/github-mcp.js';
 import { aboutJian } from './about-jian.js';
 import { activity } from './activity.js';
 import { channelReplies } from './channel-replies.js';
 import { codingWork } from './coding-work.js';
 import { conversations } from './conversations.js';
+import { github } from './github.js';
 import { githubMcp } from './github-mcp.js';
 import { handlingErrors } from './handling-errors.js';
 import { jevJudgment } from './jev-judgment.js';
@@ -52,37 +54,34 @@ const ALWAYS: readonly Skill[] = [
   handlingErrors,
   jevJudgment,
   caveman,
+  workingWithAgents,
+  managingYourself,
+  machineTools,
+  codingWork,
+  remoteControl,
+  ...ponytailSkills,
+  webResearch,
+  stickers,
   // Starts switched off on a new profile (OPT_IN_SKILLS); the owner turns it on in Skills.
   discernmentNudge,
 ];
 
 /**
- * Each of these describes tools that exist only behind one of the profile's switches, or only
- * with servers configured. Offered without them, a skill would teach tools the agent does not
- * have, and it would say it cannot do what the skill promised.
+ * These describe tools that exist only with MCP servers on the run, or with the server the
+ * GitHub integration attaches. Offered without them, a skill would teach tools the agent does
+ * not have, and it would say it cannot do what the skill promised.
  */
-const SELF_MANAGED: readonly Skill[] = [managingYourself];
-const AGENTS: readonly Skill[] = [workingWithAgents];
-const SHELL: readonly Skill[] = [machineTools, codingWork, remoteControl, ...ponytailSkills];
-const WEB: readonly Skill[] = [webResearch];
 const MCP: readonly Skill[] = [mcpServers, githubMcp];
-const STICKERS: readonly Skill[] = [stickers];
 
 export const builtinSkillNames: ReadonlySet<string> = new Set(
-  [...ALWAYS, ...AGENTS, ...SELF_MANAGED, ...SHELL, ...WEB, ...MCP, ...STICKERS].map(
-    (skill) => skill.name,
-  ),
+  [...ALWAYS, ...MCP, github].map((skill) => skill.name),
 );
 
 export function builtinSkills(profile: Pick<Profile, 'mcpServers'>): readonly Skill[] {
   return [
     ...ALWAYS,
-    ...AGENTS,
-    ...SELF_MANAGED,
-    ...SHELL,
-    ...WEB,
     ...(profile.mcpServers.length ? MCP : []),
-    ...STICKERS,
+    ...(profile.mcpServers.some(isGitHubIntegrationServer) ? [github] : []),
   ];
 }
 

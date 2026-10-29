@@ -64,8 +64,9 @@ The activity calendar counts a day as it ends where the reader is: the browser's
 **Integrations** are installation-wide and shared by all profiles. The GitHub integration creates
 its GitHub App through GitHub's manifest flow and stores its generated credentials in the encrypted
 gateway vault. Configure the gateway's `JIAN_PUBLIC_URL` before registering the App. Users may connect multiple GitHub accounts and choose
-which repositories the App can access. GitHub MCP tools are available to a chat linked to a
-GitHub-backed Project, and its short-lived installation token is scoped to that repository.
+which repositories the App can access. Every chat then has GitHub's MCP tools and the `github`
+skill: a chat in a GitHub-backed Project reaches only that repository, and any other chat reaches
+each connected account (`github`, or `github_<login>` with several).
 **Projects** remain profile-specific; creating one selects a repository from any connected account
 and verifies that selection on the gateway. See
 [`docs/deploy.md`](deploy.md#github-app) for App permissions and callback setup.
