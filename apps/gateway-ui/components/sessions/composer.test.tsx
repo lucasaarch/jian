@@ -47,3 +47,43 @@ it('keeps voice-note recording and removes live call controls', async () => {
   await act(async () => record?.click());
   expect(startRecording).toHaveBeenCalledOnce();
 });
+
+it('offers a new project first and names each project by its repository slug', async () => {
+  const onNewProject = vi.fn();
+  const onProjectChange = vi.fn();
+  await act(async () => {
+    root.render(
+      createElement(Composer, {
+        name: 'Mia',
+        upload: vi.fn(),
+        send: vi.fn(),
+        onSent: vi.fn(),
+        projects: [
+          {
+            id: 'site',
+            profileId: 'mia',
+            name: 'Site',
+            repositoryUrl: 'https://github.com/octo-example/site.git',
+            createdAt: '2026-10-29T12:00:00Z',
+          },
+        ],
+        onProjectChange,
+        onNewProject,
+      }),
+    );
+  });
+
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[aria-label="Project"]')?.click(),
+  );
+  const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+  expect(options.map((option) => option.textContent)).toEqual([
+    'New Project',
+    'No project',
+    'Siteocto-example/site',
+  ]);
+
+  await act(async () => options[0]?.click());
+  expect(onNewProject).toHaveBeenCalledOnce();
+  expect(onProjectChange).not.toHaveBeenCalled();
+});

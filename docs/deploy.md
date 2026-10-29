@@ -219,7 +219,7 @@ Project gets a token restricted to that Project's repository, and any other chat
 connected account, covering the repositories the App was granted there. Tokens stay in the
 gateway's memory, reused until five minutes before GitHub expires them, and are never stored.
 Each installed GitHub account is shared by all Jian agents, while Projects remain
-profile-specific. GitHub requires existing App owners to update the App's permissions and
+profile-specific, created and chosen from a chat's composer. GitHub requires existing App owners to update the App's permissions and
 approve the change for each installation; Integrations → Apps → GitHub shows any missing App
 permissions and links to the relevant GitHub settings.
 

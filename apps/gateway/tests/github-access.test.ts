@@ -42,16 +42,21 @@ async function connected({ registered = true } = {}) {
       });
     }
     if (url.pathname === '/installation/repositories') {
+      // Each installation lists its own: the token says which one is asking.
+      const token = new Headers(init?.headers).get('authorization')?.replace('Bearer ', '');
+      const installation = minted[Number(token?.replace('synthetic-token-', '')) - 1]?.installation;
+      const [owner, id, name] =
+        installation === '101' ? ['octo-example', 42, 'site'] : ['mona', 7, 'notes'];
       return Response.json({
         repositories: [
           {
-            id: 42,
-            name: 'site',
-            full_name: 'octo-example/site',
-            owner: { login: 'octo-example' },
+            id,
+            name,
+            full_name: `${owner}/${name}`,
+            owner: { login: owner },
             private: true,
-            html_url: 'https://github.com/octo-example/site',
-            clone_url: 'https://github.com/octo-example/site.git',
+            html_url: `https://github.com/${owner}/${name}`,
+            clone_url: `https://github.com/${owner}/${name}.git`,
             default_branch: 'main',
           },
         ],
@@ -167,4 +172,18 @@ it('lends polling the token of the connected account that owns the repository', 
   expect(minted).toEqual([{ installation: '101', body: '' }]);
   // Nobody connected owns it: the poll goes out as a stranger, and a public repo still answers.
   expect(await integrations.tokenFor('someone-else')).toBeUndefined();
+});
+
+it('lists the repositories of every connected account in one list, each with its account', async () => {
+  const { integrations, organization } = await connected();
+
+  expect(
+    (await integrations.allRepositories()).map(({ fullName, accountId }) => ({
+      fullName,
+      organization: accountId === organization,
+    })),
+  ).toEqual([
+    { fullName: 'mona/notes', organization: false },
+    { fullName: 'octo-example/site', organization: true },
+  ]);
 });

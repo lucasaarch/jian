@@ -28,11 +28,11 @@ import {
   decisionsStatusSchema,
 } from './decisions.js';
 import {
+  githubConnectedRepositorySchema,
   githubInstallInputSchema,
   githubInstallSchema,
   githubIntegrationStatusSchema,
   githubManifestSchema,
-  githubRepositorySchema,
 } from './integrations.js';
 import { inlineMediaSchema, mediaContentSchema, mediaRecordSchema } from './media.js';
 import {
@@ -192,11 +192,10 @@ export const operations: Operation[] = [
   },
   {
     method: 'GET',
-    path: '/v1/integrations/github/installations/:accountId/repositories',
+    path: '/v1/integrations/github/repositories',
     operationId: 'githubRepositories',
     access: 'admin',
-    params: z.strictObject({ accountId: z.uuid() }),
-    response: z.array(githubRepositorySchema),
+    response: z.array(githubConnectedRepositorySchema),
   },
   {
     method: 'DELETE',

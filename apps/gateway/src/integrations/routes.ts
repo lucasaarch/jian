@@ -82,10 +82,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, github: GitHubIn
     }
   });
 
-  app.get<{ Params: { accountId: string } }>(
-    '/v1/integrations/github/installations/:accountId/repositories',
-    async (request) => github.repositories(request.params.accountId),
-  );
+  app.get('/v1/integrations/github/repositories', async () => github.allRepositories());
 
   app.delete<{ Params: { accountId: string } }>(
     '/v1/integrations/github/installations/:accountId',

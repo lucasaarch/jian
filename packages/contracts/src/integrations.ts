@@ -57,5 +57,11 @@ export const githubRepositorySchema = z.strictObject({
   description: z.string().max(1000).optional(),
 });
 
+/** A repository with the connected account it comes through, so one list can mix accounts. */
+export const githubConnectedRepositorySchema = githubRepositorySchema.extend({
+  accountId: z.uuid(),
+});
+
 export type GitHubIntegrationAccount = z.infer<typeof githubIntegrationAccountSchema>;
 export type GitHubRepository = z.infer<typeof githubRepositorySchema>;
+export type GitHubConnectedRepository = z.infer<typeof githubConnectedRepositorySchema>;

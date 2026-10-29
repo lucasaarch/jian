@@ -42,10 +42,10 @@ export const queries = {
       queryKey: keys.githubIntegration,
       queryFn: () => panelApi().githubIntegration(),
     }),
-  githubRepositories: (accountId: string) =>
+  githubRepositories: () =>
     queryOptions({
-      queryKey: keys.githubRepositories(accountId),
-      queryFn: () => panelApi().githubRepositories(accountId),
+      queryKey: keys.githubRepositories,
+      queryFn: () => panelApi().githubRepositories(),
     }),
   /**
    * What this installation runs and what changed. Read once a visit: it only moves with an

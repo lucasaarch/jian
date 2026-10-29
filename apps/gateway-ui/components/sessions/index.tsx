@@ -53,6 +53,7 @@ import { Composer } from './composer';
 import { History } from './history';
 import { SessionListeners } from './listeners';
 import { SessionModel } from './model-picker';
+import { NewProjectDialog } from './new-project';
 import { statusOf } from './progress';
 
 const objectiveTone = {
@@ -187,6 +188,8 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   // in the URL or a new chat is being written.
   const reading = draft || Boolean(selected);
   const [draftProjectId, setDraftProjectId] = useState<string | null>(null);
+  // Who a project created from a composer is chosen for: the new chat or the open one.
+  const [newProjectFor, setNewProjectFor] = useState<(projectId: string) => void>();
   const [draftMachineId, setDraftMachineId] = useState<string | null>(null);
   const [draftModel, setDraftModel] = useState<Session['model']>();
   const draftSession = useRef<Promise<Session> | null>(null);
@@ -258,6 +261,14 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   const profiles = useAgents();
   const refresh = useRefresh();
   const deleteConversation = useDeleteConversation();
+  // The open chat runs in another repository from its next turn.
+  const moveToProject = (session: Session, projectId: string | null) =>
+    void api
+      .setGatewaySessionTarget(profile.id, session.id, projectId, session.remoteMachineId ?? null)
+      .then(() => refresh())
+      .catch((error: unknown) =>
+        toast.error(error instanceof Error ? error.message : 'The project could not be changed.'),
+      );
   const ensureDraftSession = () => {
     if (!draftSession.current) {
       draftSession.current = api.createGatewaySession(profile.id, draftProjectId, draftMachineId);
@@ -511,6 +522,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
             projectId={draftProjectId}
             remoteMachineId={draftMachineId}
             onProjectChange={setDraftProjectId}
+            onNewProject={() => setNewProjectFor(() => setDraftProjectId)}
             onMachineChange={setDraftMachineId}
             modelControl={
               <SessionModel
@@ -679,20 +691,9 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
               machines={machines}
               projectId={active.projectId ?? null}
               remoteMachineId={active.remoteMachineId ?? null}
-              onProjectChange={(projectId) =>
-                void api
-                  .setGatewaySessionTarget(
-                    profile.id,
-                    active.id,
-                    projectId,
-                    active.remoteMachineId ?? null,
-                  )
-                  .then(() => refresh())
-                  .catch((error: unknown) =>
-                    toast.error(
-                      error instanceof Error ? error.message : 'The project could not be changed.',
-                    ),
-                  )
+              onProjectChange={(projectId) => moveToProject(active, projectId)}
+              onNewProject={() =>
+                setNewProjectFor(() => (projectId: string) => moveToProject(active, projectId))
               }
               onMachineChange={(machineId) =>
                 void api
@@ -741,6 +742,17 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
             <Empty title="No conversations here">Choose a conversation or create a new chat.</Empty>
           </div>
         </section>
+      )}
+      {newProjectFor && (
+        <NewProjectDialog
+          api={api}
+          profileId={profile.id}
+          close={() => setNewProjectFor(undefined)}
+          created={async (project) => {
+            await refresh();
+            newProjectFor(project.id);
+          }}
+        />
       )}
       {contextMenu && (
         <div
