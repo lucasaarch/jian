@@ -49,7 +49,11 @@ export const channelCalls = (client: Client) => ({
     result(client.GET('/v1/profiles/{profileId}/deliveries', { params: profile(profileId) })),
   contacts: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/contacts', { params: profile(profileId) })),
-  updateContact: (profileId: string, id: string, body: { aiEnabled: boolean }) =>
+  updateContact: (
+    profileId: string,
+    id: string,
+    body: { aiEnabled: boolean } | { canApprove: boolean },
+  ) =>
     result(
       client.PATCH('/v1/profiles/{profileId}/contacts/{id}', {
         params: { path: { profileId, id } },

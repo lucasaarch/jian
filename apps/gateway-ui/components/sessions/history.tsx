@@ -1,16 +1,18 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { subscribe } from '@/lib/events';
 import { useCrew } from '@/lib/stores/crew';
-import type { GatewayApi, Person, Run, Subagent, ToolStep } from '../../lib/api';
+import type { GatewayApi, Person, Run, RunApproval, Subagent, ToolStep } from '../../lib/api';
 import { Badge, Button, Empty, Spinner } from '../ui';
 import { CrewCards, CrewDock, reportOf } from './crew';
+import { ApprovalCard, QuestionCard } from './decision-cards';
 import { useFollowBottom } from './follow-bottom';
 import { MessageMedia } from './media';
 import { authored, ChatMessage } from './message';
 import { LiveTurn, traceOf } from './progress';
-import { running, statusLabels, waiting } from './status';
+import { running, statusLabels } from './status';
 import { ThoughtLine } from './thought-line';
 
 export function History({
@@ -21,13 +23,20 @@ export function History({
   revision = 0,
   empty = 'Messages arriving through the channel show up here.',
   group = false,
+  chat,
   onAnswered,
 }: {
   api: Pick<GatewayApi, 'messages' | 'activities'> &
     Partial<
       Pick<
         GatewayApi,
-        'media' | 'people' | 'timeline' | 'run' | 'conversationSubagents' | 'answerRun'
+        | 'media'
+        | 'people'
+        | 'timeline'
+        | 'run'
+        | 'conversationSubagents'
+        | 'answerRun'
+        | 'decideApproval'
       >
     >;
   profileId: string;
@@ -38,18 +47,30 @@ export function History({
   empty?: string;
   /** A room: the other side is several people, each shown with their face and name. */
   group?: boolean;
+  /**
+   * The channel a chat's approvals and questions are answered in, by name. Its cards show what
+   * is waiting and how it went, without buttons: there, only the chat decides.
+   */
+  chat?: string;
   onAnswered?: () => void;
 }) {
   const [messages, setMessages] = useState<Awaited<ReturnType<GatewayApi['messages']>>>([]);
   const [people, setPeople] = useState(new Map<string, Person>());
   const [tools, setTools] = useState(new Map<string, ToolStep[]>());
+  // What each run asked the owner to decide or answer, from the timeline.
+  const [asks, setAsks] = useState(
+    new Map<
+      string,
+      { approval?: RunApproval; question?: { prompt: string; choices?: string[] } }
+    >(),
+  );
   // In an agent conversation this profile started, the other agent's runs and their tools.
   const [callTools, setCallTools] = useState(new Map<string, ToolStep[]>());
   const [callRun, setCallRun] = useState<Run>();
   const [subagents, setSubagents] = useState<Subagent[]>([]);
   // Bumped by an event about this conversation, so it reads again the moment something happens.
   const [heard, setHeard] = useState(0);
-  const [answering, setAnswering] = useState(false);
+  const [deciding, setDeciding] = useState(false);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -121,7 +142,18 @@ export function History({
         if (worked.every((item) => item !== undefined)) {
           setCallTools(new Map(worked.flat().map((item) => [item.runId, item.steps])));
         }
-        if (timeline) setTools(new Map(timeline.map((item) => [item.runId, item.steps])));
+        if (timeline) {
+          setTools(new Map(timeline.map((item) => [item.runId, item.steps])));
+          setAsks(
+            new Map(
+              timeline.flatMap((item) =>
+                item.approval || item.question
+                  ? [[item.runId, { approval: item.approval, question: item.question }] as const]
+                  : [],
+              ),
+            ),
+          );
+        }
         setMessages(history);
         setSubagents(children);
         setPeople(new Map(members.map((person) => [person.id, person])));
@@ -216,6 +248,21 @@ export function History({
     };
   }, [api, callKey]);
 
+  // Each press settles one thing, then the conversation reads again to show what came of it.
+  const settle = (work: Promise<unknown> | undefined) => {
+    if (!work) return;
+    setDeciding(true);
+    void work
+      .then(() => onAnswered?.())
+      .catch((failure: unknown) =>
+        toast.error(failure instanceof Error ? failure.message : 'That did not go through.'),
+      )
+      .finally(() => {
+        setDeciding(false);
+        setHeard((value) => value + 1);
+      });
+  };
+
   return (
     <div className="session-history">
       <section
@@ -283,25 +330,58 @@ export function History({
 
               // A finished agent's report is the agent's mail; its card already says it ended.
               const report = reportOf(message, subagents);
+              // The line the gateway writes for an approval or a question becomes its card.
+              const asked = message.runId ? asks.get(message.runId) : undefined;
+              const approval =
+                message.role === 'assistant' &&
+                asked?.approval &&
+                message.content.startsWith('Waiting for approval: ')
+                  ? asked.approval
+                  : undefined;
+              const question =
+                message.role === 'assistant' &&
+                asked?.question &&
+                message.content.startsWith(asked.question.prompt)
+                  ? asked.question
+                  : undefined;
+              const thought =
+                answering && (steps?.length || handedOff) ? (
+                  <ThoughtLine working={false} steps={traceOf(steps ?? [])} {...span(answering)} />
+                ) : undefined;
 
               return (
                 <Fragment key={message.id}>
-                  {report ? null : (
+                  {report ? null : approval && message.runId ? (
+                    <div className="chat-line theirs">
+                      {thought}
+                      <ApprovalCard
+                        approval={approval}
+                        chat={chat}
+                        busy={deciding}
+                        onDecide={(decision) =>
+                          settle(api.decideApproval?.(profileId, message.runId ?? '', decision))
+                        }
+                      />
+                    </div>
+                  ) : question && message.runId ? (
+                    <div className="chat-line theirs">
+                      {thought}
+                      <QuestionCard
+                        question={question}
+                        chat={chat}
+                        busy={deciding}
+                        onAnswer={(choice) =>
+                          settle(api.answerRun?.(profileId, message.runId ?? '', choice))
+                        }
+                      />
+                    </div>
+                  ) : (
                     <ChatMessage
                       message={message}
                       group={group}
                       people={people}
                       opensRun={!previous || who(previous) !== who(message)}
-                      before={
-                        answering &&
-                        (steps?.length || handedOff) && (
-                          <ThoughtLine
-                            working={false}
-                            steps={traceOf(steps ?? [])}
-                            {...span(answering)}
-                          />
-                        )
-                      }
+                      before={thought}
                     >
                       {api.media && (
                         <MessageMedia
@@ -357,33 +437,6 @@ export function History({
             >
               Try again
             </Button>
-          </div>
-        )}
-        {run && waiting(run) && run.question && (
-          <div className="run-status run-waiting" role="status">
-            <Badge tone="accent">{statusLabels.waiting}</Badge>
-            <p>{run.question.prompt}</p>
-            {run.question.choices && api.answerRun && (
-              <div className="run-waiting-choices">
-                {run.question.choices.map((choice) => (
-                  <Button
-                    key={choice}
-                    variant="secondary"
-                    disabled={answering}
-                    onClick={() => {
-                      setAnswering(true);
-                      void api
-                        .answerRun?.(profileId, run.id, choice)
-                        .then(() => onAnswered?.())
-                        .catch(() => undefined)
-                        .finally(() => setAnswering(false));
-                    }}
-                  >
-                    {choice}
-                  </Button>
-                ))}
-              </div>
-            )}
           </div>
         )}
         {/* The dots already say the agent is working; the bar speaks only when a turn went wrong. */}

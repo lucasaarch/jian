@@ -1,0 +1,136 @@
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { GatewayApi, RunApproval } from '../../lib/api';
+import { History } from './history';
+
+vi.mock('../../lib/events', () => ({ subscribe: () => () => undefined }));
+vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
+
+const approval: RunApproval = {
+  id: '00000000-0000-4000-8000-0000000000a1',
+  toolCallId: 'call-1',
+  toolName: 'run_command',
+  kind: 'machine',
+  title: 'Delete 12 archived projects and their build history',
+  detail: 'Frees 4.2 GB. Active projects are untouched and this cannot be undone.',
+  confirmLabel: 'Delete 12 projects',
+  request: '{"command":"rm -rf archive/"}',
+  askedAt: '2026-10-29T10:00:00.000Z',
+};
+
+const message = (content: string) => ({
+  id: 'message',
+  profileId: 'profile',
+  sessionId: 'session',
+  runId: 'run',
+  role: 'assistant' as const,
+  content,
+  createdAt: '2026-10-29T10:00:00.000Z',
+});
+
+let element: HTMLDivElement;
+let root: ReturnType<typeof createRoot>;
+
+beforeEach(() => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  element = document.createElement('div');
+  document.body.append(element);
+  root = createRoot(element);
+});
+
+afterEach(async () => {
+  await act(async () => root.unmount());
+  element.remove();
+});
+
+async function show(
+  timeline: {
+    approval?: RunApproval;
+    question?: { id: string; prompt: string; choices?: string[]; askedAt: string };
+  },
+  content: string,
+  chat?: string,
+) {
+  const decideApproval = vi.fn(async () => ({}));
+  const answerRun = vi.fn(async () => ({}));
+  const api = {
+    messages: async () => [message(content)],
+    activities: async () => [],
+    timeline: async () => [{ runId: 'run', steps: [], ...timeline }],
+    decideApproval,
+    answerRun,
+  } as unknown as GatewayApi;
+
+  await act(async () =>
+    root.render(<History api={api} profileId="profile" sessionId="session" chat={chat} />),
+  );
+  const button = (name: string) =>
+    [...element.querySelectorAll('button')].find((item) => item.textContent === name);
+
+  return { decideApproval, answerRun, button };
+}
+
+it('asks for approval in the conversation, and approving or rejecting decides that run', async () => {
+  const { decideApproval, button } = await show(
+    { approval },
+    `Waiting for approval: ${approval.title}`,
+  );
+
+  // The card takes the place of the line the gateway wrote for it.
+  expect(element.textContent).toContain('Needs approval');
+  expect(element.textContent).not.toContain('Waiting for approval:');
+  expect(element.textContent).not.toContain('rm -rf');
+  await act(async () => button('Show request')?.click());
+  expect(element.querySelector('.decision-request pre')?.textContent).toContain('rm -rf archive/');
+
+  await act(async () => button('Delete 12 projects')?.click());
+  expect(decideApproval).toHaveBeenCalledWith('profile', 'run', 'approve');
+  await act(async () => button('Reject')?.click());
+  expect(decideApproval).toHaveBeenLastCalledWith('profile', 'run', 'reject');
+});
+
+it('shows a decided approval without buttons, saying how it went', async () => {
+  const { button } = await show(
+    { approval: { ...approval, decision: 'rejected', decidedBy: 'contact', note: 'not today' } },
+    `Waiting for approval: ${approval.title}`,
+    'WhatsApp',
+  );
+
+  expect(element.textContent).toContain('Rejected');
+  expect(element.textContent).toContain('Declined in WhatsApp: not today');
+  expect(button('Reject')).toBeUndefined();
+  expect(button('Delete 12 projects')).toBeUndefined();
+});
+
+it('leaves a chat’s pending approval and question to the chat', async () => {
+  const pending = await show({ approval }, `Waiting for approval: ${approval.title}`, 'Telegram');
+
+  expect(element.textContent).toContain('Waiting for an answer in Telegram.');
+  expect(pending.button('Reject')).toBeUndefined();
+
+  const question = {
+    id: 'q',
+    prompt: 'Which branch?',
+    choices: ['main', 'dev'],
+    askedAt: approval.askedAt,
+  };
+  const asked = await show({ question }, 'Which branch?\n\n1. main\n2. dev', 'WhatsApp');
+
+  expect(element.textContent).toContain('Question');
+  expect(element.textContent).toContain('Waiting for an answer in WhatsApp.');
+  expect(asked.button('main')).toBeUndefined();
+});
+
+it('answers a question from its choices in the panel’s own chat', async () => {
+  const question = {
+    id: 'q',
+    prompt: 'Which branch?',
+    choices: ['main', 'dev'],
+    askedAt: approval.askedAt,
+  };
+  const { answerRun, button } = await show({ question }, 'Which branch?\n\n1. main\n2. dev');
+
+  await act(async () => button('dev')?.click());
+  expect(answerRun).toHaveBeenCalledWith('profile', 'run', 'dev');
+});

@@ -196,6 +196,57 @@ it('keeps AI controls out of Channels for all contact statuses', async () => {
   expect(baileys.element.querySelector('[aria-label="AI replies for Customer"]')).toBeNull();
 });
 
+it('lets the owner mark who may approve actions, and patches only that', async () => {
+  const { toggle, updateContact, updateChannel } = await render([business], false, [customer]);
+  const panel = await toggle('whatsapp-business');
+  const control = panel.querySelector<HTMLButtonElement>(
+    '[aria-label="Customer can approve actions"]',
+  );
+  expect(control?.getAttribute('aria-checked')).toBe('false');
+  expect(panel.textContent).toContain('Their yes in the chat runs what the agent asked to do');
+  await act(async () => control?.click());
+  expect(updateContact).toHaveBeenCalledExactlyOnceWith(profile.id, customer.id, {
+    canApprove: true,
+  });
+  expect(updateChannel).not.toHaveBeenCalled();
+});
+
+it('saves a channel’s own approval wording and the replies it takes', async () => {
+  const { toggle, updateChannel } = await render([{ ...business, type: 'telegram' }]);
+  const panel = await toggle('telegram');
+  const open = [...panel.querySelectorAll('button')].find((item) =>
+    item.textContent?.includes('Messages'),
+  );
+  await act(async () => open?.click());
+  const field = (label: string) => {
+    const tag = [...panel.querySelectorAll('label')].find((item) => item.textContent === label);
+    return tag ? panel.querySelector<HTMLInputElement>(`[id="${tag.htmlFor}"]`) : null;
+  };
+  const type = async (
+    input: HTMLInputElement | HTMLTextAreaElement | null | undefined,
+    value: string,
+  ) => {
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')?.set;
+    await act(async () => {
+      setter?.call(input, value);
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+  await type(field('Replies that approve'), 'go, do it');
+  await act(async () =>
+    panel
+      .querySelector('.channel-messages-form')
+      ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
+  expect(updateChannel).toHaveBeenCalledExactlyOnceWith(
+    profile.id,
+    business.id,
+    expect.objectContaining({
+      messages: expect.objectContaining({ approveWords: ['go', 'do it'] }),
+    }),
+  );
+});
+
 const credentials = {
   accessToken: 'synthetic-access-token',
   appSecret: 'synthetic-app-secret',

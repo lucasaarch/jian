@@ -449,6 +449,37 @@
   .face {
     @apply grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-accent-soft object-cover text-xs font-semibold text-accent;
   }
+  /* A channel's wording for approvals and questions: folded until the owner wants to edit it. */
+  .channel-messages {
+    @apply border-t border-line pt-4;
+  }
+  .channel-messages-toggle {
+    @apply flex w-full items-start gap-2 text-left;
+  }
+  .channel-messages-toggle > svg {
+    @apply mt-0.5 shrink-0 text-muted transition-transform;
+  }
+  .channel-messages[data-open] .channel-messages-toggle > svg {
+    @apply rotate-90;
+  }
+  .channel-messages-toggle strong {
+    @apply block text-sm font-medium text-ink;
+  }
+  .channel-messages-toggle small {
+    @apply block text-xs text-muted;
+  }
+  .channel-messages-form {
+    @apply mt-4 grid gap-4 pl-6;
+  }
+  .channel-messages-actions {
+    @apply flex flex-wrap justify-end gap-2;
+  }
+  .contact-approver {
+    @apply flex shrink-0 items-center gap-3 text-right;
+  }
+  .contact-approver small {
+    @apply max-w-56 whitespace-normal;
+  }
   .conversation-row[data-status="blocked"] .face {
     @apply opacity-50 grayscale;
   }
@@ -538,6 +569,16 @@
 @media (max-width: 760px) {
   .overview-profile h2 {
     @apply text-2xl;
+  }
+  /* A phone puts who may approve on a line of its own under the contact. */
+  .conversation-row {
+    @apply flex-wrap;
+  }
+  .contact-approver {
+    @apply order-last basis-full justify-between text-left;
+  }
+  .channel-messages-form {
+    @apply pl-0;
   }
 }
 
