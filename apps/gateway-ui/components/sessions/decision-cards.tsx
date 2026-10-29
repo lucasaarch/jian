@@ -4,6 +4,7 @@ import { Check, ChevronRight } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import type { RunApproval, RunQuestion } from '@/lib/api';
 import { Button } from '../ui';
+import { highlightLines } from './preview';
 
 function Card({
   chip,
@@ -51,7 +52,28 @@ function Request({ json }: { json: string }) {
         <ChevronRight size={14} aria-hidden="true" />
         {open ? 'Hide request' : 'Show request'}
       </button>
-      {open && <pre>{pretty}</pre>}
+      {open && (
+        <pre>
+          <code>
+            {highlightLines(pretty, 'json').map((line, row) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: lines are positions, never reordered.
+              <span key={row}>
+                {line.map((segment, index) =>
+                  segment.className ? (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: segments are positions too.
+                    <span key={index} className={segment.className}>
+                      {segment.text}
+                    </span>
+                  ) : (
+                    segment.text
+                  ),
+                )}
+                {'\n'}
+              </span>
+            ))}
+          </code>
+        </pre>
+      )}
     </div>
   );
 }
