@@ -141,6 +141,22 @@ describe('a conversation that asks first', () => {
     expect(await readRunAction(services.store.db, run.id)).toBeNull();
   });
 
+  it('shows the approved call as done in the conversation, with what it changed', async () => {
+    const { services, profile, session, runtime, ask } = await setup();
+    const run = await ask();
+    await runtime.execute(profile.id, run.id);
+    const resume = await services.runs.decideApproval(profile.id, run.id, { decision: 'approve' });
+    await runtime.execute(profile.id, resume.id);
+
+    // It runs ahead of any model step, so no step closes it: it has to close itself, or the
+    // timeline reads it as unfinished and the panel leaves out its diff.
+    const step = (await services.sessions.timeline(profile.id, session.id))
+      .flatMap((entry) => entry.steps)
+      .find((item) => item.toolCallId === 'write-1');
+    expect(step).toMatchObject({ toolName: 'write_file', status: 'done' });
+    expect(step?.diff).toMatchObject({ created: true, additions: 1, deletions: 0 });
+  });
+
   it('never runs a rejected action', async () => {
     const { services, profile, file, seen, runtime, ask } = await setup();
     const run = await ask();

@@ -12,6 +12,7 @@ const phases = [
   'tool-refused',
   'tool-uncertain',
   'tool-diff',
+  'tool-completed',
 ];
 
 /**
@@ -95,6 +96,16 @@ export async function sessionTimeline(
       const diff = codeDiffSchema.safeParse(row.diff);
 
       if (step && diff.success) step.diff = diff.data;
+      continue;
+    }
+
+    // An approved action runs ahead of the turn's first step and closes itself.
+    if (row.phase === 'tool-completed') {
+      const step = row.toolCallId ? steps.get(row.toolCallId) : undefined;
+
+      if (step?.status === 'running') {
+        Object.assign(step, { status: 'done', finishedAt: row.at.toISOString() });
+      }
       continue;
     }
 
