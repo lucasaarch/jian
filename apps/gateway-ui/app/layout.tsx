@@ -3,8 +3,9 @@ import { connection } from 'next/server';
 import '@fontsource-variable/ibm-plex-sans';
 import '@fontsource/ibm-plex-mono/400.css';
 import { Notifications } from '../components/shell/notice';
+import { QueryProvider } from '../components/shell/query';
 import { ServiceWorker } from '../components/shell/service-worker';
-import { ThemeProvider } from '../components/shell/theme';
+import { ThemeSync } from '../components/shell/theme';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -25,7 +26,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="en">
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <QueryProvider>{children}</QueryProvider>
+        <ThemeSync />
         <Notifications />
         <ServiceWorker />
       </body>

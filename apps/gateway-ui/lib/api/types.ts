@@ -66,20 +66,12 @@ export type GitHubIntegration = JsonResponse<'githubIntegration', 200>;
 export type GitHubAccount = GitHubIntegration['accounts'][number];
 export type GitHubRepository = JsonResponse<'githubRepositories', 200>[number];
 
-/** The open profile's whole screenful. Every section reads its slice from here. */
-export type ProfileData = {
+/** What a model is chosen from: the providers, the models each offers, the agent's defaults. */
+export type ModelCatalog = {
   providers: Provider[];
   /** One entry per usable provider, keyed by provider id. Absent while a list never arrived. */
   providerModels: Record<string, ProviderModelList>;
   modelDefaults: ModelDefaults;
-  sessions: Session[];
-  projects: Project[];
-  channels: Channel[];
-  memories: Memory[];
-  activities: Run[];
-  deliveries: Delivery[];
-  contacts: Contact[];
-  groups: Group[];
 };
 
 /** Runs an action, shows its outcome and reloads the profile. False means it failed. */

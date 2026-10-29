@@ -2,10 +2,11 @@
 
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { useAgent, useModelCatalog } from '@/lib/query/agent';
+import { useRefresh } from '@/lib/workspace';
 import type { ModelDefaultsInput, ModelSelection, ReasoningEffort } from '../../lib/api';
 import { useAutosave } from '../../lib/autosave';
-import { useWorkspace } from '../../lib/workspace';
-import type { SectionProps } from '../props';
+import type { SectionActions } from '../props';
 import { SectionHeading } from '../ui';
 import { type Role, roles, usableProviders } from './catalog';
 import {
@@ -47,32 +48,35 @@ function toSelection(value: RoleValue): ModelSelection | 'disabled' | null {
   };
 }
 
-export function ModelDefaults({ profile, data, api, busy }: SectionProps) {
-  const configured = usableProviders(data);
+export function ModelDefaults({ api, busy }: Pick<SectionActions, 'api' | 'busy'>) {
+  const catalog = useModelCatalog();
+  const profile = useAgent();
+  const configured = usableProviders(catalog);
   const hasOpenAIKey = configured.some(
     (provider) => provider.kind === 'openai' && provider.authMode !== 'codex',
   );
   const [values, setValues] = useState<Record<Role, RoleValue>>(() => {
     const defaultConversation =
-      data.modelDefaults.conversation ?? preferredModelSelection('conversation', data, configured);
+      catalog.modelDefaults.conversation ??
+      preferredModelSelection('conversation', catalog, configured);
     return Object.fromEntries(
       roles.map((role) => {
-        const saved = data.modelDefaults[role.key];
+        const saved = catalog.modelDefaults[role.key];
         const fallback =
           role.key === 'channel' || role.key === 'compaction'
             ? defaultConversation
-            : preferredModelSelection(role.key, data, configured);
+            : preferredModelSelection(role.key, catalog, configured);
         const selection = saved ?? fallback ?? null;
         const resolved =
           selection && selection !== 'disabled' && role.tools
-            ? withDefaultEffort(selection, data)
+            ? withDefaultEffort(selection, catalog)
             : selection;
         return [role.key, initial(resolved ?? null)];
       }),
     ) as Record<Role, RoleValue>;
   });
 
-  const { refresh } = useWorkspace();
+  const refresh = useRefresh();
   const latest = useRef(values);
 
   // A choice in a menu is final: it is saved at once, and the next one waits for it.
@@ -139,7 +143,7 @@ export function ModelDefaults({ profile, data, api, busy }: SectionProps) {
                   <RoleFields
                     role={role}
                     value={value}
-                    data={data}
+                    catalog={catalog}
                     configured={configured}
                     hasOpenAIKey={hasOpenAIKey}
                     busy={busy}

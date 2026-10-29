@@ -1,11 +1,15 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
-import type { SectionProps } from '../props';
+import { AgentCache, type AgentSlices } from '@/test/agent';
+import type { GatewayApi, Profile } from '../../lib/api';
 import { ModelDefaults } from './model-defaults';
 
 // A saved choice reloads the workspace; here there is none to reload.
-vi.mock('../../lib/workspace', () => ({ useWorkspace: () => ({ refresh: async () => {} }) }));
+vi.mock('../../lib/workspace', () => ({
+  useRefresh: () => async () => {},
+  useAgentPath: () => (path: string) => `/${path}`,
+}));
 
 const model = (id: string, output: string[] = ['text']) => ({
   id,
@@ -28,29 +32,34 @@ async function modelMenu(
   const element = document.createElement('div');
   document.body.append(element);
   const root = createRoot(element);
-  const props = {
-    profile: { id: 'profile' },
-    data: {
-      providers: [
-        { id: 'google', name: 'Gemini', kind: 'google' },
-        { id: 'anthropic', name: 'Anthropic', kind: 'anthropic' },
-        { id: 'codex', name: 'OpenAI', kind: 'openai', authMode: 'codex' },
-        ...(apiKey ? [{ id: 'openai', name: 'OpenAI', kind: 'openai', authMode: 'api' }] : []),
-      ],
-      providerModels: {
-        google: {
-          models: [model('gemini-3-pro'), model('gemini-3-pro-image', ['image'])],
-        },
-        anthropic: { models: [model('claude-sonnet-5')] },
-        openai: { models: [model('gpt-image-1', ['image'])] },
+  const profile = { id: 'profile' } as Profile;
+  const slices = {
+    providers: [
+      { id: 'google', name: 'Gemini', kind: 'google' },
+      { id: 'anthropic', name: 'Anthropic', kind: 'anthropic' },
+      { id: 'codex', name: 'OpenAI', kind: 'openai', authMode: 'codex' },
+      ...(apiKey ? [{ id: 'openai', name: 'OpenAI', kind: 'openai', authMode: 'api' }] : []),
+    ],
+    providerModels: {
+      google: {
+        providerId: 'google',
+        models: [model('gemini-3-pro'), model('gemini-3-pro-image', ['image'])],
       },
-      modelDefaults,
+      anthropic: { providerId: 'anthropic', models: [model('claude-sonnet-5')] },
+      openai: { providerId: 'openai', models: [model('gpt-image-1', ['image'])] },
+      // Every usable provider has its list here, so nothing is asked of the network.
+      codex: { providerId: 'codex', models: [] },
     },
-    api: { setModelDefaults },
-    mutate: async () => {},
-    busy: false,
-  } as unknown as SectionProps;
-  await act(async () => root.render(<ModelDefaults {...props} />));
+    modelDefaults,
+  } as unknown as AgentSlices;
+  const api = { setModelDefaults } as unknown as GatewayApi;
+  await act(async () =>
+    root.render(
+      <AgentCache profile={profile} slices={slices}>
+        <ModelDefaults api={api} busy={false} />
+      </AgentCache>,
+    ),
+  );
   const card = Array.from(element.querySelectorAll('.model-card')).find(
     (item) => item.querySelector('h2')?.textContent === activity,
   );

@@ -1,5 +1,5 @@
 import { optionalModelRoles } from '@jian/contracts';
-import type { ProfileData, ProviderModel, ReasoningEffort } from '../../lib/api';
+import type { ModelCatalog, ProviderModel, ReasoningEffort } from '../../lib/api';
 
 /** The vendors the panel offers, each with what it is and the host variable it falls back to. */
 export const providers = [
@@ -146,8 +146,8 @@ export const efforts: Array<{ value: ReasoningEffort; label: string }> = [
 ];
 
 /** A live provider carries its own key: revoking it takes the key with it. */
-export const usableProviders = (data: ProfileData) =>
-  data.providers.filter((provider) => !provider.revokedAt);
+export const usableProviders = (catalog: ModelCatalog) =>
+  catalog.providers.filter((provider) => !provider.revokedAt);
 
 export const modelLabel = (model: ProviderModel, catalogued = true) =>
   `${model.displayName ?? model.id}${model.known || !catalogued ? '' : ' · capabilities unknown'}`;

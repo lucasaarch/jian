@@ -1,9 +1,12 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { Check, Download, ExternalLink, LoaderCircle, Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import type { Profile } from '@/lib/api';
+import { keys } from '@/lib/query/keys';
 import type { GatewayApi } from '../../lib/api';
-import type { SectionProps } from '../props';
+import type { SectionActions } from '../props';
 import { Button, Confirm, ProviderLogo } from '../ui';
 
 const sources = [
@@ -29,41 +32,23 @@ export function SkillCatalog({
   api,
   mutate,
   busy,
-}: Pick<SectionProps, 'profile' | 'api' | 'mutate' | 'busy'>) {
+}: SectionActions & { profile: Profile }) {
   const [source, setSource] = useState<(typeof sources)[number]>(sources[0]);
-  const [catalogs, setCatalogs] = useState<Record<string, Entry[]>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [query, setQuery] = useState('');
-  const [retry, setRetry] = useState(0);
   const [replacing, setReplacing] = useState<Entry>();
-  const entries = catalogs[source.id];
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Retry explicitly restarts a failed read.
-  useEffect(() => {
-    if (entries) {
-      setLoading(false);
-      setError('');
-      return;
-    }
-    let alive = true;
-    setLoading(true);
-    setError('');
-    api
-      .skillCatalog(profile.id, source.url)
-      .then((catalog) => {
-        if (alive) setCatalogs((current) => ({ ...current, [source.id]: catalog.entries }));
-      })
-      .catch((failure) => {
-        if (alive)
-          setError(failure instanceof Error ? failure.message : 'The catalog could not be loaded.');
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [api, profile.id, source, entries, retry]);
+  // Each catalog is read once a session and kept; switching sources back shows it at once.
+  const catalog = useQuery({
+    queryKey: keys.skillCatalog(profile.id, source.url),
+    queryFn: () => api.skillCatalog(profile.id, source.url),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  const entries = catalog.data?.entries;
+  const loading = catalog.isPending;
+  const error = catalog.error
+    ? catalog.error instanceof Error
+      ? catalog.error.message
+      : 'The catalog could not be loaded.'
+    : '';
   const importEntry = async (entry: Entry) => {
     if (await mutate(() => api.importSkill(profile.id, entry.url), `Skill ${entry.name} imported.`))
       setReplacing(undefined);
@@ -115,7 +100,7 @@ export function SkillCatalog({
       ) : error ? (
         <div className="history-error" role="alert">
           <p>{error}</p>
-          <Button variant="secondary" onClick={() => setRetry((value) => value + 1)}>
+          <Button variant="secondary" onClick={() => void catalog.refetch()}>
             Try again
           </Button>
         </div>

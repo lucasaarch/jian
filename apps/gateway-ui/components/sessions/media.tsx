@@ -1,7 +1,9 @@
 'use client';
 
+import { useQueries } from '@tanstack/react-query';
 import { FileText } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { keys } from '@/lib/query/keys';
 import type { GatewayApi } from '../../lib/api';
 import { AudioPlayer } from '../ui';
 import { MediaViewer } from './viewer';
@@ -74,30 +76,24 @@ export function MessageMedia({
       ].map((match) => match[1] ?? ''),
     ),
   ];
-  const key = ids.join(',');
-  const [items, setItems] = useState<Array<LoadedMedia | { id: string; failed: true }>>();
   const [open, setOpen] = useState<LoadedMedia>();
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for the ids it joins.
-  useEffect(() => {
-    if (!ids.length) return;
-    let stopped = false;
-
-    void Promise.all(
-      ids.map((id) =>
+  // An attachment never changes once stored, so each is read once and kept for the visit; one
+  // that fails stays a failure instead of being asked for again on every render.
+  const items = useQueries({
+    queries: ids.map((id) => ({
+      queryKey: keys.media(profileId, id),
+      queryFn: (): Promise<LoadedMedia | { id: string; failed: true }> =>
         api
           .media(profileId, id)
           .then((media) => ({ ...media, url: `data:${media.mimeType};base64,${media.data}` }))
           .catch(() => ({ id, failed: true as const })),
-      ),
-    ).then((loaded) => {
-      if (!stopped) setItems(loaded);
-    });
-
-    return () => {
-      stopped = true;
-    };
-  }, [api.media, profileId, key]);
+      staleTime: Number.POSITIVE_INFINITY,
+    })),
+    combine: (results) =>
+      results.every((result) => result.data)
+        ? results.flatMap((result) => (result.data ? [result.data] : []))
+        : undefined,
+  });
 
   if (!ids.length) return null;
   if (!items) return <p className="media-note">Loading attachments…</p>;

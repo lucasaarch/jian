@@ -1,8 +1,8 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
+import { statsFor } from '@/test/fixtures';
 import type { ProfileStats } from '../../lib/api';
-import { statsFor } from '../../stories/fixtures';
 import { ChannelCards, ModelCards, UsageSummary } from './usage';
 
 it('labels Meta usage independently of Baileys and the API server', async () => {

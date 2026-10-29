@@ -5,15 +5,13 @@ import type { GatewayApi, Run } from '../../lib/api';
 import { History } from './history';
 
 let hear: ((event: { type: string }) => void) | undefined;
-vi.mock('../../lib/workspace', () => ({
-  useWorkspace: () => ({
-    subscribe: (listener: () => void) => {
-      hear = listener;
-      return () => {
-        hear = undefined;
-      };
-    },
-  }),
+vi.mock('../../lib/events', () => ({
+  subscribe: (listener: () => void) => {
+    hear = listener;
+    return () => {
+      hear = undefined;
+    };
+  },
 }));
 
 it('centers a spinner while a conversation is loading', async () => {

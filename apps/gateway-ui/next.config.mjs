@@ -30,13 +30,5 @@ export default function configuration() {
     async headers() {
       return [{ source: '/:path*', headers: SECURITY_HEADERS }];
     },
-    // The gateway served the panel under /ui/; links and bookmarks from then land on the
-    // same page here.
-    async redirects() {
-      return [
-        { source: '/ui', destination: '/', permanent: false },
-        { source: '/ui/:path*', destination: '/:path*', permanent: false },
-      ];
-    },
   };
 }

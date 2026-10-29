@@ -3,8 +3,8 @@
 import { BookOpen, Download, Eye, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import type { Profile } from '../../lib/api';
-import type { SectionProps } from '../props';
+import { useAgent, useAgents } from '@/lib/query/agent';
+import type { SectionActions } from '../props';
 import { Badge, Button, Confirm, Empty, ProviderLogo, ResourceRow, SectionHeading } from '../ui';
 import { BuiltinSkills } from './built-in';
 import { SkillCatalog } from './catalog';
@@ -30,16 +30,15 @@ function originOf(url?: string): { label: string; path?: string; logo?: ReactNod
 
 export function Capabilities({
   kind,
-  profile,
   api,
   mutate,
   busy,
-  others = [],
-}: Omit<SectionProps, 'data'> & {
+}: SectionActions & {
   kind: 'skills' | 'mcpServers';
-  /** Every profile of the installation, for importing another agent's servers. */
-  others?: Profile[];
 }) {
+  // Every agent of the installation, for importing another agent's servers.
+  const others = useAgents();
+  const profile = useAgent();
   const [editing, setEditing] = useState<number | 'new'>();
   const [removing, setRemoving] = useState<number>();
   const [failed, setFailed] = useState(false);

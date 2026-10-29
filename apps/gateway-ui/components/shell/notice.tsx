@@ -1,8 +1,6 @@
 'use client';
 import { CircleCheck, CircleX, Info } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import { Toaster, toast } from 'sonner';
-import { useWorkspace } from '../../lib/workspace';
+import { Toaster } from 'sonner';
 
 export function Notifications() {
   return (
@@ -23,16 +21,4 @@ export function Notifications() {
       }}
     />
   );
-}
-
-export function NoticeBar() {
-  const { notice } = useWorkspace();
-  const announced = useRef<typeof notice>(undefined);
-  useEffect(() => {
-    if (!notice || announced.current === notice) return;
-    announced.current = notice;
-    if (notice.error) toast.error(notice.text, { duration: 8000 });
-    else toast.success(notice.text);
-  }, [notice]);
-  return null;
 }

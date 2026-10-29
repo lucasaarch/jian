@@ -3,7 +3,8 @@
 import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import type { GatewayApi, ProfileData, ReasoningEffort, Session } from '../../lib/api';
+import { useModelCatalog } from '@/lib/query/agent';
+import type { GatewayApi, ReasoningEffort, Session } from '../../lib/api';
 import { efforts, usableProviders } from '../providers/catalog';
 import {
   choiceOf,
@@ -25,7 +26,6 @@ export function SessionModel({
   draftModel,
   onDraftChange,
   className,
-  data,
   channel,
   saved,
 }: {
@@ -35,7 +35,6 @@ export function SessionModel({
   draftModel?: Session['model'];
   onDraftChange?: (model: Session['model']) => void;
   className?: string;
-  data: ProfileData;
   /** A WhatsApp or Telegram conversation, which follows the Channels default. */
   channel: boolean;
   saved: () => void;
@@ -43,16 +42,17 @@ export function SessionModel({
   const [savedModel, setSavedModel] = useState(session?.model);
   const [busy, setBusy] = useState(false);
   const initialSave = useRef(false);
-  const providers = usableProviders(data);
+  const catalog = useModelCatalog();
+  const providers = usableProviders(catalog);
   const fallback =
-    (channel ? data.modelDefaults.channel : undefined) ??
-    data.modelDefaults.conversation ??
-    preferredModelSelection('conversation', data, providers);
+    (channel ? catalog.modelDefaults.channel : undefined) ??
+    catalog.modelDefaults.conversation ??
+    preferredModelSelection('conversation', catalog, providers);
   const model = withDefaultEffort(
     session ? (savedModel ?? session.model ?? fallback) : (draftModel ?? fallback),
-    data,
+    catalog,
   );
-  const choices = modelChoices('conversation', data, providers).map((choice) => {
+  const choices = modelChoices('conversation', catalog, providers).map((choice) => {
     const providerId = choice.value.slice(0, choice.value.indexOf(':'));
     const provider = providers.find((item) => item.id === providerId);
     return {
@@ -63,7 +63,7 @@ export function SessionModel({
   });
   const current = model ? choiceOf(model.providerId, model.modelId) : '';
   const listed = model
-    ? data.providerModels[model.providerId]?.models.find((item) => item.id === model.modelId)
+    ? catalog.providerModels[model.providerId]?.models.find((item) => item.id === model.modelId)
     : undefined;
   const allowed = efforts.filter((effort) => listed?.reasoningEfforts.includes(effort.value));
   useEffect(() => {
@@ -92,7 +92,7 @@ export function SessionModel({
 
   const save = async (next: Session['model']) => {
     const previous = model;
-    const selection = withDefaultEffort(next, data);
+    const selection = withDefaultEffort(next, catalog);
 
     if (session) setSavedModel(selection);
     else onDraftChange?.(selection);

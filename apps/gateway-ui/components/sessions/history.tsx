@@ -1,8 +1,8 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
+import { subscribe } from '@/lib/events';
 import type { GatewayApi, Person, Run, ToolStep } from '../../lib/api';
-import { useWorkspace } from '../../lib/workspace';
 import { Badge, Button, Empty, Spinner } from '../ui';
 import { useFollowBottom } from './follow-bottom';
 import { MessageMedia } from './media';
@@ -50,7 +50,6 @@ export function History({
   // Bumped by an event about this conversation, so it reads again the moment something happens.
   const [heard, setHeard] = useState(0);
   const [answering, setAnswering] = useState(false);
-  const { subscribe } = useWorkspace();
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -75,7 +74,7 @@ export function History({
       stop();
       clearTimeout(timer);
     };
-  }, [subscribe, sessionId]);
+  }, [sessionId]);
   const [run, setRun] = useState(initialRun);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

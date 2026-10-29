@@ -1,5 +1,6 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import {
   AlarmClock,
   History,
@@ -10,11 +11,12 @@ import {
   Trash2,
   TriangleAlert,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useAgent, useAgents, useContacts, useSessions } from '@/lib/query/agent';
+import { keys } from '@/lib/query/keys';
 import type { Schedule } from '../../lib/api';
 import { browserTimeZone, describeCron, inZone } from '../../lib/time';
-import { useWorkspace } from '../../lib/workspace';
-import type { SectionProps } from '../props';
+import type { SectionActions } from '../props';
 import { Badge, Button, Confirm, Empty, ResourceRow, SectionHeading, Switch } from '../ui';
 import { conversationName } from './conversations';
 import { ScheduleEditor } from './editor';
@@ -24,65 +26,42 @@ import { ScheduleHistory } from './history';
  * What the agent does at a time: reminders, summaries, recurring checks, each in one of the
  * profile's conversations. The owner and the agent manage the same list.
  */
-export function Schedules({ profile, data, api, mutate, busy }: SectionProps) {
-  const { profiles, subscribe } = useWorkspace();
-  const [list, setList] = useState<Schedule[]>();
-  const [error, setError] = useState('');
+export function Schedules({ api, mutate, busy }: SectionActions) {
+  const profile = useAgent();
+  const sessions = useSessions();
+  const contacts = useContacts();
+  const profiles = useAgents();
+  // Read through the section's own client, which a story or a test hands in.
+  const schedules = useQuery({
+    queryKey: keys.schedules(profile.id),
+    queryFn: () => api.schedules(profile.id),
+  });
+  const list = schedules.data;
+  const error = schedules.error
+    ? schedules.error instanceof Error
+      ? schedules.error.message
+      : 'The schedules could not load.'
+    : '';
   const [editing, setEditing] = useState<Schedule | 'new'>();
   const [removing, setRemoving] = useState<Schedule>();
-  const [zone, setZone] = useState(browserTimeZone());
   const [history, setHistory] = useState<Schedule>();
+  // The gateway's zone, which schedules run in; this browser's until it is known.
+  const { data: settings } = useQuery({ queryKey: keys.settings, queryFn: () => api.settings() });
+  const zone = settings?.timeZone ?? browserTimeZone();
 
-  useEffect(() => {
-    void api
-      .settings()
-      .then((settings) => setZone(settings.timeZone))
-      .catch(() => {});
-  }, [api]);
-
-  const load = useCallback(
-    () =>
-      api
-        .schedules(profile.id)
-        .then((items) => {
-          setList(items);
-          setError('');
-        })
-        .catch((failure) =>
-          setError(failure instanceof Error ? failure.message : 'The schedules could not load.'),
-        ),
-    [api, profile.id],
-  );
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // The agent writes schedules too, and every run changes when one ran last.
-  useEffect(
-    () =>
-      subscribe((event) => {
-        if (event.type.startsWith('schedule.')) void load();
-      }),
-    [subscribe, load],
-  );
-
-  const change = async (action: () => Promise<unknown>, done: string) => {
-    const ok = await mutate(action, done);
-
-    if (ok) await load();
-    return ok;
-  };
-  const conversations = data.sessions.map((session) => ({
+  // An action reloads the agent's queries, the schedules among them; the stream covers the
+  // agent's own changes.
+  const change = (action: () => Promise<unknown>, done: string) => mutate(action, done);
+  const conversations = sessions.map((session) => ({
     session,
-    ...conversationName(session, data.contacts, profiles),
+    ...conversationName(session, contacts, profiles),
   }));
   const where = (sessionId: string) =>
     conversations.find((item) => item.session.id === sessionId) ?? {
       name: 'A deleted conversation',
       where: '',
     };
-  const gateway = data.sessions.find((session) => session.channel === 'gateway');
+  const gateway = sessions.find((session) => session.channel === 'gateway');
   /** A single time that already ran: kept a week, faded, under the ones still to come. */
   const done = (item: Schedule) => !item.cron && !item.enabled && Boolean(item.lastRunAt);
   const repeating = (list ?? []).filter((item) => item.cron);
@@ -261,7 +240,7 @@ export function Schedules({ profile, data, api, mutate, busy }: SectionProps) {
           key={editing === 'new' ? 'new' : editing.id}
           schedule={editing === 'new' ? undefined : editing}
           sessions={conversations}
-          defaultSession={gateway?.id ?? data.sessions[0]?.id ?? ''}
+          defaultSession={gateway?.id ?? sessions[0]?.id ?? ''}
           zone={zone}
           busy={busy}
           close={() => setEditing(undefined)}

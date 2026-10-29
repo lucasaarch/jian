@@ -1,10 +1,10 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { Ear } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { keys } from '@/lib/query/keys';
 import type { GatewayApi, Subscription } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
-import { useWorkspace } from '../../lib/workspace';
 import { Badge } from '../ui';
 
 function observationLabel(item: Subscription): string {
@@ -59,34 +59,15 @@ export function SessionListeners({
   profileId: string;
   sessionId: string;
 }) {
-  const { subscribe } = useWorkspace();
-  const [items, setItems] = useState<Subscription[]>([]);
-
-  const load = useCallback(() => {
-    void api
-      .subscriptions(profileId)
-      .then((list) => {
-        const now = Date.now();
-        setItems(
-          list.filter(
-            (item) =>
-              item.sessionId === sessionId && item.enabled && Date.parse(item.expiresAt) > now,
-          ),
-        );
-      })
-      .catch(() => setItems([]));
-  }, [api, profileId, sessionId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(
-    () =>
-      subscribe((event) => {
-        if (event.type.startsWith('subscription.')) void load();
-      }),
-    [subscribe, load],
+  // The agent's listeners, shared by every conversation; the stream reloads them as they change.
+  // Without the list there is simply nothing to show.
+  const { data: all = [] } = useQuery({
+    queryKey: keys.subscriptions(profileId),
+    queryFn: () => api.subscriptions(profileId),
+  });
+  const now = Date.now();
+  const items = all.filter(
+    (item) => item.sessionId === sessionId && item.enabled && Date.parse(item.expiresAt) > now,
   );
 
   if (!items.length) return null;

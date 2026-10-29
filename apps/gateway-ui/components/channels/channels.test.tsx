@@ -1,8 +1,10 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { Channel, Contact, GatewayApi, NewChannel, ProfileData } from '../../lib/api';
-import { profiles } from '../../stories/fixtures';
+import { AgentCache, agentClient } from '@/test/agent';
+import { profile } from '@/test/fixtures';
+import type { Channel, Contact, GatewayApi, NewChannel } from '../../lib/api';
+import { keys } from '../../lib/query/keys';
 import { Channels } from '.';
 
 vi.mock('./pairing', () => ({ Pairing: () => <p>QR pairing opened</p> }));
@@ -21,8 +23,6 @@ async function render(
   busy = false,
 ) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  const profile = profiles[0];
-  if (!profile) throw new Error('Missing profile fixture');
   const createChannel = vi.fn(async (_profileId: string, body: NewChannel) => {
     if (fail) throw new Error('Synthetic save failure');
     return {
@@ -66,19 +66,21 @@ async function render(
       return false;
     }
   });
-  const refresh = async (channels: Channel[]) =>
+  const client = agentClient({ profile, slices: { channels, contacts, groups: [] } });
+  await act(async () => {
+    root.render(
+      <AgentCache client={client} profile={profile}>
+        <Channels api={api} mutate={mutate} busy={busy} />
+      </AgentCache>,
+    );
+  });
+  // What the panel's reload after an action brings: the same screen, on the gateway's answer.
+  const refresh = async (next: Channel[]) =>
     act(async () => {
-      root.render(
-        <Channels
-          profile={profile}
-          data={{ channels, contacts, groups: [] } as unknown as ProfileData}
-          api={api}
-          mutate={mutate}
-          busy={busy}
-        />,
-      );
+      client.setQueryData(keys.channels(profile.id), next);
+      // The cache tells its readers on the next tick, not within this one.
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
-  await refresh(channels);
   const toggle = async (type: string) => {
     await act(async () =>
       element.querySelector<HTMLButtonElement>(`[aria-controls="channel-${type}"]`)?.click(),
@@ -136,7 +138,7 @@ for (const enabled of [undefined, true, false]) {
     const control = panel.querySelector<HTMLButtonElement>('[aria-label="Channel automation"]');
     expect(control?.getAttribute('aria-checked')).toBe(String(enabled ?? true));
     await act(async () => control?.click());
-    expect(updateChannel).toHaveBeenCalledExactlyOnceWith(profiles[0]?.id, business.id, {
+    expect(updateChannel).toHaveBeenCalledExactlyOnceWith(profile.id, business.id, {
       enabled: !(enabled ?? true),
     });
     expect(revokeChannel).not.toHaveBeenCalled();
@@ -154,7 +156,7 @@ for (const type of ['whatsapp', 'whatsapp-business'] as const) {
     const control = panel.querySelector<HTMLButtonElement>('[aria-label="Allow all contacts"]');
     expect(control?.getAttribute('aria-checked')).toBe('false');
     await act(async () => control?.click());
-    expect(updateChannel).toHaveBeenCalledExactlyOnceWith(profiles[0]?.id, business.id, {
+    expect(updateChannel).toHaveBeenCalledExactlyOnceWith(profile.id, business.id, {
       allowAllContacts: true,
     });
   });
@@ -221,7 +223,7 @@ for (const fail of [false, true]) {
         .querySelector('form')
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
-    expect(createChannel).toHaveBeenCalledWith(profiles[0]?.id, {
+    expect(createChannel).toHaveBeenCalledWith(profile.id, {
       type: 'whatsapp-business',
       whatsappBusiness: { verifyToken: 'synthetic-verify-secret' },
     });
@@ -306,7 +308,7 @@ for (const fail of [false, true]) {
         .querySelector('form')
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
-    expect(updateChannel).toHaveBeenCalledWith(profiles[0]?.id, pendingChannel.id, {
+    expect(updateChannel).toHaveBeenCalledWith(profile.id, pendingChannel.id, {
       whatsappBusiness: credentials,
     });
     expect(createChannel).not.toHaveBeenCalled();
@@ -339,7 +341,7 @@ it('shows the returned callback immediately after creation, then configured afte
       .querySelector('form')
       ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   });
-  expect(updateChannel).toHaveBeenCalledWith(profiles[0]?.id, pendingChannel.id, {
+  expect(updateChannel).toHaveBeenCalledWith(profile.id, pendingChannel.id, {
     whatsappBusiness: credentials,
   });
   await refresh([{ ...pendingChannel, whatsappBusinessStatus: 'configured' }]);
@@ -387,8 +389,8 @@ it('still starts QR pairing only for Baileys', async () => {
       .querySelector('form')
       ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   });
-  expect(createChannel).toHaveBeenCalledWith(profiles[0]?.id, { type: 'whatsapp' });
-  expect(connect).toHaveBeenCalledWith(profiles[0]?.id, 'meta-channel');
+  expect(createChannel).toHaveBeenCalledWith(profile.id, { type: 'whatsapp' });
+  expect(connect).toHaveBeenCalledWith(profile.id, 'meta-channel');
   expect(element.textContent).toContain('QR pairing opened');
 });
 
@@ -407,7 +409,7 @@ it('still sends the BotFather token only for Telegram', async () => {
       .querySelector('form')
       ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   });
-  expect(createChannel).toHaveBeenCalledWith(profiles[0]?.id, {
+  expect(createChannel).toHaveBeenCalledWith(profile.id, {
     type: 'telegram',
     botToken: 'synthetic-bot-token',
   });

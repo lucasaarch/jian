@@ -5,7 +5,6 @@ allowBuilds:
   baileys: false
   esbuild: true
   fsevents: false
-  msw: false
   protobufjs: false
 overrides:
   source-map-js: '>=1.2.2'

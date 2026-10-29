@@ -1,10 +1,22 @@
 'use client';
 
-import { Overview } from '../../components/overview/index';
-import { useSection } from '../../lib/workspace';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { Loading, NoAgents } from '@/components/shell/states';
+import { agentPath } from '@/lib/navigation';
+import { useProfiles } from '@/lib/query/profile';
+import { useLastProfile } from '@/lib/stores/last-profile';
 
+/** `/` belongs to no agent: it opens the one the owner had open last, or the first. */
 export default function Page() {
-  const { profile, data, api } = useSection();
+  const router = useRouter();
+  const profiles = useProfiles().data ?? [];
+  const last = useLastProfile((state) => state.profileId);
+  const target = profiles.find((profile) => profile.id === last) ?? profiles[0];
 
-  return <Overview profile={profile} data={data} api={api} />;
+  useEffect(() => {
+    if (target) router.replace(agentPath(target.id));
+  }, [router, target]);
+
+  return target ? <Loading /> : <NoAgents />;
 }

@@ -1,14 +1,19 @@
 'use client';
 
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Save, Server, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useProviderModels, useProviders } from '@/lib/query/agent';
+import { keys } from '@/lib/query/keys';
 import type { GatewayApi } from '../../lib/api';
 import { date } from '../../lib/format';
-import type { SectionProps } from '../props';
+import type { SectionActions } from '../props';
 import { Badge, Button, Field, hasLogo, ProviderLogo, ResourceRow, SectionHeading } from '../ui';
 import { Select } from '../ui/select';
 import { anthropicCredentials, providers } from './catalog';
 import { DecisionsRow, WebSearchRow } from './service-keys';
+
+type CodexLogin = Awaited<ReturnType<GatewayApi['codexLogin']>>;
 
 /** What the row says about the credential in place, in one line. */
 function credentialLine(provider: {
@@ -30,45 +35,42 @@ function credentialLine(provider: {
   return `${kind} saved on ${date(provider.createdAt)}`;
 }
 
-export function Providers({ data, api, mutate, busy }: SectionProps) {
+export function Providers({ api, mutate, busy }: SectionActions) {
+  // The credentials this installation holds; `providers` is the catalog of kinds offered.
+  const connected = useProviders();
+  const providerModels = useProviderModels();
   const [editing, setEditing] = useState<string>();
   const [formError, setFormError] = useState('');
   const [credential, setCredential] = useState('key');
-  const [codexLogin, setCodexLogin] = useState<Awaited<ReturnType<GatewayApi['codexLogin']>>>();
-
-  useEffect(() => {
-    let active = true;
-    void api
-      .codexLogin()
-      .then((state) => {
-        if (active) setCodexLogin(state);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [api]);
-
-  useEffect(() => {
-    if (codexLogin?.status !== 'pending') return;
-    const timer = setInterval(() => {
-      void api
+  const client = useQueryClient();
+  // The ChatGPT login, read once and then every five seconds while it waits for the owner. A
+  // check that fails ends the wait as a failure instead of polling on.
+  const { data: codexLogin } = useQuery({
+    queryKey: keys.codexLogin,
+    queryFn: () =>
+      api
         .codexLogin()
-        .then((state) => {
-          setCodexLogin(state);
-          if (state.status === 'connected') void mutate(async () => {}, 'ChatGPT connected.');
-        })
-        .catch(() => setCodexLogin({ status: 'failed', error: 'The login could not be checked.' }));
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [api, codexLogin?.status, mutate]);
+        .catch((): CodexLogin => ({ status: 'failed', error: 'The login could not be checked.' })),
+    refetchInterval: (query) => (query.state.data?.status === 'pending' ? 5000 : false),
+  });
+  const setCodexLogin = (state: CodexLogin) => client.setQueryData(keys.codexLogin, state);
+  // The wait ending in a connection is a provider added: say so and read them again.
+  const waiting = useRef(false);
+
+  useEffect(() => {
+    if (codexLogin?.status === 'pending') waiting.current = true;
+    else if (waiting.current) {
+      waiting.current = false;
+      if (codexLogin?.status === 'connected') void mutate(async () => {}, 'ChatGPT connected.');
+    }
+  }, [codexLogin?.status, mutate]);
 
   const entry = providers.find((item) => item.kind === editing);
   const liveOf = (kind: string) => ({
-    configured: data.providers.find(
+    configured: connected.find(
       (provider) => provider.kind === kind && !provider.revokedAt && provider.authMode !== 'codex',
     ),
-    codex: data.providers.find(
+    codex: connected.find(
       (provider) => provider.kind === kind && provider.authMode === 'codex' && !provider.revokedAt,
     ),
   });
@@ -250,7 +252,7 @@ export function Providers({ data, api, mutate, busy }: SectionProps) {
         <div className="resource-list">
           {providers.map((item) => {
             const live = liveOf(item.kind);
-            const list = live.configured ? data.providerModels[live.configured.id] : undefined;
+            const list = live.configured ? providerModels[live.configured.id] : undefined;
             const uncatalogued = list?.models.filter((model) => !model.known).length ?? 0;
 
             return (

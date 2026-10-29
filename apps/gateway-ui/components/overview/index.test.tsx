@@ -1,12 +1,13 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
-import type { GatewayApi, ProfileData, ProfileStats } from '../../lib/api';
-import { profiles, statsFor } from '../../stories/fixtures';
+import { AgentCache } from '@/test/agent';
+import { profile, statsFor } from '@/test/fixtures';
+import type { GatewayApi, ProfileStats } from '../../lib/api';
 import { Overview } from '.';
 
-const profile = profiles[0];
-if (!profile) throw new Error('Missing profile fixture');
+// The cache tells its readers on the next tick, not within the one that answered.
+const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
 it('waits for stats before showing any overview content', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -19,7 +20,11 @@ it('waits for stats before showing any overview content', async () => {
   const root = createRoot(element);
 
   await act(async () =>
-    root.render(<Overview profile={profile} data={{} as ProfileData} api={api} />),
+    root.render(
+      <AgentCache profile={profile}>
+        <Overview api={api} />
+      </AgentCache>,
+    ),
   );
   expect(element.querySelector('[aria-label="Loading overview"]')).not.toBeNull();
   expect(element.querySelector('.overview-profile')).toBeNull();
@@ -27,6 +32,7 @@ it('waits for stats before showing any overview content', async () => {
   expect(api.activityCalendar).not.toHaveBeenCalled();
 
   await act(async () => resolveStats(statsFor(30) as ProfileStats));
+  await settle();
   expect(element.querySelector('.overview-profile')).not.toBeNull();
   expect(element.querySelector('.stat-subscriptions')).not.toBeNull();
   expect(element.querySelector('.heatmap-panel')).not.toBeNull();
@@ -42,12 +48,18 @@ it('offers retry if the first stats load fails', async () => {
   const root = createRoot(element);
 
   await act(async () =>
-    root.render(<Overview profile={profile} data={{} as ProfileData} api={api} />),
+    root.render(
+      <AgentCache profile={profile}>
+        <Overview api={api} />
+      </AgentCache>,
+    ),
   );
+  await settle();
   expect(element.textContent).toContain('Could not load overview.');
   expect(element.querySelector('.overview-profile')).toBeNull();
 
   await act(async () => element.querySelector<HTMLButtonElement>('button')?.click());
+  await settle();
   expect(stats).toHaveBeenCalledTimes(2);
   expect(element.querySelector('.overview-profile')).not.toBeNull();
 

@@ -1,7 +1,9 @@
 'use client';
 
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Monitor, Plus, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { keys } from '@/lib/query/keys';
 import type { GatewayApi } from '../../lib/api';
 import { Avatar } from '../profile/avatar-field';
 import { Badge, Button, Confirm, Empty, Field, Modal, ResourceRow, SectionHeading } from '../ui';
@@ -103,9 +105,7 @@ function CopyBlock({
 }
 
 export function RemoteMachines({ api }: Props) {
-  const [machines, setMachines] = useState<Machine[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
@@ -117,66 +117,45 @@ export function RemoteMachines({ api }: Props) {
     token: string;
     kind: 'created' | 'rotated';
   } | null>(null);
-  const [access, setAccess] = useState<Record<string, string[]>>({});
+  // Access the owner changed and has not saved yet, per machine. Kept apart from the list, so a
+  // poll that brings the gateway's answer never undoes a choice still being made.
+  const [edits, setEdits] = useState<Record<string, string[]>>({});
   const [openId, setOpenId] = useState<string>();
   const [removing, setRemoving] = useState<Machine>();
   const [rotating, setRotating] = useState<Machine>();
   const [gatewayOrigin, setGatewayOrigin] = useState('https://YOUR-JIAN-GATEWAY');
-  /** npm dist-tag or exact version matching this gateway release when known. */
-  const [packageTag, setPackageTag] = useState('latest');
 
-  const refresh = useCallback(
-    async (opts?: { quiet?: boolean }) => {
-      if (!opts?.quiet) setLoading(true);
-      try {
-        const [nextMachines, nextProfiles] = await Promise.all([
-          api.remoteMachines(),
-          api.profiles(),
-        ]);
-        setMachines(nextMachines);
-        setProfiles(nextProfiles);
-        setAccess(
-          Object.fromEntries(
-            nextMachines.map((machine) => [machine.id, machine.allowedProfileIds]),
-          ),
-        );
-        setError('');
-      } catch (cause) {
-        // Quiet polls keep the last good list; only surface errors on an explicit load.
-        if (!opts?.quiet) {
-          setError(cause instanceof Error ? cause.message : 'Could not load remote machines.');
-        }
-      } finally {
-        if (!opts?.quiet) setLoading(false);
-      }
-    },
-    [api],
-  );
+  // Worker presence is polled by the gateway; the list is read again so Online/Offline follows
+  // without a reload — faster while the install or rotate modal is open, since someone is
+  // connecting a machine right now. A failed poll keeps the last good list.
+  const list = useQuery({
+    queryKey: keys.remoteMachines,
+    queryFn: () => api.remoteMachines(),
+    refetchInterval: reveal ? 2000 : 5000,
+  });
+  const machines = list.data ?? [];
+  const loading = list.isPending;
+  const loadError = list.data ? '' : list.error ? 'Could not load remote machines.' : '';
+  const { data: profiles = [] } = useQuery({
+    queryKey: keys.profiles,
+    queryFn: () => api.profiles(),
+  });
+  // The npm dist-tag matching this gateway's release; @latest on a dev build or without notes.
+  const { data: releases } = useQuery({
+    queryKey: keys.releases,
+    queryFn: () => api.releases(),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+  const version = releases?.version?.trim();
+  const packageTag =
+    version && /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version) ? version : 'latest';
+  const accessOf = (machine: Machine) => edits[machine.id] ?? machine.allowedProfileIds;
+  const refresh = () => client.invalidateQueries({ queryKey: keys.remoteMachines });
 
   useEffect(() => {
     setGatewayOrigin(window.location.origin);
-    void refresh();
-    void api
-      .releases()
-      .then((releases) => {
-        const version = releases.version?.trim();
-        // Dev builds have no version; pin published installs to the running release.
-        if (version && /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
-          setPackageTag(version);
-        }
-      })
-      .catch(() => {
-        // Keep @latest when the releases endpoint is unavailable.
-      });
-  }, [api, refresh]);
-
-  // Worker presence is polled by the gateway; refresh Online/Offline without a manual reload.
-  // Faster while the install/rotate modal is open (someone is connecting a machine right now).
-  useEffect(() => {
-    const ms = reveal ? 2000 : 5000;
-    const timer = window.setInterval(() => void refresh({ quiet: true }), ms);
-    return () => window.clearInterval(timer);
-  }, [reveal, refresh]);
+  }, []);
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
@@ -204,8 +183,10 @@ export function RemoteMachines({ api }: Props) {
     setBusy(true);
     setError('');
     try {
-      await api.setRemoteMachineAccess(machineId, access[machineId] ?? []);
+      const machine = machines.find((item) => item.id === machineId);
+      await api.setRemoteMachineAccess(machineId, machine ? accessOf(machine) : []);
       await refresh();
+      setEdits(({ [machineId]: _saved, ...rest }) => rest);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not update access.');
     } finally {
@@ -274,9 +255,9 @@ export function RemoteMachines({ api }: Props) {
           </Button>
         }
       />
-      {error && (
+      {(error || loadError) && (
         <p className="form-error" role="alert">
-          {error}
+          {error || loadError}
         </p>
       )}
       {loading ? (
@@ -297,7 +278,7 @@ export function RemoteMachines({ api }: Props) {
       ) : (
         <div className="resource-list">
           {machines.map((machine) => {
-            const authorized = access[machine.id] ?? [];
+            const authorized = accessOf(machine);
             const names = profiles
               .filter((profile) => authorized.includes(profile.id))
               .map((profile) => profile.name);
@@ -362,7 +343,7 @@ export function RemoteMachines({ api }: Props) {
                       profiles={profiles}
                       selected={authorized}
                       onChange={(next) =>
-                        setAccess((current) => ({ ...current, [machine.id]: next }))
+                        setEdits((current) => ({ ...current, [machine.id]: next }))
                       }
                       empty="Create an agent before granting access."
                     />
@@ -424,7 +405,7 @@ export function RemoteMachines({ api }: Props) {
                 maxLength={100}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="e.g. Lucas's Windows PC"
+                placeholder="e.g. Maya's Windows PC"
               />
             </Field>
             <Field

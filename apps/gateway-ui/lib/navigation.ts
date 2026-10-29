@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 
 export type NavigationItem = {
-  href: string;
+  /** Relative to the open agent: `''` is its overview, `'sessions'` is `/agents/:id/sessions`. */
+  path: string;
   label: string;
   icon: LucideIcon;
   group: NavigationGroup;
@@ -33,26 +34,42 @@ type NavigationGroup = (typeof navigationGroups)[number]['id'];
 
 /** Routes are ordered within their section in the order shown by the sidebar. */
 export const navigation: NavigationItem[] = [
-  { href: '/sessions', label: 'Chats', icon: MessageSquare, group: 'workspace' },
-  { href: '/', label: 'Overview', icon: LayoutDashboard, group: 'workspace' },
-  { href: '/projects', label: 'Projects', icon: FolderGit2, group: 'workspace' },
-  { href: '/identity', label: 'Identity', icon: Fingerprint, group: 'agent-setup' },
-  { href: '/models', label: 'Model defaults', icon: Cpu, group: 'agent-setup' },
-  { href: '/memories', label: 'Memories', icon: BookOpen, group: 'agent-setup' },
-  { href: '/skills', label: 'Skills', icon: Sparkles, group: 'agent-setup' },
-  { href: '/providers', label: 'Providers', icon: Plug, group: 'connections' },
-  { href: '/integrations', label: 'Integrations', icon: Cable, group: 'connections' },
-  { href: '/channels', label: 'Channels', icon: Smartphone, group: 'connections' },
-  { href: '/ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'connections' },
-  { href: '/remote', label: 'Remote Control', icon: Monitor, group: 'connections' },
-  { href: '/schedules', label: 'Schedules', icon: AlarmClock, group: 'automation' },
+  { path: 'sessions', label: 'Chats', icon: MessageSquare, group: 'workspace' },
+  { path: '', label: 'Overview', icon: LayoutDashboard, group: 'workspace' },
+  { path: 'projects', label: 'Projects', icon: FolderGit2, group: 'workspace' },
+  { path: 'identity', label: 'Identity', icon: Fingerprint, group: 'agent-setup' },
+  { path: 'models', label: 'Model defaults', icon: Cpu, group: 'agent-setup' },
+  { path: 'memories', label: 'Memories', icon: BookOpen, group: 'agent-setup' },
+  { path: 'skills', label: 'Skills', icon: Sparkles, group: 'agent-setup' },
+  { path: 'providers', label: 'Providers', icon: Plug, group: 'connections' },
+  { path: 'integrations', label: 'Integrations', icon: Cable, group: 'connections' },
+  { path: 'channels', label: 'Channels', icon: Smartphone, group: 'connections' },
+  { path: 'ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'connections' },
+  { path: 'remote', label: 'Remote Control', icon: Monitor, group: 'connections' },
+  { path: 'schedules', label: 'Schedules', icon: AlarmClock, group: 'automation' },
 ];
+
+/** Where a page of one agent lives. Every screen of the panel belongs to an agent. */
+export function agentPath(profileId: string, path = ''): string {
+  const rest = path.replace(/^\//, '');
+
+  return `/agents/${encodeURIComponent(profileId)}${rest ? `/${rest}` : ''}`;
+}
+
+/** The part of an agent's route after its id: `/agents/a/sessions/b` reads `sessions/b`. */
+function withinAgent(pathname: string): string | undefined {
+  const match = /^\/agents\/[^/]+(?:\/(.*))?$/.exec(pathname.replace(/\/$/, ''));
+
+  return match ? (match[1] ?? '') : undefined;
+}
 
 /** The deepest section whose route prefixes the current one, so a child route stays marked. */
 export function currentSection(pathname: string): NavigationItem | undefined {
-  const path = pathname.replace(/\/$/, '') || '/';
+  const path = withinAgent(pathname);
+
+  if (path === undefined) return undefined;
 
   return [...navigation]
-    .sort((a, b) => b.href.length - a.href.length)
-    .find((item) => path === item.href || path.startsWith(`${item.href}/`));
+    .sort((a, b) => b.path.length - a.path.length)
+    .find((item) => path === item.path || (item.path && path.startsWith(`${item.path}/`)));
 }

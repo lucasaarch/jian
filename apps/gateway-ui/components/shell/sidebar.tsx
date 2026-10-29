@@ -1,13 +1,13 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { LogOut, ScrollText, Star, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { gatewayApi } from '../../lib/api';
+import { queries } from '@/lib/query/profile';
+import { useAgentPath, useLoading, useProfileId, useSignOut } from '@/lib/workspace';
 import { currentSection, navigation, navigationGroups } from '../../lib/navigation';
-import { useWorkspace } from '../../lib/workspace';
-import { useReleaseNotes, useReleaseUpdate } from '../releases/dialog';
+import { useReleaseNotes } from '../releases/dialog';
 import { GitHubLogo, Mark } from '../ui';
 import { ProfileSwitcher } from './profile-switcher';
 import { ThemeSwitcher } from './theme';
@@ -23,11 +23,16 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const active = currentSection(pathname);
-  const { data, loading, signOut } = useWorkspace();
+  const profileId = useProfileId();
+  const loading = useLoading();
+  const signOut = useSignOut();
+  const contacts = useQuery({ ...queries.contacts(profileId ?? ''), enabled: Boolean(profileId) });
   const releaseNotes = useReleaseNotes();
-  const releaseUpdate = useReleaseUpdate();
+  // How many releases this installation is behind, for the count beside the notes.
+  const behind = useQuery(queries.releases()).data?.behind ?? 0;
   // Requests waiting on the owner, shown wherever they are in the panel.
-  const pending = data?.contacts.filter((contact) => contact.status === 'pending').length ?? 0;
+  const pending = contacts.data?.filter((contact) => contact.status === 'pending').length ?? 0;
+  const hrefOf = useAgentPath();
 
   return (
     <aside
@@ -45,7 +50,7 @@ export function Sidebar({
         <X size={18} />
       </button>
       <Link className="brand" href="/" onClick={onNavigate}>
-        <Mark className={loading ? 'connecting' : data ? 'connected' : ''} />
+        <Mark className={loading ? 'connecting' : contacts.data ? 'connected' : ''} />
         <span>Jian</span>
       </Link>
       <ProfileSwitcher onCreate={onCreateProfile} />
@@ -57,15 +62,15 @@ export function Sidebar({
               .filter((item) => item.group === group.id)
               .map((item) => (
                 <Link
-                  key={item.href}
-                  href={item.href}
-                  className={active?.href === item.href ? 'active' : ''}
-                  aria-current={active?.href === item.href ? 'page' : undefined}
+                  key={item.path}
+                  href={hrefOf(item.path)}
+                  className={active === item ? 'active' : ''}
+                  aria-current={active === item ? 'page' : undefined}
                   onClick={onNavigate}
                 >
                   <item.icon size={18} strokeWidth={1.7} />
                   <span>{item.label}</span>
-                  {item.href === '/channels' && pending > 0 && (
+                  {item.path === 'channels' && pending > 0 && (
                     <span className="nav-count">
                       {pending}
                       <span className="sr-only"> waiting for approval</span>
@@ -81,7 +86,7 @@ export function Sidebar({
         <GitHubLink />
         <button
           type="button"
-          className={releaseUpdate.behind > 0 ? 'release-update' : undefined}
+          className={behind > 0 ? 'release-update' : undefined}
           onClick={() => {
             onNavigate();
             releaseNotes();
@@ -89,9 +94,9 @@ export function Sidebar({
         >
           <ScrollText size={16} />
           Release notes
-          {releaseUpdate.behind > 0 && (
+          {behind > 0 && (
             <span className="release-update-count">
-              {releaseUpdate.behind}
+              {behind}
               <span className="sr-only"> releases behind</span>
             </span>
           )}
@@ -112,22 +117,7 @@ const starCount = new Intl.NumberFormat('en', { notation: 'compact', maximumFrac
 
 /** Where Jian lives. The count comes through the gateway; the link works without it. */
 function GitHubLink() {
-  const [stars, setStars] = useState<number>();
-
-  useEffect(() => {
-    let active = true;
-
-    void gatewayApi()
-      .repository()
-      .then((repository) => {
-        if (active) setStars(repository.stars);
-      })
-      .catch(() => {});
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  const stars = useQuery(queries.repository()).data?.stars;
 
   return (
     <a className="sidebar-github" href={REPOSITORY} target="_blank" rel="noreferrer">

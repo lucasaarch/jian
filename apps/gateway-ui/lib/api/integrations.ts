@@ -4,18 +4,12 @@ import { result } from './result';
 export const integrationCalls = (client: Client) => ({
   githubIntegration: () => result(client.GET('/v1/integrations/github')),
   startGithubInstallation: (
-    returnPath:
-      | '/integrations'
-      | '/ui/integrations'
-      | '/integrations/github'
-      | '/ui/integrations/github',
+    // The integrations page of the open agent; the gateway sends the owner back there.
+    returnPath: string,
   ) => result(client.POST('/v1/integrations/github/install', { body: { returnPath } })),
   startGithubAppRegistration: (
-    returnPath:
-      | '/integrations'
-      | '/ui/integrations'
-      | '/integrations/github'
-      | '/ui/integrations/github',
+    // The integrations page of the open agent; the gateway sends the owner back there.
+    returnPath: string,
   ) => result(client.POST('/v1/integrations/github/manifest', { body: { returnPath } })),
   githubRepositories: (accountId: string) =>
     result(

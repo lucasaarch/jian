@@ -1,39 +1,31 @@
 'use client';
 
-import { Plus } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
-import { NewProfileDialog } from '../../components/profile/editor';
-import { ReleaseNotes } from '../../components/releases/dialog';
-import { NoticeBar } from '../../components/shell/notice';
-import { Sidebar } from '../../components/shell/sidebar';
-import { Topbar } from '../../components/shell/topbar';
-import { Button, Empty, Spinner } from '../../components/ui';
-import { gatewayApi, type Profile } from '../../lib/api';
-import { useWorkspace, WorkspaceProvider } from '../../lib/workspace';
+import { NewProfileDialog } from '@/components/profile/editor';
+import { ReleaseNotes } from '@/components/releases/dialog';
+import { Sidebar } from '@/components/shell/sidebar';
+import { Topbar } from '@/components/shell/topbar';
+import { Spinner } from '@/components/ui';
+import { currentSection } from '@/lib/navigation';
+import { panelApi } from '@/lib/query/client';
+import { useProfiles } from '@/lib/query/profile';
+import { useShell } from '@/lib/stores/shell';
+import { useAdoptProfile } from '@/lib/workspace';
 
 /** The chrome every section shares, and the one place the session is checked. */
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [profiles, setProfiles] = useState<Profile[]>();
-  const [checking, setChecking] = useState(true);
-
   // A signed cookie from an earlier visit is enough to walk straight back in.
-  useEffect(() => {
-    gatewayApi()
-      .profiles()
-      .then(setProfiles)
-      .catch(() => undefined)
-      .finally(() => setChecking(false));
-  }, []);
+  const profiles = useProfiles();
 
   useEffect(() => {
-    if (!checking && !profiles) {
+    if (profiles.isError) {
       router.replace('/sign-in');
     }
-  }, [checking, profiles, router]);
+  }, [profiles.isError, router]);
 
-  if (!profiles) {
+  if (!profiles.data) {
     return (
       <main className="boot" aria-busy="true" aria-label="Checking the session">
         <Spinner size={32} />
@@ -41,20 +33,16 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  return (
-    <WorkspaceProvider initialProfiles={profiles} onSignOut={() => router.replace('/sign-in')}>
-      <Shell>{children}</Shell>
-    </WorkspaceProvider>
-  );
+  return <Shell>{children}</Shell>;
 }
 
 function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // The one screen that is an app of its own: it takes the whole area and scrolls inside.
-  const fill = pathname.startsWith('/sessions');
-  const { profiles, profile, data, loading, refresh, adopt } = useWorkspace();
+  const fill = currentSection(pathname)?.path === 'sessions';
+  const adopt = useAdoptProfile();
+  const { creating, setCreating } = useShell();
   const [mobile, setMobile] = useState(false);
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     if (!mobile) {
@@ -109,7 +97,7 @@ function Shell({ children }: { children: ReactNode }) {
   }, [mobile]);
 
   return (
-    <ReleaseNotes>
+    <>
       <div className="app-shell">
         <a href="#main-content" className="skip-link">
           Skip to content
@@ -125,42 +113,12 @@ function Shell({ children }: { children: ReactNode }) {
         <div className="workspace" inert={mobile}>
           <Topbar navigationOpen={mobile} onOpenNavigation={() => setMobile(true)} />
           <main id="main-content" tabIndex={-1} className={`main-content ${fill ? 'fill' : ''}`}>
-            <NoticeBar />
-            {!profiles.length ? (
-              <Empty
-                title="Bring your first agent to life"
-                action={
-                  <Button onClick={() => setCreating(true)}>
-                    <Plus size={16} />
-                    Create an agent
-                  </Button>
-                }
-              >
-                Start with a name and instructions. Connect your providers next.
-              </Empty>
-            ) : profile && data ? (
-              <div key={profile.id} className="page-enter">
-                {children}
-              </div>
-            ) : (
-              <div className="loading-state" role="status">
-                {loading ? (
-                  <>
-                    <Spinner size={32} />
-                    <span>Loading your workspace…</span>
-                  </>
-                ) : (
-                  <Button variant="secondary" onClick={() => void refresh()}>
-                    Try loading again
-                  </Button>
-                )}
-              </div>
-            )}
+            {children}
           </main>
         </div>
         {creating && (
           <NewProfileDialog
-            api={gatewayApi()}
+            api={panelApi()}
             close={() => setCreating(false)}
             done={(created) => {
               adopt(created);
@@ -169,6 +127,7 @@ function Shell({ children }: { children: ReactNode }) {
           />
         )}
       </div>
-    </ReleaseNotes>
+      <ReleaseNotes />
+    </>
   );
 }
