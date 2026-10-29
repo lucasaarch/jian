@@ -1,12 +1,11 @@
-import type { CatalogEntry, Profile, SkillOrigin } from '@jian/contracts';
-import { catalogQuerySchema, skillImportSchema } from '@jian/contracts';
+import type { Profile, SkillOrigin } from '@jian/contracts';
+import { skillImportSchema } from '@jian/contracts';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import type { ProfileAdmin } from '../profiles/port.js';
-import { type MarketplacePlugin, parseMarketplace, parseSkillDocument } from './document.js';
+import { parseSkillDocument } from './document.js';
 import { contentsUrl, pageUrl, parseSource, rawUrl, type Source } from './source.js';
 
-const MANIFEST = '.claude-plugin/marketplace.json';
 /** Generous for a document, small enough that a wrong URL cannot stream into memory. */
 const MAX_BYTES = 256 * 1024;
 const MAX_SKILLS = 20;
@@ -65,62 +64,6 @@ export class Skills {
       ? `${source.path ? `${source.path}/` : ''}skills`
       : source.path;
     return { path, entries: path === source.path ? root : await this.listDirectory(source, path) };
-  }
-
-  /** What a URL offers: a marketplace of plugins, a folder of skills, or one skill. */
-  async catalog(input: unknown): Promise<{ marketplace?: string; entries: CatalogEntry[] }> {
-    const { url } = catalogQuerySchema.parse(input);
-    const source = parseSource(url);
-
-    if (!source.path) {
-      const manifest = await this.read(rawUrl(source, MANIFEST));
-
-      if (manifest) {
-        const market = parseMarketplace(manifest);
-
-        return {
-          marketplace: market.name,
-          entries: market.plugins.map((plugin) => this.pluginEntry(source, plugin)),
-        };
-      }
-    }
-
-    const document = await this.read(rawUrl(source, this.documentPath(source.path)));
-
-    if (document) {
-      const skill = parseSkillDocument(document, this.folderName(source.path));
-
-      return { entries: [{ name: skill.name, description: skill.description, url }] };
-    }
-
-    const entries: CatalogEntry[] = [];
-
-    const directory = await this.skillDirectory(source);
-    for (const child of directory.entries) {
-      if (child.type === 'dir' && !child.name.startsWith('.')) {
-        entries.push({
-          name: child.name,
-          description: 'Skill in this repository',
-          url: pageUrl(source, `${directory.path ? `${directory.path}/` : ''}${child.name}`),
-        });
-      }
-    }
-
-    if (!entries.length) {
-      throw new GatewayError(404, 'No SKILL.md and no skills folder at that URL');
-    }
-
-    return { entries };
-  }
-
-  private pluginEntry(source: Source, plugin: MarketplacePlugin): CatalogEntry {
-    return {
-      name: plugin.name,
-      description: plugin.description,
-      plugin: plugin.name,
-      // A plugin hosted elsewhere keeps its own URL; the import resolves it from scratch.
-      url: plugin.url ?? pageUrl(source, plugin.path ?? ''),
-    };
   }
 
   private documentPath(path: string): string {

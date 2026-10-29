@@ -5,9 +5,11 @@ import { Eye, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import type { Profile } from '@/lib/api';
 import { keys } from '@/lib/query/keys';
+import { matchesQuery } from '@/lib/search';
 import type { BuiltinSkill } from '../../lib/api';
 import type { SectionActions } from '../props';
-import { Button, ResourceRow, Switch } from '../ui';
+import { Button, SearchField, Switch } from '../ui';
+import { SkillCard } from './skill-card';
 import { SkillView } from './skill-view';
 
 /**
@@ -21,13 +23,15 @@ export function BuiltinSkills({
   busy,
 }: SectionActions & { profile: Profile }) {
   const [open, setOpen] = useState<string>();
+  const [query, setQuery] = useState('');
   // Keyed by the profile's version: a toggle, here or by the agent, changes which are enabled.
   const builtIn = useQuery({
     queryKey: [...keys.builtinSkills(profile.id), profile.version],
     queryFn: () => api.builtinSkills(profile.id),
     placeholderData: keepPreviousData,
   });
-  const skills = builtIn.data;
+  const skills = builtIn.data ?? [];
+  const shown = skills.filter((skill) => matchesQuery(`${skill.name} ${skill.description}`, query));
   const error = builtIn.error
     ? builtIn.error instanceof Error
       ? builtIn.error.message
@@ -54,38 +58,55 @@ export function BuiltinSkills({
     );
   }
 
-  const viewing = skills?.find((skill) => skill.name === open);
+  const viewing = skills.find((skill) => skill.name === open);
 
   return (
     <section className="row-group" aria-labelledby="skills-built-in">
-      <h2 id="skills-built-in">Built in</h2>
-      <p>They ship with the gateway and teach the agent to use what Jian gives it.</p>
-      <div className="resource-list">
-        {(skills ?? []).map((skill) => (
-          <ResourceRow
-            key={skill.name}
-            id={`skill-${skill.name}`}
-            icon={<ShieldCheck size={20} strokeWidth={1.6} />}
-            name={skill.name}
-            description={skill.description}
-            facts={skill.origin ? [`From ${skill.origin.marketplace ?? 'a marketplace'}`] : []}
-            actions={
-              <>
-                <Button variant="quiet" onClick={() => setOpen(skill.name)}>
-                  <Eye size={16} />
-                  View
-                </Button>
-                <Switch
-                  checked={skill.enabled}
-                  label={`${skill.name} ${skill.enabled ? 'on' : 'off'}`}
-                  disabled={busy}
-                  onChange={() => void toggle(skill)}
-                />
-              </>
-            }
-          />
-        ))}
+      <div className="skills-heading">
+        <div>
+          <h2 id="skills-built-in">Built in</h2>
+          <p>They ship with the gateway and teach the agent to use what Jian gives it.</p>
+        </div>
+        <SearchField
+          aria-label="Search built-in skills"
+          placeholder="Search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
       </div>
+      {shown.length ? (
+        <div className="skill-grid">
+          {shown.map((skill) => (
+            <SkillCard
+              key={skill.name}
+              name={skill.name}
+              description={skill.description}
+              source={
+                <>
+                  <ShieldCheck size={14} aria-hidden="true" />
+                  Built in
+                </>
+              }
+              actions={
+                <>
+                  <Button variant="quiet" onClick={() => setOpen(skill.name)}>
+                    <Eye size={14} />
+                    View
+                  </Button>
+                  <Switch
+                    checked={skill.enabled}
+                    label={`${skill.name} ${skill.enabled ? 'on' : 'off'}`}
+                    disabled={busy}
+                    onChange={() => void toggle(skill)}
+                  />
+                </>
+              }
+            />
+          ))}
+        </div>
+      ) : (
+        skills.length > 0 && <p className="skill-grid-empty">No built-in skill matches.</p>
+      )}
       {viewing && (
         <SkillView
           name={viewing.name}

@@ -38,8 +38,6 @@ export const keys = {
   codexLogin: ['providers', 'openai', 'oauth'] as const,
   subscriptions: (profileId: string) => ['profile', profileId, 'subscriptions'] as const,
   builtinSkills: (profileId: string) => ['profile', profileId, 'builtin-skills'] as const,
-  skillCatalog: (profileId: string, url: string) =>
-    ['profile', profileId, 'skill-catalog', url] as const,
   stats: (profileId: string, days: number) => ['profile', profileId, 'stats', days] as const,
   activityCalendar: (profileId: string, zone: string) =>
     ['profile', profileId, 'activity-calendar', zone] as const,

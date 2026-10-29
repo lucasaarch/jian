@@ -100,7 +100,7 @@ import {
   scheduleRunSchema,
 } from './schedules.js';
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
-import { catalogQuerySchema, catalogSchema, skillImportSchema } from './skills.js';
+import { skillImportSchema } from './skills.js';
 import { sshKeyCreateSchema, sshKeySchema } from './ssh.js';
 import {
   subscriptionDeliverySchema,
@@ -759,14 +759,6 @@ export const operations: Operation[] = [
     operationId: 'listBuiltinSkills',
     access: 'admin',
     response: z.array(builtinSkillSchema).max(50),
-  },
-  {
-    method: 'GET',
-    path: `${profile}/skill-catalog`,
-    operationId: 'listSkillCatalog',
-    access: 'admin',
-    query: catalogQuerySchema,
-    response: catalogSchema,
   },
   {
     method: 'POST',

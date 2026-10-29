@@ -17,22 +17,4 @@ export const skillImportSchema = z.strictObject({
   url: z.url().max(600),
 });
 
-export const catalogQuerySchema = z.strictObject({
-  url: z.string().max(600),
-});
-
-export const catalogEntrySchema = z.strictObject({
-  name: z.string().max(100),
-  description: z.string().max(600),
-  url: z.url().max(600),
-  plugin: z.string().max(100).optional(),
-});
-
-/** A catalog is whatever a repository announces: a marketplace manifest, or a single skill. */
-export const catalogSchema = z.strictObject({
-  marketplace: z.string().max(100).optional(),
-  entries: z.array(catalogEntrySchema).max(200),
-});
-
 export type SkillOrigin = z.infer<typeof skillOriginSchema>;
-export type CatalogEntry = z.infer<typeof catalogEntrySchema>;
