@@ -410,6 +410,7 @@ export function Composer({
             <Select
               aria-label="Project"
               variant="ghost"
+              popup="content"
               value={projectId ?? ''}
               onValueChange={(value) => onProjectChange(value || null)}
               options={projectOptions}
@@ -420,7 +421,7 @@ export function Composer({
             <Select
               aria-label="Execution machine"
               variant="ghost"
-              popup="wide"
+              popup="content"
               value={remoteMachineId ?? ''}
               onValueChange={(value) => onMachineChange(value || null)}
               options={machineOptions}

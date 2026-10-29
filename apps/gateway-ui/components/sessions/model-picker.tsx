@@ -114,7 +114,7 @@ export function SessionModel({
       <Select
         aria-label="Model for this conversation"
         variant="ghost"
-        popup="wide"
+        popup="content"
         value={current}
         disabled={busy}
         onValueChange={(choice) => {
@@ -155,6 +155,7 @@ export function SessionModel({
       <Select
         aria-label="Reasoning effort for this conversation"
         variant="ghost"
+        popup="content"
         value={model?.reasoningEffort ?? ''}
         disabled={busy || !model || !allowed.length}
         onValueChange={(effort) =>

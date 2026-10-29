@@ -24,8 +24,12 @@ type SelectVariant = 'default' | 'ghost' | 'subtle';
 type CommonProps = {
   options: SelectOption[];
   variant?: SelectVariant;
-  /** `anchor` is as wide as the trigger; `wide` is a fixed width for long names under a small trigger. */
-  popup?: 'anchor' | 'wide';
+  /**
+   * `anchor` is as wide as the trigger; `content` is as wide as its longest option, for a small
+   * trigger whose options carry long names, never narrower than the trigger nor wider than the
+   * screen.
+   */
+  popup?: 'anchor' | 'content';
   disabled?: boolean;
   id?: string;
   'aria-label'?: string;

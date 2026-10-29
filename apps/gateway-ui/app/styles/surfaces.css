@@ -205,15 +205,6 @@
   .field > small {
     @apply text-xs leading-relaxed text-muted;
   }
-  .check-row {
-    @apply flex cursor-pointer gap-3 py-2.5;
-  }
-  .check-row strong {
-    @apply block text-sm font-medium;
-  }
-  .check-row small {
-    @apply mt-1 block text-xs leading-relaxed text-muted;
-  }
   .avatar-field {
     @apply mb-6 flex items-start gap-5;
   }

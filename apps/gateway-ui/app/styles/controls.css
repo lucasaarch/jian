@@ -72,14 +72,14 @@
       opacity 120ms,
       transform 120ms;
   }
-  .select-popup.wide {
-    @apply w-80 min-w-80;
+  .select-popup.content {
+    width: max-content;
+    min-width: max(var(--anchor-width), 13rem);
   }
-  .select-popup.wide .select-option-copy > span {
+  /* One line per name: the list grows to fit it, and only a name wider than the screen is cut. */
+  .select-popup.content .select-option-copy > span,
+  .select-popup.content .select-option-copy small {
     @apply block truncate;
-  }
-  .select-popup.wide .select-option-copy small {
-    @apply whitespace-nowrap;
   }
   .select-popup[data-starting-style],
   .select-popup[data-ending-style] {
@@ -627,52 +627,5 @@
   }
   .skill-card-actions {
     @apply flex items-center gap-1;
-  }
-  /* Servers to import: a row card each, the whole card is the choice. */
-  .import-servers {
-    @apply m-0 grid min-w-0 gap-1.5 border-0 p-0;
-  }
-  /* The same size as a field's label, which it sits under. */
-  .import-servers legend {
-    @apply mb-2 flex w-full items-center justify-between p-0 text-xs font-medium text-ink;
-  }
-  /* The corners of the select above it, so the dialog reads as one form. */
-  .import-server {
-    @apply flex w-full items-center gap-3 border border-line bg-canvas px-3.5 py-2.5 text-left transition-colors;
-    border-radius: 3px 10px 3px 3px;
-  }
-  .import-server:hover:not(:disabled) {
-    @apply border-control;
-  }
-  .import-server[aria-pressed="true"] {
-    @apply border-accent;
-    background: color-mix(in srgb, var(--accent) 6%, var(--canvas));
-  }
-  .import-server:disabled {
-    @apply cursor-not-allowed opacity-60;
-  }
-  .import-server-icon {
-    @apply grid h-9 w-9 shrink-0 place-items-center rounded-md border border-line bg-surface text-ink;
-  }
-  .import-server-copy {
-    @apply grid min-w-0 flex-1 gap-0.5;
-  }
-  .import-server-copy strong {
-    @apply text-sm font-semibold text-ink;
-  }
-  .import-server-copy small {
-    @apply truncate text-xs text-muted;
-  }
-  .import-server-copy .import-server-note {
-    @apply text-accent;
-  }
-  .import-server:disabled .import-server-note {
-    @apply text-muted;
-  }
-  .import-server-check {
-    @apply grid h-5 w-5 shrink-0 place-items-center rounded-full border border-line text-on-accent;
-  }
-  .import-server[aria-pressed="true"] .import-server-check {
-    @apply border-accent bg-accent;
   }
 }

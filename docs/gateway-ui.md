@@ -20,7 +20,7 @@ The panel holds no workspace in React context. The open agent is the URL's `[pro
 
 ## Styles
 
-Each shared component in `components/ui` has one semantic class, written with Tailwind's `@apply` in `app/styles`. When a component looks different somewhere, that look is a variant the component takes — `<Button variant="quiet">`, `<Select variant="ghost" popup="wide">`, `<IconButton size="control">` — and becomes a modifier class beside its own (`.select-trigger.ghost`). A screen never restyles a component by nesting a selector under its own class: the next screen that needs the same look would not find it. Where a component sits — margin, width, flex — is the container's, so a wrapper or the container's own rule carries it.
+Each shared component in `components/ui` has one semantic class, written with Tailwind's `@apply` in `app/styles`. When a component looks different somewhere, that look is a variant the component takes — `<Button variant="quiet">`, `<Select variant="ghost" popup="content">`, `<IconButton size="control">` — and becomes a modifier class beside its own (`.select-trigger.ghost`). A screen never restyles a component by nesting a selector under its own class: the next screen that needs the same look would not find it. Where a component sits — margin, width, flex — is the container's, so a wrapper or the container's own rule carries it.
 
 Controls that stand side by side share one height, `control` (46px, what an input measures with its padding, line and border), declared in `app/styles/themes.css`. Buttons and selects take it; an icon button takes it with `size="control"`. Repeated markup becomes a component in `components/ui` (`SearchField`, `IconButton`); a link that looks like a button takes `buttonClass(variant)`.
 
