@@ -75,7 +75,7 @@ Base = disponível no escopo autorizado; opcional = habilitação/configuração
 | Shell e arquivos do workspace | base | não |
 | Git/SSH/programação | base | não |
 | Web livre | base | não |
-| Remote Control, shell/tela | opcional + ACL da máquina | não |
+| Remote Control, shell/tela | base | não |
 | MCP geral | opcional | não |
 | MCP HTTP comercial limitado | opcional | opcional, allowlist e escopo |
 | Subagentes internos | base | não inicialmente |

@@ -1,6 +1,6 @@
 import type { Skill } from '@jian/contracts';
 
-/** Offered with workspace shell skills: Remote Control is gated by machine ACL, not allowShell. */
+/** Offered with the workspace shell skills: every agent may use every connected machine. */
 export const remoteControl: Skill = {
   name: 'remote-control',
   description:
@@ -8,15 +8,15 @@ export const remoteControl: Skill = {
   instructions: `# Remote Control
 
 The owner connects computers in the panel under **Remote Control**. Each machine has a worker
-that polls this gateway over HTTPS. Only profiles the owner authorized for that machine may
-use it — that ACL covers shell and computer use together. Commands and GUI actions run as the
+that polls this gateway over HTTPS. Every agent may use every connected machine, for shell
+and computer use alike. Commands and GUI actions run as the
 logged-in local user — full local privileges, not a sandbox.
 
 Load the \`remote\` tool group with \`load_tools\` before calling these tools.
 
 ## The tools
 
-- \`list_remote_machines\` — machines authorized for you: id, name, platform, online, uiState,
+- \`list_remote_machines\` — the connected machines: id, name, platform, online, uiState,
   capabilities.
 - \`run_remote_command\` — shell on that computer (PowerShell on Windows, \`/bin/sh\` on
   macOS/Linux). Open apps, install software, Git, builds, scripts — anything a local user

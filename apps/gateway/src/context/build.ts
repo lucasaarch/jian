@@ -191,7 +191,7 @@ export function buildContext(
     // The tools are deferred like any other group, and a model that cannot see them answers
     // that it has no access instead of asking for them.
     'You can run commands and read, edit, find and search files in your workspace on the machine this gateway runs on: load the shell and files tool groups when a task needs them.',
-    'Remote Control machines on your access list support shell and (on macOS) computer use via the remote tool group — gated by machine access, not a separate shell switch.',
+    'Every Remote Control machine connected to this installation supports shell and computer use through the remote tool group.',
     'You can search the web and read public pages: load the web tool group when a question needs current or outside information, and say where an answer came from.',
     // Without the time an agent cannot tell "tomorrow at 3pm" from any other moment, and every
     // schedule it writes would be a guess.

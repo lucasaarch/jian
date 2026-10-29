@@ -2175,6 +2175,9 @@ async function postResult(base, headers, result) {
 async function run() {
   await acquireWorkerLock();
   let stopMacIdle = () => {};
+  // Set once the gateway is known: tells it this worker is stopping, so the panel shows the
+  // machine offline at once instead of when its last poll grows old.
+  let sayGoodbye = async () => {};
   const shutdown = () => {
     try {
       stopMacIdle();
@@ -2190,8 +2193,10 @@ async function run() {
   };
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.once(signal, () => {
-      shutdown();
-      process.exit(0);
+      void sayGoodbye().finally(() => {
+        shutdown();
+        process.exit(0);
+      });
     });
   }
   process.once('exit', shutdown);
@@ -2224,6 +2229,17 @@ async function run() {
     ...(capabilities.length ? { 'x-jian-remote-capabilities': capabilities.join(',') } : {}),
   });
   const base = `${config.gateway}/v1/remote/worker/${config.machineId}`;
+  // Best effort and brief: a stop must not hang on an unreachable gateway.
+  sayGoodbye = () =>
+    fetch(`${base}/disconnect`, {
+      method: 'POST',
+      headers: pollHeaders(),
+      redirect: 'error',
+      signal: AbortSignal.timeout(2000),
+    }).then(
+      () => {},
+      () => {},
+    );
   // Match the gateway worker (including major.minor skew) before polling so fleets do not
   // crash-loop on refuse without attempting a self-update first.
   const gatewayVersion = await reconcileWorkerWithGateway(config, base, pollHeaders());

@@ -519,6 +519,13 @@
       "when": 1793239000000,
       "tag": "0073_gateway-ssh-keys",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793240000000,
+      "tag": "0074_remote-machines-for-every-agent",
+      "breakpoints": true
     }
   ]
 }

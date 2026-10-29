@@ -66,7 +66,7 @@ export class Sessions {
           .limit(1);
         assertFound(project, 'Project');
       }
-      if (data.remoteMachineId) await this.assertMachine(profileId, data.remoteMachineId, tx);
+      if (data.remoteMachineId) await this.assertMachine(data.remoteMachineId, tx);
 
       const session: Session = {
         id: randomUUID(),
@@ -115,7 +115,7 @@ export class Sessions {
           .limit(1);
         assertFound(project, 'Project');
       }
-      if (data.remoteMachineId) await this.assertMachine(profileId, data.remoteMachineId, tx);
+      if (data.remoteMachineId) await this.assertMachine(data.remoteMachineId, tx);
       return assertFound(
         await setGatewaySessionTarget(
           tx,
@@ -129,15 +129,14 @@ export class Sessions {
     });
   }
 
-  private async assertMachine(profileId: string, machineId: string, tx: Queryable) {
+  /** Every agent may use every machine; a chat can only aim at one that exists. */
+  private async assertMachine(machineId: string, tx: Queryable) {
     const [machine] = await tx
-      .select({ id: remoteMachines.id, allowedProfileIds: remoteMachines.allowedProfileIds })
+      .select({ id: remoteMachines.id })
       .from(remoteMachines)
       .where(eq(remoteMachines.id, machineId))
       .limit(1);
-    if (!machine?.allowedProfileIds.includes(profileId)) {
-      throw new GatewayError(403, 'This profile is not allowed to use that remote machine');
-    }
+    if (!machine) throw new GatewayError(404, 'Remote machine not found');
   }
 
   /** A caller already inside a profile transaction passes it in: this store never nests locks. */

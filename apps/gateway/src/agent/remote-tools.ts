@@ -168,7 +168,7 @@ const coordinateSchema = z.tuple([z.number().int(), z.number().int()]);
  */
 export function remoteTools(
   run: Run,
-  remote: Pick<Remote, 'listForProfile' | 'execute' | 'executeComputer'>,
+  remote: Pick<Remote, 'list' | 'execute' | 'executeComputer'>,
   store: Store,
   targetMachineId?: string,
 ): ToolSet {
@@ -180,9 +180,9 @@ export function remoteTools(
   const tools: ToolSet = {
     list_remote_machines: tool({
       description:
-        'List remote computers explicitly authorized for this agent (Remote Control). Commands and computer use run there as the logged-in local user.',
+        'List the remote computers connected to this installation (Remote Control); every agent may use each one. Commands and computer use run there as the logged-in local user.',
       inputSchema: z.object({}),
-      execute: async () => remote.listForProfile(run.profileId),
+      execute: async () => remote.list(),
     }),
     run_remote_command: tool({
       description:
@@ -215,9 +215,9 @@ export function remoteTools(
       }),
       execute: async (input, { abortSignal }) => {
         requireTarget(input.machineId);
-        const machines = await remote.listForProfile(run.profileId);
+        const machines = await remote.list();
         const machine = machines.find((item) => item.id === input.machineId);
-        if (!machine) throw new GatewayError(403, 'That remote machine is not authorized');
+        if (!machine) throw new GatewayError(404, 'Remote machine not found');
         if (!machine.online) throw new GatewayError(503, 'Remote machine is offline');
         // Locked is advisory (list_remote_machines.uiState). Attempt Computer Use; the
         // worker wakes the display and only fails if the OS rejects the call.
@@ -334,9 +334,9 @@ export function remoteTools(
       }),
       execute: async ({ machineId, path, name, timeoutMs }, { abortSignal }) => {
         requireTarget(machineId);
-        const machines = await remote.listForProfile(run.profileId);
+        const machines = await remote.list();
         const machine = machines.find((item) => item.id === machineId);
-        if (!machine) throw new GatewayError(403, 'That remote machine is not authorized');
+        if (!machine) throw new GatewayError(404, 'Remote machine not found');
         if (!machine.online) throw new GatewayError(503, 'Remote machine is offline');
 
         const platform = platformOf(machine);
@@ -400,9 +400,9 @@ export function remoteTools(
       }),
       execute: async ({ machineId, path, content, encoding, timeoutMs }, { abortSignal }) => {
         requireTarget(machineId);
-        const machines = await remote.listForProfile(run.profileId);
+        const machines = await remote.list();
         const machine = machines.find((item) => item.id === machineId);
-        if (!machine) throw new GatewayError(403, 'That remote machine is not authorized');
+        if (!machine) throw new GatewayError(404, 'Remote machine not found');
         if (!machine.online) throw new GatewayError(503, 'Remote machine is offline');
 
         const platform = platformOf(machine);
