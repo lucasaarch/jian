@@ -11,6 +11,8 @@ export type SelectOption = {
   label: string;
   detail?: string;
   icon?: ReactNode;
+  /** A short state at the far end of the row, such as a repository's visibility. */
+  badge?: ReactNode;
   disabled?: boolean;
 };
 
@@ -63,6 +65,7 @@ function OptionContent({ option }: { option: SelectOption }) {
         <span>{option.label}</span>
         {option.detail && <small>{option.detail}</small>}
       </span>
+      {option.badge}
     </>
   );
 }

@@ -1,10 +1,9 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { FolderGit2 } from 'lucide-react';
 import Link from 'next/link';
 import { useId, useState } from 'react';
-import { Button, buttonClass, Field, Modal } from '@/components/ui';
+import { Badge, Button, buttonClass, Field, GitHubLogo, Modal } from '@/components/ui';
 import { Select, type SelectOption } from '@/components/ui/select';
 import type { GatewayApi, Project } from '@/lib/api';
 import { settingsPath } from '@/lib/navigation';
@@ -48,10 +47,8 @@ export function NewProjectDialog({
   const options: SelectOption[] = repositories.map((repository) => ({
     value: keyOf(repository),
     label: repository.fullName,
-    detail: [repository.private ? 'Private' : 'Public', repository.description]
-      .filter(Boolean)
-      .join(' · '),
-    icon: <FolderGit2 size={16} />,
+    icon: <GitHubLogo size={16} />,
+    badge: <Badge dot={false}>{repository.private ? 'Private' : 'Public'}</Badge>,
   }));
 
   if (!loadingAccounts && !connected) {
