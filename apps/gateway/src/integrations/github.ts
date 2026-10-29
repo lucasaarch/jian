@@ -17,11 +17,15 @@ const API_VERSION = '2022-11-28';
 const STATE_LIFETIME_MS = 10 * 60_000;
 const PAGE_SIZE = 100;
 const PAGE_LIMIT = 50;
+/**
+ * What the GitHub App asks for, by GitHub App permission name (the REST `app-permissions`
+ * schema). GitHub refuses the whole manifest for one name outside that list, so a name that
+ * only exists for personal tokens does not belong here.
+ */
 const GITHUB_MCP_PERMISSIONS = {
   actions: 'write',
   checks: 'write',
   contents: 'write',
-  dependabot_alerts: 'write',
   deployments: 'write',
   discussions: 'write',
   environments: 'write',
@@ -30,10 +34,11 @@ const GITHUB_MCP_PERMISSIONS = {
   packages: 'write',
   pages: 'write',
   pull_requests: 'write',
-  repository_advisories: 'write',
   secret_scanning_alerts: 'write',
   security_events: 'write',
   statuses: 'write',
+  // Dependabot alerts.
+  vulnerability_alerts: 'write',
   workflows: 'write',
 } as const;
 
