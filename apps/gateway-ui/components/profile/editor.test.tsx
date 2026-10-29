@@ -16,12 +16,8 @@ const profile = {
   summary: '',
   avatar: null,
   identity: { role: '', tone: '', goals: [], boundaries: [] },
-  allowSelfManagement: false,
   allowShell: false,
-  allowWebSearch: false,
-  learnFromWork: true,
   useStickers: true,
-  reachableByAgents: true,
   version: 3,
 } as unknown as Profile;
 
@@ -98,16 +94,10 @@ it('saves once typing pauses, each save sending the version the last one returne
   expect(saves[1]).toMatchObject({ summary: 'Assistant', expectedVersion: 4 });
 });
 
-it('saves a switch at once, and never an empty name', async () => {
-  const { element, saves, type, wait } = await render();
-  const webSearch = element.querySelector<HTMLInputElement>('[name="webSearch"]');
-
-  await act(async () => webSearch?.click());
-  await wait(10);
-  expect(saves).toHaveLength(1);
-  expect(saves[0]).toMatchObject({ allowWebSearch: true });
+it('never saves an empty name', async () => {
+  const { saves, type, wait } = await render();
 
   await type('name', '');
   await wait(1000);
-  expect(saves).toHaveLength(1);
+  expect(saves).toEqual([]);
 });

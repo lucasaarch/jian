@@ -12603,18 +12603,10 @@ export interface operations {
                             /** @default [] */
                             disabledTools: string[];
                         }[];
-                        /** @default false */
-                        allowSelfManagement: boolean;
                         /** @default true */
                         allowShell: boolean;
                         /** @default false */
-                        allowWebSearch: boolean;
-                        /** @default true */
-                        learnFromWork: boolean;
-                        /** @default false */
                         useStickers: boolean;
-                        /** @default true */
-                        reachableByAgents: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -12872,18 +12864,10 @@ export interface operations {
                             /** @default [] */
                             disabledTools: string[];
                         }[];
-                        /** @default false */
-                        allowSelfManagement: boolean;
                         /** @default true */
                         allowShell: boolean;
                         /** @default false */
-                        allowWebSearch: boolean;
-                        /** @default true */
-                        learnFromWork: boolean;
-                        /** @default false */
                         useStickers: boolean;
-                        /** @default true */
-                        reachableByAgents: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -13135,18 +13119,10 @@ export interface operations {
                         /** @default [] */
                         disabledTools?: string[];
                     }[];
-                    /** @default false */
-                    allowSelfManagement?: boolean;
                     /** @default true */
                     allowShell?: boolean;
                     /** @default false */
-                    allowWebSearch?: boolean;
-                    /** @default true */
-                    learnFromWork?: boolean;
-                    /** @default false */
                     useStickers?: boolean;
-                    /** @default true */
-                    reachableByAgents?: boolean;
                 };
             };
         };
@@ -13288,18 +13264,10 @@ export interface operations {
                             /** @default [] */
                             disabledTools: string[];
                         }[];
-                        /** @default false */
-                        allowSelfManagement: boolean;
                         /** @default true */
                         allowShell: boolean;
                         /** @default false */
-                        allowWebSearch: boolean;
-                        /** @default true */
-                        learnFromWork: boolean;
-                        /** @default false */
                         useStickers: boolean;
-                        /** @default true */
-                        reachableByAgents: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -13559,18 +13527,10 @@ export interface operations {
                             /** @default [] */
                             disabledTools: string[];
                         }[];
-                        /** @default false */
-                        allowSelfManagement: boolean;
                         /** @default true */
                         allowShell: boolean;
                         /** @default false */
-                        allowWebSearch: boolean;
-                        /** @default true */
-                        learnFromWork: boolean;
-                        /** @default false */
                         useStickers: boolean;
-                        /** @default true */
-                        reachableByAgents: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -13915,12 +13875,8 @@ export interface operations {
                         /** @default [] */
                         disabledTools?: string[];
                     }[];
-                    allowSelfManagement?: boolean;
                     allowShell?: boolean;
-                    allowWebSearch?: boolean;
-                    learnFromWork?: boolean;
                     useStickers?: boolean;
-                    reachableByAgents?: boolean;
                     expectedVersion: number;
                 };
             };
@@ -14063,18 +14019,10 @@ export interface operations {
                             /** @default [] */
                             disabledTools: string[];
                         }[];
-                        /** @default false */
-                        allowSelfManagement: boolean;
                         /** @default true */
                         allowShell: boolean;
                         /** @default false */
-                        allowWebSearch: boolean;
-                        /** @default true */
-                        learnFromWork: boolean;
-                        /** @default false */
                         useStickers: boolean;
-                        /** @default true */
-                        reachableByAgents: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -14464,18 +14412,10 @@ export interface operations {
                                 /** @default [] */
                                 disabledTools: string[];
                             }[];
-                            /** @default false */
-                            allowSelfManagement: boolean;
                             /** @default true */
                             allowShell: boolean;
                             /** @default false */
-                            allowWebSearch: boolean;
-                            /** @default true */
-                            learnFromWork: boolean;
-                            /** @default false */
                             useStickers: boolean;
-                            /** @default true */
-                            reachableByAgents: boolean;
                             /** Format: uuid */
                             id: string;
                             version: number;

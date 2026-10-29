@@ -22,12 +22,8 @@ const profileBase = {
     maxRunTokens: 500000,
   },
   disabledSkills: [],
-  allowSelfManagement: false,
   allowShell: false,
-  allowWebSearch: false,
-  learnFromWork: true,
   useStickers: true,
-  reachableByAgents: true,
   version: 3,
   createdAt: at(60 * 24 * 30),
   updatedAt: at(60 * 3),
@@ -65,11 +61,7 @@ export const profile: Profile = {
       disabledTools: ['create_issue'],
     },
   ],
-  allowSelfManagement: true,
-  allowWebSearch: true,
-  learnFromWork: true,
   useStickers: true,
-  reachableByAgents: true,
 };
 
 export const statsFor = (days: number) => {

@@ -312,7 +312,7 @@ export class AgentRuntime {
             0,
           );
         }),
-        ...this.services.web?.tools(run),
+        ...this.services.web?.tools(),
         ...this.services.stickers?.tools(run),
         compact_context: tool({
           description:

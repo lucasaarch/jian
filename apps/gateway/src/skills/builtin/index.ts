@@ -74,18 +74,13 @@ export const builtinSkillNames: ReadonlySet<string> = new Set(
   ),
 );
 
-export function builtinSkills(
-  profile: Pick<
-    Profile,
-    'allowSelfManagement' | 'allowWebSearch' | 'mcpServers' | 'reachableByAgents'
-  >,
-): readonly Skill[] {
+export function builtinSkills(profile: Pick<Profile, 'mcpServers'>): readonly Skill[] {
   return [
     ...ALWAYS,
-    ...(profile.reachableByAgents ? AGENTS : []),
-    ...(profile.allowSelfManagement ? SELF_MANAGED : []),
+    ...AGENTS,
+    ...SELF_MANAGED,
     ...SHELL,
-    ...(profile.allowWebSearch ? WEB : []),
+    ...WEB,
     ...(profile.mcpServers.length ? MCP : []),
     ...STICKERS,
   ];

@@ -144,7 +144,7 @@ export function ProfileEditor({ api, busy }: { api: GatewayApi; busy: boolean })
 
     if (!element) return;
 
-    const values: Record<string, string | boolean> = {
+    const values: Record<string, string> = {
       name: profile.name,
       instructions: [
         profile.instructions,
@@ -156,10 +156,6 @@ export function ProfileEditor({ api, busy }: { api: GatewayApi; busy: boolean })
         .join('\n\n'),
       summary: profile.summary ?? '',
       boundaries: profile.identity.boundaries.join('\n'),
-      selfManagement: profile.allowSelfManagement,
-      webSearch: profile.allowWebSearch,
-      learn: profile.learnFromWork,
-      agents: profile.reachableByAgents,
     };
 
     for (const [name, value] of Object.entries(values)) {
@@ -167,8 +163,7 @@ export function ProfileEditor({ api, busy }: { api: GatewayApi; busy: boolean })
 
       if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) continue;
       if (field === document.activeElement) continue;
-      if (typeof value === 'boolean' && field instanceof HTMLInputElement) field.checked = value;
-      else if (typeof value === 'string') field.value = value;
+      field.value = value;
     }
   }, [profile.version]);
 
@@ -192,10 +187,6 @@ export function ProfileEditor({ api, busy }: { api: GatewayApi; busy: boolean })
         goals: [] as string[],
         boundaries: lines(String(data.get('boundaries'))),
       },
-      allowSelfManagement: data.get('selfManagement') === 'on',
-      allowWebSearch: data.get('webSearch') === 'on',
-      learnFromWork: data.get('learn') === 'on',
-      reachableByAgents: data.get('agents') === 'on',
     };
     const snapshot = JSON.stringify(patch);
 
@@ -243,12 +234,7 @@ export function ProfileEditor({ api, busy }: { api: GatewayApi; busy: boolean })
           event.preventDefault();
           void flush();
         }}
-        onChange={(event) => {
-          // A switch is a decision made; text is still being typed.
-          const { type } = event.target as { type?: string };
-
-          schedule(type === 'checkbox' ? 0 : undefined);
-        }}
+        onChange={() => schedule()}
       >
         <div className="identity-form">
           <div className="settings-fields">
@@ -288,51 +274,6 @@ export function ProfileEditor({ api, busy }: { api: GatewayApi; busy: boolean })
                 rows={3}
               />
             </Field>
-            <label className="check-row">
-              <input name="agents" type="checkbox" defaultChecked={profile.reachableByAgents} />
-              <span>
-                <strong>Talk with other agents</strong>
-                <small>
-                  Other agents can find this one and ask it things, and it can ask them. Off, it
-                  leaves their list and loses contact with all of them.
-                </small>
-              </span>
-            </label>
-            <label className="check-row">
-              <input
-                name="selfManagement"
-                type="checkbox"
-                defaultChecked={profile.allowSelfManagement}
-              />
-              <span>
-                <strong>Allow self-management</strong>
-                <small>
-                  The agent may rewrite its own identity and skills. Providers and permissions stay
-                  yours.
-                </small>
-              </span>
-            </label>
-            <label className="check-row">
-              <input name="webSearch" type="checkbox" defaultChecked={profile.allowWebSearch} />
-              <span>
-                <strong>Allow web search</strong>
-                <small>
-                  The agent may search the internet and read public pages, through the search key
-                  under Providers. Pages are written by strangers and can try to steer it.
-                </small>
-              </span>
-            </label>
-            <label className="check-row">
-              <input name="learn" type="checkbox" defaultChecked={profile.learnFromWork} />
-              <span>
-                <strong>Learn from its work</strong>
-                <small>
-                  After a long turn, an error it recovered from, or every fifteen turns, the agent
-                  looks back and keeps what helps as a skill or a memory. What it kept, and why, is
-                  under Chats › Learning.
-                </small>
-              </span>
-            </label>
           </div>
         </div>
       </form>

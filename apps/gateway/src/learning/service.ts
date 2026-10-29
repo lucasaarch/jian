@@ -62,8 +62,6 @@ export class Learning {
   async consider(run: Run, work: TurnWork): Promise<Run | undefined> {
     const profile = await this.services.profiles.profile(run.profileId);
 
-    if (!profile.learnFromWork) return undefined;
-
     // Read, not opened: a profile gets its Learning conversation on its first look back.
     const learning = await findOwnSession(
       this.services.store.db,

@@ -57,13 +57,9 @@ export const profiles = pgTable('profiles', {
   skills: jsonb('skills').$type<Skill[]>().notNull().default([]),
   disabledSkills: jsonb('disabled_skills').$type<string[]>().notNull().default([]),
   mcpServers: jsonb('mcp_servers').$type<McpServer[]>().notNull().default([]),
-  allowSelfManagement: boolean('allow_self_management').notNull().default(false),
   // Deprecated product switch — always on; column kept for older rows / API compatibility.
   allowShell: boolean('allow_shell').notNull().default(true),
-  allowWebSearch: boolean('allow_web_search').notNull().default(false),
-  learnFromWork: boolean('learn_from_work').notNull().default(true),
   useStickers: boolean('use_stickers').notNull().default(false),
-  reachableByAgents: boolean('reachable_by_agents').notNull().default(true),
   version: integer('version').notNull(),
   createdAt,
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
