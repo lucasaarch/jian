@@ -295,16 +295,6 @@ describe('Telegram transport', () => {
       await expect(f.channels.connect(f.profile.id, { type: 'telegram' })).rejects.toThrow();
 
       const api = await f.channels.connect(f.profile.id, { type: 'api' });
-      for (const channel of [f.channel, api]) {
-        const response = await f.app.inject({
-          method: 'PATCH',
-          url: `/v1/profiles/${f.profile.id}/channels/${channel.id}`,
-          headers: admin,
-          payload: { allowAllContacts: true },
-        });
-        expect(response.statusCode).toBe(400);
-      }
-      expect((await f.channels.list(f.profile.id)).every((c) => !c.allowAllContacts)).toBe(true);
       await f.channels.revoke(f.profile.id, api.id);
 
       await f.channels.revoke(f.profile.id, f.channel.id);

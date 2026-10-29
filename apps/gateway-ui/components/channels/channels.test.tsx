@@ -129,13 +129,13 @@ const customer: Contact = {
 };
 
 for (const enabled of [undefined, true, false]) {
-  it(`saves only enabled when channel automation is ${enabled}`, async () => {
+  it(`saves only enabled when the channel enabled switch is ${enabled}`, async () => {
     const { enabled: _enabled, ...legacyChannel } = business;
     // Deliberately omit the required field to exercise pre-automation API payloads.
     const channel = enabled === undefined ? (legacyChannel as Channel) : { ...business, enabled };
     const { toggle, updateChannel, revokeChannel, connect } = await render([channel]);
     const panel = await toggle('whatsapp-business');
-    const control = panel.querySelector<HTMLButtonElement>('[aria-label="Channel automation"]');
+    const control = panel.querySelector<HTMLButtonElement>('[aria-label="Channel enabled"]');
     expect(control?.getAttribute('aria-checked')).toBe(String(enabled ?? true));
     await act(async () => control?.click());
     expect(updateChannel).toHaveBeenCalledExactlyOnceWith(profile.id, business.id, {
@@ -143,17 +143,19 @@ for (const enabled of [undefined, true, false]) {
     });
     expect(revokeChannel).not.toHaveBeenCalled();
     expect(connect).not.toHaveBeenCalled();
-    expect(panel.textContent).toContain('never replayed');
+    expect(panel.textContent).toContain('not answered later');
     expect(panel.textContent).toContain('Jian does not enable app/API coexistence');
-    if (enabled === false) expect(panel.closest('article')?.textContent).toContain('Paused');
+    if (enabled === false) expect(panel.closest('article')?.textContent).toContain('Disabled');
   });
 }
 
-for (const type of ['whatsapp', 'whatsapp-business'] as const) {
-  it(`allows all contacts for ${type} with a separate permissions patch`, async () => {
+for (const type of ['whatsapp', 'whatsapp-business', 'telegram', 'api'] as const) {
+  it(`allows everyone on ${type} with a separate permissions patch`, async () => {
     const { toggle, updateChannel } = await render([{ ...business, type }]);
     const panel = await toggle(type);
-    const control = panel.querySelector<HTMLButtonElement>('[aria-label="Allow all contacts"]');
+    // An API server admits senders of the owner's systems, not contacts.
+    const label = type === 'api' ? 'Allow all senders' : 'Allow all contacts';
+    const control = panel.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`);
     expect(control?.getAttribute('aria-checked')).toBe('false');
     await act(async () => control?.click());
     expect(updateChannel).toHaveBeenCalledExactlyOnceWith(profile.id, business.id, {
@@ -184,7 +186,7 @@ it('keeps AI controls out of Channels for all contact statuses', async () => {
     { ...customer, status: 'pending', aiEnabled: false },
   ]);
   expect(pending.element.querySelector('[aria-label="AI replies for Customer"]')).toBeNull();
-  expect(pending.element.textContent).toContain('Approval does not resume paused automation');
+  expect(pending.element.textContent).toContain('Approving does not turn the channel back on');
   const blocked = await render([business], false, [{ ...customer, status: 'blocked' }]);
   expect(blocked.element.querySelector('[aria-label="AI replies for Customer"]')).toBeNull();
   const baileys = await render([{ ...business, type: 'whatsapp' }], false, [
@@ -268,14 +270,16 @@ it('shows configured rather than connected, with the signed Meta URL and no grou
   expect(panel.textContent).not.toContain('/v1/ingress/');
   expect(panel.querySelector('input')).toBeNull();
   expect(panel.querySelector('[aria-label="Allow all contacts"]')).not.toBeNull();
-  expect(
-    panel.querySelector('[aria-label="Channel automation"]')?.getAttribute('aria-checked'),
-  ).toBe('true');
+  expect(panel.querySelector('[aria-label="Channel enabled"]')?.getAttribute('aria-checked')).toBe(
+    'true',
+  );
   expect(panel.textContent).not.toContain('Add the agent to one');
   expect(panel.textContent).toContain('Replies after expiry are blocked');
   expect(panel.textContent).toContain('Ogg/Opus mono');
   expect(panel.textContent).toContain('16 MB');
-  expect(panel.closest('article')?.querySelector('.badge')?.textContent).toBe('Configured');
+  const badge = panel.closest('article')?.querySelector('.badge');
+  expect(badge?.textContent).toBe('Configured');
+  expect(badge?.classList.contains('good')).toBe(true);
   expect(element.textContent).toContain('WhatsApp (Baileys)');
 });
 
@@ -414,4 +418,23 @@ it('still sends the BotFather token only for Telegram', async () => {
     botToken: 'synthetic-bot-token',
   });
   expect(connect).not.toHaveBeenCalled();
+});
+
+it('shows a channel by its badge alone, and only the sections it has records for', async () => {
+  const { element, toggle } = await render([{ ...business, type: 'whatsapp' }], false, []);
+  // No counts or connection date beside the name, open or closed.
+  const summary = () => element.querySelector('article .grow')?.textContent;
+  expect(summary()).not.toMatch(/\d+ contacts?|\d+ groups?|Connected on/);
+  const panel = await toggle('whatsapp');
+  expect(summary()).not.toMatch(/\d+ contacts?|\d+ groups?|Connected on/);
+  expect([...panel.querySelectorAll('h3')].map((heading) => heading.textContent)).toEqual([]);
+  expect(panel.textContent).not.toContain('reads everything');
+  const switches = [...panel.querySelectorAll('[role="switch"]')].map((item) =>
+    item.getAttribute('aria-label'),
+  );
+  expect(switches).toEqual(['Channel enabled', 'Allow all contacts']);
+  const disconnect = [...panel.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Disconnect',
+  );
+  expect(disconnect?.classList.contains('danger')).toBe(true);
 });
