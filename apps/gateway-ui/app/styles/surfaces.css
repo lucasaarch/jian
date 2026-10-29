@@ -916,15 +916,15 @@
     background: #0d1117;
     color: #e6edf3;
   }
-  :is(.viewer-code, .code-diff-lines, .decision-request pre)
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
     :is(.hljs-keyword, .hljs-doctag, .hljs-template-tag) {
     color: #ff7b72;
   }
-  :is(.viewer-code, .code-diff-lines, .decision-request pre)
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
     :is(.hljs-title, .hljs-title.class_, .hljs-title.function_) {
     color: #d2a8ff;
   }
-  :is(.viewer-code, .code-diff-lines, .decision-request pre)
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
     :is(
       .hljs-attr,
       .hljs-attribute,
@@ -939,29 +939,64 @@
     ) {
     color: #79c0ff;
   }
-  :is(.viewer-code, .code-diff-lines, .decision-request pre) :is(.hljs-regexp, .hljs-string) {
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
+    :is(.hljs-regexp, .hljs-string) {
     color: #a5d6ff;
   }
-  :is(.viewer-code, .code-diff-lines, .decision-request pre)
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
     :is(.hljs-built_in, .hljs-symbol, .hljs-type) {
     color: #ffa657;
   }
-  :is(.viewer-code, .code-diff-lines, .decision-request pre)
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
     :is(.hljs-comment, .hljs-code, .hljs-formula) {
     color: #8b949e;
   }
-  :is(.viewer-code, .code-diff-lines, .decision-request pre)
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
     :is(.hljs-name, .hljs-quote, .hljs-selector-tag, .hljs-selector-pseudo) {
     color: #7ee787;
   }
-  :is(.viewer-code, .code-diff-lines, .decision-request pre) .hljs-section {
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines) .hljs-section {
     @apply font-bold;
     color: #79c0ff;
   }
-  :is(.viewer-code, .code-diff-lines, .decision-request pre) .hljs-bullet {
+  /* The same code on a light ground: the light theme's diffs, requests and code blocks. The
+     file viewer stays dark in both themes. */
+  :root[data-theme="light"] :is(.code-diff-lines, .decision-request pre, .code-block-lines) {
+    & :is(.hljs-keyword, .hljs-doctag, .hljs-template-tag) {
+      color: #cf222e;
+    }
+    & :is(.hljs-title, .hljs-title.class_, .hljs-title.function_) {
+      color: #8250df;
+    }
+    &
+      :is(
+        .hljs-attr,
+        .hljs-attribute,
+        .hljs-literal,
+        .hljs-meta,
+        .hljs-number,
+        .hljs-operator,
+        .hljs-variable
+      ) {
+      color: #0550ae;
+    }
+    & :is(.hljs-regexp, .hljs-string) {
+      color: #0a3069;
+    }
+    & :is(.hljs-built_in, .hljs-symbol, .hljs-type) {
+      color: #953800;
+    }
+    & :is(.hljs-comment, .hljs-code, .hljs-formula) {
+      color: #6e7781;
+    }
+    & :is(.hljs-name, .hljs-quote, .hljs-selector-tag) {
+      color: #116329;
+    }
+  }
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines) .hljs-bullet {
     color: #f2cc60;
   }
-  :is(.viewer-code, .code-diff-lines, .decision-request pre) .hljs-emphasis {
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines) .hljs-emphasis {
     @apply italic;
   }
   .viewer-code .hljs-strong {
@@ -1097,7 +1132,7 @@
   .markdown code {
     @apply rounded-sm bg-surface px-1 py-0.5 font-mono text-[13px];
   }
-  .markdown pre {
+  .markdown pre:not(.code-block-lines) {
     @apply overflow-x-auto rounded-lg border border-line bg-surface p-3 font-mono text-[13px] leading-6;
   }
   .markdown pre code {

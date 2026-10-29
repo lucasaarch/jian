@@ -333,3 +333,98 @@ it('keeps tool history visible when a failed run never wrote an answer', async (
     element.remove();
   }
 });
+
+it('draws a turn under way once: its working line and its diff head what it has said', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const working: Run = {
+    id: 'working-run',
+    profileId: 'profile',
+    sessionId: 'session',
+    requestKey: 'working',
+    input: 'Add a test',
+    status: 'running',
+    progress: {
+      phase: 'tool',
+      tool: 'edit_file',
+      text: '',
+      steps: 2,
+      updatedAt: '2026-09-29T17:58:20Z',
+    },
+    createdAt: '2026-09-29T17:58:17Z',
+    updatedAt: '2026-09-29T17:58:20Z',
+  };
+  const message = (id: string, role: 'user' | 'assistant', content: string) => ({
+    id,
+    profileId: 'profile',
+    sessionId: 'session',
+    runId: working.id,
+    role,
+    content,
+    createdAt: working.createdAt,
+  });
+  const api = {
+    // What the agent said before its tool is already a message while the turn goes on.
+    messages: async () => [
+      message('request', 'user', 'Add a test'),
+      message('said', 'assistant', 'I will add the test.'),
+    ],
+    activities: async () => [working],
+    timeline: async () => [
+      {
+        runId: working.id,
+        steps: [
+          {
+            toolCallId: 'edit-1',
+            toolName: 'edit_file',
+            status: 'done' as const,
+            startedAt: '2026-09-29T17:58:18Z',
+            finishedAt: '2026-09-29T17:58:19Z',
+            diff: {
+              path: 'src/a.ts',
+              additions: 1,
+              deletions: 0,
+              hunks: [
+                {
+                  oldStart: 1,
+                  oldLines: 1,
+                  newStart: 1,
+                  newLines: 2,
+                  lines: [
+                    { kind: 'context' as const, old: 1, new: 1, text: 'const a = 1;' },
+                    { kind: 'add' as const, new: 2, text: 'const b = 2;' },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+
+  try {
+    await act(async () =>
+      root.render(
+        <History api={api} profileId="profile" sessionId="session" initialRun={working} />,
+      ),
+    );
+    expect(element.querySelectorAll('.thought-line')).toHaveLength(1);
+    expect(element.querySelectorAll('.code-diff')).toHaveLength(1);
+    // Still working, and above what it said rather than below it.
+    const line = element.querySelector('.thought-line');
+    expect(line?.hasAttribute('data-working')).toBe(true);
+    const said = [...element.querySelectorAll('.chat-text')].find((item) =>
+      item.textContent?.includes('I will add the test.'),
+    );
+    expect(said).toBeDefined();
+    expect(
+      (line?.compareDocumentPosition(said as Node) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
