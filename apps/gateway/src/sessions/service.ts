@@ -423,7 +423,7 @@ export class Sessions {
   async sessions(profileId: string) {
     await this.profiles.profile(profileId);
 
-    return listSessions(this.store.db, profileId, 100);
+    return listSessions(this.store.db, profileId);
   }
 
   /** The list the panel shows: each session with its last message on one line, newest first. */
