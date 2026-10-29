@@ -445,6 +445,11 @@ export function History({
                           api={{ media: api.media }}
                           profileId={profileId}
                           content={message.content}
+                          drawn={
+                            (message.runId ? tools.get(message.runId) : undefined)?.find(
+                              (step) => step.toolName === 'generate_image' && step.aspectRatio,
+                            )?.aspectRatio
+                          }
                         />
                       )}
                     </ChatMessage>

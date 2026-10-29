@@ -3,7 +3,9 @@
 import type { OrbState } from 'thinking-orbs';
 import type { Run, ToolStep } from '@/lib/api';
 import { Markdown } from '../ui/markdown';
+import { RefineFrame } from '../ui/refine-frame';
 import { CodeChanges } from './code-change';
+import { drawnBox } from './media';
 import { ThoughtLine, type ThoughtStep } from './thought-line';
 
 /** What the panel calls each tool, so the owner reads an action instead of a function name. */
@@ -150,7 +152,28 @@ export function LiveThought({ run, steps }: { run: Run; steps: ToolStep[] }) {
         startedAt={run.createdAt}
       />
       <CodeChanges steps={steps} fresh />
+      <ImageDrafts steps={steps} />
     </>
+  );
+}
+
+/**
+ * A frame for each picture the turn is drawing, where the answer will carry it. The finished
+ * picture arrives with the answer and resolves in its own frame there.
+ */
+function ImageDrafts({ steps }: { steps: ToolStep[] }) {
+  const drawing = steps.filter(
+    (step) => step.toolName === 'generate_image' && step.status === 'running',
+  );
+
+  if (!drawing.length) return null;
+
+  return (
+    <div className="image-drafts">
+      {drawing.map((step) => (
+        <RefineFrame key={step.toolCallId} status="generating" {...drawnBox(step.aspectRatio)} />
+      ))}
+    </div>
   );
 }
 
