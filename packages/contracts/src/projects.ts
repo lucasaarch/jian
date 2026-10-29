@@ -14,24 +14,19 @@ const repositoryUrl = z
   )
   .refine((value) => !/^https:\/\/[^/]*@/.test(value), 'Do not include credentials in the URL');
 
-export const projectInputSchema = z
-  .strictObject({
-    name: z.string().trim().min(1).max(100),
-    repositoryUrl: repositoryUrl.optional(),
-    githubAccountId: z.uuid().optional(),
-    githubRepositoryId: z.number().int().positive().optional(),
-  })
-  .refine(
-    (value) =>
-      value.repositoryUrl
-        ? !value.githubAccountId && !value.githubRepositoryId
-        : Boolean(value.githubAccountId && value.githubRepositoryId),
-    'Choose a GitHub repository or provide a repository URL.',
-  );
+/**
+ * A project is a repository an agent works on, chosen from the composer: the repository is the
+ * whole input, and choosing it again opens the same project.
+ */
+export const projectInputSchema = z.strictObject({
+  githubAccountId: z.uuid(),
+  githubRepositoryId: z.number().int().positive(),
+});
 
 export const projectSchema = z.strictObject({
   id: z.uuid(),
   profileId: z.uuid(),
+  /** The repository's `owner/repo`. Projects opened before that rule keep the name they had. */
   name: z.string().trim().min(1).max(100),
   repositoryUrl,
   githubAccountId: z.uuid().optional(),

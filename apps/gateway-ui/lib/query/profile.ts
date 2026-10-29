@@ -42,10 +42,13 @@ export const queries = {
       queryKey: keys.githubIntegration,
       queryFn: () => panelApi().githubIntegration(),
     }),
+  // Every connected account's repositories, read from GitHub: kept for a few minutes so each
+  // new chat's composer opens its list at once instead of asking GitHub again.
   githubRepositories: () =>
     queryOptions({
       queryKey: keys.githubRepositories,
       queryFn: () => panelApi().githubRepositories(),
+      staleTime: 5 * 60_000,
     }),
   /**
    * What this installation runs and what changed. Read once a visit: it only moves with an

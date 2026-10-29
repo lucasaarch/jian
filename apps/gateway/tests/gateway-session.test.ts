@@ -1,5 +1,6 @@
 import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
+import { projectRow } from './helpers/rows.js';
 import { testServices } from './helpers/services.js';
 
 async function setup() {
@@ -33,10 +34,7 @@ describe('Gateway chats', () => {
 
   it('creates distinct owner chats without a default conversation', async () => {
     const { services, profile } = await setup();
-    const project = await services.projects.create(profile.id, {
-      name: 'Jian',
-      repositoryUrl: 'git@github.com:example/jian.git',
-    });
+    const project = await projectRow(services.store, profile.id, 'git@github.com:example/jian.git');
     const first = await services.sessions.createGatewaySession(profile.id, {
       projectId: project.id,
     });
@@ -57,10 +55,11 @@ describe('Gateway chats', () => {
       instructions: 'Help.',
       model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
     });
-    const project = await services.projects.create(other.id, {
-      name: 'Private',
-      repositoryUrl: 'https://github.com/example/private.git',
-    });
+    const project = await projectRow(
+      services.store,
+      other.id,
+      'https://github.com/example/private.git',
+    );
 
     await expect(
       services.sessions.createGatewaySession(profile.id, { projectId: project.id }),
@@ -101,10 +100,11 @@ describe('Gateway chats', () => {
 
   it('gives a project chat its repository and its own checkout path in agent context', async () => {
     const { services, profile } = await setup();
-    const project = await services.projects.create(profile.id, {
-      name: 'Jian',
-      repositoryUrl: 'https://github.com/example/jian.git',
-    });
+    const project = await projectRow(
+      services.store,
+      profile.id,
+      'https://github.com/example/jian.git',
+    );
     const session = await services.sessions.createGatewaySession(profile.id, {
       projectId: project.id,
     });

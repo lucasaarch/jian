@@ -1,6 +1,7 @@
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { GitHubIntegrations } from '../src/integrations/github.js';
+import { Projects } from '../src/projects/service.js';
 import { githubInstallations, projects } from '../src/storage/schema.js';
 import { testServices } from './helpers/services.js';
 
@@ -186,4 +187,28 @@ it('lists the repositories of every connected account in one list, each with its
     { fullName: 'mona/notes', organization: false },
     { fullName: 'octo-example/site', organization: true },
   ]);
+});
+
+it('opens one project per repository and agent, however often it is chosen', async () => {
+  const { services, integrations, organization, profile } = await connected();
+  const projectsOf = new Projects(services.store, services.profiles, Date.now, integrations);
+  const site = { githubAccountId: organization, githubRepositoryId: 42 };
+
+  const first = await projectsOf.ensure(profile.id, site);
+  const again = await projectsOf.ensure(profile.id, site);
+
+  expect(again.id).toBe(first.id);
+  expect(first).toMatchObject({
+    name: 'octo-example/site',
+    repositoryUrl: 'https://github.com/octo-example/site.git',
+  });
+  expect(await projectsOf.list(profile.id)).toHaveLength(1);
+
+  // Another agent working on the same repository has a project of its own.
+  const other = await services.profiles.createProfile({
+    name: 'Zero',
+    instructions: 'Help.',
+    model,
+  });
+  expect((await projectsOf.ensure(other.id, site)).id).not.toBe(first.id);
 });

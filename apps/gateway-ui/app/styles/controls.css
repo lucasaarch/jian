@@ -134,7 +134,8 @@
   .select-footer {
     @apply border-t border-line p-1.5;
   }
-  .select-footer button {
+  .select-footer button,
+  .select-footer a {
     @apply flex w-full items-center gap-3 rounded px-3 py-3 text-xs text-accent hover:bg-accent-soft;
   }
   .profile-trigger-copy {

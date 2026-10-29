@@ -3,7 +3,6 @@
 import {
   ArrowUp,
   FileText,
-  FolderKanban,
   LaptopMinimal,
   LoaderCircle,
   Mic,
@@ -13,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import type { MediaUpload, Project, RemoteMachine } from '../../lib/api';
+import type { MediaUpload, RemoteMachine } from '../../lib/api';
 import {
   type AttachmentKind,
   base64,
@@ -21,14 +20,10 @@ import {
   MAX_MESSAGE_MEDIA,
   PASTE_AS_FILE_CHARS,
 } from '../../lib/attachments';
-import { repositorySlug } from '../../lib/format';
 import { useRecorder } from '../../lib/recorder';
 import { AudioPlayer } from '../ui';
 import { Select, type SelectOption } from '../ui/select';
 import { size } from './media';
-
-/** The first entry of the project list, which opens the dialog instead of choosing. */
-const NEW_PROJECT = 'new-project';
 
 type Attachment = {
   key: string;
@@ -59,13 +54,10 @@ export function Composer({
   onSent,
   placeholder,
   draft = false,
-  projects = [],
   machines = [],
-  projectId = null,
   remoteMachineId = null,
-  onProjectChange,
-  onNewProject,
   onMachineChange,
+  projectControl,
   modelControl,
 }: {
   name: string;
@@ -74,14 +66,11 @@ export function Composer({
   onSent: () => void;
   placeholder?: string;
   draft?: boolean;
-  projects?: Project[];
   machines?: RemoteMachine[];
-  projectId?: string | null;
   remoteMachineId?: string | null;
-  onProjectChange?: (value: string | null) => void;
-  /** Opens the dialog that creates a project; offered first in the project list. */
-  onNewProject?: () => void;
   onMachineChange?: (value: string | null) => void;
+  /** Which repository the chat works on; a gateway chat has one, a channel's does not. */
+  projectControl?: ReactNode;
   modelControl?: ReactNode;
 }) {
   const [text, setText] = useState('');
@@ -92,18 +81,6 @@ export function Composer({
   const picker = useRef<HTMLInputElement>(null);
   const recorder = useRecorder();
   const pastes = useRef(0);
-  const projectOptions: SelectOption[] = [
-    ...(onNewProject
-      ? [{ value: NEW_PROJECT, label: 'New Project', icon: <Plus size={16} /> }]
-      : []),
-    { value: '', label: 'No project', icon: <FolderKanban size={16} /> },
-    ...projects.map((project) => ({
-      value: project.id,
-      label: project.name,
-      detail: repositorySlug(project.repositoryUrl),
-      icon: <FolderKanban size={16} />,
-    })),
-  ];
   const machineOptions: SelectOption[] = [
     {
       value: '',
@@ -416,21 +393,7 @@ export function Composer({
               />
             </>
           )}
-          {onProjectChange && (
-            <Select
-              aria-label="Project"
-              variant="ghost"
-              popup="content"
-              value={projectId ?? ''}
-              // Creating one is an action, not a choice: the chat keeps its project until the
-              // new one exists.
-              onValueChange={(value) =>
-                value === NEW_PROJECT ? onNewProject?.() : onProjectChange(value || null)
-              }
-              options={projectOptions}
-              renderValue={(option) => (option?.value ? option.label : 'Project')}
-            />
-          )}
+          {projectControl}
           {onMachineChange && (
             <Select
               aria-label="Execution machine"

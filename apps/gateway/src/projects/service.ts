@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Profile } from '@jian/contracts';
 import { type Project, projectInputSchema } from '@jian/contracts';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import type { Queryable, Store } from '../storage/database.js';
@@ -9,7 +9,10 @@ import { projects } from '../storage/schema.js';
 
 type ProfileLookup = { profile(id: string, reader?: Queryable): Promise<Profile> };
 type GitHubRepositoryLookup = {
-  repository(accountId: string, repositoryId: number): Promise<{ cloneUrl: string }>;
+  repository(
+    accountId: string,
+    repositoryId: number,
+  ): Promise<{ cloneUrl: string; fullName: string }>;
 };
 
 function toProject(row: typeof projects.$inferSelect): Project {
@@ -43,27 +46,47 @@ export class Projects {
     return rows.map(toProject);
   }
 
-  async create(profileId: string, input: unknown) {
+  /**
+   * The agent's project for a repository, opened the first time it is chosen. A repository id
+   * is GitHub's own and global, so the same repository reached through another account is the
+   * same project; it moves to the account it was chosen through, which can reach it now.
+   */
+  async ensure(profileId: string, input: unknown) {
     const data = projectInputSchema.parse(input);
     await this.profiles.profile(profileId);
-    const repository =
-      data.githubAccountId && data.githubRepositoryId
-        ? await this.github?.repository(data.githubAccountId, data.githubRepositoryId)
-        : undefined;
-    if (data.githubAccountId && !repository) {
-      throw new GatewayError(503, 'GitHub integration is not available.');
-    }
-    const repositoryUrl = repository?.cloneUrl ?? data.repositoryUrl;
-    if (!repositoryUrl) throw new GatewayError(400, 'Choose a repository for this project.');
+    if (!this.github) throw new GatewayError(503, 'GitHub integration is not available.');
+    const repository = await this.github.repository(data.githubAccountId, data.githubRepositoryId);
+
     return this.store.transaction(profileId, async (tx) => {
       await this.profiles.profile(profileId, tx);
+      const [existing] = await tx
+        .select()
+        .from(projects)
+        .where(
+          and(
+            eq(projects.profileId, profileId),
+            eq(projects.githubRepositoryId, data.githubRepositoryId),
+          ),
+        )
+        .limit(1);
+
+      if (existing) {
+        if (existing.githubAccountId === data.githubAccountId) return toProject(existing);
+        const [moved] = await tx
+          .update(projects)
+          .set({ githubAccountId: data.githubAccountId })
+          .where(eq(projects.id, existing.id))
+          .returning();
+        return toProject(moved ?? existing);
+      }
+
       const project = {
         id: randomUUID(),
         profileId,
-        name: data.name,
-        repositoryUrl,
-        githubAccountId: data.githubAccountId ?? null,
-        githubRepositoryId: data.githubRepositoryId ?? null,
+        name: repository.fullName,
+        repositoryUrl: repository.cloneUrl,
+        githubAccountId: data.githubAccountId,
+        githubRepositoryId: data.githubRepositoryId,
         createdAt: new Date(nowIso(this.clock)),
       };
       await tx.insert(projects).values(project);
