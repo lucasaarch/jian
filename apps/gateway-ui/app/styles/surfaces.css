@@ -900,15 +900,22 @@
     @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-on-accent;
   }
   .audio-track {
+    --audio-progress: 0;
     @apply relative h-8 min-w-0 flex-1;
   }
   .audio-bars {
     @apply flex h-full items-center gap-[2px];
   }
   .audio-bars span {
-    @apply min-h-[3px] flex-1 rounded-full bg-muted/35 transition-colors;
+    @apply min-h-[3px] flex-1 rounded-full bg-muted/35;
   }
-  .audio-bars span[data-played="true"] {
+  /* Uncovered to the playhead each frame, so the fill sweeps through a bar instead of
+     flipping whole bars four times a second. */
+  .audio-bars.played {
+    @apply pointer-events-none absolute inset-0;
+    clip-path: inset(0 calc((1 - var(--audio-progress)) * 100%) 0 0);
+  }
+  .audio-bars.played span {
     @apply bg-accent;
   }
   /* The range drives seeking and the keyboard; the bars under it are what shows. */
