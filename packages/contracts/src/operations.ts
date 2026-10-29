@@ -1229,9 +1229,25 @@ export function jsonSchema(schema: z.ZodType, io: 'input' | 'output' = 'input') 
   return result;
 }
 
+/**
+ * A failure body. `issues` names each field validation refused and why; without it in the
+ * schema, the response serializer drops it and every validation failure reads only "Invalid
+ * request".
+ */
 export const errorSchema = {
   type: 'object',
-  properties: { error: { type: 'string' } },
+  properties: {
+    error: { type: 'string' },
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { path: { type: 'string' }, message: { type: 'string' } },
+        required: ['path', 'message'],
+        additionalProperties: false,
+      },
+    },
+  },
   required: ['error'],
   additionalProperties: false,
 };
@@ -1311,11 +1327,16 @@ function openAPIResponses(operation: Operation, schema: RouteSchema) {
             ? (operation.responseContentType ?? 'application/json')
             : 'application/json';
 
+      // Every failure has the same body: one shared schema, not a copy in each response.
       return [
         code,
         {
           description: Number(code) < 400 ? 'Success' : 'Error',
-          content: { [contentType]: { schema: value } },
+          content: {
+            [contentType]: {
+              schema: Number(code) < 400 ? value : { $ref: '#/components/schemas/Error' },
+            },
+          },
         },
       ];
     }),
@@ -1358,6 +1379,7 @@ export function createOpenAPI() {
     info: { title: 'Jian Gateway', version: '0.2.0' },
     paths,
     components: {
+      schemas: { Error: errorSchema },
       securitySchemes: {
         bearerAuth: { type: 'http', scheme: 'bearer' },
         telegramWebhook: { type: 'apiKey', in: 'header', name: 'X-Telegram-Bot-Api-Secret-Token' },
