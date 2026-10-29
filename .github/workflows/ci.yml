@@ -70,7 +70,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run test:integration
-      - run: docker build -t jian:ci .
+      - run: docker build -f apps/gateway/Dockerfile -t jian:ci .
       - run: make image-test-display IMAGE=jian VERSION=ci
       - name: Check out pinned Lemon render fixture
         uses: actions/checkout@v4

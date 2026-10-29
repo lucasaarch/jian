@@ -103,7 +103,7 @@ build: ## Compile the gateway and the panel's standalone server
 ##@ Image
 
 image: ## Build the gateway and web images for this machine's architecture
-	docker build \
+	docker build -f apps/gateway/Dockerfile \
 		--build-arg JIAN_VERSION=$(VERSION) \
 		--build-arg JIAN_REVISION=$(REVISION) \
 		-t $(IMAGE):$(VERSION) .

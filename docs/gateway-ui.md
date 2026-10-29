@@ -4,7 +4,7 @@
 
 ## Build and hosting
 
-`pnpm build` compiles the contracts, the SDK, the gateway and the panel; `pnpm --filter @jian/gateway-ui build` writes `.next/standalone` with the static assets and `public/` placed inside, and `pnpm --filter @jian/gateway-ui start` runs it. `apps/gateway-ui/Dockerfile` ships that tree on `node:24-bookworm-slim`, built from the repository root.
+`pnpm build` compiles the contracts, the SDK, the gateway and the panel; `pnpm --filter @jian/gateway-ui build` writes `.next/standalone` with the static assets and `public/` placed inside, and `pnpm --filter @jian/gateway-ui start` runs it. `apps/gateway-ui/Dockerfile` ships that tree on `node:24-bookworm-slim`; like the gateway's `apps/gateway/Dockerfile`, it is built from the repository root (`make image`).
 
 The panel lives at the root of its own origin (`/channels`, `/sessions`). The web server is also the installation's only public door: `app/v1/[...path]`, `app/health`, `app/openapi.json` and `app/jian-remote.mjs` pass those requests to `JIAN_GATEWAY_URL` through `lib/server/gateway.ts`, so the browser, channel webhooks, OAuth callbacks and remote workers keep one origin, and the panel cookie stays same-origin. The pass-through streams both ways, keeps redirects for the browser, drops per-hop headers, closes the gateway's side when the client leaves, and answers 502 when the gateway is down. It is a route handler rather than a Next rewrite: a rewrite to another server cuts responses at 30 seconds, which would end the event stream. `/web/health` is the web server's own liveness; `/health` is the gateway's.
 
