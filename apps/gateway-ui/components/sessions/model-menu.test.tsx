@@ -2,26 +2,22 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ModelSelection } from '@/lib/api';
-import { type ModelEntry, ModelMenu } from './model-menu';
+import { EffortMenu, type ModelEntry, ModelMenu } from './model-menu';
 
-const models: ModelEntry[] = [
-  {
-    providerId: 'p',
-    modelId: 'claude-sonnet-5-5',
-    name: 'Claude Sonnet 5.5',
-    provider: 'Anthropic',
-    efforts: ['low', 'medium', 'high'],
-    fast: false,
-  },
-  {
-    providerId: 'p',
-    modelId: 'claude-opus-5-5',
-    name: 'Claude Opus 5.5',
-    provider: 'Anthropic',
-    efforts: ['low', 'medium', 'high'],
-    fast: true,
-  },
-];
+const sonnet: ModelEntry = {
+  providerId: 'p',
+  modelId: 'claude-sonnet-5-5',
+  name: 'Claude Sonnet 5.5',
+  provider: 'Anthropic',
+  efforts: ['low', 'medium', 'high'],
+  fast: false,
+};
+const opus: ModelEntry = {
+  ...sonnet,
+  modelId: 'claude-opus-5-5',
+  name: 'Claude Opus 5.5',
+  fast: true,
+};
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -38,74 +34,62 @@ afterEach(() => {
   container.remove();
 });
 
-async function open(value: ModelSelection, onChange = vi.fn()) {
-  await act(async () =>
-    root.render(<ModelMenu label="Model" models={models} value={value} onChange={onChange} />),
+const click = async (element?: Element | null) => {
+  await act(async () => (element as HTMLElement | null)?.click());
+};
+const option = (text: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('.model-option')].find((item) =>
+    item.textContent?.includes(text),
   );
-  const trigger = container.querySelector('button') as HTMLButtonElement;
-  await act(async () => trigger.click());
-  // The options open only from the button at the end of a model's row.
-  const more = async (name: string) => {
-    const button = document.querySelector<HTMLButtonElement>(`[aria-label="${name} options"]`);
-    await act(async () => button?.click());
-  };
-  return { trigger, onChange, more };
-}
 
-it('reads the model and its effort in the trigger', async () => {
-  const { trigger } = await open({
-    providerId: 'p',
-    modelId: 'claude-opus-5-5',
-    reasoningEffort: 'low',
-    fast: true,
-  });
-
-  expect(trigger.textContent).toBe('Claude Opus 5.5Low Fast');
-});
-
-it('offers Fast only on a model that takes it, and switching it on picks that model', async () => {
-  const { onChange, more } = await open({
-    providerId: 'p',
-    modelId: 'claude-sonnet-5-5',
-    reasoningEffort: 'medium',
-  });
-
-  // Closed until a row asks for it, and a model without Fast offers no switch.
-  expect(document.querySelector('.model-menu-options')).toBeNull();
-  await more('Claude Sonnet 5.5');
-  expect(document.querySelector('.model-menu-options')).not.toBeNull();
-  expect(document.querySelector('[role="switch"]')).toBeNull();
-
-  await more('Claude Opus 5.5');
-  const fast = document.querySelector<HTMLButtonElement>('[role="switch"]');
-  expect(fast).not.toBeNull();
-  await act(async () => fast?.click());
-
-  // The effort chosen for the previous model carries over when the new one has it.
-  expect(onChange).toHaveBeenCalledWith({
-    providerId: 'p',
-    modelId: 'claude-opus-5-5',
-    reasoningEffort: 'medium',
-    fast: true,
-  });
-});
-
-it('an effort picked beside another model switches to that model with it', async () => {
-  const { onChange, more } = await open({
-    providerId: 'p',
-    modelId: 'claude-sonnet-5-5',
-    reasoningEffort: 'low',
-  });
-
-  await more('Claude Opus 5.5');
-  const high = [
-    ...document.querySelectorAll<HTMLButtonElement>('.model-menu-options .model-option'),
-  ].find((item) => item.textContent === 'High');
-  await act(async () => high?.click());
-
-  expect(onChange).toHaveBeenCalledWith({
+it('a model chosen keeps the effort and speed it can, and drops what it cannot', async () => {
+  const onChange = vi.fn();
+  const value: ModelSelection = {
     providerId: 'p',
     modelId: 'claude-opus-5-5',
     reasoningEffort: 'high',
+    fast: true,
+  };
+  await act(async () =>
+    root.render(
+      <ModelMenu label="Model" models={[sonnet, opus]} value={value} onChange={onChange} />,
+    ),
+  );
+
+  await click(container.querySelector('button'));
+  await click(option('Claude Sonnet 5.5'));
+
+  // Sonnet has High but no Fast.
+  expect(onChange).toHaveBeenCalledWith({
+    providerId: 'p',
+    modelId: 'claude-sonnet-5-5',
+    reasoningEffort: 'high',
   });
+});
+
+it('offers Fast beside the efforts only on a model that takes it', async () => {
+  const onChange = vi.fn();
+  const value: ModelSelection = {
+    providerId: 'p',
+    modelId: 'claude-sonnet-5-5',
+    reasoningEffort: 'low',
+  };
+  await act(async () =>
+    root.render(<EffortMenu model={sonnet} value={value} onChange={onChange} />),
+  );
+
+  expect(container.querySelector('button')?.textContent).toBe('Low');
+  await click(container.querySelector('button'));
+  expect(document.querySelector('[role="switch"]')).toBeNull();
+  await click(option('High'));
+  expect(onChange).toHaveBeenCalledWith({ ...value, reasoningEffort: 'high' });
+
+  await act(async () =>
+    root.render(
+      <EffortMenu model={opus} value={{ ...value, modelId: opus.modelId }} onChange={onChange} />,
+    ),
+  );
+  await click(container.querySelector('button'));
+  await click(document.querySelector('[role="switch"]'));
+  expect(onChange).toHaveBeenLastCalledWith({ ...value, modelId: opus.modelId, fast: true });
 });

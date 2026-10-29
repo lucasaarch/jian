@@ -29,9 +29,12 @@
     @apply shrink-0;
   }
 
+  /* As wide as what it lists, within the screen, and opening above the composer. */
   .model-menu {
-    @apply flex max-h-[min(28rem,70dvh)] items-start gap-2 text-sm;
+    @apply flex max-h-[min(28rem,70dvh)] w-max min-w-44 flex-col overflow-hidden rounded-xl border text-sm shadow-xl;
     max-width: calc(100vw - 2rem);
+    background: var(--surface);
+    border-color: var(--line);
     transform-origin: var(--transform-origin);
     transition:
       opacity 150ms ease,
@@ -42,16 +45,7 @@
     opacity: 0;
     transform: translateY(4px) scale(0.98);
   }
-  .model-menu-list,
-  .model-menu-options {
-    @apply flex max-h-[min(28rem,70dvh)] flex-col overflow-hidden rounded-xl border shadow-xl;
-    background: var(--surface);
-    border-color: var(--line);
-  }
-  .model-menu-list {
-    @apply w-72;
-  }
-  .model-menu-list > ul {
+  .model-menu > ul {
     @apply m-0 min-h-0 list-none overflow-y-auto overscroll-contain p-1.5;
   }
   .model-menu-search {
@@ -69,17 +63,14 @@
     @apply px-3 py-3 text-sm;
     color: var(--muted);
   }
-  .model-menu-options {
-    @apply w-60 overflow-y-auto p-1.5;
+  .model-menu > fieldset {
+    @apply m-0 grid min-w-0 border-0 p-1.5;
   }
-  .model-menu-options fieldset {
-    @apply m-0 grid min-w-0 border-0 p-0;
-  }
-  .model-menu-options fieldset + fieldset {
-    @apply mt-1.5 border-t pt-1.5;
+  .model-menu > fieldset + fieldset {
+    @apply border-t;
     border-color: var(--line);
   }
-  .model-menu-options legend {
+  .model-menu legend {
     @apply px-2.5 pb-1 pt-1.5 text-xs;
     color: var(--muted);
   }
@@ -87,42 +78,9 @@
     @apply flex w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 py-2 text-left outline-none transition-colors;
     color: var(--ink);
   }
-  .model-menu-options button.model-option:hover,
-  .model-menu-options button.model-option:focus-visible {
+  button.model-option:hover,
+  button.model-option:focus-visible {
     background: var(--accent-soft);
-  }
-  /* A row: the model, and at its end the button that opens its options. The row lights up as
-     one, and the button shows only while the row is pointed at, focused, or open. */
-  .model-row {
-    @apply relative flex items-center rounded-md transition-colors;
-  }
-  .model-row:hover,
-  .model-row:focus-within,
-  .model-row[data-open] {
-    background: var(--accent-soft);
-  }
-  .model-row > .model-option {
-    @apply pr-10;
-  }
-  .model-more {
-    @apply absolute right-1.5 grid h-7 w-7 place-items-center rounded-md opacity-0 transition-opacity;
-    color: var(--muted);
-  }
-  .model-more:hover,
-  .model-more[aria-expanded="true"] {
-    background: var(--line);
-    color: var(--ink);
-  }
-  .model-row:hover .model-more,
-  .model-row:focus-within .model-more,
-  .model-row[data-open] .model-more {
-    @apply opacity-100;
-  }
-  /* No pointer to hover with: the button stays in sight. */
-  @media (hover: none) {
-    .model-more {
-      @apply opacity-100;
-    }
   }
   .model-option[aria-pressed="true"] .model-option-name {
     @apply font-medium;
@@ -131,7 +89,7 @@
     @apply min-w-0 flex-1 truncate;
   }
   .model-option-name small {
-    @apply block whitespace-normal text-xs leading-snug;
+    @apply block max-w-48 whitespace-normal text-xs leading-snug;
     color: var(--muted);
   }
   .model-option-detail {
@@ -140,19 +98,5 @@
   }
   .model-option.static {
     @apply cursor-default;
-  }
-}
-
-/* A phone has no room beside the list: the options go under it. */
-@media (max-width: 760px) {
-  .model-menu {
-    @apply flex-col items-stretch;
-  }
-  .model-menu-list,
-  .model-menu-options {
-    @apply w-[min(20rem,calc(100vw-2rem))];
-  }
-  .model-menu-list {
-    @apply max-h-[45dvh];
   }
 }

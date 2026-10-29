@@ -1,7 +1,7 @@
 'use client';
 
 import { Popover } from '@base-ui/react/popover';
-import { Check, ChevronDown, Ellipsis, Search } from 'lucide-react';
+import { Check, ChevronDown, Search } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import type { ModelSelection, ReasoningEffort } from '@/lib/api';
 import { matchesQuery } from '@/lib/search';
@@ -21,17 +21,52 @@ export type ModelEntry = {
   gone?: boolean;
 };
 
-const effortName = (effort?: ReasoningEffort) =>
-  efforts.find((item) => item.value === effort)?.label;
-
 const same = (entry: ModelEntry, selection?: ModelSelection) =>
   entry.providerId === selection?.providerId && entry.modelId === selection?.modelId;
 
+/** A popup that opens above its trigger, as the composer sits at the bottom of the screen. */
+function Menu({
+  label,
+  trigger,
+  disabled,
+  open,
+  onOpenChange,
+  children,
+}: {
+  label: string;
+  trigger: ReactNode;
+  disabled?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: ReactNode;
+}) {
+  return (
+    <Popover.Root open={open} onOpenChange={onOpenChange}>
+      <Popover.Trigger className="model-trigger" aria-label={label} disabled={disabled}>
+        {trigger}
+        <ChevronDown size={14} aria-hidden="true" />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner
+          className="select-positioner"
+          side="top"
+          align="end"
+          sideOffset={8}
+          positionMethod="fixed"
+          collisionBoundary={[]}
+        >
+          <Popover.Popup className="model-menu" aria-label={label}>
+            {children}
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
 /**
- * The model, its effort and its speed, behind one compact trigger: "Claude Opus 5.5 Low". The
- * list is searchable; a row's "more" button, shown on hover, opens what that model offers beside
- * it, so a model and how it thinks are picked in one place, and choosing an effort or Fast for a
- * model that is not the current one switches to it.
+ * The model, behind a trigger that names it. The list is searchable and as wide as its names;
+ * choosing a model keeps what it can of the current effort and speed.
  */
 export function ModelMenu({
   label,
@@ -49,161 +84,141 @@ export function ModelMenu({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const current = models.find((entry) => same(entry, value));
-  // The model whose options are open beside the list, from the "more" button at the end of its
-  // row; none until one is asked for, so the list alone is what the menu usually is.
-  const [focus, setFocus] = useState<string>();
-  const shown = models.find((entry) => `${entry.providerId}:${entry.modelId}` === focus);
   const listed = models.filter((entry) => matchesQuery(`${entry.name} ${entry.provider}`, query));
 
-  /** The model with what it can keep of the current effort and speed. */
-  const choose = (entry: ModelEntry, change: Partial<ModelSelection> = {}) => {
-    const keep = same(entry, value) ? value : undefined;
-    const effort = change.reasoningEffort ?? keep?.reasoningEffort ?? value?.reasoningEffort;
-    const fast = change.fast ?? keep?.fast ?? value?.fast;
-
-    onChange({
-      providerId: entry.providerId,
-      modelId: entry.modelId,
-      ...(effort && entry.efforts.includes(effort) ? { reasoningEffort: effort } : {}),
-      ...(fast && entry.fast ? { fast: true } : {}),
-    });
-  };
-
-  const summary = [
-    effortName(current && value?.reasoningEffort),
-    current?.fast && value?.fast ? 'Fast' : undefined,
-  ]
-    .filter(Boolean)
-    .join(' ');
-
   return (
-    <Popover.Root
+    <Menu
+      label={label}
+      disabled={disabled}
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) {
-          setQuery('');
-          setFocus(undefined);
-        }
+        if (!next) setQuery('');
       }}
+      trigger={<span className="model-trigger-name">{current?.name ?? 'No model available'}</span>}
     >
-      <Popover.Trigger className="model-trigger" aria-label={label} disabled={disabled}>
-        <span className="model-trigger-name">{current?.name ?? 'No model available'}</span>
-        {summary && <span className="model-trigger-detail">{summary}</span>}
-        <ChevronDown size={14} aria-hidden="true" />
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner
-          className="select-positioner"
-          side="top"
-          align="end"
-          sideOffset={8}
-          positionMethod="fixed"
-          collisionBoundary={[]}
-        >
-          <Popover.Popup className="model-menu" aria-label={label}>
-            <div className="model-menu-list">
-              <label className="model-menu-search">
-                <Search size={14} aria-hidden="true" />
-                <input
-                  aria-label="Search models"
-                  placeholder="Search models"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </label>
-              <ul aria-label="Models">
-                {listed.map((entry) => {
-                  const key = `${entry.providerId}:${entry.modelId}`;
-                  const chosen = same(entry, value);
+      <label className="model-menu-search">
+        <Search size={14} aria-hidden="true" />
+        <input
+          aria-label="Search models"
+          placeholder="Search models"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </label>
+      <ul aria-label="Models">
+        {listed.map((entry) => {
+          const chosen = same(entry, value);
 
-                  return (
-                    <li key={key} className="model-row" data-open={shown === entry || undefined}>
-                      <button
-                        type="button"
-                        className="model-option"
-                        aria-pressed={chosen}
-                        onClick={() => {
-                          choose(entry);
-                          setOpen(false);
-                        }}
-                      >
-                        {entry.icon}
-                        <span className="model-option-name">{entry.name}</span>
-                        {chosen && value?.reasoningEffort && (
-                          <span className="model-option-detail">
-                            {effortName(value.reasoningEffort)}
-                            {entry.fast && value.fast ? ' Fast' : ''}
-                          </span>
-                        )}
-                        {entry.gone && (
-                          <span className="model-option-detail">No longer offered</span>
-                        )}
-                      </button>
-                      {(entry.efforts.length > 0 || entry.fast) && (
-                        <button
-                          type="button"
-                          className="model-more"
-                          aria-label={`${entry.name} options`}
-                          aria-expanded={shown === entry}
-                          onClick={() => setFocus(shown === entry ? undefined : key)}
-                        >
-                          <Ellipsis size={16} aria-hidden="true" />
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-                {!listed.length && <li className="model-menu-empty">No model matches.</li>}
-              </ul>
-            </div>
-            {shown && (shown.efforts.length > 0 || shown.fast) && (
-              <section className="model-menu-options" aria-label={`${shown.name} options`}>
-                {shown.efforts.length > 0 && (
-                  <fieldset>
-                    <legend>Effort</legend>
-                    {efforts
-                      .filter((effort) => shown.efforts.includes(effort.value))
-                      .map((effort) => {
-                        const active =
-                          same(shown, value) && value?.reasoningEffort === effort.value;
+          return (
+            <li key={`${entry.providerId}:${entry.modelId}`}>
+              <button
+                type="button"
+                className="model-option"
+                aria-pressed={chosen}
+                onClick={() => {
+                  const effort = value?.reasoningEffort;
 
-                        return (
-                          <button
-                            key={effort.value}
-                            type="button"
-                            className="model-option"
-                            aria-pressed={active}
-                            onClick={() => choose(shown, { reasoningEffort: effort.value })}
-                          >
-                            <span className="model-option-name">{effort.label}</span>
-                            {active && <Check size={14} aria-hidden="true" />}
-                          </button>
-                        );
-                      })}
-                  </fieldset>
-                )}
-                {shown.fast && (
-                  <fieldset>
-                    <legend>Options</legend>
-                    <div className="model-option static">
-                      <span className="model-option-name">
-                        Fast
-                        <small>Faster answers, at the provider's higher price</small>
-                      </span>
-                      <Switch
-                        label={`Fast mode for ${shown.name}`}
-                        checked={same(shown, value) && Boolean(value?.fast)}
-                        onChange={(fast) => choose(shown, { fast })}
-                      />
-                    </div>
-                  </fieldset>
-                )}
-              </section>
-            )}
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+                  onChange({
+                    providerId: entry.providerId,
+                    modelId: entry.modelId,
+                    ...(effort && entry.efforts.includes(effort)
+                      ? { reasoningEffort: effort }
+                      : {}),
+                    ...(value?.fast && entry.fast ? { fast: true } : {}),
+                  });
+                  setOpen(false);
+                }}
+              >
+                {entry.icon}
+                <span className="model-option-name">{entry.name}</span>
+                {entry.gone && <span className="model-option-detail">No longer offered</span>}
+                {chosen && <Check size={14} aria-hidden="true" />}
+              </button>
+            </li>
+          );
+        })}
+        {!listed.length && <li className="model-menu-empty">No model matches.</li>}
+      </ul>
+    </Menu>
+  );
+}
+
+/**
+ * How the current model thinks and how fast it answers: its reasoning efforts and, where the
+ * vendor has it, Fast. Absent for a model that offers neither.
+ */
+export function EffortMenu({
+  model,
+  value,
+  disabled,
+  onChange,
+}: {
+  model?: ModelEntry;
+  value?: ModelSelection;
+  disabled?: boolean;
+  onChange: (next: ModelSelection) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (!model || !value || (!model.efforts.length && !model.fast)) return null;
+
+  const offered = efforts.filter((effort) => model.efforts.includes(effort.value));
+  const effort = offered.find((item) => item.value === value.reasoningEffort);
+  const fast = model.fast && Boolean(value.fast);
+  const summary = [effort?.label, fast ? 'Fast' : undefined].filter(Boolean).join(' ');
+
+  return (
+    <Menu
+      label={`Effort for ${model.name}`}
+      disabled={disabled}
+      open={open}
+      onOpenChange={setOpen}
+      trigger={<span className="model-trigger-name">{summary || 'Effort'}</span>}
+    >
+      {offered.length > 0 && (
+        <fieldset>
+          <legend>Effort</legend>
+          {offered.map((item) => {
+            const active = value.reasoningEffort === item.value;
+
+            return (
+              <button
+                key={item.value}
+                type="button"
+                className="model-option"
+                aria-pressed={active}
+                onClick={() => {
+                  onChange({ ...value, reasoningEffort: item.value });
+                  setOpen(false);
+                }}
+              >
+                <span className="model-option-name">{item.label}</span>
+                {active && <Check size={14} aria-hidden="true" />}
+              </button>
+            );
+          })}
+        </fieldset>
+      )}
+      {model.fast && (
+        <fieldset>
+          <legend>Options</legend>
+          <div className="model-option static">
+            <span className="model-option-name">
+              Fast
+              <small>Faster answers, at the provider's higher price</small>
+            </span>
+            <Switch
+              label={`Fast mode for ${model.name}`}
+              checked={fast}
+              onChange={(next) => {
+                const { fast: _off, ...rest } = value;
+                onChange(next ? { ...rest, fast: true } : rest);
+              }}
+            />
+          </div>
+        </fieldset>
+      )}
+    </Menu>
   );
 }
