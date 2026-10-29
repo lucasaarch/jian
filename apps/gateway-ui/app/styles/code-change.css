@@ -1,0 +1,113 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: A diff's parts are styled per kind and do not overlap. */
+@reference "tailwindcss";
+@reference "./themes.css";
+
+/* What a turn's file writes changed, as a review tool shows it. The card is an editor surface:
+   dark in both themes, as the file viewer is, since the token colours are a dark palette.
+   Long lines scroll inside the card, never the page. */
+@layer components {
+  .code-changes {
+    @apply mb-3 grid w-full min-w-0 gap-3;
+  }
+  .code-change {
+    @apply grid min-w-0 gap-2;
+  }
+  .code-change-row {
+    @apply flex min-w-0 items-baseline gap-2 text-sm;
+  }
+  .code-change-tool {
+    @apply shrink-0 font-mono text-xs;
+    color: var(--muted);
+  }
+  .code-change-summary {
+    @apply min-w-0 truncate font-medium;
+    color: var(--ink);
+  }
+  .code-change-counts {
+    @apply ml-auto flex shrink-0 gap-1.5 font-mono text-xs tabular-nums;
+  }
+  .code-change-counts .added {
+    color: var(--good);
+  }
+  .code-change-counts .removed {
+    color: var(--bad);
+  }
+
+  .code-diff {
+    --diff-ink: #e6edf3;
+    --diff-dim: #8b949e;
+    --diff-rule: #262626;
+    @apply min-w-0 overflow-hidden rounded-lg border;
+    background: #101010;
+    border-color: var(--diff-rule);
+    color: var(--diff-ink);
+  }
+  .code-diff-head {
+    @apply flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left font-mono text-[12.5px];
+    color: var(--diff-ink);
+  }
+  .code-diff-head[aria-expanded="true"] {
+    @apply border-b;
+    border-color: var(--diff-rule);
+  }
+  .code-diff-head .code-change-counts .added {
+    color: #7ee787;
+  }
+  .code-diff-head .code-change-counts .removed {
+    color: #ffa198;
+  }
+  .code-diff-chevron {
+    @apply shrink-0 transition-transform;
+    color: var(--diff-dim);
+  }
+  .code-diff-head[aria-expanded="false"] .code-diff-chevron {
+    @apply -rotate-90;
+  }
+  .code-diff-path {
+    @apply min-w-0 truncate;
+  }
+  .code-diff-body {
+    @apply overflow-x-auto;
+  }
+  .code-diff-lines {
+    @apply min-w-max font-mono text-[12.5px] leading-[1.65];
+  }
+  .code-diff-hunk {
+    @apply whitespace-pre px-3 py-1;
+    background: #161616;
+    color: var(--diff-dim);
+  }
+  .code-diff-line {
+    @apply grid;
+    grid-template-columns: 3rem 3rem 1.5rem minmax(0, 1fr);
+  }
+  .code-diff-number {
+    @apply select-none pr-2 text-right tabular-nums;
+    color: #6e7681;
+  }
+  .code-diff-sign {
+    @apply select-none text-center;
+    color: var(--diff-dim);
+  }
+  .code-diff-line code {
+    @apply whitespace-pre pr-4;
+  }
+  /* Added lines sit on a lighter band; removed ones fade, so the new code reads first. */
+  .code-diff-line[data-kind="add"] {
+    background: rgb(255 255 255 / 0.07);
+  }
+  .code-diff-line[data-kind="add"] .code-diff-sign {
+    color: #7ee787;
+  }
+  .code-diff-line[data-kind="del"] code {
+    @apply opacity-50;
+  }
+  .code-diff-line[data-kind="del"] .code-diff-sign {
+    color: #ffa198;
+  }
+  .code-diff-cut {
+    @apply border-t px-3 py-2 text-xs;
+    border-color: var(--diff-rule);
+    color: var(--diff-dim);
+  }
+}

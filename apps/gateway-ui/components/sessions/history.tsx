@@ -6,6 +6,7 @@ import { subscribe } from '@/lib/events';
 import { useCrew } from '@/lib/stores/crew';
 import type { GatewayApi, Person, Run, RunApproval, Subagent, ToolStep } from '../../lib/api';
 import { Badge, Button, Empty, Spinner } from '../ui';
+import { CodeChanges } from './code-change';
 import { CrewCards, CrewDock, reportOf } from './crew';
 import { ApprovalCard, QuestionCard } from './decision-cards';
 import { useFollowBottom } from './follow-bottom';
@@ -101,6 +102,8 @@ export function History({
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const isRunning = running(run);
+  // The turn being read now: its file changes open whole, older ones only when short.
+  const newest = messages.findLast((message) => message.runId)?.runId;
   const { scroller, follow, onScroll, hold } = useFollowBottom();
 
   // Sending is a return to the end, wherever the reader had scrolled.
@@ -343,7 +346,14 @@ export function History({
               const question = asking && asked?.question ? asked.question : undefined;
               const thought =
                 answering && (steps?.length || handedOff) ? (
-                  <ThoughtLine working={false} steps={traceOf(steps ?? [])} {...span(answering)} />
+                  <>
+                    <ThoughtLine
+                      working={false}
+                      steps={traceOf(steps ?? [])}
+                      {...span(answering)}
+                    />
+                    <CodeChanges steps={steps ?? []} fresh={answering === newest} />
+                  </>
                 ) : undefined;
 
               return (
@@ -396,6 +406,7 @@ export function History({
                         steps={traceOf(unansweredSteps)}
                         {...span(message.runId)}
                       />
+                      <CodeChanges steps={unansweredSteps} fresh={message.runId === newest} />
                     </div>
                   )}
                   {crew.length > 0 && (
