@@ -12,6 +12,8 @@ describe('media providers', () => {
       expect(JSON.parse(String(options?.body))).toMatchObject({
         model: 'gpt-image-2',
         prompt: 'A blue square',
+        // Square unless a shape is asked for.
+        size: '1024x1024',
       });
       return Response.json({ data: [{ b64_json: png }] });
     });
@@ -25,6 +27,40 @@ describe('media providers', () => {
         signal,
       ),
     ).toMatchObject({ mimeType: 'image/png', data: png });
+  });
+
+  it('asks each image provider for the shape the agent chose', async () => {
+    const asked: unknown[] = [];
+    const client = new MediaProviders(async (url, options) => {
+      const body = JSON.parse(String(options?.body));
+      asked.push(String(url).includes('openai') ? body.size : body.generationConfig.imageConfig);
+      return String(url).includes('openai')
+        ? Response.json({ data: [{ b64_json: png }] })
+        : Response.json({
+            candidates: [
+              { content: { parts: [{ inlineData: { mimeType: 'image/png', data: png } }] } },
+            ],
+          });
+    });
+    const draw = (config: { provider: string; modelId: string }) =>
+      client.generate(
+        'image',
+        config as never,
+        'synthetic-key',
+        'A beach',
+        undefined,
+        signal,
+        undefined,
+        undefined,
+        '16:9',
+      );
+
+    await draw({ provider: 'google', modelId: 'gemini-2.5-flash-image' });
+    await draw({ provider: 'openai', modelId: 'gpt-image-2' });
+    await draw({ provider: 'openai', modelId: 'dall-e-3' });
+
+    // Gemini draws the shape itself; OpenAI gets the nearest landscape size it offers.
+    expect(asked).toEqual([{ aspectRatio: '16:9' }, '1536x1024', '1792x1024']);
   });
 
   it('wraps Gemini PCM speech in a playable WAV file', async () => {

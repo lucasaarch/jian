@@ -1,4 +1,5 @@
 import {
+  type ImageAspect,
   type InlineMedia,
   inlineMediaSchema,
   MAX_MEDIA_BYTES,
@@ -251,6 +252,7 @@ export class MediaProviders {
     signal: AbortSignal,
     account?: MediaMeter,
     instructions?: string,
+    aspectRatio: ImageAspect = '1:1',
   ): Promise<InlineMedia> {
     if (config.provider === 'openai-codex')
       throw new Error('Image and speech generation require an OpenAI API key, not a ChatGPT login');
@@ -272,7 +274,7 @@ export class MediaProviders {
           },
         ],
         kind === 'image'
-          ? { responseModalities: ['TEXT', 'IMAGE'] }
+          ? { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { aspectRatio } }
           : {
               responseModalities: ['AUDIO'],
               speechConfig: {
@@ -312,6 +314,7 @@ export class MediaProviders {
                 model: config.modelId,
                 prompt,
                 n: 1,
+                size: openaiImageSize(config.modelId, aspectRatio),
                 ...(config.modelId.startsWith('dall-e') ? { response_format: 'b64_json' } : {}),
               }
             : {
@@ -334,4 +337,15 @@ export class MediaProviders {
       .parse(body);
     return { mimeType: 'image/png', data: parsed.data[0]?.b64_json ?? '' };
   }
+}
+
+/**
+ * OpenAI draws a few sizes only: the one nearest the shape asked for, by orientation. DALL·E 2
+ * is square alone.
+ */
+export function openaiImageSize(modelId: string, aspectRatio: ImageAspect): string {
+  const [width = 1, height = 1] = aspectRatio.split(':').map(Number);
+  if (modelId === 'dall-e-2' || width === height) return '1024x1024';
+  if (modelId === 'dall-e-3') return width > height ? '1792x1024' : '1024x1792';
+  return width > height ? '1536x1024' : '1024x1536';
 }
