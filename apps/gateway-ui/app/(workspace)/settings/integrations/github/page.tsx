@@ -5,24 +5,16 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { Button, Empty, GitHubLogo, ResourceRow, SectionHeading } from '@/components/ui';
 import { githubOutcome } from '@/lib/github';
-import { agentPath } from '@/lib/navigation';
-import { useAgent } from '@/lib/query/agent';
+import { settingsPath } from '@/lib/navigation';
 import { panelApi } from '@/lib/query/client';
 import { keys } from '@/lib/query/keys';
 import { useReportFailure } from '@/lib/query/notify';
 import { queries } from '@/lib/query/profile';
 import { notifyError } from '@/lib/workspace';
-import {
-  Button,
-  Empty,
-  GitHubLogo,
-  ResourceRow,
-  SectionHeading,
-} from '../../../../../../components/ui';
 
 export default function GitHubIntegrationDetailsPage() {
-  const profile = useAgent();
   const api = panelApi();
   const client = useQueryClient();
   const { data: integration, isPending: loading } = useReportFailure(
@@ -50,9 +42,7 @@ export default function GitHubIntegrationDetailsPage() {
   const connect = async () => {
     setConnecting(true);
     try {
-      const result = await api.startGithubInstallation(
-        agentPath(profile.id, 'integrations/github'),
-      );
+      const result = await api.startGithubInstallation('/settings/integrations/github');
       window.location.assign(result.url);
     } catch (error) {
       notifyError(error, 'GitHub authorization could not start.');
@@ -82,12 +72,12 @@ export default function GitHubIntegrationDetailsPage() {
 
   return (
     <>
-      <Link href={agentPath(profile.id, 'integrations')} className="integration-back-link">
+      <Link href={settingsPath('integrations')} className="integration-back-link">
         <ArrowLeft size={16} /> Integrations
       </Link>
       <SectionHeading
         title={app?.name ?? 'GitHub App'}
-        description="Official GitHub MCP tools for the repositories linked to each Jian project."
+        description="Official GitHub MCP tools for every agent: each connected account in any chat, and only its repository in a project's chat."
         action={
           <Button
             busy={connecting}

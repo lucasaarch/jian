@@ -2,7 +2,6 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
-import { probeMcpServer } from '../src/agent/mcp-probe.js';
 import { createSafeFetch } from '../src/security/outbound.js';
 import { testServices } from './helpers/services.js';
 
@@ -69,15 +68,10 @@ async function check(refuseWith?: number) {
   const outbound = createSafeFetch({ allowPrivateOrigins: [origin] });
   const services = await testServices();
 
-  const profile = await services.profiles.createProfile({
-    name: 'Atlas',
-    instructions: 'Help.',
-    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-    mcpServers: [{ name: 'docs', url: `${origin}/mcp` }],
-  });
+  await services.mcp.replace({ servers: [{ name: 'docs', url: `${origin}/mcp` }] });
 
   try {
-    return await probeMcpServer(profile, 'docs', services.vault, outbound.fetch);
+    return await services.mcp.check('docs', outbound.fetch);
   } finally {
     await outbound.close();
     server.close();
@@ -103,11 +97,9 @@ describe('checking an MCP server from the panel', () => {
 
   it('says which variable is missing before trying the network', async () => {
     const services = await testServices();
-    const profile = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-      mcpServers: [
+
+    await services.mcp.replace({
+      servers: [
         {
           name: 'docs',
           url: 'https://example.com/mcp',
@@ -117,7 +109,7 @@ describe('checking an MCP server from the panel', () => {
       ],
     });
 
-    const status = await probeMcpServer(profile, 'docs', services.vault);
+    const status = await services.mcp.check('docs');
 
     expect(status.reachable).toBe(false);
     expect(status.error).toContain('JIAN_MCP_ABSENT');

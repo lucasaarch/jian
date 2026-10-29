@@ -30,14 +30,14 @@ export const githubIntegrationStatusSchema = z.strictObject({
 
 export const githubInstallSchema = z.strictObject({ url: z.url() });
 /**
- * Where GitHub sends the owner back: the integrations page of the agent they started from. The
- * gateway redirects to it, so it is a panel path and nothing else — never another origin.
+ * Where GitHub sends the owner back: the gateway's Integrations page, or its GitHub details. The
+ * gateway redirects to it, so it is one of those two panel paths and nothing else — never another
+ * origin.
  */
-export const githubReturnPathSchema = z
-  .string()
-  .regex(
-    /^\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/integrations(?:\/github)?$/,
-  );
+export const githubReturnPathSchema = z.enum([
+  '/settings/integrations',
+  '/settings/integrations/github',
+]);
 export const githubInstallInputSchema = z.strictObject({ returnPath: githubReturnPathSchema });
 export const githubManifestSchema = z.strictObject({
   state: z.string().min(1),

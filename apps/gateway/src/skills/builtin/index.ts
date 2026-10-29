@@ -1,4 +1,4 @@
-import type { Profile, Skill } from '@jian/contracts';
+import type { McpServer, Profile, Skill } from '@jian/contracts';
 import { isGitHubIntegrationServer } from '../../agent/github-mcp.js';
 import { aboutJian } from './about-jian.js';
 import { activity } from './activity.js';
@@ -77,11 +77,12 @@ export const builtinSkillNames: ReadonlySet<string> = new Set(
   [...ALWAYS, ...MCP, github].map((skill) => skill.name),
 );
 
-export function builtinSkills(profile: Pick<Profile, 'mcpServers'>): readonly Skill[] {
+/** `servers` are the MCP servers a run reaches: the installation's, and any lent to it. */
+export function builtinSkills(servers: readonly McpServer[]): readonly Skill[] {
   return [
     ...ALWAYS,
-    ...(profile.mcpServers.length ? MCP : []),
-    ...(profile.mcpServers.some(isGitHubIntegrationServer) ? [github] : []),
+    ...(servers.length ? MCP : []),
+    ...(servers.some(isGitHubIntegrationServer) ? [github] : []),
   ];
 }
 
@@ -89,16 +90,20 @@ export function builtinSkills(profile: Pick<Profile, 'mcpServers'>): readonly Sk
  * What the profile can load this run. An imported skill wins over a built-in of the same
  * name, so an owner who disagrees with a default replaces it by importing over it.
  */
-export function availableSkills(profile: Profile): Skill[] {
+export function availableSkills(profile: Profile, servers: readonly McpServer[]): Skill[] {
   const own = new Set(profile.skills.map((skill) => skill.name));
   const disabled = new Set(profile.disabledSkills);
 
   return [
-    ...builtinSkills(profile).filter((skill) => !own.has(skill.name) && !disabled.has(skill.name)),
+    ...builtinSkills(servers).filter((skill) => !own.has(skill.name) && !disabled.has(skill.name)),
     ...profile.skills,
   ];
 }
 
-export function findSkill(profile: Profile, name: string): Skill | undefined {
-  return availableSkills(profile).find((skill) => skill.name === name);
+export function findSkill(
+  profile: Profile,
+  servers: readonly McpServer[],
+  name: string,
+): Skill | undefined {
+  return availableSkills(profile, servers).find((skill) => skill.name === name);
 }

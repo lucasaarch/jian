@@ -262,7 +262,7 @@ describe('group conversations', () => {
 
       if (!run) throw new Error('Run missing');
 
-      const context = await f.services.contexts.context(run);
+      const context = await f.services.contexts.context(run, []);
       const transcript = context.messages.map((message) => message.content).join('\n\n');
 
       expect(context.messages).toHaveLength(2);
@@ -316,7 +316,7 @@ describe('group conversations', () => {
 
       if (!run) throw new Error('Run missing');
 
-      const context = await f.services.contexts.context(run);
+      const context = await f.services.contexts.context(run, []);
       const heard = context.messages.map((message) => message.content).join('\n');
       const mediaId = heard.match(/prices\.csv, media ID ([0-9a-f-]{36})/)?.[1];
 

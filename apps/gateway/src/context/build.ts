@@ -1,5 +1,6 @@
 import {
   GROUP_AGENT_TURN_LIMIT,
+  type McpServer,
   type Memory,
   type Message,
   type Run,
@@ -11,6 +12,8 @@ import { availableSkills } from '../skills/builtin/index.js';
 import { tokenCounter } from './budget.js';
 
 export interface ContextSources {
+  /** The MCP servers this run reaches: the skills it is offered follow them. */
+  servers: readonly McpServer[];
   /** The installation's zone, which the agent reads the time in; the host's when absent. */
   timeZone?: string;
   /** The memories the request matched, each carrying the keys of those linked to it. */
@@ -155,7 +158,7 @@ export function buildContext(
     }));
 
   // Skill bodies are loaded on demand; the prompt carries only their discovery catalog.
-  const skills = availableSkills(run.profile).map(({ name, description }) => ({
+  const skills = availableSkills(run.profile, sources.servers).map(({ name, description }) => ({
     name,
     description,
   }));

@@ -14,6 +14,7 @@ import { createWhatsAppDeviceFactory } from './channels/whatsapp/driver.js';
 import { WhatsAppBusinessChannel } from './channels/whatsapp-business.js';
 import { Coordination } from './coordination/service.js';
 import { GitHubIntegrations } from './integrations/github.js';
+import { moveMcpSecrets } from './mcp/move-secrets.js';
 import { ModelCatalog } from './providers/catalog-source.js';
 import { CodexLogin } from './providers/codex/login.js';
 import { ProviderModels } from './providers/discovery.js';
@@ -156,7 +157,7 @@ const skills = new Skills(services.profiles, outbound.fetch);
 // An MCP server that wants OAuth sends the owner's browser back here, so a gateway with no
 // public address configured cannot offer that sign-in at all.
 const mcpLogins = config.data.JIAN_PUBLIC_URL
-  ? new McpLogins(vault, config.data.JIAN_PUBLIC_URL, outbound.fetch)
+  ? new McpLogins(gatewayVault, config.data.JIAN_PUBLIC_URL, outbound.fetch)
   : undefined;
 
 const coordination = new Coordination(services);
@@ -199,7 +200,6 @@ let scheduleTimer: ReturnType<typeof setInterval> | undefined;
 services.profiles.useBeforeDelete((profileId, tx) => channels.revokeAll(profileId, tx));
 
 const runtime = new AgentRuntime(services, undefined, {
-  vault,
   gatewayVault,
   github,
   ...(mcpLogins ? { mcpOAuth: mcpLogins.provider } : {}),
@@ -265,6 +265,8 @@ let startupStage: StartupStage = 'database';
 
 try {
   await store.migrate();
+  // Secrets of the MCP servers migration 0071 made the installation's; nothing once done.
+  await moveMcpSecrets(store, vault, gatewayVault);
   startupStage = 'queue';
   await queue?.start();
 

@@ -16,7 +16,8 @@ forward-moving shape: an agent with its own identity, connected to the person wh
 ## What it does
 
 - **Profiles as identity.** Versioned role, tone, goals and boundaries, with their own
-  model, context budget, skills and MCP servers.
+  context budget and skills. Models and MCP servers are configured once and shared by every
+  profile.
 - **Memory that survives the session.** Explicit memories, paginated history search, and
   messages passed between parallel sessions.
 - **A context budget you control.** Per-step and per-run limits, relevant memories only,

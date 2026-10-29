@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { GatewayError } from '../core/errors.js';
 import type { ProfileParams } from '../http/params.js';
+import type { McpServerReader } from '../mcp/port.js';
 import type { ProfileReader } from '../profiles/port.js';
 import { builtinSkills } from './builtin/index.js';
 import type { Skills } from './service.js';
 
-type SkillRouteServices = { skills?: Skills; profiles: ProfileReader };
+type SkillRouteServices = { skills?: Skills; profiles: ProfileReader; mcp: McpServerReader };
 
 function available(deps: SkillRouteServices): Skills {
   if (!deps.skills) {
@@ -22,7 +23,8 @@ export function registerSkillRoutes(app: FastifyInstance, deps: SkillRouteServic
     const profile = await deps.profiles.profile(request.params.profileId);
     const disabled = new Set(profile.disabledSkills);
 
-    return builtinSkills(profile).map((skill) => ({
+    // The installation's servers: what a run lends itself, such as GitHub's, is not listed here.
+    return builtinSkills(await deps.mcp.list()).map((skill) => ({
       ...skill,
       enabled: !disabled.has(skill.name),
     }));

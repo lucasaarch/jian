@@ -3,10 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { mcpValueSecret } from '../src/agent/mcp-connect.js';
-import { probeMcpServer } from '../src/agent/mcp-probe.js';
 import { testServices } from './helpers/services.js';
-
-const model = { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' };
 
 /** A server that answers the handshake over stdin and stdout, as a real one does. */
 function commandServer() {
@@ -43,11 +40,8 @@ process.stdin.on('data', (chunk) => {
 describe('the ways an MCP server can be reached', () => {
   it('runs a command server and reads what it offers', async () => {
     const services = await testServices();
-    const profile = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model,
-      mcpServers: [
+    const servers = await services.mcp.replace({
+      servers: [
         {
           name: 'local',
           transport: 'stdio',
@@ -58,13 +52,13 @@ describe('the ways an MCP server can be reached', () => {
       ],
     });
 
-    // The value the owner typed never stays on the profile.
-    expect(JSON.stringify(profile)).not.toContain('synthetic-secret');
-    expect(
-      await services.vault.read(profile.id, mcpValueSecret('local', 'env', 'SERVER_NAME')),
-    ).toBe('synthetic-secret');
+    // The value the owner typed never stays on the server's definition.
+    expect(JSON.stringify(servers)).not.toContain('synthetic-secret');
+    expect(await services.gatewayVault.read(mcpValueSecret('local', 'env', 'SERVER_NAME'))).toBe(
+      'synthetic-secret',
+    );
 
-    const status = await probeMcpServer(profile, 'local', services.vault);
+    const status = await services.mcp.check('local');
 
     expect(status.reachable).toBe(true);
     expect(status.tools.map((tool) => tool.name)).toEqual(['echo']);
@@ -74,11 +68,8 @@ describe('the ways an MCP server can be reached', () => {
     const seen: string[] = [];
     const services = await testServices();
 
-    const profile = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model,
-      mcpServers: [
+    await services.mcp.replace({
+      servers: [
         {
           name: 'docs',
           url: 'https://mcp.example.com/mcp',
@@ -91,7 +82,7 @@ describe('the ways an MCP server can be reached', () => {
       ],
     });
 
-    await probeMcpServer(profile, 'docs', services.vault, (async (_url, init) => {
+    await services.mcp.check('docs', (async (_url, init) => {
       seen.push(String(new Headers(init?.headers).get('authorization')));
       seen.push(String(new Headers(init?.headers).get('x-tenant')));
 
@@ -104,11 +95,8 @@ describe('the ways an MCP server can be reached', () => {
 
   it('says which value is missing rather than failing on the network', async () => {
     const services = await testServices();
-    const profile = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model,
-      mcpServers: [
+    await services.mcp.replace({
+      servers: [
         {
           name: 'docs',
           url: 'https://mcp.example.com/mcp',
@@ -118,7 +106,7 @@ describe('the ways an MCP server can be reached', () => {
       ],
     });
 
-    const status = await probeMcpServer(profile, 'docs', services.vault, (async () => {
+    const status = await services.mcp.check('docs', (async () => {
       throw new Error('the network must not be reached');
     }) as typeof globalThis.fetch);
 
@@ -130,11 +118,8 @@ describe('the ways an MCP server can be reached', () => {
     const services = await testServices();
 
     await expect(
-      services.profiles.createProfile({
-        name: 'Atlas',
-        instructions: 'Help.',
-        model,
-        mcpServers: [{ name: 'local', transport: 'stdio', command: 'x', auth: 'oauth' }],
+      services.mcp.replace({
+        servers: [{ name: 'local', transport: 'stdio', command: 'x', auth: 'oauth' }],
       }),
     ).rejects.toThrow();
   });

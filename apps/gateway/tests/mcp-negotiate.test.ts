@@ -7,7 +7,6 @@ import {
   shouldFallbackToLegacyInitialize,
   supportedProtocolVersions,
 } from '../src/agent/mcp-negotiate.js';
-import { probeMcpServer } from '../src/agent/mcp-probe.js';
 import { createSafeFetch } from '../src/security/outbound.js';
 import { testServices } from './helpers/services.js';
 
@@ -198,15 +197,10 @@ describe('MCP auto negotiation against synthetic peers', () => {
     await withOrigin('legacy-disabled-modern', async (origin) => {
       const outbound = createSafeFetch({ allowPrivateOrigins: [origin] });
       const services = await testServices();
-      const profile = await services.profiles.createProfile({
-        name: 'Atlas',
-        instructions: 'Help.',
-        model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-        mcpServers: [{ name: 'atlassian', url: `${origin}/mcp` }],
-      });
+      await services.mcp.replace({ servers: [{ name: 'atlassian', url: `${origin}/mcp` }] });
 
       try {
-        const status = await probeMcpServer(profile, 'atlassian', services.vault, outbound.fetch);
+        const status = await services.mcp.check('atlassian', outbound.fetch);
 
         expect(status.reachable).toBe(true);
         expect(status.tools.map((tool) => tool.name)).toEqual(['legacy_tool']);
@@ -244,15 +238,10 @@ describe('MCP auto negotiation against synthetic peers', () => {
     await withOrigin('legacy-unknown-discover', async (origin) => {
       const outbound = createSafeFetch({ allowPrivateOrigins: [origin] });
       const services = await testServices();
-      const profile = await services.profiles.createProfile({
-        name: 'Atlas',
-        instructions: 'Help.',
-        model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-        mcpServers: [{ name: 'docs', url: `${origin}/mcp` }],
-      });
+      await services.mcp.replace({ servers: [{ name: 'docs', url: `${origin}/mcp` }] });
 
       try {
-        const status = await probeMcpServer(profile, 'docs', services.vault, outbound.fetch);
+        const status = await services.mcp.check('docs', outbound.fetch);
 
         expect(status.reachable).toBe(true);
         expect(status.tools.map((tool) => tool.name)).toEqual(['legacy_tool']);

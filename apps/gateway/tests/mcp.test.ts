@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { MCPClient } from '@ai-sdk/mcp';
-import type { Run } from '@jian/contracts';
+import { mcpSchema } from '@jian/contracts';
 import type { ToolSet } from 'ai';
 import { expect, it } from 'vitest';
 import { mcpActionKind } from '../src/agent/guard.js';
@@ -232,7 +232,9 @@ it.each([false, true])(
         name: 'MCP test',
         instructions: 'Help.',
         model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-        mcpServers: [
+      });
+      await services.mcp.replace({
+        servers: [
           {
             name: 'docs',
             url: `${origin}/mcp`,
@@ -377,8 +379,8 @@ it.each(['disconnect', 'isError', 'readOnlyError', 'validationError'])(
         name: 'Effect test',
         instructions: 'Help.',
         model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-        mcpServers: [{ name: 'effects', url: `${origin}/mcp` }],
       });
+      await services.mcp.replace({ servers: [{ name: 'effects', url: `${origin}/mcp` }] });
 
       const session = await services.sessions.createSession(profile.id, { title: 'Effects' });
 
@@ -602,15 +604,10 @@ it('reconnects after a closed MCP client instead of treating the call as uncerta
   const outbound = createSafeFetch({ allowPrivateOrigins: [origin] });
   const tools: ToolSet = {};
   const clients: MCPClient[] = [];
-  const run = {
-    profileId: 'p',
-    profile: {
-      mcpServers: [{ name: 'github', url: `${origin}/mcp` }],
-    },
-  } as unknown as Run;
+  const servers = [mcpSchema.parse({ name: 'github', url: `${origin}/mcp` })];
 
   try {
-    const { mcpToolNames } = await connectMcpTools(run, tools, {
+    const { mcpToolNames } = await connectMcpTools(servers, tools, {
       vault: undefined,
       secrets: new Set(),
       clients,
@@ -724,7 +721,9 @@ process.stdin.on('data', (chunk) => {
     name: 'Closed client',
     instructions: 'Help.',
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-    mcpServers: [
+  });
+  await services.mcp.replace({
+    servers: [
       {
         name: 'effects',
         transport: 'stdio',
@@ -801,7 +800,7 @@ process.stdin.on('data', (chunk) => {
     },
   });
 
-  await new AgentRuntime(services, () => model, { vault: services.vault }).execute(
+  await new AgentRuntime(services, () => model, { gatewayVault: services.gatewayVault }).execute(
     profile.id,
     run.id,
   );

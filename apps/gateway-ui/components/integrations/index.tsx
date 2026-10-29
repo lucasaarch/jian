@@ -4,20 +4,18 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Capabilities } from '@/components/skills';
 import { Button, GitHubLogo, SectionHeading } from '@/components/ui';
 import { githubOutcome } from '@/lib/github';
-import { agentPath } from '@/lib/navigation';
-import { useAgent } from '@/lib/query/agent';
+import { settingsPath } from '@/lib/navigation';
 import { useReportFailure } from '@/lib/query/notify';
 import { queries } from '@/lib/query/profile';
 import { notifyError, useActions } from '@/lib/workspace';
+import { McpServers } from './mcp-servers';
 
 /** Each tab is a route of its own, so a link or a reload opens the one it names. */
 export type IntegrationTab = 'apps' | 'mcps';
 
 export function Integrations({ tab }: { tab: IntegrationTab }) {
-  const profile = useAgent();
   const actions = useActions();
   const { api } = actions;
   const { data: integration, isPending: loading } = useReportFailure(
@@ -43,9 +41,7 @@ export function Integrations({ tab }: { tab: IntegrationTab }) {
   const register = async () => {
     setConnecting(true);
     try {
-      const { action, manifest } = await api.startGithubAppRegistration(
-        agentPath(profile.id, 'integrations'),
-      );
+      const { action, manifest } = await api.startGithubAppRegistration('/settings/integrations');
       const form = document.createElement('form');
       form.method = 'post';
       form.action = action;
@@ -69,11 +65,11 @@ export function Integrations({ tab }: { tab: IntegrationTab }) {
     <>
       <SectionHeading
         title="Integrations"
-        description="Connect official services and MCP servers for your agents."
+        description="Official services and MCP servers, shared by every agent."
       />
       <div className="integration-tabs" role="tablist" aria-label="Integration types">
         <Link
-          href={agentPath(profile.id, 'integrations')}
+          href={settingsPath('integrations')}
           replace
           id="integrations-apps-tab"
           role="tab"
@@ -83,7 +79,7 @@ export function Integrations({ tab }: { tab: IntegrationTab }) {
           Apps
         </Link>
         <Link
-          href={agentPath(profile.id, 'integrations/mcps')}
+          href={settingsPath('integrations/mcps')}
           replace
           id="integrations-mcps-tab"
           role="tab"
@@ -101,10 +97,7 @@ export function Integrations({ tab }: { tab: IntegrationTab }) {
           aria-labelledby="integrations-apps-tab"
         >
           {integration?.configured && integration.app ? (
-            <Link
-              href={agentPath(profile.id, 'integrations/github')}
-              className="integration-app-card"
-            >
+            <Link href={settingsPath('integrations/github')} className="integration-app-card">
               <span className="integration-card-icon">
                 <GitHubLogo size={24} />
               </span>
@@ -150,10 +143,10 @@ export function Integrations({ tab }: { tab: IntegrationTab }) {
           aria-labelledby="integrations-mcps-tab"
         >
           <p className="integration-mcp-note">
-            GitHub MCP tools are added automatically to chats with a GitHub-backed project and are
-            scoped to that project’s repository.
+            GitHub’s MCP tools are added to every chat once an account is connected under Apps; a
+            chat in a GitHub-backed project reaches only that project’s repository.
           </p>
-          <Capabilities {...actions} kind="mcpServers" />
+          <McpServers {...actions} />
         </section>
       )}
     </>

@@ -1,9 +1,14 @@
 import type { MCPClient } from '@ai-sdk/mcp';
 import type { McpServer, McpValue } from '@jian/contracts';
-import { mcpSecret } from '../profiles/service.js';
-import type { Vault } from '../security/vault.js';
+import type { GatewayVault } from '../security/gateway-vault.js';
 import { createNegotiatedMcpClient } from './mcp-negotiate.js';
 import { stdioTransport } from './mcp-stdio.js';
+
+/**
+ * Where a server's secrets live in the installation's vault, addressed by the server's name.
+ * The bare address is the single bearer token of servers configured before headers existed.
+ */
+export const mcpSecret = (name: string) => `mcp:${name}`;
 
 /**
  * Where one of a server's values lives in the vault. The header or variable name is part of the
@@ -16,11 +21,10 @@ export const mcpValueSecret = (server: string, kind: 'header' | 'env', name: str
 export const mcpOauthClientSecretKey = (server: string) =>
   `${mcpSecret(server)}:oauth:client_secret`;
 
-export type SecretReader = Pick<Vault, 'read'>;
+export type SecretReader = Pick<GatewayVault, 'read'>;
 
 /** A value the owner typed, or one the host environment carries. Absent means not configured. */
 async function resolve(
-  profileId: string,
   server: string,
   kind: 'header' | 'env',
   value: McpValue,
@@ -31,7 +35,7 @@ async function resolve(
     return env[value.fromEnv]?.trim() || undefined;
   }
 
-  return vault.read(profileId, mcpValueSecret(server, kind, value.name));
+  return vault.read(mcpValueSecret(server, kind, value.name));
 }
 
 export class MissingMcpValue extends Error {
@@ -41,7 +45,6 @@ export class MissingMcpValue extends Error {
 }
 
 async function collect(
-  profileId: string,
   server: McpServer,
   kind: 'header' | 'env',
   values: McpValue[],
@@ -51,7 +54,7 @@ async function collect(
   const resolved: Record<string, string> = {};
 
   for (const value of values) {
-    const secret = await resolve(profileId, server.name, kind, value, vault, env);
+    const secret = await resolve(server.name, kind, value, vault, env);
 
     if (secret === undefined) {
       throw new MissingMcpValue(
@@ -68,7 +71,6 @@ async function collect(
 }
 
 export type McpConnection = {
-  profileId: string;
   server: McpServer;
   vault: SecretReader;
   fetcher: typeof globalThis.fetch;
@@ -90,7 +92,7 @@ export type McpConnection = {
 
 /** Opens a client for one configured server, whatever transport and auth it was given. */
 export async function connectMcp(connection: McpConnection): Promise<MCPClient> {
-  const { profileId, server, vault, fetcher, signal } = connection;
+  const { server, vault, fetcher, signal } = connection;
   const env = connection.env ?? process.env;
 
   if (server.transport === 'stdio') {
@@ -98,7 +100,7 @@ export async function connectMcp(connection: McpConnection): Promise<MCPClient> 
       transport: stdioTransport({
         command: server.command as string,
         args: server.args,
-        env: await collect(profileId, server, 'env', server.env, vault, env),
+        env: await collect(server, 'env', server.env, vault, env),
         signal: connection.lifetime ?? signal,
       }),
       initializationOptions: { signal, timeout: 15_000 },
@@ -108,7 +110,7 @@ export async function connectMcp(connection: McpConnection): Promise<MCPClient> 
 
   const headers =
     server.auth === 'headers'
-      ? await collect(profileId, server, 'header', server.headers, vault, env)
+      ? await collect(server, 'header', server.headers, vault, env)
       : undefined;
 
   return createNegotiatedMcpClient({

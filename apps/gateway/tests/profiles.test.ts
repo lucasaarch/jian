@@ -133,7 +133,6 @@ describe('profile configuration changes', () => {
       skills: [
         { name: 'deploy', description: 'Deployment guide', instructions: 'Check the release.' },
       ],
-      mcpServers: [{ name: 'docs', url: 'https://example.com/mcp' }],
     });
 
     const updated = await services.profiles.updateProfile(profile.id, {
@@ -142,7 +141,6 @@ describe('profile configuration changes', () => {
     });
 
     expect(updated.skills).toHaveLength(1);
-    expect(updated.mcpServers).toHaveLength(1);
     // The only thing other profiles ever see of this one, and every screen edits something else.
     expect(updated.summary).toBe('Looks after deliveries.');
   });
@@ -170,7 +168,7 @@ describe('profile configuration changes', () => {
       requestKey: 'one',
     });
 
-    expect((await services.contexts.context(run)).system).not.toContain(avatar.slice(-24));
+    expect((await services.contexts.context(run, [])).system).not.toContain(avatar.slice(-24));
 
     const cleared = await services.profiles.updateProfile(profile.id, {
       expectedVersion: 2,

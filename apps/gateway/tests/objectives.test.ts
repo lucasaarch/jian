@@ -461,7 +461,7 @@ it('injects the open objective into the prompt', async () => {
     text: 'Go',
     requestKey: 'ctx',
   });
-  const context = await services.contexts.context(run);
+  const context = await services.contexts.context(run, []);
   expect(context.system).toContain('Finish the WhatsApp loop fix');
   expect(context.system).toContain('complete_session_objective');
 });
@@ -480,7 +480,7 @@ it('prompt injection sanitizes a dump-shaped objective', async () => {
     text: 'Go',
     requestKey: 'ctx-dump',
   });
-  const context = await services.contexts.context(run);
+  const context = await services.contexts.context(run, []);
   expect(context.system).not.toContain('Last login:');
   expect(context.system).not.toContain('ERR_UNKNOWN_FILE_EXTENSION');
   expect(context.system).toContain('Continue prior open work');

@@ -295,7 +295,7 @@ describe('judging the turn before it starts', () => {
       undefined,
       judge,
     );
-    const context = await contexts.context(f.run);
+    const context = await contexts.context(f.run, []);
 
     expect(calls).toHaveLength(1);
     expect(context.system).toContain('dentist-appointment');
@@ -313,8 +313,8 @@ describe('judging the turn before it starts', () => {
       f.services.sessions,
       undefined,
       judge,
-    ).context(f.run);
-    const plain = await f.services.contexts.context(f.run);
+    ).context(f.run, []);
+    const plain = await f.services.contexts.context(f.run, []);
 
     expect(judged.system).not.toContain('made-up-skill');
     expect(judged.light).toBeUndefined();

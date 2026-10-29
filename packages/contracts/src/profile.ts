@@ -171,6 +171,23 @@ export const mcpSchema = z
     }
   });
 
+/**
+ * The installation's MCP servers, in the order the owner keeps them. Every agent reaches each
+ * one; a name is how a server is addressed, so two never share it.
+ */
+export const mcpServerListSchema = z
+  .array(mcpSchema)
+  .max(50)
+  .superRefine((servers, ctx) => {
+    const names = servers.map((server) => server.name);
+    if (new Set(names).size !== names.length) {
+      ctx.addIssue({ code: 'custom', message: 'MCP server names must be unique' });
+    }
+  });
+
+/** The whole list, replaced at once: a value left out of a header keeps the stored one. */
+export const mcpServerListInputSchema = z.strictObject({ servers: mcpServerListSchema });
+
 /** What a server answered when the owner asked whether it works. */
 export const mcpStatusSchema = z.strictObject({
   name: z.string(),
@@ -254,7 +271,6 @@ export const profileSchema = z.strictObject({
     .array(skillNameSchema)
     .max(20)
     .default([...OPT_IN_SKILLS]),
-  mcpServers: z.array(mcpSchema).default([]),
   /**
    * Deprecated. Workspace-confined shell and file tools are always available; the panel no
    * longer exposes this switch. Kept on the wire so older clients keep parsing. Ignored for
@@ -275,7 +291,6 @@ export const profilePatchSchema = profileSchema.partial().extend({
   contextPolicy: contextPolicySchema.optional(),
   skills: z.array(skillSchema).max(20).optional(),
   disabledSkills: z.array(skillNameSchema).max(20).optional(),
-  mcpServers: z.array(mcpSchema).optional(),
   allowShell: z.boolean().optional(),
 });
 
@@ -390,23 +405,6 @@ export type McpStatus = z.infer<typeof mcpStatusSchema>;
 export type Skill = z.infer<typeof skillSchema>;
 export type McpServer = z.infer<typeof mcpSchema>;
 export type SessionObjective = z.infer<typeof sessionObjectiveSchema>;
-/**
- * Copies servers from another profile: each becomes this profile's own, with its own copy of
- * the typed values, and changing one never changes the other. Absent `servers` copies them all.
- */
-export const mcpImportSchema = z.strictObject({
-  fromProfileId: z.uuid(),
-  servers: z.array(z.string().regex(/^[a-z0-9_]{1,30}$/)).optional(),
-});
-
-export const mcpImportResultSchema = z.strictObject({
-  imported: z.array(z.string()),
-  // A server this profile already has under that name is left as it is.
-  skipped: z.array(z.strictObject({ name: z.string(), reason: z.string() })),
-  // A sign-in belongs to the profile that made it; these servers need one here too.
-  signIn: z.array(z.string()),
-});
-
 export type McpValue = z.infer<typeof mcpValueSchema>;
 export type Identity = z.infer<typeof identitySchema>;
 export type ContextPolicy = z.infer<typeof contextPolicySchema>;

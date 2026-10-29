@@ -1,14 +1,14 @@
 import type { Skill } from '@jian/contracts';
 
-/** Offered only to a profile with MCP servers configured; there is nothing to teach otherwise. */
+/** Offered only to a run with MCP servers to reach; there is nothing to teach otherwise. */
 export const mcpServers: Skill = {
   name: 'mcp-servers',
   description:
     'Use when a task might be done by one of your connected MCP servers — GitHub, Notion, Linear, a company API — or before saying you cannot do something.',
   instructions: `# Using your MCP servers
 
-The owner connected MCP servers to this profile. Your context lists them with a sample of
-what each offers. Their tools are not in your tool list until you load them.
+The owner connected MCP servers to this installation, and every agent reaches each of them.
+Your context lists them with a sample of what each offers. Their tools are not in your tool list until you load them.
 
 ## Finding and loading
 
@@ -25,8 +25,9 @@ it.
 ## When a server fails
 
 - **It does not connect** — the server is down or its address or credentials are wrong. Say
-  which server, and that the owner can test it under MCP servers.
-- **It needs sign-in** — the owner signs in from MCP servers; you cannot do it for them.
+  which server, and that the owner can test it under Gateway → Integrations → MCPs.
+- **It needs sign-in** — the owner signs in from Gateway → Integrations → MCPs; you cannot do
+  it for them.
 - **The client was already closed** — nothing was sent. The gateway tears the session down,
   reconnects a few times, and retries the call. If that still fails, you get a normal tool
   error. Keep going; do not treat it as an unknown write.

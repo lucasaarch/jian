@@ -112,7 +112,7 @@ describe('Gateway chats', () => {
       text: 'Inspect this project.',
       requestKey: 'project-context',
     });
-    const context = await services.contexts.context(run);
+    const context = await services.contexts.context(run, []);
 
     expect(context.system).toContain(project.repositoryUrl);
     expect(context.system).toContain(`/projects/${project.id}`);

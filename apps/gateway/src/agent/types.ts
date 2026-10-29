@@ -5,7 +5,6 @@ import type { GitHubIntegrations } from '../integrations/github.js';
 import type { CodexLogin } from '../providers/codex/login.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
 import type { createSafeFetch } from '../security/outbound.js';
-import type { Vault } from '../security/vault.js';
 
 /** Pre-registered OAuth client when the authorization server has no registration endpoint. */
 export type McpOAuthClient = {
@@ -15,15 +14,11 @@ export type McpOAuthClient = {
 };
 
 /**
- * One provider per profile and server. A static `oauth` client is used when the authorization
- * server has no dynamic registration endpoint; a typed secret is read from the vault by the
- * provider itself.
+ * One provider per server: a sign-in belongs to the installation, as the server does. A static
+ * `oauth` client is used when the authorization server has no dynamic registration endpoint; a
+ * typed secret is read from the vault by the provider itself.
  */
-export type McpOAuthProviders = (
-  profileId: string,
-  server: string,
-  oauth?: McpOAuthClient,
-) => OAuthClientProvider;
+export type McpOAuthProviders = (server: string, oauth?: McpOAuthClient) => OAuthClientProvider;
 
 export type ModelResolver = (
   config: ModelConfig,
@@ -33,9 +28,10 @@ export type ModelResolver = (
 ) => LanguageModel | Promise<LanguageModel>;
 
 export interface RuntimeOptions {
-  /** Per-profile secrets: an MCP token the owner typed for one agent. */
-  vault?: Pick<Vault, 'read'>;
-  /** What the installation shares: the vendor key behind the model this run uses. */
+  /**
+   * What the installation shares: the vendor key behind the model this run uses, and every
+   * value typed for an MCP server.
+   */
   gatewayVault?: Pick<GatewayVault, 'read'>;
   /** Hands one MCP server its stored sign-in, so the SDK can refresh and use it. */
   mcpOAuth?: McpOAuthProviders;

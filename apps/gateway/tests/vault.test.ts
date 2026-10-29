@@ -76,7 +76,7 @@ describe('profile vault', () => {
   });
 
   it('stores an MCP token with its server and forgets it when the server goes', async () => {
-    const { services, profile } = await setup();
+    const { services } = await setup();
 
     const server = {
       name: 'tracker',
@@ -86,36 +86,29 @@ describe('profile vault', () => {
 
     const header = mcpValueSecret('tracker', 'header', 'Authorization');
 
-    const updated = await services.profiles.updateProfile(profile.id, {
-      expectedVersion: profile.version,
-      mcpServers: [
+    const stored = await services.mcp.replace({
+      servers: [
         { ...server, headers: [{ name: 'Authorization', value: 'Basic synthetic-mcp-token' }] },
       ],
     });
 
-    expect(JSON.stringify(updated)).not.toContain('synthetic-mcp-token');
-    expect(await services.vault.read(profile.id, header)).toBe('Basic synthetic-mcp-token');
+    expect(JSON.stringify(stored)).not.toContain('synthetic-mcp-token');
+    expect(await services.gatewayVault.read(header)).toBe('Basic synthetic-mcp-token');
 
-    // A patch that omits the value keeps the stored one, which is how an owner edits a server
+    // A list that omits the value keeps the stored one, which is how an owner edits a server
     // without retyping a credential the panel can no longer show them.
-    const kept = await services.profiles.updateProfile(profile.id, {
-      expectedVersion: updated.version,
-      mcpServers: [{ ...server, headers: [{ name: 'Authorization' }] }],
+    await services.mcp.replace({
+      servers: [{ ...server, headers: [{ name: 'Authorization' }] }],
     });
 
-    expect(await services.vault.read(profile.id, header)).toBe('Basic synthetic-mcp-token');
+    expect(await services.gatewayVault.read(header)).toBe('Basic synthetic-mcp-token');
 
     // Removing the header removes its secret, even with the server still configured.
-    const bare = await services.profiles.updateProfile(profile.id, {
-      expectedVersion: kept.version,
-      mcpServers: [{ ...server, auth: 'none' as const, headers: [] }],
-    });
+    await services.mcp.replace({ servers: [{ ...server, auth: 'none' as const, headers: [] }] });
 
-    expect(await services.vault.read(profile.id, header)).toBeUndefined();
+    expect(await services.gatewayVault.read(header)).toBeUndefined();
 
-    await services.profiles.updateProfile(profile.id, {
-      expectedVersion: bare.version,
-      mcpServers: [],
-    });
+    await services.mcp.replace({ servers: [] });
+    expect(await services.mcp.list()).toEqual([]);
   });
 });

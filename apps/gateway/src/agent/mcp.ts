@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { MCPClient } from '@ai-sdk/mcp';
-import type { McpServer, Run } from '@jian/contracts';
+import type { McpServer } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { connectMcp, type SecretReader } from './mcp-connect.js';
@@ -158,13 +158,11 @@ type LiveServer = {
 };
 
 async function openServer(
-  run: Run,
   config: McpServer,
   context: McpContext,
 ): Promise<{ live: LiveServer; failure?: undefined } | { live?: undefined; failure: string }> {
   try {
     const client = await connectMcp({
-      profileId: run.profileId,
       server: config,
       vault: context.vault as SecretReader,
       fetcher: context.fetcher,
@@ -174,7 +172,7 @@ async function openServer(
       lifetime: context.signal,
       ...(config.auth === 'oauth'
         ? {
-            authProvider: context.oauth?.(run.profileId, config.name, mcpOauthClient(config)),
+            authProvider: context.oauth?.(config.name, mcpOauthClient(config)),
           }
         : {}),
     });
@@ -189,14 +187,13 @@ async function openServer(
 
 async function reconnectServer(
   live: LiveServer,
-  run: Run,
   context: McpContext,
   cause: unknown,
 ): Promise<void> {
   if (!live.reconnecting) {
     live.reconnecting = (async () => {
       const previous = live.client;
-      const reopened = await openServer(run, live.config, context);
+      const reopened = await openServer(live.config, context);
 
       if (!reopened.live) {
         // Keep the disconnect as cause so the runtime still knows nothing was sent.
@@ -234,7 +231,6 @@ function withClosedClientRetry(
   live: LiveServer,
   serverTool: string,
   remote: ToolSet[string],
-  run: Run,
   context: McpContext,
 ): ToolSet[string] {
   if (!remote.execute) {
@@ -278,7 +274,7 @@ function withClosedClientRetry(
           );
 
           try {
-            await reconnectServer(live, run, context, error);
+            await reconnectServer(live, context, error);
           } catch (reconnectError) {
             throw reconnectError instanceof Error
               ? reconnectError
@@ -295,7 +291,15 @@ function withClosedClientRetry(
 }
 
 /** Discover what each server offers now; expose a full schema only when the agent selects it. */
-export async function connectMcpTools(run: Run, tools: ToolSet, context: McpContext) {
+/**
+ * `servers` are the ones this run reaches: the installation's, plus any a run is lent for itself,
+ * such as the GitHub integration's.
+ */
+export async function connectMcpTools(
+  servers: readonly McpServer[],
+  tools: ToolSet,
+  context: McpContext,
+) {
   const mcpToolNames: string[] = [];
   const catalog: McpEntry[] = [];
   const selectedMcpTools = new Set<string>();
@@ -303,14 +307,12 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
 
   // All at once, each on its own clock: a turn waits for the slowest server, not for the sum
   // of them, and one that hangs is given up on without holding the others.
-  const reached = await Promise.all(
-    run.profile.mcpServers.map(async (config) => openServer(run, config, context)),
-  );
+  const reached = await Promise.all(servers.map(async (config) => openServer(config, context)));
 
   // Merged in the owner's order, so the catalog reads the same whichever server answered first.
   for (let index = 0; index < reached.length; index++) {
     const result = reached[index];
-    const config = run.profile.mcpServers[index];
+    const config = servers[index];
 
     if (!config) {
       continue;
@@ -336,7 +338,7 @@ export async function connectMcpTools(run: Run, tools: ToolSet, context: McpCont
 
       const exposed = exposedName(config.name, name);
 
-      tools[exposed] = withClosedClientRetry(live, name, remote, run, context);
+      tools[exposed] = withClosedClientRetry(live, name, remote, context);
       mcpToolNames.push(exposed);
       catalog.push({
         name: exposed,

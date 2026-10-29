@@ -1,8 +1,6 @@
-import type { McpStatus, Profile } from '@jian/contracts';
-import { GatewayError } from '../core/errors.js';
+import type { McpServer, McpStatus } from '@jian/contracts';
 import { createSafeFetch } from '../security/outbound.js';
-import type { Vault } from '../security/vault.js';
-import { connectMcp, MissingMcpValue } from './mcp-connect.js';
+import { connectMcp, MissingMcpValue, type SecretReader } from './mcp-connect.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
 
@@ -21,34 +19,26 @@ export function clarifyOauthError(message: string): string {
 
 /**
  * Connects to one configured server and reports what it answered. This is the owner asking
- * "does this work", so a refusal is a result to show, not an error to raise — the only failure
- * is a server that is not configured at all.
+ * "does this work", so a refusal is a result to show, not an error to raise.
  */
 export async function probeMcpServer(
-  profile: Profile,
-  name: string,
-  vault: Vault,
+  server: McpServer,
+  vault: SecretReader,
   fetcher?: typeof globalThis.fetch,
   oauth?: McpOAuthProviders,
 ): Promise<McpStatus> {
-  const server = profile.mcpServers.find((item) => item.name === name);
-
-  if (!server) {
-    throw new GatewayError(404, 'MCP server not found');
-  }
-
+  const { name } = server;
   const checkedAt = new Date().toISOString();
   const outbound = fetcher ? undefined : createSafeFetch();
 
   try {
     const client = await connectMcp({
-      profileId: profile.id,
       server,
       vault,
       fetcher: fetcher ?? (outbound?.fetch as typeof globalThis.fetch),
       signal: AbortSignal.timeout(20_000),
       ...(server.auth === 'oauth'
-        ? { authProvider: oauth?.(profile.id, server.name, mcpOauthClient(server)) }
+        ? { authProvider: oauth?.(server.name, mcpOauthClient(server)) }
         : {}),
     });
 

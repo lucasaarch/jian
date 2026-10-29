@@ -2,7 +2,7 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { MCPClient } from '@ai-sdk/mcp';
-import type { Run } from '@jian/contracts';
+import { mcpServerListSchema } from '@jian/contracts';
 import type { ToolSet } from 'ai';
 import { afterEach, expect, it } from 'vitest';
 import { connectMcpTools } from '../src/agent/mcp.js';
@@ -59,26 +59,21 @@ it('never offers the agent a tool the owner switched off, not even to search for
   const tools: ToolSet = {};
   const clients: MCPClient[] = [];
   const outbound = createSafeFetch({ allowPrivateOrigins: [origin] });
-  const run = {
-    profileId: 'p',
-    profile: {
-      mcpServers: [
-        {
-          name: 'docs',
-          transport: 'http',
-          url: `${origin}/mcp`,
-          auth: 'none',
-          headers: [],
-          args: [],
-          env: [],
-          disabledTools: ['delete_everything'],
-        },
-      ],
+  const servers = mcpServerListSchema.parse([
+    {
+      name: 'docs',
+      transport: 'http',
+      url: `${origin}/mcp`,
+      auth: 'none',
+      headers: [],
+      args: [],
+      env: [],
+      disabledTools: ['delete_everything'],
     },
-  } as unknown as Run;
+  ]);
 
   try {
-    await connectMcpTools(run, tools, {
+    await connectMcpTools(servers, tools, {
       vault: undefined,
       secrets: new Set(),
       clients,

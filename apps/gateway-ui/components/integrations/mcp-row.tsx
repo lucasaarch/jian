@@ -2,7 +2,7 @@
 
 import { Pencil, Plug, RefreshCw, Unplug } from 'lucide-react';
 import { useState } from 'react';
-import type { GatewayApi, McpServer, Profile } from '../../lib/api';
+import type { GatewayApi, McpServer } from '../../lib/api';
 import { Badge, Button, ProviderLogo, ResourceRow, serviceOf } from '../ui';
 import { McpResult, useMcpCheck } from './mcp-check';
 
@@ -18,7 +18,6 @@ const auths: Record<string, string> = {
  */
 export function McpRow({
   server,
-  profile,
   api,
   onEdit,
   onRemove,
@@ -26,7 +25,6 @@ export function McpRow({
   saving,
 }: {
   server: McpServer;
-  profile: Profile;
   api: GatewayApi;
   onEdit: () => void;
   onRemove: () => void;
@@ -34,7 +32,7 @@ export function McpRow({
   saving: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const { status, error, busy, check } = useMcpCheck(profile, server.name, api);
+  const { status, error, busy, check } = useMcpCheck(server.name, api);
   const address =
     server.transport === 'stdio'
       ? [server.command, ...server.args].filter(Boolean).join(' ')
@@ -104,7 +102,7 @@ export function McpRow({
 }
 
 /** A server's mark: the logo of the service it fronts, when it is one we know, or a plug. */
-export function McpIcon({ server }: { server: McpServer }) {
+function McpIcon({ server }: { server: McpServer }) {
   const address =
     server.transport === 'stdio'
       ? [server.command, ...server.args].filter(Boolean).join(' ')

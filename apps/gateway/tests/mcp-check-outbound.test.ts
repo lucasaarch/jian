@@ -66,11 +66,8 @@ async function check(options: { allow?: boolean; resolvesTo: string; configured?
   clients.push(outbound);
 
   const services = await testServices();
-  const profile = await services.profiles.createProfile({
-    name: 'Owner',
-    instructions: 'Help.',
-    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-    mcpServers: [{ name: 'docs', transport: 'http', url: `${origin}/mcp` }],
+  await services.mcp.replace({
+    servers: [{ name: 'docs', transport: 'http', url: `${origin}/mcp` }],
   });
   const app = createApp({
     ...services,
@@ -82,7 +79,7 @@ async function check(options: { allow?: boolean; resolvesTo: string; configured?
   try {
     const response = await app.inject({
       method: 'POST',
-      url: `/v1/profiles/${profile.id}/mcp-servers/docs/check`,
+      url: '/v1/mcp-servers/docs/check',
       headers: { authorization: `Bearer ${token}` },
     });
 

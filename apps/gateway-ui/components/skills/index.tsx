@@ -1,15 +1,15 @@
 'use client';
 
-import { BookOpen, Download, Eye, Pencil, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, Eye, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { useAgent, useAgents } from '@/lib/query/agent';
+import type { Skill } from '@/lib/api';
+import { useAgent } from '@/lib/query/agent';
 import type { SectionActions } from '../props';
 import {
   Badge,
   Button,
   Confirm,
-  Empty,
   IconButton,
   ProviderLogo,
   ResourceRow,
@@ -18,9 +18,6 @@ import {
 import { BuiltinSkills } from './built-in';
 import { SkillCatalog } from './catalog';
 import { SkillImport } from './import';
-import { McpForm } from './mcp-form';
-import { McpImport } from './mcp-import';
-import { McpRow } from './mcp-row';
 import { SkillForm } from './skill-form';
 import { SkillView } from './skill-view';
 
@@ -37,39 +34,26 @@ function originOf(url?: string): { label: string; path?: string; logo?: ReactNod
   return { label: 'Imported', path };
 }
 
-export function Capabilities({
-  kind,
-  api,
-  mutate,
-  busy,
-}: SectionActions & {
-  kind: 'skills' | 'mcpServers';
-}) {
-  // Every agent of the installation, for importing another agent's servers.
-  const others = useAgents();
+/** This agent's own skills: the built-in ones it carries, and those written or imported here. */
+export function Skills({ api, mutate, busy }: SectionActions) {
   const profile = useAgent();
   const [editing, setEditing] = useState<number | 'new'>();
   const [removing, setRemoving] = useState<number>();
   const [failed, setFailed] = useState(false);
   // The skill whose instructions are open for reading.
   const [open, setOpen] = useState<string>();
-  const [importing, setImporting] = useState(false);
-  // The other agents with a server to offer; importing copies from one of them.
-  const sources = others.filter((item) => item.id !== profile.id && item.mcpServers.length > 0);
-  const isSkill = kind === 'skills';
-  const viewing = isSkill ? profile.skills.find((skill) => skill.name === open) : undefined;
-  const items = profile[kind];
-  const skill = typeof editing === 'number' && isSkill ? profile.skills[editing] : undefined;
-  const mcp = typeof editing === 'number' && !isSkill ? profile.mcpServers[editing] : undefined;
+  const viewing = profile.skills.find((skill) => skill.name === open);
+  const items = profile.skills;
+  const skill = typeof editing === 'number' ? profile.skills[editing] : undefined;
 
-  const save = async (next: unknown) => {
+  const save = async (next: Skill) => {
     const updated =
       editing === 'new'
         ? [...items, next]
         : items.map((item, index) => (index === editing ? next : item));
 
     const ok = await mutate(
-      () => api.updateProfile(profile.id, { expectedVersion: profile.version, [kind]: updated }),
+      () => api.updateProfile(profile.id, { expectedVersion: profile.version, skills: updated }),
       'Saved.',
     );
 
@@ -83,151 +67,78 @@ export function Capabilities({
   return (
     <>
       <SectionHeading
-        title={isSkill ? 'Skills' : 'MCP servers'}
-        description={
-          isSkill
-            ? 'Specialised instructions, loaded by the agent when it needs them.'
-            : 'The agent discovers the tools each server offers and loads what it needs.'
-        }
+        title="Skills"
+        description="Specialised instructions, loaded by the agent when it needs them."
         action={
-          <div className="flex flex-wrap gap-2">
-            {!isSkill && sources.length > 0 && (
-              <Button variant="secondary" onClick={() => setImporting(true)}>
-                <Download size={16} />
-                Import from another agent
-              </Button>
-            )}
-            <Button
-              onClick={() => {
-                setFailed(false);
-                setEditing('new');
-              }}
-              disabled={isSkill && items.length >= 20}
-            >
-              <Plus size={16} />
-              {isSkill ? 'New skill' : 'Connect a server'}
-            </Button>
-          </div>
+          <Button
+            onClick={() => {
+              setFailed(false);
+              setEditing('new');
+            }}
+            disabled={items.length >= 20}
+          >
+            <Plus size={16} />
+            New skill
+          </Button>
         }
       />
-      {isSkill && <BuiltinSkills profile={profile} api={api} mutate={mutate} busy={busy} />}
-      {isSkill ? (
-        <section className="row-group" aria-labelledby="skills-installed">
-          <h2 id="skills-installed">Installed</h2>
-          <p>
-            Written here, imported, or written by the agent itself. Each agent keeps its own copy.
+      <BuiltinSkills profile={profile} api={api} mutate={mutate} busy={busy} />
+      <section className="row-group" aria-labelledby="skills-installed">
+        <h2 id="skills-installed">Installed</h2>
+        <p>
+          Written here, imported, or written by the agent itself. Each agent keeps its own copy.
+        </p>
+        <SkillImport profile={profile} api={api} mutate={mutate} busy={busy} />
+        {profile.skills.length ? (
+          <div className="resource-list">
+            {profile.skills.map((item, index) => {
+              const from =
+                item.writtenBy === 'agent'
+                  ? { label: `Written by ${profile.name}` }
+                  : originOf(item.origin?.url);
+
+              return (
+                <ResourceRow
+                  key={item.name}
+                  id={`skill-${item.name}`}
+                  icon={from.logo ?? <BookOpen size={20} strokeWidth={1.6} />}
+                  name={item.name}
+                  badges={<Badge dot={false}>{from.label}</Badge>}
+                  description={item.description}
+                  facts={from.path ? [`From ${from.path}`] : []}
+                  actions={
+                    <>
+                      <Button variant="quiet" onClick={() => setOpen(item.name)}>
+                        <Eye size={16} />
+                        View
+                      </Button>
+                      <IconButton
+                        aria-label={`Edit ${item.name}`}
+                        onClick={() => {
+                          setFailed(false);
+                          setEditing(index);
+                        }}
+                      >
+                        <Pencil size={16} />
+                      </IconButton>
+                      <IconButton
+                        aria-label={`Remove ${item.name}`}
+                        onClick={() => setRemoving(index)}
+                      >
+                        <Trash2 size={16} />
+                      </IconButton>
+                    </>
+                  }
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <p className="rounded-md bg-surface px-5 py-4 text-sm">
+            No skill installed. Pick one from the catalogs below, or import from your repository.
           </p>
-          <SkillImport profile={profile} api={api} mutate={mutate} busy={busy} />
-          {profile.skills.length ? (
-            <div className="resource-list">
-              {profile.skills.map((item, index) => {
-                const from =
-                  item.writtenBy === 'agent'
-                    ? { label: `Written by ${profile.name}` }
-                    : originOf(item.origin?.url);
-
-                return (
-                  <ResourceRow
-                    key={item.name}
-                    id={`skill-${item.name}`}
-                    icon={from.logo ?? <BookOpen size={20} strokeWidth={1.6} />}
-                    name={item.name}
-                    badges={<Badge dot={false}>{from.label}</Badge>}
-                    description={item.description}
-                    facts={from.path ? [`From ${from.path}`] : []}
-                    actions={
-                      <>
-                        <Button variant="quiet" onClick={() => setOpen(item.name)}>
-                          <Eye size={16} />
-                          View
-                        </Button>
-                        <IconButton
-                          aria-label={`Edit ${item.name}`}
-                          onClick={() => {
-                            setFailed(false);
-                            setEditing(index);
-                          }}
-                        >
-                          <Pencil size={16} />
-                        </IconButton>
-                        <IconButton
-                          aria-label={`Remove ${item.name}`}
-                          onClick={() => setRemoving(index)}
-                        >
-                          <Trash2 size={16} />
-                        </IconButton>
-                      </>
-                    }
-                  />
-                );
-              })}
-            </div>
-          ) : (
-            <p className="rounded-md bg-surface px-5 py-4 text-sm">
-              No skill installed. Pick one from the catalogs below, or import from your repository.
-            </p>
-          )}
-        </section>
-      ) : profile.mcpServers.length ? (
-        <div className="resource-list">
-          {profile.mcpServers.map((item, index) => (
-            <McpRow
-              key={item.name}
-              server={item}
-              profile={profile}
-              api={api}
-              onEdit={() => {
-                setFailed(false);
-                setEditing(index);
-              }}
-              onRemove={() => setRemoving(index)}
-              saving={busy}
-              onToggleTool={(tool) => {
-                const off = item.disabledTools ?? [];
-
-                void mutate(
-                  () =>
-                    api.updateProfile(profile.id, {
-                      expectedVersion: profile.version,
-                      mcpServers: profile.mcpServers.map((server) =>
-                        server.name === item.name
-                          ? {
-                              ...server,
-                              disabledTools: off.includes(tool)
-                                ? off.filter((name) => name !== tool)
-                                : [...off, tool],
-                            }
-                          : server,
-                      ),
-                    }),
-                  off.includes(tool) ? `${tool} switched on.` : `${tool} switched off.`,
-                );
-              }}
-            />
-          ))}
-        </div>
-      ) : (
-        <Empty title="Connect a tool">
-          Give the address of an MCP server. The tools come from it, and the agent loads one before
-          it can call it.
-        </Empty>
-      )}
-      {importing && (
-        <McpImport
-          profile={profile}
-          sources={sources}
-          close={() => setImporting(false)}
-          importServers={async (fromProfileId, servers) => {
-            let result: Awaited<ReturnType<typeof api.importMcpServers>> | undefined;
-
-            await mutate(async () => {
-              result = await api.importMcpServers(profile.id, fromProfileId, servers);
-            }, 'Servers imported.');
-
-            return result;
-          }}
-        />
-      )}
+        )}
+      </section>
       {viewing && (
         <SkillView
           name={viewing.name}
@@ -236,28 +147,19 @@ export function Capabilities({
           close={() => setOpen(undefined)}
         />
       )}
-      {isSkill && <SkillCatalog profile={profile} api={api} mutate={mutate} busy={busy} />}
-      {editing !== undefined &&
-        (isSkill ? (
-          <SkillForm
-            skill={skill}
-            busy={busy}
-            failed={failed}
-            onSave={(next) => void save(next)}
-            onClose={() => setEditing(undefined)}
-          />
-        ) : (
-          <McpForm
-            server={mcp}
-            busy={busy}
-            error={failed ? 'Could not save. Check the fields, or refresh the agent.' : ''}
-            onSave={(next) => void save(next)}
-            onClose={() => setEditing(undefined)}
-          />
-        ))}
+      <SkillCatalog profile={profile} api={api} mutate={mutate} busy={busy} />
+      {editing !== undefined && (
+        <SkillForm
+          skill={skill}
+          busy={busy}
+          failed={failed}
+          onSave={(next) => void save(next)}
+          onClose={() => setEditing(undefined)}
+        />
+      )}
       {removing !== undefined && (
         <Confirm
-          title={isSkill ? 'Remove this skill?' : 'Disconnect this server?'}
+          title="Remove this skill?"
           description="This capability stops being available on the next runs."
           busy={busy}
           close={() => setRemoving(undefined)}
@@ -267,7 +169,7 @@ export function Capabilities({
                 () =>
                   api.updateProfile(profile.id, {
                     expectedVersion: profile.version,
-                    [kind]: items.filter((_, index) => index !== removing),
+                    skills: items.filter((_, index) => index !== removing),
                   }),
                 'Removed.',
               )

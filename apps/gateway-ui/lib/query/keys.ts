@@ -14,6 +14,7 @@ export const keys = {
   githubRepositories: (accountId: string) =>
     ['integrations', 'github', accountId, 'repositories'] as const,
   remoteMachines: ['remote-machines'] as const,
+  mcpServers: ['mcp-servers'] as const,
   releases: ['releases'] as const,
   repository: ['repository'] as const,
   settings: ['settings'] as const,

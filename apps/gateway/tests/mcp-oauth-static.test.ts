@@ -102,19 +102,7 @@ describe('MCP OAuth without dynamic client registration', () => {
     const services = await testServices();
     const pending = new Map<string, string>();
 
-    const profile = await services.profiles.createProfile({
-      name: 'OAuth',
-      instructions: 'Help.',
-      model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-    });
-
-    const provider = new McpOAuth(
-      services.vault,
-      profile.id,
-      'github',
-      `${origin}/callback`,
-      pending,
-    );
+    const provider = new McpOAuth(services.gatewayVault, 'github', `${origin}/callback`, pending);
 
     try {
       await expect(
@@ -137,11 +125,8 @@ describe('MCP OAuth without dynamic client registration', () => {
     const services = await testServices();
     const pending = new Map<string, string>();
 
-    const profile = await services.profiles.createProfile({
-      name: 'OAuth',
-      instructions: 'Help.',
-      model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-      mcpServers: [
+    const servers = await services.mcp.replace({
+      servers: [
         {
           name: 'github',
           url: `${origin}/mcp`,
@@ -152,21 +137,16 @@ describe('MCP OAuth without dynamic client registration', () => {
       ],
     });
 
-    expect(JSON.stringify(profile.mcpServers)).not.toContain('synthetic-client-secret');
-    expect(await services.vault.read(profile.id, mcpOauthClientSecretKey('github'))).toBe(
+    expect(JSON.stringify(servers)).not.toContain('synthetic-client-secret');
+    expect(await services.gatewayVault.read(mcpOauthClientSecretKey('github'))).toBe(
       'synthetic-client-secret',
     );
-    expect(profile.mcpServers[0]?.oauthClientId).toBe('static-github-client');
-    expect(profile.mcpServers[0]?.oauthClientSecret).toEqual({});
+    expect(servers[0]?.oauthClientId).toBe('static-github-client');
+    expect(servers[0]?.oauthClientSecret).toEqual({});
 
-    const provider = new McpOAuth(
-      services.vault,
-      profile.id,
-      'github',
-      `${origin}/callback`,
-      pending,
-      { clientId: 'static-github-client' },
-    );
+    const provider = new McpOAuth(services.gatewayVault, 'github', `${origin}/callback`, pending, {
+      clientId: 'static-github-client',
+    });
 
     try {
       const result = await auth(provider, {
@@ -178,7 +158,7 @@ describe('MCP OAuth without dynamic client registration', () => {
       expect(state.registerHits).toBe(0);
       expect(state.authorizeHits).toBe(0);
 
-      const authorizationUrl = pending.get(`${profile.id}:github`);
+      const authorizationUrl = pending.get('github');
 
       expect(authorizationUrl).toBeTruthy();
       expect(authorizationUrl).toContain('client_id=static-github-client');

@@ -469,7 +469,7 @@ describe('agent runtime', () => {
       requestKey: 'two',
     });
 
-    expect((await services.contexts.context(otherRun)).system).toContain('Deploy at 21:00');
+    expect((await services.contexts.context(otherRun, [])).system).toContain('Deploy at 21:00');
 
     expect(
       (await events(services.store, profile.id, 0)).filter(
@@ -541,7 +541,7 @@ describe('agent runtime', () => {
       });
     }
 
-    const context = await services.contexts.context(run);
+    const context = await services.contexts.context(run, []);
 
     expect(context.system.length).toBeLessThan(24_000);
     expect(context.messages.at(-1)?.content).toBe('Remember the deployment time');
@@ -1442,7 +1442,6 @@ it('writes its own skill through the loop without accepting new capability grant
   expect(updated.version).toBe(2);
   expect(updated.skills[0]).toMatchObject({ name: 'release', writtenBy: 'agent' });
   expect(updated.model).toEqual(profile.model);
-  expect(updated.mcpServers).toEqual([]);
 });
 
 it('tells the owner what the provider answered instead of a generic failure', async () => {
@@ -1653,7 +1652,7 @@ it('persists a cursor only through earlier messages covered by compaction', asyn
   const saved = await services.sessions.session(profile.id, session.id);
   expect(saved.summarizedThroughId).toBe(earlierId);
   expect(saved.summary).toContain('earlier deployment discussion');
-  const resumed = await services.contexts.context(run);
+  const resumed = await services.contexts.context(run, []);
   expect(resumed.messages[0]?.content).not.toContain('Earlier deployment discussion:');
   expect(resumed.messages.at(-1)?.content).toContain(run.input);
 });

@@ -5,7 +5,7 @@ import { FolderGit2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { agentPath } from '@/lib/navigation';
+import { agentPath, settingsPath } from '@/lib/navigation';
 import { useAgent, useProjects } from '@/lib/query/agent';
 import { useReportFailure } from '@/lib/query/notify';
 import { queries } from '@/lib/query/profile';
@@ -131,7 +131,7 @@ export default function ProjectsPage() {
         <Empty
           title="Connect GitHub to add a project"
           action={
-            <Link href={agentPath(profile.id, 'integrations')} className={buttonClass('secondary')}>
+            <Link href={settingsPath('integrations')} className={buttonClass('secondary')}>
               Open Integrations
             </Link>
           }

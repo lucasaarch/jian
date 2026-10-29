@@ -59,7 +59,7 @@ export type GitHubInstallation = GitHubIntegrationAccount & {
   installationId: number;
 };
 
-/** A panel path, `/agents/:id/integrations[/github]`; the route's schema has checked it. */
+/** A panel path, `/settings/integrations[/github]`; the route's schema has checked it. */
 export type GitHubReturnPath = string;
 
 /**
@@ -450,9 +450,12 @@ export class GitHubIntegrations {
           return pending;
         })
       : undefined;
-    // Without its state there is no telling which agent started it; the panel's root opens one.
+    // Without its state there is no telling which page started it; Integrations is where both live.
     const origin =
-      row?.returnOrigin ?? (this.publicUrl ? new URL('/', this.publicUrl).toString() : '/');
+      row?.returnOrigin ??
+      (this.publicUrl
+        ? new URL('/settings/integrations', this.publicUrl).toString()
+        : '/settings/integrations');
     return `${origin}?github=failed${reason ? `&reason=${reason}` : ''}`;
   }
 

@@ -1,4 +1,9 @@
-import { GATEWAY_SESSION_CHANNEL, LEARNING_SESSION_CHANNEL, type Run } from '@jian/contracts';
+import {
+  GATEWAY_SESSION_CHANNEL,
+  LEARNING_SESSION_CHANNEL,
+  type McpServer,
+  type Run,
+} from '@jian/contracts';
 import { and, eq } from 'drizzle-orm';
 import { workspaceOf } from '../agent/workspace.js';
 import { listConversations } from '../channels/repository.js';
@@ -41,7 +46,7 @@ export class Contexts {
     return withToolHistory(history, toolHistoryByRun(checkpoints, summary), run.id);
   }
 
-  async context(run: Run): ReturnType<ContextSource['context']> {
+  async context(run: Run, servers: readonly McpServer[]): ReturnType<ContextSource['context']> {
     const worker = run.subagent;
     const words = [...new Set(run.input.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])].slice(
       0,
@@ -97,7 +102,7 @@ export class Contexts {
             request: run.input,
             ...(before ? { before } : {}),
             memories: rankMemories(run.input, memories).map(({ memory }) => memory),
-            skills: availableSkills(run.profile).map(({ name, description }) => ({
+            skills: availableSkills(run.profile, servers).map(({ name, description }) => ({
               name,
               description,
             })),
@@ -105,6 +110,7 @@ export class Contexts {
         : {};
 
     const built = buildContext(run, {
+      servers,
       ...(judged.relevance ? { relevance: judged.relevance } : {}),
       ...(judged.skill ? { suggestedSkill: judged.skill } : {}),
       ...(this.settings ? { timeZone: await this.settings.timeZone() } : {}),

@@ -287,7 +287,7 @@ describe('schedules', () => {
       text: 'Oi de novo',
       requestKey: 't',
     });
-    const system = (await f.services.contexts.context(run)).system;
+    const system = (await f.services.contexts.context(run, [])).system;
 
     expect(system).toContain('Thursday, 24 September 2026 at 07:00 in America/Sao_Paulo');
   });
