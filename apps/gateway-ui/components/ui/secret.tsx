@@ -45,7 +45,7 @@ export function Secret({
     >
       <textarea
         className="secret-value"
-        aria-label="Valor gerado"
+        aria-label="Generated value"
         value={value}
         readOnly
         rows={4}

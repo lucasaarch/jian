@@ -39,6 +39,7 @@ import {
   builtinSkillSchema,
   gatewaySessionInputSchema,
   gatewaySessionTargetSchema,
+  mcpDraftCheckSchema,
   mcpServerListInputSchema,
   mcpServerListSchema,
   mcpStatusSchema,
@@ -723,6 +724,15 @@ export const operations: Operation[] = [
     access: 'admin',
     body: mcpServerListInputSchema,
     response: mcpServerListSchema,
+  },
+  {
+    // The form's Test connection: nothing is stored, so a draft the owner drops leaves no trace.
+    method: 'POST',
+    path: '/v1/mcp-servers/check',
+    operationId: 'checkMcpDraft',
+    access: 'admin',
+    body: mcpDraftCheckSchema,
+    response: mcpStatusSchema,
   },
   {
     // A check the owner asks for, so it runs the connection now instead of reading a cache.

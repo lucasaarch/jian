@@ -26,6 +26,10 @@ export function registerMcpRoutes(app: FastifyInstance, deps: McpRouteServices):
 
   app.put('/v1/mcp-servers', async (request) => deps.mcp.replace(request.body));
 
+  app.post('/v1/mcp-servers/check', async (request) =>
+    deps.mcp.checkDraft(request.body, deps.fetcher, deps.mcpLogins),
+  );
+
   app.post<{ Params: ServerParams }>('/v1/mcp-servers/:name/check', async (request) => {
     const status = await deps.mcp.check(
       request.params.name,

@@ -950,6 +950,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/mcp-servers/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["checkMcpDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/mcp-servers/{name}/check": {
         parameters: {
             query?: never;
@@ -10535,6 +10552,162 @@ export interface operations {
                         /** @default [] */
                         disabledTools: string[];
                     }[];
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    checkMcpDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    server: {
+                        name: string;
+                        /**
+                         * @default http
+                         * @enum {string}
+                         */
+                        transport?: "http" | "stdio";
+                        /** Format: uri */
+                        url?: string;
+                        /**
+                         * @default none
+                         * @enum {string}
+                         */
+                        auth?: "none" | "headers" | "oauth";
+                        /** @default [] */
+                        headers?: {
+                            name: string;
+                            value?: string;
+                            fromEnv?: string;
+                        }[];
+                        command?: string;
+                        /** @default [] */
+                        args?: string[];
+                        /** @default [] */
+                        env?: {
+                            name: string;
+                            value?: string;
+                            fromEnv?: string;
+                        }[];
+                        oauthClientId?: string;
+                        oauthClientSecret?: {
+                            value?: string;
+                            fromEnv?: string;
+                        };
+                        /** @default [] */
+                        disabledTools?: string[];
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        reachable: boolean;
+                        /** @default [] */
+                        tools: {
+                            name: string;
+                            description?: string;
+                        }[];
+                        error?: string;
+                        /** Format: uri */
+                        authorizationUrl?: string;
+                        /** Format: date-time */
+                        checkedAt: string;
+                    };
                 };
             };
             /** @description Error */
