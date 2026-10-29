@@ -1866,8 +1866,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    returnPath: "/integrations" | "/ui/integrations" | "/integrations/github" | "/ui/integrations/github";
+                    returnPath: string;
                 };
             };
         };
@@ -1999,8 +1998,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    returnPath: "/integrations" | "/ui/integrations" | "/integrations/github" | "/ui/integrations/github";
+                    returnPath: string;
                 };
             };
         };

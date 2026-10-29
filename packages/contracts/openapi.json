@@ -335,12 +335,7 @@
                 "properties": {
                   "returnPath": {
                     "type": "string",
-                    "enum": [
-                      "/integrations",
-                      "/ui/integrations",
-                      "/integrations/github",
-                      "/ui/integrations/github"
-                    ]
+                    "pattern": "^\\/agents\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\/integrations(?:\\/github)?$"
                   }
                 },
                 "required": [
@@ -578,12 +573,7 @@
                 "properties": {
                   "returnPath": {
                     "type": "string",
-                    "enum": [
-                      "/integrations",
-                      "/ui/integrations",
-                      "/integrations/github",
-                      "/ui/integrations/github"
-                    ]
+                    "pattern": "^\\/agents\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\/integrations(?:\\/github)?$"
                   }
                 },
                 "required": [
