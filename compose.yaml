@@ -1,9 +1,29 @@
-# Production stack: the published gateway image and its PostgreSQL. `make up` starts it.
+# Production stack: the panel's web server, the gateway behind it, and PostgreSQL behind both.
+# `make up` starts it.
 # For the development database alone, see compose.dev.yaml.
 # Compose would otherwise name the project after the checkout directory, so the container
 # and volume names would follow whatever the clone is called.
 name: jian
 services:
+  # The only service with a published port. It serves the panel and passes /v1 and /health on
+  # to the gateway, so the browser, webhooks and remote workers all keep one address.
+  web:
+    image: ghcr.io/lucasaarch/jian-web:${JIAN_VERSION:-latest}
+    # To run your own build, uncomment this as well as the gateway's.
+    # build:
+    #   context: .
+    #   dockerfile: apps/gateway-ui/Dockerfile
+    environment:
+      JIAN_GATEWAY_URL: http://gateway:4310
+    ports:
+      # Localhost by default: anything wider belongs behind an HTTPS proxy. The host port is
+      # the one the gateway used to publish, so addresses handed out before keep working.
+      - '${JIAN_BIND_ADDRESS:-127.0.0.1}:${JIAN_BIND_PORT:-4310}:3000'
+    depends_on:
+      gateway:
+        condition: service_healthy
+    # The health check comes from the image's own HEALTHCHECK, which hits /web/health.
+    restart: unless-stopped
   gateway:
     image: ghcr.io/lucasaarch/jian-gateway:${JIAN_VERSION:-latest}
     # To run your own build instead of the published image, uncomment this and use
@@ -23,12 +43,12 @@ services:
       # Opt in to the bundled record-only listener; override URL for an external proxy.
       JIAN_CAVEMAN_ENABLED: ${JIAN_CAVEMAN_ENABLED:-false}
       JIAN_CAVEMAN_PROXY_URL: ${JIAN_CAVEMAN_PROXY_URL:-http://127.0.0.1:8788}
-      # Bound inside the container; JIAN_BIND_ADDRESS decides who reaches it.
+      # Only the web service reaches the gateway, over the Compose network, so the forwarded
+      # client address and scheme it sends are believed from private addresses only.
+      JIAN_TRUSTED_PROXIES: ${JIAN_TRUSTED_PROXIES:-uniquelocal}
+      # Bound inside the container, with no published port: the web service is the way in.
       HOST: 0.0.0.0
       PORT: 4310
-    ports:
-      # Localhost by default: anything wider belongs behind an HTTPS proxy.
-      - '${JIAN_BIND_ADDRESS:-127.0.0.1}:${JIAN_BIND_PORT:-4310}:4310'
     depends_on:
       postgres:
         condition: service_healthy

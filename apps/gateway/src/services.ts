@@ -2,11 +2,13 @@ import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
 import { Decisions } from './decisions/service.js';
 import { Errands } from './errands/service.js';
+import type { GitHubIntegrations } from './integrations/github.js';
 import { Learning } from './learning/service.js';
 import { Media } from './media/service.js';
 import { Memories } from './memories/service.js';
 import { Peers } from './peers/service.js';
 import { Profiles } from './profiles/service.js';
+import { Projects } from './projects/service.js';
 import type { ModelCatalog } from './providers/catalog-source.js';
 import { Providers } from './providers/service.js';
 import { SubscriptionUsageReader } from './providers/subscription-usage.js';
@@ -34,6 +36,7 @@ export type Services = {
   profiles: Profiles;
   providers: Providers;
   sessions: Sessions;
+  projects: Projects;
   memories: Memories;
   media: Media;
   web: WebSearch;
@@ -69,6 +72,7 @@ export function buildServices({
   catalog,
   fetcher,
   timeZone,
+  github,
 }: {
   store: Store;
   vault: Vault;
@@ -77,11 +81,12 @@ export function buildServices({
   catalog?: ModelCatalog;
   fetcher?: typeof fetch;
   timeZone?: string;
+  github?: Pick<GitHubIntegrations, 'repository'>;
 }): Services {
   const profiles = new Profiles(store, vault, clock);
   const providers = new Providers(store, profiles, gatewayVault, clock, catalog);
   const sessions = new Sessions(store, profiles, clock);
-  providers.useSessionReader(sessions);
+  const projects = new Projects(store, profiles, clock, github);
   const memories = new Memories(store, profiles, sessions, clock);
   const runs = new Runs(store, profiles, sessions, providers, clock);
   const settings = new Settings(store, timeZone);
@@ -104,6 +109,7 @@ export function buildServices({
     profiles,
     providers,
     sessions,
+    projects,
     memories,
     media,
     web: new WebSearch(store, gatewayVault, fetcher ?? createSafeFetch().fetch),

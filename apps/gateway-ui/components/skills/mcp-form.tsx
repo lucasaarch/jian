@@ -88,7 +88,7 @@ export function McpForm({
       <form
         id="mcp-form"
         method="post"
-        action="/ui/"
+        action="/"
         onSubmit={(event) => {
           event.preventDefault();
 

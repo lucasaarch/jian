@@ -29,6 +29,8 @@ export function toSession(row: SessionRow): Session {
     profileId: row.profileId,
     title: row.title,
     channel: row.channel,
+    ...(row.projectId ? { projectId: row.projectId } : {}),
+    ...(row.remoteMachineId ? { remoteMachineId: row.remoteMachineId } : {}),
     ...(row.peerProfileId ? { peerProfileId: row.peerProfileId } : {}),
     ...(row.scope ? { scope: row.scope } : {}),
     ...(row.summary ? { summary: row.summary } : {}),
@@ -66,6 +68,8 @@ export async function insertSession(db: Queryable, session: Session): Promise<vo
     summarizedThroughId: session.summarizedThroughId ?? null,
     model: session.model ?? null,
     objective: session.objective ?? null,
+    projectId: session.projectId ?? null,
+    remoteMachineId: session.remoteMachineId ?? null,
     createdAt: new Date(session.createdAt),
   });
 }
@@ -81,6 +85,20 @@ export async function findSession(
     .from(sessions)
     .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)))
     .limit(1);
+
+  return row ? toSession(row) : null;
+}
+
+/** Deletes only a profile-owned chat; channel contacts retain their identity and reopen on intake. */
+export async function deleteSession(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+): Promise<Session | null> {
+  const [row] = await db
+    .delete(sessions)
+    .where(and(eq(sessions.profileId, profileId), eq(sessions.id, sessionId)))
+    .returning();
 
   return row ? toSession(row) : null;
 }
@@ -221,11 +239,7 @@ export async function findPeerSession(
   return row ? toSession(row) : null;
 }
 
-export async function findGatewaySession(db: Queryable, profileId: string) {
-  return findOwnSession(db, profileId, GATEWAY_SESSION_CHANNEL);
-}
-
-/** One of the conversations the gateway keeps for a profile, one of each: gateway, learning. */
+/** The one internal conversation the gateway keeps for a profile. */
 export async function findOwnSession(
   db: Queryable,
   profileId: string,
@@ -409,6 +423,27 @@ export async function setSessionModel(
     .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)))
     .returning();
 
+  return row ? toSession(row) : null;
+}
+
+export async function setGatewaySessionTarget(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  projectId: string | null,
+  remoteMachineId: string | null,
+): Promise<Session | null> {
+  const [row] = await db
+    .update(sessions)
+    .set({ projectId, remoteMachineId })
+    .where(
+      and(
+        eq(sessions.id, sessionId),
+        eq(sessions.profileId, profileId),
+        eq(sessions.channel, GATEWAY_SESSION_CHANNEL),
+      ),
+    )
+    .returning();
   return row ? toSession(row) : null;
 }
 

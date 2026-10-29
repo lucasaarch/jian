@@ -9,6 +9,7 @@ export const profileData: ProfileData = {
   providerModels: fixtures.providerModels,
   modelDefaults: fixtures.modelDefaults,
   sessions: fixtures.sessions,
+  projects: [],
   channels: fixtures.channels,
   memories: fixtures.memories,
   activities: fixtures.runs,

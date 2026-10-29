@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import {
   AGENT_SESSION_CHANNEL,
   GATEWAY_SESSION_CHANNEL,
+  gatewaySessionInputSchema,
+  gatewaySessionTargetSchema,
   LEARNING_SESSION_CHANNEL,
   type Profile,
   type Session,
@@ -12,13 +14,16 @@ import {
   sessionSchema,
   TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
+import { and, eq, inArray } from 'drizzle-orm';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
+import { projects, remoteMachines, runs } from '../storage/schema.js';
 import { objectiveAt, sanitizeObjectiveText } from './objective.js';
 import {
+  deleteSession as deleteSessionRecord,
   findOwnSession,
   findPeerSession,
   findSession,
@@ -29,6 +34,7 @@ import {
   listSessions,
   listUncompactedMessages,
   renameSession,
+  setGatewaySessionTarget,
   setSessionModel,
   setSessionObjective,
   writeSessionSummary,
@@ -45,6 +51,94 @@ export class Sessions {
     private readonly profiles: ProfileLookup,
     private readonly clock: Clock = Date.now,
   ) {}
+
+  /** Creates an owner chat without changing the singleton used by older clients. */
+  async createGatewaySession(profileId: string, input: unknown) {
+    const data = gatewaySessionInputSchema.parse(input);
+
+    return this.store.transaction(profileId, async (tx) => {
+      await this.profiles.profile(profileId, tx);
+      if (data.projectId) {
+        const [project] = await tx
+          .select({ id: projects.id })
+          .from(projects)
+          .where(and(eq(projects.id, data.projectId), eq(projects.profileId, profileId)))
+          .limit(1);
+        assertFound(project, 'Project');
+      }
+      if (data.remoteMachineId) await this.assertMachine(profileId, data.remoteMachineId, tx);
+
+      const session: Session = {
+        id: randomUUID(),
+        profileId,
+        title: null,
+        channel: GATEWAY_SESSION_CHANNEL,
+        ...(data.projectId ? { projectId: data.projectId } : {}),
+        ...(data.remoteMachineId ? { remoteMachineId: data.remoteMachineId } : {}),
+        createdAt: nowIso(this.clock),
+      };
+      await insertSession(tx, session);
+      await recordEvent(tx, this.clock, profileId, 'session.created', session);
+      return session;
+    });
+  }
+
+  async setGatewayTarget(profileId: string, sessionId: string, input: unknown) {
+    const data = gatewaySessionTargetSchema.parse(input);
+    return this.store.transaction(profileId, async (tx) => {
+      const current = await this.session(profileId, sessionId, tx);
+      if (current.channel !== GATEWAY_SESSION_CHANNEL) {
+        throw new GatewayError(409, 'Only Gateway chats can change project or machine');
+      }
+      const [active] = await tx
+        .select({ id: runs.id })
+        .from(runs)
+        .where(
+          and(
+            eq(runs.profileId, profileId),
+            eq(runs.sessionId, sessionId),
+            inArray(runs.status, ['queued', 'running']),
+          ),
+        )
+        .limit(1);
+      if (active) {
+        throw new GatewayError(
+          409,
+          'Wait for this conversation to finish before changing its target',
+        );
+      }
+      if (data.projectId) {
+        const [project] = await tx
+          .select({ id: projects.id })
+          .from(projects)
+          .where(and(eq(projects.id, data.projectId), eq(projects.profileId, profileId)))
+          .limit(1);
+        assertFound(project, 'Project');
+      }
+      if (data.remoteMachineId) await this.assertMachine(profileId, data.remoteMachineId, tx);
+      return assertFound(
+        await setGatewaySessionTarget(
+          tx,
+          profileId,
+          sessionId,
+          data.projectId,
+          data.remoteMachineId,
+        ),
+        'Session',
+      );
+    });
+  }
+
+  private async assertMachine(profileId: string, machineId: string, tx: Queryable) {
+    const [machine] = await tx
+      .select({ id: remoteMachines.id, allowedProfileIds: remoteMachines.allowedProfileIds })
+      .from(remoteMachines)
+      .where(eq(remoteMachines.id, machineId))
+      .limit(1);
+    if (!machine?.allowedProfileIds.includes(profileId)) {
+      throw new GatewayError(403, 'This profile is not allowed to use that remote machine');
+    }
+  }
 
   /** A caller already inside a profile transaction passes it in: this store never nests locks. */
   /** `scope` is the gateway's to set, for a channel conversation; the public input has none. */
@@ -107,6 +201,37 @@ export class Sessions {
       await recordEvent(tx, this.clock, profileId, 'session.renamed', session);
 
       return session;
+    });
+  }
+
+  /** Removes a chat and its transcript while leaving a channel contact ready to reopen it. */
+  async deleteSession(profileId: string, sessionId: string) {
+    return this.store.transaction(profileId, async (tx) => {
+      const session = await this.session(profileId, sessionId, tx);
+      if (session.channel === LEARNING_SESSION_CHANNEL) {
+        throw new GatewayError(409, 'This built-in conversation cannot be deleted');
+      }
+
+      const [active] = await tx
+        .select({ id: runs.id })
+        .from(runs)
+        .where(
+          and(
+            eq(runs.profileId, profileId),
+            eq(runs.sessionId, sessionId),
+            inArray(runs.status, ['queued', 'running']),
+          ),
+        )
+        .limit(1);
+      if (active)
+        throw new GatewayError(409, 'Wait for this conversation to finish before deleting it');
+
+      const deleted = assertFound(await deleteSessionRecord(tx, profileId, sessionId), 'Session');
+      await recordEvent(tx, this.clock, profileId, 'session.deleted', {
+        sessionId,
+        channel: deleted.channel,
+      });
+      return deleted;
     });
   }
 
@@ -258,15 +383,6 @@ export class Sessions {
   }
 
   /**
-   * The conversation the owner holds with this profile through the panel, found or opened. A
-   * profile has exactly one: the gateway opens it, a reset that clears the sessions lets the
-   * next read open it again, and the public session input cannot create another.
-   */
-  async gatewaySession(profileId: string) {
-    return this.ownSession(profileId, GATEWAY_SESSION_CHANNEL, 'Gateway');
-  }
-
-  /**
    * Where the agent looks back on its turns and says what it kept. Opened on the first look, and
    * the public session input cannot create another.
    */
@@ -312,8 +428,6 @@ export class Sessions {
 
   /** The list the panel shows: each session with its last message on one line, newest first. */
   async overview(profileId: string) {
-    await this.gatewaySession(profileId);
-
     const [list, last] = await Promise.all([
       this.sessions(profileId),
       lastMessages(this.store.db, profileId),

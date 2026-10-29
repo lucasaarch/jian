@@ -177,6 +177,33 @@ export const gatewaySecrets = pgTable('gateway_secrets', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** GitHub App installations belong to the Jian installation, not an individual agent. */
+export const githubInstallations = pgTable(
+  'github_installations',
+  {
+    id: uuid('id').primaryKey(),
+    installationId: bigint('installation_id', { mode: 'number' }).notNull(),
+    accountId: bigint('account_id', { mode: 'number' }).notNull(),
+    login: text('login').notNull(),
+    type: text('type').$type<'User' | 'Organization'>().notNull(),
+    avatarUrl: text('avatar_url'),
+    connectedAt: timestamp('connected_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('github_installations_installation_id').on(table.installationId)],
+);
+
+/** A short-lived, single-use correlation for GitHub's installation authorization callback. */
+export const githubInstallationStates = pgTable('github_installation_states', {
+  hash: text('hash').primaryKey(),
+  returnOrigin: text('return_origin').notNull(),
+  purpose: text('purpose')
+    .$type<'installation' | 'registration'>()
+    .notNull()
+    .default('installation'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt,
+});
+
 /** A role per row, so a role added later needs no column. */
 export const modelDefaults = pgTable(
   'model_defaults',
@@ -195,6 +222,25 @@ export const modelDefaults = pgTable(
   (table) => [primaryKey({ columns: [table.profileId, table.role] })],
 );
 
+/** Repositories belong to one profile; a chat can reference only that profile's project. */
+export const projects = pgTable(
+  'projects',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    repositoryUrl: text('repository_url').notNull(),
+    githubAccountId: uuid('github_account_id').references(() => githubInstallations.id, {
+      onDelete: 'set null',
+    }),
+    githubRepositoryId: bigint('github_repository_id', { mode: 'number' }),
+    createdAt,
+  },
+  (table) => [uniqueIndex('projects_profile_id_id').on(table.profileId, table.id)],
+);
+
 export const sessions = pgTable(
   'sessions',
   {
@@ -204,6 +250,9 @@ export const sessions = pgTable(
       .references(() => profiles.id, { onDelete: 'cascade' }),
     title: text('title'),
     channel: text('channel').notNull(),
+    projectId: uuid('project_id'),
+    // A deleted machine stays as the session target so work never silently falls back to local.
+    remoteMachineId: uuid('remote_machine_id'),
     // Set on the session a pair of agents shares; the peer never reads it.
     peerProfileId: uuid('peer_profile_id').references(() => profiles.id, { onDelete: 'set null' }),
     // On a channel conversation: 'direct' or 'group', kept here so it outlives its contact.
@@ -227,8 +276,11 @@ export const sessions = pgTable(
   (table) => [
     index('sessions_recent').on(table.profileId, table.createdAt.desc()),
     index('sessions_peer').on(table.profileId, table.peerProfileId),
-    // One gateway conversation per profile, whatever races to open it.
-    uniqueIndex('sessions_gateway').on(table.profileId).where(sql`${table.channel} = 'gateway'`),
+    foreignKey({
+      columns: [table.profileId, table.projectId],
+      foreignColumns: [projects.profileId, projects.id],
+      name: 'sessions_project_profile_fk',
+    }),
     uniqueIndex('sessions_learning').on(table.profileId).where(sql`${table.channel} = 'learning'`),
   ],
 );

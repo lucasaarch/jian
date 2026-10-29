@@ -105,6 +105,7 @@ export function profileTools(
   services: ToolServices,
   run: Run,
   gitAccess: { readOnly: string[]; writable: string[] } = { readOnly: [], writable: [] },
+  remoteTarget?: string,
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -588,9 +589,9 @@ export function profileTools(
 
   // Workspace-confined shell/files are always available. Remote Control is gated only by
   // each machine’s allowedProfileIds — not by the deprecated allowShell profile flag.
-  Object.assign(tools, shellTools(run.profileId, gitAccess));
+  if (!remoteTarget) Object.assign(tools, shellTools(run.profileId, gitAccess));
   if (services.remote) {
-    Object.assign(tools, remoteTools(run, services.remote, services.store));
+    Object.assign(tools, remoteTools(run, services.remote, services.store, remoteTarget));
   }
 
   // Writing its own skills is part of every agent's work, not of managing itself: what it

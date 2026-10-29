@@ -285,7 +285,7 @@ export function Channels(props: SectionProps) {
                 ) : (
                   <form
                     method="post"
-                    action="/ui/"
+                    action="/"
                     onSubmit={(event) => {
                       event.preventDefault();
 

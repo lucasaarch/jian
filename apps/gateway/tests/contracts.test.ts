@@ -82,13 +82,20 @@ describe('public API contracts', () => {
         ]);
       }
 
-      // Liveness, the sign-in that verifies the token itself, and the OAuth redirect — which
-      // a browser cannot give a header and which proves itself with a state this gateway wrote.
+      // Liveness, the sign-in that verifies the token itself, and the redirects back from
+      // GitHub and from an MCP server — which a browser cannot give a header, and which prove
+      // themselves with a single-use state this gateway wrote. Without it they only fail.
       expect(
         operations
           .filter((operation) => operation.access === 'public')
           .map((operation) => operation.operationId),
-      ).toEqual(['health', 'startPanelSession', 'completeMcpLogin']);
+      ).toEqual([
+        'completeGithubAppRegistration',
+        'completeGithubInstallation',
+        'health',
+        'startPanelSession',
+        'completeMcpLogin',
+      ]);
     } finally {
       await app.close();
     }

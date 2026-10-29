@@ -3,17 +3,17 @@
 import {
   ArrowUp,
   FileText,
+  FolderKanban,
+  LaptopMinimal,
   LoaderCircle,
   Mic,
-  Phone,
-  PhoneOff,
   Plus,
   Square,
   Trash2,
   X,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import type { MediaUpload } from '../../lib/api';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import type { MediaUpload, Project, RemoteMachine } from '../../lib/api';
 import {
   type AttachmentKind,
   base64,
@@ -23,7 +23,7 @@ import {
 } from '../../lib/attachments';
 import { useRecorder } from '../../lib/recorder';
 import { AudioPlayer } from '../ui';
-import { connectLiveVoice } from './live-voice';
+import { Select, type SelectOption } from '../ui/select';
 import { size } from './media';
 
 type Attachment = {
@@ -35,6 +35,9 @@ type Attachment = {
   preview?: string;
   state: 'uploading' | 'ready' | 'failed';
   id?: string;
+  file?: File;
+  mimeType?: MediaUpload['mimeType'];
+  voice?: boolean;
 };
 
 const clock = (seconds: number) =>
@@ -47,99 +50,33 @@ const clock = (seconds: number) =>
  */
 export function Composer({
   name,
-  sessionId,
   upload,
   send,
-  createVoiceToken,
-  executeVoiceTool,
   onSent,
   placeholder,
+  draft = false,
+  projects = [],
+  machines = [],
+  projectId = null,
+  remoteMachineId = null,
+  onProjectChange,
+  onMachineChange,
+  modelControl,
 }: {
   name: string;
-  sessionId: string;
   upload: (file: MediaUpload) => Promise<{ id: string }>;
   send: (text: string, mediaIds: string[]) => Promise<unknown>;
-  createVoiceToken: (sessionId: string) => Promise<{
-    token: string;
-    model: string;
-    provider: 'google' | 'openai';
-    voiceName?: string;
-  }>;
-  executeVoiceTool: (name: string, args: unknown) => Promise<unknown>;
   onSent: () => void;
   placeholder?: string;
+  draft?: boolean;
+  projects?: Project[];
+  machines?: RemoteMachine[];
+  projectId?: string | null;
+  remoteMachineId?: string | null;
+  onProjectChange?: (value: string | null) => void;
+  onMachineChange?: (value: string | null) => void;
+  modelControl?: ReactNode;
 }) {
-  const [live, setLive] = useState(false);
-  const [liveBusy, setLiveBusy] = useState(false);
-  const liveBusyRef = useRef(false);
-  const liveSession = useRef<{ close: () => void } | undefined>(undefined);
-  // Transcript stays local during the Live call and is submitted through the normal run on hang-up.
-  const liveTranscript = useRef<string[]>([]);
-  const liveStartedAt = useRef(0);
-  const liveLabel = useRef('Gemini Live');
-
-  const toggleLive = async () => {
-    if (liveBusy || liveBusyRef.current) return;
-    liveBusyRef.current = true;
-    if (liveSession.current) {
-      liveSession.current.close();
-      liveSession.current = undefined;
-      setLive(false);
-      setLiveBusy(true);
-      try {
-        // Leave room for the call label within the gateway's 8,000-character message limit.
-        const transcript = liveTranscript.current.join(' ').slice(0, 7_500);
-        liveTranscript.current = [];
-        if (!transcript.trim()) return;
-        const duration = Math.max(1, Math.round((Date.now() - liveStartedAt.current) / 1000));
-        // Submit the verbatim transcript as a normal owner message so the usual Jian runtime,
-        // identity, conversation context, skills and tools handle it. Do not call a provider
-        // directly here: that bypasses runtime behavior and can surface provider 401s as panel auth.
-        await send(`[Voice call · ${clock(duration)} · ${liveLabel.current}]\n${transcript}`, []);
-        onSent();
-      } catch (failure) {
-        setError(
-          failure instanceof Error
-            ? failure.message
-            : 'Could not submit the voice-call transcript.',
-        );
-      } finally {
-        liveBusyRef.current = false;
-        setLiveBusy(false);
-      }
-      return;
-    }
-    setLiveBusy(true);
-    try {
-      setError('');
-      const { token, model, provider, voiceName } = await createVoiceToken(sessionId);
-      liveLabel.current = provider === 'openai' ? 'OpenAI Live' : 'Gemini Live';
-      liveTranscript.current = [];
-      liveStartedAt.current = Date.now();
-      liveSession.current = await connectLiveVoice(
-        token,
-        model,
-        (text, speaker) => {
-          // Only the owner's speech becomes a user message; do not re-submit Gemini's reply as owner input.
-          if (speaker !== 'user') return;
-          const room = 7_500 - liveTranscript.current.join(' ').length;
-          if (room > 0) liveTranscript.current.push(text.slice(0, room));
-        },
-        voiceName,
-        executeVoiceTool,
-      );
-      setLive(true);
-    } catch (failure) {
-      liveSession.current?.close();
-      liveSession.current = undefined;
-      liveTranscript.current = [];
-      setError(failure instanceof Error ? failure.message : 'Could not start the voice call.');
-    } finally {
-      liveBusyRef.current = false;
-      setLiveBusy(false);
-    }
-  };
-
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [sending, setSending] = useState(false);
@@ -148,8 +85,41 @@ export function Composer({
   const picker = useRef<HTMLInputElement>(null);
   const recorder = useRecorder();
   const pastes = useRef(0);
-
-  useEffect(() => () => liveSession.current?.close(), []);
+  const projectOptions: SelectOption[] = [
+    { value: '', label: 'Project', detail: 'No project', icon: <FolderKanban size={16} /> },
+    ...projects.map((project) => ({
+      value: project.id,
+      label: project.name,
+      detail: project.repositoryUrl,
+      icon: <FolderKanban size={16} />,
+    })),
+  ];
+  const machineOptions: SelectOption[] = [
+    {
+      value: '',
+      label: 'Local',
+      detail: 'Runs on this Jian machine',
+      icon: <LaptopMinimal size={16} />,
+    },
+    ...machines.map((machine) => ({
+      value: machine.id,
+      label: machine.name,
+      detail: `${machine.online ? 'Online' : 'Offline'} · ${machine.platform}`,
+      icon: <LaptopMinimal size={16} />,
+      disabled: !machine.online,
+    })),
+    ...(remoteMachineId && !machines.some((machine) => machine.id === remoteMachineId)
+      ? [
+          {
+            value: remoteMachineId,
+            label: 'Unavailable machine',
+            detail: 'Choose Local explicitly to change the target',
+            icon: <LaptopMinimal size={16} />,
+            disabled: true,
+          },
+        ]
+      : []),
+  ];
 
   // Local previews hold memory until released; the last ones go with the composer.
   const previews = useRef(new Set<string>());
@@ -185,22 +155,31 @@ export function Composer({
         name: file.name,
         kind: verdict.kind,
         bytes: file.size,
-        state: 'uploading',
+        state: draft ? 'ready' : 'uploading',
         ...(preview ? { preview } : {}),
+        ...(draft
+          ? {
+              file,
+              mimeType: verdict.mimeType as MediaUpload['mimeType'],
+              ...(voice ? { voice: true } : {}),
+            }
+          : {}),
       };
 
       if (preview) previews.current.add(preview);
-      void base64(file)
-        .then((data) =>
-          upload({
-            mimeType: verdict.mimeType as MediaUpload['mimeType'],
-            data,
-            name: file.name,
-            ...(voice ? { voice: true } : {}),
-          }),
-        )
-        .then((media) => patch(item.key, { state: 'ready', id: media.id }))
-        .catch(() => patch(item.key, { state: 'failed' }));
+      if (!draft) {
+        void base64(file)
+          .then((data) =>
+            upload({
+              mimeType: verdict.mimeType as MediaUpload['mimeType'],
+              data,
+              name: file.name,
+              ...(voice ? { voice: true } : {}),
+            }),
+          )
+          .then((media) => patch(item.key, { state: 'ready', id: media.id }))
+          .catch(() => patch(item.key, { state: 'failed' }));
+      }
 
       return [item];
     });
@@ -231,10 +210,23 @@ export function Composer({
     setSending(true);
     setError('');
     try {
-      await send(
-        text.trim(),
-        ready.map((item) => item.id ?? ''),
+      const mediaIds = await Promise.all(
+        ready.map(async (item) => {
+          if (item.id) return item.id;
+          if (!draft || !item.file || !item.mimeType) {
+            throw new Error(`Could not upload ${item.name}. Remove it and try again.`);
+          }
+          const media = await upload({
+            mimeType: item.mimeType,
+            data: await base64(item.file),
+            name: item.name,
+            ...(item.voice ? { voice: true } : {}),
+          });
+          patch(item.key, { state: 'ready', id: media.id, file: undefined });
+          return media.id;
+        }),
       );
+      await send(text.trim(), mediaIds);
       for (const item of attachments) if (item.preview) URL.revokeObjectURL(item.preview);
       previews.current.clear();
       setText('');
@@ -344,7 +336,7 @@ export function Composer({
         ) : (
           <textarea
             aria-label={`Message to ${name}`}
-            placeholder={placeholder ?? `Message ${name}`}
+            placeholder={placeholder ?? 'Ask anything'}
             rows={1}
             maxLength={8000}
             value={text}
@@ -414,20 +406,27 @@ export function Composer({
               />
             </>
           )}
-          <button
-            type="button"
-            className={`composer-tool ${live ? 'recording' : ''}`}
-            aria-label={live ? 'End voice call' : 'Start voice call'}
-            title={
-              live
-                ? 'End voice call'
-                : 'Start a Live voice call (needs a Gemini Live model under Voice calls)'
-            }
-            disabled={liveBusy}
-            onClick={() => void toggleLive()}
-          >
-            {live ? <PhoneOff size={16} /> : <Phone size={16} />}
-          </button>
+          {onProjectChange && (
+            <Select
+              aria-label="Project"
+              className="composer-select-ghost"
+              value={projectId ?? ''}
+              onValueChange={(value) => onProjectChange(value || null)}
+              options={projectOptions}
+              renderValue={(option) => (option?.value ? option.label : 'Project')}
+            />
+          )}
+          {onMachineChange && (
+            <Select
+              aria-label="Execution machine"
+              className="composer-select-ghost"
+              popupClassName="composer-machine-popup"
+              value={remoteMachineId ?? ''}
+              onValueChange={(value) => onMachineChange(value || null)}
+              options={machineOptions}
+            />
+          )}
+          {modelControl}
           <span className="grow" />
           {recorder.recording ? (
             <button
@@ -453,6 +452,9 @@ export function Composer({
           </button>
         </div>
       </div>
+      <p className="composer-hint">
+        <kbd>Enter</kbd> to send <kbd>Shift Enter</kbd> for a new line
+      </p>
     </form>
   );
 }

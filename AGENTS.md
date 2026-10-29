@@ -7,7 +7,7 @@ TypeScript on Node 24+, Fastify, PostgreSQL, pg-boss.
 
 ```text
 apps/gateway/         HTTP API, runtime, workers, tests
-apps/gateway-ui/      Next.js panel, statically exported into the gateway
+apps/gateway-ui/      Next.js panel, standalone server in front of the gateway (`jian-web` image)
 apps/remote-control/  Published npm worker (`@jian-ai/remote-control`)
 packages/contracts/   Zod schemas — the source of the HTTP contract
 packages/sdk/         Generated TypeScript client
@@ -28,7 +28,7 @@ make db-up       # development PostgreSQL on 127.0.0.1:5432
 make dev         # gateway on :4310 and the panel with hot reload on :3000
 make storybook   # components and whole pages on :6006, no gateway needed
 make check       # lint, typecheck, unit tests, build, contract drift
-make up          # production stack: published image plus its own PostgreSQL
+make up          # production stack: web and gateway images plus their own PostgreSQL
 make release VERSION=1.2.3  # after writing docs/releases/1.2.3.md; tags and publishes
 ```
 
@@ -65,8 +65,9 @@ Published migrations are immutable; a later change gets a new version.
 
 ## Traps
 
-- The panel served at `:4310/ui/` is the copy from the last `pnpm build`. Edits show up on
-  `:3000` only.
+- The gateway no longer serves the panel: `:4310/ui/` is a notice that it moved. The panel
+  is `:3000`, which passes `/v1`, `/health`, `/openapi.json` and `/jian-remote.mjs` to the
+  gateway. A new gateway route outside `/v1` needs a matching route handler there.
 - PostgreSQL applies `POSTGRES_PASSWORD` only when the volume is first created. A
   recreated `.env` then fails with `28P01`; `ALTER USER` fixes it without losing data.
 - Unit tests need no Docker and no provider. Persistence tests need `TEST_DATABASE_URL`.

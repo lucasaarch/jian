@@ -68,7 +68,7 @@ export const anthropicCredentials = [
 ] as const;
 
 /**
- * Each activity selects a model independently; empty selections use the stated fallback.
+ * Each activity selects a model independently; the initial choice follows the configured provider preference.
  * `tools` marks the activities that run the model as an agent, where its context window and
  * reasoning levels set the limits; generating images or speech and transcribing audio use
  * neither, so what is not catalogued about their models does not matter.
@@ -84,21 +84,21 @@ export const roles = [
   {
     key: 'channel',
     label: 'Channels',
-    hint: 'WhatsApp, Telegram and webhooks. Unset, it follows the conversation default.',
+    hint: 'WhatsApp, Telegram and webhooks. Uses the conversation model unless a channel model is selected.',
     runtime: true,
     tools: true,
   },
   {
     key: 'compaction',
     label: 'Context compaction',
-    hint: 'Summarises older context automatically or when the agent requests it. Unset, it uses the conversation model.',
+    hint: 'Summarises older context automatically or when the agent requests it. Uses the conversation model unless another model is selected.',
     runtime: true,
     tools: true,
   },
   {
     key: 'image',
     label: 'Image generation',
-    hint: 'Generates images with an OpenAI API key or Gemini. Unset, it uses Gemini when configured.',
+    hint: 'Generates images with an OpenAI API key or Gemini. Requires a selected model.',
     runtime: true,
     tools: false,
   },
@@ -112,28 +112,21 @@ export const roles = [
   {
     key: 'sticker',
     label: 'Sticker analysis',
-    hint: 'Describes and tags the stickers the agent keeps, once each. Unset, it uses the image analysis model.',
+    hint: 'Describes and tags the stickers the agent keeps, once each. Uses the image analysis model unless another model is selected.',
     runtime: true,
     tools: false,
   },
   {
     key: 'audio',
     label: 'Incoming audio',
-    hint: 'Voice notes and audio files share this model. Gemini also describes relevant sounds; Whisper, from OpenAI, Groq or your own server, transcribes the speech. Unset, it uses Gemini.',
+    hint: 'Voice notes and audio files share this model. Gemini also describes relevant sounds; Whisper, from OpenAI, Groq or your own server, transcribes the speech.',
     runtime: true,
     tools: false,
   },
   {
     key: 'speech',
     label: 'Text to speech',
-    hint: 'Generates voice replies with OpenAI or Gemini. Unset, it uses Gemini with the Kore voice.',
-    runtime: true,
-    tools: false,
-  },
-  {
-    key: 'voice',
-    label: 'Voice calls',
-    hint: 'Gemini Live calls work in the gateway conversation today. OpenAI gpt-live / gpt-realtime models appear for API-key providers and can be saved, but starting a call still needs Gemini Live until the OpenAI path ships. ChatGPT OAuth is not offered. Tool-using turns stay on the conversation model.',
+    hint: 'Generates voice replies with OpenAI or Gemini. Select a model and voice to enable replies.',
     runtime: true,
     tools: false,
   },

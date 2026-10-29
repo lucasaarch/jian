@@ -442,6 +442,41 @@
       "when": 1792780000000,
       "tag": "0062_channel-automation",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1792781000000,
+      "tag": "0063_projects-and-gateway-chats",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1793230515000,
+      "tag": "0064_gateway-chats-no-default",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1793231200000,
+      "tag": "0065_gateway-session-machine",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1793232000000,
+      "tag": "0066_github-integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1793233000000,
+      "tag": "0067_github-manifest-state",
+      "breakpoints": true
     }
   ]
 }

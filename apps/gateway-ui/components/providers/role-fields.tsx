@@ -1,7 +1,7 @@
 'use client';
 
 import { supportsModelRole, supportsProviderRole } from '@jian/contracts';
-import type { ProfileData, Provider } from '../../lib/api';
+import type { ModelSelection, ProfileData, Provider, ProviderModel } from '../../lib/api';
 import { Field } from '../ui';
 import { Select, type SelectOption } from '../ui/select';
 import { efforts, modelLabel, optionalRoles, type Role, type roles } from './catalog';
@@ -17,6 +17,37 @@ export type RoleValue = {
 /** A provider id is a UUID, so the first colon is always where the model id begins. */
 export const choiceOf = (providerId: string, modelId: string) =>
   providerId && modelId ? `${providerId}:${modelId}` : '';
+
+const claudeSubscriptionModels = new Set([
+  'claude-opus-5',
+  'claude-opus-5-5',
+  'claude-fable-5-1',
+  'claude-sonnet-5',
+  'claude-sonnet-5-5',
+  'claude-haiku-5',
+  'claude-haiku-5-5',
+]);
+
+const codexModels = new Set([
+  'gpt-6.1-sol',
+  'gpt-6-astra',
+  'gpt-6.1-terra',
+  'gpt-6-sol',
+  'gpt-6-luna',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+]);
+
+/** Keep subscription pickers aligned with the model choices their native CLIs expose. */
+function isSelectableModel(provider: Provider, model: ProviderModel) {
+  const id = model.id.toLowerCase().replace(/-\d{8}$/, '');
+  if (provider.authMode === 'codex') return codexModels.has(id);
+  if (provider.kind === 'anthropic' && provider.credential === 'subscription') {
+    return claudeSubscriptionModels.has(id);
+  }
+  return true;
+}
 
 export const providerName = (provider: Provider) =>
   `${provider.name}${provider.kind === 'openai' ? (provider.authMode === 'codex' ? ' · ChatGPT' : ' · API key') : ''}`;
@@ -35,7 +66,9 @@ export function modelChoices(
     .filter((provider) => supportsProviderRole(provider, role))
     .flatMap((provider) =>
       (data.providerModels[provider.id]?.models ?? [])
-        .filter((model) => supportsModelRole(provider, model, role))
+        .filter(
+          (model) => isSelectableModel(provider, model) && supportsModelRole(provider, model, role),
+        )
         .map((model) => ({
           value: choiceOf(provider.id, model.id),
           // Only the name: an uncatalogued model is flagged once it is chosen, not in the menu.
@@ -43,6 +76,60 @@ export function modelChoices(
           detail: providerName(provider),
         })),
     );
+}
+
+/** New conversation model choices start at Low when that model exposes reasoning levels. */
+export function withDefaultEffort(
+  selection: ModelSelection | undefined,
+  data: ProfileData,
+): ModelSelection | undefined {
+  if (!selection || selection.reasoningEffort) return selection;
+  const efforts = data.providerModels[selection.providerId]?.models.find(
+    (model) => model.id === selection.modelId,
+  )?.reasoningEfforts;
+  const effort = efforts?.includes('low') ? 'low' : efforts?.[0];
+  return effort ? { ...selection, reasoningEffort: effort } : selection;
+}
+
+/** The chat default follows a configured Anthropic Opus, then GPT-6 Astra, then a live model. */
+export function preferredModelSelection(
+  role: Role,
+  data: ProfileData,
+  configured: Provider[],
+): ModelSelection | undefined {
+  const choices = modelChoices(role, data, configured);
+  const byProvider = (provider: Provider | undefined) =>
+    provider ? choices.filter((choice) => choice.value.startsWith(`${provider.id}:`)) : [];
+  const anthropic = configured.filter((provider) => provider.kind === 'anthropic');
+  const openai = configured.filter((provider) => provider.kind === 'openai');
+  const other = configured.filter(
+    (provider) => provider.kind !== 'anthropic' && provider.kind !== 'openai',
+  );
+  const anthropicChoices = anthropic.flatMap(byProvider);
+  const openaiChoices = openai.flatMap(byProvider);
+  const otherChoices = other.flatMap(byProvider);
+  const gptChoices = [...openaiChoices, ...otherChoices];
+  const ordered = [
+    anthropicChoices.find((model) => /opus[-_. ]?5[-_. ]?5/i.test(`${model.value} ${model.label}`)),
+    gptChoices.find((model) => /gpt-?6[-_. ]?astra/i.test(`${model.value} ${model.label}`)),
+    anthropicChoices.find((model) =>
+      /opus[-_. ]?5(?:[-_.]|$)/i.test(`${model.value} ${model.label}`),
+    ),
+    anthropicChoices.find((model) => /opus/i.test(`${model.value} ${model.label}`)),
+    anthropicChoices[0],
+    openaiChoices[0],
+    otherChoices[0],
+  ];
+  const choice = ordered.find((model): model is SelectOption => Boolean(model));
+  if (!choice) return undefined;
+  const separator = choice.value.indexOf(':');
+  return withDefaultEffort(
+    {
+      providerId: choice.value.slice(0, separator),
+      modelId: choice.value.slice(separator + 1),
+    },
+    data,
+  );
 }
 
 /** What one activity can offer and has chosen, read the same by its card and its dialog. */
@@ -55,7 +142,7 @@ export function describeRole(value: RoleValue, data: ProfileData, configured: Pr
   return { provider, list, selected, allowed };
 }
 
-const geminiLiveVoices = [
+const geminiSpeechVoices = [
   'Achernar',
   'Achird',
   'Algenib',
@@ -88,51 +175,12 @@ const geminiLiveVoices = [
   'Zubenelgenubi',
 ];
 
-const gptLiveVoices = [
-  'alloy',
-  'ash',
-  'ballad',
-  'beacon',
-  'bossa',
-  'brise',
-  'cedar',
-  'cinder',
-  'coral',
-  'delta',
-  'echo',
-  'flitz',
-  'gleam',
-  'harema',
-  'juni',
-  'marin',
-  'meridian',
-  'nira',
-  'noeul',
-  'nuri',
-  'quartz',
-  'ripple',
-  'sage',
-  'shimmer',
-  'shitan',
-  'sillage',
-  'stone',
-  'tempo',
-  'verse',
-  'vesper',
-  'willow',
-];
-
-function voiceOptions(provider: string, speech = false): SelectOption[] {
-  const voices = speech
-    ? provider === 'google'
-      ? geminiLiveVoices
+function voiceOptions(provider: string): SelectOption[] {
+  const voices =
+    provider === 'google'
+      ? geminiSpeechVoices
       : provider === 'openai'
         ? ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer']
-        : []
-    : provider === 'google'
-      ? geminiLiveVoices
-      : provider === 'openai'
-        ? gptLiveVoices
         : [];
   return [
     { value: '', label: 'Default voice' },
@@ -190,11 +238,15 @@ export function RoleFields({
                 });
               } else {
                 const split = choice.indexOf(':');
+                const selection = withDefaultEffort(
+                  { providerId: choice.slice(0, split), modelId: choice.slice(split + 1) },
+                  data,
+                );
 
                 change(role.key, {
-                  providerId: choice.slice(0, split),
-                  modelId: choice.slice(split + 1),
-                  reasoningEffort: '',
+                  providerId: selection?.providerId ?? '',
+                  modelId: selection?.modelId ?? '',
+                  reasoningEffort: selection?.reasoningEffort ?? '',
                   voiceName: undefined,
                   disabled: false,
                 });
@@ -202,7 +254,9 @@ export function RoleFields({
             }}
             options={[
               ...(optionalRoles.has(role.key) ? [{ value: 'disabled', label: 'Disabled' }] : []),
-              { value: '', label: 'Automatic' },
+              ...(choices.length
+                ? []
+                : [{ value: '', label: 'No compatible model available', disabled: true }]),
               ...choices,
               ...(current && !choices.some((choice) => choice.value === current)
                 ? [
@@ -220,32 +274,28 @@ export function RoleFields({
         </Field>
         {role.key === 'image' && !value.disabled && !hasOpenAIKey && (
           <p className="note">
-            <a href="/ui/providers/">Configure an OpenAI API key in Providers.</a> ChatGPT login
-            does not authorize image generation.
+            <a href="/providers">Configure an OpenAI API key in Providers.</a> ChatGPT login does
+            not authorize image generation.
           </p>
         )}
-        {(role.key === 'voice' || role.key === 'speech') &&
-          !value.disabled &&
-          provider &&
-          value.modelId && (
-            <Field label="Voice">
-              <Select
-                value={value.voiceName ?? ''}
-                disabled={busy}
-                onValueChange={(voiceName) =>
-                  change(role.key, { voiceName: voiceName || undefined })
-                }
-                options={voiceOptions(provider.kind, role.key === 'speech')}
-              />
-            </Field>
-          )}
+        {role.key === 'speech' && !value.disabled && provider && value.modelId && (
+          <Field label="Voice">
+            <Select
+              value={value.voiceName ?? ''}
+              disabled={busy}
+              onValueChange={(voiceName) => change(role.key, { voiceName: voiceName || undefined })}
+              options={voiceOptions(provider.kind)}
+            />
+          </Field>
+        )}
         {role.tools && !value.disabled && (
           <Field label="Effort">
             <Select
               value={value.reasoningEffort}
               disabled={busy || !allowed.length}
               onValueChange={(reasoningEffort) => change(role.key, { reasoningEffort })}
-              options={[{ value: '', label: "The provider's own default" }, ...allowed]}
+              placeholder="Effort"
+              options={allowed}
             />
           </Field>
         )}

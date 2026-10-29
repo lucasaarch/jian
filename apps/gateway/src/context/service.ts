@@ -1,4 +1,5 @@
-import { LEARNING_SESSION_CHANNEL, type Run } from '@jian/contracts';
+import { GATEWAY_SESSION_CHANNEL, LEARNING_SESSION_CHANNEL, type Run } from '@jian/contracts';
+import { and, eq } from 'drizzle-orm';
 import { workspaceOf } from '../agent/workspace.js';
 import { listConversations } from '../channels/repository.js';
 import type { Judge } from '../decisions/service.js';
@@ -6,9 +7,9 @@ import { findMemories, searchMemories, withLinks } from '../memories/repository.
 import type { RunReader } from '../runs/port.js';
 import { listContextToolCheckpoints } from '../runs/repository.js';
 import type { SessionReader } from '../sessions/port.js';
-import { findGatewaySession } from '../sessions/repository.js';
 import { availableSkills } from '../skills/builtin/index.js';
 import type { Store } from '../storage/database.js';
+import { projects } from '../storage/schema.js';
 import { buildContext, rankMemories } from './build.js';
 import { judgeTurn } from './judgments.js';
 import type { ContextSource } from './port.js';
@@ -52,10 +53,9 @@ export class Contexts {
     // Independent reads: whatever the request mentions, what the profile is busy with, whom it
     // talks to on its channels, and the turns since the record of what was compacted away.
     // `buildContext` is what decides how much of each survives.
-    const [matched, activities, gateway, conversations, history] = await Promise.all([
+    const [matched, activities, conversations, history, project] = await Promise.all([
       worker ? [] : searchMemories(this.store.db, run.profileId, words, 100),
       worker ? [] : this.runs.activities(run.profileId),
-      worker ? null : findGatewaySession(this.store.db, run.profileId),
       worker ? [] : listConversations(this.store.db, run.profileId),
       this.sessions.uncompactedMessages(
         run.profileId,
@@ -66,6 +66,13 @@ export class Contexts {
         // summary and blows the model window on long upgraded sessions.
         session.summarizedThroughId ? undefined : session.summarizedUpTo,
       ),
+      !worker && session.projectId
+        ? this.store.db
+            .select()
+            .from(projects)
+            .where(and(eq(projects.profileId, run.profileId), eq(projects.id, session.projectId)))
+            .then(([row]) => row)
+        : null,
     ]);
 
     // One step out from what matched: the memories linked to it, which the request may not
@@ -104,11 +111,10 @@ export class Contexts {
       memories,
       linked,
       activities,
-      // The owner's own conversation, from the panel, comes first: it is where they reach the
-      // agent directly, and without it the agent believes the conversation it is in is missing.
+      // Name this conversation directly; there is no longer a profile-wide default chat.
       conversations: [
-        ...(gateway
-          ? [{ sessionId: gateway.id, channel: 'gateway', with: 'your owner, in the Jian panel' }]
+        ...(!worker && session.channel === GATEWAY_SESSION_CHANNEL
+          ? [{ sessionId: session.id, channel: 'gateway', with: 'your owner, in Jian Chats' }]
           : []),
         ...conversations.map((contact) => ({
           sessionId: contact.sessionId as string,
@@ -141,6 +147,13 @@ export class Contexts {
     }
     const result = {
       ...built,
+      ...(project
+        ? {
+            system: session.remoteMachineId
+              ? `${built.system}\n\nThis conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}. This conversation targets a Remote Control machine; clone the repository there into a dedicated checkout before changing files, and keep all project work on that machine.`
+              : `${built.system}\n\nThis conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}. Use this conversation's checkout directory: ${JSON.stringify(`${await workspaceOf(run.profileId)}/projects/${project.id}/sessions/${session.id}`)}. If it is not checked out yet, create its parent directory with mkdir -p and clone this repository into that path before changing files. Keep this conversation's work in that checkout and report commands and verification performed.`,
+          }
+        : {}),
       ...(workerGuidance ? { system: `${built.system}\n\n${workerGuidance}` } : {}),
       ...(previous ? { historyCursor: { id: previous.id, createdAt: previous.createdAt } } : {}),
     };

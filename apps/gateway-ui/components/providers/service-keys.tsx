@@ -93,7 +93,7 @@ function ServiceKeyRow<S extends Status>({
       <form
         className="connection-form"
         method="post"
-        action="/ui/"
+        action="/"
         onSubmit={async (event) => {
           event.preventDefault();
           setFormError('');

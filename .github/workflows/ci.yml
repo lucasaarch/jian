@@ -36,6 +36,13 @@ jobs:
       - run: pnpm --filter @jian/contracts build && pnpm --filter @jian/sdk build
       - run: pnpm --filter @jian/gateway-ui exec playwright install --with-deps chromium
       - run: pnpm --filter @jian/gateway-ui storybook:smoke
+  # The panel's server image; the gateway's is built in the postgres job, where its display
+  # tests run.
+  web-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f apps/gateway-ui/Dockerfile -t jian-web:ci .
   postgres:
     runs-on: ubuntu-latest
     services:

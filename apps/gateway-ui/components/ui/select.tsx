@@ -22,6 +22,7 @@ type CommonProps = {
   placeholder?: string;
   searchThreshold?: number;
   className?: string;
+  popupClassName?: string;
   footer?: (close: () => void) => ReactNode;
 };
 
@@ -109,10 +110,14 @@ export function Select(props: Props) {
     placeholder = 'Select',
     searchThreshold = 8,
     className = '',
+    popupClassName = '',
     footer,
     renderValue,
-    ...aria
   } = props;
+  const aria = {
+    'aria-label': props['aria-label'],
+    'aria-describedby': props['aria-describedby'],
+  };
   const multiple = props.multiple === true;
   const trigger = useRef<HTMLButtonElement>(null);
   const [container, setContainer] = useState<HTMLElement | null>(null);
@@ -184,7 +189,10 @@ export function Select(props: Props) {
               // the list under the footer even when the dialog itself does not overflow:hidden.
               collisionBoundary={[]}
             >
-              <Combobox.Popup className="select-popup" aria-label={aria['aria-label'] ?? 'Options'}>
+              <Combobox.Popup
+                className={`select-popup ${popupClassName}`}
+                aria-label={aria['aria-label'] ?? 'Options'}
+              >
                 <div className="select-search">
                   <Search size={15} />
                   <Combobox.Input aria-label="Search options" placeholder="Search…" />
@@ -234,7 +242,10 @@ export function Select(props: Props) {
             positionMethod="fixed"
             collisionBoundary={[]}
           >
-            <Combobox.Popup className="select-popup" aria-label={aria['aria-label'] ?? 'Options'}>
+            <Combobox.Popup
+              className={`select-popup ${popupClassName}`}
+              aria-label={aria['aria-label'] ?? 'Options'}
+            >
               <div className="select-search">
                 <Search size={15} />
                 <Combobox.Input aria-label="Search options" placeholder="Search…" />
@@ -286,7 +297,7 @@ export function Select(props: Props) {
             positionMethod="fixed"
             collisionBoundary={[]}
           >
-            <BaseSelect.Popup className="select-popup">
+            <BaseSelect.Popup className={`select-popup ${popupClassName}`}>
               <BaseSelect.List className="select-list">
                 {options.map((option) => (
                   <BaseSelect.Item
@@ -331,7 +342,7 @@ export function Select(props: Props) {
           positionMethod="fixed"
           collisionBoundary={[]}
         >
-          <BaseSelect.Popup className="select-popup">
+          <BaseSelect.Popup className={`select-popup ${popupClassName}`}>
             <BaseSelect.List className="select-list">
               {options.map((option) => (
                 <BaseSelect.Item

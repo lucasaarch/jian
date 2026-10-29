@@ -1,14 +1,18 @@
 # Gateway panel
 
-`apps/gateway-ui` is a Next.js app with `output: 'export'`, React and TypeScript. The panel uses the SDK generated from the OpenAPI document; validation, authorization and domain rules stay in the gateway.
+`apps/gateway-ui` is a Next.js app, React and TypeScript, built with `output: 'standalone'` and run as its own container, `ghcr.io/lucasaarch/jian-web`, in front of the gateway. The panel uses the SDK generated from the OpenAPI document; validation, authorization and domain rules stay in the gateway.
 
 ## Build and hosting
 
-`pnpm build` and `pnpm --filter @jian/gateway build` compile the contracts, the SDK, the panel and the server. The export is copied into `apps/gateway/dist/ui` and shipped in the production package and in the Docker image. The runtime serves `/ui/` with Fastify; no Next.js is needed on the server.
+`pnpm build` compiles the contracts, the SDK, the gateway and the panel; `pnpm --filter @jian/gateway-ui build` writes `.next/standalone` with the static assets and `public/` placed inside, and `pnpm --filter @jian/gateway-ui start` runs it. `apps/gateway-ui/Dockerfile` ships that tree on `node:24-bookworm-slim`, built from the repository root.
 
-`pnpm --filter @jian/gateway build:server` compiles only the server, for development. A run from source serves whatever export is in `dist/ui`. The script policy is derived from the file being served, so replacing the export under a running gateway is safe; use the Next.js dev server for hot reload.
+The panel lives at the root of its own origin (`/channels`, `/sessions`). The web server is also the installation's only public door: `app/v1/[...path]`, `app/health`, `app/openapi.json` and `app/jian-remote.mjs` pass those requests to `JIAN_GATEWAY_URL` through `lib/server/gateway.ts`, so the browser, channel webhooks, OAuth callbacks and remote workers keep one origin, and the panel cookie stays same-origin. The pass-through streams both ways, keeps redirects for the browser, drops per-hop headers, closes the gateway's side when the client leaves, and answers 502 when the gateway is down. It is a route handler rather than a Next rewrite: a rewrite to another server cuts responses at 30 seconds, which would end the event stream. `/web/health` is the web server's own liveness; `/health` is the gateway's.
 
-The application exports static routes (`/ui/channels/`, for example). There are no server actions, no SSR and no provider code in the browser. Fonts, icons and the QR code are local, with no external rendering service.
+The gateway keeps `/ui/` for installations updated without the web server: it answers there with a page that explains the move ([deploy](deploy.md#moving-the-panel-out-of-the-gateway)). The web server redirects `/ui/...` to the same page at the root, so old bookmarks keep working.
+
+Every page is rendered per request, so the script policy can carry a fresh nonce (`proxy.ts`). Pages are still client components today; the server makes server components, dynamic routes and server-side data loading available without another change to hosting. Fonts, icons and the QR code are local, with no external rendering service.
+
+`make dev` runs `next dev` on `:3000`, with the same pass-through to the gateway on `:4310`.
 
 ## Storybook
 
@@ -18,7 +22,7 @@ The application exports static routes (`/ui/channels/`, for example). There are 
 - **Pages** are in `stories/pages`: every route inside the layout, plus a first run with nothing configured, the dialog after an update, and a phone-sized view.
 - **Another state** is another handler list: `parameters: { msw: { handlers: [http.get(...), ...handlers] } }` puts one answer ahead of the defaults.
 
-`make storybook-smoke` builds Storybook and opens each story in headless Chromium, failing on one that throws, logs an error, renders nothing or never gets past the session check. CI runs it on every change. The service worker lives in `.storybook/public`, so it never ships in the panel's export.
+`make storybook-smoke` builds Storybook and opens each story in headless Chromium, failing on one that throws, logs an error, renders nothing or never gets past the session check. CI runs it on every change. The service worker lives in `.storybook/public`, so it never ships with the panel.
 
 ## Setting up a profile
 
@@ -29,9 +33,7 @@ The application exports static routes (`/ui/channels/`, for example). There are 
    Anthropic issues two credentials that are not interchangeable, so its row asks which one you are pasting: an API key, sent as a key, or a subscription token from `claude setup-token`, sent as a bearer from a caller presenting itself as Claude Code. Either one sent as the other answers 401 on every run and on the model listing. Unstated, the choice is read from the credential's own prefix, and failing that from the variable it came in — `ANTHROPIC_API_TOKEN` holds the bearer one.
 4. Under **Model defaults**, choose the model for each activity. One menu lists the models of every connected provider, each with its provider's name under it; picking a model picks its provider. The list comes from the provider account, never from a list written in this repository, and the panel marks the models whose capabilities the gateway cannot catalog. Reasoning effort appears where the model accepts one. With nothing chosen — or with a chosen model whose provider was removed — the first run picks a model and saves it as the default. When there is no model to pick at all, a message arriving on WhatsApp or Telegram is kept in its conversation and the chat is told, once every ten minutes, that no model is set up; it no longer waits in silence.
 
-   Model defaults execute conversations, channels, context compaction, image analysis, image generation, incoming audio, text to speech, and voice calls. Each picker filters incompatible models. Compaction uses its selected model, falling back to the conversation model, and can run automatically or through `compact_context`. Empty media selections use Gemini (`gemini-flash-latest`, `gemini-2.5-flash-image`, `gemini-2.5-flash-preview-tts`). Image generation also supports OpenAI GPT Image and DALL-E with an API key. When a provider does not answer, its last model list stays visible with a warning.
-
-   **Voice calls** (Live): choose a Gemini Live model under Voice calls, then use the phone control in the gateway conversation composer. The gateway mints a short-lived Gemini token; the browser streams microphone audio to Gemini and plays the reply. On hang-up, a short English summary is written into the session history. OpenAI `gpt-live` / `gpt-realtime` models appear for API-key providers (not ChatGPT OAuth) and can be saved, but starting a call still requires Gemini Live until the OpenAI path ships. Live calls do not run tools; tool-using turns stay on the conversation model.
+   Model defaults execute conversations, channels, context compaction, image analysis, image generation, incoming audio and text to speech. Each picker filters incompatible models. Compaction uses its selected model, falling back to the conversation model, and can run automatically or through `compact_context`. Empty media selections use Gemini (`gemini-flash-latest`, `gemini-2.5-flash-image`, `gemini-2.5-flash-preview-tts`). Image generation also supports OpenAI GPT Image and DALL-E with an API key. When a provider does not answer, its last model list stays visible with a warning.
 
 5. Add skills, written on the screen or imported from a GitHub repository in the open `SKILL.md` format — the same one Claude Code, Codex and Copilot read. An import copies the instructions once and records where they came from; the repository changing later never rewrites what the agent already follows, and only the owner imports. Add MCP servers too: the tools come from the server, and the agent loads one before it can call it. A server is reached over HTTP or by running a command on this machine, and an HTTP one authenticates with headers you write — `Bearer`, `Basic`, anything it asks for — or by signing in to the server itself, which needs `JIAN_PUBLIC_URL` so the redirect can come back. The official Claude and Codex catalogs are on the Skills screen itself. An import copies the instructions only: scripts and supporting files are not installed.
 6. Under **Channels**, connect WhatsApp, Telegram or the API server. Each type exists once and reads as connected or not, as under Providers. For a room with several agents, connect one channel per profile — a number or a bot for each — and approve the room in every profile that should speak in it.
@@ -51,14 +53,26 @@ Secrets have no screen of their own: a provider key is typed under **Providers**
 
 The activity calendar counts a day as it ends where the reader is: the browser's own zone travels with the request, because a calendar drawn in UTC puts an evening in Brazil on tomorrow's square.
 
+## Integrations and projects
+
+**Integrations** are installation-wide and shared by all profiles. The GitHub integration creates
+its GitHub App through GitHub's manifest flow and stores its generated credentials in the encrypted
+gateway vault. Configure the gateway's `JIAN_PUBLIC_URL` before registering the App. Users may connect multiple GitHub accounts and choose
+which repositories the App can access. GitHub MCP tools are available to a chat linked to a
+GitHub-backed Project, and its short-lived installation token is scoped to that repository.
+**Projects** remain profile-specific; creating one selects a repository from any connected account
+and verifies that selection on the gateway. See
+[`docs/deploy.md`](deploy.md#github-app) for App permissions and callback setup.
+
 ## Security and limits
 
 - The sign-in page and the assets are public. Every API route needs the host token, or the panel cookie signed with it; there is no reduced-permission client key.
 - The sign-in form only enables submission after hydration and falls back to POST, so the token never travels in a URL. The host token is exchanged once for a session cookie and is kept in neither localStorage nor sessionStorage. Visual preferences — accent colour, light or dark mode, motion and text size — live in localStorage. The mode defaults to the device's own setting. Every colour is declared once with `light-dark()` in `app/styles/themes.css`, so an accent is one entry with a light and a dark value, not a second theme.
 - The panel cookie is `HttpOnly`, `SameSite=Strict`, valid for 30 days, and `Secure` when the request arrives over HTTPS. It carries only its own expiry and an HMAC signature derived from `JIAN_API_TOKEN`: nothing is stored in the database, and changing the host token ends every open session. Reloading keeps the session; signing out deletes the cookie.
-- The gateway accepts the cookie only on requests that also send `x-jian-panel: 1`. A custom header needs a CORS preflight, which the gateway does not answer, so another site cannot use the cookie. Sign-in has its own limit of 10 attempts a minute.
+- The gateway accepts the cookie only on requests that also send `x-jian-panel: 1`. A custom header needs a CORS preflight, which neither the web server nor the gateway grants, so another site cannot use the cookie. Sign-in has its own limit of 10 attempts a minute.
 - Requests go to the same origin, with no cache and with a timeout. The panel carries no credentials in its build.
-- The content security policy allows scripts from the gateway itself and the exact hashes of the export's hydration scripts, read from the page being served. Framing, plugins and changing the base URL are blocked.
+- The content security policy allows scripts from the panel's own origin and the nonce minted for that request; Next stamps it on every script it renders. Framing, plugins and changing the base URL are blocked. Pages are never cached, since each carries its own nonce.
+- The web server holds no secret. The gateway believes the client address, scheme and host it forwards only from `JIAN_TRUSTED_PROXIES`. The address is the one the client or the platform in front stated, so the rate limits keyed on it are a fairness measure; the host token's length is what resists guessing.
 - Input is rendered as text; history and instructions never execute HTML.
 - A profile change carries `expectedVersion`. The panel does not create sessions and does not send messages.
 - Listings follow the API's current limits: up to 100 sessions, recent messages, memories and deliveries, up to 200 contacts, and up to 500 room contacts across the whole installation. The panel does not replace the paginated history API.
@@ -70,4 +84,4 @@ Looking at the screen, and local HTTP tests, prove neither PostgreSQL persistenc
 
 Incoming audio uses one selection for WhatsApp voice notes and attached audio files. It preserves speech verbatim and adds relevant sound context when the model supports it. The deprecated API `transcription` field is a compatibility alias for `audio`; existing selections are preserved, with `audio` taking precedence.
 
-The composer phone control starts a Live voice call; the adjacent microphone control still records a voice note attachment. They are separate paths.
+The composer microphone control records a voice note attachment. Audio calls are not part of the panel.

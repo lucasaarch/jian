@@ -1,10 +1,10 @@
 import { type Client, profile } from './params';
 import { result } from './result';
-import type { MediaUpload, ModelSelection } from './types';
+import type { MediaUpload, ModelSelection, NewProject } from './types';
 
 /**
- * Sessions, messages and execution history. Reading covers every conversation; writing only
- * the gateway conversation, since the others belong to the channel they came through.
+ * Sessions, messages and execution history. Gateway chats are owner-written; channel
+ * conversations belong to the channel they came through.
  */
 export const sessionCalls = (client: Client) => ({
   media: (profileId: string, mediaId: string) =>
@@ -15,9 +15,45 @@ export const sessionCalls = (client: Client) => ({
     ),
   sessions: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/sessions', { params: profile(profileId) })),
+  projects: (profileId: string) =>
+    result(client.GET('/v1/profiles/{profileId}/projects', { params: profile(profileId) })),
+  createProject: (profileId: string, input: NewProject) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/projects', {
+        params: profile(profileId),
+        body: input,
+      }),
+    ),
+  createGatewaySession: (
+    profileId: string,
+    projectId?: string | null,
+    remoteMachineId?: string | null,
+  ) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/gateway-sessions', {
+        params: profile(profileId),
+        body: {
+          ...(projectId ? { projectId } : {}),
+          ...(remoteMachineId ? { remoteMachineId } : {}),
+        },
+      }),
+    ),
+  renameSession: (profileId: string, sessionId: string, title: string) =>
+    result(
+      client.PATCH('/v1/profiles/{profileId}/sessions/{sessionId}', {
+        params: { path: { profileId, sessionId } },
+        body: { title },
+      }),
+    ),
   messages: (profileId: string, sessionId: string) =>
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/messages', {
+        params: { path: { profileId, sessionId } },
+      }),
+    ),
+  deleteSession: (profileId: string, sessionId: string) =>
+    result(
+      client.DELETE('/v1/profiles/{profileId}/sessions/{sessionId}', {
         params: { path: { profileId, sessionId } },
       }),
     ),
@@ -39,6 +75,18 @@ export const sessionCalls = (client: Client) => ({
       client.PUT('/v1/profiles/{profileId}/sessions/{sessionId}/model', {
         params: { path: { profileId, sessionId } },
         body: { model },
+      }),
+    ),
+  setGatewaySessionTarget: (
+    profileId: string,
+    sessionId: string,
+    projectId: string | null,
+    remoteMachineId: string | null,
+  ) =>
+    result(
+      client.PUT('/v1/profiles/{profileId}/sessions/{sessionId}/target', {
+        params: { path: { profileId, sessionId } },
+        body: { projectId, remoteMachineId },
       }),
     ),
   upload: (profileId: string, sessionId: string, file: MediaUpload) =>

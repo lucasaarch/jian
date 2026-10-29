@@ -7,7 +7,17 @@ import type { Sessions } from './service.js';
 
 type SessionRouteServices = {
   sessions: SessionWriter &
-    Pick<Sessions, 'renameSession' | 'setModel' | 'setObjective' | 'overview' | 'timeline'>;
+    Pick<
+      Sessions,
+      | 'createGatewaySession'
+      | 'deleteSession'
+      | 'renameSession'
+      | 'setModel'
+      | 'setGatewayTarget'
+      | 'setObjective'
+      | 'overview'
+      | 'timeline'
+    >;
   runs: RunWriter;
   // History spans every message of a profile or a session, so it comes from coordination.
   coordination: Pick<Coordination, 'history'>;
@@ -22,10 +32,34 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
     reply.code(201).send(await deps.sessions.createSession(request.params.profileId, request.body)),
   );
 
+  app.post<{ Params: ProfileParams }>(
+    '/v1/profiles/:profileId/gateway-sessions',
+    async (request, reply) =>
+      reply
+        .code(201)
+        .send(await deps.sessions.createGatewaySession(request.params.profileId, request.body)),
+  );
+
   app.patch<{ Params: SessionParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId',
     async (request) =>
       deps.sessions.renameSession(request.params.profileId, request.params.sessionId, request.body),
+  );
+
+  app.delete<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId',
+    async (request) =>
+      deps.sessions.deleteSession(request.params.profileId, request.params.sessionId),
+  );
+
+  app.put<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/target',
+    async (request) =>
+      deps.sessions.setGatewayTarget(
+        request.params.profileId,
+        request.params.sessionId,
+        request.body,
+      ),
   );
 
   app.put<{ Params: SessionParams }>(

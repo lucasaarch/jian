@@ -17,7 +17,7 @@ export function MetaCredentials({
   return (
     <form
       method="post"
-      action="/ui/"
+      action="/"
       onSubmit={(event) => {
         event.preventDefault();
         const form = event.currentTarget;

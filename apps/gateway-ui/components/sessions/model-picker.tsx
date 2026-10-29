@@ -1,10 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { GatewayApi, ProfileData, ReasoningEffort, Session } from '../../lib/api';
 import { efforts, usableProviders } from '../providers/catalog';
-import { choiceOf, modelChoices } from '../providers/role-fields';
+import {
+  choiceOf,
+  modelChoices,
+  preferredModelSelection,
+  withDefaultEffort,
+} from '../providers/role-fields';
+import { ProviderLogo } from '../ui';
 import { Select } from '../ui/select';
 
 /**
@@ -15,44 +22,87 @@ export function SessionModel({
   api,
   profileId,
   session,
+  draftModel,
+  onDraftChange,
+  className,
   data,
   channel,
   saved,
 }: {
   api: GatewayApi;
   profileId: string;
-  session: Session;
+  session?: Session;
+  draftModel?: Session['model'];
+  onDraftChange?: (model: Session['model']) => void;
+  className?: string;
   data: ProfileData;
   /** A WhatsApp or Telegram conversation, which follows the Channels default. */
   channel: boolean;
   saved: () => void;
 }) {
-  const [model, setModel] = useState(session.model);
+  const [savedModel, setSavedModel] = useState(session?.model);
   const [busy, setBusy] = useState(false);
-  const choices = modelChoices('conversation', data, usableProviders(data));
+  const initialSave = useRef(false);
+  const providers = usableProviders(data);
+  const fallback =
+    (channel ? data.modelDefaults.channel : undefined) ??
+    data.modelDefaults.conversation ??
+    preferredModelSelection('conversation', data, providers);
+  const model = withDefaultEffort(
+    session ? (savedModel ?? session.model ?? fallback) : (draftModel ?? fallback),
+    data,
+  );
+  const choices = modelChoices('conversation', data, providers).map((choice) => {
+    const providerId = choice.value.slice(0, choice.value.indexOf(':'));
+    const provider = providers.find((item) => item.id === providerId);
+    return {
+      ...choice,
+      detail: undefined,
+      ...(provider ? { icon: <ProviderLogo kind={provider.kind} size={16} /> } : {}),
+    };
+  });
   const current = model ? choiceOf(model.providerId, model.modelId) : '';
   const listed = model
     ? data.providerModels[model.providerId]?.models.find((item) => item.id === model.modelId)
     : undefined;
   const allowed = efforts.filter((effort) => listed?.reasoningEfforts.includes(effort.value));
-  const fallback =
-    (channel ? data.modelDefaults.channel : undefined) ?? data.modelDefaults.conversation;
-  const fallbackName = fallback
-    ? (data.providerModels[fallback.providerId]?.models.find((item) => item.id === fallback.modelId)
-        ?.displayName ?? fallback.modelId)
-    : 'Automatic';
+  useEffect(() => {
+    if (!session || session.channel !== GATEWAY_SESSION_CHANNEL || !model || initialSave.current) {
+      return;
+    }
+    initialSave.current = true;
+    if (JSON.stringify(session.model) === JSON.stringify(model)) return;
+
+    setSavedModel(model);
+    setBusy(true);
+    void api
+      .setSessionModel(profileId, session.id, model)
+      .then(saved)
+      .catch((error: unknown) => {
+        toast.error(
+          error instanceof Error ? error.message : 'The conversation model could not be saved.',
+        );
+      })
+      .finally(() => setBusy(false));
+  }, [api, model, profileId, saved, session]);
+
+  useEffect(() => {
+    if (!session && !draftModel && model) onDraftChange?.(model);
+  }, [draftModel, model, onDraftChange, session]);
 
   const save = async (next: Session['model']) => {
     const previous = model;
+    const selection = withDefaultEffort(next, data);
 
-    setModel(next);
+    if (session) setSavedModel(selection);
+    else onDraftChange?.(selection);
     setBusy(true);
 
     try {
-      await api.setSessionModel(profileId, session.id, next ?? null);
+      if (session) await api.setSessionModel(profileId, session.id, selection ?? null);
       saved();
     } catch (error) {
-      setModel(previous);
+      setSavedModel(previous);
       toast.error(error instanceof Error ? error.message : 'The model could not be changed.');
     } finally {
       setBusy(false);
@@ -60,9 +110,11 @@ export function SessionModel({
   };
 
   return (
-    <div className="session-model">
+    <div className={`session-model ${className ?? ''}`}>
       <Select
         aria-label="Model for this conversation"
+        className="composer-select-ghost"
+        popupClassName="composer-model-popup"
         value={current}
         disabled={busy}
         onValueChange={(choice) => {
@@ -72,16 +124,37 @@ export function SessionModel({
 
           void save({ providerId: choice.slice(0, split), modelId: choice.slice(split + 1) });
         }}
+        placeholder="No model available"
+        renderValue={(option) => option?.label}
         options={[
-          { value: '', label: 'Agent default', detail: fallbackName },
           ...choices,
           ...(current && !choices.some((choice) => choice.value === current)
-            ? [{ value: current, label: model?.modelId ?? current, detail: 'No longer offered' }]
+            ? [
+                {
+                  value: current,
+                  label: model?.modelId ?? current,
+                  detail: 'No longer offered',
+                  ...(providers.find((provider) => provider.id === model?.providerId)
+                    ? {
+                        icon: (
+                          <ProviderLogo
+                            kind={
+                              providers.find((provider) => provider.id === model?.providerId)
+                                ?.kind ?? ''
+                            }
+                            size={16}
+                          />
+                        ),
+                      }
+                    : {}),
+                },
+              ]
             : []),
         ]}
       />
       <Select
         aria-label="Reasoning effort for this conversation"
+        className="composer-select-ghost"
         value={model?.reasoningEffort ?? ''}
         disabled={busy || !model || !allowed.length}
         onValueChange={(effort) =>
@@ -92,7 +165,8 @@ export function SessionModel({
             ...(effort ? { reasoningEffort: effort as ReasoningEffort } : {}),
           })
         }
-        options={[{ value: '', label: 'Default effort' }, ...allowed]}
+        placeholder="Effort"
+        options={allowed}
       />
     </div>
   );

@@ -103,7 +103,7 @@ it('parks the run as waiting and resumes when the owner answers', async () => {
 it('answers a waiting run through the explicit answer API', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);
-  const session = await services.sessions.gatewaySession(profile.id);
+  const session = await services.sessions.createGatewaySession(profile.id, {});
   const run = await services.runs.submit(profile.id, session.id, {
     text: 'Need a decision',
     requestKey: 'ask-api',

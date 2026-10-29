@@ -42,7 +42,7 @@ other client would use.
 
 ```text
 apps/gateway/       HTTP API, runtime and workers
-apps/gateway-ui/    Web panel, exported into the gateway
+apps/gateway-ui/    Web panel: its own Next.js server, in front of the gateway
 packages/contracts/ Zod schemas — the source of the HTTP contract
 packages/sdk/       Generated TypeScript client
 docs/               Architecture, security, channels, panel
@@ -50,15 +50,15 @@ docs/               Architecture, security, channels, panel
 
 ## Hosting it
 
-Docker, and a clone of this repository. `make up` starts the published gateway image with
-its own PostgreSQL, on `127.0.0.1:4310`.
+Docker, and a clone of this repository. `make up` starts the published panel and gateway
+images with their own PostgreSQL; the panel answers on `127.0.0.1:4310`.
 
 ```bash
 make setup
 make up
 ```
 
-The same image runs in a plain container against your own PostgreSQL, or in Kubernetes.
+The same images run as plain containers against your own PostgreSQL, or in Kubernetes.
 [Deploying](docs/deploy.md) has the exact command for each, the environment variables, and
 how to move between versions.
 
@@ -75,7 +75,17 @@ make dev
 
 `make setup` writes a `.env` with local credentials and an encryption key, and never
 prints a secret. `make dev` serves the API on `127.0.0.1:4310` and the panel with hot
-reload on `http://localhost:3000/ui/`.
+reload on `http://localhost:3000/`.
+
+To test the packaged application in production mode from VS Code, open this repository
+in a Dev Container using `.devcontainer/devcontainer.json`. It builds the gateway and web
+images, starts them with an isolated PostgreSQL database, and serves the panel on port 4310. The
+Dev Container attaches to a separate Node workspace; the production gateway does not mount
+the source tree or its `.env` secrets. Use `jian-devcontainer-test-token-only` to sign in.
+The Compose file contains fixed synthetic credentials strictly for local tests: do not use
+them with real data or outside this Dev Container. Rebuild the container after changing
+source so the production image includes those changes. Its database and `/home/node`
+workspace use separate volumes from `make up`.
 
 [Getting started](docs/getting-started.md) walks through creating the first profile and
 sending the first message. See also [architecture](docs/architecture.md),

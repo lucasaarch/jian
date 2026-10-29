@@ -2,8 +2,9 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import type { ComponentType } from 'react';
 import ChannelsPage from '../../app/(workspace)/channels/page';
 import IdentityPage from '../../app/(workspace)/identity/page';
+import GitHubIntegrationDetailsPage from '../../app/(workspace)/integrations/github/page';
+import IntegrationsPage from '../../app/(workspace)/integrations/page';
 import WorkspaceLayout from '../../app/(workspace)/layout';
-import McpPage from '../../app/(workspace)/mcp/page';
 import MemoriesPage from '../../app/(workspace)/memories/page';
 import ModelsPage from '../../app/(workspace)/models/page';
 import OverviewPage from '../../app/(workspace)/page';
@@ -42,7 +43,8 @@ export const Providers = page(ProvidersPage, '/providers');
 export const Channels = page(ChannelsPage, '/channels');
 export const Memories = page(MemoriesPage, '/memories');
 export const Skills = page(SkillsPage, '/skills');
-export const Mcp = page(McpPage, '/mcp');
+export const Integrations = page(IntegrationsPage, '/integrations');
+export const GitHubAppDetails = page(GitHubIntegrationDetailsPage, '/integrations/github');
 export const SshKeys = page(SshKeysPage, '/ssh-keys');
 
 /** A gateway on its first day: no providers, no channels, no conversations. */

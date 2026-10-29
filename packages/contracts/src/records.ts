@@ -8,6 +8,7 @@ import {
   sessionObjectiveSchema,
   sessionSchema,
 } from './profile.js';
+import { projectSchema } from './projects.js';
 import { modelSelectionSchema } from './providers.js';
 import { subagentSchema } from './work.js';
 
@@ -26,6 +27,8 @@ export const sessionRecordSchema = sessionSchema.extend({
   title: z.string().max(160).nullable(),
   id: uuid,
   profileId: uuid,
+  projectId: uuid.optional(),
+  remoteMachineId: uuid.optional(),
   // Only on the session a pair of agents shares: the profile on the other side of it. The
   // session belongs to this profile alone; the peer never reads it.
   peerProfileId: uuid.optional(),
@@ -48,6 +51,8 @@ export const sessionRecordSchema = sessionSchema.extend({
   objective: sessionObjectiveSchema.optional(),
   createdAt: timestamp,
 });
+
+export const projectRecordSchema = projectSchema;
 
 /**
  * A session as a list shows it: with the last thing said in it, cut to a line, so the owner

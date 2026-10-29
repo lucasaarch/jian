@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { gatewayApi } from '../../lib/api';
-import { currentSection, groupLabels, navigation } from '../../lib/navigation';
+import { currentSection, navigation, navigationGroups } from '../../lib/navigation';
 import { useWorkspace } from '../../lib/workspace';
 import { useReleaseNotes, useReleaseUpdate } from '../releases/dialog';
 import { GitHubLogo, Mark } from '../ui';
@@ -50,11 +50,11 @@ export function Sidebar({
       </Link>
       <ProfileSwitcher onCreate={onCreateProfile} />
       <nav className="sidebar-nav" aria-label="Main navigation">
-        {(['global', 'agent'] as const).map((group) => (
-          <div className="nav-group" key={group}>
-            <span className="nav-label">{groupLabels[group]}</span>
+        {navigationGroups.map((group) => (
+          <div className="nav-group" key={group.id}>
+            <span className="nav-label">{group.label}</span>
             {navigation
-              .filter((item) => item.group === group)
+              .filter((item) => item.group === group.id)
               .map((item) => (
                 <Link
                   key={item.href}

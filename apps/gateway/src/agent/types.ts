@@ -1,6 +1,7 @@
 import type { OAuthClientProvider } from '@ai-sdk/mcp';
 import type { ModelConfig, Run } from '@jian/contracts';
 import type { LanguageModel } from 'ai';
+import type { GitHubIntegrations } from '../integrations/github.js';
 import type { CodexLogin } from '../providers/codex/login.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
 import type { createSafeFetch } from '../security/outbound.js';
@@ -38,6 +39,8 @@ export interface RuntimeOptions {
   gatewayVault?: Pick<GatewayVault, 'read'>;
   /** Hands one MCP server its stored sign-in, so the SDK can refresh and use it. */
   mcpOAuth?: McpOAuthProviders;
+  /** Issues project-repository-scoped GitHub App tokens for the official MCP server. */
+  github?: Pick<GitHubIntegrations, 'mcpAccess'>;
   codexLogin?: Pick<CodexLogin, 'accessToken'>;
   outbound?: ReturnType<typeof createSafeFetch>;
   storeArtifact?: (

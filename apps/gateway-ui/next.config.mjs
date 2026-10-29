@@ -1,31 +1,42 @@
-import { PHASE_DEVELOPMENT_SERVER } from 'next/constants.js';
+import { fileURLToPath } from 'node:url';
 
-export default function configuration(phase) {
+// What helmet used to put on every page the gateway served. The policy that names scripts is
+// per request and lives in proxy.ts; these never change.
+const SECURITY_HEADERS = [
+  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+  { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
+  { key: 'Origin-Agent-Cluster', value: '?1' },
+  { key: 'Referrer-Policy', value: 'no-referrer' },
+  { key: 'Strict-Transport-Security', value: 'max-age=15552000; includeSubDomains' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'X-DNS-Prefetch-Control', value: 'off' },
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
+  {
+    key: 'X-Robots-Tag',
+    value: 'noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate',
+  },
+];
+
+export default function configuration() {
   return {
-    output: 'export',
-    basePath: '/ui',
-    trailingSlash: true,
+    output: 'standalone',
+    // The workspace packages live above this app; tracing from here alone would leave
+    // @jian/contracts and @jian/sdk out of the standalone tree.
+    outputFileTracingRoot: fileURLToPath(new URL('../../', import.meta.url)),
     poweredByHeader: false,
     images: { unoptimized: true },
     devIndicators: false,
-    ...(phase === PHASE_DEVELOPMENT_SERVER
-      ? {
-          // basePath makes the dev server answer only under /ui; in production the Gateway
-          // is what redirects the bare host.
-          async redirects() {
-            return [{ source: '/', destination: '/ui/', basePath: false, permanent: false }];
-          },
-          // Production calls the same origin; this proxy exists only for the separate dev server.
-          async rewrites() {
-            return [
-              {
-                source: '/v1/:path*',
-                destination: 'http://127.0.0.1:4310/v1/:path*',
-                basePath: false,
-              },
-            ];
-          },
-        }
-      : {}),
+    async headers() {
+      return [{ source: '/:path*', headers: SECURITY_HEADERS }];
+    },
+    // The gateway served the panel under /ui/; links and bookmarks from then land on the
+    // same page here.
+    async redirects() {
+      return [
+        { source: '/ui', destination: '/', permanent: false },
+        { source: '/ui/:path*', destination: '/:path*', permanent: false },
+      ];
+    },
   };
 }

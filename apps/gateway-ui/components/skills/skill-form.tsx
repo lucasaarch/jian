@@ -34,7 +34,7 @@ export function SkillForm({
       <form
         id="skill-form"
         method="post"
-        action="/ui/"
+        action="/"
         onSubmit={(event) => {
           event.preventDefault();
 

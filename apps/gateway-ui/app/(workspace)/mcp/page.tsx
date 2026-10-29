@@ -1,10 +1,5 @@
-'use client';
-
-import { Capabilities } from '../../../components/skills/index';
-import { useSection, useWorkspace } from '../../../lib/workspace';
+import { redirect } from 'next/navigation';
 
 export default function Page() {
-  const { profiles } = useWorkspace();
-
-  return <Capabilities {...useSection()} kind="mcpServers" others={profiles} />;
+  redirect('/integrations?tab=mcps');
 }

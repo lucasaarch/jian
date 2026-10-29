@@ -1,4 +1,3 @@
-import { voiceTokenInputSchema } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import { GatewayError } from '../core/errors.js';
 import type { ProfileParams } from '../http/params.js';
@@ -9,18 +8,9 @@ import type { Providers } from './service.js';
 
 type ProviderRouteServices = {
   providers: ProviderAdmin &
-    Pick<
-      Providers,
-      | 'createProvider'
-      | 'revokeProvider'
-      | 'modelDefaults'
-      | 'setModelDefaults'
-      | 'createVoiceToken'
-      | 'summarizeVoiceTranscript'
-    >;
+    Pick<Providers, 'createProvider' | 'revokeProvider' | 'modelDefaults' | 'setModelDefaults'>;
   codexLogin?: CodexLogin;
   providerModels?: Pick<ProviderModels, 'list'>;
-  sessions: { session(profileId: string, sessionId: string): Promise<unknown> };
 };
 
 export function registerProviderRoutes(app: FastifyInstance, deps: ProviderRouteServices): void {
@@ -65,15 +55,5 @@ export function registerProviderRoutes(app: FastifyInstance, deps: ProviderRoute
 
   app.put<{ Params: ProfileParams }>('/v1/profiles/:profileId/model-defaults', async (request) =>
     deps.providers.setModelDefaults(request.params.profileId, request.body),
-  );
-
-  app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/voice/token', async (request) => {
-    const { sessionId } = voiceTokenInputSchema.parse(request.body ?? {});
-    if (sessionId) await deps.sessions.session(request.params.profileId, sessionId);
-    return deps.providers.createVoiceToken(request.params.profileId, fetch, sessionId);
-  });
-
-  app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/voice/summary', async (request) =>
-    deps.providers.summarizeVoiceTranscript(request.params.profileId, request.body),
   );
 }

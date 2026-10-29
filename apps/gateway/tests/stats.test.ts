@@ -15,7 +15,7 @@ it('adds up tokens, list-price cost, days, models, channels and tools', async ()
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
   });
   const api = await services.sessions.createSession(profile.id, { title: 'Report' });
-  const gateway = await services.sessions.gatewaySession(profile.id);
+  const gateway = await services.sessions.createGatewaySession(profile.id, {});
   const now = Date.parse('2026-09-24T15:00:00Z');
 
   const turn = async (

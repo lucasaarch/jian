@@ -1,8 +1,10 @@
 import {
   AlarmClock,
   BookOpen,
+  Cable,
   Cpu,
   Fingerprint,
+  FolderGit2,
   KeyRound,
   LayoutDashboard,
   type LucideIcon,
@@ -17,32 +19,34 @@ export type NavigationItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  group: 'global' | 'agent';
+  group: NavigationGroup;
 };
 
-/**
- * The sections of the panel, in the order the sidebar shows them. A section is a route. The
- * Global holds what belongs to the installation; Agent holds the open agent's own sections.
- */
-export const navigation: NavigationItem[] = [
-  { href: '/providers', label: 'Providers', icon: Plug, group: 'global' },
-  { href: '/remote', label: 'Remote Control', icon: Monitor, group: 'global' },
-  { href: '/', label: 'Overview', icon: LayoutDashboard, group: 'agent' },
-  { href: '/identity', label: 'Identity', icon: Fingerprint, group: 'agent' },
-  { href: '/ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'agent' },
-  { href: '/sessions', label: 'Chats', icon: MessageSquare, group: 'agent' },
-  { href: '/models', label: 'Model defaults', icon: Cpu, group: 'agent' },
-  { href: '/channels', label: 'Channels', icon: Smartphone, group: 'agent' },
-  { href: '/schedules', label: 'Schedules', icon: AlarmClock, group: 'agent' },
-  { href: '/memories', label: 'Memories', icon: BookOpen, group: 'agent' },
-  { href: '/skills', label: 'Skills', icon: Sparkles, group: 'agent' },
-  { href: '/mcp', label: 'MCP servers', icon: Plug, group: 'agent' },
-];
+export const navigationGroups = [
+  { id: 'workspace', label: 'Workspace' },
+  { id: 'agent-setup', label: 'Agent setup' },
+  { id: 'connections', label: 'Connections' },
+  { id: 'automation', label: 'Automation' },
+] as const;
 
-export const groupLabels = {
-  global: 'Global',
-  agent: 'Agent',
-} as const;
+type NavigationGroup = (typeof navigationGroups)[number]['id'];
+
+/** Routes are ordered within their section in the order shown by the sidebar. */
+export const navigation: NavigationItem[] = [
+  { href: '/sessions', label: 'Chats', icon: MessageSquare, group: 'workspace' },
+  { href: '/', label: 'Overview', icon: LayoutDashboard, group: 'workspace' },
+  { href: '/projects', label: 'Projects', icon: FolderGit2, group: 'workspace' },
+  { href: '/identity', label: 'Identity', icon: Fingerprint, group: 'agent-setup' },
+  { href: '/models', label: 'Model defaults', icon: Cpu, group: 'agent-setup' },
+  { href: '/memories', label: 'Memories', icon: BookOpen, group: 'agent-setup' },
+  { href: '/skills', label: 'Skills', icon: Sparkles, group: 'agent-setup' },
+  { href: '/providers', label: 'Providers', icon: Plug, group: 'connections' },
+  { href: '/integrations', label: 'Integrations', icon: Cable, group: 'connections' },
+  { href: '/channels', label: 'Channels', icon: Smartphone, group: 'connections' },
+  { href: '/ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'connections' },
+  { href: '/remote', label: 'Remote Control', icon: Monitor, group: 'connections' },
+  { href: '/schedules', label: 'Schedules', icon: AlarmClock, group: 'automation' },
+];
 
 /** The deepest section whose route prefixes the current one, so a child route stays marked. */
 export function currentSection(pathname: string): NavigationItem | undefined {

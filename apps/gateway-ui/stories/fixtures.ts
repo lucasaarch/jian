@@ -186,7 +186,7 @@ const session = (
 
 /** One conversation per situation the Sessions screen handles; see `conversations.ts`. */
 export const sessions: Session[] = [
-  session(ids.gatewayChat, 'gateway', 'Gateway', 60 * 24 * 30),
+  session(ids.gatewayChat, 'gateway', null, 60 * 24 * 30),
   session(ids.mayaChat, 'whatsapp', 'WhatsApp · Maya Chen', 60 * 24 * 12),
   session(ids.launchGroup, 'whatsapp', 'WhatsApp · Northwind Launch', 60 * 24 * 6),
   session(ids.theoChat, 'telegram', 'Telegram · Theo Park', 60 * 24 * 9),
@@ -545,7 +545,6 @@ export const modelDefaults: ModelDefaults = {
   vision: 'disabled',
   audio: 'disabled',
   speech: 'disabled',
-  voice: 'disabled',
   transcription: null,
   sticker: 'disabled',
 };

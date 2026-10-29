@@ -9,7 +9,7 @@ async function setup() {
   };
   const profile = await services.profiles.createProfile({ ...input, name: 'Owner' });
   const other = await services.profiles.createProfile({ ...input, name: 'Other' });
-  const session = await services.sessions.gatewaySession(profile.id);
+  const session = await services.sessions.createGatewaySession(profile.id, {});
   const turn = async (key: string) => {
     const run = await services.runs.submit(profile.id, session.id, {
       text: 'Pesquisa o deploy',

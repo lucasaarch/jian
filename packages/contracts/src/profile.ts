@@ -303,14 +303,22 @@ export const profilePatchSchema = profileSchema.partial().extend({
   reachableByAgents: z.boolean().optional(),
 });
 
-/**
- * The channel of the one conversation the owner holds with a profile through the panel. The
- * gateway opens it on its own, exactly one per profile, so no caller may create another.
- */
+/** The channel of chats the owner starts with a profile through the panel. */
 export const GATEWAY_SESSION_CHANNEL = 'gateway';
 /** Where an agent reviews its own turns and says what it kept: one per profile. */
 export const LEARNING_SESSION_CHANNEL = 'learning';
 export const TASK_SESSION_CHANNEL = 'task';
+
+/** A Gateway chat can be attached to a coding project; channel conversations never use this. */
+export const gatewaySessionInputSchema = z.strictObject({
+  projectId: z.uuid().optional(),
+  remoteMachineId: z.uuid().nullable().optional(),
+});
+
+export const gatewaySessionTargetSchema = z.strictObject({
+  projectId: z.uuid().nullable(),
+  remoteMachineId: z.uuid().nullable(),
+});
 
 export const sessionSchema = z.strictObject({
   // Absent on purpose: the agent names the conversation from its first message, and the owner

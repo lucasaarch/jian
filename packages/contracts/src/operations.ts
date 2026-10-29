@@ -28,6 +28,13 @@ import {
   decisionsStatusSchema,
 } from './decisions.js';
 import {
+  githubInstallInputSchema,
+  githubInstallSchema,
+  githubIntegrationStatusSchema,
+  githubManifestSchema,
+  githubRepositorySchema,
+} from './integrations.js';
+import {
   inlineMediaSchema,
   mediaContentSchema,
   mediaRecordSchema,
@@ -37,6 +44,8 @@ import {
 } from './media.js';
 import {
   builtinSkillSchema,
+  gatewaySessionInputSchema,
+  gatewaySessionTargetSchema,
   mcpImportResultSchema,
   mcpImportSchema,
   mcpStatusSchema,
@@ -50,6 +59,7 @@ import {
   sessionSchema,
   submitSchema,
 } from './profile.js';
+import { projectInputSchema, projectSchema } from './projects.js';
 import {
   codexLoginSchema,
   modelDefaultsInputSchema,
@@ -57,10 +67,6 @@ import {
   providerInputSchema,
   providerModelListSchema,
   providerRecordSchema,
-  voiceSummarySchema,
-  voiceTokenInputSchema,
-  voiceTokenSchema,
-  voiceTranscriptSchema,
 } from './providers.js';
 import {
   activityDaySchema,
@@ -141,6 +147,73 @@ export const cursorSchema = z.strictObject({
 });
 
 export const operations: Operation[] = [
+  {
+    method: 'GET',
+    path: '/v1/integrations/github',
+    operationId: 'githubIntegration',
+    access: 'admin',
+    response: githubIntegrationStatusSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/integrations/github/manifest',
+    operationId: 'startGithubAppRegistration',
+    access: 'admin',
+    body: githubInstallInputSchema,
+    response: githubManifestSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/integrations/github/install',
+    operationId: 'startGithubInstallation',
+    access: 'admin',
+    body: githubInstallInputSchema,
+    response: githubInstallSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/integrations/github/manifest/callback',
+    operationId: 'completeGithubAppRegistration',
+    access: 'public',
+    query: z.looseObject({
+      code: z.string().min(1).max(500).optional(),
+      state: z.string().min(1).max(128).optional(),
+    }),
+    response: z.string(),
+    status: 302,
+    responseContentType: 'text/plain',
+  },
+  {
+    method: 'GET',
+    path: '/v1/integrations/github/callback',
+    operationId: 'completeGithubInstallation',
+    access: 'public',
+    query: z.looseObject({
+      code: z.string().min(1).max(500).optional(),
+      state: z.string().min(1).max(128).optional(),
+      installation_id: z.coerce.number().int().positive().safe().optional(),
+      error: z.string().max(100).optional(),
+    }),
+    response: z.string(),
+    status: 302,
+    responseContentType: 'text/plain',
+  },
+  {
+    method: 'GET',
+    path: '/v1/integrations/github/installations/:accountId/repositories',
+    operationId: 'githubRepositories',
+    access: 'admin',
+    params: z.strictObject({ accountId: z.uuid() }),
+    response: z.array(githubRepositorySchema),
+  },
+  {
+    method: 'DELETE',
+    path: '/v1/integrations/github/installations/:accountId',
+    operationId: 'disconnectGithubInstallation',
+    access: 'admin',
+    params: z.strictObject({ accountId: z.uuid() }),
+    response: z.strictObject({ id: z.uuid() }),
+  },
   {
     method: 'GET',
     path: '/v1/remote/machines',
@@ -364,22 +437,6 @@ export const operations: Operation[] = [
     access: 'admin',
     body: modelDefaultsInputSchema,
     response: modelDefaultsRecordSchema,
-  },
-  {
-    method: 'POST',
-    path: `${profile}/voice/token`,
-    operationId: 'createVoiceToken',
-    access: 'admin',
-    body: voiceTokenInputSchema,
-    response: voiceTokenSchema,
-  },
-  {
-    method: 'POST',
-    path: `${profile}/voice/summary`,
-    operationId: 'summarizeVoiceTranscript',
-    access: 'admin',
-    body: voiceTranscriptSchema,
-    response: voiceSummarySchema,
   },
   {
     method: 'GET',
@@ -792,6 +849,39 @@ export const operations: Operation[] = [
     response: z.array(sessionSummarySchema),
   },
   {
+    method: 'GET',
+    path: `${profile}/projects`,
+    operationId: 'listProjects',
+    access: 'admin',
+    response: z.array(projectSchema),
+  },
+  {
+    method: 'POST',
+    path: `${profile}/projects`,
+    operationId: 'createProject',
+    access: 'admin',
+    body: projectInputSchema,
+    response: projectSchema,
+    status: 201,
+  },
+  {
+    method: 'POST',
+    path: `${profile}/gateway-sessions`,
+    operationId: 'createGatewaySession',
+    access: 'admin',
+    body: gatewaySessionInputSchema,
+    response: sessionRecordSchema,
+    status: 201,
+  },
+  {
+    method: 'PUT',
+    path: `${session}/target`,
+    operationId: 'setGatewaySessionTarget',
+    access: 'admin',
+    body: gatewaySessionTargetSchema,
+    response: sessionRecordSchema,
+  },
+  {
     method: 'POST',
     path: `${profile}/sessions`,
     operationId: 'createSession',
@@ -806,6 +896,13 @@ export const operations: Operation[] = [
     operationId: 'renameSession',
     access: 'admin',
     body: sessionRenameSchema,
+    response: sessionRecordSchema,
+  },
+  {
+    method: 'DELETE',
+    path: session,
+    operationId: 'deleteSession',
+    access: 'admin',
     response: sessionRecordSchema,
   },
   {

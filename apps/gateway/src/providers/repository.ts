@@ -8,7 +8,7 @@ import {
   type ProviderRecord,
   providerRecordSchema,
 } from '@jian/contracts';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { modelDefaults, providers } from '../storage/schema.js';
 
@@ -122,8 +122,11 @@ export async function readModelDefaults(
   fallbackUpdatedAt: string,
 ): Promise<ModelDefaultsRecord> {
   const rows = await db.select().from(modelDefaults).where(eq(modelDefaults.profileId, profileId));
+  const supportedRows = rows.filter((row) =>
+    modelRoleSchema.options.includes(row.role as ModelRole),
+  );
 
-  const byRole = new Map(rows.map((row) => [row.role, row]));
+  const byRole = new Map(supportedRows.map((row) => [row.role, row]));
   const selections: Record<string, ModelSelection | 'disabled' | null> = {};
 
   for (const role of modelRoleSchema.options) {
@@ -153,7 +156,7 @@ export async function readModelDefaults(
 
   // The record carries one timestamp for what is now several rows: the newest write stands for
   // the set, so a client that polls it still sees a change to any single role.
-  const latest = rows.reduce<Date | null>(
+  const latest = supportedRows.reduce<Date | null>(
     (newest, row) => (!newest || row.updatedAt > newest ? row.updatedAt : newest),
     null,
   );
@@ -166,14 +169,21 @@ export async function readModelDefaults(
   });
 }
 
-/** Every role keeps a row, cleared or not, so the record's timestamp is stored and not guessed. */
+/** Every current role keeps a row; unknown legacy roles remain untouched for safe rollback. */
 export async function writeModelDefaults(
   db: Queryable,
   profileId: string,
   selections: RoleSelections,
   at: Date,
 ): Promise<void> {
-  await db.delete(modelDefaults).where(eq(modelDefaults.profileId, profileId));
+  await db
+    .delete(modelDefaults)
+    .where(
+      and(
+        eq(modelDefaults.profileId, profileId),
+        inArray(modelDefaults.role, modelRoleSchema.options),
+      ),
+    );
 
   const rows = modelRoleSchema.options.map((role) => {
     const selection = selections[role];

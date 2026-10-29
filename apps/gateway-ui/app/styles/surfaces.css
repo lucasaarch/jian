@@ -136,6 +136,72 @@
   .settings-fields {
     @apply max-w-3xl;
   }
+  .integration-card-icon {
+    @apply grid h-11 w-11 shrink-0 place-items-center rounded-sm border border-line bg-canvas;
+  }
+  .integration-tabs {
+    @apply mb-6 flex gap-1 border-b border-line;
+  }
+  .integration-tabs button {
+    @apply -mb-px border-b-2 border-transparent px-4 py-2.5 text-sm text-muted transition-colors;
+  }
+  .integration-tabs button[aria-selected="true"] {
+    @apply border-ink text-ink;
+  }
+  .integration-app-card {
+    @apply flex min-h-24 items-center gap-4 rounded-sm border border-line bg-surface p-5 text-ink transition-colors hover:border-control hover:bg-canvas;
+  }
+  .integration-app-card-copy {
+    @apply flex min-w-0 flex-1 flex-col gap-1;
+  }
+  .integration-app-card-copy strong {
+    @apply truncate text-base font-semibold;
+  }
+  .integration-app-card-copy span {
+    @apply truncate text-sm text-muted;
+  }
+  .integration-app-card-action {
+    @apply text-sm text-muted;
+  }
+  .integration-public-url-note {
+    @apply mt-3 text-sm text-muted;
+  }
+  .integration-mcp-note {
+    @apply mb-4 text-sm text-muted;
+  }
+  .integration-back-link {
+    @apply mb-4 inline-flex items-center gap-2 text-sm text-muted hover:text-ink;
+  }
+  .github-app-details-card {
+    @apply mb-6 flex items-center gap-4 rounded-sm border border-line bg-surface p-5;
+  }
+  .github-app-details-copy {
+    @apply flex min-w-0 flex-1 flex-col gap-1;
+  }
+  .github-app-details-copy strong {
+    @apply truncate text-sm font-semibold;
+  }
+  .github-app-details-copy span {
+    @apply truncate text-xs text-muted;
+  }
+  .integration-external-link {
+    @apply inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink;
+  }
+  .integration-permission-notice {
+    @apply mb-6 flex flex-wrap items-start justify-between gap-4 rounded-sm border border-warn/30 bg-warn-soft p-4 text-sm;
+  }
+  .integration-permission-notice p {
+    @apply mt-2 max-w-3xl text-muted;
+  }
+  .integration-permission-notice .github-missing-permissions {
+    @apply font-mono text-xs;
+  }
+  .github-installations {
+    @apply mt-8;
+  }
+  .github-installations > .section-heading {
+    @apply mb-4;
+  }
   .field {
     @apply mb-5 flex min-w-0 flex-col gap-2;
   }
@@ -421,10 +487,39 @@
     @apply flex min-h-0 flex-col border-r border-line bg-surface;
   }
   .conversation-list > header {
-    @apply grid gap-3 border-b border-line px-4 pb-4 pt-6;
+    @apply grid gap-3 border-b border-line px-4 pb-4 pt-4;
   }
   .conversation-list h1 {
     @apply text-3xl;
+  }
+  .chat-channel-select {
+    @apply relative min-w-0;
+  }
+  .chat-channel-trigger {
+    @apply flex items-center gap-2 rounded-sm text-left text-ink;
+  }
+  .chat-channel-trigger > svg {
+    @apply shrink-0 text-muted;
+  }
+  .chat-channel-menu,
+  .conversation-context-menu {
+    @apply z-50 min-w-48 overflow-hidden rounded-sm border border-line bg-surface p-1.5 text-sm text-ink shadow-xl;
+  }
+  .chat-channel-menu {
+    @apply absolute left-0 top-full mt-2;
+  }
+  .chat-channel-option,
+  .conversation-context-menu button {
+    @apply flex min-h-10 w-full items-center rounded px-3 py-2 text-left outline-none hover:bg-accent-soft hover:text-accent focus-visible:bg-accent-soft focus-visible:text-accent;
+  }
+  .conversation-context-menu {
+    @apply fixed;
+  }
+  .conversation-context-menu button[data-danger="true"] {
+    @apply text-bad;
+  }
+  .chat-channel-option {
+    @apply gap-2;
   }
   .conversation-scroll {
     @apply min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3;
@@ -493,6 +588,12 @@
   .conversation-none {
     @apply px-3 py-6 text-center text-sm text-muted;
   }
+  .draft-empty {
+    @apply flex min-h-0 flex-1 items-center justify-center px-6;
+  }
+  .draft-empty .empty {
+    @apply w-full max-w-3xl border-0 bg-transparent;
+  }
   .conversation-pane {
     @apply flex min-h-0 min-w-0 flex-col;
   }
@@ -551,10 +652,6 @@
   .conversation-pane .run-status {
     @apply mx-6 mb-4;
   }
-  /* The gateway conversation, pinned above the channels. */
-  .conversation-pinned {
-    @apply border-b border-line pb-2;
-  }
   /* The composer as AI chats draw it: one rounded box holding the files, the text and the
      buttons, floating over the end of the conversation. */
   .composer {
@@ -575,6 +672,52 @@
   }
   .composer-actions {
     @apply flex items-center gap-1;
+  }
+  .select-trigger.composer-select-ghost {
+    @apply h-9 min-h-9 w-auto max-w-40 shrink-0 gap-1 rounded-md border-transparent bg-transparent px-2 py-1 text-xs text-muted;
+  }
+  .select-trigger.composer-select-ghost:hover:not(:disabled),
+  .select-trigger.composer-select-ghost:focus-visible,
+  .select-trigger.composer-select-ghost[data-popup-open] {
+    @apply border-transparent bg-canvas text-ink;
+  }
+  .select-trigger.composer-select-ghost .select-value {
+    @apply gap-1.5;
+  }
+  .select-trigger.composer-select-ghost .select-chevron {
+    @apply h-3.5 w-3.5;
+  }
+  .select-popup.composer-machine-popup {
+    width: 18rem;
+    min-width: 18rem;
+  }
+  .select-popup.composer-machine-popup .select-option-copy small {
+    white-space: nowrap;
+  }
+  .select-popup.composer-model-popup {
+    width: 20rem;
+    min-width: 20rem;
+  }
+  .select-popup.composer-model-popup .select-option-copy > span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .select-popup.composer-model-popup .select-option-copy small {
+    white-space: nowrap;
+  }
+  .composer-model-control.session-model {
+    @apply flex w-auto min-w-0 shrink gap-1;
+  }
+  .composer-model-control .select-trigger.composer-select-ghost {
+    @apply max-w-36;
+  }
+  .composer-hint {
+    @apply px-2 text-xs text-muted;
+  }
+  .composer-hint kbd {
+    @apply mx-0.5 rounded border border-line px-1.5 py-0.5 font-mono text-[11px];
   }
   .composer-tool {
     @apply grid h-9 w-9 place-items-center rounded-full text-muted transition-colors hover:bg-canvas hover:text-ink;
