@@ -13,7 +13,7 @@ import {
   withDefaultEffort,
 } from '../providers/role-fields';
 import { ProviderLogo } from '../ui';
-import { EffortMenu, type ModelEntry, ModelMenu } from './model-menu';
+import { EffortMenu, type MenuAlign, type ModelEntry, ModelMenu } from './model-menu';
 
 /**
  * The model one conversation runs on, over the profile's defaults, and its reasoning effort.
@@ -28,6 +28,7 @@ export function SessionModel({
   className,
   channel,
   saved,
+  menuAlign,
 }: {
   api: GatewayApi;
   profileId: string;
@@ -38,6 +39,8 @@ export function SessionModel({
   /** A WhatsApp or Telegram conversation, which follows the Channels default. */
   channel: boolean;
   saved: () => void;
+  /** Where the menus line up with their triggers; the end unless the controls sit on the left. */
+  menuAlign?: MenuAlign;
 }) {
   const [savedModel, setSavedModel] = useState(session?.model);
   const [busy, setBusy] = useState(false);
@@ -149,6 +152,7 @@ export function SessionModel({
         models={entries}
         value={model}
         disabled={busy}
+        align={menuAlign}
         onChange={(next) => void save(next)}
       />
       <EffortMenu
@@ -157,6 +161,7 @@ export function SessionModel({
         )}
         value={model}
         disabled={busy}
+        align={menuAlign}
         onChange={(next) => void save(next)}
       />
     </div>
