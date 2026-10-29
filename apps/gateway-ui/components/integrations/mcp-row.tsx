@@ -32,7 +32,7 @@ export function McpRow({
   saving: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const { status, error, busy, check } = useMcpCheck(server.name, api);
+  const { status, error, busy, check } = useMcpCheck(() => api.checkMcpServer(server.name));
   const address =
     server.transport === 'stdio'
       ? [server.command, ...server.args].filter(Boolean).join(' ')

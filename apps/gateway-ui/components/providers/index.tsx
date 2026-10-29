@@ -11,6 +11,7 @@ import type { SectionActions } from '../props';
 import { Badge, Button, Field, hasLogo, ProviderLogo, ResourceRow, SectionHeading } from '../ui';
 import { Select } from '../ui/select';
 import { anthropicCredentials, providers } from './catalog';
+import { CodexCode, handOff } from './codex-login';
 import { DecisionsRow, WebSearchRow } from './service-keys';
 
 type CodexLogin = Awaited<ReturnType<GatewayApi['codexLogin']>>;
@@ -54,6 +55,8 @@ export function Providers({ api, mutate, busy }: SectionActions) {
     refetchInterval: (query) => (query.state.data?.status === 'pending' ? 5000 : false),
   });
   const setCodexLogin = (state: CodexLogin) => client.setQueryData(keys.codexLogin, state);
+  // Set by the owner's click, so a sign-in found pending on a reload stays a line, not a dialog.
+  const [codeShown, setCodeShown] = useState<{ copied: boolean }>();
   // The wait ending in a connection is a provider added: say so and read them again.
   const waiting = useRef(false);
 
@@ -61,6 +64,7 @@ export function Providers({ api, mutate, busy }: SectionActions) {
     if (codexLogin?.status === 'pending') waiting.current = true;
     else if (waiting.current) {
       waiting.current = false;
+      setCodeShown(undefined);
       if (codexLogin?.status === 'connected') void mutate(async () => {}, 'ChatGPT connected.');
     }
   }, [codexLogin?.status, mutate]);
@@ -191,16 +195,20 @@ export function Providers({ api, mutate, busy }: SectionActions) {
               type="button"
               variant="secondary"
               disabled={busy || codexLogin?.status === 'pending'}
-              onClick={() =>
-                void api
-                  .startCodexLogin()
-                  .then(setCodexLogin)
-                  .catch((error) =>
-                    setFormError(
-                      error instanceof Error ? error.message : 'The login is unavailable.',
-                    ),
-                  )
-              }
+              onClick={async () => {
+                setFormError('');
+
+                try {
+                  const login = await api.startCodexLogin();
+
+                  setCodexLogin(login);
+                  if (login.status === 'pending') setCodeShown({ copied: await handOff(login) });
+                } catch (error) {
+                  setFormError(
+                    error instanceof Error ? error.message : 'The login is unavailable.',
+                  );
+                }
+              }}
             >
               Sign in with ChatGPT
             </Button>
@@ -217,15 +225,28 @@ export function Providers({ api, mutate, busy }: SectionActions) {
               </Button>
             )}
           </div>
-          {codexLogin?.status === 'pending' && (
-            <p className="note">
-              Open{' '}
-              <a href={codexLogin.verificationUrl} target="_blank" rel="noreferrer">
-                the OpenAI login
-              </a>{' '}
-              and enter the code <strong>{codexLogin.userCode}</strong>.
-            </p>
-          )}
+          {codexLogin?.status === 'pending' &&
+            codexLogin.verificationUrl &&
+            codexLogin.userCode &&
+            (codeShown ? (
+              <CodexCode
+                verificationUrl={codexLogin.verificationUrl}
+                userCode={codexLogin.userCode}
+                copied={codeShown.copied}
+                close={() => setCodeShown(undefined)}
+              />
+            ) : (
+              <p className="note">
+                Waiting for the ChatGPT sign-in.{' '}
+                <button
+                  type="button"
+                  className="text-link"
+                  onClick={() => setCodeShown({ copied: false })}
+                >
+                  Show the code
+                </button>
+              </p>
+            ))}
           {codexLogin?.status === 'failed' && codexLogin.error && (
             <p className="form-error" role="alert">
               {codexLogin.error}

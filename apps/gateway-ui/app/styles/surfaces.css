@@ -361,6 +361,16 @@
   .copy-block .secret-value {
     @apply w-full resize-y rounded-sm border border-control bg-surface px-3 py-2.5 text-ink;
   }
+  /* The ChatGPT sign-in code: read off the screen and typed elsewhere, so it is the dialog. */
+  .device-code {
+    @apply flex items-center justify-center gap-3 rounded-sm border border-control bg-surface px-5 py-6;
+  }
+  .device-code output {
+    @apply select-all font-mono text-3xl font-semibold tracking-[0.2em] text-ink;
+  }
+  .device-code-state {
+    @apply mt-4 flex items-center justify-center gap-2 text-sm text-muted;
+  }
   .notice {
     @apply mb-6 flex items-start gap-3 rounded-sm border border-control bg-surface px-5 py-4 text-sm text-ink;
   }

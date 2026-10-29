@@ -1,5 +1,16 @@
-import { type McpServer, mcpServerListInputSchema } from '@jian/contracts';
-import { mcpOauthClientSecretKey, mcpSecret, mcpValueSecret } from '../agent/mcp-connect.js';
+import {
+  type McpServer,
+  type McpStatus,
+  mcpDraftCheckSchema,
+  mcpServerListInputSchema,
+} from '@jian/contracts';
+import {
+  mcpOauthClientSecretKey,
+  mcpSecret,
+  mcpValueSecret,
+  type SecretReader,
+} from '../agent/mcp-connect.js';
+import type { McpLogins } from '../agent/mcp-login.js';
 import { probeMcpServer } from '../agent/mcp-probe.js';
 import type { McpOAuthProviders } from '../agent/types.js';
 import type { Clock } from '../core/clock.js';
@@ -124,6 +135,54 @@ export class McpServers {
     oauth?: McpOAuthProviders,
   ): ReturnType<typeof probeMcpServer> {
     return probeMcpServer(await this.server(name), this.vault, fetcher, oauth);
+  }
+
+  /**
+   * Connects to a server the form holds but has not saved. Nothing is written: typed values
+   * live only for this call, and a sign-in runs only for the saved server the draft still is —
+   * its callback finds the server by name, so a sign-in started for anything else could never
+   * finish.
+   */
+  async checkDraft(
+    input: unknown,
+    fetcher?: typeof globalThis.fetch,
+    logins?: Pick<McpLogins, 'provider' | 'withAuthorization'>,
+  ): Promise<McpStatus> {
+    const { server } = mcpDraftCheckSchema.parse(input);
+    const {
+      stored: [draft],
+      values,
+      oauthSecrets,
+    } = stripMcpValues([server]);
+
+    if (!draft) throw new GatewayError(400, 'Invalid request');
+
+    const typed = new Map([
+      ...values.map(({ kind, name, value }) => [mcpValueSecret(draft.name, kind, name), value]),
+      ...oauthSecrets.map(({ value }) => [mcpOauthClientSecretKey(draft.name), value]),
+    ] as Array<[string, string]>);
+    const reader: SecretReader = {
+      read: async (owner) => typed.get(owner) ?? this.vault.read(owner),
+    };
+    const saved = (await this.list()).find((item) => item.name === draft.name);
+    const signsIn =
+      draft.auth === 'oauth' &&
+      saved?.auth === 'oauth' &&
+      saved.url === draft.url &&
+      saved.oauthClientId === draft.oauthClientId;
+
+    if (signsIn && logins) {
+      return logins.withAuthorization(
+        await probeMcpServer(draft, reader, fetcher, logins.provider),
+      );
+    }
+
+    const status = await probeMcpServer(draft, reader, fetcher);
+
+    // Without a sign-in to offer, the refusal an OAuth server answers with is the expected one.
+    return draft.auth === 'oauth' && !status.reachable && /\(HTTP 401\)/.test(status.error ?? '')
+      ? { ...status, error: 'the server asks for a sign-in, which opens once it is saved' }
+      : status;
   }
 
   /** A header or variable the owner removed takes its secret with it. */

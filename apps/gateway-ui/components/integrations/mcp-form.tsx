@@ -1,10 +1,11 @@
 'use client';
 
-import { Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import type { McpServer, McpValue } from '../../lib/api';
+import { Plug, Plus, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import type { GatewayApi, McpServer, McpValue } from '@/lib/api';
 import { Button, Field, IconButton, Modal, StackedFields } from '../ui';
 import { Select } from '../ui/select';
+import { McpResult, useMcpCheck } from './mcp-check';
 
 type Draft = {
   name: string;
@@ -47,13 +48,50 @@ const clean = (values: McpValue[]): McpValue[] =>
       ...(value.fromEnv ? { fromEnv: value.fromEnv } : {}),
     }));
 
+/** What the form holds, in the shape the gateway saves and checks. */
+function serverOf(draft: Draft, secretSaved: boolean): McpServer {
+  const oauthClientId = draft.oauthClientId.trim();
+  const oauthClientSecret = draft.oauthClientSecret.trim();
+
+  return {
+    name: draft.name.trim(),
+    transport: draft.transport,
+    auth: draft.transport === 'stdio' ? 'none' : draft.auth,
+    ...(draft.transport === 'http'
+      ? {
+          url: draft.url.trim(),
+          headers: draft.auth === 'headers' ? clean(draft.headers) : [],
+          ...(draft.auth === 'oauth' && oauthClientId
+            ? {
+                oauthClientId,
+                ...(oauthClientSecret
+                  ? { oauthClientSecret: { value: oauthClientSecret } }
+                  : secretSaved
+                    ? { oauthClientSecret: {} }
+                    : {}),
+              }
+            : {}),
+        }
+      : { headers: [] }),
+    ...(draft.transport === 'stdio'
+      ? {
+          command: draft.command.trim(),
+          args: draft.args.split(/\s+/).filter(Boolean),
+          env: clean(draft.env),
+        }
+      : { args: [], env: [] }),
+  } as McpServer;
+}
+
 export function McpForm({
+  api,
   server,
   busy,
   error,
   onSave,
   onClose,
 }: {
+  api: GatewayApi;
   server?: McpServer;
   busy: boolean;
   error: string;
@@ -61,14 +99,19 @@ export function McpForm({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftOf(server));
-  const change = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
+  const form = useRef<HTMLFormElement>(null);
+  const secretSaved = Boolean(server?.oauthClientSecret);
+  const test = useMcpCheck(() => api.checkMcpDraft(serverOf(draft, secretSaved)));
+  // An answer is about the fields as they were tested; editing one makes it stale.
+  const change = (patch: Partial<Draft>) => {
+    test.reset();
+    setDraft((current) => ({ ...current, ...patch }));
+  };
 
   const values = (kind: 'headers' | 'env') => ({
     list: draft[kind],
     set: (list: McpValue[]) => change({ [kind]: list } as Partial<Draft>),
   });
-
-  const secretSaved = Boolean(server?.oauthClientSecret);
 
   return (
     <Modal
@@ -76,6 +119,17 @@ export function McpForm({
       close={onClose}
       footer={
         <>
+          <Button
+            variant="secondary"
+            busy={test.busy}
+            disabled={busy}
+            onClick={() => {
+              if (form.current?.reportValidity()) void test.check();
+            }}
+          >
+            <Plug size={16} />
+            Test connection
+          </Button>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
@@ -89,40 +143,10 @@ export function McpForm({
         id="mcp-form"
         method="post"
         action="/"
+        ref={form}
         onSubmit={(event) => {
           event.preventDefault();
-
-          const oauthClientId = draft.oauthClientId.trim();
-          const oauthClientSecret = draft.oauthClientSecret.trim();
-
-          onSave({
-            name: draft.name.trim(),
-            transport: draft.transport,
-            auth: draft.transport === 'stdio' ? 'none' : draft.auth,
-            ...(draft.transport === 'http'
-              ? {
-                  url: draft.url.trim(),
-                  headers: draft.auth === 'headers' ? clean(draft.headers) : [],
-                  ...(draft.auth === 'oauth' && oauthClientId
-                    ? {
-                        oauthClientId,
-                        ...(oauthClientSecret
-                          ? { oauthClientSecret: { value: oauthClientSecret } }
-                          : secretSaved
-                            ? { oauthClientSecret: {} }
-                            : {}),
-                      }
-                    : {}),
-                }
-              : { headers: [] }),
-            ...(draft.transport === 'stdio'
-              ? {
-                  command: draft.command.trim(),
-                  args: draft.args.split(/\s+/).filter(Boolean),
-                  env: clean(draft.env),
-                }
-              : { args: [], env: [] }),
-          } as McpServer);
+          onSave(serverOf(draft, secretSaved));
         }}
       >
         <Field label="Name" hint="Lowercase letters, digits and underscore.">
@@ -185,8 +209,8 @@ export function McpForm({
             {draft.auth === 'oauth' && (
               <>
                 <p className="note">
-                  Save the server, then use <strong>Test the connection</strong> — it answers with
-                  the link to sign in. Needs <code>JIAN_PUBLIC_URL</code>.
+                  Saving opens the server&apos;s sign-in in a new tab. Needs{' '}
+                  <code>JIAN_PUBLIC_URL</code>.
                 </p>
                 <Field
                   label="OAuth client id"
@@ -241,6 +265,8 @@ export function McpForm({
             />
           </>
         )}
+
+        <McpResult status={test.status} error={test.error} />
 
         {error && (
           <p role="alert" className="form-error">

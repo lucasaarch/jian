@@ -188,6 +188,12 @@ export const mcpServerListSchema = z
 /** The whole list, replaced at once: a value left out of a header keeps the stored one. */
 export const mcpServerListInputSchema = z.strictObject({ servers: mcpServerListSchema });
 
+/**
+ * One server as the form holds it, before it is saved. Typed values are used as typed; a value
+ * left out is the one stored under the same name, the way saving would keep it.
+ */
+export const mcpDraftCheckSchema = z.strictObject({ server: mcpSchema });
+
 /** What a server answered when the owner asked whether it works. */
 export const mcpStatusSchema = z.strictObject({
   name: z.string(),

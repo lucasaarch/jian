@@ -24,6 +24,9 @@ export const integrationCalls = (client: Client) => ({
   // The whole list at once: a value left out of a header keeps the stored one.
   replaceMcpServers: (servers: McpServer[]) =>
     result(client.PUT('/v1/mcp-servers', { body: { servers } })),
+  // A server the form holds and has not saved; nothing it carries is stored.
+  checkMcpDraft: (server: McpServer) =>
+    result(client.POST('/v1/mcp-servers/check', { body: { server } })),
   checkMcpServer: (name: string) =>
     result(client.POST('/v1/mcp-servers/{name}/check', { params: { path: { name } } })),
 });
