@@ -474,8 +474,10 @@
   .conversation-context-menu button[data-danger="true"] {
     @apply text-bad;
   }
+  /* The same side padding as the header above, so a row's edges line up with the search and
+     the channel select. */
   .conversation-scroll {
-    @apply min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3;
+    @apply min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3;
   }
   .conversation-scroll h2 {
     @apply flex items-center gap-1.5 px-3 pb-1 pt-3 font-sans text-[11px] font-semibold uppercase tracking-wider text-muted;
