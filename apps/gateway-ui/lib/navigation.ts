@@ -16,7 +16,10 @@ import {
 } from 'lucide-react';
 
 export type NavigationItem = {
-  /** Relative to the open agent: `''` is its overview, `'sessions'` is `/agents/:id/sessions`. */
+  /**
+   * Relative to where the item lives: for an agent's item, to the open agent — `''` is its
+   * overview, `'sessions'` is `/agents/:id/sessions`; for the gateway's, to `/settings`.
+   */
   path: string;
   label: string;
   icon: LucideIcon;
@@ -28,6 +31,8 @@ export const navigationGroups = [
   { id: 'agent-setup', label: 'Agent setup' },
   { id: 'connections', label: 'Connections' },
   { id: 'automation', label: 'Automation' },
+  // Shared by every agent: these screens live under `/settings`, outside any agent.
+  { id: 'gateway', label: 'Gateway' },
 ] as const;
 
 type NavigationGroup = (typeof navigationGroups)[number]['id'];
@@ -41,15 +46,25 @@ export const navigation: NavigationItem[] = [
   { path: 'models', label: 'Model defaults', icon: Cpu, group: 'agent-setup' },
   { path: 'memories', label: 'Memories', icon: BookOpen, group: 'agent-setup' },
   { path: 'skills', label: 'Skills', icon: Sparkles, group: 'agent-setup' },
-  { path: 'providers', label: 'Providers', icon: Plug, group: 'connections' },
   { path: 'integrations', label: 'Integrations', icon: Cable, group: 'connections' },
   { path: 'channels', label: 'Channels', icon: Smartphone, group: 'connections' },
   { path: 'ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'connections' },
-  { path: 'remote', label: 'Remote Control', icon: Monitor, group: 'connections' },
   { path: 'schedules', label: 'Schedules', icon: AlarmClock, group: 'automation' },
+  { path: 'providers', label: 'Providers', icon: Plug, group: 'gateway' },
+  { path: 'remote', label: 'Remote Control', icon: Monitor, group: 'gateway' },
 ];
 
-/** Where a page of one agent lives. Every screen of the panel belongs to an agent. */
+/** Whether an item is one of the gateway's own screens rather than an agent's. */
+export const isGatewayItem = (item: NavigationItem) => item.group === 'gateway';
+
+/** Where a gateway screen lives: the same for every agent. */
+export function settingsPath(path = ''): string {
+  const rest = path.replace(/^\//, '');
+
+  return `/settings${rest ? `/${rest}` : ''}`;
+}
+
+/** Where a page of one agent lives. */
 export function agentPath(profileId: string, path = ''): string {
   const rest = path.replace(/^\//, '');
 
@@ -63,13 +78,23 @@ function withinAgent(pathname: string): string | undefined {
   return match ? (match[1] ?? '') : undefined;
 }
 
+/** The part of a gateway route after `/settings`. */
+function withinSettings(pathname: string): string | undefined {
+  const match = /^\/settings(?:\/(.*))?$/.exec(pathname.replace(/\/$/, ''));
+
+  return match ? (match[1] ?? '') : undefined;
+}
+
 /** The deepest section whose route prefixes the current one, so a child route stays marked. */
 export function currentSection(pathname: string): NavigationItem | undefined {
-  const path = withinAgent(pathname);
+  const agent = withinAgent(pathname);
+  const settings = withinSettings(pathname);
+  const path = agent ?? settings;
 
   if (path === undefined) return undefined;
 
   return [...navigation]
+    .filter((item) => isGatewayItem(item) === (settings !== undefined))
     .sort((a, b) => b.path.length - a.path.length)
     .find((item) => path === item.path || (item.path && path.startsWith(`${item.path}/`)));
 }

@@ -2,9 +2,10 @@
 
 import { Plus } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { agentPath, currentSection } from '@/lib/navigation';
+import { agentPath, currentSection, isGatewayItem } from '@/lib/navigation';
 import { useProfiles } from '@/lib/query/profile';
-import { useBusy, useProfileId } from '@/lib/workspace';
+import { useLastProfile } from '@/lib/stores/last-profile';
+import { useBusy, useWorkingAgentId } from '@/lib/workspace';
 import { Avatar } from '../profile/avatar-field';
 import { Select } from '../ui/select';
 
@@ -12,13 +13,19 @@ export function ProfileSwitcher({ onCreate }: { onCreate: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const profiles = useProfiles().data ?? [];
-  const selected = useProfileId() ?? '';
+  const selected = useWorkingAgentId() ?? '';
+  const remember = useLastProfile((state) => state.remember);
   const profile = profiles.find((item) => item.id === selected);
   const busy = useBusy();
   // Another agent opens on the same section; anything deeper, such as one conversation,
-  // belonged to the agent being left.
-  const select = (profileId: string) =>
-    router.push(agentPath(profileId, currentSection(pathname)?.path));
+  // belonged to the agent being left. A gateway screen is everyone's, so it stays open.
+  const select = (profileId: string) => {
+    const section = currentSection(pathname);
+
+    if (section && isGatewayItem(section)) return remember(profileId);
+
+    router.push(agentPath(profileId, section?.path));
+  };
   return (
     <div className="profile-selector">
       <Select

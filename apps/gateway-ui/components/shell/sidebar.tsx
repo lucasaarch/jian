@@ -4,9 +4,15 @@ import { useQuery } from '@tanstack/react-query';
 import { LogOut, ScrollText, Star, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import {
+  currentSection,
+  isGatewayItem,
+  navigation,
+  navigationGroups,
+  settingsPath,
+} from '@/lib/navigation';
 import { queries } from '@/lib/query/profile';
-import { useAgentPath, useLoading, useProfileId, useSignOut } from '@/lib/workspace';
-import { currentSection, navigation, navigationGroups } from '../../lib/navigation';
+import { useAgentPath, useLoading, useSignOut, useWorkingAgentId } from '@/lib/workspace';
 import { useReleaseNotes } from '../releases/dialog';
 import { GitHubLogo, IconButton, Mark } from '../ui';
 import { ProfileSwitcher } from './profile-switcher';
@@ -23,7 +29,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const active = currentSection(pathname);
-  const profileId = useProfileId();
+  const profileId = useWorkingAgentId();
   const loading = useLoading();
   const signOut = useSignOut();
   const contacts = useQuery({ ...queries.contacts(profileId ?? ''), enabled: Boolean(profileId) });
@@ -62,7 +68,7 @@ export function Sidebar({
               .map((item) => (
                 <Link
                   key={item.path}
-                  href={hrefOf(item.path)}
+                  href={isGatewayItem(item) ? settingsPath(item.path) : hrefOf(item.path)}
                   className={active === item ? 'active' : ''}
                   aria-current={active === item ? 'page' : undefined}
                   onClick={onNavigate}

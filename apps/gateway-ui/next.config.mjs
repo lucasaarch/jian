@@ -18,6 +18,10 @@ const SECURITY_HEADERS = [
   },
 ];
 
+// Screens that moved out of the agent to the gateway's own settings. A bookmark of the old
+// address lands on the new one.
+const MOVED_TO_SETTINGS = ['providers', 'remote'];
+
 export default function configuration() {
   return {
     output: 'standalone',
@@ -29,6 +33,13 @@ export default function configuration() {
     devIndicators: false,
     async headers() {
       return [{ source: '/:path*', headers: SECURITY_HEADERS }];
+    },
+    async redirects() {
+      return MOVED_TO_SETTINGS.map((section) => ({
+        source: `/agents/:profileId/${section}/:rest*`,
+        destination: `/settings/${section}/:rest*`,
+        permanent: false,
+      }));
     },
   };
 }
