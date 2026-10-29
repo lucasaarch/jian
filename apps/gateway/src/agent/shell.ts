@@ -58,7 +58,6 @@ export function commandEnvironment(
   home: string,
   source: NodeJS.ProcessEnv = process.env,
   gitSshCommand?: string,
-  ghConfigDir?: string,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
 
@@ -77,7 +76,6 @@ export function commandEnvironment(
   return {
     ...env,
     HOME: home,
-    GH_CONFIG_DIR: ghConfigDir ?? join(home, '.config', 'gh'),
     TMPDIR: join(home, 'tmp'),
     GOPATH: join(home, 'go'),
     NPM_CONFIG_PREFIX: join(home, '.local'),
@@ -105,7 +103,6 @@ export function shellTools(
     readOnly: string[];
     writable: string[];
     sshCommand?: string;
-    ghConfigDir?: string;
   } = {
     readOnly: [],
     writable: [],
@@ -138,12 +135,7 @@ export function shellTools(
             shell.args,
             {
               cwd: directory,
-              env: commandEnvironment(
-                home,
-                process.env,
-                gitAccess.sshCommand,
-                gitAccess.ghConfigDir,
-              ),
+              env: commandEnvironment(home, process.env, gitAccess.sshCommand),
               timeout: timeoutMs,
               maxBuffer: MAX_OUTPUT * 4,
               encoding: 'utf8',

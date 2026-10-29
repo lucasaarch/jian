@@ -65,7 +65,6 @@ it('gives subagents the same profile workspace as the principal, not a separate 
   const first = worker(firstId, [source]);
   const second = worker(secondId, [source, sibling]);
   const gitAccess = await prepareWorkerWorkspace(first);
-  expect(gitAccess.ghConfigDir).toBe(join(home, '.config', 'gh'));
   expect(gitAccess.readOnly).toEqual([]);
   await prepareWorkerWorkspace(second);
 

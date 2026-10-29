@@ -17,8 +17,8 @@ Use the SSH key tools whenever you need to inspect, create or remove a key for t
 
 Keys created here are used automatically for \`git\` (IdentityFile / \`GIT_SSH_COMMAND\`).
 GitHub’s published host keys are already in \`~/.ssh/known_hosts\` — do not disable host-key
-checking or invent one-off \`ssh\` wrappers. Prefer SSH remotes (\`git@github.com:…\`) over
-\`gh\` when the owner has not logged \`gh\` in. After creating a key, give the owner the public
-key to add at the host; then \`git push\` from this workspace.
+checking or invent one-off \`ssh\` wrappers. Use SSH remotes (\`git@github.com:…\`) for Git.
+After creating a key, give the owner the public key to add at the host; then \`git push\` from
+this workspace.
 `,
 };

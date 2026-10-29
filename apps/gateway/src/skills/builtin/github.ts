@@ -23,7 +23,7 @@ to ask for.
 - **Not reachable, by GitHub's design**: anything that belongs to a person rather than to a
   repository — their stars, their profile as "the authenticated user", their notifications.
   GitHub refuses an App's token there whatever its permissions, so those tools are left out.
-  Say so plainly when asked, and offer the shell's \`gh\` if the profile is signed in there.
+  Say so plainly when asked: it is GitHub's limit, not a setting.
 
 ## Finding the tools
 
@@ -47,7 +47,7 @@ load the ones you will call with \`load_mcp_tools\`. Searches that work:
 
 - **Not a checkout.** For work on files with tests and builds, clone the repository in your
   workspace with the shell and work there; the App's token never reaches the shell, which uses
-  the profile's SSH keys or its own \`gh\` sign-in. Use the server for what lives on GitHub:
+  the profile's SSH keys. Use the server for what lives on GitHub:
   issues, reviews, pull requests, runs, alerts, and small file edits.
 - **Not a wait.** To be told when checks finish or a pull request closes, use
   \`create_subscription\` instead of asking again and again.

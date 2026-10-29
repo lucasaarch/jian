@@ -10,7 +10,7 @@ export const githubMcp: Skill = {
     'Use when creating or updating GitHub issues or pull requests through an MCP server, or when a GitHub MCP call returns Validation Failed or HTTP 422.',
   instructions: `# GitHub MCP
 
-Prefer a connected GitHub MCP server over shell \`gh\` for issues and pull requests. Find tools
+Use a connected GitHub MCP server for issues and pull requests. Find tools
 with \`search_mcp_tools\` ("create issue", "create pull request", "update issue") and load them
 with \`load_mcp_tools\` before calling.
 

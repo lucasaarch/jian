@@ -29,7 +29,8 @@ exists with \`command -v <tool>\`, and install nothing there unless the owner as
 
 - Runtimes: Node 24 with npm, pnpm and yarn (through corepack); Python 3 with pip, venv and
   \`uv\`/\`uvx\`; Go.
-- Git and the network: \`git\`, \`gh\`, \`ssh\`, \`scp\`, \`curl\`, \`wget\`, \`rsync\`.
+- Git and the network: \`git\`, \`ssh\`, \`scp\`, \`curl\`, \`wget\`, \`rsync\`. GitHub's
+  API is reached through its MCP server (\`github\` skill), not a CLI.
 - Text: \`rg\` (ripgrep), \`fd\`, \`jq\`, \`sed\`, \`awk\`, \`grep\`, \`diff\`, \`patch\`, \`tree\`,
   \`file\`, \`less\`, \`nano\`, \`vi\`.
 - Archives: \`tar\`, \`zip\`/\`unzip\`, \`xz\`, \`bzip2\`, \`zstd\`.
@@ -81,9 +82,8 @@ the image. Install what the task needs, not what might be handy, and say what yo
 
 ## Logins and keys
 
-- \`gh\` needs a token: \`gh auth login --with-token\` with one the owner gives you, or
-  \`GH_TOKEN\` in the command's environment. Prefer the profile’s SSH key for \`git push\`
-  when \`gh\` is not logged in.
+- \`git push\` to a private repository uses the profile's SSH key; there is no other GitHub
+  login in the workspace.
 - SSH keys: create them with the SSH key tools (\`ssh-keys\` skill), not \`ssh-keygen\`. The
   gateway points \`git\` at those identities and seeds GitHub’s host keys in
   \`~/.ssh/known_hosts\`.

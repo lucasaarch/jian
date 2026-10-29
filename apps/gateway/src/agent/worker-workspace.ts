@@ -17,7 +17,6 @@ export type WorkerGitAccess = {
   readOnly: string[];
   writable: string[];
   sshCommand?: string;
-  ghConfigDir?: string;
 };
 
 /** Seed known_hosts and wire GIT_SSH_COMMAND for the profile's own shell. */
@@ -31,7 +30,6 @@ export async function prepareProfileGitAccess(profileId: string): Promise<Worker
   };
   const config = join(home, '.config');
   await directory(config);
-  access.ghConfigDir = join(config, 'gh');
   access.writable.push(config);
   return access;
 }

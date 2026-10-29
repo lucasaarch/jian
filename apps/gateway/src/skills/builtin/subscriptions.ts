@@ -44,8 +44,9 @@ unless they want that setup.
 
 ## Private repositories
 
-Polling uses the profile's \`gh\` login when present (\`gh auth login\` in the workspace).
-Public repositories work without it.
+Polling a private repository uses the GitHub account the owner connected under Integrations
+for the repository's owner. Public repositories work without one; a private repository of an
+account that is not connected cannot be polled.
 
 ## When a wake arrives
 

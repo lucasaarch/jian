@@ -4,8 +4,9 @@ import {
   type SubscriptionObservation,
 } from '@jian/contracts';
 
+/** A token for a repository's owner, when GitHub is connected for it; public repos need none. */
 export type GithubTokenSource = {
-  tokenFor(profileId: string): Promise<string | undefined>;
+  tokenFor(owner: string): Promise<string | undefined>;
 };
 
 type GithubEvent = Subscription['filter']['events'][number];
@@ -128,7 +129,7 @@ export async function observeGithub(
       observation: {},
       error:
         pull.status === 401 || pull.status === 403
-          ? 'GitHub refused the poll (sign in with gh in this profile’s workspace, or use a public repo).'
+          ? 'GitHub refused the poll: connect the account that owns this repository under Integrations, or use a public repo.'
           : (pull.error ?? 'Could not read the pull request'),
     };
   }

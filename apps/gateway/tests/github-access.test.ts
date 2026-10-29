@@ -159,3 +159,12 @@ it('reaches nothing until a GitHub App is registered', async () => {
   expect(await integrations.mcpAccess(profile.id)).toEqual([]);
   expect(minted).toEqual([]);
 });
+
+it('lends polling the token of the connected account that owns the repository', async () => {
+  const { integrations, minted } = await connected();
+
+  expect(await integrations.tokenFor('Octo-Example')).toBe('synthetic-token-1');
+  expect(minted).toEqual([{ installation: '101', body: '' }]);
+  // Nobody connected owns it: the poll goes out as a stranger, and a public repo still answers.
+  expect(await integrations.tokenFor('someone-else')).toBeUndefined();
+});
