@@ -27,7 +27,9 @@ export function policy(nonce: string, development = process.env.NODE_ENV === 'de
     "worker-src 'self'",
     "base-uri 'none'",
     "frame-ancestors 'none'",
-    "form-action 'self'",
+    // Registering the GitHub App posts its manifest to github.com, the one way GitHub accepts
+    // one. That is the only other place a form of this panel may be sent.
+    "form-action 'self' https://github.com",
   ].join('; ');
 }
 
