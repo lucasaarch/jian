@@ -376,6 +376,7 @@ export class GitHubIntegrations {
 
       const installation = await step('github', () => this.getInstallation(config, installationId));
       const account = githubIntegrationAccountSchema.parse({
+        installationId,
         accountId: installation.account.accountId,
         login: installation.account.login,
         type: installation.account.type,
