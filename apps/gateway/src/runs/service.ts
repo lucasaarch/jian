@@ -6,12 +6,16 @@ import {
   type Message,
   type ModelSelection,
   type Run,
+  type RunApproval,
   runAnswerSchema,
+  runApprovalInputSchema,
   type Session,
   submitSchema,
   TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
 import { resumePrompt } from '../agent/ask-user.js';
+import { approvalResumePrompt } from '../agent/guard.js';
+import { isChatChannel } from '../channels/kinds.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError, NoModelAvailable } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -48,8 +52,10 @@ import {
   insertRun,
   listActiveRuns,
   listRecentRuns,
+  readRunAction,
   setRelayTo,
   updateRun,
+  writeRunAction,
 } from './repository.js';
 
 /** The cap on what one profile may have waiting or in flight at once. */
@@ -211,12 +217,35 @@ export class Runs {
           profileId,
           session,
           waiting,
-          data.text,
+          options.answer ?? data.text,
           resumeKey,
           data.mediaIds,
           author,
           activity,
+          data.text,
         );
+      }
+
+      // A pending approval is decided by a message only from someone who may decide it: the
+      // chat's approver, through the channel, or the owner writing in the panel, which is a no
+      // carrying what they wrote. Anyone else's message is ordinary and leaves it pending.
+      if (waiting?.approval && !waiting.approval.decision) {
+        const resumeKey = `approval:${waiting.id}`;
+        const decided = await findRunByRequestKey(tx, profileId, sessionId, resumeKey);
+        if (decided) return decided;
+
+        const chat = options.approval?.id === waiting.approval.id ? options.approval : undefined;
+
+        if (chat || options.ownerMessage) {
+          return this.resumeApproval(tx, profileId, session, waiting, {
+            decision: chat?.decision ?? 'reject',
+            decidedBy: chat ? 'contact' : 'owner',
+            note: chat ? chat.note : data.text,
+            requestKey: resumeKey,
+            reply: { text: data.text, ...(author ? { author } : {}) },
+            activity,
+          });
+        }
       }
 
       const inFlight = await findActiveSessionRun(tx, profileId, sessionId);
@@ -258,7 +287,7 @@ export class Runs {
         ? [data.model]
         : [session.model, defaults[activity] ?? defaults.conversation, automatic];
       let selection: ModelSelection | null = null;
-      let chosen: Awaited<ReturnType<typeof this.providers.selectedModel>> | null = null;
+      let chosen: Awaited<ReturnType<ProviderSelection['selectedModel']>> | null = null;
 
       for (const candidate of candidates) {
         if (!candidate) continue;
@@ -469,6 +498,53 @@ export class Runs {
     return resume;
   }
 
+  /**
+   * The panel's decision on a waiting action. A chat channel's conversation is decided in its
+   * chat, by a contact the owner allowed to approve, so this route refuses it: an owner who
+   * wants to approve from here gives the conversation full access instead.
+   */
+  async decideApproval(profileId: string, runId: string, input: unknown) {
+    const data = runApprovalInputSchema.parse(input);
+    const waiting = await this.run(profileId, runId);
+    if (waiting.subagent) throw new GatewayError(403, 'Subagents are managed by the agent');
+
+    const session = await this.sessions.session(profileId, waiting.sessionId);
+    if (isChatChannel(session.channel)) {
+      throw new GatewayError(403, 'This conversation is approved in its own chat');
+    }
+
+    const resume = await this.store.transaction(profileId, async (tx) => {
+      const requestKey = data.requestKey ?? `approval:${waiting.id}`;
+      const duplicate = await findRunByRequestKey(tx, profileId, waiting.sessionId, requestKey);
+      if (duplicate) {
+        // The same key again is the same decision; a different one under it is a mistake.
+        const approval = (await findRun(tx, profileId, runId))?.approval;
+        if (approval?.decision !== (data.decision === 'approve' ? 'approved' : 'rejected')) {
+          throw new GatewayError(409, 'Request key was already used for a different decision');
+        }
+        return duplicate;
+      }
+
+      const fresh = await findRun(tx, profileId, runId);
+      if (fresh?.status !== 'waiting' || !fresh.approval || fresh.approval.decision) {
+        throw new GatewayError(409, 'That run is not waiting for approval');
+      }
+
+      return this.resumeApproval(tx, profileId, session, fresh, {
+        decision: data.decision,
+        decidedBy: 'owner',
+        requestKey,
+        activity: session.channel === GATEWAY_SESSION_CHANNEL ? 'conversation' : 'channel',
+      });
+    });
+
+    if (session.channel !== GATEWAY_SESSION_CHANNEL && session.channel !== 'learning') {
+      await this.deliveries?.deliverRun(profileId, resume.sessionId, resume.id);
+    }
+
+    return resume;
+  }
+
   async cancel(profileId: string, runId: string, transaction?: Queryable) {
     const write = async (tx: Queryable) => {
       const run = await this.run(profileId, runId, tx);
@@ -488,6 +564,8 @@ export class Runs {
       };
 
       await updateRun(tx, final);
+      // A cancelled run takes its pending action with it: nothing can approve it any more.
+      await writeRunAction(tx, runId, null);
       await recordEvent(tx, this.clock, profileId, 'run.cancelled', {}, runId);
 
       return final;
@@ -509,6 +587,8 @@ export class Runs {
     mediaIds: string[] | undefined,
     author: Message['author'] | undefined,
     activity: 'conversation' | 'channel',
+    // What the person wrote, when the answer it stands for differs: "2" for the second choice.
+    said: string = answer,
   ): Promise<Run> {
     const question = waiting.question;
     if (!question) throw new GatewayError(409, 'That run is not waiting for an answer');
@@ -530,14 +610,128 @@ export class Runs {
       sessionId: waiting.sessionId,
       runId: waiting.id,
       role: 'user',
-      content: answer,
+      content: said,
       ...(author ? { author } : {}),
       createdAt: nowIso(this.clock),
     });
 
-    // Nested submit would open another transaction; build the resume run here instead.
-    // Model fallback was resolved before the outer transaction when possible; here reuse the
-    // waiting run's frozen model so the resume stays on the same choice.
+    const { chosen, selection } = await this.continuationModel(tx, session, waiting, activity);
+
+    if ((await countActiveRuns(tx, profileId)) >= ACTIVE_RUN_LIMIT) {
+      throw new GatewayError(429, 'Profile run limit reached');
+    }
+
+    const text = resumePrompt(question, answer);
+    const run = this.continuation(waiting, requestKey, text, chosen, selection);
+
+    const collided = await insertRun(tx, run);
+    if (collided) return this.sameRequest(collided, text);
+
+    await bindMedia(tx, profileId, waiting.sessionId, mediaIds ?? [], run.id);
+    await this.queueContinuation(tx, profileId, waiting, run);
+
+    return run;
+  }
+
+  /**
+   * Decides a waiting action and queues the turn that carries on. The decision is kept on the
+   * parked run; on a yes, the stored call moves onto the continuation, which runs it once before
+   * its model is called, and on a no it is dropped, so a rejected action has nothing left to run.
+   */
+  private async resumeApproval(
+    tx: Queryable,
+    profileId: string,
+    session: Session,
+    waiting: Run,
+    decision: {
+      decision: 'approve' | 'reject';
+      decidedBy: 'owner' | 'contact';
+      note?: string;
+      requestKey: string;
+      /** The message that decided it, when one did. */
+      reply?: { text: string; author?: Message['author'] };
+      activity: 'conversation' | 'channel';
+    },
+  ): Promise<Run> {
+    if (!waiting.approval || waiting.approval.decision) {
+      throw new GatewayError(409, 'That run is not waiting for approval');
+    }
+
+    const action = await readRunAction(tx, waiting.id);
+    const approve = decision.decision === 'approve';
+    if (approve && action?.state !== 'pending') {
+      throw new GatewayError(409, 'The action to approve is no longer available');
+    }
+
+    const note = decision.note?.trim().slice(0, 500);
+    const approval: RunApproval = {
+      ...waiting.approval,
+      decision: approve ? 'approved' : 'rejected',
+      decidedAt: nowIso(this.clock),
+      decidedBy: decision.decidedBy,
+      ...(note ? { note } : {}),
+    };
+
+    await updateRun(tx, {
+      ...waiting,
+      status: 'completed',
+      approval,
+      updatedAt: nowIso(this.clock),
+    });
+    await writeRunAction(tx, waiting.id, null);
+    await recordEvent(
+      tx,
+      this.clock,
+      profileId,
+      approve ? 'run.approved' : 'run.rejected',
+      { approval },
+      waiting.id,
+    );
+
+    if (decision.reply) {
+      await insertMessage(tx, {
+        id: randomUUID(),
+        profileId,
+        sessionId: waiting.sessionId,
+        runId: waiting.id,
+        role: 'user',
+        content: decision.reply.text,
+        ...(decision.reply.author ? { author: decision.reply.author } : {}),
+        createdAt: nowIso(this.clock),
+      });
+    }
+
+    const { chosen, selection } = await this.continuationModel(
+      tx,
+      session,
+      waiting,
+      decision.activity,
+    );
+
+    if ((await countActiveRuns(tx, profileId)) >= ACTIVE_RUN_LIMIT) {
+      throw new GatewayError(429, 'Profile run limit reached');
+    }
+
+    const text = approvalResumePrompt(approval);
+    const run = this.continuation(waiting, decision.requestKey, text, chosen, selection);
+    const collided = await insertRun(tx, run);
+    if (collided) return collided;
+
+    if (approve && action) {
+      await writeRunAction(tx, run.id, { ...action, state: 'approved' });
+    }
+    await this.queueContinuation(tx, profileId, waiting, run);
+
+    return run;
+  }
+
+  /** The model a parked run carries on with: its own choice first, so a resume never switches. */
+  private async continuationModel(
+    tx: Queryable,
+    session: Session,
+    waiting: Run,
+    activity: 'conversation' | 'channel',
+  ) {
     const profile = waiting.profile;
     const defaults = await readModelDefaults(tx, nowIso(this.clock));
     const candidates = [
@@ -546,7 +740,7 @@ export class Runs {
       defaults[activity] ?? defaults.conversation,
     ];
     let selection: ModelSelection | null = null;
-    let chosen: Awaited<ReturnType<typeof this.providers.selectedModel>> | null = null;
+    let chosen: Awaited<ReturnType<ProviderSelection['selectedModel']>> | null = null;
 
     for (const candidate of candidates) {
       if (!candidate) continue;
@@ -566,18 +760,24 @@ export class Runs {
       throw new NoModelAvailable();
     }
 
-    if ((await countActiveRuns(tx, profileId)) >= ACTIVE_RUN_LIMIT) {
-      throw new GatewayError(429, 'Profile run limit reached');
-    }
+    return { chosen, selection };
+  }
 
-    const text = resumePrompt(question, answer);
-    const run: Run = {
+  /** The turn that carries a parked run on, on its model, in its chain and its room. */
+  private continuation(
+    waiting: Run,
+    requestKey: string,
+    text: string,
+    chosen: Awaited<ReturnType<ProviderSelection['selectedModel']>> | null,
+    selection: ModelSelection | null,
+  ): Run {
+    return {
       id: randomUUID(),
-      profileId,
+      profileId: waiting.profileId,
       sessionId: waiting.sessionId,
       requestKey,
       input: text,
-      profile,
+      profile: waiting.profile,
       ...(chosen ? { model: chosen.config, contextPolicy: chosen.policy } : {}),
       ...(selection ? { modelSelection: selection } : {}),
       ...(waiting.call ? { call: waiting.call } : {}),
@@ -587,19 +787,16 @@ export class Runs {
       createdAt: nowIso(this.clock),
       updatedAt: nowIso(this.clock),
     };
+  }
 
-    const collided = await insertRun(tx, run);
-    if (collided) return this.sameRequest(collided, text);
-
-    await bindMedia(tx, profileId, waiting.sessionId, mediaIds ?? [], run.id);
-
+  private async queueContinuation(tx: Queryable, profileId: string, waiting: Run, run: Run) {
     await insertMessage(tx, {
       id: randomUUID(),
       profileId,
       sessionId: waiting.sessionId,
       runId: run.id,
       role: 'user',
-      content: text,
+      content: run.input,
       createdAt: nowIso(this.clock),
     });
 
@@ -608,11 +805,9 @@ export class Runs {
       this.clock,
       profileId,
       'run.queued',
-      { sessionId: waiting.sessionId, input: text, resumedFrom: waiting.id },
+      { sessionId: waiting.sessionId, input: run.input, resumedFrom: waiting.id },
       run.id,
     );
-
-    return run;
   }
 
   /**

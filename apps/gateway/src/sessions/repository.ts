@@ -3,6 +3,7 @@ import {
   GATEWAY_SESSION_CHANNEL,
   type Message,
   type ModelSelection,
+  type ProtectionMode,
   type Session,
   type SessionObjective,
   TASK_SESSION_CHANNEL,
@@ -38,6 +39,7 @@ export function toSession(row: SessionRow): Session {
     ...(row.summarizedThroughId ? { summarizedThroughId: row.summarizedThroughId } : {}),
     ...(row.model ? { model: row.model } : {}),
     ...(row.objective ? { objective: readObjective(row.objective) } : {}),
+    protection: row.protection,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -416,6 +418,21 @@ export async function setSessionModel(
   const [row] = await db
     .update(sessions)
     .set({ model })
+    .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)))
+    .returning();
+
+  return row ? toSession(row) : null;
+}
+
+export async function setSessionProtection(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  protection: ProtectionMode,
+): Promise<Session | null> {
+  const [row] = await db
+    .update(sessions)
+    .set({ protection })
     .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)))
     .returning();
 

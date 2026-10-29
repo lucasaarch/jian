@@ -10,6 +10,7 @@ import {
   type SessionObjective,
   sessionModelSchema,
   sessionObjectiveInputSchema,
+  sessionProtectionSchema,
   sessionRenameSchema,
   sessionSchema,
   TASK_SESSION_CHANNEL,
@@ -37,6 +38,7 @@ import {
   setGatewaySessionTarget,
   setSessionModel,
   setSessionObjective,
+  setSessionProtection,
   writeSessionSummary,
 } from './repository.js';
 
@@ -75,6 +77,7 @@ export class Sessions {
         channel: GATEWAY_SESSION_CHANNEL,
         ...(data.projectId ? { projectId: data.projectId } : {}),
         ...(data.remoteMachineId ? { remoteMachineId: data.remoteMachineId } : {}),
+        protection: 'ask',
         createdAt: nowIso(this.clock),
       };
       await insertSession(tx, session);
@@ -158,6 +161,7 @@ export class Sessions {
         id: randomUUID(),
         profileId,
         ...(scope ? { scope } : {}),
+        protection: 'ask',
         createdAt: nowIso(this.clock),
       };
 
@@ -178,6 +182,8 @@ export class Sessions {
       profileId,
       title: title.slice(0, 160),
       channel: TASK_SESSION_CHANNEL,
+      // Never read: a subagent acts under the protection of the conversation that sent it.
+      protection: 'ask',
       createdAt: nowIso(this.clock),
     };
     await insertSession(tx, session);
@@ -254,6 +260,29 @@ export class Sessions {
         sessionId,
         model: model ? { providerId: model.providerId, modelId: model.modelId } : null,
       });
+
+      return session;
+    });
+  }
+
+  /**
+   * Whether the agent asks before it acts in this conversation, from its next tool call. An
+   * action already parked on an approval stays parked: switching to full access approves
+   * nothing by itself.
+   */
+  async setProtection(profileId: string, sessionId: string, input: unknown) {
+    const { protection } = sessionProtectionSchema.parse(input);
+
+    return this.store.transaction(profileId, async (tx) => {
+      if ((await this.session(profileId, sessionId, tx)).channel === TASK_SESSION_CHANNEL) {
+        throw new GatewayError(403, 'Subagent sessions are read-only');
+      }
+      const session = assertFound(
+        await setSessionProtection(tx, profileId, sessionId, protection),
+        'Session',
+      );
+
+      await recordEvent(tx, this.clock, profileId, 'session.protection', { sessionId, protection });
 
       return session;
     });
@@ -369,6 +398,7 @@ export class Sessions {
         id: randomUUID(),
         profileId,
         peerProfileId,
+        protection: 'ask',
         createdAt: nowIso(this.clock),
       };
 
@@ -404,6 +434,7 @@ export class Sessions {
         channel,
         id: randomUUID(),
         profileId,
+        protection: 'ask',
         createdAt: nowIso(this.clock),
       };
 

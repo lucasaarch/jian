@@ -503,6 +503,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/profiles/{profileId}/runs/{runId}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["decideApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/runs/{runId}/answer": {
         parameters: {
             query?: never;
@@ -1221,6 +1238,23 @@ export interface paths {
         get?: never;
         /** @description Required permission: admin. */
         put: operations["setSessionModel"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/profiles/{profileId}/sessions/{sessionId}/protection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Required permission: admin. */
+        put: operations["setSessionProtection"];
         post?: never;
         delete?: never;
         options?: never;
@@ -4469,19 +4503,19 @@ export interface operations {
                         /** Format: date-time */
                         updatedAt?: string;
                         uses: {
-                            actions: boolean;
                             outside: boolean;
                             turn: boolean;
                             memories: boolean;
                             learning: boolean;
                             groups: boolean;
                             delegation: boolean;
+                            replies: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups" | "delegation";
+                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -4603,19 +4637,19 @@ export interface operations {
                         /** Format: date-time */
                         updatedAt?: string;
                         uses: {
-                            actions: boolean;
                             outside: boolean;
                             turn: boolean;
                             memories: boolean;
                             learning: boolean;
                             groups: boolean;
                             delegation: boolean;
+                            replies: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups" | "delegation";
+                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -4729,19 +4763,19 @@ export interface operations {
                         /** Format: date-time */
                         updatedAt?: string;
                         uses: {
-                            actions: boolean;
                             outside: boolean;
                             turn: boolean;
                             memories: boolean;
                             learning: boolean;
                             groups: boolean;
                             delegation: boolean;
+                            replies: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups" | "delegation";
+                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -4844,13 +4878,13 @@ export interface operations {
             content: {
                 "application/json": {
                     uses?: {
-                        actions?: boolean;
                         outside?: boolean;
                         turn?: boolean;
                         memories?: boolean;
                         learning?: boolean;
                         groups?: boolean;
                         delegation?: boolean;
+                        replies?: boolean;
                     };
                 };
             };
@@ -4869,19 +4903,19 @@ export interface operations {
                         /** Format: date-time */
                         updatedAt?: string;
                         uses: {
-                            actions: boolean;
                             outside: boolean;
                             turn: boolean;
                             memories: boolean;
                             learning: boolean;
                             groups: boolean;
                             delegation: boolean;
+                            replies: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups" | "delegation";
+                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -6509,6 +6543,284 @@ export interface operations {
                             /** Format: date-time */
                             askedAt: string;
                         };
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    decideApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    decision: "approve" | "reject";
+                    requestKey?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        /** Format: uuid */
+                        sessionId: string;
+                        subagent?: {
+                            /** @enum {string} */
+                            role: "execute" | "review";
+                            name: string;
+                            identity: string;
+                            /** Format: uuid */
+                            parentRunId: string;
+                            spawnKey: string;
+                            inputHash: string;
+                            repositories?: string[];
+                            /** @enum {string} */
+                            tier?: "light" | "standard" | "deep";
+                            /** @enum {string} */
+                            tierBy?: "agent" | "jev" | "default";
+                        };
+                        requestKey: string;
+                        input: string;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "waiting" | "completed" | "failed" | "interrupted" | "cancelled";
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        error?: string;
+                        output?: string;
+                        usage?: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            /** @default 0 */
+                            cachedInputTokens: number;
+                            /** @default false */
+                            estimated: boolean;
+                            steps: number;
+                        };
+                        /** Format: uuid */
+                        continuationOf?: string;
+                        model?: {
+                            /** @enum {string} */
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            modelId: string;
+                            apiKeyEnv?: string;
+                            /** Format: uuid */
+                            providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
+                            /** Format: uri */
+                            baseURL?: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                        };
+                        modelSelection?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                            voiceName?: string;
+                        };
+                        contextPolicy?: {
+                            /** @default 32000 */
+                            inputTokens: number;
+                            /** @default 4096 */
+                            outputTokens: number;
+                            /** @default 1500 */
+                            memoryTokens: number;
+                            /** @default 6000 */
+                            historyTokens: number;
+                            /** @default 1500 */
+                            toolResultTokens: number;
+                            /** @default 500 */
+                            maxSteps: number;
+                            maxRunTokens?: number;
+                        };
+                        call?: {
+                            /** Format: uuid */
+                            fromProfileId: string;
+                            fromName: string;
+                            /** Format: uuid */
+                            fromRunId: string;
+                            /** Format: uuid */
+                            fromSessionId?: string;
+                            depth: number;
+                            chain: string[];
+                        };
+                        group?: {
+                            chatId: string;
+                            name?: string;
+                            fromName: string;
+                            fromAgent: boolean;
+                            turns: number;
+                            /** @default [] */
+                            agents: string[];
+                        };
+                        progress?: {
+                            /** @enum {string} */
+                            phase: "thinking" | "tool" | "writing";
+                            tool?: string;
+                            /** @default  */
+                            text: string;
+                            /** @default 0 */
+                            steps: number;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        };
+                        commentary?: string[];
+                        /** Format: uuid */
+                        relayTo?: string;
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            /** Format: date-time */
+                            askedAt: string;
+                        };
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
+                        };
                     };
                 };
             };
@@ -6744,6 +7056,27 @@ export interface operations {
                             /** Format: date-time */
                             askedAt: string;
                         };
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
+                        };
                     };
                 };
             };
@@ -6860,6 +7193,12 @@ export interface operations {
                         allowAllContacts: boolean;
                         /** @enum {string} */
                         whatsappBusinessStatus?: "pending" | "configured";
+                        messages?: {
+                            approval: string;
+                            question: string;
+                            approveWords: string[];
+                            rejectWords: string[];
+                        };
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -6997,6 +7336,12 @@ export interface operations {
                         allowAllContacts: boolean;
                         /** @enum {string} */
                         whatsappBusinessStatus?: "pending" | "configured";
+                        messages?: {
+                            approval: string;
+                            question: string;
+                            approveWords: string[];
+                            rejectWords: string[];
+                        };
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -7121,6 +7466,12 @@ export interface operations {
                         allowAllContacts: boolean;
                         /** @enum {string} */
                         whatsappBusinessStatus?: "pending" | "configured";
+                        messages?: {
+                            approval: string;
+                            question: string;
+                            approveWords: string[];
+                            rejectWords: string[];
+                        };
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -7234,6 +7585,13 @@ export interface operations {
                         phoneNumberId: string;
                         businessAccountId: string;
                     };
+                } | {
+                    messages: {
+                        approval?: string;
+                        question?: string;
+                        approveWords?: string[];
+                        rejectWords?: string[];
+                    };
                 };
             };
         };
@@ -7257,6 +7615,12 @@ export interface operations {
                         allowAllContacts: boolean;
                         /** @enum {string} */
                         whatsappBusinessStatus?: "pending" | "configured";
+                        messages?: {
+                            approval: string;
+                            question: string;
+                            approveWords: string[];
+                            rejectWords: string[];
+                        };
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -7385,6 +7749,8 @@ export interface operations {
                         status: "pending" | "approved" | "blocked";
                         /** @default true */
                         aiEnabled: boolean;
+                        /** @default false */
+                        canApprove: boolean;
                         /** Format: uuid */
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
@@ -7494,7 +7860,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    aiEnabled: boolean;
+                    aiEnabled?: boolean;
+                    canApprove?: boolean;
                 };
             };
         };
@@ -7526,6 +7893,8 @@ export interface operations {
                         status: "pending" | "approved" | "blocked";
                         /** @default true */
                         aiEnabled: boolean;
+                        /** @default false */
+                        canApprove: boolean;
                         /** Format: uuid */
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
@@ -7661,6 +8030,8 @@ export interface operations {
                         status: "pending" | "approved" | "blocked";
                         /** @default true */
                         aiEnabled: boolean;
+                        /** @default false */
+                        canApprove: boolean;
                         /** Format: uuid */
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
@@ -7796,6 +8167,8 @@ export interface operations {
                         status: "pending" | "approved" | "blocked";
                         /** @default true */
                         aiEnabled: boolean;
+                        /** @default false */
+                        canApprove: boolean;
                         /** Format: uuid */
                         sessionId?: string;
                         /** @description The message held until the owner decides. */
@@ -12984,6 +13357,11 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         };
+                        /**
+                         * @default ask
+                         * @enum {string}
+                         */
+                        protection: "ask" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -13144,6 +13522,11 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         };
+                        /**
+                         * @default ask
+                         * @enum {string}
+                         */
+                        protection: "ask" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -13536,6 +13919,11 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         };
+                        /**
+                         * @default ask
+                         * @enum {string}
+                         */
+                        protection: "ask" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -13691,6 +14079,11 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         };
+                        /**
+                         * @default ask
+                         * @enum {string}
+                         */
+                        protection: "ask" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -13837,6 +14230,11 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         };
+                        /**
+                         * @default ask
+                         * @enum {string}
+                         */
+                        protection: "ask" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -13989,6 +14387,11 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         };
+                        /**
+                         * @default ask
+                         * @enum {string}
+                         */
+                        protection: "ask" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -14149,6 +14552,169 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         };
+                        /**
+                         * @default ask
+                         * @enum {string}
+                         */
+                        protection: "ask" | "full";
+                        objective?: {
+                            text: string;
+                            /** @enum {string} */
+                            status: "open" | "blocked" | "done" | "cancelled";
+                            /** Format: date-time */
+                            updatedAt: string;
+                            /** @default 0 */
+                            continuations: number;
+                            note?: string;
+                        };
+                        /** Format: date-time */
+                        createdAt: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setSessionProtection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    protection: "ask" | "full";
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        title: string | null;
+                        /** @default api */
+                        channel: string;
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        /** Format: uuid */
+                        projectId?: string;
+                        /** Format: uuid */
+                        remoteMachineId?: string;
+                        /** Format: uuid */
+                        peerProfileId?: string;
+                        /** @enum {string} */
+                        scope?: "direct" | "group";
+                        summary?: string;
+                        /** Format: date-time */
+                        summarizedUpTo?: string;
+                        /** Format: uuid */
+                        summarizedThroughId?: string;
+                        model?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                            voiceName?: string;
+                        };
+                        /**
+                         * @default ask
+                         * @enum {string}
+                         */
+                        protection: "ask" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -14304,6 +14870,11 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         };
+                        /**
+                         * @default ask
+                         * @enum {string}
+                         */
+                        protection: "ask" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -14807,6 +15378,27 @@ export interface operations {
                             /** Format: date-time */
                             askedAt: string;
                         };
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
+                        };
                     };
                 };
             };
@@ -15050,6 +15642,35 @@ export interface operations {
                             finishedAt?: string;
                             error?: string;
                         }[];
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
+                        };
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            /** Format: date-time */
+                            askedAt: string;
+                        };
                     }[];
                 };
             };
@@ -17115,6 +17736,27 @@ export interface operations {
                             /** Format: date-time */
                             askedAt: string;
                         };
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
+                        };
                     };
                 };
             };
@@ -18103,6 +18745,27 @@ export interface operations {
                             /** Format: date-time */
                             askedAt: string;
                         };
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
+                        };
                     }[];
                 };
             };
@@ -18331,6 +18994,27 @@ export interface operations {
                             /** Format: date-time */
                             askedAt: string;
                         };
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
+                        };
                     };
                 };
             };
@@ -18558,6 +19242,27 @@ export interface operations {
                             choices?: string[];
                             /** Format: date-time */
                             askedAt: string;
+                        };
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
                         };
                     };
                 };

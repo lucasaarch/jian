@@ -151,10 +151,10 @@ describe('spending on Jev', () => {
     });
 
     expect(patched.statusCode).toBe(200);
-    expect(patched.json().uses).toMatchObject({ groups: false, actions: true, turn: true });
+    expect(patched.json().uses).toMatchObject({ groups: false, replies: true, turn: true });
     expect(await decisions.ask(question, { use: 'groups' })).toBeUndefined();
     expect(requests).toEqual([]);
-    expect(await decisions.ask(question, { use: 'actions' })).toBe(0.7);
+    expect(await decisions.ask(question, { use: 'replies' })).toBe(0.7);
     expect(requests).toHaveLength(1);
   });
 

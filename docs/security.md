@@ -96,6 +96,22 @@ A profile can also be given the machine: reading files, writing files and runnin
 
 A profile can be allowed to search the web. Searches go to the installation's Tavily key, set once under **Providers** and stored in the gateway vault like any other credential; reading a page goes through the same outbound guard as every other call, one redirect at a time, so a public page cannot send the gateway to an address inside its network. Off by default. Everything a search or a page returns was written by strangers and can try to steer the agent: it arrives as data, and a profile that can also run commands should be the one whose output you watch.
 
+## Actions and approval
+
+An action is a tool call that reaches past the conversation: a command, a file written or edited, a file moved to or from a remote machine, a message or file sent to someone else, a question to another agent, and any MCP tool its server does not declare read-only. Reading, searching, remembering and answering are not actions and never ask.
+
+Each conversation has a protection mode, **Ask first** or **Full access**, set beside its model (`PUT /v1/profiles/{profileId}/sessions/{sessionId}/protection`). Every conversation starts in Ask first, the ones that existed before the mode did included. In Full access actions run with no check: give it only to a conversation whose every participant you would hand the machine.
+
+In Ask first an action does not run. The run stops, waiting, with an approval: a title, a short detail and the label of the button that runs it, written by the run's own model in a few seconds or, failing that, built from the call itself. The exact call is kept beside the run and never served. Approving runs that call — once, exactly as the agent made it, before the model is asked anything — and the next turn starts from its result. Rejecting runs nothing, and the agent is told. A decision is taken once: deciding again returns the same continuation, and a different decision on a decided approval is refused with `409`.
+
+Who decides depends on where the conversation is:
+
+- In the panel and on the API server, the owner decides, with `POST /v1/profiles/{profileId}/runs/{runId}/approval`. Writing in the panel's conversation instead of deciding is a no, with what was written passed to the agent; another message on the API server leaves the approval pending.
+- On WhatsApp and Telegram only a contact the owner marked **Can approve** decides, by replying in the chat. A message from anyone else is an ordinary message and the approval stays pending. With nobody allowed to approve, the action is declined at once and the agent says what it would have done. The panel shows these approvals and does not decide them: the route answers `403`.
+- A subagent acts under the conversation that sent it. When that conversation asks first, the subagent's actions are declined, and it reports what it would do so its parent can ask.
+
+Jev no longer decides whether an action runs. A reply in a chat is read by its words first and by Jev only when the words do not decide it, and a reply that still decides nothing is a no: an unclear answer never approves.
+
 ## Failures and outside effects
 
 An expired lease interrupts a run; it does not restart tools on its own. Continuing needs explicit reconciliation, creates another run and preserves the earlier checkpoints. It does not offer exactly-once execution of outside effects.

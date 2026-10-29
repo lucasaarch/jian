@@ -7,11 +7,6 @@ type Use = keyof DecisionsStatus['uses'];
 
 const USES: Array<{ use: Use; title: string; what: string }> = [
   {
-    use: 'actions',
-    title: 'Actions',
-    what: 'Commands, file changes, changes in connected services and messages sent to others.',
-  },
-  {
     use: 'outside',
     title: 'Outside content',
     what: 'Pages, searches and service results that try to give the agent orders.',
@@ -36,6 +31,11 @@ const USES: Array<{ use: Use; title: string; what: string }> = [
     use: 'delegation',
     title: 'Subagent models',
     what: 'How much model a subagent needs, when the agent leaves it open.',
+  },
+  {
+    use: 'replies',
+    title: 'Chat replies',
+    what: 'What a reply in WhatsApp or Telegram means for an approval or a question.',
   },
 ];
 

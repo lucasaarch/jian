@@ -5,6 +5,7 @@ import {
   contextPolicySchema,
   modelSchema,
   profileSchema,
+  protectionModeSchema,
   sessionObjectiveSchema,
   sessionSchema,
 } from './profile.js';
@@ -45,6 +46,8 @@ export const sessionRecordSchema = sessionSchema.extend({
   summarizedThroughId: uuid.optional(),
   /** Chosen for this conversation alone; absent, it runs on the profile's model defaults. */
   model: modelSelectionSchema.optional(),
+  /** Whether the agent asks before it acts here. Every conversation starts asking. */
+  protection: protectionModeSchema.default('ask'),
   /**
    * Durable work the agent should finish across turns. Absent when nothing is in progress.
    * While `open`, the gateway queues follow-up runs after a completed slice.
@@ -132,6 +135,36 @@ export const runQuestionSchema = z.strictObject({
   askedAt: timestamp,
 });
 
+/**
+ * An action the agent wants to take, parked until a person who may approve it decides. The
+ * call is kept exactly as the agent asked for it, apart from this record, and an approval runs
+ * that call and no other; `request` is only how it reads, bounded and with secrets masked.
+ */
+export const runApprovalSchema = z.strictObject({
+  id: uuid,
+  toolCallId: z.string().min(1).max(200),
+  toolName: z.string().min(1).max(200),
+  kind: z.enum(['machine', 'service', 'message']),
+  title: z.string().trim().min(1).max(140),
+  detail: z.string().max(600),
+  /** The yes button, in the action's own words: "Delete 12 projects" rather than "Approve". */
+  confirmLabel: z.string().trim().min(1).max(40),
+  /** The tool input as JSON text, cut to 4000 characters. */
+  request: z.string().max(4000),
+  askedAt: timestamp,
+  decision: z.enum(['approved', 'rejected']).optional(),
+  decidedAt: timestamp.optional(),
+  /** The owner from the panel, or a contact allowed to approve, from their chat. */
+  decidedBy: z.enum(['owner', 'contact']).optional(),
+  /** What the person said when their reply was neither a yes nor a no. */
+  note: z.string().max(500).optional(),
+});
+
+export const runApprovalInputSchema = z.strictObject({
+  decision: z.enum(['approve', 'reject']),
+  requestKey: z.string().min(1).max(120).optional(),
+});
+
 /** Owner answer to a waiting run's question. */
 export const runAnswerSchema = z.strictObject({
   text: z.string().trim().min(1).max(8_000),
@@ -178,6 +211,11 @@ export const runRecordSchema = z.strictObject({
   relayTo: uuid.optional(),
   /** Present while status is `waiting`: the owner question that parked this run. */
   question: runQuestionSchema.optional(),
+  /**
+   * The action that parked this run, pending while it waits and kept with its decision
+   * afterwards. A waiting run carries either this or a question, never both.
+   */
+  approval: runApprovalSchema.optional(),
 });
 
 /**
@@ -358,10 +396,15 @@ export const toolStepSchema = z.strictObject({
 export const runTimelineSchema = z.strictObject({
   runId: uuid,
   steps: z.array(toolStepSchema),
+  /** What the run asked to do and how it was decided, for a card in the conversation. */
+  approval: runApprovalSchema.optional(),
+  /** The question the run is waiting on, while it waits. */
+  question: runQuestionSchema.optional(),
 });
 
 export type ToolStep = z.infer<typeof toolStepSchema>;
 export type RunTimeline = z.infer<typeof runTimelineSchema>;
+export type RunApproval = z.infer<typeof runApprovalSchema>;
 
 export const continuationSchema = z.strictObject({
   text: z.string().trim().min(1).max(4000),

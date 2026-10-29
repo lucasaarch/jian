@@ -18,7 +18,12 @@ export async function sessionTimeline(
   sessionId: string,
 ): Promise<RunTimeline[]> {
   const recent = await db
-    .select({ id: runs.id, status: runs.status })
+    .select({
+      id: runs.id,
+      status: runs.status,
+      approval: runs.approval,
+      question: runs.question,
+    })
     .from(runs)
     .where(and(eq(runs.profileId, profileId), eq(runs.sessionId, sessionId)))
     .orderBy(desc(runs.createdAt))
@@ -101,8 +106,10 @@ export async function sessionTimeline(
     }
   }
 
+  // A turn that asked for approval or put a question belongs here even with no tool run: the
+  // panel places its card where the turn sits in the conversation.
   return recent
-    .filter((run) => timelines.get(run.id)?.size)
+    .filter((run) => timelines.get(run.id)?.size || run.approval || run.question)
     .reverse()
     .map((run) => ({
       runId: run.id,
@@ -110,5 +117,7 @@ export async function sessionTimeline(
         // A tool still "running" in a turn that ended never came back.
         step.status === 'running' && !active.has(run.id) ? { ...step, status: 'stopped' } : step,
       ),
+      ...(run.approval ? { approval: run.approval } : {}),
+      ...(run.question ? { question: run.question } : {}),
     }));
 }

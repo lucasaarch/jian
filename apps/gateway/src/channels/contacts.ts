@@ -130,6 +130,8 @@ export class Contacts {
         ...(name ? { displayName: name } : {}),
         status: allow ? 'approved' : 'pending',
         aiEnabled: true,
+        // Being let in to talk is not being let in to approve: that stays the owner's call.
+        canApprove: false,
         // Nothing is held for a room. Releasing it on approval would answer a message that
         // named nobody, which is exactly what a group with several agents must not do.
         ...(group || allow ? {} : { message: message.text, requestKey: message.requestKey }),
@@ -233,22 +235,28 @@ export class Contacts {
       );
   }
 
-  async setAiEnabled(
+  /**
+   * The owner's switches on one conversation: whether the agent answers it, and whether the
+   * people in it may approve the agent's actions. Only chat channels have either.
+   */
+  async setSettings(
     profileId: string,
     id: string,
-    aiEnabled: boolean,
+    patch: { aiEnabled?: boolean; canApprove?: boolean },
     tx: Queryable,
   ): Promise<ContactRecord> {
     const current = await this.read(profileId, id, tx);
     const channel = await findChannel(tx, current.channelId);
     if (!channel || channel.revokedAt)
       throw new GatewayError(409, 'The channel of this contact is disconnected');
-    if (channel.type !== 'whatsapp-business')
-      throw new GatewayError(400, 'Per-conversation AI controls require WhatsApp Business');
+    if (channel.type === 'api')
+      throw new GatewayError(400, 'Conversation controls are for WhatsApp and Telegram');
     const now = nowIso(this.clock);
+    const aiEnabled = patch.aiEnabled ?? current.aiEnabled;
     const contact: ContactRecord = {
       ...current,
       aiEnabled,
+      canApprove: patch.canApprove ?? current.canApprove,
       updatedAt: now,
       ...(current.aiEnabled !== aiEnabled ? { aiPausedAt: now } : {}),
       ...(!aiEnabled ? { message: undefined, requestKey: undefined } : {}),

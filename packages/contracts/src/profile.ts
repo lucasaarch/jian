@@ -343,6 +343,16 @@ export const sessionRenameSchema = z.strictObject({
   title: z.string().trim().min(1).max(160),
 });
 
+/**
+ * Whether the agent asks before it acts in this conversation. `ask` pauses every action — a
+ * command or file change on a machine, a change in a connected service, something sent to
+ * someone else — until a person who may approve says yes; `full` lets them run. Reading,
+ * searching and answering never ask.
+ */
+export const protectionModeSchema = z.enum(['ask', 'full']);
+
+export const sessionProtectionSchema = z.strictObject({ protection: protectionModeSchema });
+
 /** The model this conversation runs on, over the profile's defaults. Null goes back to them. */
 export const sessionModelSchema = z.strictObject({
   model: modelSelectionSchema.nullable(),
@@ -416,3 +426,5 @@ export type SessionObjective = z.infer<typeof sessionObjectiveSchema>;
 export type McpValue = z.infer<typeof mcpValueSchema>;
 export type Identity = z.infer<typeof identitySchema>;
 export type ContextPolicy = z.infer<typeof contextPolicySchema>;
+
+export type ProtectionMode = z.infer<typeof protectionModeSchema>;

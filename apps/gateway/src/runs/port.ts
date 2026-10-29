@@ -3,11 +3,13 @@ import type {
   Checkpoint,
   GroupTurn,
   Run,
+  RunApproval,
   RunProgress,
   RunQuestion,
   Subagent,
 } from '@jian/contracts';
 import type { Queryable } from '../storage/database.js';
+import type { RunAction } from './action.js';
 
 /** What decides a run beyond its text: where it continues from, who asked, what it may cost. */
 export type SubmitOptions = {
@@ -23,6 +25,13 @@ export type SubmitOptions = {
   transaction?: Queryable;
   /** Revalidate channel authority under the submission lock, after catalog/network work. */
   beforeSubmit?: (tx: Queryable) => Promise<void>;
+  /**
+   * The chat's decision on the approval this message answers, read by the channel from a
+   * contact allowed to approve. Applied only to that approval, and only while it is pending.
+   */
+  approval?: { id: string; decision: 'approve' | 'reject'; note?: string };
+  /** The answer a chat reply stands for, when it named a choice by number or in its own words. */
+  answer?: string;
 };
 
 export interface RunReader {
@@ -70,6 +79,13 @@ export interface RunExecution {
     content: string,
   ): Promise<Run>;
   wait(profileId: string, runId: string, owner: string, question: RunQuestion): Promise<Run>;
+  waitForApproval(
+    profileId: string,
+    runId: string,
+    owner: string,
+    approval: RunApproval,
+    action: RunAction,
+  ): Promise<Run>;
 }
 
 export interface RunRecovery {

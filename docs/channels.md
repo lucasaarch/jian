@@ -42,6 +42,25 @@ Rules the implementation guarantees:
 
 The automatic notice only exists on channels that can answer. The API server only receives: the HTTP response carries `contact: "pending"`, and it is up to the caller to tell their user.
 
+## Approvals and questions in a chat
+
+A conversation that asks before acting asks in the chat itself; see [Actions and approval](security.md#actions-and-approval) for what counts as an action. Only a contact the owner marked **Can approve** — `PATCH /v1/profiles/{profileId}/contacts/{id}` with `{ "canApprove": true }`, `false` by default — may answer. In a room the room's own contact carries the mark, so the owner trusts the room, not each participant. With nobody marked, an action is declined at once and the agent says so instead of waiting.
+
+What the chat reads is the channel's wording, changed with `PATCH /v1/profiles/{profileId}/channels/{channelId}` and `{ "messages": { … } }`; a field left out keeps its default.
+
+| Field | Default | Fills in |
+| --- | --- | --- |
+| `approval` | `I need your approval to continue.` then the title, the detail and `Reply {yes} to {confirm}, or {no} to stop.` | `{title}` `{detail}` `{confirm}` `{yes}` `{no}` |
+| `question` | `{prompt}` then `{options}` | `{prompt}`, and `{options}` as a numbered list |
+| `approveWords` | `yes`, `y`, `approve`, `ok`, `sim`, `s` | the first one is `{yes}` |
+| `rejectWords` | `no`, `n`, `reject`, `não`, `nao` | the first one is `{no}` |
+
+Telegram adds a one-time keyboard under the last bubble: the approval's own button label, which is read as a yes, and the first reject word. A question's keyboard holds its options.
+
+A reply from a marked contact is read in three steps. One of the words or the button's label decides it, case and accents aside. Otherwise the `replies` use of Jev reads it as approve, reject or neither, and only an answer it gives with at least 0.6 counts, within a second and a half. Anything else rejects, and the reply goes to the agent as what the person said. A reply to a question is a choice when it is the choice's number, the choice itself or what Jev maps it to; otherwise it is the answer as written.
+
+The panel shows these approvals and questions, and their outcome, without deciding or answering them.
+
 ## A session per conversation
 
 Each conversation is a session of the profile, created on approval and titled with the channel and the sender — `WhatsApp · 5511999999999@c.us`, `WhatsApp · Team room`. Nothing is configured for that. The sessions appear under **Sessions** in the panel, share the profile's identity, tools and memories, and keep their history apart. A room's session is separate from the private conversations of the same people.

@@ -1,11 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import type { Checkpoint, Message, Run, RunProgress, RunQuestion } from '@jian/contracts';
+import type {
+  Checkpoint,
+  Message,
+  Run,
+  RunApproval,
+  RunProgress,
+  RunQuestion,
+} from '@jian/contracts';
 import { formatQuestionText } from '../agent/ask-user.js';
+import { approvalText } from '../agent/guard.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { insertMessage } from '../sessions/repository.js';
 import type { Store } from '../storage/database.js';
+import type { RunAction } from './action.js';
 import type { RunReader } from './port.js';
 import {
   appendCommentary,
@@ -15,6 +24,7 @@ import {
   takeSteer,
   updateRun,
   writeProgress,
+  writeRunAction,
 } from './repository.js';
 
 /** The lease is the right to apply external effects, so a stale owner must never write. */
@@ -215,6 +225,54 @@ export class RunLifecycle {
       });
 
       await recordEvent(tx, this.clock, profileId, 'run.waiting', { question }, runId);
+
+      return waiting;
+    });
+  }
+
+  /**
+   * Parks the run on an action that needs approval. The call itself is kept apart from the
+   * record, complete, for the continuation an approval queues; the record carries only how it
+   * reads. As with a question, the lease is released and delivery sends it to the chat.
+   */
+  async waitForApproval(
+    profileId: string,
+    runId: string,
+    owner: string,
+    approval: RunApproval,
+    action: RunAction,
+  ) {
+    return this.store.transaction(profileId, async (tx) => {
+      const run = await this.runs.run(profileId, runId, tx);
+
+      assertOwned(run, owner, this.clock);
+
+      const text = approvalText(approval);
+      const waiting: Run = {
+        ...run,
+        status: 'waiting',
+        approval,
+        output: text,
+        updatedAt: nowIso(this.clock),
+        leaseOwner: undefined,
+        leaseUntil: undefined,
+        progress: undefined,
+      };
+
+      await updateRun(tx, waiting);
+      await writeRunAction(tx, runId, action);
+
+      await insertMessage(tx, {
+        id: randomUUID(),
+        profileId,
+        sessionId: run.sessionId,
+        runId,
+        role: 'assistant',
+        content: text,
+        createdAt: nowIso(this.clock),
+      });
+
+      await recordEvent(tx, this.clock, profileId, 'run.waiting', { approval }, runId);
 
       return waiting;
     });
