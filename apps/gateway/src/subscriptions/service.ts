@@ -286,7 +286,7 @@ export class Subscriptions {
         continue;
       }
 
-      const token = await this.tokens?.tokenFor(subscription.profileId);
+      const token = await this.tokens?.tokenFor(subscription.filter.owner);
       const { observation, error } = await observeGithub(subscription.filter, this.fetcher, token);
       const nextPollAt = new Date(
         now.getTime() + pollIntervalMs(subscription.filter),

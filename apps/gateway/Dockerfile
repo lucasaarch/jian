@@ -90,12 +90,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 python3-pip python3-venv python3-dev \
       sqlite3 postgresql-client \
  && ln -s /usr/bin/fdfind /usr/local/bin/fd \
- && install -d -m 0755 /etc/apt/keyrings \
- && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-      -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
- && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-      > /etc/apt/sources.list.d/github-cli.list \
- && apt-get update && apt-get install -y --no-install-recommends gh \
  && rm -rf /var/lib/apt/lists/*
 # Rust projects such as Lemon need a current toolchain plus rustfmt and clippy. Keep the
 # toolchain in the image, but leave CARGO_HOME unset so each workspace user gets a writable

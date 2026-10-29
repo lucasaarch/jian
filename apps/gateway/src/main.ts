@@ -27,7 +27,6 @@ import { buildServices } from './services.js';
 import { Skills } from './skills/service.js';
 import { type StartupStage, startupFailure } from './startup.js';
 import { PostgresStore } from './storage/postgres.js';
-import { profileGithubTokenSource } from './subscriptions/github-token.js';
 
 const config = z
   .object({
@@ -184,7 +183,8 @@ services.objectives.useDeliveries(channels);
 services.runs.useDeliveries(channels);
 // A matching GitHub event (poll or optional webhook) wakes the subscribed session the same way.
 services.subscriptions.useDeliveries(channels);
-services.subscriptions.useGithub(outbound.fetch, profileGithubTokenSource());
+// Private repositories are polled with the connected account's installation token.
+services.subscriptions.useGithub(outbound.fetch, github);
 
 /**
  * How often due schedules and Listening polls are looked for, in milliseconds. A schedule set

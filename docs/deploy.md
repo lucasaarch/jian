@@ -62,7 +62,7 @@ docker run -d --name jian-web --network jian --restart unless-stopped \
 
 The gateway image carries a health check against `/health`, and the web image one against its own `/web/health`; `docker ps` shows both. The process runs as the unprivileged `node` user, and the gateway itself writes nothing outside the database.
 
-The image is also a workbench for that agent: Node, Python with `uv`, Go, `git`, `gh`, `ssh`, `curl`, `wget`, the text tools (`sed`, `awk`, `rg`, `jq`) and a C toolchain. The built-in `machine-tools` skill tells the agent what is there and how to add more. It installs per user and never as root — no `sudo`, no `apt` — so it works the same on a host that starts containers with `no-new-privileges`. Each profile works in its own workspace under `/home/node/workspaces`, which holds what it installs, its SSH keys and its Git and `gh` logins, confined by Landlock (see [security](security.md)); mount a volume on `/home/node` to keep them across updates. A system package it needs belongs in the image.
+The image is also a workbench for that agent: Node, Python with `uv`, Go, `git`, `ssh`, `curl`, `wget`, the text tools (`sed`, `awk`, `rg`, `jq`) and a C toolchain. The built-in `machine-tools` skill tells the agent what is there and how to add more. It installs per user and never as root — no `sudo`, no `apt` — so it works the same on a host that starts containers with `no-new-privileges`. Each profile works in its own workspace under `/home/node/workspaces`, which holds what it installs, its SSH keys and its Git configuration, confined by Landlock (see [security](security.md)); mount a volume on `/home/node` to keep them across updates. A system package it needs belongs in the image.
 
 ## Way 3 — Kubernetes
 
@@ -302,7 +302,7 @@ Published migrations are immutable; a fix arrives as the next version, never as 
 
 ## Where the data lives
 
-Everything the gateway keeps is in PostgreSQL: profiles, sessions, history, memories, runs, the pg-boss queue and the credential vault. The one exception is each agent's workspace under `/home/node/workspaces` — the tools it installed, SSH keys, Git and `gh` logins — which Compose keeps in the named volume `jian_gateway_home`. Recreating the container loses nothing.
+Everything the gateway keeps is in PostgreSQL: profiles, sessions, history, memories, runs, the pg-boss queue and the credential vault. The one exception is each agent's workspace under `/home/node/workspaces` — the tools it installed, SSH keys, Git configuration — which Compose keeps in the named volume `jian_gateway_home`. Recreating the container loses nothing.
 
 Under Compose the database lives in the named volume `jian_postgres_data`; the development one lives in `jian-dev_postgres_data`. `make down` keeps the volume, `docker compose down -v` deletes it. `make db-reset` deletes the development one on purpose.
 

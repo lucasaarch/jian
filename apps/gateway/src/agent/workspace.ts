@@ -7,7 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 /**
  * Each profile with the shell switch on works in a directory of its own, and nowhere else.
  *
- * The directory is the profile's `HOME`: its repositories, Git and `gh` logins, SSH keys and
+ * The directory is the profile's `HOME`: its repositories, Git configuration, SSH keys and
  * per-user installs live there, and its `TMPDIR` too. Principal turns and conversation
  * subagents share this same workspace; Jian does not give a subagent a separate home or
  * forced Git worktree. Two mechanisms hold the line between *profiles*:

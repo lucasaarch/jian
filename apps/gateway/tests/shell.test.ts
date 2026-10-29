@@ -153,11 +153,9 @@ describe('running commands on the machine the gateway runs on', () => {
   it('starts in the profile workspace, which is its home and holds its temporary files', async () => {
     const { tools, home } = await toolsFor(true);
 
-    expect(
-      await sh(tools.run_command, 'pwd; echo "$HOME"; echo "$TMPDIR"; echo "$GH_CONFIG_DIR"'),
-    ).toMatchObject({
+    expect(await sh(tools.run_command, 'pwd; echo "$HOME"; echo "$TMPDIR"')).toMatchObject({
       exitCode: 0,
-      stdout: `${home}\n${home}\n${join(home, 'tmp')}\n${join(home, '.config', 'gh')}\n`,
+      stdout: `${home}\n${home}\n${join(home, 'tmp')}\n`,
     });
   });
 

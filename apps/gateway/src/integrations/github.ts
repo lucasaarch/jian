@@ -503,6 +503,24 @@ export class GitHubIntegrations {
     );
   }
 
+  /**
+   * For polling a repository: the installation token of the connected account that owns it.
+   * Undefined when none does, or when the token cannot be had, and the poll reads as a stranger
+   * would: public repositories still answer, a private one says it is not found.
+   */
+  async tokenFor(owner: string): Promise<string | undefined> {
+    if (!(await this.config())) return undefined;
+    const account = (await this.accounts()).find(
+      (item) => item.login.toLowerCase() === owner.toLowerCase(),
+    );
+    if (!account) return undefined;
+    try {
+      return await this.installationToken(account.installationId);
+    } catch {
+      return undefined;
+    }
+  }
+
   async repository(accountId: string, repositoryId: number) {
     const repository = (await this.repositories(accountId)).find(
       (item) => item.id === repositoryId,

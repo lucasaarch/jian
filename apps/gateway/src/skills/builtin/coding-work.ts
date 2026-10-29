@@ -24,7 +24,7 @@ The file tools are in the \`files\` group and commands in the \`shell\` group; l
   line or two around it to make it unique.
 - \`write_file\` — a new file, or replacing one entirely. For part of a file, use
   \`edit_file\`.
-- \`run_command\` — builds, tests, linters, Git, \`gh\`, anything else.
+- \`run_command\` — builds, tests, linters, Git, anything else.
 
 A file must be read in this run before you edit or overwrite it, and the edit is refused if
 it changed since you read it. That is protecting someone else's change: read it again.
@@ -48,12 +48,11 @@ it changed since you read it. That is protecting someone else's change: read it 
   already uses.
 - Never force-push, rewrite published history, delete branches or reset away work unless
   the person asked for exactly that.
-- Prefer a connected GitHub MCP server for issues and pull requests: search and load its
-  tools first. Configure a GitHub MCP server under Skills → MCP (HTTP+OAuth with an OAuth App
-  client id/secret, or stdio+PAT).
-  Load \`github-mcp\` before create/update issue or PR calls (milestones, labels, common 422s).
-- Otherwise \`gh\` opens pull requests, reads issues and checks runs when shell is allowed and
-  \`gh\` is logged in in this profile's workspace (see \`machine-tools\`).
+- Issues, pull requests, reviews and runs go through GitHub's MCP server: the one the GitHub
+  integration attaches when the owner connected an account (\`github\` skill), or one the
+  owner configured under Skills → MCP. Search and load its tools first, and load
+  \`github-mcp\` before create/update issue or PR calls (milestones, labels, common 422s).
+  There is no \`gh\` in the image.
 
 ## Judgement
 
