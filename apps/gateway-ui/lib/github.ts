@@ -11,6 +11,7 @@ const failures: Record<string, string> = {
   'not-owner': 'The GitHub account you signed in with cannot manage that installation.',
   github: 'GitHub could not be reached to confirm the installation. Try again.',
   save: 'The GitHub account could not be saved. Try again.',
+  gateway: 'Jian could not record the GitHub account. Its log says why.',
 };
 
 /** The outcome GitHub left in the address, said once and then dropped from it. */
