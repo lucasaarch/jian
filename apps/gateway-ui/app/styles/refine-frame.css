@@ -1,0 +1,142 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: The frame's parts are styled per stage and do not overlap. */
+@reference "tailwindcss";
+@reference "./themes.css";
+
+/* A picture on its way (RefineFrame): the frame is the box it will take, blocks shift in it
+   while it is made or fetched, and a mosaic resolves into it once it is here. The paper and
+   the ink are the theme's, so it reads in both. */
+@layer components {
+  .refine-frame {
+    --rf-bg: color-mix(in srgb, var(--ink) 7%, var(--surface));
+    --rf-ink: var(--ink);
+    @apply relative isolate overflow-hidden text-[12px] font-medium leading-none;
+    /* Its own width capped by the parent's, not a share of it: inside a bubble that shrinks to
+       its content, a percentage alone would leave the frame no width at all. */
+    width: var(--rf-w);
+    max-width: 100%;
+    aspect-ratio: var(--rf-aspect);
+    border-radius: 1rem;
+    background: var(--rf-bg);
+    color: var(--rf-ink);
+  }
+  /* A mosaic tile already has its box and its corners. */
+  .refine-frame[data-fill] {
+    @apply h-full w-full max-w-none rounded-none;
+    aspect-ratio: auto;
+  }
+  .refine-frame-stage {
+    @apply absolute inset-0;
+    opacity: var(--rf-opacity);
+    filter: blur(var(--rf-blur)) saturate(var(--rf-sat));
+    transform: scale(var(--rf-scale));
+    transition:
+      opacity var(--rf-stage) cubic-bezier(0.23, 1, 0.32, 1),
+      filter var(--rf-stage) cubic-bezier(0.23, 1, 0.32, 1),
+      transform var(--rf-stage) cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .refine-frame[data-status="queued"] .refine-frame-stage {
+    animation: refine-frame-wait 2.4s ease-in-out infinite;
+  }
+  .refine-frame-print {
+    @apply h-full w-full;
+    transition: opacity var(--rf-stage) ease;
+  }
+  .refine-frame-print > * {
+    @apply block h-full w-full object-cover;
+  }
+  .refine-frame-canvas {
+    @apply pointer-events-none absolute inset-0 h-full w-full opacity-0;
+    transition: opacity var(--rf-stage) ease;
+  }
+  /* The mosaic stands in for the picture until it has resolved, then hands it back. */
+  .refine-frame[data-mosaic] .refine-frame-print {
+    @apply opacity-0;
+  }
+  .refine-frame[data-mosaic] .refine-frame-canvas {
+    @apply opacity-100;
+  }
+  .refine-frame[data-resolved] .refine-frame-print {
+    @apply opacity-100;
+  }
+  .refine-frame[data-resolved] .refine-frame-canvas {
+    @apply opacity-0;
+  }
+  /* Before there is a picture, the canvas is the blocks the frame dreams in. */
+  .refine-frame[data-dream] .refine-frame-canvas {
+    @apply opacity-100;
+  }
+  .refine-frame-chip {
+    @apply pointer-events-none absolute bottom-2.5 left-2.5 inline-flex h-[26px] items-center gap-1.5 rounded-[13px] pl-2 pr-2.5 backdrop-blur-[8px];
+    background: color-mix(in srgb, var(--rf-bg) 72%, transparent);
+    transition:
+      opacity 200ms ease,
+      transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+    @starting-style {
+      opacity: 0;
+      transform: translateY(0.25rem);
+    }
+  }
+  .refine-frame-mark {
+    @apply inline-flex;
+    color: color-mix(in srgb, var(--rf-ink) 80%, transparent);
+  }
+  .refine-frame-mark[data-kind="spin"] {
+    animation: refine-frame-spin 1.1s linear infinite;
+  }
+  .refine-frame-mark[data-kind="error"] {
+    color: var(--bad);
+  }
+  .refine-frame-label {
+    animation: refine-frame-label 200ms ease both;
+  }
+  .refine-frame-retry {
+    @apply absolute left-1/2 top-1/2 inline-flex h-8 -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-2xl pl-3 pr-3.5 text-[13px] font-medium;
+    background: color-mix(in srgb, var(--rf-ink) 14%, var(--rf-bg));
+    color: var(--rf-ink);
+    transition:
+      transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+      background-color 150ms ease;
+  }
+  .refine-frame-retry:hover {
+    background: color-mix(in srgb, var(--rf-ink) 20%, var(--rf-bg));
+  }
+  .refine-frame-retry:active {
+    @apply scale-[0.96];
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .refine-frame-stage,
+    .refine-frame[data-status="queued"] .refine-frame-stage {
+      transition: opacity var(--rf-stage) ease;
+      animation: none;
+    }
+    .refine-frame-mark[data-kind="spin"] {
+      animation: none;
+    }
+  }
+
+  /* The pictures being drawn in a turn, where the answer will carry them. */
+  .image-drafts {
+    @apply mb-3 grid gap-2;
+  }
+}
+
+@keyframes refine-frame-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes refine-frame-label {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+@keyframes refine-frame-wait {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}

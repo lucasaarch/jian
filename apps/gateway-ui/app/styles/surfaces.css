@@ -813,8 +813,10 @@
   .mosaic-tile:hover img {
     @apply scale-[1.03];
   }
-  .mosaic[data-count="1"] .mosaic-tile img {
-    @apply h-auto max-h-80 w-auto max-w-xs;
+  /* Over the frame rather than around it, so the frame stays the same element from the moment
+     the tile is loading to the moment it can be opened. */
+  .mosaic-open {
+    @apply absolute inset-0;
   }
   .mosaic-more {
     @apply absolute inset-0 grid place-items-center bg-black/55 text-3xl font-semibold text-white;
@@ -1021,9 +1023,6 @@
   }
   .viewer-next {
     @apply right-4;
-  }
-  .media-note {
-    @apply text-xs text-muted;
   }
   /* A voice note: the round button, the waveform that fills in as it plays, time and speed. */
   .audio-player {

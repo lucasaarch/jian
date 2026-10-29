@@ -13,6 +13,7 @@
 @import "./styles/code-change.css";
 @import "./styles/decision.css";
 @import "./styles/github.css";
+@import "./styles/refine-frame.css";
 
 @layer base {
   /* Scrollbars that belong to the panel: thin, no track, a rounded thumb in the ink at low
