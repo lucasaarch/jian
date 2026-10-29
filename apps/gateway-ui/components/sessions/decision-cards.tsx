@@ -20,10 +20,13 @@ function Card({
 }) {
   return (
     <section className="decision-card" aria-label={chip}>
-      <span className="decision-chip" data-tone={tone}>
-        {chip}
-      </span>
-      <p className="decision-title">{title}</p>
+      {/* The state sits in the corner, so what is asked opens the card. */}
+      <header className="decision-head">
+        <p className="decision-title">{title}</p>
+        <span className="decision-chip" data-tone={tone}>
+          {chip}
+        </span>
+      </header>
       {children && <div className="decision-body">{children}</div>}
       {footer && <div className="decision-footer">{footer}</div>}
     </section>
@@ -72,8 +75,8 @@ export function ApprovalCard({
   onDecide?: (decision: 'approve' | 'reject') => void;
 }) {
   const decided = approval.decision;
+  // Only who else decided is worth a line: a decision with no line was the owner's own.
   const where = approval.decidedBy === 'contact' && chat ? ` in ${chat}` : '';
-  const by = approval.decidedBy === 'owner' ? ' by you' : where;
 
   const chip = !decided ? 'Needs approval' : decided === 'approved' ? 'Approved' : 'Rejected';
   const tone = !decided ? 'neutral' : decided === 'approved' ? 'good' : 'bad';
@@ -96,13 +99,13 @@ export function ApprovalCard({
         ) : undefined
       }
     >
-      {approval.detail && <p>{approval.detail}</p>}
       <Request json={approval.request} />
       {!decided && chat && <p className="decision-state">Waiting for an answer in {chat}.</p>}
-      {decided && (
+      {decided && (where || approval.note) && (
         <p className="decision-state">
-          {decided === 'approved' ? `Approved${by}.` : `Declined${by}`}
-          {decided === 'rejected' && (approval.note ? `: ${approval.note}` : '.')}
+          {where && `${decided === 'approved' ? 'Approved' : 'Declined'}${where}`}
+          {where && approval.note && ': '}
+          {approval.note}
         </p>
       )}
     </Card>
@@ -130,7 +133,8 @@ export function QuestionCard({
   const answered = question.answer !== undefined;
   const picked = answered ? choices.find((choice) => choice === question.answer) : undefined;
   const answering = !answered && !chat && Boolean(onAnswer);
-  const by = question.answeredBy === 'owner' ? ' by you' : chat ? ` in ${chat}` : '';
+  // As on an approval: only an answer given elsewhere says where it came from.
+  const where = question.answeredBy === 'contact' && chat ? ` in ${chat}` : '';
 
   return (
     <Card chip="Question" tone={answered ? 'good' : 'neutral'} title={question.prompt}>
@@ -178,11 +182,11 @@ export function QuestionCard({
       )}
       {answered && !picked && (
         <p className="decision-answer">
-          <span>Answered{by}</span>
+          {where && <span>Answered{where}</span>}
           {question.answer}
         </p>
       )}
-      {answered && picked && <p className="decision-state">Answered{by}.</p>}
+      {answered && picked && where && <p className="decision-state">Answered{where}.</p>}
       {!answered && chat && <p className="decision-state">Waiting for an answer in {chat}.</p>}
       {!answered && !chat && !choices.length && (
         <p className="decision-state">Answer below to continue.</p>

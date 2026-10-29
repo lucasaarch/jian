@@ -12,8 +12,14 @@
     border-color: var(--line);
     animation: thought-rise 220ms cubic-bezier(0.23, 1, 0.32, 1);
   }
+  .decision-head {
+    @apply flex items-start gap-3;
+  }
+  .decision-head .decision-title {
+    @apply min-w-0 flex-1;
+  }
   .decision-chip {
-    @apply justify-self-start rounded-md border px-2 py-0.5 text-xs font-medium;
+    @apply shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium;
     border-color: var(--control);
     color: var(--ink);
   }
