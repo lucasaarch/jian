@@ -1,0 +1,126 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: The menu's parts are styled per state and do not overlap. */
+@reference "tailwindcss";
+@reference "./themes.css";
+
+/* The model menu: a compact trigger reading "Claude Opus 5.5 Low", and a popup with the
+   searchable list on the left and what the model under the pointer offers on the right. Colors
+   are the runtime tokens; the Tailwind `--color-*` names do not exist at runtime. */
+@layer components {
+  .model-trigger {
+    @apply inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm transition-colors;
+    color: var(--muted);
+  }
+  .model-trigger:hover:not(:disabled),
+  .model-trigger[data-popup-open] {
+    background: var(--canvas);
+    color: var(--ink);
+  }
+  .model-trigger:disabled {
+    @apply cursor-default opacity-60;
+  }
+  .model-trigger-name {
+    @apply min-w-0 truncate;
+    color: var(--ink);
+  }
+  .model-trigger-detail {
+    @apply shrink-0;
+  }
+  .model-trigger > svg {
+    @apply shrink-0;
+  }
+
+  .model-menu {
+    @apply flex max-h-[min(28rem,70dvh)] items-start gap-2 text-sm;
+    max-width: calc(100vw - 2rem);
+    transform-origin: var(--transform-origin);
+    transition:
+      opacity 150ms ease,
+      transform 150ms ease;
+  }
+  .model-menu[data-starting-style],
+  .model-menu[data-ending-style] {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  .model-menu-list,
+  .model-menu-options {
+    @apply flex max-h-[min(28rem,70dvh)] flex-col overflow-hidden rounded-xl border shadow-xl;
+    background: var(--surface);
+    border-color: var(--line);
+  }
+  .model-menu-list {
+    @apply w-72;
+  }
+  .model-menu-list > ul {
+    @apply m-0 min-h-0 list-none overflow-y-auto overscroll-contain p-1.5;
+  }
+  .model-menu-search {
+    @apply flex items-center gap-2 border-b px-3 py-2.5;
+    border-color: var(--line);
+    color: var(--muted);
+  }
+  .model-menu-search input,
+  .model-menu-search input:focus {
+    @apply w-full border-0 bg-transparent p-0 text-sm outline-none;
+    box-shadow: none;
+    color: var(--ink);
+  }
+  .model-menu-empty {
+    @apply px-3 py-3 text-sm;
+    color: var(--muted);
+  }
+  .model-menu-options {
+    @apply w-60 overflow-y-auto p-1.5;
+  }
+  .model-menu-options fieldset {
+    @apply m-0 grid min-w-0 border-0 p-0;
+  }
+  .model-menu-options fieldset + fieldset {
+    @apply mt-1.5 border-t pt-1.5;
+    border-color: var(--line);
+  }
+  .model-menu-options legend {
+    @apply px-2.5 pb-1 pt-1.5 text-xs;
+    color: var(--muted);
+  }
+  .model-option {
+    @apply flex w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 py-2 text-left outline-none transition-colors;
+    color: var(--ink);
+  }
+  button.model-option:hover,
+  button.model-option:focus-visible,
+  .model-option[data-focused] {
+    background: var(--accent-soft);
+  }
+  .model-option[aria-pressed="true"] .model-option-name {
+    @apply font-medium;
+  }
+  .model-option-name {
+    @apply min-w-0 flex-1 truncate;
+  }
+  .model-option-name small {
+    @apply block whitespace-normal text-xs leading-snug;
+    color: var(--muted);
+  }
+  .model-option-detail {
+    @apply shrink-0;
+    color: var(--muted);
+  }
+  .model-option.static {
+    @apply cursor-default;
+  }
+}
+
+/* A phone has no room beside the list: the options go under it. */
+@media (max-width: 760px) {
+  .model-menu {
+    @apply flex-col items-stretch;
+  }
+  .model-menu-list,
+  .model-menu-options {
+    @apply w-[min(20rem,calc(100vw-2rem))];
+  }
+  .model-menu-list {
+    @apply max-h-[45dvh];
+  }
+}

@@ -618,11 +618,9 @@
   .composer {
     @apply grid gap-2 px-6 pb-5 pt-2;
   }
-  /* Its column never grows past the screen for something wide inside it: the row of options
-     scrolls instead. */
+  /* Its column never grows past the screen for something wide inside it. */
   .composer-box {
     @apply grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-2xl border border-line bg-surface p-3 transition-colors;
-    container: composer / inline-size;
   }
   .composer-box[data-dragging="true"] {
     @apply border-dashed border-accent bg-accent-soft;
@@ -637,34 +635,12 @@
   .composer-actions {
     @apply flex items-center gap-1;
   }
-  /* One line, always: options that do not fit scroll sideways rather than wrap or slide under
-     the buttons beside them. */
-  .composer-options {
-    @apply flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto;
-    scrollbar-width: none;
-  }
-  .composer-options > * {
-    @apply shrink-0;
-  }
-  /* A narrow composer — a phone, or a desktop pane squeezed by the sidebar and the chat list —
-     gives the options the first row whole, fading at the edge so a cut option reads as more to
-     scroll to, and keeps attach, the microphone and send on the second. Measured on the composer
-     itself, since the screen's width says nothing about the pane's. */
-  @container composer (max-width: 32rem) {
-    .composer-actions {
-      @apply flex-wrap gap-y-2;
-    }
-    .composer-options {
-      @apply order-first -mx-1 basis-full px-1;
-      mask-image: linear-gradient(to right, black calc(100% - 1.5rem), transparent);
-    }
+  /* Above the box, on its left: what the turn works on and where it runs. */
+  .composer-context {
+    @apply flex min-w-0 flex-wrap items-center gap-1 px-1;
   }
   .composer-model-control.session-model {
-    @apply flex w-auto min-w-0 shrink gap-1;
-  }
-  /* Two selects share this spot in the composer, so each gives up a little width. */
-  .composer-model-control .select-trigger {
-    @apply max-w-36;
+    @apply flex w-auto min-w-0 shrink;
   }
   .composer-hint {
     @apply px-2 text-xs text-muted;

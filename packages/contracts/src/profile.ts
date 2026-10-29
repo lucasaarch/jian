@@ -43,6 +43,8 @@ export const modelSchema = z
     baseURL: endpointSchema.optional(),
     // Frozen with the run: the effort chosen next to the model is what the request carries.
     reasoningEffort: reasoningEffortSchema.optional(),
+    // Frozen with the run as well: a turn started fast finishes fast.
+    fast: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.apiKeyEnv && value.providerId) {

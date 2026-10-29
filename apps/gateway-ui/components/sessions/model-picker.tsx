@@ -4,8 +4,8 @@ import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useModelCatalog } from '@/lib/query/agent';
-import type { GatewayApi, ReasoningEffort, Session } from '../../lib/api';
-import { efforts, usableProviders } from '../providers/catalog';
+import type { GatewayApi, Session } from '../../lib/api';
+import { usableProviders } from '../providers/catalog';
 import {
   choiceOf,
   modelChoices,
@@ -13,7 +13,7 @@ import {
   withDefaultEffort,
 } from '../providers/role-fields';
 import { ProviderLogo } from '../ui';
-import { Select } from '../ui/select';
+import { type ModelEntry, ModelMenu } from './model-menu';
 
 /**
  * The model one conversation runs on, over the profile's defaults, and its reasoning effort.
@@ -62,10 +62,6 @@ export function SessionModel({
     };
   });
   const current = model ? choiceOf(model.providerId, model.modelId) : '';
-  const listed = model
-    ? catalog.providerModels[model.providerId]?.models.find((item) => item.id === model.modelId)
-    : undefined;
-  const allowed = efforts.filter((effort) => listed?.reasoningEfforts.includes(effort.value));
   useEffect(() => {
     if (!session || session.channel !== GATEWAY_SESSION_CHANNEL || !model || initialSave.current) {
       return;
@@ -109,65 +105,51 @@ export function SessionModel({
     }
   };
 
-  return (
-    <div className={`session-model ${className ?? ''}`}>
-      <Select
-        aria-label="Model for this conversation"
-        variant="ghost"
-        popup="content"
-        value={current}
-        disabled={busy}
-        onValueChange={(choice) => {
-          if (!choice) return void save(undefined);
+  // Every model the conversation can run on, with what each offers; the one it still names but
+  // no provider offers any more stays listed, marked, so the menu never hides the current choice.
+  const entries: ModelEntry[] = [
+    ...choices.map((choice) => {
+      const split = choice.value.indexOf(':');
+      const providerId = choice.value.slice(0, split);
+      const modelId = choice.value.slice(split + 1);
+      const offered = catalog.providerModels[providerId]?.models.find(
+        (item) => item.id === modelId,
+      );
+      const provider = providers.find((item) => item.id === providerId);
 
-          const split = choice.indexOf(':');
-
-          void save({ providerId: choice.slice(0, split), modelId: choice.slice(split + 1) });
-        }}
-        placeholder="No model available"
-        renderValue={(option) => option?.label}
-        options={[
-          ...choices,
-          ...(current && !choices.some((choice) => choice.value === current)
-            ? [
-                {
-                  value: current,
-                  label: model?.modelId ?? current,
-                  detail: 'No longer offered',
-                  ...(providers.find((provider) => provider.id === model?.providerId)
-                    ? {
-                        icon: (
-                          <ProviderLogo
-                            kind={
-                              providers.find((provider) => provider.id === model?.providerId)
-                                ?.kind ?? ''
-                            }
-                            size={16}
-                          />
-                        ),
-                      }
-                    : {}),
-                },
-              ]
-            : []),
-        ]}
-      />
-      <Select
-        aria-label="Reasoning effort for this conversation"
-        variant="ghost"
-        popup="content"
-        value={model?.reasoningEffort ?? ''}
-        disabled={busy || !model || !allowed.length}
-        onValueChange={(effort) =>
-          model &&
-          void save({
+      return {
+        providerId,
+        modelId,
+        name: choice.label,
+        provider: provider ? (provider.name ?? provider.kind) : '',
+        ...(choice.icon ? { icon: choice.icon } : {}),
+        efforts: offered?.reasoningEfforts ?? [],
+        fast: Boolean(offered?.fast),
+      };
+    }),
+    ...(model && current && !choices.some((choice) => choice.value === current)
+      ? [
+          {
             providerId: model.providerId,
             modelId: model.modelId,
-            ...(effort ? { reasoningEffort: effort as ReasoningEffort } : {}),
-          })
-        }
-        placeholder="Effort"
-        options={allowed}
+            name: model.modelId,
+            provider: '',
+            efforts: [],
+            fast: false,
+            gone: true,
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <div className={`session-model ${className ?? ''}`}>
+      <ModelMenu
+        label="Model for this conversation"
+        models={entries}
+        value={model}
+        disabled={busy}
+        onChange={(next) => void save(next)}
       />
     </div>
   );

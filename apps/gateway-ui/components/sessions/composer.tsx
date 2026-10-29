@@ -261,6 +261,22 @@ export function Composer({
           {error}
         </p>
       )}
+      {/* Where the turn runs, above the box: what it works on and on which machine. */}
+      {(projectControl || onMachineChange) && (
+        <div className="composer-context">
+          {projectControl}
+          {onMachineChange && (
+            <Select
+              aria-label="Execution machine"
+              variant="ghost"
+              popup="content"
+              value={remoteMachineId ?? ''}
+              onValueChange={(value) => onMachineChange(value || null)}
+              options={machineOptions}
+            />
+          )}
+        </div>
+      )}
       <div className="composer-box" data-dragging={dragging}>
         {attachments.length > 0 && (
           <ul className="composer-attachments" aria-label="Attachments">
@@ -388,22 +404,8 @@ export function Composer({
               />
             </>
           )}
-          {/* Where the turn runs and with what. A phone gives them a row of their own. */}
-          <div className="composer-options">
-            {projectControl}
-            {onMachineChange && (
-              <Select
-                aria-label="Execution machine"
-                variant="ghost"
-                popup="content"
-                value={remoteMachineId ?? ''}
-                onValueChange={(value) => onMachineChange(value || null)}
-                options={machineOptions}
-              />
-            )}
-            {modelControl}
-          </div>
           <span className="grow" />
+          {modelControl}
           <VoicePill
             listening={recorder.recording}
             stream={recorder.stream}
