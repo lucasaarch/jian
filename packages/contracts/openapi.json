@@ -26652,6 +26652,119 @@
                             },
                             "error": {
                               "type": "string"
+                            },
+                            "diff": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "maxLength": 4096
+                                },
+                                "language": {
+                                  "type": "string",
+                                  "maxLength": 40
+                                },
+                                "additions": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "deletions": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "created": {
+                                  "type": "boolean"
+                                },
+                                "hunks": {
+                                  "maxItems": 400,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "oldStart": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "oldLines": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "newStart": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "newLines": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "header": {
+                                        "type": "string",
+                                        "maxLength": 120
+                                      },
+                                      "lines": {
+                                        "maxItems": 400,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "enum": [
+                                                "context",
+                                                "add",
+                                                "del"
+                                              ]
+                                            },
+                                            "old": {
+                                              "type": "integer",
+                                              "exclusiveMinimum": 0,
+                                              "maximum": 9007199254740991
+                                            },
+                                            "new": {
+                                              "type": "integer",
+                                              "exclusiveMinimum": 0,
+                                              "maximum": 9007199254740991
+                                            },
+                                            "text": {
+                                              "type": "string",
+                                              "maxLength": 520
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "text"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "oldStart",
+                                      "oldLines",
+                                      "newStart",
+                                      "newLines",
+                                      "lines"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "truncated": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "additions",
+                                "deletions",
+                                "hunks"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [

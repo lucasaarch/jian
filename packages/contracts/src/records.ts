@@ -384,6 +384,45 @@ export type Checkpoint = z.infer<typeof checkpointSchema>;
  * it took and how it ended. `stopped` is a tool that started in a turn that ended before it came
  * back. What it received and returned stays in the run's checkpoints.
  */
+/**
+ * What one file write changed, line by line, for the owner to read: git's hunks with each line
+ * numbered on the side it belongs to. Bounded for reading (`truncated` says it was cut); the
+ * agent never receives it.
+ */
+export const codeDiffSchema = z.strictObject({
+  /** Relative to the agent's workspace when the file is inside it. */
+  path: z.string().max(4096),
+  /** A highlighting hint from the file's extension, such as `typescript`. */
+  language: z.string().max(40).optional(),
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+  /** The write made the file. */
+  created: z.boolean().optional(),
+  hunks: z
+    .array(
+      z.strictObject({
+        oldStart: z.number().int().nonnegative(),
+        oldLines: z.number().int().nonnegative(),
+        newStart: z.number().int().nonnegative(),
+        newLines: z.number().int().nonnegative(),
+        /** The line the hunk sits under, as git's `@@ … @@ header`. */
+        header: z.string().max(120).optional(),
+        lines: z
+          .array(
+            z.strictObject({
+              kind: z.enum(['context', 'add', 'del']),
+              old: z.number().int().positive().optional(),
+              new: z.number().int().positive().optional(),
+              text: z.string().max(520),
+            }),
+          )
+          .max(400),
+      }),
+    )
+    .max(400),
+  truncated: z.boolean().optional(),
+});
+
 export const toolStepSchema = z.strictObject({
   toolCallId: z.string(),
   toolName: z.string(),
@@ -391,6 +430,8 @@ export const toolStepSchema = z.strictObject({
   startedAt: timestamp,
   finishedAt: timestamp.optional(),
   error: z.string().optional(),
+  /** What a file write changed, for the tools that write files. */
+  diff: codeDiffSchema.optional(),
 });
 
 export const runTimelineSchema = z.strictObject({
@@ -403,6 +444,7 @@ export const runTimelineSchema = z.strictObject({
 });
 
 export type ToolStep = z.infer<typeof toolStepSchema>;
+export type CodeDiff = z.infer<typeof codeDiffSchema>;
 export type RunTimeline = z.infer<typeof runTimelineSchema>;
 export type RunApproval = z.infer<typeof runApprovalSchema>;
 

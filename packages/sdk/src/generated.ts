@@ -15641,6 +15641,28 @@ export interface operations {
                             /** Format: date-time */
                             finishedAt?: string;
                             error?: string;
+                            diff?: {
+                                path: string;
+                                language?: string;
+                                additions: number;
+                                deletions: number;
+                                created?: boolean;
+                                hunks: {
+                                    oldStart: number;
+                                    oldLines: number;
+                                    newStart: number;
+                                    newLines: number;
+                                    header?: string;
+                                    lines: {
+                                        /** @enum {string} */
+                                        kind: "context" | "add" | "del";
+                                        old?: number;
+                                        new?: number;
+                                        text: string;
+                                    }[];
+                                }[];
+                                truncated?: boolean;
+                            };
                         }[];
                         approval?: {
                             /** Format: uuid */

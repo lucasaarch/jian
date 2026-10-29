@@ -48,6 +48,7 @@ import { findSkill } from '../skills/builtin/index.js';
 import type { WebSearch } from '../web/service.js';
 import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
+import { splitDiff } from './diff.js';
 import {
   GITHUB_MCP_TOOLSETS,
   githubMcpCredentialKey,
@@ -537,7 +538,21 @@ export class AgentRuntime {
               });
 
               try {
-                const output = await execute(input, options);
+                const raw = await execute(input, options);
+                // A file write's diff is for the owner, not the agent: it goes to its own
+                // checkpoint, read by the timeline alone, and leaves the result before the
+                // result is bounded, so it can neither cost context nor push the result into an
+                // artifact.
+                const { output, diff } = splitDiff(name, raw);
+
+                if (diff) {
+                  await this.services.lifecycle.checkpoint(profileId, runId, owner, {
+                    phase: 'tool-diff',
+                    toolName: name,
+                    toolCallId: options.toolCallId,
+                    diff: redactOutput(diff, secrets),
+                  });
+                }
 
                 // A server that answers with `isError` is reporting a failure it knows about:
                 // the request reached it and it said no. That is a fact the agent can act on,
