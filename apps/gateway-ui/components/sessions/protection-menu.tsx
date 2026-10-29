@@ -15,8 +15,7 @@ const modes: Array<{
   {
     value: 'ask',
     label: 'Ask first',
-    detail:
-      'Asks before running commands, changing files, using connected services or messaging others',
+    detail: 'Asks before acting',
     icon: ShieldCheck,
   },
   { value: 'full', label: 'Full access', detail: 'Acts without asking', icon: ShieldOff },
