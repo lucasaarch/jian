@@ -618,8 +618,10 @@
   .composer {
     @apply grid gap-2 px-6 pb-5 pt-2;
   }
+  /* Its column never grows past the screen for something wide inside it: the row of options
+     scrolls instead. */
   .composer-box {
-    @apply grid gap-2 rounded-2xl border border-line bg-surface p-3 transition-colors;
+    @apply grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-2xl border border-line bg-surface p-3 transition-colors;
   }
   .composer-box[data-dragging="true"] {
     @apply border-dashed border-accent bg-accent-soft;
@@ -634,6 +636,9 @@
   .composer-actions {
     @apply flex items-center gap-1;
   }
+  .composer-options {
+    @apply flex min-w-0 items-center gap-1;
+  }
   .composer-model-control.session-model {
     @apply flex w-auto min-w-0 shrink gap-1;
   }
@@ -643,6 +648,12 @@
   }
   .composer-hint {
     @apply px-2 text-xs text-muted;
+  }
+  /* Return breaks the line on a touch keyboard, so there is no shortcut to explain. */
+  @media (pointer: coarse) {
+    .composer-hint {
+      @apply hidden;
+    }
   }
   .composer-hint kbd {
     @apply mx-0.5 rounded border border-line px-1.5 py-0.5 font-mono text-[11px];
@@ -1292,6 +1303,28 @@
   }
   .composer {
     @apply px-3 pb-3;
+  }
+  /* The options take the first row whole and scroll sideways; the attach, the microphone and
+     send keep the second, in reach of a thumb. */
+  .composer-actions {
+    @apply flex-wrap gap-y-2;
+  }
+  .composer-options {
+    @apply order-first -mx-1 basis-full overflow-x-auto px-1;
+    scrollbar-width: none;
+    /* Fades out at the edge, so an option cut there reads as more to scroll to. */
+    mask-image: linear-gradient(to right, black calc(100% - 1.5rem), transparent);
+  }
+  .composer-options > * {
+    @apply shrink-0;
+  }
+  /* Under 16px, iOS zooms the page in on focus. */
+  .composer-box textarea,
+  .composer-box textarea:focus {
+    @apply text-base;
+  }
+  .attachment.audio .audio-player {
+    @apply w-64;
   }
   /* A phone shows the list or the conversation, never both. */
   .main-content.fill {

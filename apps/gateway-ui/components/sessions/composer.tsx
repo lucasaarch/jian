@@ -342,7 +342,14 @@ export function Composer({
               }
             }}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+              // A touch keyboard has no Shift to hold, so there Return breaks the line and the
+              // button sends.
+              if (
+                event.key === 'Enter' &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing &&
+                !window.matchMedia?.('(pointer: coarse)').matches
+              ) {
                 event.preventDefault();
                 void submit();
               }
@@ -381,18 +388,21 @@ export function Composer({
               />
             </>
           )}
-          {projectControl}
-          {onMachineChange && (
-            <Select
-              aria-label="Execution machine"
-              variant="ghost"
-              popup="content"
-              value={remoteMachineId ?? ''}
-              onValueChange={(value) => onMachineChange(value || null)}
-              options={machineOptions}
-            />
-          )}
-          {modelControl}
+          {/* Where the turn runs and with what. A phone gives them a row of their own. */}
+          <div className="composer-options">
+            {projectControl}
+            {onMachineChange && (
+              <Select
+                aria-label="Execution machine"
+                variant="ghost"
+                popup="content"
+                value={remoteMachineId ?? ''}
+                onValueChange={(value) => onMachineChange(value || null)}
+                options={machineOptions}
+              />
+            )}
+            {modelControl}
+          </div>
           <span className="grow" />
           <VoicePill
             listening={recorder.recording}
