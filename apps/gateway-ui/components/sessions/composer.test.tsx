@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const { startRecording } = vi.hoisted(() => ({ startRecording: vi.fn() }));
 
 vi.mock('../../lib/recorder', () => ({
-  useRecorder: () => ({ recording: false, seconds: 0, start: startRecording, cancel: vi.fn() }),
+  useRecorder: () => ({ recording: false, start: startRecording, cancel: vi.fn() }),
 }));
 vi.mock('../ui', () => ({ AudioPlayer: () => null }));
 

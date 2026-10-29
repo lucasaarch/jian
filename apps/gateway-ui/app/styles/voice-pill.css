@@ -1,0 +1,162 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: The pill's parts are styled per state and do not overlap. */
+@reference "tailwindcss";
+@reference "./themes.css";
+
+/* The composer's microphone. At rest it is one of the composer's round tools; recording, its
+   surface opens to the left into a capsule that holds the waveform and the clock. The capsule
+   is drawn by clipping one surface, never by resizing the button, so nothing beside it moves. */
+@layer components {
+  .voice-pill {
+    /* Geometry, in px, from the 36px footprint the composer's tools share. */
+    --vp-size: 36px;
+    --vp-radius: 18px;
+    --vp-reach: 8px;
+    --vp-clock-w: 37px;
+    --vp-wave-w: 68px;
+    --vp-extra: calc(var(--vp-clock-w) + var(--vp-wave-w));
+    --vp-stop: 12px;
+    --vp-time-size: 13px;
+    --vp-open: 200ms;
+    --vp-ease: cubic-bezier(0.23, 1, 0.32, 1);
+    /* Set while a held press slides: how far, and how close to cancelling, from 0 to 1. */
+    --vp-slide: 0px;
+    --vp-cancel: 0;
+    --vp-accent: var(--color-ink);
+    --vp-icon: var(--color-muted);
+    --vp-bg: var(--color-canvas);
+
+    @apply relative isolate inline-grid shrink-0 cursor-pointer touch-none select-none place-items-center p-0;
+    width: var(--vp-size);
+    height: var(--vp-size);
+    border-radius: var(--vp-radius);
+    color: var(--vp-icon);
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    transition:
+      transform 160ms var(--vp-ease),
+      color 150ms ease;
+  }
+  /* A touch target of 44px around the smaller mark. */
+  .voice-pill::before {
+    @apply absolute -inset-1 content-[''];
+  }
+  .voice-pill[data-state="listening"] {
+    @apply z-[1];
+    color: var(--vp-accent);
+  }
+  .voice-pill[data-pressed] {
+    transform: scale(0.95);
+  }
+  .voice-pill:disabled {
+    @apply pointer-events-none cursor-default opacity-55;
+  }
+
+  .voice-pill-surface {
+    @apply pointer-events-none absolute bg-transparent;
+    inset: 0 0 0 calc(-1 * (var(--vp-reach) + var(--vp-extra)));
+    border-radius: var(--vp-radius);
+    clip-path: inset(0 0 0 calc(var(--vp-reach) + var(--vp-extra)) round var(--vp-radius));
+    transition:
+      clip-path var(--vp-open) var(--vp-ease),
+      background-color 150ms ease;
+  }
+  .voice-pill[data-state="listening"] .voice-pill-surface {
+    background: var(--vp-bg);
+    clip-path: inset(0 round var(--vp-radius));
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .voice-pill:enabled[data-state="idle"]:hover {
+      color: var(--vp-accent);
+    }
+    .voice-pill:enabled[data-state="idle"]:hover .voice-pill-surface {
+      background: var(--vp-bg);
+    }
+  }
+
+  .voice-pill-wave,
+  .voice-pill-time {
+    @apply pointer-events-none absolute opacity-0;
+    color: var(--vp-accent);
+    filter: blur(2px);
+    transform: translateX(var(--vp-slide));
+    transition:
+      opacity 200ms ease,
+      filter 200ms ease,
+      transform 240ms var(--vp-ease);
+  }
+  .voice-pill-wave {
+    top: 18%;
+    height: 64%;
+    right: calc(100% + var(--vp-clock-w));
+    width: var(--vp-wave-w);
+  }
+  .voice-pill-time {
+    @apply inset-y-0 right-full grid place-items-center font-medium leading-none tabular-nums;
+    width: var(--vp-clock-w);
+    font-size: var(--vp-time-size);
+  }
+  .voice-pill[data-state="listening"] .voice-pill-wave,
+  .voice-pill[data-state="listening"] .voice-pill-time {
+    opacity: calc(1 - var(--vp-cancel));
+    filter: none;
+  }
+
+  .voice-pill-cancel {
+    @apply pointer-events-none absolute inset-y-0 right-full inline-flex items-center justify-center gap-[3px] font-medium leading-none;
+    width: var(--vp-extra);
+    font-size: var(--vp-time-size);
+    color: var(--vp-accent);
+    opacity: var(--vp-cancel);
+  }
+
+  .voice-pill-core {
+    @apply relative grid place-items-center;
+    width: var(--vp-size);
+    height: var(--vp-size);
+    transform: translateX(var(--vp-slide));
+    transition: transform 240ms var(--vp-ease);
+  }
+  .voice-pill-mic,
+  .voice-pill-stop {
+    grid-area: 1 / 1;
+    transition:
+      opacity 200ms ease,
+      filter 200ms ease,
+      transform 200ms var(--vp-ease);
+  }
+  .voice-pill-mic {
+    @apply inline-flex;
+  }
+  .voice-pill-stop {
+    @apply bg-current opacity-0;
+    width: var(--vp-stop);
+    height: var(--vp-stop);
+    border-radius: 22%;
+    filter: blur(2px);
+    transform: scale(0.6);
+  }
+  .voice-pill[data-state="listening"] .voice-pill-mic {
+    @apply opacity-0;
+    filter: blur(2px);
+    transform: scale(0.7);
+  }
+  .voice-pill[data-state="listening"] .voice-pill-stop {
+    @apply opacity-100;
+    filter: none;
+    transform: scale(1);
+  }
+
+  /* A drag follows the finger, not an easing curve. */
+  .voice-pill[data-sliding] .voice-pill-wave,
+  .voice-pill[data-sliding] .voice-pill-time,
+  .voice-pill[data-sliding] .voice-pill-core {
+    transition-property: opacity, filter;
+  }
+  /* A key gets the state at once: there is no press to follow. */
+  .voice-pill[data-input="key"] .voice-pill-surface,
+  .voice-pill[data-input="key"] .voice-pill-time,
+  .voice-pill[data-input="key"] .voice-pill-mic,
+  .voice-pill[data-input="key"] .voice-pill-stop {
+    transition-duration: 0ms;
+  }
+}
