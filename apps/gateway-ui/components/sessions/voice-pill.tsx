@@ -161,6 +161,9 @@ export function VoicePill({
 
       if (Context) {
         const context = new Context();
+        // Created once the microphone was granted, after the click: autoplay rules leave it
+        // suspended, and a suspended analyser reads silence.
+        void context.resume();
         const analyser = context.createAnalyser();
 
         analyser.fftSize = 256;
@@ -208,6 +211,8 @@ export function VoicePill({
   useEffect(() => {
     if (!pressed) return;
     const stop = () => {
+      press.current.pointerId = null;
+      setPressed(false);
       if (live.current.listening) live.current.onStop('blur');
     };
     const hidden = () => {
@@ -232,10 +237,17 @@ export function VoicePill({
     element.style.setProperty('--vp-cancel', '0');
   };
 
+  /** Drops a press without stopping anything, once it is known to have ended unheard. */
+  const forget = () => {
+    press.current.pointerId = null;
+    setPressed(false);
+    if (sliding.current) settleSlide();
+  };
+
   const onPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
-    if (disabled || event.button !== 0 || !event.isPrimary || press.current.pointerId !== null) {
-      return;
-    }
+    // A press already on record is one whose release never arrived — a permission prompt takes
+    // it — so a new primary press replaces it rather than being ignored.
+    if (disabled || event.button !== 0 || !event.isPrimary) return;
     press.current = {
       pointerId: event.pointerId,
       downX: event.clientX,
@@ -253,7 +265,14 @@ export function VoicePill({
   const onPointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     const element = root.current;
     const current = press.current;
-    if (!element || current.pointerId !== event.pointerId || !listening || !current.own) return;
+    if (!element || current.pointerId !== event.pointerId) return;
+    // The button is no longer down: the release went elsewhere, and a pointer coming back from
+    // the browser's prompt is not a slide to cancel.
+    if ((event.buttons & 1) === 0) {
+      forget();
+      return;
+    }
+    if (!listening || !current.own) return;
     const dx = event.clientX - current.downX;
     if (!sliding.current && dx > -SLIDE_MIN) return;
 
