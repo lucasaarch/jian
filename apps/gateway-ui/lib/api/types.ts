@@ -32,6 +32,7 @@ export type Message = JsonResponse<'listMessages', 200>[number];
 export type Person = JsonResponse<'listSessionPeople', 200>[number];
 type RunTimeline = JsonResponse<'listSessionTimeline', 200>[number];
 export type ToolStep = RunTimeline['steps'][number];
+export type CodeDiff = NonNullable<ToolStep['diff']>;
 export type Subagent = JsonResponse<'listConversationSubagents', 200>[number];
 export type ActivityDay = JsonResponse<'getActivityCalendar', 200>[number];
 

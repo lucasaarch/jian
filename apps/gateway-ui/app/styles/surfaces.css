@@ -909,19 +909,20 @@
     @apply h-full w-full max-w-4xl overflow-auto rounded-lg bg-surface px-10 py-8 text-ink;
   }
   /* Code reads on a dark page, as it does in an editor; the colours are the
-     GitHub dark palette, keyed to the classes highlight.js gives each token. */
+     GitHub dark palette, keyed to the classes highlight.js gives each token, shared by the file
+     viewer and the diffs in a conversation. */
   .viewer-code {
     @apply h-full w-full max-w-5xl overflow-auto whitespace-pre-wrap break-words rounded-lg p-6 font-mono text-sm leading-6;
     background: #0d1117;
     color: #e6edf3;
   }
-  .viewer-code :is(.hljs-keyword, .hljs-doctag, .hljs-template-tag) {
+  :is(.viewer-code, .code-diff-lines) :is(.hljs-keyword, .hljs-doctag, .hljs-template-tag) {
     color: #ff7b72;
   }
-  .viewer-code :is(.hljs-title, .hljs-title.class_, .hljs-title.function_) {
+  :is(.viewer-code, .code-diff-lines) :is(.hljs-title, .hljs-title.class_, .hljs-title.function_) {
     color: #d2a8ff;
   }
-  .viewer-code
+  :is(.viewer-code, .code-diff-lines)
     :is(
       .hljs-attr,
       .hljs-attribute,
@@ -936,26 +937,27 @@
     ) {
     color: #79c0ff;
   }
-  .viewer-code :is(.hljs-regexp, .hljs-string) {
+  :is(.viewer-code, .code-diff-lines) :is(.hljs-regexp, .hljs-string) {
     color: #a5d6ff;
   }
-  .viewer-code :is(.hljs-built_in, .hljs-symbol, .hljs-type) {
+  :is(.viewer-code, .code-diff-lines) :is(.hljs-built_in, .hljs-symbol, .hljs-type) {
     color: #ffa657;
   }
-  .viewer-code :is(.hljs-comment, .hljs-code, .hljs-formula) {
+  :is(.viewer-code, .code-diff-lines) :is(.hljs-comment, .hljs-code, .hljs-formula) {
     color: #8b949e;
   }
-  .viewer-code :is(.hljs-name, .hljs-quote, .hljs-selector-tag, .hljs-selector-pseudo) {
+  :is(.viewer-code, .code-diff-lines)
+    :is(.hljs-name, .hljs-quote, .hljs-selector-tag, .hljs-selector-pseudo) {
     color: #7ee787;
   }
-  .viewer-code .hljs-section {
+  :is(.viewer-code, .code-diff-lines) .hljs-section {
     @apply font-bold;
     color: #79c0ff;
   }
-  .viewer-code .hljs-bullet {
+  :is(.viewer-code, .code-diff-lines) .hljs-bullet {
     color: #f2cc60;
   }
-  .viewer-code .hljs-emphasis {
+  :is(.viewer-code, .code-diff-lines) .hljs-emphasis {
     @apply italic;
   }
   .viewer-code .hljs-strong {

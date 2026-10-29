@@ -3,6 +3,7 @@
 import type { OrbState } from 'thinking-orbs';
 import type { Run, ToolStep } from '@/lib/api';
 import { Markdown } from '../ui/markdown';
+import { CodeChanges } from './code-change';
 import { ThoughtLine, type ThoughtStep } from './thought-line';
 
 /** What the panel calls each tool, so the owner reads an action instead of a function name. */
@@ -159,6 +160,7 @@ export function LiveTurn({
         steps={traceOf(steps)}
         startedAt={run.createdAt}
       />
+      <CodeChanges steps={steps} fresh />
       {children}
       {writing && (
         <div className="chat-text markdown streaming">

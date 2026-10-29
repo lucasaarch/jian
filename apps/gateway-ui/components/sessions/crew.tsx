@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Orb } from '@/components/ui';
 import type { GatewayApi, Message, ModelSelection, Subagent, ToolStep } from '@/lib/api';
 import { useCrew } from '@/lib/stores/crew';
+import { CodeChanges } from './code-change';
 import { MessageMedia } from './media';
 import { ChatMessage } from './message';
 import { statusOf, traceOf } from './progress';
@@ -306,6 +307,7 @@ export function CrewDrawer({
           startedAt={agent.createdAt}
           finishedAt={working ? undefined : agent.updatedAt}
         />
+        <CodeChanges steps={steps} fresh />
         {error && <p className="text-bad">{error}</p>}
         {said.map((message) => (
           <ChatMessage key={message.id} message={message} group={false} people={new Map()} opensRun>
