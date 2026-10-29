@@ -15,6 +15,14 @@
   .chat-line .thought-line {
     @apply mb-2;
   }
+  /* Settled work's mark, in the 20px the orb took. */
+  .work-mark {
+    @apply grid h-5 w-5 shrink-0 place-items-center;
+    color: var(--good);
+  }
+  .work-mark[data-failed] {
+    color: var(--bad);
+  }
   .thought-head {
     @apply relative inline-flex max-w-full items-center gap-2 whitespace-nowrap text-left;
   }

@@ -161,26 +161,6 @@
   .crew-drawer-body .chat-line {
     @apply mb-0;
   }
-  /* A finished agent's report, where it came back: a quiet line, not a message. */
-  .crew-report {
-    @apply inline-flex items-center gap-2 self-start rounded-full border px-3 py-1 text-[13px] transition-colors;
-    border-color: var(--line);
-    color: var(--muted);
-  }
-  .crew-report:hover {
-    border-color: var(--control);
-    color: var(--ink);
-  }
-  .crew-report strong {
-    @apply font-medium;
-    color: var(--ink);
-  }
-  .crew-report[data-state="done"] > svg {
-    color: var(--good);
-  }
-  .crew-report[data-state="failed"] > svg {
-    color: var(--bad);
-  }
   .crew-output {
     @apply whitespace-pre-wrap text-sm;
   }

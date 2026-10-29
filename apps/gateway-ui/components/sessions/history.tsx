@@ -5,7 +5,7 @@ import { subscribe } from '@/lib/events';
 import { useCrew } from '@/lib/stores/crew';
 import type { GatewayApi, Person, Run, Subagent, ToolStep } from '../../lib/api';
 import { Badge, Button, Empty, Spinner } from '../ui';
-import { CrewCards, CrewDock, ReportLine, reportOf } from './crew';
+import { CrewCards, CrewDock, reportOf } from './crew';
 import { useFollowBottom } from './follow-bottom';
 import { MessageMedia } from './media';
 import { authored, ChatMessage } from './message';
@@ -271,15 +271,12 @@ export function History({
                   ? subagents.some((child) => child.parentRunId === answering)
                   : false;
 
+              // A finished agent's report is the agent's mail; its card already says it ended.
               const report = reportOf(message, subagents);
 
               return (
                 <Fragment key={message.id}>
-                  {report ? (
-                    <div className="chat-line theirs">
-                      <ReportLine agent={report} />
-                    </div>
-                  ) : (
+                  {report ? null : (
                     <ChatMessage
                       message={message}
                       group={group}
