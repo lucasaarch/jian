@@ -6,7 +6,7 @@ export function registerProjectRoutes(app: FastifyInstance, projects: Projects):
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/projects', async (request) =>
     projects.list(request.params.profileId),
   );
-  app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/projects', async (request, reply) =>
-    reply.code(201).send(await projects.create(request.params.profileId, request.body)),
+  app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/projects', async (request) =>
+    projects.ensure(request.params.profileId, request.body),
   );
 }

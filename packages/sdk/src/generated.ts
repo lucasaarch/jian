@@ -1135,7 +1135,7 @@ export interface paths {
         get: operations["listProjects"];
         put?: never;
         /** @description Required permission: admin. */
-        post: operations["createProject"];
+        post: operations["ensureProject"];
         delete?: never;
         options?: never;
         head?: never;
@@ -13108,7 +13108,7 @@ export interface operations {
             };
         };
     };
-    createProject: {
+    ensureProject: {
         parameters: {
             query?: never;
             header?: never;
@@ -13120,17 +13120,15 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    name: string;
-                    repositoryUrl?: string;
                     /** Format: uuid */
-                    githubAccountId?: string;
-                    githubRepositoryId?: number;
+                    githubAccountId: string;
+                    githubRepositoryId: number;
                 };
             };
         };
         responses: {
             /** @description Success */
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -845,11 +845,10 @@ export const operations: Operation[] = [
   {
     method: 'POST',
     path: `${profile}/projects`,
-    operationId: 'createProject',
+    operationId: 'ensureProject',
     access: 'admin',
     body: projectInputSchema,
     response: projectSchema,
-    status: 201,
   },
   {
     method: 'POST',

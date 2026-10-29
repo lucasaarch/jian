@@ -1,6 +1,6 @@
 import { type Client, profile } from './params';
 import { result } from './result';
-import type { MediaUpload, ModelSelection, NewProject } from './types';
+import type { MediaUpload, ModelSelection, ProjectChoice } from './types';
 
 /**
  * Sessions, messages and execution history. Gateway chats are owner-written; channel
@@ -17,7 +17,8 @@ export const sessionCalls = (client: Client) => ({
     result(client.GET('/v1/profiles/{profileId}/sessions', { params: profile(profileId) })),
   projects: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/projects', { params: profile(profileId) })),
-  createProject: (profileId: string, input: NewProject) =>
+  /** This agent's project for a repository: opened the first time, the same one after. */
+  ensureProject: (profileId: string, input: ProjectChoice) =>
     result(
       client.POST('/v1/profiles/{profileId}/projects', {
         params: profile(profileId),

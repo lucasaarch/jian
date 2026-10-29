@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import { readEvents } from '../../src/core/event-feed.js';
 import { findRun } from '../../src/runs/repository.js';
@@ -6,6 +7,7 @@ import {
   channelAuth,
   channelConnections,
   channelInbox,
+  projects,
   runs,
   secrets,
 } from '../../src/storage/schema.js';
@@ -64,4 +66,16 @@ export async function queuedRun(store: Store, profileId: string) {
     .limit(1);
 
   return row ? findRun(store.db, profileId, row.id) : null;
+}
+
+/** A project as it is stored, for a test that only needs one to exist. */
+export async function projectRow(store: Store, profileId: string, repositoryUrl: string) {
+  const project = {
+    id: randomUUID(),
+    profileId,
+    name: repositoryUrl.replace(/^.*[:/]([^/]+\/[^/]+?)(\.git)?$/, '$1'),
+    repositoryUrl,
+  };
+  await store.db.insert(projects).values(project);
+  return project;
 }
