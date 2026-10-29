@@ -23,7 +23,6 @@ const profileBase = {
   },
   disabledSkills: [],
   allowShell: false,
-  useStickers: true,
   version: 3,
   createdAt: at(60 * 24 * 30),
   updatedAt: at(60 * 3),
@@ -61,7 +60,6 @@ export const profile: Profile = {
       disabledTools: ['create_issue'],
     },
   ],
-  useStickers: true,
 };
 
 export const statsFor = (days: number) => {

@@ -213,7 +213,7 @@ export class AgentRuntime {
     pulse.unref();
 
     try {
-      const defaults = await this.services.providers?.modelDefaults?.(profileId);
+      const defaults = await this.services.providers?.modelDefaults?.();
       const policy = run.contextPolicy ?? run.profile.contextPolicy;
       const config = run.model ?? run.profile.model;
       let providerKey: string | undefined;
@@ -690,9 +690,8 @@ export class AgentRuntime {
             lastCompactionAttempt = stepNumber;
             try {
               const session = await this.services.sessions.session(profileId, run.sessionId);
-              const selection = (
-                await readModelDefaults(this.services.store.db, profileId, run.createdAt)
-              ).compaction;
+              const selection = (await readModelDefaults(this.services.store.db, run.createdAt))
+                .compaction;
               const chosen =
                 selection && this.services.providers
                   ? await this.services.providers.selectedModel(selection, this.services.store.db)

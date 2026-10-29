@@ -76,6 +76,7 @@ export function useRefresh(): () => Promise<void> {
     await Promise.all([
       client.invalidateQueries({ queryKey: keys.profiles }),
       client.invalidateQueries({ queryKey: keys.providers }),
+      client.invalidateQueries({ queryKey: keys.modelDefaults }),
       client.invalidateQueries({ queryKey: keys.groups }),
       profileId ? client.invalidateQueries({ queryKey: keys.profile(profileId) }) : undefined,
     ]);

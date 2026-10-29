@@ -78,7 +78,7 @@ describe('a profile with a provider but no model chosen', () => {
     expect(run.model?.modelId).toBe('claude-sonnet-4-5');
 
     // Written as the default, so the panel agrees and the next run does not choose again.
-    const defaults = await services.providers.modelDefaults(profile.id);
+    const defaults = await services.providers.modelDefaults();
 
     expect(defaults.conversation?.modelId).toBe('claude-sonnet-4-5');
   });
@@ -91,7 +91,7 @@ describe('a profile with a provider but no model chosen', () => {
       secret: 'synthetic-old-key',
     });
 
-    await services.providers.setModelDefaults(profile.id, {
+    await services.providers.setModelDefaults({
       conversation: { providerId: gone.id, modelId: 'gpt-4.1' },
     });
     await services.providers.revokeProvider(gone.id);
@@ -103,7 +103,7 @@ describe('a profile with a provider but no model chosen', () => {
     });
 
     expect(run.model?.modelId).toBe('claude-sonnet-4-5');
-    expect((await services.providers.modelDefaults(profile.id)).conversation?.modelId).toBe(
+    expect((await services.providers.modelDefaults()).conversation?.modelId).toBe(
       'claude-sonnet-4-5',
     );
   });
@@ -119,7 +119,7 @@ describe('a profile with a provider but no model chosen', () => {
   it('leaves a model the owner chose alone', async () => {
     const { services, profile, provider } = await setup(['claude-3-haiku', 'claude-sonnet-4-5']);
 
-    await services.providers.setModelDefaults(profile.id, {
+    await services.providers.setModelDefaults({
       conversation: { providerId: provider.id, modelId: 'claude-3-haiku' },
     });
 

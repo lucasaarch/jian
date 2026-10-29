@@ -122,7 +122,6 @@ it('keeps a saved channel override visible until changing the shared default upd
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
     expect(setModelDefaults).toHaveBeenCalledWith(
-      'profile',
       expect.objectContaining({
         conversation: { providerId: 'anthropic', modelId: 'claude-sonnet-5' },
         channel: { providerId: 'anthropic', modelId: 'claude-sonnet-5' },
@@ -174,10 +173,7 @@ it('saves Disabled as a distinct state from a selected model', async () => {
         .querySelector('form')
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
-    expect(setModelDefaults).toHaveBeenCalledWith(
-      'profile',
-      expect.objectContaining({ image: 'disabled' }),
-    );
+    expect(setModelDefaults).toHaveBeenCalledWith(expect.objectContaining({ image: 'disabled' }));
   } finally {
     await view.close();
   }

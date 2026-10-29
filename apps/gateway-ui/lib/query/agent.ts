@@ -40,7 +40,7 @@ export const useChannels = () => useSuspenseQuery(queries.channels(useAgentId())
 export const useContacts = () => useSuspenseQuery(queries.contacts(useAgentId())).data;
 export const useMemories = () => useSuspenseQuery(queries.memories(useAgentId())).data;
 export const useActivities = () => useSuspenseQuery(queries.activities(useAgentId())).data;
-const useModelDefaults = () => useSuspenseQuery(queries.modelDefaults(useAgentId())).data;
+const useModelDefaults = () => useSuspenseQuery(queries.modelDefaults()).data;
 export const useGroups = () => useSuspenseQuery(queries.groups()).data;
 export const useProviders = () => useSuspenseQuery(queries.providers()).data;
 
@@ -65,7 +65,7 @@ export function useProviderModels(): Record<string, ProviderModelList> {
   });
 }
 
-/** What a model is chosen from: the providers, what each offers, and the agent's defaults. */
+/** What a model is chosen from: the providers, what each offers, and the installation's defaults. */
 export function useModelCatalog(): ModelCatalog {
   const providers = useProviders();
   const providerModels = useProviderModels();

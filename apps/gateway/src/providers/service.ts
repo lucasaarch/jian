@@ -11,14 +11,10 @@ import {
   type Run,
   supportsModelRole,
 } from '@jian/contracts';
-import { eq } from 'drizzle-orm';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
-import { recordEvent } from '../core/events.js';
-import type { ProfileReader } from '../profiles/port.js';
 import { GATEWAY_SCOPE, type GatewayVault } from '../security/gateway-vault.js';
 import type { Queryable, Store } from '../storage/database.js';
-import { profiles } from '../storage/schema.js';
 import { modelCapabilities } from './capabilities.js';
 import { environmentProvider, GROQ_BASE_URL, providerKinds, XAI_BASE_URL } from './catalog.js';
 import type { ModelCatalog } from './catalog-source.js';
@@ -58,8 +54,6 @@ export type ContextPolicy = NonNullable<Run['contextPolicy']>;
 export class Providers {
   constructor(
     private readonly store: Store,
-    // Credentials need no profile; the model each profile chooses with them does.
-    private readonly profiles: ProfileReader,
     private readonly vault: GatewayVault,
     private readonly clock: Clock = Date.now,
     private readonly catalog?: ModelCatalog,
@@ -180,18 +174,15 @@ export class Providers {
     });
   }
 
-  async modelDefaults(profileId: string) {
-    const profile = await this.profiles.profile(profileId);
-
-    // Assembled from one row per role; missing optional roles start disabled, while an old
-    // A saved null keeps the provider-preferred runtime fallback.
-    const defaults = await readModelDefaults(this.store.db, profileId, nowIso(this.clock));
-
-    // A legacy owner may have switched stickers off before this role existed.
-    return profile.useStickers ? defaults : { ...defaults, sticker: 'disabled' as const };
+  /**
+   * The installation's models, shared by every agent. Assembled from one row per role; missing
+   * optional roles start disabled, while a saved null keeps the provider-preferred fallback.
+   */
+  async modelDefaults() {
+    return readModelDefaults(this.store.db, nowIso(this.clock));
   }
 
-  async setModelDefaults(profileId: string, input: unknown) {
+  async setModelDefaults(input: unknown) {
     const data = modelDefaultsInputSchema.parse(input);
     // Older clients may still send transcription. Both names now address one audio selection.
     if (data.transcription && (data.audio === null || !Object.hasOwn(input as object, 'audio'))) {
@@ -201,9 +192,8 @@ export class Providers {
     await this.warmCatalog();
     const available = await this.providers();
 
-    return this.store.transaction(profileId, async (tx) => {
-      await this.profiles.profile(profileId, tx);
-      const current = await readModelDefaults(tx, profileId, nowIso(this.clock));
+    return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
+      const current = await readModelDefaults(tx, nowIso(this.clock));
 
       // The panel sends every role on each save. A stored choice can fail today's role checks
       // while the owner only wants to change another activity — validate only what actually
@@ -229,16 +219,9 @@ export class Providers {
 
       const updatedAt = nowIso(this.clock);
 
-      await writeModelDefaults(tx, profileId, data, new Date(updatedAt));
-      // Keep the old switch in sync for older gateway versions and existing profiles that
-      // turned stickers off before Model defaults owned the choice.
-      await tx
-        .update(profiles)
-        .set({ useStickers: data.sticker !== 'disabled' })
-        .where(eq(profiles.id, profileId));
-      await recordEvent(tx, this.clock, profileId, 'model-defaults.updated', data);
+      await writeModelDefaults(tx, data, new Date(updatedAt));
 
-      return modelDefaultsRecordSchema.parse({ ...data, id: profileId, profileId, updatedAt });
+      return modelDefaultsRecordSchema.parse({ ...data, updatedAt });
     });
   }
 

@@ -245,7 +245,7 @@ export function Providers({ api, mutate, busy }: SectionActions) {
     <>
       <SectionHeading
         title="Providers"
-        description="Connect once, use from every agent. Each agent picks its own model under Model defaults."
+        description="Connect once, use from every agent. Which model runs each activity is chosen under Model defaults."
       />
       <section className="row-group" aria-labelledby="provider-models">
         <h2 id="provider-models">Models</h2>

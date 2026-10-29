@@ -885,7 +885,7 @@ it.each([false])('uses the separately selected compaction model', async (subscri
     kind: 'google',
     secret: 'synthetic-summary-key-1234567890',
   });
-  await services.providers.setModelDefaults(profile.id, {
+  await services.providers.setModelDefaults({
     compaction: { providerId: provider.id, modelId: 'summary-model' },
   });
   let summaryCalls = 0;

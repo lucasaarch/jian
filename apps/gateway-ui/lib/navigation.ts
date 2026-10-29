@@ -43,7 +43,6 @@ export const navigation: NavigationItem[] = [
   { path: 'sessions', label: 'Chats', icon: MessageSquare, group: 'workspace' },
   { path: 'projects', label: 'Projects', icon: FolderGit2, group: 'workspace' },
   { path: 'identity', label: 'Identity', icon: Fingerprint, group: 'agent-setup' },
-  { path: 'models', label: 'Model defaults', icon: Cpu, group: 'agent-setup' },
   { path: 'memories', label: 'Memories', icon: BookOpen, group: 'agent-setup' },
   { path: 'skills', label: 'Skills', icon: Sparkles, group: 'agent-setup' },
   { path: 'integrations', label: 'Integrations', icon: Cable, group: 'connections' },
@@ -51,6 +50,7 @@ export const navigation: NavigationItem[] = [
   { path: 'ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'connections' },
   { path: 'schedules', label: 'Schedules', icon: AlarmClock, group: 'automation' },
   { path: 'providers', label: 'Providers', icon: Plug, group: 'gateway' },
+  { path: 'models', label: 'Model defaults', icon: Cpu, group: 'gateway' },
   { path: 'remote', label: 'Remote Control', icon: Monitor, group: 'gateway' },
 ];
 

@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import {
   type McpServer,
   mcpImportSchema,
-  optionalModelRoles,
   type Profile,
   profilePatchSchema,
   profileSchema,
@@ -15,7 +14,7 @@ import { recordEvent } from '../core/events.js';
 import { environmentProvider, type ProviderKind, providerCatalog } from '../providers/catalog.js';
 import type { Vault } from '../security/vault.js';
 import type { Queryable, Store } from '../storage/database.js';
-import { modelDefaults, providers } from '../storage/schema.js';
+import { providers } from '../storage/schema.js';
 import {
   deleteProfileRow,
   findProfile,
@@ -125,14 +124,6 @@ export class Profiles {
       const { stored, values, oauthSecrets } = stripMcpValues(profile);
 
       await insertProfile(tx, stored);
-      await tx.insert(modelDefaults).values(
-        [...optionalModelRoles].map((role) => ({
-          profileId: stored.id,
-          role,
-          providerId: '00000000-0000-0000-0000-000000000000',
-          modelId: 'disabled',
-        })),
-      );
       await this.writeMcpValues(profile.id, values, tx);
       await this.writeOauthClientSecrets(profile.id, oauthSecrets, tx);
       await insertRevision(tx, stored);

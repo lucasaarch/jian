@@ -425,14 +425,14 @@ export const operations: Operation[] = [
   },
   {
     method: 'GET',
-    path: `${profile}/model-defaults`,
+    path: '/v1/model-defaults',
     operationId: 'getModelDefaults',
     access: 'admin',
     response: modelDefaultsRecordSchema,
   },
   {
     method: 'PUT',
-    path: `${profile}/model-defaults`,
+    path: '/v1/model-defaults',
     operationId: 'setModelDefaults',
     access: 'admin',
     body: modelDefaultsInputSchema,

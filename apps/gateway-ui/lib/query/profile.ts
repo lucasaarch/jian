@@ -98,10 +98,10 @@ export const queries = {
       queryKey: keys.activities(profileId),
       queryFn: () => panelApi().activities(profileId),
     }),
-  modelDefaults: (profileId: string) =>
+  modelDefaults: () =>
     queryOptions({
-      queryKey: keys.modelDefaults(profileId),
-      queryFn: () => panelApi().modelDefaults(profileId),
+      queryKey: keys.modelDefaults,
+      queryFn: () => panelApi().modelDefaults(),
     }),
 };
 

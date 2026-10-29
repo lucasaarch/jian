@@ -148,9 +148,8 @@ export const modelDefaultsInputSchema = z.strictObject({
   ),
 });
 
+/** The installation's models: every agent runs on these unless a conversation chose its own. */
 export const modelDefaultsRecordSchema = modelDefaultsInputSchema.extend({
-  id: z.uuid(),
-  profileId: z.uuid(),
   updatedAt: z.iso.datetime(),
 });
 

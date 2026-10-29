@@ -1,7 +1,6 @@
-import { readFile } from 'node:fs/promises';
 import type { Run } from '@jian/contracts';
 import { asSchema } from 'ai';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { expect, it } from 'vitest';
 import { listDeliveries } from '../src/channels/repository.js';
 import { Channels } from '../src/channels/service.js';
@@ -9,7 +8,7 @@ import { TelegramChannel } from '../src/channels/telegram.js';
 import { outgoingMedia } from '../src/channels/whatsapp/driver.js';
 import { readWhatsAppContent } from '../src/channels/whatsapp/media.js';
 import { Stickers } from '../src/stickers/service.js';
-import { modelDefaults, profiles } from '../src/storage/schema.js';
+import { modelDefaults } from '../src/storage/schema.js';
 import { testServices } from './helpers/services.js';
 
 const webp = (tag: string) => Buffer.from(`RIFF-webp-${tag}`).toString('base64');
@@ -21,7 +20,7 @@ async function collection() {
     instructions: 'Help.',
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
   });
-  await services.providers.setModelDefaults(profile.id, { sticker: null });
+  await services.providers.setModelDefaults({ sticker: null });
   const described: string[] = [];
   const descriptions: Record<string, { keep: boolean; description: string; tags: string[] }> = {
     [webp('laugh')]: {
@@ -55,43 +54,6 @@ async function collection() {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
-it('migrates an unset legacy sticker choice without overwriting a saved Automatic choice', async () => {
-  const services = await testServices();
-  const create = (name: string) =>
-    services.profiles.createProfile({
-      name,
-      instructions: 'Help.',
-      model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-    });
-  const legacy = await create('Legacy');
-  const explicit = await create('Explicit');
-
-  await services.store.db.delete(modelDefaults).where(eq(modelDefaults.profileId, legacy.id));
-  await services.store.db
-    .update(profiles)
-    .set({ useStickers: true })
-    .where(eq(profiles.id, legacy.id));
-  await services.providers.setModelDefaults(explicit.id, { sticker: null });
-
-  const migration = await readFile(
-    new URL('../migrations/0040_stickers-default-off.sql', import.meta.url),
-    'utf8',
-  );
-  for (const statement of migration.split('--> statement-breakpoint')) {
-    await services.store.db.execute(sql.raw(statement));
-  }
-
-  const [legacySticker] = await services.store.db
-    .select()
-    .from(modelDefaults)
-    .where(and(eq(modelDefaults.profileId, legacy.id), eq(modelDefaults.role, 'sticker')));
-  expect(legacySticker?.modelId).toBe('disabled_legacy_default');
-  expect((await services.profiles.profile(legacy.id)).useStickers).toBe(false);
-  expect((await services.providers.modelDefaults(legacy.id)).sticker).toBe('disabled');
-  expect((await services.providers.modelDefaults(explicit.id)).sticker).toBeNull();
-  expect((await services.profiles.profile(explicit.id)).useStickers).toBe(true);
-});
-
 it('starts optional media activities disabled and enables sticker collection only through its default', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile({
@@ -99,7 +61,7 @@ it('starts optional media activities disabled and enables sticker collection onl
     instructions: 'Help.',
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
   });
-  const first = await services.providers.modelDefaults(profile.id);
+  const first = await services.providers.modelDefaults();
   for (const role of ['sticker', 'audio', 'speech', 'image', 'vision'] as const)
     expect(first[role]).toBe('disabled');
 
@@ -107,42 +69,22 @@ it('starts optional media activities disabled and enables sticker collection onl
   await services.stickers.keep(profile.id, sticker);
   expect(await services.stickers.list(profile.id)).toEqual([]);
 
-  await services.providers.setModelDefaults(profile.id, { sticker: 'disabled' });
+  await services.providers.setModelDefaults({ sticker: 'disabled' });
   const [stored] = await services.store.db
     .select()
     .from(modelDefaults)
-    .where(and(eq(modelDefaults.profileId, profile.id), eq(modelDefaults.role, 'sticker')));
+    .where(eq(modelDefaults.role, 'sticker'));
   expect(stored).toMatchObject({
     providerId: '00000000-0000-0000-0000-000000000000',
     modelId: 'disabled',
   });
 
-  await services.providers.setModelDefaults(profile.id, { sticker: null });
-  const enabled = await services.providers.modelDefaults(profile.id);
+  await services.providers.setModelDefaults({ sticker: null });
+  const enabled = await services.providers.modelDefaults();
   expect(enabled.sticker).toBeNull();
   expect(enabled.image).toBe('disabled');
-  expect((await services.profiles.profile(profile.id)).useStickers).toBe(true);
   await services.stickers.keep(profile.id, sticker);
   expect(await services.stickers.list(profile.id)).toHaveLength(1);
-});
-
-it('honors a saved legacy sticker-off switch until Model defaults explicitly enables it', async () => {
-  const f = await collection();
-  const current = await f.services.profiles.profile(f.profile.id);
-  await f.services.profiles.updateProfile(f.profile.id, {
-    expectedVersion: current.version,
-    useStickers: false,
-  });
-  expect((await f.services.providers.modelDefaults(f.profile.id)).sticker).toBe('disabled');
-  await f.stickers.keep(f.profile.id, {
-    mimeType: 'image/webp',
-    data: webp('laugh'),
-    sticker: true,
-  });
-  expect(await f.stickers.list(f.profile.id)).toEqual([]);
-
-  await f.services.providers.setModelDefaults(f.profile.id, { sticker: null });
-  expect((await f.services.providers.modelDefaults(f.profile.id)).sticker).toBeNull();
 });
 
 it('keeps each sticker once, counts it each time, and finds it by tag, meaning or popularity', async () => {
@@ -202,7 +144,7 @@ it('forgets every sticker for one agent without affecting another or collecting 
     instructions: 'Help.',
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
   });
-  await f.services.providers.setModelDefaults(other.id, { sticker: null });
+  await f.services.providers.setModelDefaults({ sticker: null });
   const keep = (profileId: string, tag: string) =>
     f.stickers.keep(profileId, { mimeType: 'image/webp', data: webp(tag), sticker: true });
 
@@ -252,7 +194,7 @@ it('sends a sticker as a sticker, on the chat the conversation is on', async () 
     sticker: true,
   });
   const [sticker] = await f.stickers.list(f.profile.id);
-  await f.services.providers.setModelDefaults(f.profile.id, { sticker: 'disabled' });
+  await f.services.providers.setModelDefaults({ sticker: 'disabled' });
   const send = f.stickers.tools(run as Run).send_sticker;
 
   await send?.execute?.(
@@ -427,14 +369,14 @@ it('leaves out a sticker the model declines, and keeps nothing while stickers ar
   // Declined once, never looked at again: the second sending cost no call.
   expect(f.described).toEqual([webp('explicit')]);
 
-  await f.services.providers.setModelDefaults(f.profile.id, { sticker: 'disabled' });
+  await f.services.providers.setModelDefaults({ sticker: 'disabled' });
   await keep('laugh');
   await settle();
 
   expect(await f.stickers.list(f.profile.id)).toEqual([]);
   expect(f.described).toHaveLength(1);
 
-  expect((await f.services.providers.modelDefaults(f.profile.id)).sticker).toBe('disabled');
+  expect((await f.services.providers.modelDefaults()).sticker).toBe('disabled');
 });
 
 it('offers its tools in schemas OpenAI accepts, and still refuses a malformed tag', async () => {

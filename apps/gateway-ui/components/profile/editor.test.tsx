@@ -17,7 +17,6 @@ const profile = {
   avatar: null,
   identity: { role: '', tone: '', goals: [], boundaries: [] },
   allowShell: false,
-  useStickers: true,
   version: 3,
 } as unknown as Profile;
 

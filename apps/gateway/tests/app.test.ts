@@ -110,7 +110,7 @@ describe('HTTP services', () => {
     const chosen = { providerId: created.json().id, modelId: 'gpt-4.1-mini' };
     const configured = await app.inject({
       method: 'PUT',
-      url: `${base}/model-defaults`,
+      url: '/v1/model-defaults',
       headers,
       payload: { conversation: chosen, channel: null },
     });

@@ -255,7 +255,7 @@ it('delivers image pixels to the conversation model after a cold catalog start',
     }),
   );
   const f = await mediaFixture(catalog);
-  await f.services.providers.setModelDefaults(f.profile.id, { vision: null });
+  await f.services.providers.setModelDefaults({ vision: null });
   await f.incoming('What color?', 'native', [{ mimeType: 'image/png', data: png }]);
   const [contact] = await f.channels.contacts(f.profile.id);
   if (!contact) throw new Error('Missing contact');
@@ -273,7 +273,7 @@ it('delivers image pixels to the conversation model after a cold catalog start',
 
 it('transcribes an incoming voice note once and reuses the transcript on later steps', async () => {
   const f = await mediaFixture();
-  await f.services.providers.setModelDefaults(f.profile.id, { audio: null });
+  await f.services.providers.setModelDefaults({ audio: null });
   await f.services.providers.createProvider({
     name: 'Gemini',
     kind: 'google',
@@ -420,7 +420,7 @@ it('uses the incoming audio model for both voice notes and attached audio files'
     kind: 'google',
     secret: 'synthetic-google-key-1234567890',
   });
-  await f.services.providers.setModelDefaults(f.profile.id, {
+  await f.services.providers.setModelDefaults({
     conversation: { providerId: provider.id, modelId: 'gemini-flash-latest' },
     audio: { providerId: provider.id, modelId: 'gemini-incoming-test' },
     transcription: { providerId: provider.id, modelId: 'gemini-legacy-test' },
@@ -467,16 +467,16 @@ it('preserves a legacy transcription selection as the incoming audio default', a
     secret: 'synthetic-openai-key-1234567890',
   });
   const selection = { providerId: provider.id, modelId: 'gpt-4o-mini-transcribe' };
-  await f.services.providers.setModelDefaults(f.profile.id, { transcription: selection });
-  const defaults = await f.services.providers.modelDefaults(f.profile.id);
+  await f.services.providers.setModelDefaults({ transcription: selection });
+  const defaults = await f.services.providers.modelDefaults();
   expect(defaults.audio).toEqual(selection);
-  await f.services.providers.setModelDefaults(f.profile.id, {
+  await f.services.providers.setModelDefaults({
     audio: null,
     transcription: selection,
   });
-  expect((await f.services.providers.modelDefaults(f.profile.id)).audio).toEqual(selection);
-  await f.services.providers.setModelDefaults(f.profile.id, { audio: null });
-  expect((await f.services.providers.modelDefaults(f.profile.id)).audio).toBeNull();
+  expect((await f.services.providers.modelDefaults()).audio).toEqual(selection);
+  await f.services.providers.setModelDefaults({ audio: null });
+  expect((await f.services.providers.modelDefaults()).audio).toBeNull();
 });
 
 it('discovers voices for the profile speech provider instead of its conversation provider', async () => {
@@ -486,7 +486,7 @@ it('discovers voices for the profile speech provider instead of its conversation
     kind: 'google',
     secret: 'synthetic-google-key-1234567890',
   });
-  await f.services.providers.setModelDefaults(f.profile.id, {
+  await f.services.providers.setModelDefaults({
     speech: { providerId: provider.id, modelId: 'gemini-2.5-flash-preview-tts' },
   });
   await f.incoming('Choose a voice', 'voices');
@@ -514,7 +514,7 @@ it('recovers an auxiliary image analysis after temporary provider overload', asy
     kind: 'google',
     secret: 'synthetic-google-key-1234567890',
   });
-  await f.services.providers.setModelDefaults(f.profile.id, {
+  await f.services.providers.setModelDefaults({
     vision: { providerId: provider.id, modelId: 'gemini-flash-latest' },
   });
   await f.incoming('What color?', 'overload', [{ mimeType: 'image/png', data: png }]);

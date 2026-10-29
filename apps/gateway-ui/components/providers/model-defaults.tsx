@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useAgent, useModelCatalog } from '@/lib/query/agent';
+import { useModelCatalog } from '@/lib/query/agent';
 import { useRefresh } from '@/lib/workspace';
 import type { ModelDefaultsInput, ModelSelection, ReasoningEffort } from '../../lib/api';
 import { useAutosave } from '../../lib/autosave';
@@ -50,7 +50,6 @@ function toSelection(value: RoleValue): ModelSelection | 'disabled' | null {
 
 export function ModelDefaults({ api, busy }: Pick<SectionActions, 'api' | 'busy'>) {
   const catalog = useModelCatalog();
-  const profile = useAgent();
   const configured = usableProviders(catalog);
   const hasOpenAIKey = configured.some(
     (provider) => provider.kind === 'openai' && provider.authMode !== 'codex',
@@ -83,7 +82,6 @@ export function ModelDefaults({ api, busy }: Pick<SectionActions, 'api' | 'busy'
   const { schedule, flush } = useAutosave(async () => {
     try {
       await api.setModelDefaults(
-        profile.id,
         Object.fromEntries(
           roles.map((role) => [role.key, toSelection(latest.current[role.key])]),
         ) as ModelDefaultsInput,
@@ -113,7 +111,7 @@ export function ModelDefaults({ api, busy }: Pick<SectionActions, 'api' | 'busy'
     <>
       <SectionHeading
         title="Model defaults"
-        description="Choose a default model for each activity, or disable optional activities. New setups prefer Claude Opus 5.5 when available, then GPT-6 Astra, then another compatible model."
+        description="The model every agent uses for each activity, unless a conversation picks its own. Disable optional activities here. New setups prefer Claude Opus 5.5 when available, then GPT-6 Astra, then another compatible model."
       />
       <form
         method="post"
