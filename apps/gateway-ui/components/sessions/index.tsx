@@ -15,7 +15,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
-  SlidersHorizontal,
   Terminal,
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -640,68 +639,8 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                   ) : null}
                 </p>
               )}
-              {active.channel === 'whatsapp-business' &&
-                activeContact?.type === 'whatsapp-business' && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span>{activeContact.aiEnabled === false ? 'AI paused' : 'AI replies'}</span>
-                    <Switch
-                      label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
-                      checked={activeContact.aiEnabled ?? true}
-                      disabled={busy}
-                      onChange={(aiEnabled) =>
-                        void mutate(
-                          () => api.updateContact(profile.id, activeContact.id, { aiEnabled }),
-                          aiEnabled
-                            ? 'AI enabled for this chat. Approval and channel automation still apply; no replay.'
-                            : 'AI paused for this chat, including queued replies.',
-                        )
-                      }
-                    />
-                    {channels.some(
-                      (channel) =>
-                        channel.id === activeContact.channelId &&
-                        channel.profileId === profile.id &&
-                        channel.enabled === false,
-                    ) && <Badge tone="warn">Channel automation paused</Badge>}
-                    {activeContact.status !== 'approved' && (
-                      <Badge>Contact {activeContact.status}</Badge>
-                    )}
-                    <p className="w-full text-xs text-muted">
-                      Separate from approval and channel automation. Paused messages are never
-                      replayed; queued replies stop. A request already in flight may finish.
-                    </p>
-                  </div>
-                )}
               <SessionListeners api={api} profileId={profile.id} sessionId={active.id} />
             </div>
-            {!isGateway(active) && kindOf(active) !== 'learning' && (
-              <>
-                <div className="session-model-desktop">
-                  <SessionModel
-                    key={`model-desktop-${active.id}`}
-                    api={api}
-                    profileId={profile.id}
-                    session={active}
-                    channel={isMessaging(active)}
-                    saved={() => void refresh()}
-                  />
-                </div>
-                <details key={`model-mobile-${active.id}`} className="session-model-mobile">
-                  <summary className="icon-button" aria-label="Chat model settings">
-                    <SlidersHorizontal size={18} />
-                  </summary>
-                  <div className="session-model-mobile-panel">
-                    <SessionModel
-                      api={api}
-                      profileId={profile.id}
-                      session={active}
-                      channel={isMessaging(active)}
-                      saved={() => void refresh()}
-                    />
-                  </div>
-                </details>
-              </>
-            )}
           </header>
           <ModelNames.Provider value={modelName}>
             <div className="conversation-main" data-following={following ? true : undefined}>
@@ -784,6 +723,55 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                       void refresh();
                     }}
                   />
+                )}
+                {(isMessaging(active) || kindOf(active) === 'agent') && (
+                  // Where a chat has its composer, a channel's conversation has its settings:
+                  // whether the agent answers this contact, and on which model.
+                  <section
+                    className="agent-toolbar"
+                    aria-label="Agent settings for this conversation"
+                  >
+                    <div className="agent-toolbar-box">
+                      {isMessaging(active) && activeContact && (
+                        <div className="agent-toolbar-switch">
+                          <Switch
+                            label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
+                            checked={activeContact.aiEnabled ?? true}
+                            disabled={busy}
+                            onChange={(aiEnabled) =>
+                              void mutate(
+                                () =>
+                                  api.updateContact(profile.id, activeContact.id, { aiEnabled }),
+                                aiEnabled
+                                  ? 'AI replies are on for this contact. Messages paused before are not replayed.'
+                                  : 'AI replies are off for this contact, queued replies included.',
+                              )
+                            }
+                          />
+                          <span>AI replies</span>
+                        </div>
+                      )}
+                      {isMessaging(active) &&
+                        activeContact &&
+                        channels.some(
+                          (channel) =>
+                            channel.id === activeContact.channelId && channel.enabled === false,
+                        ) && <Badge tone="warn">Channel paused</Badge>}
+                      {activeContact && activeContact.status !== 'approved' && (
+                        <Badge>Contact {activeContact.status}</Badge>
+                      )}
+                      <span className="grow" />
+                      <SessionModel
+                        key={`toolbar-model-${active.id}`}
+                        api={api}
+                        profileId={profile.id}
+                        session={active}
+                        channel={isMessaging(active)}
+                        className="composer-model-control"
+                        saved={() => void refresh()}
+                      />
+                    </div>
+                  </section>
                 )}
               </div>
               <CrewDrawer api={api} profileId={profile.id} />
