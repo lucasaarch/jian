@@ -8,7 +8,17 @@ import { keys as cache } from '@/lib/query/keys';
 import type { SshKey } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionActions } from '../props';
-import { Badge, Button, Confirm, Empty, Field, Modal, ResourceRow, SectionHeading } from '../ui';
+import {
+  Badge,
+  Button,
+  Confirm,
+  Empty,
+  Field,
+  IconButton,
+  Modal,
+  ResourceRow,
+  SectionHeading,
+} from '../ui';
 
 export function SshKeys({ api, mutate, busy }: SectionActions) {
   const profile = useAgent();
@@ -84,22 +94,12 @@ export function SshKeys({ api, mutate, busy }: SectionActions) {
               facts={[key.fingerprint, `Created ${date(key.createdAt)}`]}
               actions={
                 <>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={`Copy ${key.name}`}
-                    onClick={() => void copy(key)}
-                  >
+                  <IconButton aria-label={`Copy ${key.name}`} onClick={() => void copy(key)}>
                     {copied === key.id ? <Check size={16} /> : <Copy size={16} />}
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={`Delete ${key.name}`}
-                    onClick={() => setRemoving(key)}
-                  >
+                  </IconButton>
+                  <IconButton aria-label={`Delete ${key.name}`} onClick={() => setRemoving(key)}>
                     <Trash2 size={16} />
-                  </button>
+                  </IconButton>
                 </>
               }
             />

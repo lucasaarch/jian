@@ -5,6 +5,7 @@ import { type ReactNode, useId, useState } from 'react';
 import { Button } from './button';
 import { useDialogMotion } from './dialog-motion';
 import { Field } from './field';
+import { IconButton } from './icon-button';
 
 /**
  * A native dialog: Escape and the backdrop are the browser's, so close() is the only exit.
@@ -48,9 +49,9 @@ export function Modal({
           <h2 id={heading}>{title}</h2>
           {description && <p>{description}</p>}
         </div>
-        <button className="icon-button" type="button" aria-label="Close" onClick={requestClose}>
+        <IconButton aria-label="Close" onClick={requestClose}>
           <X size={20} />
-        </button>
+        </IconButton>
       </header>
       {children && <div className="modal-body">{children}</div>}
       {footer && <footer className="modal-footer">{footer}</footer>}

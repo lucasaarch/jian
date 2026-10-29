@@ -5,7 +5,16 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useAgent, useAgents } from '@/lib/query/agent';
 import type { SectionActions } from '../props';
-import { Badge, Button, Confirm, Empty, ProviderLogo, ResourceRow, SectionHeading } from '../ui';
+import {
+  Badge,
+  Button,
+  Confirm,
+  Empty,
+  IconButton,
+  ProviderLogo,
+  ResourceRow,
+  SectionHeading,
+} from '../ui';
 import { BuiltinSkills } from './built-in';
 import { SkillCatalog } from './catalog';
 import { SkillImport } from './import';
@@ -132,9 +141,7 @@ export function Capabilities({
                           <Eye size={16} />
                           View
                         </Button>
-                        <button
-                          type="button"
-                          className="icon-button"
+                        <IconButton
                           aria-label={`Edit ${item.name}`}
                           onClick={() => {
                             setFailed(false);
@@ -142,15 +149,13 @@ export function Capabilities({
                           }}
                         >
                           <Pencil size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-button"
+                        </IconButton>
+                        <IconButton
                           aria-label={`Remove ${item.name}`}
                           onClick={() => setRemoving(index)}
                         >
                           <Trash2 size={16} />
-                        </button>
+                        </IconButton>
                       </>
                     }
                   />

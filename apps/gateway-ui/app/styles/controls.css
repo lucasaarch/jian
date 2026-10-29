@@ -4,7 +4,7 @@
 
 @layer components {
   .select-trigger {
-    @apply flex min-h-11 w-full min-w-0 items-center justify-between gap-3 rounded-sm border border-control bg-surface px-3.5 py-3 text-left text-sm text-ink transition-colors;
+    @apply flex min-h-control w-full min-w-0 items-center justify-between gap-3 rounded-sm border border-control bg-surface px-3.5 py-3 text-left text-sm text-ink transition-colors;
   }
   .select-trigger:hover:not(:disabled) {
     @apply border-control;
@@ -14,6 +14,23 @@
     @apply border-control bg-surface;
     outline: none;
     box-shadow: none;
+  }
+  .select-trigger.ghost {
+    @apply h-9 min-h-9 w-auto max-w-40 shrink-0 gap-1 rounded-md border-transparent bg-transparent px-2 py-1 text-xs text-muted;
+  }
+  .select-trigger.ghost:hover:not(:disabled),
+  .select-trigger.ghost:focus-visible,
+  .select-trigger.ghost[data-popup-open] {
+    @apply border-transparent bg-canvas text-ink;
+  }
+  .select-trigger.ghost .select-value {
+    @apply gap-1.5;
+  }
+  .select-trigger.ghost .select-chevron {
+    @apply h-3.5 w-3.5;
+  }
+  .select-trigger.subtle {
+    @apply border-line bg-surface/60 px-3;
   }
   .select-value {
     @apply flex min-w-0 items-center gap-3;
@@ -54,6 +71,15 @@
     transition:
       opacity 120ms,
       transform 120ms;
+  }
+  .select-popup.wide {
+    @apply w-80 min-w-80;
+  }
+  .select-popup.wide .select-option-copy > span {
+    @apply block truncate;
+  }
+  .select-popup.wide .select-option-copy small {
+    @apply whitespace-nowrap;
   }
   .select-popup[data-starting-style],
   .select-popup[data-ending-style] {
@@ -111,9 +137,6 @@
   .select-footer button {
     @apply flex w-full items-center gap-3 rounded px-3 py-3 text-xs text-accent hover:bg-accent-soft;
   }
-  .profile-trigger {
-    @apply border-line bg-surface/60 px-3 py-3;
-  }
   .profile-trigger-copy {
     @apply min-w-0;
   }
@@ -145,9 +168,6 @@
   }
   .provider-row .connection-form {
     @apply max-w-xl border-t border-line pt-5;
-  }
-  .provider-row .select-trigger {
-    @apply bg-canvas;
   }
   .connection-meta {
     @apply mt-5 flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted;
@@ -579,9 +599,6 @@
   }
   .skill-import-hint {
     @apply col-span-full text-xs text-muted;
-  }
-  .skill-import .button {
-    @apply min-h-[46px];
   }
   .catalog-toolbar {
     @apply mb-4 flex flex-wrap items-center justify-between gap-4;

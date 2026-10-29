@@ -150,7 +150,7 @@
     @apply text-xs;
   }
   .button {
-    @apply relative inline-flex min-h-11 shrink-0 items-center justify-center gap-2.5 rounded-sm border border-transparent px-4 py-2.5 text-xs font-medium transition-all;
+    @apply relative inline-flex min-h-control shrink-0 items-center justify-center gap-2.5 rounded-sm border border-transparent px-4 py-2.5 text-xs font-medium transition-all;
   }
   .button:active:not(:disabled) {
     transform: translateY(1px);
@@ -170,6 +170,9 @@
   }
   .icon-button {
     @apply inline-flex min-h-10 min-w-10 items-center justify-center rounded-sm text-muted hover:bg-accent-soft hover:text-accent;
+  }
+  .icon-button.control {
+    @apply size-control;
   }
   .icon-button:disabled {
     @apply cursor-default opacity-50 hover:bg-transparent hover:text-muted;

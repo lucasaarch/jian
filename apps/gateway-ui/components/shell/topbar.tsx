@@ -1,6 +1,6 @@
 'use client';
 import { Menu } from 'lucide-react';
-import { Mark } from '../ui';
+import { IconButton, Mark } from '../ui';
 export function Topbar({
   onOpenNavigation,
   navigationOpen,
@@ -13,16 +13,14 @@ export function Topbar({
       <span className="flex items-center gap-2 font-display text-lg font-semibold tracking-tight">
         <Mark small /> Jian
       </span>
-      <button
-        type="button"
-        className="icon-button"
+      <IconButton
         aria-label="Open navigation"
         aria-expanded={navigationOpen}
         aria-controls="main-navigation"
         onClick={onOpenNavigation}
       >
         <Menu size={20} />
-      </button>
+      </IconButton>
     </header>
   );
 }

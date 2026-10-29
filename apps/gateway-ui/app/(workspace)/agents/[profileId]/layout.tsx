@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { type ReactNode, Suspense, useEffect } from 'react';
 import { Loading, NoAgents } from '@/components/shell/states';
-import { Empty } from '@/components/ui';
+import { buttonClass, Empty } from '@/components/ui';
 import { useProfiles } from '@/lib/query/profile';
 import { useEventStream } from '@/lib/query/stream';
 import { useLastProfile } from '@/lib/stores/last-profile';
@@ -25,7 +25,7 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
       <Empty
         title="This agent is not here"
         action={
-          <Link href="/" className="button secondary">
+          <Link href="/" className={buttonClass('secondary')}>
             Open another agent
           </Link>
         }

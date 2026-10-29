@@ -8,7 +8,7 @@ import { queries } from '@/lib/query/profile';
 import { useAgentPath, useLoading, useProfileId, useSignOut } from '@/lib/workspace';
 import { currentSection, navigation, navigationGroups } from '../../lib/navigation';
 import { useReleaseNotes } from '../releases/dialog';
-import { GitHubLogo, Mark } from '../ui';
+import { GitHubLogo, IconButton, Mark } from '../ui';
 import { ProfileSwitcher } from './profile-switcher';
 import { ThemeSwitcher } from './theme';
 
@@ -41,14 +41,13 @@ export function Sidebar({
       role={open ? 'dialog' : undefined}
       aria-label={open ? 'Navigation' : undefined}
     >
-      <button
-        type="button"
-        className="icon-button mobile-menu absolute right-3 top-3"
+      <IconButton
+        className="mobile-menu absolute right-3 top-3"
         aria-label="Close navigation"
         onClick={onNavigate}
       >
         <X size={18} />
-      </button>
+      </IconButton>
       <Link className="brand" href="/" onClick={onNavigate}>
         <Mark className={loading ? 'connecting' : contacts.data ? 'connected' : ''} />
         <span>Jian</span>

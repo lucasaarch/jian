@@ -23,7 +23,7 @@ export function ProfileSwitcher({ onCreate }: { onCreate: () => void }) {
     <div className="profile-selector">
       <Select
         aria-label="Active agent"
-        className="profile-trigger"
+        variant="subtle"
         value={selected}
         onValueChange={select}
         disabled={busy}

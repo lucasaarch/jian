@@ -113,8 +113,8 @@ export function SessionModel({
     <div className={`session-model ${className ?? ''}`}>
       <Select
         aria-label="Model for this conversation"
-        className="composer-select-ghost"
-        popupClassName="composer-model-popup"
+        variant="ghost"
+        popup="wide"
         value={current}
         disabled={busy}
         onValueChange={(choice) => {
@@ -154,7 +154,7 @@ export function SessionModel({
       />
       <Select
         aria-label="Reasoning effort for this conversation"
-        className="composer-select-ghost"
+        variant="ghost"
         value={model?.reasoningEffort ?? ''}
         disabled={busy || !model || !allowed.length}
         onValueChange={(effort) =>

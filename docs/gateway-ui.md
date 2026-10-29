@@ -18,6 +18,14 @@ Every page is rendered per request, so the script policy can carry a fresh nonce
 
 The panel holds no workspace in React context. The open agent is the URL's `[profileId]`; what the panel shows comes from [TanStack Query](https://tanstack.com/query), one query per slice (`lib/query`). A section reads the slices it shows with the hooks in `lib/query/agent.ts`, which suspend until they arrive, and is handed only its actions — the client, `mutate` and `busy` — by its page. `mutate` runs an action, reports it and invalidates the agent's queries. The agent's event stream (`lib/query/stream.ts`) invalidates exactly what an event changed, so the panel follows the agent without polling and never asks the providers for their models again on its own. Screens that poll — a machine coming online, a WhatsApp pairing, a ChatGPT login — do it with the query's own interval. The state that is the browser's alone — the agent opened last, the theme, whether the new agent dialog or the release notes are open — lives in [Zustand](https://zustand.docs.pmnd.rs) stores. The panel uses no React context of its own.
 
+## Styles
+
+Each shared component in `components/ui` has one semantic class, written with Tailwind's `@apply` in `app/styles`. When a component looks different somewhere, that look is a variant the component takes — `<Button variant="quiet">`, `<Select variant="ghost" popup="wide">`, `<IconButton size="control">` — and becomes a modifier class beside its own (`.select-trigger.ghost`). A screen never restyles a component by nesting a selector under its own class: the next screen that needs the same look would not find it. Where a component sits — margin, width, flex — is the container's, so a wrapper or the container's own rule carries it.
+
+Controls that stand side by side share one height, `control` (46px, what an input measures with its padding, line and border), declared in `app/styles/themes.css`. Buttons and selects take it; an icon button takes it with `size="control"`. Repeated markup becomes a component in `components/ui` (`SearchField`, `IconButton`); a link that looks like a button takes `buttonClass(variant)`.
+
+`pnpm --filter @jian/gateway-ui knip` runs in `pnpm check` and fails on an unused file, export or dependency.
+
 ## Tests
 
 `pnpm --filter @jian/gateway-ui test` runs the panel's unit tests in happy-dom, with no gateway and no network. A section is rendered inside `<AgentCache profile={...} slices={...}>` from `test/agent.tsx`, which puts the agent's slices in a cache of its own and the agent in the URL; its actions are handed in as props, so a test injects the client calls it checks. `test/setup.ts` stands in for Next's router, and `test/fixtures.ts` holds the synthetic agent and usage the tests share.

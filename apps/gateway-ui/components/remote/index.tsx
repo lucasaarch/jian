@@ -6,7 +6,17 @@ import { useEffect, useState } from 'react';
 import { keys } from '@/lib/query/keys';
 import type { GatewayApi } from '../../lib/api';
 import { Avatar } from '../profile/avatar-field';
-import { Badge, Button, Confirm, Empty, Field, Modal, ResourceRow, SectionHeading } from '../ui';
+import {
+  Badge,
+  Button,
+  Confirm,
+  Empty,
+  Field,
+  IconButton,
+  Modal,
+  ResourceRow,
+  SectionHeading,
+} from '../ui';
 import { Select } from '../ui/select';
 
 type Props = { api: GatewayApi };
@@ -69,9 +79,7 @@ function CopyBlock({
     <div className="copy-block">
       <div className="copy-block-head">
         <span>{label}</span>
-        <button
-          type="button"
-          className="icon-button"
+        <IconButton
           aria-label={ariaLabel}
           onClick={async () => {
             try {
@@ -85,7 +93,7 @@ function CopyBlock({
           }}
         >
           {copied ? <Check size={16} /> : <Copy size={16} />}
-        </button>
+        </IconButton>
       </div>
       <textarea
         className="secret-value"
@@ -323,15 +331,13 @@ export function RemoteMachines({ api }: Props) {
                 busy={busy}
                 onToggle={() => setOpenId(open ? undefined : machine.id)}
                 actions={
-                  <button
-                    type="button"
-                    className="icon-button"
+                  <IconButton
                     aria-label={`Remove ${machine.name}`}
                     disabled={busy}
                     onClick={() => setRemoving(machine)}
                   >
                     <Trash2 size={16} />
-                  </button>
+                  </IconButton>
                 }
               >
                 <div className="connection-form">

@@ -13,16 +13,24 @@ export type SelectOption = {
   disabled?: boolean;
 };
 
+/**
+ * How the trigger looks where it stands. `default` is a form field. `ghost` is borderless and
+ * compact, among the composer's tools. `subtle` has a lighter border over a translucent fill,
+ * for the sidebar.
+ */
+type SelectVariant = 'default' | 'ghost' | 'subtle';
+
 type CommonProps = {
   options: SelectOption[];
+  variant?: SelectVariant;
+  /** `anchor` is as wide as the trigger; `wide` is a fixed width for long names under a small trigger. */
+  popup?: 'anchor' | 'wide';
   disabled?: boolean;
   id?: string;
   'aria-label'?: string;
   'aria-describedby'?: string;
   placeholder?: string;
   searchThreshold?: number;
-  className?: string;
-  popupClassName?: string;
   footer?: (close: () => void) => ReactNode;
 };
 
@@ -109,8 +117,8 @@ export function Select(props: Props) {
     id,
     placeholder = 'Select',
     searchThreshold = 8,
-    className = '',
-    popupClassName = '',
+    variant = 'default',
+    popup = 'anchor',
     footer,
     renderValue,
   } = props;
@@ -156,7 +164,7 @@ export function Select(props: Props) {
     id,
     disabled,
     ...aria,
-    className: `select-trigger ${className}`,
+    className: `select-trigger ${variant}`,
   };
   const footerContent = footer && (
     <div className="select-footer">{footer(() => setOpen(false))}</div>
@@ -190,7 +198,7 @@ export function Select(props: Props) {
               collisionBoundary={[]}
             >
               <Combobox.Popup
-                className={`select-popup ${popupClassName}`}
+                className={`select-popup ${popup}`}
                 aria-label={aria['aria-label'] ?? 'Options'}
               >
                 <div className="select-search">
@@ -243,7 +251,7 @@ export function Select(props: Props) {
             collisionBoundary={[]}
           >
             <Combobox.Popup
-              className={`select-popup ${popupClassName}`}
+              className={`select-popup ${popup}`}
               aria-label={aria['aria-label'] ?? 'Options'}
             >
               <div className="select-search">
@@ -297,7 +305,7 @@ export function Select(props: Props) {
             positionMethod="fixed"
             collisionBoundary={[]}
           >
-            <BaseSelect.Popup className={`select-popup ${popupClassName}`}>
+            <BaseSelect.Popup className={`select-popup ${popup}`}>
               <BaseSelect.List className="select-list">
                 {options.map((option) => (
                   <BaseSelect.Item
@@ -342,7 +350,7 @@ export function Select(props: Props) {
           positionMethod="fixed"
           collisionBoundary={[]}
         >
-          <BaseSelect.Popup className={`select-popup ${popupClassName}`}>
+          <BaseSelect.Popup className={`select-popup ${popup}`}>
             <BaseSelect.List className="select-list">
               {options.map((option) => (
                 <BaseSelect.Item
