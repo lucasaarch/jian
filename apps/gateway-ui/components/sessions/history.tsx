@@ -80,7 +80,7 @@ export function History({
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const isRunning = running(run);
-  const { scroller, follow, onScroll } = useFollowBottom();
+  const { scroller, follow, onScroll, hold } = useFollowBottom();
 
   // Sending is a return to the end, wherever the reader had scrolled.
   useEffect(() => {
@@ -150,6 +150,16 @@ export function History({
     useCrew.getState().show(sessionId, subagents);
   }, [sessionId, subagents]);
   useEffect(() => () => useCrew.getState().leave(sessionId), [sessionId]);
+  // Opening or closing the drawer narrows or widens the conversation: the card the owner acted
+  // on stays where it was. The store calls back before the layout changes, so the place it
+  // holds is the one the owner was looking at.
+  useEffect(
+    () =>
+      useCrew.subscribe((state, previous) => {
+        if (state.following !== previous.following) hold(state.opener);
+      }),
+    [hold],
+  );
 
   useEffect(() => {
     if (!subagents.some((child) => child.status === 'queued' || child.status === 'running')) return;
