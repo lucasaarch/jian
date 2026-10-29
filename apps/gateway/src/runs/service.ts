@@ -597,7 +597,14 @@ export class Runs {
       ...waiting,
       status: 'completed',
       updatedAt: nowIso(this.clock),
-      question: undefined,
+      // The question stays on the parked run with its answer, so it still reads as a question
+      // with the answer marked; the run's status, not the field, says whether it waits.
+      question: {
+        ...question,
+        answer,
+        answeredAt: nowIso(this.clock),
+        answeredBy: activity === 'channel' ? 'contact' : 'owner',
+      },
       // Keep the question text as the parked run's output; delivery already sent it.
       output: waiting.output,
     };
@@ -612,6 +619,7 @@ export class Runs {
       role: 'user',
       content: said,
       ...(author ? { author } : {}),
+      purpose: 'answer',
       createdAt: nowIso(this.clock),
     });
 
@@ -697,6 +705,7 @@ export class Runs {
         role: 'user',
         content: decision.reply.text,
         ...(decision.reply.author ? { author: decision.reply.author } : {}),
+        purpose: 'answer',
         createdAt: nowIso(this.clock),
       });
     }
@@ -797,6 +806,8 @@ export class Runs {
       runId: run.id,
       role: 'user',
       content: run.input,
+      // The agent's note to carry on: it reads it, the conversation does not show it.
+      purpose: 'resume',
       createdAt: nowIso(this.clock),
     });
 

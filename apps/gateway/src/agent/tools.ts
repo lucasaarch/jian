@@ -235,19 +235,26 @@ export function profileTools(
       ? {
           ask_user: tool({
             description:
-              'Ask the owner a required question and pause this run until they answer. Prefer this over finishing the turn or block_session_objective when you need a concrete choice or fact to continue. Optional choices become buttons in the panel and a reply keyboard on Telegram.',
+              'Ask the owner a required question and pause this run until they answer. Prefer this over finishing the turn or block_session_objective when you need a concrete choice or fact to continue. Optional choices become a list in the panel and a reply keyboard on Telegram. When you have a view on which choice is best, set recommended to that choice, copied exactly; leave it out when you have none.',
             inputSchema: z.object({
               prompt: z.string().trim().min(1).max(2000),
               choices: z.array(z.string().trim().min(1).max(100)).min(2).max(12).optional(),
+              recommended: z.string().trim().min(1).max(100).optional(),
             }),
             execute: async ({
               prompt,
               choices,
+              recommended,
             }: {
               prompt: string;
               choices?: string[];
+              recommended?: string;
             }): Promise<{ paused: true }> => {
-              throw new AskUserPause({ prompt, ...(choices?.length ? { choices } : {}) });
+              throw new AskUserPause({
+                prompt,
+                ...(choices?.length ? { choices } : {}),
+                ...(recommended ? { recommended } : {}),
+              });
             },
           }),
         }

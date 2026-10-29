@@ -3,31 +3,45 @@ import type { RunQuestion } from '@jian/contracts';
 
 /** Thrown from `ask_user` so the runtime can park the run instead of failing the tool. */
 export class AskUserPause extends Error {
-  readonly question: Omit<RunQuestion, 'id' | 'askedAt'> & { choices?: string[] };
+  readonly question: Pick<RunQuestion, 'prompt' | 'choices' | 'recommended'>;
 
-  constructor(question: { prompt: string; choices?: string[] }) {
+  constructor(question: { prompt: string; choices?: string[]; recommended?: string }) {
     super('Waiting for the owner’s answer');
     this.name = 'AskUserPause';
     this.question = question;
   }
 }
 
-export function formatQuestionText(question: Pick<RunQuestion, 'prompt' | 'choices'>): string {
+/** The choices as a numbered list, the recommended one saying so. */
+export function numberedChoices(question: Pick<RunQuestion, 'choices' | 'recommended'>): string[] {
+  return (question.choices ?? []).map(
+    (choice, index) =>
+      `${index + 1}. ${choice}${choice === question.recommended ? ' (recommended)' : ''}`,
+  );
+}
+
+export function formatQuestionText(
+  question: Pick<RunQuestion, 'prompt' | 'choices' | 'recommended'>,
+): string {
   if (!question.choices?.length) return question.prompt;
 
-  const options = question.choices.map((choice, index) => `${index + 1}. ${choice}`).join('\n');
-  return `${question.prompt}\n\n${options}`;
+  return `${question.prompt}\n\n${numberedChoices(question).join('\n')}`;
 }
 
 export function buildRunQuestion(
-  input: { prompt: string; choices?: string[] },
+  input: { prompt: string; choices?: string[]; recommended?: string },
   askedAt: string,
 ): RunQuestion {
+  const choices = input.choices?.length ? input.choices : undefined;
+  // Only a choice on offer can be the recommended one; anything else is dropped, not shown.
+  const recommended = choices?.find((choice) => choice === input.recommended?.trim());
+
   return {
     id: randomUUID(),
     prompt: input.prompt,
     askedAt,
-    ...(input.choices?.length ? { choices: input.choices } : {}),
+    ...(choices ? { choices } : {}),
+    ...(recommended ? { recommended } : {}),
   };
 }
 

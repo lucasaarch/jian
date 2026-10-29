@@ -6540,8 +6540,14 @@ export interface operations {
                             id: string;
                             prompt: string;
                             choices?: string[];
+                            recommended?: string;
                             /** Format: date-time */
                             askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
                         };
                         approval?: {
                             /** Format: uuid */
@@ -6797,8 +6803,14 @@ export interface operations {
                             id: string;
                             prompt: string;
                             choices?: string[];
+                            recommended?: string;
                             /** Format: date-time */
                             askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
                         };
                         approval?: {
                             /** Format: uuid */
@@ -7053,8 +7065,14 @@ export interface operations {
                             id: string;
                             prompt: string;
                             choices?: string[];
+                            recommended?: string;
                             /** Format: date-time */
                             askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
                         };
                         approval?: {
                             /** Format: uuid */
@@ -9608,6 +9626,8 @@ export interface operations {
                                 /** Format: uuid */
                                 runId: string;
                             };
+                            /** @enum {string} */
+                            purpose?: "answer" | "resume";
                             /** Format: date-time */
                             createdAt: string;
                         }[];
@@ -9744,6 +9764,8 @@ export interface operations {
                                 /** Format: uuid */
                                 runId: string;
                             };
+                            /** @enum {string} */
+                            purpose?: "answer" | "resume";
                             /** Format: date-time */
                             createdAt: string;
                         }[];
@@ -15131,6 +15153,8 @@ export interface operations {
                             /** Format: uuid */
                             runId: string;
                         };
+                        /** @enum {string} */
+                        purpose?: "answer" | "resume";
                         /** Format: date-time */
                         createdAt: string;
                     }[];
@@ -15375,8 +15399,14 @@ export interface operations {
                             id: string;
                             prompt: string;
                             choices?: string[];
+                            recommended?: string;
                             /** Format: date-time */
                             askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
                         };
                         approval?: {
                             /** Format: uuid */
@@ -15690,8 +15720,14 @@ export interface operations {
                             id: string;
                             prompt: string;
                             choices?: string[];
+                            recommended?: string;
                             /** Format: date-time */
                             askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
                         };
                     }[];
                 };
@@ -17755,8 +17791,14 @@ export interface operations {
                             id: string;
                             prompt: string;
                             choices?: string[];
+                            recommended?: string;
                             /** Format: date-time */
                             askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
                         };
                         approval?: {
                             /** Format: uuid */
@@ -18764,8 +18806,14 @@ export interface operations {
                             id: string;
                             prompt: string;
                             choices?: string[];
+                            recommended?: string;
                             /** Format: date-time */
                             askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
                         };
                         approval?: {
                             /** Format: uuid */
@@ -19013,8 +19061,14 @@ export interface operations {
                             id: string;
                             prompt: string;
                             choices?: string[];
+                            recommended?: string;
                             /** Format: date-time */
                             askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
                         };
                         approval?: {
                             /** Format: uuid */
@@ -19262,8 +19316,14 @@ export interface operations {
                             id: string;
                             prompt: string;
                             choices?: string[];
+                            recommended?: string;
                             /** Format: date-time */
                             askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
                         };
                         approval?: {
                             /** Format: uuid */
