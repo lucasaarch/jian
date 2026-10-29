@@ -18,7 +18,7 @@ export interface ContextSources {
   /** The memories linked to those, recalled with them when there is room. */
   linked?: Memory[];
   activities: Run[];
-  /** The gateway conversation and the approved channel ones: whom it talks to, and where. */
+  /** This chat and the approved channel ones: whom it talks to, and where. */
   conversations?: Array<{ sessionId: string; channel: string; with: string; group?: boolean }>;
   history: Message[];
   /** What the turns before this history held, once they stopped fitting in a request. */

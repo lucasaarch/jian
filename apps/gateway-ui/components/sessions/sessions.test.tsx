@@ -5,8 +5,12 @@ import type { Channel, Contact, GatewayApi, ProfileData, Session } from '../../l
 import { profiles } from '../../stories/fixtures';
 import { Sessions } from '.';
 
+const { deleteConversation } = vi.hoisted(() => ({
+  deleteConversation: vi.fn(async () => true),
+}));
+
 vi.mock('../../lib/workspace', () => ({
-  useWorkspace: () => ({ profiles: [], refresh: vi.fn() }),
+  useWorkspace: () => ({ profiles: [], refresh: vi.fn(), setNotice: vi.fn(), deleteConversation }),
 }));
 vi.mock('./history', () => ({ History: () => <div>History</div> }));
 vi.mock('./listeners', () => ({ SessionListeners: () => null }));
@@ -46,6 +50,7 @@ async function render({
   status = 'approved',
   channel = 'whatsapp-business',
   contacts = [contact],
+  sessions = [{ ...session, channel }],
 }: {
   aiEnabled?: boolean;
   busy?: boolean;
@@ -53,6 +58,7 @@ async function render({
   status?: Contact['status'];
   channel?: string;
   contacts?: Contact[];
+  sessions?: Session[];
 } = {}) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const updateContact = vi.fn(async () => {
@@ -61,6 +67,14 @@ async function render({
   const updateChannel = vi.fn();
   const approveContact = vi.fn();
   const blockContact = vi.fn();
+  const deleteSession = vi.fn();
+  const createGatewaySession = vi.fn(async () => ({
+    ...session,
+    id: 'new-gateway-chat',
+    channel: 'gateway',
+  }));
+  const renameSession = vi.fn(async () => ({}));
+  const sendMessage = vi.fn(async () => ({}));
   const notices: string[] = [];
   const mutate = vi.fn(async (action: () => Promise<unknown>) => {
     try {
@@ -81,14 +95,34 @@ async function render({
         profile={profile}
         data={
           {
-            sessions: [{ ...session, channel }],
+            sessions,
+            projects: [],
             activities: [],
             contacts: contacts.map((item) => ({ ...item, aiEnabled, status })),
-            channels: [{ id: 'business', profileId: profile.id, enabled: false } as Channel],
+            channels: [
+              {
+                id: 'business',
+                profileId: profile.id,
+                type: 'whatsapp-business',
+                whatsappBusinessStatus: 'configured',
+                enabled: false,
+              } as Channel,
+            ],
           } as unknown as ProfileData
         }
         api={
-          { updateContact, updateChannel, approveContact, blockContact } as unknown as GatewayApi
+          {
+            updateContact,
+            updateChannel,
+            approveContact,
+            blockContact,
+            deleteSession,
+            createGatewaySession,
+            renameSession,
+            send: sendMessage,
+            // The chat offers the remote machines it can run on; none are connected here.
+            remoteMachines: vi.fn(async () => []),
+          } as unknown as GatewayApi
         }
         mutate={mutate}
         busy={busy}
@@ -97,7 +131,20 @@ async function render({
     ),
   );
   const control = element.querySelector<HTMLButtonElement>('[role="switch"]');
-  return { element, control, updateContact, updateChannel, approveContact, blockContact, notices };
+  return {
+    element,
+    control,
+    updateContact,
+    updateChannel,
+    approveContact,
+    blockContact,
+    deleteSession,
+    createGatewaySession,
+    renameSession,
+    sendMessage,
+    mutate,
+    notices,
+  };
 }
 
 for (const aiEnabled of [true, false]) {
@@ -154,4 +201,119 @@ it('does not offer AI controls for other channels or unmatched contacts', async 
   expect(
     (await render({ contacts: [{ ...contact, profileId: 'another-profile' }] })).control,
   ).toBeNull();
+});
+
+it('opens the channel selector and filters the conversation list', async () => {
+  const gateway = {
+    id: 'gateway-chat',
+    profileId: profile.id,
+    title: null,
+    channel: 'gateway',
+    createdAt: '2026-10-23T12:00:00Z',
+  } as Session;
+  const result = await render({ sessions: [gateway, session] });
+
+  await act(async () =>
+    result.element.querySelector<HTMLButtonElement>('.chat-channel-trigger')?.click(),
+  );
+  const option = [
+    ...result.element.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'),
+  ].find((button) => button.textContent === 'WhatsApp Business (Meta)');
+  expect(option).toBeDefined();
+  await act(async () => option?.click());
+
+  expect(result.element.querySelector('.chat-channel-trigger')?.textContent).toContain(
+    'WhatsApp Business (Meta)',
+  );
+  expect(
+    [...result.element.querySelectorAll('.conversation-item strong')].map(
+      (item) => item.textContent,
+    ),
+  ).toEqual(['Customer']);
+});
+
+it('creates and titles a chat only when the first message is sent', async () => {
+  const result = await render();
+  const create = result.element.querySelector<HTMLButtonElement>('[aria-label="New chat"]');
+  await act(async () => create?.click());
+
+  expect(result.createGatewaySession).not.toHaveBeenCalled();
+  expect(result.element.querySelector('.draft-empty')).not.toBeNull();
+  expect(result.element.querySelector('textarea')).not.toBeNull();
+  const input = result.element.querySelector<HTMLTextAreaElement>('textarea');
+  if (!input) throw new Error('Draft composer missing');
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  await act(async () => {
+    valueSetter?.call(input, '  Fix the first bug  ');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const send = result.element.querySelector<HTMLButtonElement>('[aria-label="Send"]');
+  await act(async () => send?.click());
+
+  // No project and no remote machine were picked for the draft: it runs on the gateway.
+  expect(result.createGatewaySession).toHaveBeenCalledWith(profile.id, null, null);
+  expect(result.renameSession).toHaveBeenCalledWith(
+    profile.id,
+    'new-gateway-chat',
+    'Fix the first bug',
+  );
+  expect(result.sendMessage).toHaveBeenCalledWith(
+    profile.id,
+    'new-gateway-chat',
+    'Fix the first bug',
+    [],
+  );
+  expect(result.mutate).not.toHaveBeenCalled();
+});
+
+it('deletes from the row context menu and omits conversation avatars', async () => {
+  deleteConversation.mockClear();
+  const result = await render();
+  const row = result.element.querySelector('.conversation-item');
+  if (!row) throw new Error('Conversation row missing');
+
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 120, clientY: 100 }));
+  });
+  expect(result.element.querySelector('.conversation-avatar')).toBeNull();
+  const remove = result.element.querySelector<HTMLButtonElement>('[role="menuitem"]');
+  expect(remove?.textContent).toBe('Delete conversation');
+  result.element
+    .querySelector('[role="menu"]')
+    ?.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+  expect(result.element.querySelector('[role="menuitem"]')).not.toBeNull();
+  await act(async () => remove?.click());
+
+  expect(deleteConversation).toHaveBeenCalledWith(session.id);
+  expect(result.notices).toEqual([]);
+});
+
+it('renames a chat from its context menu', async () => {
+  const result = await render({
+    sessions: [{ ...session, id: 'gateway-chat', channel: 'gateway', title: 'Old title' }],
+  });
+  const row = result.element.querySelector('.conversation-item');
+  if (!row) throw new Error('Conversation row missing');
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 120, clientY: 100 }));
+  });
+  const rename = [...result.element.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (button) => button.textContent === 'Rename conversation',
+  );
+  await act(async () => rename?.click());
+
+  const input = result.element.querySelector<HTMLInputElement>('#rename-conversation-form input');
+  if (!input) throw new Error('Rename field missing');
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  await act(async () => {
+    valueSetter?.call(input, 'New title');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const form = result.element.querySelector<HTMLFormElement>('#rename-conversation-form');
+  await act(async () =>
+    form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
+
+  expect(result.renameSession).toHaveBeenCalledWith(profile.id, 'gateway-chat', 'New title');
+  expect(result.mutate).toHaveBeenCalled();
 });

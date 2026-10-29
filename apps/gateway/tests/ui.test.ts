@@ -1,96 +1,75 @@
 import { createHash } from 'node:crypto';
-import { mkdtempSync, utimesSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import Fastify from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
-import { registerGatewayUi } from '../src/http/ui.js';
+import { createApp } from '../src/app.js';
+import { testServices } from './helpers/services.js';
 
-const page = (script: string) =>
-  `<!doctype html><html><head><script src="/ui/app.js"></script><script>${script}</script></head><body></body></html>`;
+const token = 'test-token-that-is-at-least-32-characters';
 
-const hash = (script: string) => `'sha256-${createHash('sha256').update(script).digest('base64')}'`;
-
-const apps: Array<{ close: () => Promise<void> }> = [];
+const apps: FastifyInstance[] = [];
 
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
-async function serve(script: string) {
-  const root = mkdtempSync(join(tmpdir(), 'jian-ui-'));
-  const file = join(root, 'index.html');
+async function setup() {
+  const app = createApp({ ...(await testServices()), token, logger: false });
 
-  writeFileSync(file, page(script));
-
-  const app = Fastify();
-
-  registerGatewayUi(app, root);
-  await app.ready();
   apps.push(app);
 
-  return { app, file, root };
+  return app;
 }
 
-describe('the policy the panel is served with', () => {
-  it('serves the PWA files without sticky browser caching', async () => {
-    const { app, root } = await serve('window.__jian = 1');
-    writeFileSync(join(root, 'sw.js'), 'self.addEventListener("fetch", () => {});');
-    writeFileSync(join(root, 'manifest.webmanifest'), '{"name":"Jian"}');
+// An installation updated from a template without the new web service lands here.
+describe('where the panel used to be', () => {
+  it('explains the move on any panel address, without a token', async () => {
+    const app = await setup();
 
-    const worker = await app.inject({ url: '/ui/sw.js' });
-    const manifest = await app.inject({ url: '/ui/manifest.webmanifest' });
+    for (const url of ['/ui', '/ui/', '/ui/sessions/', '/ui/channels?profile=p1']) {
+      const response = await app.inject({ url });
 
-    expect(worker.statusCode).toBe(200);
-    expect(manifest.statusCode).toBe(200);
-    expect(worker.headers['cache-control']).toBe('no-cache');
-    expect(manifest.headers['cache-control']).toBe('no-cache');
+      expect(response.statusCode, url).toBe(200);
+      expect(response.headers['content-type']).toContain('text/html');
+      expect(response.body).toContain('The panel has moved out of the gateway');
+      expect(response.body).toContain('ghcr.io/lucasaarch/jian-web');
+    }
   });
 
-  it('names the hash of the inline script in the page it is attached to', async () => {
-    const { app } = await serve('window.__jian = 1');
+  it('still sends the bare host to it', async () => {
+    const app = await setup();
+    const response = await app.inject({ url: '/' });
 
-    const response = await app.inject({ method: 'GET', url: '/ui/' });
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe('/ui/');
+  });
+
+  it('runs nothing: the policy allows only its own inline style', async () => {
+    const app = await setup();
+    const response = await app.inject({ url: '/ui/' });
     const policy = String(response.headers['content-security-policy']);
+    const style = response.body.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
 
-    expect(policy).toContain(`script-src 'self' ${hash('window.__jian = 1')}`);
-    expect(policy).toContain("frame-ancestors 'none'");
-  });
-
-  it("lets the viewer show a PDF from the panel's own blob address", async () => {
-    const { app } = await serve('window.__jian = 1');
-
-    const response = await app.inject({ method: 'GET', url: '/ui/' });
-    const policy = String(response.headers['content-security-policy']);
-
-    expect(policy).toContain("frame-src 'self' blob:");
-    expect(policy).toContain("object-src 'self' blob:");
-  });
-
-  it('allows Gemini Live WebSocket connections without opening other remote origins', async () => {
-    const { app } = await serve('window.__jian = 1');
-
-    const response = await app.inject({ method: 'GET', url: '/ui/' });
-    const policy = String(response.headers['content-security-policy']);
-
-    expect(policy).toContain("connect-src 'self' wss://generativelanguage.googleapis.com");
-    expect(policy).not.toContain('wss://example.com');
-    expect(policy).toContain("media-src 'self' data:");
-  });
-
-  it('follows a rebuild under a running gateway instead of blocking the new page', async () => {
-    const { app, file } = await serve('window.__jian = 1');
-
-    await app.inject({ method: 'GET', url: '/ui/' });
-
-    // What `pnpm build` does to a gateway that is already serving.
-    writeFileSync(file, page('window.__jian = 2'));
-    utimesSync(file, new Date(), new Date(Date.now() + 1000));
-
-    const response = await app.inject({ method: 'GET', url: '/ui/' });
-
-    expect(String(response.headers['content-security-policy'])).toContain(
-      hash('window.__jian = 2'),
+    expect(response.body).not.toMatch(/<script/i);
+    expect(policy).toContain("default-src 'none'");
+    expect(policy).toContain(
+      `style-src 'sha256-${createHash('sha256').update(style).digest('base64')}'`,
     );
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(response.headers['cache-control']).toBe('no-store');
+  });
+
+  it("answers the old service worker's update check with a 404, so the browser drops it", async () => {
+    const app = await setup();
+
+    for (const url of ['/ui/sw.js', '/ui/manifest.webmanifest', '/ui/_next/static/chunks/a.js']) {
+      expect((await app.inject({ url })).statusCode, url).toBe(404);
+    }
+  });
+
+  it('opens no API route along the way', async () => {
+    const app = await setup();
+
+    expect((await app.inject({ url: '/v1/profiles' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'POST', url: '/ui/' })).statusCode).toBe(401);
   });
 });

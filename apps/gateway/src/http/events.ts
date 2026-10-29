@@ -50,7 +50,9 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
 
       reply.raw.writeHead(200, {
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
+        // no-transform keeps a compressing proxy, the web server's included, from holding
+        // events back to fill a gzip block.
+        'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',
       });

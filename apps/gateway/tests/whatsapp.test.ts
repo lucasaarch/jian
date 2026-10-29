@@ -384,6 +384,47 @@ describe('WhatsApp linked device', () => {
     }
   });
 
+  it('reopens the same unique channel contact after its conversation is deleted', async () => {
+    const f = await setup();
+
+    try {
+      await f.whatsapp.connect(f.profile.id, f.binding.id);
+      await f.whatsapp.tick(f.receive);
+      const callbacks = f.devices[0]?.callbacks;
+      if (!callbacks) throw new Error('Device missing');
+      await callbacks.ready('5511888888888@c.us');
+      await callbacks.message(message);
+      await f.whatsapp.tick(f.receive);
+      const contact = await f.approve();
+      const previousSessionId = contact.sessionId;
+      if (!previousSessionId) throw new Error('Approved session missing');
+      const [run] = await f.services.runs.activities(f.profile.id);
+      if (!run) throw new Error('Contact run missing');
+      await f.services.lifecycle.claim(run.id, f.profile.id, 'worker');
+      await f.services.lifecycle.finish(f.profile.id, run.id, 'worker', 'completed', 'Done.');
+
+      await f.services.sessions.deleteSession(f.profile.id, previousSessionId);
+      expect(
+        (await f.channels.contacts(f.profile.id)).find((item) => item.id === contact.id)?.sessionId,
+      ).toBeUndefined();
+
+      await callbacks.message({
+        ...message,
+        text: 'After deletion',
+        requestKey: 'wa-after-delete',
+      });
+      await f.whatsapp.tick(f.receive);
+      const reopened = (await f.channels.contacts(f.profile.id)).find(
+        (item) => item.id === contact.id,
+      );
+      expect(reopened?.sessionId).toBeDefined();
+      expect(reopened?.sessionId).not.toBe(previousSessionId);
+      expect(await f.services.sessions.sessions(f.profile.id)).toHaveLength(1);
+    } finally {
+      await f.app.close();
+    }
+  });
+
   it('turns an approved contact into its own session and sends each result once', async () => {
     const f = await setup();
     const stranger = '5511000000000@c.us';

@@ -16,9 +16,9 @@ const input = {
 
 const apps: FastifyInstance[] = [];
 
-async function setup() {
+async function setup(options: { trustedProxies?: string[] } = {}) {
   const services = await testServices();
-  const app = createApp({ ...services, token, logger: false });
+  const app = createApp({ ...services, token, logger: false, ...options });
 
   apps.push(app);
 
@@ -434,5 +434,65 @@ describe('panel session', () => {
     expect(response.statusCode).toBe(200);
     expect(response.cookies[0]).toMatchObject({ name: 'jian_panel', value: '' });
     expect(response.cookies[0]?.maxAge).toBe(0);
+  });
+});
+
+// The web container is the gateway's only client in the standard stack, so the address and
+// scheme it reports are what the rate limits and the cookie's Secure flag go by.
+describe('forwarded client details', () => {
+  const wrongSignIn = (app: FastifyInstance, client: string) =>
+    app.inject({
+      method: 'POST',
+      url: '/v1/panel/session',
+      payload: { token: `${token}-wrong` },
+      headers: { 'x-forwarded-for': client },
+    });
+
+  it('marks the cookie Secure when a trusted proxy received the request over HTTPS', async () => {
+    const { app } = await setup({ trustedProxies: ['loopback'] });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/panel/session',
+      payload: { token },
+      headers: { 'x-forwarded-proto': 'https' },
+    });
+
+    expect(response.cookies[0]?.secure).toBe(true);
+  });
+
+  it('ignores a scheme stated by a peer it does not trust', async () => {
+    const { app } = await setup();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/panel/session',
+      payload: { token },
+      headers: { 'x-forwarded-proto': 'https' },
+    });
+
+    expect(response.cookies[0]?.secure).toBeFalsy();
+  });
+
+  it('keeps one sign-in budget per client behind a trusted proxy', async () => {
+    const { app } = await setup({ trustedProxies: ['loopback'] });
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await wrongSignIn(app, '203.0.113.10');
+    }
+
+    expect((await wrongSignIn(app, '203.0.113.10')).statusCode).toBe(429);
+    // Everyone else arriving through the same web container still gets their own attempts.
+    expect((await wrongSignIn(app, '203.0.113.20')).statusCode).toBe(401);
+  });
+
+  it('does not let an untrusted peer escape the sign-in limit by naming other addresses', async () => {
+    const { app } = await setup();
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await wrongSignIn(app, `203.0.113.${attempt}`);
+    }
+
+    expect((await wrongSignIn(app, '203.0.113.99')).statusCode).toBe(429);
   });
 });

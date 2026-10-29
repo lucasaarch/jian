@@ -11,10 +11,13 @@ import { registerDecisionRoutes } from './decisions/routes.js';
 import { registerEventRoutes } from './http/events.js';
 import { registerMetaRoutes } from './http/meta.js';
 import { configureSecurity } from './http/security.js';
-import { registerGatewayUi } from './http/ui.js';
+import { registerPanelNotice } from './http/ui.js';
+import type { GitHubIntegrations } from './integrations/github.js';
+import { registerIntegrationRoutes } from './integrations/routes.js';
 import { registerMediaRoutes } from './media/routes.js';
 import { registerMemoryRoutes } from './memories/routes.js';
 import { registerProfileRoutes } from './profiles/routes.js';
+import { registerProjectRoutes } from './projects/routes.js';
 import type { CodexLogin } from './providers/codex/login.js';
 import type { ProviderModels } from './providers/discovery.js';
 import { registerProviderRoutes } from './providers/routes.js';
@@ -44,10 +47,16 @@ export function createApp(
     codexLogin?: CodexLogin;
     providerModels?: ProviderModels;
     skills?: Skills;
+    github?: GitHubIntegrations;
     channels?: Channels;
     whatsapp?: WhatsAppConnections;
     maxStreams?: number;
-    uiRoot?: string;
+    /**
+     * Who may set X-Forwarded-For and -Proto. The rate limits key on the address they name, and
+     * the panel cookie is marked Secure from the scheme; trusting anyone else would let a client
+     * pick both.
+     */
+    trustedProxies?: string[];
     /**
      * The guarded client every outbound call of the gateway goes through, with the private
      * origins the operator allowed. Absent, a request made from a route allows none.
@@ -78,6 +87,7 @@ export function createApp(
     requestTimeout: 30000,
     connectionTimeout: 30000,
     bodyLimit: 256 * 1024,
+    trustProxy: options.trustedProxies?.length ? options.trustedProxies : false,
     logController: new LogController({ disableRequestLogging: true }),
   });
 
@@ -110,32 +120,39 @@ export function createApp(
 
   configureSecurity(app, options);
 
-  registerProviderRoutes(app, options);
-  registerMetaRoutes(app);
-  registerSecurityRoutes(app, options);
-  registerSshRoutes(app, options);
-  registerRemoteRoutes(app, options);
-  registerSkillRoutes(app, options);
-  registerProfileRoutes(app, options);
-  registerSessionRoutes(app, { ...options, coordination });
-  registerMemoryRoutes(app, options);
-  registerStickerRoutes(app, options);
-  registerStatsRoutes(app, options);
-  registerScheduleRoutes(app, options);
-  registerSubscriptionRoutes(app, options);
-  registerWorkRoutes(app, options);
-  registerSettingsRoutes(app, options);
-  registerMediaRoutes(app, options);
-  registerRunRoutes(app, options);
-  registerCoordinationRoutes(app, { coordination });
-  registerChannelRoutes(app, options);
-  registerWebRoutes(app, options);
-  registerReleaseRoutes(app, options);
-  registerDecisionRoutes(app, options);
+  // The limiter attaches itself to each route as the route is added, and a plugin only loads
+  // once the queue reaches it. Routes declared directly on `app` here would all be added before
+  // it, unlimited; registering them as the next plugin puts them after it.
+  void app.register(async (routes) => {
+    registerProviderRoutes(routes, options);
+    if (options.github) registerIntegrationRoutes(routes, options.github);
+    registerMetaRoutes(routes);
+    registerSecurityRoutes(routes, options);
+    registerSshRoutes(routes, options);
+    registerRemoteRoutes(routes, options);
+    registerSkillRoutes(routes, options);
+    registerProfileRoutes(routes, options);
+    registerProjectRoutes(routes, options.projects);
+    registerSessionRoutes(routes, { ...options, coordination });
+    registerMemoryRoutes(routes, options);
+    registerStickerRoutes(routes, options);
+    registerStatsRoutes(routes, options);
+    registerScheduleRoutes(routes, options);
+    registerSubscriptionRoutes(routes, options);
+    registerWorkRoutes(routes, options);
+    registerSettingsRoutes(routes, options);
+    registerMediaRoutes(routes, options);
+    registerRunRoutes(routes, options);
+    registerCoordinationRoutes(routes, { coordination });
+    registerChannelRoutes(routes, options);
+    registerWebRoutes(routes, options);
+    registerReleaseRoutes(routes, options);
+    registerDecisionRoutes(routes, options);
 
-  registerEventRoutes(app, options);
+    registerEventRoutes(routes, options);
 
-  registerGatewayUi(app, options.uiRoot);
+    registerPanelNotice(routes);
+  });
 
   return app;
 }

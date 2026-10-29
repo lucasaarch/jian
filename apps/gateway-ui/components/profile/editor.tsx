@@ -47,7 +47,7 @@ export function NewProfileDialog({
       <form
         id="new-profile-form"
         method="post"
-        action="/ui/"
+        action="/"
         onSubmit={async (event) => {
           event.preventDefault();
           setBusy(true);
@@ -243,7 +243,7 @@ export function ProfileEditor({
         ref={form}
         className="profile-form"
         method="post"
-        action="/ui/"
+        action="/"
         onSubmit={(event) => {
           event.preventDefault();
           void flush();

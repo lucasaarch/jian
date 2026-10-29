@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   activityQuerySchema,
   continuationSchema,
+  GATEWAY_SESSION_CHANNEL,
   type Message,
   type ModelSelection,
   type Run,
@@ -31,6 +32,7 @@ import {
   parsePonytailMode,
   setCavemanMode,
   setPonytailMode,
+  setSessionModel,
   setSessionObjective,
 } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
@@ -268,6 +270,23 @@ export class Runs {
           if (data.model) throw error;
         }
       }
+      const selectedAutomatically = selection === automatic;
+      if (chosen && selection && session.channel === GATEWAY_SESSION_CHANNEL) {
+        const reasoningEfforts =
+          this.providers.capabilities?.(chosen.config).reasoningEfforts ?? [];
+        const defaultEffort = reasoningEfforts.includes('low') ? 'low' : undefined;
+        if (!selection.reasoningEffort && defaultEffort) {
+          selection = { ...selection, reasoningEffort: defaultEffort };
+          chosen = await this.providers.selectedModel(selection, tx);
+        }
+        if (JSON.stringify(session.model) !== JSON.stringify(selection)) {
+          await setSessionModel(tx, profileId, sessionId, selection);
+          await recordEvent(tx, this.clock, profileId, 'session.model', {
+            sessionId,
+            model: { providerId: selection.providerId, modelId: selection.modelId },
+          });
+        }
+      }
       // No list is invented here: which models a key can call is the provider's answer, so a
       // run needs either a model the owner chose or one picked from what a provider reports.
       if (!chosen && !profile.model.apiKeyEnv && !profile.model.providerId) {
@@ -276,11 +295,11 @@ export class Runs {
 
       // A model picked here becomes the profile's default, so the panel agrees with what just
       // ran and the next run does not have to choose again.
-      if (chosen && selection && selection === automatic) {
+      if (chosen && selection && selectedAutomatically) {
         await writeModelDefaults(
           tx,
           profileId,
-          { ...defaults, conversation: automatic },
+          { ...defaults, conversation: selection },
           new Date(this.clock()),
         );
       }

@@ -13,6 +13,7 @@ import { WhatsAppConnections } from './channels/whatsapp/connections.js';
 import { createWhatsAppDeviceFactory } from './channels/whatsapp/driver.js';
 import { WhatsAppBusinessChannel } from './channels/whatsapp-business.js';
 import { Coordination } from './coordination/service.js';
+import { GitHubIntegrations } from './integrations/github.js';
 import { ModelCatalog } from './providers/catalog-source.js';
 import { CodexLogin } from './providers/codex/login.js';
 import { ProviderModels } from './providers/discovery.js';
@@ -62,6 +63,10 @@ const config = z
     // Where a browser reaches this gateway. An MCP authorization server redirects the owner
     // back to it, so it has to be the public address rather than the listening one.
     JIAN_PUBLIC_URL: z.url().optional(),
+    // The proxies allowed to state the client's address and scheme in X-Forwarded-*: the web
+    // container above all. Comma-separated addresses, CIDR ranges, or `loopback`, `linklocal`
+    // and `uniquelocal`. Empty, the socket peer is the client, as when nothing sits in front.
+    JIAN_TRUSTED_PROXIES: z.string().default(''),
   })
   .safeParse(process.env);
 
@@ -112,6 +117,13 @@ const catalog = new ModelCatalog(outbound.fetch);
 const vault = new Vault(store, box);
 // Vendor credentials belong to the installation; everything else a profile types is its own.
 const gatewayVault = new GatewayVault(store, box);
+const github = new GitHubIntegrations(
+  store,
+  gatewayVault,
+  config.data.JIAN_PUBLIC_URL,
+  outbound.fetch,
+  Date.now,
+);
 // The store rides along: several consumers read records no single area owns.
 const services = {
   ...buildServices({
@@ -120,12 +132,12 @@ const services = {
     gatewayVault,
     catalog,
     fetcher: outbound.fetch,
+    github,
     ...(config.data.JIAN_TIME_ZONE ? { timeZone: config.data.JIAN_TIME_ZONE } : {}),
   }),
   store,
 };
 const codexLogin = new CodexLogin(services, gatewayVault);
-services.providers.useCodexLogin(codexLogin);
 services.media.useCodexLogin(codexLogin);
 services.subscriptionUsage.useCodexLogin(codexLogin);
 
@@ -189,6 +201,7 @@ services.profiles.useBeforeDelete((profileId, tx) => channels.revokeAll(profileI
 const runtime = new AgentRuntime(services, undefined, {
   vault,
   gatewayVault,
+  github,
   ...(mcpLogins ? { mcpOAuth: mcpLogins.provider } : {}),
   codexLogin,
   outbound,
@@ -204,6 +217,7 @@ const app =
   config.data.JIAN_ROLE !== 'worker'
     ? createApp({
         ...services,
+        github,
         codexLogin,
         providerModels,
         skills,
@@ -212,6 +226,9 @@ const app =
         ...(mcpLogins ? { mcpLogins } : {}),
         fetcher: outbound.fetch,
         token: config.data.JIAN_API_TOKEN,
+        trustedProxies: config.data.JIAN_TRUSTED_PROXIES.split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
         onCancel: (id) => runtime.cancel(id),
       })
     : undefined;

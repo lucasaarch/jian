@@ -37,6 +37,12 @@ import type { Stickers } from '../stickers/service.js';
 import type { WebSearch } from '../web/service.js';
 import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
+import {
+  GITHUB_MCP_TOOLSETS,
+  githubMcpCredentialKey,
+  githubMcpServer,
+  githubMcpToolsetsKey,
+} from './github-mcp.js';
 import { ACTION_KINDS, actionGuard, guardTools, mcpActionKind } from './guard.js';
 import { availableNote, connectMcpTools, unavailableNote } from './mcp.js';
 import { mcpOutcomeUncertain } from './mcp-errors.js';
@@ -244,14 +250,54 @@ export class AgentRuntime {
         ) === 'subscription';
 
       const model = await this.model(config, process.env, outbound.fetch, providerKey);
-      const learning =
-        (await this.services.sessions.session(profileId, run.sessionId)).channel ===
-        LEARNING_SESSION_CHANNEL;
+      const session = await this.services.sessions.session(profileId, run.sessionId);
+      const learning = session.channel === LEARNING_SESSION_CHANNEL;
+      let mcpRun = learning ? { ...run, profile: { ...run.profile, mcpServers: [] } } : run;
+      let mcpVault = this.options.vault;
+      let githubMcpFailure: { name: string; reason: string } | undefined;
+      if (!learning && session.projectId && this.options.github) {
+        try {
+          const access = await this.options.github.mcpAccess(profileId, session.projectId);
+          if (access) {
+            secrets.add(access.token);
+            let name = 'github';
+            for (
+              let suffix = 2;
+              run.profile.mcpServers.some((server) => server.name === name);
+              suffix++
+            ) {
+              name = `github_${suffix}`;
+            }
+            const server = githubMcpServer(name);
+            mcpRun = {
+              ...run,
+              profile: { ...run.profile, mcpServers: [...run.profile.mcpServers, server] },
+            };
+            const ordinaryVault = this.options.vault;
+            mcpVault = {
+              read: (owner, key) =>
+                owner === profileId && key === githubMcpCredentialKey(name)
+                  ? Promise.resolve(`Bearer ${access.token}`)
+                  : owner === profileId && key === githubMcpToolsetsKey(name)
+                    ? Promise.resolve(GITHUB_MCP_TOOLSETS)
+                    : (ordinaryVault?.read(owner, key) ?? Promise.resolve(undefined)),
+            };
+          }
+        } catch (error) {
+          githubMcpFailure = {
+            name: 'github',
+            reason:
+              error instanceof Error
+                ? error.message.slice(0, 200)
+                : 'GitHub access is unavailable.',
+          };
+        }
+      }
       const gitAccess = run.subagent
         ? await prepareWorkerWorkspace(run)
         : await prepareProfileGitAccess(run.profileId);
       const tools: ToolSet = {
-        ...profileTools(this.services, run, gitAccess),
+        ...profileTools(this.services, run, gitAccess, session.remoteMachineId),
         ...this.services.media?.tools(run, async (usage) => {
           await account(
             {
@@ -294,10 +340,10 @@ export class AgentRuntime {
       const loadedTools = new Set<string>(learning ? Object.keys(tools) : []);
       const { gated } = deferTools(tools, loadedTools);
       const { mcpToolNames, selectedMcpTools, unavailable, catalog } = await connectMcpTools(
-        learning ? { ...run, profile: { ...run.profile, mcpServers: [] } } : run,
+        mcpRun,
         tools,
         {
-          vault: this.options.vault,
+          vault: mcpVault,
           secrets,
           clients,
           fetcher: outbound.fetch,
@@ -305,6 +351,7 @@ export class AgentRuntime {
           ...(this.options.mcpOAuth ? { oauth: this.options.mcpOAuth } : {}),
         },
       );
+      if (githubMcpFailure) unavailable.push(githubMcpFailure);
 
       const mcpNote = [availableNote(catalog), unavailableNote(unavailable)]
         .filter(Boolean)
@@ -519,7 +566,10 @@ export class AgentRuntime {
         return subscription ? withClaudeCodeIdentity(noted) : noted;
       };
 
-      const instructions = dress(context.system);
+      const targetInstructions = session.remoteMachineId
+        ? `\n\nExecution target: Remote Control machine ${session.remoteMachineId}. Use only remote machine tools for project work; local machine tools are intentionally unavailable.`
+        : '';
+      const instructions = dress(`${context.system}${targetInstructions}`);
       const codingSkill = findSkill(run.profile, 'ponytail');
       const instructionsForMode = (mode: PonytailMode) =>
         !codingSkill

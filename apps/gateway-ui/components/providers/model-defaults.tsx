@@ -8,7 +8,12 @@ import { useWorkspace } from '../../lib/workspace';
 import type { SectionProps } from '../props';
 import { SectionHeading } from '../ui';
 import { type Role, roles, usableProviders } from './catalog';
-import { RoleFields, type RoleValue } from './role-fields';
+import {
+  preferredModelSelection,
+  RoleFields,
+  type RoleValue,
+  withDefaultEffort,
+} from './role-fields';
 
 const empty: RoleValue = {
   providerId: '',
@@ -47,12 +52,25 @@ export function ModelDefaults({ profile, data, api, busy }: SectionProps) {
   const hasOpenAIKey = configured.some(
     (provider) => provider.kind === 'openai' && provider.authMode !== 'codex',
   );
-  const [values, setValues] = useState<Record<Role, RoleValue>>(
-    () =>
-      Object.fromEntries(
-        roles.map((role) => [role.key, initial(data.modelDefaults[role.key])]),
-      ) as Record<Role, RoleValue>,
-  );
+  const [values, setValues] = useState<Record<Role, RoleValue>>(() => {
+    const defaultConversation =
+      data.modelDefaults.conversation ?? preferredModelSelection('conversation', data, configured);
+    return Object.fromEntries(
+      roles.map((role) => {
+        const saved = data.modelDefaults[role.key];
+        const fallback =
+          role.key === 'channel' || role.key === 'compaction'
+            ? defaultConversation
+            : preferredModelSelection(role.key, data, configured);
+        const selection = saved ?? fallback ?? null;
+        const resolved =
+          selection && selection !== 'disabled' && role.tools
+            ? withDefaultEffort(selection, data)
+            : selection;
+        return [role.key, initial(resolved ?? null)];
+      }),
+    ) as Record<Role, RoleValue>;
+  });
 
   const { refresh } = useWorkspace();
   const latest = useRef(values);
@@ -91,11 +109,11 @@ export function ModelDefaults({ profile, data, api, busy }: SectionProps) {
     <>
       <SectionHeading
         title="Model defaults"
-        description="Choose a model, use an automatic fallback, or disable optional activities."
+        description="Choose a default model for each activity, or disable optional activities. New setups prefer Claude Opus 5.5 when available, then GPT-6 Astra, then another compatible model."
       />
       <form
         method="post"
-        action="/ui/"
+        action="/"
         onSubmit={(event) => {
           event.preventDefault();
           void flush();

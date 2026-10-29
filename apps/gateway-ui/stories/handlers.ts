@@ -39,6 +39,32 @@ const decisions = (configured: boolean) => ({
 });
 
 export const handlers = [
+  http.get('*/v1/integrations/github', () =>
+    ok({
+      configured: true,
+      permissionsVerified: true,
+      missingPermissions: [],
+      app: {
+        appId: 123456,
+        name: 'Jian - jian.example - story',
+        slug: 'jian-story',
+        ownerLogin: 'lucas-example',
+        ownerType: 'User',
+        url: 'https://github.com/apps/jian-story',
+      },
+      callbackUrl: 'https://jian.example/v1/integrations/github/callback',
+      accounts: [
+        {
+          id: 'a1b2c3d4-1111-4111-8111-111111111111',
+          installationId: 987654,
+          accountId: 123,
+          login: 'example-project',
+          type: 'Organization',
+          connectedAt: new Date().toISOString(),
+        },
+      ],
+    }),
+  ),
   http.get('*/v1/profiles/:profileId/sessions/:sessionId/subagents', () => ok([])),
   http.get('*/v1/profiles', () => ok(data.profiles)),
   http.get('*/v1/profiles/:profileId', ({ params }) =>
@@ -441,21 +467,6 @@ export const handlers = [
   ),
   http.get('*/v1/profiles/:profileId/model-defaults', () => ok(data.modelDefaults)),
   http.put('*/v1/profiles/:profileId/model-defaults', () => ok(data.modelDefaults)),
-  http.post('*/v1/profiles/:profileId/voice/token', () =>
-    HttpResponse.json(
-      {
-        error: 'Choose a Gemini Live model under Model defaults › Voice calls first',
-      },
-      { status: 409 },
-    ),
-  ),
-  http.post('*/v1/profiles/:profileId/voice/summary', async ({ request }) => {
-    const body = (await request.json()) as { transcript?: string };
-    return ok({
-      summary: (body.transcript ?? 'Voice call').slice(0, 120),
-    });
-  }),
-
   http.get('*/v1/profiles/:profileId/built-in-skills', () => ok(data.builtinSkills)),
   http.get('*/v1/profiles/:profileId/skill-catalog', () =>
     ok({

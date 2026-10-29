@@ -354,7 +354,7 @@ it('sends a sticker or a file into another conversation, as itself, never as its
   const group = approved.sessionId as string;
 
   // The owner asks from the gateway conversation; the sticker is for Rowan's chat.
-  const gateway = await f.services.sessions.gatewaySession(f.profile.id);
+  const gateway = await f.services.sessions.createGatewaySession(f.profile.id, {});
   const run = await f.services.runs.submit(f.profile.id, gateway.id, {
     text: 'Send Rowan a thumbs up',
     requestKey: 'ask',
@@ -402,7 +402,7 @@ it('sends a sticker or a file into another conversation, as itself, never as its
     instructions: 'Help.',
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
   });
-  const theirs = await f.services.sessions.gatewaySession(stranger.id);
+  const theirs = await f.services.sessions.createGatewaySession(stranger.id, {});
 
   await expect(
     tools.send_file?.execute?.(

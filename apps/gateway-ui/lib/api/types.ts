@@ -17,6 +17,8 @@ export type McpServer = Profile['mcpServers'][number];
 export type McpValue = McpServer['headers'][number];
 export type Skill = Profile['skills'][number];
 export type Session = JsonResponse<'listSessions', 200>[number];
+export type Project = JsonResponse<'listProjects', 200>[number];
+export type NewProject = RequestBody<'createProject'>;
 export type Channel = JsonResponse<'listChannels', 200>[number];
 export type ChannelType = Channel['type'];
 export type Contact = JsonResponse<'listContacts', 200>[number];
@@ -60,6 +62,9 @@ export type NewSshKey = RequestBody<'createSshKey'>;
 export type RemoteMachine = JsonResponse<'listRemoteMachines', 200>[number];
 export type NewRemoteMachine = RequestBody<'createRemoteMachine'>;
 export type CreatedRemoteMachine = JsonResponse<'createRemoteMachine', 201>;
+export type GitHubIntegration = JsonResponse<'githubIntegration', 200>;
+export type GitHubAccount = GitHubIntegration['accounts'][number];
+export type GitHubRepository = JsonResponse<'githubRepositories', 200>[number];
 
 /** The open profile's whole screenful. Every section reads its slice from here. */
 export type ProfileData = {
@@ -68,6 +73,7 @@ export type ProfileData = {
   providerModels: Record<string, ProviderModelList>;
   modelDefaults: ModelDefaults;
   sessions: Session[];
+  projects: Project[];
   channels: Channel[];
   memories: Memory[];
   activities: Run[];

@@ -49,15 +49,16 @@ own zones.
 
 ## The web panel
 
-`pnpm build` compiles the panel with Next.js `output: 'export'` and copies it into
-`apps/gateway/dist/ui`; there is no Next.js server in production. `pnpm start` then serves
-it at `http://localhost:4310/ui/`. Sign in with the server's `JIAN_API_TOKEN`.
+The panel is its own Next.js server, in front of the gateway. `pnpm build` compiles both;
+`pnpm start` runs the gateway on `:4310`, and `pnpm --filter @jian/gateway-ui start` the panel
+on `http://localhost:3000/`, passing `/v1` on to the gateway. Sign in with the server's
+`JIAN_API_TOKEN`.
 
 The panel trades that token for a signed cookie, so a reload keeps the session. Provider
 keys go to the gateway's encrypted vault, never to browser storage.
 
-While developing the panel, use `http://localhost:3000/ui/`, which reloads on edit and
-forwards `/v1` to the gateway. Port 4310 serves the copy from the last `pnpm build`.
+While developing, `make dev` serves the same on `http://localhost:3000/`, reloading on edit.
+The gateway's own `:4310/ui/` only explains that the panel moved.
 
 ## First profile
 

@@ -38,6 +38,7 @@ type Workspace = {
    * would run first, still pointed at the profile this just deleted — and fail loading it.
    */
   deleteProfile: (profileId: string) => Promise<boolean>;
+  deleteConversation: (sessionId: string) => Promise<boolean>;
   refresh: () => Promise<void>;
   /**
    * Hears every event of the open profile as it arrives, for a screen that keeps something
@@ -83,6 +84,7 @@ export function useWorkspace(): Workspace {
 async function profileData(api: GatewayApi, id: string): Promise<ProfileData> {
   const [
     sessions,
+    projects,
     channels,
     contacts,
     groups,
@@ -93,6 +95,7 @@ async function profileData(api: GatewayApi, id: string): Promise<ProfileData> {
     modelDefaults,
   ] = await Promise.all([
     api.sessions(id),
+    api.projects(id),
     api.channels(id),
     api.contacts(id),
     api.groups(),
@@ -123,6 +126,7 @@ async function profileData(api: GatewayApi, id: string): Promise<ProfileData> {
 
   return {
     sessions,
+    projects,
     channels,
     contacts,
     groups,
@@ -151,6 +155,8 @@ export function WorkspaceProvider({
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>();
+  // An older in-flight refresh can finish after a delete and otherwise restore that row.
+  const sessionsRevision = useRef(0);
   // A load that started before a profile switch must not overwrite the one that follows it.
   const generation = useRef(0);
   const listeners = useRef(new Set<(event: GatewayEvent) => void>());
@@ -177,6 +183,7 @@ export function WorkspaceProvider({
       live.current.timer = setTimeout(async () => {
         const withSessions = live.current.sessions;
         const profileId = selected;
+        const revision = sessionsRevision.current;
 
         live.current.sessions = false;
         try {
@@ -189,7 +196,16 @@ export function WorkspaceProvider({
             current && current.profileId === profileId
               ? {
                   profileId,
-                  value: { ...current.value, activities, ...(list ? { sessions: list } : {}) },
+                  value: {
+                    ...current.value,
+                    activities,
+                    ...(list
+                      ? {
+                          sessions:
+                            revision === sessionsRevision.current ? list : current.value.sessions,
+                        }
+                      : {}),
+                  },
                 }
               : current,
           );
@@ -242,6 +258,7 @@ export function WorkspaceProvider({
 
   const refresh = useCallback(async () => {
     const current = ++generation.current;
+    const revision = sessionsRevision.current;
 
     setLoading(true);
 
@@ -258,7 +275,16 @@ export function WorkspaceProvider({
       setProfiles(updated);
 
       if (details) {
-        setHeld({ profileId: selected, value: details });
+        setHeld((held) => ({
+          profileId: selected,
+          value: {
+            ...details,
+            sessions:
+              revision === sessionsRevision.current || held?.profileId !== selected
+                ? details.sessions
+                : held.value.sessions,
+          },
+        }));
       }
     } catch (error) {
       if (current === generation.current) {
@@ -405,6 +431,38 @@ export function WorkspaceProvider({
       }
 
       return true;
+    },
+    deleteConversation: async (sessionId) => {
+      if (!selected) return false;
+      const profileId = selected;
+      setBusy(true);
+      setNotice(undefined);
+
+      try {
+        await api.deleteSession(profileId, sessionId);
+        sessionsRevision.current++;
+        setHeld((current) =>
+          current?.profileId === profileId
+            ? {
+                profileId,
+                value: {
+                  ...current.value,
+                  sessions: current.value.sessions.filter((session) => session.id !== sessionId),
+                },
+              }
+            : current,
+        );
+        setNotice({ text: 'Conversation deleted.', error: false });
+        return true;
+      } catch (error) {
+        setNotice({
+          text: error instanceof Error ? error.message : 'The conversation could not be deleted.',
+          error: true,
+        });
+        return false;
+      } finally {
+        setBusy(false);
+      }
     },
     refresh,
     subscribe,

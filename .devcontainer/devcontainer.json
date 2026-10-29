@@ -1,0 +1,16 @@
+{
+  "name": "Jian Production Test",
+  "dockerComposeFile": "compose.yaml",
+  "service": "workspace",
+  "runServices": ["web", "gateway", "postgres", "workspace"],
+  "workspaceFolder": "/workspaces/jian",
+  "forwardPorts": ["web:3000"],
+  "portsAttributes": {
+    "web:3000": {
+      "label": "Jian",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "remoteUser": "node",
+  "shutdownAction": "stopCompose"
+}

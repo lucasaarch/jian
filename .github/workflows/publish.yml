@@ -1,5 +1,5 @@
 name: Publish
-# A release publishes the gateway image and the remote-control npm package, and nothing else
+# A release publishes the gateway and web images and the remote-control npm package, and nothing else
 # does: a tag is the only commit anyone has said is worth running. `make release` pushes it,
 # after its note in docs/releases is written; this workflow builds both architectures, publishes
 # `@jian-ai/remote-control` at the same version, and publishes the GitHub release with that note.
@@ -8,8 +8,6 @@ on:
   push:
     tags: ['v*.*.*']
   workflow_dispatch:
-env:
-  IMAGE: ghcr.io/lucasaarch/jian-gateway
 permissions: {}
 jobs:
   # Before anything is built, a tag without a valid note stops here.
@@ -31,9 +29,10 @@ jobs:
           path: notes.md
           retention-days: 1
 
-  # One native runner per architecture. The repository is public, so the arm64 runner is
-  # free and emulation — which would make the Next.js export crawl — is never needed.
-  # Each runner pushes the layers under a digest only; the index job names them.
+  # One native runner per image and architecture. The repository is public, so the arm64
+  # runner is free and emulation — which would make the Next.js build crawl — is never needed.
+  # Each runner pushes the layers under a digest only; the index job names them. The web image
+  # is the panel's server and always ships at the gateway's version: compose pairs them.
   build:
     needs: notes
     # A dispatch has no tag and no note to check, so a skipped check is not a failed one.
@@ -42,16 +41,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-24.04
-            platform: linux/amd64
-            arch: amd64
-          - runner: ubuntu-24.04-arm
-            platform: linux/arm64
-            arch: arm64
+          - { image: gateway, file: Dockerfile, runner: ubuntu-24.04, platform: linux/amd64, arch: amd64 }
+          - { image: gateway, file: Dockerfile, runner: ubuntu-24.04-arm, platform: linux/arm64, arch: arm64 }
+          - { image: web, file: apps/gateway-ui/Dockerfile, runner: ubuntu-24.04, platform: linux/amd64, arch: amd64 }
+          - { image: web, file: apps/gateway-ui/Dockerfile, runner: ubuntu-24.04-arm, platform: linux/arm64, arch: arm64 }
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
+    env:
+      IMAGE: ghcr.io/lucasaarch/jian-${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -67,6 +66,7 @@ jobs:
       - id: build
         uses: docker/build-push-action@v6
         with:
+          file: ${{ matrix.file }}
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -77,8 +77,8 @@ jobs:
           provenance: false
           sbom: false
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
       - name: Record the digest
         run: |
           mkdir -p /tmp/digests
@@ -86,14 +86,19 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
       - uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ matrix.arch }}
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
 
   index:
     needs: build
+    strategy:
+      matrix:
+        image: [gateway, web]
     runs-on: ubuntu-24.04
+    env:
+      IMAGE: ghcr.io/lucasaarch/jian-${{ matrix.image }}
     permissions:
       contents: read
       packages: write
@@ -104,7 +109,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: /tmp/digests
-          pattern: digests-*
+          pattern: digests-${{ matrix.image }}-*
           merge-multiple: true
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3

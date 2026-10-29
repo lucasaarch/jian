@@ -4,6 +4,7 @@
 # list cannot drift from the targets it describes.
 
 IMAGE ?= ghcr.io/lucasaarch/jian-gateway
+WEB_IMAGE ?= ghcr.io/lucasaarch/jian-web
 # The version `make release` writes, so a local image and a published one agree.
 # The newest release tag; a checkout without tags builds as a developer's image.
 VERSION ?= $(or $(patsubst v%,%,$(shell git describe --tags --abbrev=0 2>/dev/null)),0.0.0-dev)
@@ -14,7 +15,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install setup up down logs ps dev db-up db-stop db-reset changelog \
+.PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog \
         check test test-integration lint format build image image-push \
         release storybook storybook-smoke test-display image-test-display
 
@@ -37,8 +38,11 @@ setup: ## Write .env with local credentials, mode 0600, printing no secret
 
 ##@ Production
 
-up: ## Start the gateway and its database from compose.yaml
+up: ## Start the panel, the gateway and the database from compose.yaml
 	$(COMPOSE) up -d --wait
+
+pull: ## Fetch the images compose.yaml names, before `make up` on an update
+	$(COMPOSE) pull
 
 down: ## Stop the production stack, keeping the volume
 	$(COMPOSE) down
@@ -93,24 +97,29 @@ lint: ## Biome, warnings are errors
 format: ## Rewrite the formatting Biome expects
 	pnpm run format
 
-build: ## Compile the gateway and export the panel into it
+build: ## Compile the gateway and the panel's standalone server
 	pnpm run build
 
 ##@ Image
 
-image: ## Build the gateway image for this machine's architecture
+image: ## Build the gateway and web images for this machine's architecture
 	docker build \
 		--build-arg JIAN_VERSION=$(VERSION) \
 		--build-arg JIAN_REVISION=$(REVISION) \
 		-t $(IMAGE):$(VERSION) .
+	docker build -f apps/gateway-ui/Dockerfile \
+		--build-arg JIAN_VERSION=$(VERSION) \
+		--build-arg JIAN_REVISION=$(REVISION) \
+		-t $(WEB_IMAGE):$(VERSION) .
 
 image-test-display: ## Real image X11/GL/Vulkan capture, isolation and cleanup; requires Landlock
 	docker run --rm --security-opt=no-new-privileges --cap-drop=ALL \
 		-v "$(CURDIR)/apps/gateway/test-display.py:/usr/local/libexec/test-display.py:ro" \
 		--entrypoint python3 $(IMAGE):$(VERSION) /usr/local/libexec/test-display.py
 
-image-push: ## Push the locally built image; the multi-architecture index comes from CI
+image-push: ## Push the locally built images; the multi-architecture indexes come from CI
 	docker push $(IMAGE):$(VERSION)
+	docker push $(WEB_IMAGE):$(VERSION)
 
 ##@ Release
 

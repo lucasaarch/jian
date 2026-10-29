@@ -39,14 +39,10 @@ async function modelMenu(
       ],
       providerModels: {
         google: {
-          models: [
-            model('gemini-3-pro'),
-            model('gemini-3-pro-image', ['image']),
-            model('gemini-3.8-live', ['audio']),
-          ],
+          models: [model('gemini-3-pro'), model('gemini-3-pro-image', ['image'])],
         },
         anthropic: { models: [model('claude-sonnet-5')] },
-        openai: { models: [model('gpt-image-1', ['image']), model('gpt-live-1', ['audio'])] },
+        openai: { models: [model('gpt-image-1', ['image'])] },
       },
       modelDefaults,
     },
@@ -84,8 +80,9 @@ it('lists the models of every connected provider in one menu, each naming its pr
   const view = await modelMenu('Conversations & channels', false);
   try {
     expect(view.options()).toEqual(
-      expect.arrayContaining(['Automatic', 'gemini-3-proGemini', 'claude-sonnet-5Anthropic']),
+      expect.arrayContaining(['gemini-3-proGemini', 'claude-sonnet-5Anthropic']),
     );
+    expect(view.options()).not.toContain('Automatic');
     expect(view.options()).not.toContain('gemini-3-pro-imageGemini');
   } finally {
     await view.close();
@@ -104,7 +101,7 @@ it('keeps a saved channel override visible until changing the shared default upd
     setModelDefaults,
   );
   try {
-    expect(view.element.querySelectorAll('.model-card')).toHaveLength(8);
+    expect(view.element.querySelectorAll('.model-card')).toHaveLength(7);
     expect(view.card.textContent).toContain('A separate channel default is saved');
     const option = Array.from(document.querySelectorAll('[role="option"]')).find((item) =>
       item.textContent?.includes('claude-sonnet-5'),
@@ -131,7 +128,7 @@ it('keeps a saved channel override visible until changing the shared default upd
 it('offers image generation only where it works, and explains the missing OpenAI API key', async () => {
   const view = await modelMenu('Image generation', false);
   try {
-    expect(view.options()).toEqual(['Disabled', 'Automatic', 'gemini-3-pro-imageGemini']);
+    expect(view.options()).toEqual(['Disabled', 'gemini-3-pro-imageGemini']);
     expect(view.element.textContent).toContain('ChatGPT login does not authorize image generation');
   } finally {
     await view.close();
@@ -144,17 +141,18 @@ it.each([
   ['Text to speech', 'speech'],
   ['Image generation', 'image'],
   ['Image analysis', 'vision'],
-])('offers Disabled before Automatic for %s', async (activity, key) => {
+])('offers Disabled and compatible models for %s', async (activity, key) => {
   const view = await modelMenu(activity, false, { [key]: 'disabled' });
   try {
-    expect(view.options().slice(0, 2)).toEqual(['Disabled', 'Automatic']);
+    expect(view.options()[0]).toBe('Disabled');
+    expect(view.options()).not.toContain('Automatic');
     expect(view.card.textContent).not.toContain('Effort');
   } finally {
     await view.close();
   }
 });
 
-it('saves Disabled as a distinct state from Automatic', async () => {
+it('saves Disabled as a distinct state from a selected model', async () => {
   const setModelDefaults = vi.fn().mockResolvedValue({});
   const view = await modelMenu('Image generation', false, { image: null }, setModelDefaults);
   try {
@@ -193,73 +191,6 @@ it('keeps a saved model visible when the provider no longer lists it', async () 
   try {
     expect(view.options()).toContain('gpt-6-solOpenAI · ChatGPT · not offered for this activity');
     expect(view.card.querySelector('input[placeholder="Model id"]')).toBeNull();
-  } finally {
-    await view.close();
-  }
-});
-
-it('offers live voice models only for API-key providers, not ChatGPT OAuth', async () => {
-  const view = await modelMenu('Voice calls', true);
-  try {
-    expect(view.options()).toContain('gemini-3.8-liveGemini');
-    expect(view.options()).toContain('gpt-live-1OpenAI · API key');
-    expect(view.options()).not.toContain('gpt-live-1OpenAI · ChatGPT');
-  } finally {
-    await view.close();
-  }
-});
-
-it('offers Gemini voices under the selected model and saves the chosen voice', async () => {
-  const setModelDefaults = vi.fn().mockResolvedValue({});
-  const view = await modelMenu('Voice calls', true, {}, setModelDefaults);
-  try {
-    const modelOption = Array.from(document.querySelectorAll('[role="option"]')).find((item) =>
-      item.textContent?.includes('gemini-3.8-live'),
-    ) as HTMLElement;
-    await act(async () => modelOption.click());
-
-    const voiceLabel = Array.from(view.card.querySelectorAll('label')).find(
-      (item) => item.textContent === 'Voice',
-    );
-    const trigger = document.getElementById(voiceLabel?.htmlFor ?? '') as HTMLButtonElement | null;
-    if (!trigger) throw new Error('Voice selector missing');
-    await act(async () => trigger.click());
-    expect(view.options()).toContain('Leda');
-    expect(view.options()).toContain('Zubenelgenubi');
-    const voiceOption = Array.from(document.querySelectorAll('[role="option"]')).find(
-      (item) => item.textContent === 'Aoede',
-    ) as HTMLElement;
-    await act(async () => voiceOption.click());
-    await act(async () => {
-      view.element
-        .querySelector('form')
-        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    });
-    expect(setModelDefaults).toHaveBeenCalledWith(
-      'profile',
-      expect.objectContaining({ voice: expect.objectContaining({ voiceName: 'Aoede' }) }),
-    );
-  } finally {
-    await view.close();
-  }
-});
-
-it('offers Iris GPT Live voices for OpenAI models', async () => {
-  const view = await modelMenu('Voice calls', true);
-  try {
-    const modelOption = Array.from(document.querySelectorAll('[role="option"]')).find((item) =>
-      item.textContent?.includes('gpt-live-1OpenAI · API key'),
-    ) as HTMLElement;
-    await act(async () => modelOption.click());
-    const voiceLabel = Array.from(view.card.querySelectorAll('label')).find(
-      (item) => item.textContent === 'Voice',
-    );
-    const trigger = document.getElementById(voiceLabel?.htmlFor ?? '') as HTMLButtonElement | null;
-    if (!trigger) throw new Error('Voice selector missing');
-    await act(async () => trigger.click());
-    expect(view.options()).toContain('marin');
-    expect(view.options()).toContain('willow');
-    expect(view.options()).not.toContain('Aoede');
   } finally {
     await view.close();
   }

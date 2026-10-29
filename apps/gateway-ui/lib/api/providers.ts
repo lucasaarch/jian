@@ -17,20 +17,6 @@ export const providerCalls = (client: Client) => ({
   codexLogin: () => result(client.GET('/v1/providers/openai/oauth')),
   modelDefaults: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/model-defaults', { params: profile(profileId) })),
-  createVoiceToken: (profileId: string, sessionId: string) =>
-    result(
-      client.POST('/v1/profiles/{profileId}/voice/token', {
-        params: profile(profileId),
-        body: { sessionId },
-      }),
-    ),
-  summarizeVoiceTranscript: (profileId: string, transcript: string) =>
-    result(
-      client.POST('/v1/profiles/{profileId}/voice/summary', {
-        params: profile(profileId),
-        body: { transcript },
-      }),
-    ),
   webSearch: () => result(client.GET('/v1/web-search')),
   setWebSearch: (apiKey: string) =>
     result(client.PUT('/v1/web-search', { body: { provider: 'tavily', apiKey } })),

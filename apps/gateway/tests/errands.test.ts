@@ -230,21 +230,39 @@ describe('writing into another conversation', () => {
     expect(history.filter((message) => message.content === 'Ping, Moabe.')).toHaveLength(1);
   });
 
-  it('tells an agent reached elsewhere which conversations it has, the gateway one first', async () => {
+  it('tells an agent which channel conversations it has, wherever it is reached', async () => {
     const { services, profile, moabe, asking } = await setup();
-    const gateway = await services.sessions.gatewaySession(profile.id);
+    await services.sessions.createGatewaySession(profile.id, {});
     const { system } = await services.contexts.context(asking);
 
     expect(system).toContain('Your conversations');
     expect(system).toContain(
       JSON.stringify({ sessionId: moabe.sessionId, channel: 'telegram', with: 'Moabe' }),
     );
+    // A profile has many panel chats and none is the default one, so none is named from
+    // outside it: the agent would not know which to write into.
+    expect(system).not.toContain('"channel":"gateway"');
+  });
+
+  it('names a panel chat as the current conversation from inside it', async () => {
+    const { services, profile, moabe } = await setup();
+    const gateway = await services.sessions.createGatewaySession(profile.id, {});
+    const run = await services.runs.submit(profile.id, gateway.id, {
+      text: 'Who can you reach?',
+      requestKey: 'from-the-panel',
+    });
+    const { system } = await services.contexts.context(run);
+
     expect(system).toContain(
       JSON.stringify({
         sessionId: gateway.id,
         channel: 'gateway',
-        with: 'your owner, in the Jian panel',
+        with: 'your owner, in Jian Chats',
+        current: true,
       }),
+    );
+    expect(system).toContain(
+      JSON.stringify({ sessionId: moabe.sessionId, channel: 'telegram', with: 'Moabe' }),
     );
   });
 

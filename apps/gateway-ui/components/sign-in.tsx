@@ -16,7 +16,7 @@ export function SignIn({ connected }: { connected: () => void }) {
   return (
     <main className="login-layout">
       <section className="login-story">
-        <a className="brand" href="/ui/">
+        <a className="brand" href="/">
           <Mark />
           <span>Jian</span>
         </a>
@@ -36,7 +36,7 @@ export function SignIn({ connected }: { connected: () => void }) {
       <section className="login-form-wrap">
         <form
           method="post"
-          action="/ui/"
+          action="/"
           className="login-form"
           onSubmit={async (event) => {
             event.preventDefault();

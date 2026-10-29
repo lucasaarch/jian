@@ -17,7 +17,7 @@ export function SkillImport({
     <form
       className="skill-import"
       method="post"
-      action="/ui/"
+      action="/"
       onSubmit={async (event) => {
         event.preventDefault();
 

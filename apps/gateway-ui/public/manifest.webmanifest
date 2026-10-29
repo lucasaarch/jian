@@ -1,18 +1,18 @@
 {
-  "id": "/ui/",
+  "id": "/",
   "name": "Jian",
   "short_name": "Jian",
   "description": "Your self-hosted agent gateway.",
-  "start_url": "/ui/",
-  "scope": "/ui/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#050505",
   "theme_color": "#050505",
   "icons": [
-    { "src": "/ui/brand/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/ui/brand/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/brand/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/brand/icon-512.png", "sizes": "512x512", "type": "image/png" },
     {
-      "src": "/ui/brand/icon-maskable-512.png",
+      "src": "/brand/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

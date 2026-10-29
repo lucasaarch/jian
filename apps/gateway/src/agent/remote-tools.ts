@@ -170,7 +170,13 @@ export function remoteTools(
   run: Run,
   remote: Pick<Remote, 'listForProfile' | 'execute' | 'executeComputer'>,
   store: Store,
+  targetMachineId?: string,
 ): ToolSet {
+  const requireTarget = (machineId: string) => {
+    if (targetMachineId && machineId !== targetMachineId) {
+      throw new GatewayError(403, 'This conversation is restricted to its selected remote machine');
+    }
+  };
   const tools: ToolSet = {
     list_remote_machines: tool({
       description:
@@ -187,8 +193,10 @@ export function remoteTools(
         cwd: z.string().min(1).max(4096).optional(),
         timeoutMs: z.number().int().min(1000).max(120000).default(30000),
       }),
-      execute: async ({ machineId, command, cwd, timeoutMs }, { abortSignal }) =>
-        remote.execute(run.profileId, machineId, { command, cwd, timeoutMs }, abortSignal),
+      execute: async ({ machineId, command, cwd, timeoutMs }, { abortSignal }) => {
+        requireTarget(machineId);
+        return remote.execute(run.profileId, machineId, { command, cwd, timeoutMs }, abortSignal);
+      },
     }),
     remote_computer: tool({
       description:
@@ -206,6 +214,7 @@ export function remoteTools(
         timeoutMs: z.number().int().min(1000).max(120000).default(30000),
       }),
       execute: async (input, { abortSignal }) => {
+        requireTarget(input.machineId);
         const machines = await remote.listForProfile(run.profileId);
         const machine = machines.find((item) => item.id === input.machineId);
         if (!machine) throw new GatewayError(403, 'That remote machine is not authorized');
@@ -324,6 +333,7 @@ export function remoteTools(
         timeoutMs: z.number().int().min(5000).max(120000).default(60000),
       }),
       execute: async ({ machineId, path, name, timeoutMs }, { abortSignal }) => {
+        requireTarget(machineId);
         const machines = await remote.listForProfile(run.profileId);
         const machine = machines.find((item) => item.id === machineId);
         if (!machine) throw new GatewayError(403, 'That remote machine is not authorized');
@@ -389,6 +399,7 @@ export function remoteTools(
         timeoutMs: z.number().int().min(5000).max(120000).default(60000),
       }),
       execute: async ({ machineId, path, content, encoding, timeoutMs }, { abortSignal }) => {
+        requireTarget(machineId);
         const machines = await remote.listForProfile(run.profileId);
         const machine = machines.find((item) => item.id === machineId);
         if (!machine) throw new GatewayError(403, 'That remote machine is not authorized');

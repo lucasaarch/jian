@@ -1,0 +1,61 @@
+name: jian-devcontainer
+services:
+  # The production layout: the panel's web server is the only published port and passes the
+  # API on to the gateway over the Compose network.
+  web:
+    image: jian-web-devcontainer
+    build:
+      context: ..
+      dockerfile: apps/gateway-ui/Dockerfile
+    environment:
+      JIAN_GATEWAY_URL: http://gateway:4310
+    depends_on:
+      gateway:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:4310:3000'
+
+  gateway:
+    image: jian-gateway-devcontainer
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://jian:jian-devcontainer-db-password@postgres:5432/jian
+      JIAN_API_TOKEN: jian-devcontainer-test-token-only
+      JIAN_ACTIVE_KEY_ID: devcontainer-v1
+      JIAN_MASTER_KEYS: '{"devcontainer-v1":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}'
+      JIAN_ROLE: all
+      # Only the web service reaches the gateway; believe what it forwards.
+      JIAN_TRUSTED_PROXIES: uniquelocal
+      HOST: 0.0.0.0
+      PORT: 4310
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - gateway_home:/home/node
+
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: jian
+      POSTGRES_USER: jian
+      POSTGRES_PASSWORD: jian-devcontainer-db-password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U jian -d jian']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  workspace:
+    image: node:24-bookworm-slim
+    command: ["sleep", "infinity"]
+    volumes:
+      - ..:/workspaces/jian:cached
+
+volumes:
+  gateway_home:
+  postgres_data:

@@ -17,7 +17,7 @@ async function setup() {
   };
   const profile = await services.profiles.createProfile({ ...input, name: 'Owner' });
   const other = await services.profiles.createProfile({ ...input, name: 'Other' });
-  const gateway = await services.sessions.gatewaySession(profile.id);
+  const gateway = await services.sessions.createGatewaySession(profile.id, {});
   const app = createApp({ ...services, token, logger: false });
   const upload = (profileId: string, sessionId: string, payload: Record<string, unknown>) =>
     app.inject({
@@ -83,7 +83,7 @@ describe('attaching files to a message', () => {
       const media = (
         await f.upload(f.profile.id, f.gateway.id, { mimeType: 'text/plain', data: base64('x') })
       ).json();
-      const theirs = await f.services.sessions.gatewaySession(f.other.id);
+      const theirs = await f.services.sessions.createGatewaySession(f.other.id, {});
 
       await expect(
         f.services.runs.submit(f.other.id, theirs.id, {

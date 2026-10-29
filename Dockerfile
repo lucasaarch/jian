@@ -64,14 +64,14 @@ COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
 RUN pnpm install --frozen-lockfile
 COPY apps/gateway apps/gateway
-COPY apps/gateway-ui apps/gateway-ui
 COPY apps/remote-control apps/remote-control
 COPY packages packages
 # The release notes ride in the build, so the panel can say what changed in this version.
 COPY docs/releases docs/releases
-# `deploy` writes a self-contained tree: the gateway's compiled output, the panel exported
-# into it, and production dependencies with the workspace links resolved to real files.
-RUN pnpm build && pnpm --filter @jian/gateway --prod deploy --legacy /runtime
+# `deploy` writes a self-contained tree: the gateway's compiled output and production
+# dependencies with the workspace links resolved to real files. The panel is its own image,
+# apps/gateway-ui/Dockerfile; only its manifest is here, for the lockfile.
+RUN pnpm --filter @jian/gateway build && pnpm --filter @jian/gateway --prod deploy --legacy /runtime
 
 FROM node:24-bookworm-slim
 # The workbench an agent with the shell switch on reaches for: version control, the network,
