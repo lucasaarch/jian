@@ -2,6 +2,7 @@ import { modelSchema } from '@jian/contracts';
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { cacheable, cacheableInstructions } from '../src/agent/cache.js';
+import { modelCapabilities } from '../src/providers/capabilities.js';
 import {
   anthropicCredential,
   CLAUDE_CODE_IDENTITY,
@@ -9,6 +10,7 @@ import {
 } from '../src/providers/claude-subscription.js';
 import { reasoningProviderOptions, takesAdaptiveThinking } from '../src/providers/effort.js';
 import { resolveModel } from '../src/providers/models.js';
+import { speedProviderOptions } from '../src/providers/speed.js';
 
 describe('providers', () => {
   it.each(['openai', 'anthropic', 'google', 'openai-compatible'] as const)(
@@ -378,4 +380,81 @@ it('never lets the marks outgrow what Anthropic accepts', () => {
           ?.cacheControl,
     ).length,
   );
+});
+
+describe('fast mode', () => {
+  const capture = () => {
+    const seen: { body?: Record<string, unknown>; headers: Headers } = { headers: new Headers() };
+    const fetcher: typeof fetch = async (_input, init) => {
+      seen.headers = new Headers(init?.headers);
+      seen.body = JSON.parse(String(init?.body ?? '{}'));
+      return Response.json(
+        { type: 'error', error: { type: 'invalid_request_error', message: 'synthetic' } },
+        { status: 400 },
+      );
+    };
+    return { seen, fetcher };
+  };
+
+  it('asks Anthropic for fast output on an Opus that offers it', async () => {
+    const { seen, fetcher } = capture();
+    const config = modelSchema.parse({
+      provider: 'anthropic',
+      modelId: 'claude-opus-5-5',
+      apiKeyEnv: 'ANTHROPIC_API_KEY',
+      fast: true,
+    });
+    const model = await resolveModel(
+      config,
+      { ANTHROPIC_API_KEY: 'sk-ant-api03-synthetic' },
+      fetcher,
+    );
+
+    await expect(
+      generateText({
+        model,
+        prompt: 'Hi',
+        maxRetries: 0,
+        providerOptions: speedProviderOptions(config),
+      }),
+    ).rejects.toThrow();
+
+    expect(seen.body?.speed).toBe('fast');
+    expect(seen.headers.get('anthropic-beta')).toContain('fast-mode-2026-02-01');
+  });
+
+  it('asks OpenAI for its priority tier', async () => {
+    const { seen, fetcher } = capture();
+    const config = modelSchema.parse({
+      provider: 'openai',
+      modelId: 'gpt-6',
+      apiKeyEnv: 'OPENAI_API_KEY',
+      fast: true,
+    });
+    const model = await resolveModel(config, { OPENAI_API_KEY: 'sk-synthetic' }, fetcher);
+
+    await expect(
+      generateText({
+        model,
+        prompt: 'Hi',
+        maxRetries: 0,
+        providerOptions: speedProviderOptions(config),
+      }),
+    ).rejects.toThrow();
+
+    expect(seen.body?.service_tier).toBe('priority');
+  });
+
+  it('is offered only on the models that take it', () => {
+    const offered = (kind: 'anthropic' | 'openai' | 'xai', id: string) =>
+      modelCapabilities(kind, id).fast === true;
+
+    expect(offered('anthropic', 'claude-opus-5-5')).toBe(true);
+    expect(offered('anthropic', 'claude-opus-4-8')).toBe(true);
+    // Opus 4.7 lost fast mode, and no Sonnet or Haiku has it.
+    expect(offered('anthropic', 'claude-opus-4-7')).toBe(false);
+    expect(offered('anthropic', 'claude-sonnet-5-5')).toBe(false);
+    expect(offered('openai', 'gpt-6')).toBe(true);
+    expect(offered('xai', 'grok-4')).toBe(false);
+  });
 });

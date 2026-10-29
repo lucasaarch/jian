@@ -29,6 +29,7 @@ import {
   revokeLiveProviders,
   writeModelDefaults,
 } from './repository.js';
+import { takesFast } from './speed.js';
 
 /** Where a provider's key lives in the vault. Revoking the provider takes the key with it. */
 export const providerSecret = (providerId: string) => `provider:${providerId}`;
@@ -44,6 +45,7 @@ function sameModelChoice(
     next.providerId === previous.providerId &&
     next.modelId === previous.modelId &&
     next.reasoningEffort === previous.reasoningEffort &&
+    Boolean(next.fast) === Boolean(previous.fast) &&
     next.voiceName === previous.voiceName
   );
 }
@@ -308,6 +310,8 @@ export class Providers {
           ? { credential: anthropicCredential(provider.credential, provider.apiKeyEnv, undefined) }
           : {}),
         ...(selection.reasoningEffort ? { reasoningEffort: selection.reasoningEffort } : {}),
+        // Only where the model takes it: a stale choice must not cost a refused request.
+        ...(selection.fast && takesFast(provider.kind, selection.modelId) ? { fast: true } : {}),
         ...(provider.apiKeyEnv ? { apiKeyEnv: provider.apiKeyEnv } : { providerId: provider.id }),
       },
       // Reserve output inside the model's actual window. Session compaction, not a fixed

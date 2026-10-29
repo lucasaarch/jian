@@ -25,6 +25,7 @@ import { resolveModel } from '../providers/models.js';
 import { readModelDefaults } from '../providers/repository.js';
 import type { Providers } from '../providers/service.js';
 import { providerSecret } from '../providers/service.js';
+import { mergeProviderOptions, speedProviderOptions } from '../providers/speed.js';
 import { createSafeFetch } from '../security/outbound.js';
 import type { ObjectiveContinuation } from '../sessions/continuation.js';
 import {
@@ -523,9 +524,10 @@ export class AgentRuntime {
 
       // The effort the owner picked next to the model, in the dialect this provider reads;
       // lowered, never raised, for a turn judged plainly light.
-      const reasoning = reasoningProviderOptions(
-        context.light ? lightEffort(config) : config,
-        policy.outputTokens,
+      // The speed rides along: a turn chosen fast stays fast, light or not.
+      const reasoning = mergeProviderOptions(
+        reasoningProviderOptions(context.light ? lightEffort(config) : config, policy.outputTokens),
+        speedProviderOptions(config),
       );
       let preparedInputTokens = 0;
       let preparedPrompt: unknown;

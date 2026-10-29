@@ -26,6 +26,8 @@ export const modelCapabilitiesSchema = z.strictObject({
   contextWindow: z.number().int().min(4096).max(20_000_000),
   maxOutputTokens: z.number().int().min(256).max(1_000_000),
   reasoningEfforts: z.array(reasoningEffortSchema).max(7),
+  /** The vendor serves this model faster for a premium, when the owner asks for it. */
+  fast: z.boolean().optional(),
   inputModalities: z.array(modelModalitySchema).min(1).max(5),
   outputModalities: z.array(modelModalitySchema).max(5).optional(),
   /**
@@ -101,6 +103,8 @@ export const modelSelectionSchema = z.strictObject({
   providerId: z.uuid(),
   modelId: z.string().trim().min(1).max(160),
   reasoningEffort: reasoningEffortSchema.optional(),
+  /** Faster output at the vendor's premium price, on a model that offers it. */
+  fast: z.boolean().optional(),
   voiceName: z.string().trim().min(1).max(40).optional(),
 });
 

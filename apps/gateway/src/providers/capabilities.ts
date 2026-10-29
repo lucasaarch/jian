@@ -1,6 +1,7 @@
 import type { ModelCapabilities } from '@jian/contracts';
 import type { ProviderKind } from './catalog.js';
 import type { CatalogEntry } from './catalog-source.js';
+import { takesFast } from './speed.js';
 
 /**
  * What the gateway assumes when nothing could be learned about a model. It is a floor, not a
@@ -38,8 +39,8 @@ export type ReportedCapabilities = {
  * of this gateway, and a model no source knows stays selectable and is marked uncatalogued.
  */
 export function modelCapabilities(
-  _kind: ProviderKind,
-  _modelId: string,
+  kind: ProviderKind,
+  modelId: string,
   reported?: ReportedCapabilities,
   catalogued?: CatalogEntry,
 ): ModelCapabilities {
@@ -60,6 +61,7 @@ export function modelCapabilities(
       ? clamp(maxOutputTokens, 256, 1_000_000)
       : floor.maxOutputTokens,
     reasoningEfforts,
+    ...(takesFast(kind, bareModelId(modelId)) ? { fast: true } : {}),
     inputModalities: inputModalities ?? floor.inputModalities,
     outputModalities: catalogued?.outputModalities ?? [],
     // Known means a source spoke for this model, not that every field came from one.

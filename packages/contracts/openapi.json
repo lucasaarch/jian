@@ -3004,6 +3004,9 @@
                               "max"
                             ]
                           },
+                          "fast": {
+                            "type": "boolean"
+                          },
                           "voiceName": {
                             "type": "string",
                             "minLength": 1,
@@ -5898,6 +5901,9 @@
                               ]
                             }
                           },
+                          "fast": {
+                            "type": "boolean"
+                          },
                           "inputModalities": {
                             "minItems": 1,
                             "maxItems": 5,
@@ -6304,6 +6310,9 @@
                             "max"
                           ]
                         },
+                        "fast": {
+                          "type": "boolean"
+                        },
                         "voiceName": {
                           "type": "string",
                           "minLength": 1,
@@ -6344,6 +6353,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -6386,6 +6398,9 @@
                             "max"
                           ]
                         },
+                        "fast": {
+                          "type": "boolean"
+                        },
                         "voiceName": {
                           "type": "string",
                           "minLength": 1,
@@ -6427,6 +6442,9 @@
                                     "xhigh",
                                     "max"
                                   ]
+                                },
+                                "fast": {
+                                  "type": "boolean"
                                 },
                                 "voiceName": {
                                   "type": "string",
@@ -6481,6 +6499,9 @@
                                     "max"
                                   ]
                                 },
+                                "fast": {
+                                  "type": "boolean"
+                                },
                                 "voiceName": {
                                   "type": "string",
                                   "minLength": 1,
@@ -6533,6 +6554,9 @@
                                     "xhigh",
                                     "max"
                                   ]
+                                },
+                                "fast": {
+                                  "type": "boolean"
                                 },
                                 "voiceName": {
                                   "type": "string",
@@ -6587,6 +6611,9 @@
                                     "max"
                                   ]
                                 },
+                                "fast": {
+                                  "type": "boolean"
+                                },
                                 "voiceName": {
                                   "type": "string",
                                   "minLength": 1,
@@ -6639,6 +6666,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -6811,6 +6841,9 @@
                           "max"
                         ]
                       },
+                      "fast": {
+                        "type": "boolean"
+                      },
                       "voiceName": {
                         "type": "string",
                         "minLength": 1,
@@ -6851,6 +6884,9 @@
                           "xhigh",
                           "max"
                         ]
+                      },
+                      "fast": {
+                        "type": "boolean"
                       },
                       "voiceName": {
                         "type": "string",
@@ -6893,6 +6929,9 @@
                           "max"
                         ]
                       },
+                      "fast": {
+                        "type": "boolean"
+                      },
                       "voiceName": {
                         "type": "string",
                         "minLength": 1,
@@ -6934,6 +6973,9 @@
                                   "xhigh",
                                   "max"
                                 ]
+                              },
+                              "fast": {
+                                "type": "boolean"
                               },
                               "voiceName": {
                                 "type": "string",
@@ -6988,6 +7030,9 @@
                                   "max"
                                 ]
                               },
+                              "fast": {
+                                "type": "boolean"
+                              },
                               "voiceName": {
                                 "type": "string",
                                 "minLength": 1,
@@ -7040,6 +7085,9 @@
                                   "xhigh",
                                   "max"
                                 ]
+                              },
+                              "fast": {
+                                "type": "boolean"
                               },
                               "voiceName": {
                                 "type": "string",
@@ -7094,6 +7142,9 @@
                                   "max"
                                 ]
                               },
+                              "fast": {
+                                "type": "boolean"
+                              },
                               "voiceName": {
                                 "type": "string",
                                 "minLength": 1,
@@ -7146,6 +7197,9 @@
                           "xhigh",
                           "max"
                         ]
+                      },
+                      "fast": {
+                        "type": "boolean"
                       },
                       "voiceName": {
                         "type": "string",
@@ -7202,6 +7256,9 @@
                             "max"
                           ]
                         },
+                        "fast": {
+                          "type": "boolean"
+                        },
                         "voiceName": {
                           "type": "string",
                           "minLength": 1,
@@ -7242,6 +7299,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -7284,6 +7344,9 @@
                             "max"
                           ]
                         },
+                        "fast": {
+                          "type": "boolean"
+                        },
                         "voiceName": {
                           "type": "string",
                           "minLength": 1,
@@ -7325,6 +7388,9 @@
                                     "xhigh",
                                     "max"
                                   ]
+                                },
+                                "fast": {
+                                  "type": "boolean"
                                 },
                                 "voiceName": {
                                   "type": "string",
@@ -7379,6 +7445,9 @@
                                     "max"
                                   ]
                                 },
+                                "fast": {
+                                  "type": "boolean"
+                                },
                                 "voiceName": {
                                   "type": "string",
                                   "minLength": 1,
@@ -7431,6 +7500,9 @@
                                     "xhigh",
                                     "max"
                                   ]
+                                },
+                                "fast": {
+                                  "type": "boolean"
                                 },
                                 "voiceName": {
                                   "type": "string",
@@ -7485,6 +7557,9 @@
                                     "max"
                                   ]
                                 },
+                                "fast": {
+                                  "type": "boolean"
+                                },
                                 "voiceName": {
                                   "type": "string",
                                   "minLength": 1,
@@ -7537,6 +7612,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -8232,6 +8310,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -8264,6 +8345,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -8892,6 +8976,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -8924,6 +9011,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -17164,6 +17254,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -17595,6 +17688,9 @@
                               "xhigh",
                               "max"
                             ]
+                          },
+                          "fast": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -18022,6 +18118,9 @@
                           "xhigh",
                           "max"
                         ]
+                      },
+                      "fast": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -18302,6 +18401,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -18742,6 +18844,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -19173,6 +19278,9 @@
                           "xhigh",
                           "max"
                         ]
+                      },
+                      "fast": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -19438,6 +19546,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -20173,6 +20284,9 @@
                                   "xhigh",
                                   "max"
                                 ]
+                              },
+                              "fast": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -20635,6 +20749,9 @@
                               "max"
                             ]
                           },
+                          "fast": {
+                            "type": "boolean"
+                          },
                           "voiceName": {
                             "type": "string",
                             "minLength": 1,
@@ -20960,6 +21077,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -21632,6 +21752,9 @@
                             "max"
                           ]
                         },
+                        "fast": {
+                          "type": "boolean"
+                        },
                         "voiceName": {
                           "type": "string",
                           "minLength": 1,
@@ -21952,6 +22075,9 @@
                             "max"
                           ]
                         },
+                        "fast": {
+                          "type": "boolean"
+                        },
                         "voiceName": {
                           "type": "string",
                           "minLength": 1,
@@ -22260,6 +22386,9 @@
                             "max"
                           ]
                         },
+                        "fast": {
+                          "type": "boolean"
+                        },
                         "voiceName": {
                           "type": "string",
                           "minLength": 1,
@@ -22545,6 +22674,9 @@
                             "max"
                           ]
                         },
+                        "fast": {
+                          "type": "boolean"
+                        },
                         "voiceName": {
                           "type": "string",
                           "minLength": 1,
@@ -22776,6 +22908,9 @@
                           "max"
                         ]
                       },
+                      "fast": {
+                        "type": "boolean"
+                      },
                       "voiceName": {
                         "type": "string",
                         "minLength": 1,
@@ -22887,6 +23022,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -23206,6 +23344,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -23885,6 +24026,9 @@
                           "max"
                         ]
                       },
+                      "fast": {
+                        "type": "boolean"
+                      },
                       "voiceName": {
                         "type": "string",
                         "minLength": 1,
@@ -24122,6 +24266,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -24154,6 +24301,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -28472,6 +28622,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -28504,6 +28657,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -30527,6 +30683,9 @@
                               "xhigh",
                               "max"
                             ]
+                          },
+                          "fast": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -30559,6 +30718,9 @@
                               "xhigh",
                               "max"
                             ]
+                          },
+                          "fast": {
+                            "type": "boolean"
                           },
                           "voiceName": {
                             "type": "string",
@@ -31162,6 +31324,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -31194,6 +31359,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",
@@ -31796,6 +31964,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -31828,6 +31999,9 @@
                             "xhigh",
                             "max"
                           ]
+                        },
+                        "fast": {
+                          "type": "boolean"
                         },
                         "voiceName": {
                           "type": "string",

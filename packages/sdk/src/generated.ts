@@ -3657,6 +3657,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         progress?: {
@@ -5461,6 +5462,7 @@ export interface operations {
                             contextWindow: number;
                             maxOutputTokens: number;
                             reasoningEfforts: ("none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[];
+                            fast?: boolean;
                             inputModalities: ("text" | "image" | "audio" | "video" | "pdf")[];
                             outputModalities?: ("text" | "image" | "audio" | "video" | "pdf")[];
                             known: boolean;
@@ -5700,6 +5702,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | null;
                         /** @default null */
@@ -5709,6 +5712,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | null;
                         /** @default null */
@@ -5718,6 +5722,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | null;
                         /** @default disabled */
@@ -5727,6 +5732,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
@@ -5736,6 +5742,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
@@ -5745,6 +5752,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
@@ -5754,6 +5762,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | "disabled") | null;
                         /**
@@ -5766,6 +5775,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | null;
                         /** Format: date-time */
@@ -5873,6 +5883,7 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                         voiceName?: string;
                     } | null;
                     /** @default null */
@@ -5882,6 +5893,7 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                         voiceName?: string;
                     } | null;
                     /** @default null */
@@ -5891,6 +5903,7 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                         voiceName?: string;
                     } | null;
                     /** @default disabled */
@@ -5900,6 +5913,7 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                         voiceName?: string;
                     } | "disabled") | null;
                     /** @default disabled */
@@ -5909,6 +5923,7 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                         voiceName?: string;
                     } | "disabled") | null;
                     /** @default disabled */
@@ -5918,6 +5933,7 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                         voiceName?: string;
                     } | "disabled") | null;
                     /** @default disabled */
@@ -5927,6 +5943,7 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                         voiceName?: string;
                     } | "disabled") | null;
                     /**
@@ -5939,6 +5956,7 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                         voiceName?: string;
                     } | null;
                 };
@@ -5959,6 +5977,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | null;
                         /** @default null */
@@ -5968,6 +5987,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | null;
                         /** @default null */
@@ -5977,6 +5997,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | null;
                         /** @default disabled */
@@ -5986,6 +6007,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
@@ -5995,6 +6017,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
@@ -6004,6 +6027,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | "disabled") | null;
                         /** @default disabled */
@@ -6013,6 +6037,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | "disabled") | null;
                         /**
@@ -6025,6 +6050,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         } | null;
                         /** Format: date-time */
@@ -6415,6 +6441,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         modelSelection?: {
                             /** Format: uuid */
@@ -6422,6 +6449,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         contextPolicy?: {
@@ -6648,6 +6676,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         modelSelection?: {
                             /** Format: uuid */
@@ -6655,6 +6684,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         contextPolicy?: {
@@ -11329,6 +11359,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         /**
                          * @default {
@@ -11532,6 +11563,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         /**
                          * @default {
@@ -11729,6 +11761,7 @@ export interface operations {
                         baseURL?: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                     };
                     /**
                      * @default {
@@ -11834,6 +11867,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         /**
                          * @default {
@@ -12039,6 +12073,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         /**
                          * @default {
@@ -12336,6 +12371,7 @@ export interface operations {
                         baseURL?: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                     };
                     identity?: {
                         /** @default  */
@@ -12417,6 +12453,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         /**
                          * @default {
@@ -12734,6 +12771,7 @@ export interface operations {
                                 baseURL?: string;
                                 /** @enum {string} */
                                 reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                                fast?: boolean;
                             };
                             /**
                              * @default {
@@ -12943,6 +12981,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         objective?: {
@@ -13102,6 +13141,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         objective?: {
@@ -13493,6 +13533,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         objective?: {
@@ -13647,6 +13688,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         objective?: {
@@ -13792,6 +13834,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         objective?: {
@@ -13943,6 +13986,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         objective?: {
@@ -14062,6 +14106,7 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                         voiceName?: string;
                     } | null;
                 };
@@ -14101,6 +14146,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         objective?: {
@@ -14255,6 +14301,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         objective?: {
@@ -14623,6 +14670,7 @@ export interface operations {
                         modelId: string;
                         /** @enum {string} */
                         reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
                         voiceName?: string;
                     };
                 };
@@ -14691,6 +14739,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         modelSelection?: {
                             /** Format: uuid */
@@ -14698,6 +14747,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         contextPolicy?: {
@@ -16997,6 +17047,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         modelSelection?: {
                             /** Format: uuid */
@@ -17004,6 +17055,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         contextPolicy?: {
@@ -17983,6 +18035,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         modelSelection?: {
                             /** Format: uuid */
@@ -17990,6 +18043,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         contextPolicy?: {
@@ -18209,6 +18263,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         modelSelection?: {
                             /** Format: uuid */
@@ -18216,6 +18271,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         contextPolicy?: {
@@ -18435,6 +18491,7 @@ export interface operations {
                             baseURL?: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                         };
                         modelSelection?: {
                             /** Format: uuid */
@@ -18442,6 +18499,7 @@ export interface operations {
                             modelId: string;
                             /** @enum {string} */
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
                             voiceName?: string;
                         };
                         contextPolicy?: {
