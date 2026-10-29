@@ -512,3 +512,23 @@ describe('forwarded client details', () => {
     expect((await wrongSignIn(app, '203.0.113.99')).statusCode).toBe(429);
   });
 });
+
+describe('request limit', () => {
+  it('never holds back the owner, and still holds back everyone else', async () => {
+    const { app } = await setup();
+
+    // Past the 120 a minute anyone else gets: a chat keeping itself current does this.
+    for (let request = 0; request < 130; request += 1) {
+      const response = await app.inject({ method: 'GET', url: '/v1/profiles', headers });
+      expect(response.statusCode).toBe(200);
+    }
+
+    // A door anyone can knock on keeps its limit.
+    let refused = 0;
+    for (let request = 0; request < 130; request += 1) {
+      const response = await app.inject({ method: 'GET', url: '/health' });
+      if (response.statusCode === 429) refused += 1;
+    }
+    expect(refused).toBe(10);
+  });
+});

@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { operations } from '@jian/contracts';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { GatewayError } from '../core/errors.js';
 import { authorizesPanel } from '../security/panel-session.js';
@@ -16,6 +16,21 @@ declare module 'fastify' {
  * require it, public routes carry their own proof, and webhook adapters authenticate the
  * secret of their own channel binding.
  */
+/** The request carries the host token, as a bearer or as the panel's signed cookie. */
+export function isOwner(request: FastifyRequest, token: string): boolean {
+  const authorization = request.headers.authorization ?? '';
+
+  if (authorization.length > 512) return false;
+
+  const supplied = Buffer.from(authorization);
+  const expected = Buffer.from(`Bearer ${token}`);
+
+  if (supplied.length === expected.length && timingSafeEqual(supplied, expected)) return true;
+
+  // The panel trades the host token for a signed cookie, so its requests carry no bearer.
+  return !authorization && authorizesPanel(request, token);
+}
+
 export function configureSecurity(app: FastifyInstance, options: { token: string }) {
   app.addHook('onRequest', async (request, reply) => {
     // Only the static-file plugin sets this flag; API routes still require bearer authentication.
@@ -32,23 +47,7 @@ export function configureSecurity(app: FastifyInstance, options: { token: string
       return;
     }
 
-    const authorization = request.headers.authorization ?? '';
-
-    if (authorization.length > 512) {
-      return reply.code(401).send({ error: 'Unauthorized' });
-    }
-
-    const supplied = Buffer.from(authorization);
-    const expected = Buffer.from(`Bearer ${options.token}`);
-
-    if (supplied.length === expected.length && timingSafeEqual(supplied, expected)) {
-      return;
-    }
-
-    // The panel trades the host token for a signed cookie, so its requests carry no bearer.
-    if (!authorization && authorizesPanel(request, options.token)) {
-      return;
-    }
+    if (isOwner(request, options.token)) return;
 
     return reply.code(401).send({ error: 'Unauthorized' });
   });
