@@ -45,18 +45,31 @@ async function waveform(src: string): Promise<{ peaks: number[]; seconds: number
   }
 }
 
+/** In seconds: a playhead this close to the decoded end, and no longer moving, has finished. */
+const END_SLACK = 0.25;
+/** In ms: how long a playhead may stand still at the end before it counts as finished. */
+const STALL = 400;
+
 /**
  * A voice note as a messaging app plays it: play and pause, the waveform filling in as it
  * plays and taking a click or a drag to jump, the time, and the speed. The native element does
  * the playing; this is only its face.
+ *
+ * The fill follows the playhead every frame, on the track's own style, instead of the four
+ * `timeupdate`s a second React would otherwise redraw from, so it sweeps instead of stepping.
+ * A recording made in the browser often reports no length and may never fire `ended`; the
+ * decoded length and a playhead that stops short of it end the playback all the same.
  */
 export function AudioPlayer({ src, label = 'Audio' }: { src: string; label?: string }) {
   const audio = useRef<HTMLAudioElement>(null);
+  const track = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [bars, setBars] = useState<number[]>(() => Array(BARS).fill(0.3));
+  const length = useRef(0);
+  length.current = duration;
 
   useEffect(() => {
     let stopped = false;
@@ -74,7 +87,54 @@ export function AudioPlayer({ src, label = 'Audio' }: { src: string; label?: str
     };
   }, [src]);
 
-  const progress = duration ? time / duration : 0;
+  const paint = (seconds: number) => {
+    const progress = length.current ? Math.min(1, seconds / length.current) : 0;
+    track.current?.style.setProperty('--audio-progress', progress.toFixed(4));
+  };
+
+  // Back to the start, ready to play again, the way a finished voice note sits.
+  const finish = () => {
+    const element = audio.current;
+
+    if (element) {
+      if (!element.paused) element.pause();
+      element.currentTime = 0;
+    }
+    setPlaying(false);
+    setTime(0);
+    paint(0);
+  };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: paint and finish read refs only.
+  useEffect(() => {
+    if (!playing) return;
+    let frame = 0;
+    let last = -1;
+    let still = performance.now();
+
+    const draw = (now: number) => {
+      const element = audio.current;
+      if (!element) return;
+      const at = element.currentTime;
+
+      if (at !== last) {
+        last = at;
+        still = now;
+      }
+      paint(at);
+      if (
+        element.ended ||
+        (length.current > 0 && at >= length.current - END_SLACK && now - still > STALL)
+      ) {
+        finish();
+        return;
+      }
+      frame = requestAnimationFrame(draw);
+    };
+    frame = requestAnimationFrame(draw);
+
+    return () => cancelAnimationFrame(frame);
+  }, [playing]);
 
   return (
     <div className="audio-player">
@@ -91,7 +151,7 @@ export function AudioPlayer({ src, label = 'Audio' }: { src: string; label?: str
         onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
+        onEnded={finish}
       />
       <button
         type="button"
@@ -101,17 +161,19 @@ export function AudioPlayer({ src, label = 'Audio' }: { src: string; label?: str
       >
         {playing ? <Pause size={16} /> : <Play size={16} className="translate-x-px" />}
       </button>
-      <div className="audio-track">
-        <div className="audio-bars" aria-hidden="true">
-          {bars.map((height, index) => (
-            <span
-              // biome-ignore lint/suspicious/noArrayIndexKey: bars are positions, never reordered.
-              key={index}
-              style={{ height: `${Math.round(height * 100)}%` }}
-              data-played={index / BARS < progress}
-            />
-          ))}
-        </div>
+      <div ref={track} className="audio-track">
+        {/* The same bars twice: the played copy on top, uncovered up to the playhead. */}
+        {['rest', 'played'].map((layer) => (
+          <div key={layer} className={`audio-bars ${layer}`} aria-hidden="true">
+            {bars.map((height, index) => (
+              <span
+                // biome-ignore lint/suspicious/noArrayIndexKey: bars are positions, never reordered.
+                key={index}
+                style={{ height: `${Math.round(height * 100)}%` }}
+              />
+            ))}
+          </div>
+        ))}
         <input
           type="range"
           aria-label={`Position in ${label}`}
@@ -124,6 +186,7 @@ export function AudioPlayer({ src, label = 'Audio' }: { src: string; label?: str
 
             if (audio.current) audio.current.currentTime = next;
             setTime(next);
+            paint(next);
           }}
         />
       </div>
