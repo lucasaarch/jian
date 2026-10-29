@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { subscribe } from '@/lib/events';
 import { useCrew } from '@/lib/stores/crew';
@@ -14,7 +14,9 @@ import type {
   ToolStep,
 } from '../../lib/api';
 import { Badge, Button, Empty, Spinner } from '../ui';
+import { plainText } from '../ui/markdown';
 import { CodeChanges } from './code-change';
+import { ConversationMap } from './conversation-map';
 import { CrewCards, CrewDock, reportOf } from './crew';
 import { ApprovalCard, QuestionCard } from './decision-cards';
 import { useFollowBottom } from './follow-bottom';
@@ -271,6 +273,39 @@ export function History({
       });
   };
 
+  // The owner's own messages, each with the first line of the answer it got, for the map.
+  const mapEntries = useMemo(
+    () =>
+      messages
+        .filter((message) => message.role === 'user' && !message.call && !message.purpose)
+        .map((message) => {
+          const replies = messages.filter(
+            (item) => item.role === 'assistant' && item.runId && item.runId === message.runId,
+          );
+          const asked = message.runId ? asks.get(message.runId) : undefined;
+          // A turn that only stopped to ask said nothing yet: its line is the gateway's, drawn
+          // as a card, so the map says what it asked instead.
+          const first =
+            replies.length === 1 && asked?.approval
+              ? `Asked for approval: ${asked.approval.title}`
+              : replies.length === 1 && asked?.question
+                ? `Asked: ${asked.question.prompt}`
+                : replies[0]
+                  ? plainText(replies[0].content)
+                      .split('\n')
+                      .find((line) => line.trim())
+                  : undefined;
+
+          return {
+            id: message.id,
+            text: plainText(message.content).replace(/\s+/g, ' ').trim(),
+            ...(first ? { reply: first.trim() } : {}),
+          };
+        })
+        .filter((entry) => entry.text),
+    [messages, asks],
+  );
+
   return (
     <div className="session-history">
       <section
@@ -451,6 +486,7 @@ export function History({
           )}
         </div>
       </section>
+      <ConversationMap scroller={scroller} entries={mapEntries} />
       {/* What sits just above the composer: errors, a question waiting, agents at work. It
           floats with the composer over the end of the conversation. */}
       <div className="history-tray">
