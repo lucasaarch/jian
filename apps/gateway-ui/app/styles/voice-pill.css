@@ -4,7 +4,8 @@
 
 /* The composer's microphone. At rest it is one of the composer's round tools; recording, its
    surface opens to the left into a capsule that holds the waveform and the clock. The capsule
-   is drawn by clipping one surface, never by resizing the button, so nothing beside it moves. */
+   is drawn by clipping one surface, and the button's margin grows beside it, so what sits to
+   its left slides over instead of disappearing under it. */
 @layer components {
   .voice-pill {
     /* Geometry, in px, from the 36px footprint the composer's tools share. */
@@ -37,15 +38,19 @@
     -webkit-touch-callout: none;
     transition:
       transform 160ms var(--vp-ease),
-      color 150ms ease;
+      color 150ms ease,
+      margin-left var(--vp-open) var(--vp-ease);
   }
   /* A touch target of 44px around the smaller mark. */
   .voice-pill::before {
     @apply absolute -inset-1 content-[''];
   }
+  /* Recording, the capsule claims its room in the row rather than covering what sits there:
+     the margin grows with the capsule, in step with it, and pushes its neighbours aside. */
   .voice-pill[data-state="listening"] {
     @apply z-[1];
     color: var(--vp-accent);
+    margin-left: calc(var(--vp-reach) + var(--vp-extra));
   }
   .voice-pill[data-pressed] {
     transform: scale(0.95);
