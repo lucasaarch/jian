@@ -48,6 +48,7 @@ const ALL_ON: DecisionUses = {
   memories: true,
   learning: true,
   groups: true,
+  delegation: true,
 };
 
 /** The three kinds of question Jev answers. The id a question is filed under is never sent. */

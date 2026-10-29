@@ -149,7 +149,7 @@ export function buildServices({
     lifecycle: new RunLifecycle(store, runs, clock),
     contexts: new Contexts(store, runs, sessions, settings, decisions.judge),
     errands: new Errands(store, clock),
-    work: new Work(store, sessions, runs, clock),
+    work: new Work(store, sessions, runs, clock, decisions.judge),
     objectives: new ObjectiveContinuation(store, sessions, runs, clock),
     vault,
     gatewayVault,

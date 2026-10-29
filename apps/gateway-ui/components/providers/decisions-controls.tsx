@@ -32,6 +32,11 @@ const USES: Array<{ use: Use; title: string; what: string }> = [
     what: 'Skips the look-back when work holds nothing to keep.',
   },
   { use: 'groups', title: 'Groups', what: 'Whether a group message is speaking to an agent.' },
+  {
+    use: 'delegation',
+    title: 'Subagent models',
+    what: 'How much model a subagent needs, when the agent leaves it open.',
+  },
 ];
 
 export function DecisionsControls({

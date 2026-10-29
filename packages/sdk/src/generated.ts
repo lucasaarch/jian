@@ -3647,6 +3647,29 @@ export interface operations {
                         input: string;
                         output?: string;
                         error?: string;
+                        /** @enum {string} */
+                        tier?: "light" | "standard" | "deep";
+                        /** @enum {string} */
+                        tierBy?: "agent" | "jev" | "default";
+                        modelSelection?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            voiceName?: string;
+                        };
+                        progress?: {
+                            /** @enum {string} */
+                            phase: "thinking" | "tool" | "writing";
+                            tool?: string;
+                            /** @default  */
+                            text: string;
+                            /** @default 0 */
+                            steps: number;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        };
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -4451,12 +4474,13 @@ export interface operations {
                             memories: boolean;
                             learning: boolean;
                             groups: boolean;
+                            delegation: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups";
+                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups" | "delegation";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -4584,12 +4608,13 @@ export interface operations {
                             memories: boolean;
                             learning: boolean;
                             groups: boolean;
+                            delegation: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups";
+                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups" | "delegation";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -4709,12 +4734,13 @@ export interface operations {
                             memories: boolean;
                             learning: boolean;
                             groups: boolean;
+                            delegation: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups";
+                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups" | "delegation";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -4823,6 +4849,7 @@ export interface operations {
                         memories?: boolean;
                         learning?: boolean;
                         groups?: boolean;
+                        delegation?: boolean;
                     };
                 };
             };
@@ -4847,12 +4874,13 @@ export interface operations {
                             memories: boolean;
                             learning: boolean;
                             groups: boolean;
+                            delegation: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups";
+                            use: "actions" | "outside" | "turn" | "memories" | "learning" | "groups" | "delegation";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -6348,6 +6376,10 @@ export interface operations {
                             spawnKey: string;
                             inputHash: string;
                             repositories?: string[];
+                            /** @enum {string} */
+                            tier?: "light" | "standard" | "deep";
+                            /** @enum {string} */
+                            tierBy?: "agent" | "jev" | "default";
                         };
                         requestKey: string;
                         input: string;
@@ -6577,6 +6609,10 @@ export interface operations {
                             spawnKey: string;
                             inputHash: string;
                             repositories?: string[];
+                            /** @enum {string} */
+                            tier?: "light" | "standard" | "deep";
+                            /** @enum {string} */
+                            tierBy?: "agent" | "jev" | "default";
                         };
                         requestKey: string;
                         input: string;
@@ -14616,6 +14652,10 @@ export interface operations {
                             spawnKey: string;
                             inputHash: string;
                             repositories?: string[];
+                            /** @enum {string} */
+                            tier?: "light" | "standard" | "deep";
+                            /** @enum {string} */
+                            tierBy?: "agent" | "jev" | "default";
                         };
                         requestKey: string;
                         input: string;
@@ -16918,6 +16958,10 @@ export interface operations {
                             spawnKey: string;
                             inputHash: string;
                             repositories?: string[];
+                            /** @enum {string} */
+                            tier?: "light" | "standard" | "deep";
+                            /** @enum {string} */
+                            tierBy?: "agent" | "jev" | "default";
                         };
                         requestKey: string;
                         input: string;
@@ -17900,6 +17944,10 @@ export interface operations {
                             spawnKey: string;
                             inputHash: string;
                             repositories?: string[];
+                            /** @enum {string} */
+                            tier?: "light" | "standard" | "deep";
+                            /** @enum {string} */
+                            tierBy?: "agent" | "jev" | "default";
                         };
                         requestKey: string;
                         input: string;
@@ -18122,6 +18170,10 @@ export interface operations {
                             spawnKey: string;
                             inputHash: string;
                             repositories?: string[];
+                            /** @enum {string} */
+                            tier?: "light" | "standard" | "deep";
+                            /** @enum {string} */
+                            tierBy?: "agent" | "jev" | "default";
                         };
                         requestKey: string;
                         input: string;
@@ -18344,6 +18396,10 @@ export interface operations {
                             spawnKey: string;
                             inputHash: string;
                             repositories?: string[];
+                            /** @enum {string} */
+                            tier?: "light" | "standard" | "deep";
+                            /** @enum {string} */
+                            tierBy?: "agent" | "jev" | "default";
                         };
                         requestKey: string;
                         input: string;
