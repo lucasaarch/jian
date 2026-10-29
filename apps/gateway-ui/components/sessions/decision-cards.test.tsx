@@ -225,7 +225,7 @@ it('keeps an answered question with its answer marked, and hides the turns aroun
 
   expect(element.querySelectorAll('.decision-options button')).toHaveLength(0);
   expect(element.querySelector('[data-chosen]')?.textContent).toContain('Gemini Live');
-  expect(element.textContent).toContain('Answered by you.');
+  expect(element.textContent).not.toContain('by you');
   expect(element.textContent).not.toContain('The owner answered');
   // The answer lives in the card, not in a bubble of its own.
   expect([...element.querySelectorAll('.chat-line.mine')].map((line) => line.textContent)).toEqual(
