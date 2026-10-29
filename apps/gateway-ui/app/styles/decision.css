@@ -59,28 +59,10 @@
   .decision-request[data-open] > button > svg {
     @apply rotate-90;
   }
-  /* Code on the card's own panel, no ground of its own. The syntax colours are the file
-     viewer's, drawn for a dark ground; the light theme gets its own below. */
+  /* Code on the card's own panel, no ground of its own, in the shared syntax colours. */
   .decision-request pre {
     @apply mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5;
     color: var(--ink);
-  }
-  :root[data-theme="light"] .decision-request pre {
-    & :is(.hljs-attr, .hljs-attribute, .hljs-literal, .hljs-number, .hljs-variable) {
-      color: #0550ae;
-    }
-    & :is(.hljs-regexp, .hljs-string) {
-      color: #0a3069;
-    }
-    & :is(.hljs-keyword, .hljs-doctag) {
-      color: #cf222e;
-    }
-    & :is(.hljs-built_in, .hljs-symbol, .hljs-type) {
-      color: #953800;
-    }
-    & .hljs-comment {
-      color: #6e7781;
-    }
   }
   /* Choices as rows, so a long one wraps instead of stretching a button. */
   .decision-options {

@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from 'react';
+import { CodeBlock } from './code-block';
 
 /**
  * The Markdown release notes, skills and the agent's answers use — headings, lists, paragraphs,
@@ -67,15 +68,21 @@ function table(lines: string[]) {
 }
 
 /** The text between code fences, and what is left around them, in order. */
-function segments(text: string): Array<{ code: boolean; text: string }> {
-  const parts: Array<{ code: boolean; text: string }> = [];
+function segments(text: string): Array<{ code: boolean; text: string; language?: string }> {
+  const parts: Array<{ code: boolean; text: string; language?: string }> = [];
   let last = 0;
 
-  for (const match of text.matchAll(/^```[^\n]*\n([\s\S]*?)^```[ \t]*$/gm)) {
+  for (const match of text.matchAll(/^```([^\n]*)\n([\s\S]*?)^```[ \t]*$/gm)) {
     const at = match.index ?? 0;
+    // The fence's first word names the language: ```ts, ```python title="x".
+    const language = match[1]?.trim().split(/\s+/)[0]?.toLowerCase() || undefined;
 
     if (at > last) parts.push({ code: false, text: text.slice(last, at) });
-    parts.push({ code: true, text: match[1]?.replace(/\n$/, '') ?? '' });
+    parts.push({
+      code: true,
+      text: match[2]?.replace(/\n$/, '') ?? '',
+      ...(language ? { language } : {}),
+    });
     last = at + match[0].length;
   }
 
@@ -242,16 +249,22 @@ function Blocks({ text, breaks }: { text: string; breaks: boolean }) {
 export function Markdown({ text, breaks = false }: { text: string; breaks?: boolean }) {
   return (
     <>
-      {keyed(segments(text).map((part) => `${part.code ? '```' : ''}${part.text}`)).map(
-        ([key, part]) =>
-          part.startsWith('```') ? (
-            <pre key={key}>
-              <code>{part.slice(3)}</code>
-            </pre>
-          ) : (
-            <Blocks key={key} text={part} breaks={breaks} />
-          ),
-      )}
+      {keyed(
+        segments(text).map((part) =>
+          part.code ? `\`\`\`${part.language ?? ''}\n${part.text}` : part.text,
+        ),
+      ).map(([key, part]) => {
+        if (!part.startsWith('```')) return <Blocks key={key} text={part} breaks={breaks} />;
+        const head = part.indexOf('\n');
+
+        return (
+          <CodeBlock
+            key={key}
+            text={part.slice(head + 1)}
+            language={part.slice(3, head) || undefined}
+          />
+        );
+      })}
     </>
   );
 }

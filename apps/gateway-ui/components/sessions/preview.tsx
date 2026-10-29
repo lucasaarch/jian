@@ -1,17 +1,6 @@
-import { common, createLowlight } from 'lowlight';
 import type { ReactNode } from 'react';
+import { HIGHLIGHT_LIMIT, lowlight, type Node } from '../ui/highlight';
 import { Markdown } from '../ui/markdown';
-
-const lowlight = createLowlight(common);
-
-type Root = ReturnType<typeof lowlight.highlight>;
-type Node = Root['children'][number];
-
-/**
- * Past this many characters a file is shown without colours: the highlighter runs on the main
- * thread, and a multi-megabyte log would freeze the panel while it works.
- */
-const HIGHLIGHT_LIMIT = 200_000;
 
 /** The grammar a file is coloured with, by its extension; names are those of highlight.js. */
 const LANGUAGES: Record<string, string> = {
@@ -123,46 +112,6 @@ function render(nodes: Node[], prefix: string): ReactNode[] {
   }
 
   return out;
-}
-
-/** One piece of a highlighted line: its text and the classes highlight.js gave it. */
-export type Segment = { text: string; className?: string };
-
-/**
- * Text highlighted as a whole and handed back line by line, so a token spanning lines (a block
- * comment, a template string) keeps its colour on every line it covers. Plain segments when the
- * grammar is unknown or the text is huge.
- */
-export function highlightLines(text: string, language?: string): Segment[][] {
-  const lines: Segment[][] = [[]];
-
-  if (!language || !lowlight.registered(language) || text.length > HIGHLIGHT_LIMIT) {
-    return text.split('\n').map((line) => [{ text: line }]);
-  }
-
-  const walk = (nodes: Node[], classes: string[]) => {
-    for (const node of nodes) {
-      if (node.type === 'text') {
-        const parts = node.value.split('\n');
-
-        for (const [index, part] of parts.entries()) {
-          if (index > 0) lines.push([]);
-          if (part) {
-            lines
-              .at(-1)
-              ?.push({ text: part, ...(classes.length ? { className: classes.join(' ') } : {}) });
-          }
-        }
-      } else if (node.type === 'element') {
-        const own = node.properties.className;
-        walk(node.children as Node[], [...classes, ...(Array.isArray(own) ? own.map(String) : [])]);
-      }
-    }
-  };
-
-  walk(lowlight.highlight(language, text).children, []);
-
-  return lines;
 }
 
 /** Source code with its syntax coloured, or plain when the grammar is unknown or it is huge. */

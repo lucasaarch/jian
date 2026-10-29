@@ -135,24 +135,13 @@ export function traceOf(steps: ToolStep[]): ThoughtStep[] {
  * the tools so far beneath it, then the answer as it is written. The panel is the only surface
  * that names tools; a chat channel gets the answer and nothing else.
  */
-export function LiveTurn({
-  run,
-  steps,
-  children,
-}: {
-  run: Run;
-  steps: ToolStep[];
-  /** The agents this turn handed work to. */
-  children?: React.ReactNode;
-}) {
-  const progress = run.progress;
+/** The working Thought Line of a run and the files it has changed so far. */
+export function LiveThought({ run, steps }: { run: Run; steps: ToolStep[] }) {
   const { label, state, tool } = statusOf(run);
-  // Writing is shown by the words themselves, drawn as the finished answer will be, so nothing
-  // reflows when the run ends.
-  const writing = !tool && Boolean(progress?.text);
+  const writing = !tool && Boolean(run.progress?.text);
 
   return (
-    <article className="chat-line pending theirs" aria-live="polite">
+    <>
       <ThoughtLine
         working
         label={writing ? 'Writing' : label}
@@ -161,6 +150,36 @@ export function LiveTurn({
         startedAt={run.createdAt}
       />
       <CodeChanges steps={steps} fresh />
+    </>
+  );
+}
+
+export function LiveTurn({
+  run,
+  steps,
+  lined = false,
+  children,
+}: {
+  run: Run;
+  steps: ToolStep[];
+  /**
+   * The turn has already said something, and its Thought Line heads that, where it will stay
+   * once the turn ends; here then is only what is being written. Drawn in both places, the
+   * line and every diff showed twice until the turn ended.
+   */
+  lined?: boolean;
+  /** The agents this turn handed work to. */
+  children?: React.ReactNode;
+}) {
+  const progress = run.progress;
+  const { tool } = statusOf(run);
+  // Writing is shown by the words themselves, drawn as the finished answer will be, so nothing
+  // reflows when the run ends.
+  const writing = !tool && Boolean(progress?.text);
+
+  return (
+    <article className="chat-line pending theirs" aria-live="polite">
+      {!lined && <LiveThought run={run} steps={steps} />}
       {children}
       {writing && (
         <div className="chat-text markdown streaming">

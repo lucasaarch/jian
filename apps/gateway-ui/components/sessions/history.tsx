@@ -20,7 +20,7 @@ import { ApprovalCard, QuestionCard } from './decision-cards';
 import { useFollowBottom } from './follow-bottom';
 import { MessageMedia } from './media';
 import { authored, ChatMessage } from './message';
-import { LiveTurn, traceOf } from './progress';
+import { LiveThought, LiveTurn, traceOf } from './progress';
 import { running, statusLabels } from './status';
 import { ThoughtLine } from './thought-line';
 
@@ -355,8 +355,12 @@ export function History({
               const pause =
                 message.purpose === 'resume' ||
                 (message.purpose === 'answer' && Boolean(asked?.question || asked?.approval));
+              // The turn under way heads what it has said with its working line; the live
+              // turn below then shows only what is being written.
               const thought =
-                answering && (steps?.length || handedOff) ? (
+                live && opensAnswer && run ? (
+                  <LiveThought run={run} steps={tools.get(run.id) ?? []} />
+                ) : answering && (steps?.length || handedOff) ? (
                   <>
                     <ThoughtLine
                       working={false}
@@ -435,7 +439,13 @@ export function History({
             <LiveTurn run={callRun} steps={callTools.get(callRun.id) ?? []} />
           )}
           {!loading && run && isRunning && (
-            <LiveTurn run={run} steps={tools.get(run.id) ?? []}>
+            <LiveTurn
+              run={run}
+              steps={tools.get(run.id) ?? []}
+              lined={messages.some(
+                (item) => item.runId === run.id && item.role === 'assistant' && !item.call,
+              )}
+            >
               <CrewCards agents={subagents.filter((child) => child.parentRunId === run.id)} />
             </LiveTurn>
           )}

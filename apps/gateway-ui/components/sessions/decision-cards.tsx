@@ -2,9 +2,9 @@
 
 import { Check, ChevronRight } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { highlightLines } from '@/components/ui/highlight';
 import type { RunApproval, RunQuestion } from '@/lib/api';
 import { Button } from '../ui';
-import { highlightLines } from './preview';
 
 function Card({
   chip,

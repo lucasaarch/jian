@@ -2,8 +2,8 @@
 
 import { ChevronDown } from 'lucide-react';
 import { Fragment, useId, useState } from 'react';
+import { highlightLines, type Segment } from '@/components/ui/highlight';
 import type { CodeDiff, ToolStep } from '@/lib/api';
-import { highlightLines, type Segment } from './preview';
 
 /** A diff shorter than this opens by itself even in an older turn: it costs a glance. */
 const SHORT = 40;
@@ -139,7 +139,6 @@ export function CodeChanges({ steps, fresh = false }: { steps: ToolStep[]; fresh
         return (
           <section key={step.toolCallId} className="code-change" aria-label={summaryOf(step)}>
             <p className="code-change-row">
-              <code className="code-change-tool">{step.toolName}</code>
               <span className="code-change-summary">{summaryOf(step)}</span>
               <Counts diff={step.diff} />
             </p>
