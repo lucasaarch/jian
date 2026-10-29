@@ -16,6 +16,9 @@
   --warn-soft: #2b2111;
   --bad: #fb8791;
   --bad-soft: #2b161a;
+  /* A merged pull request, as GitHub colours one: neither good nor bad, done. */
+  --merged: #c4a5f7;
+  --merged-soft: #231a33;
   --shade: #000000;
 }
 
@@ -37,6 +40,8 @@
   --warn-soft: #fff2d5;
   --bad: #b22e3d;
   --bad-soft: #fde7e9;
+  --merged: #7a45d1;
+  --merged-soft: #f1eafd;
   --shade: #ffffff;
 }
 

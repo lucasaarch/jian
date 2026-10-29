@@ -1,9 +1,32 @@
 'use client';
 
 import { AlarmClock, GraduationCap } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { Message, Person } from '../../lib/api';
 import { Face } from '../ui';
-import { Markdown } from '../ui/markdown';
+import { Markdown, MarkdownLink } from '../ui/markdown';
+
+const GITHUB_LINK =
+  /https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/(?:pull|issues)\/\d+(?:[^\s<>()]*[^\s<>().,;:!?'"])?/g;
+
+/**
+ * What a person typed, as typed, except that a pull request or an issue they link to is shown
+ * as the agent's would be: their words are never read as Markdown.
+ */
+function withGitHubLinks(text: string) {
+  const parts: ReactNode[] = [];
+  let last = 0;
+
+  for (const match of text.matchAll(GITHUB_LINK)) {
+    const at = match.index ?? 0;
+
+    if (at > last) parts.push(text.slice(last, at));
+    parts.push(<MarkdownLink key={at} href={match[0]} label={match[0]} />);
+    last = at + match[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
 
 /**
  * How a member is known when they gave no name: their number on WhatsApp, their id elsewhere.
@@ -89,7 +112,7 @@ function PersonText({ text }: { text: string }) {
           {quote ?? 'A message'}
         </blockquote>
       )}
-      {body}
+      {withGitHubLinks(body)}
     </div>
   );
 }

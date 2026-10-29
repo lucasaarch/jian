@@ -34,6 +34,10 @@ type RunTimeline = JsonResponse<'listSessionTimeline', 200>[number];
 export type ToolStep = RunTimeline['steps'][number];
 export type CodeDiff = NonNullable<ToolStep['diff']>;
 export type Subagent = JsonResponse<'listConversationSubagents', 200>[number];
+export type GitHubPull = JsonResponse<'getGithubPull', 200>;
+export type GitHubIssue = JsonResponse<'getGithubIssue', 200>;
+export type GitHubLinkSummary = JsonResponse<'resolveGithubLinks', 200>[number];
+export type GitHubMergeMethod = GitHubPull['mergeMethods'][number];
 export type ActivityDay = JsonResponse<'getActivityCalendar', 200>[number];
 
 export type Provider = JsonResponse<'listProviders', 200>[number];

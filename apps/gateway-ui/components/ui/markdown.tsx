@@ -1,5 +1,26 @@
-import { Fragment, type ReactNode } from 'react';
+import { createContext, Fragment, type ReactNode, useContext } from 'react';
 import { CodeBlock } from './code-block';
+
+/**
+ * What a page shows in place of a link it knows more about, such as a pull request's card.
+ * Undefined keeps the plain link; without a provider every link is plain.
+ */
+export const MarkdownLinks = createContext<
+  ((href: string, label: string) => ReactNode | undefined) | undefined
+>(undefined);
+
+/** A link as the page around it chooses to show it, or as a plain one. */
+export function MarkdownLink({ href, label }: { href: string; label: string }) {
+  const custom = useContext(MarkdownLinks)?.(href, label);
+
+  return (
+    custom ?? (
+      <a className="text-link" href={href} target="_blank" rel="noreferrer">
+        {label}
+      </a>
+    )
+  );
+}
 
 /**
  * The Markdown release notes, skills and the agent's answers use — headings, lists, paragraphs,
@@ -36,11 +57,7 @@ function inline(text: string): ReactNode[] {
     else {
       const href = match[4] ?? match[6] ?? '';
 
-      parts.push(
-        <a key={at} className="text-link" href={href} target="_blank" rel="noreferrer">
-          {match[3] ?? href}
-        </a>,
-      );
+      parts.push(<MarkdownLink key={at} href={href} label={match[3] ?? href} />);
     }
 
     last = at + match[0].length;
