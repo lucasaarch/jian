@@ -346,7 +346,10 @@ it('caps oversized objective writes to a short durable goal', async () => {
 it('blocks on the owner and reopens when they reply', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);
-  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const session = await services.sessions.createSession(profile.id, {
+    channel: 'api',
+    title: 'Provider',
+  });
   await services.sessions.setObjective(profile.id, session.id, {
     text: 'Choose a Live API provider',
     status: 'open',

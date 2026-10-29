@@ -125,7 +125,10 @@ it('reports a missing final response when the recovery also returns no text', as
   expect(calls).toBe(2);
 });
 
-it('names a new conversation without an uncounted model request', async () => {
+const naming = (options: { prompt: unknown }) =>
+  JSON.stringify(options.prompt).includes('You name a conversation');
+
+it('names a new conversation with its own model, counted on the run', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);
   const session = await services.sessions.createSession(profile.id, {});
@@ -133,18 +136,63 @@ it('names a new conversation without an uncounted model request', async () => {
     text: 'Please prepare a deployment report with all the completed steps and remaining checks.',
     requestKey: 'title',
   });
-  let calls = 0;
+  const asked: string[] = [];
   const model = mockModel({
-    doGenerate: async () => {
-      calls++;
+    doGenerate: async (options) => {
+      if (naming(options)) {
+        asked.push(JSON.stringify(options.prompt));
+        return answer('"Deployment report."');
+      }
       return answer('Report ready.');
     },
   });
   await new AgentRuntime(services, () => model).execute(profile.id, run.id);
-  expect((await services.sessions.session(profile.id, session.id)).title).toContain(
-    'Please prepare',
+
+  expect((await services.sessions.session(profile.id, session.id)).title).toBe('Deployment report');
+  // Read from the first message alone, never from the agent's answer.
+  expect(asked).toHaveLength(1);
+  expect(asked[0]).toContain('Please prepare a deployment report');
+  expect(asked[0]).not.toContain('Report ready');
+  const finished = await services.runs.run(profile.id, run.id);
+  expect(finished.output).toBe('Report ready.');
+  expect(finished.usage?.inputTokens).toBe(20);
+});
+
+it('keeps the opening as the title when the model cannot write one', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, {});
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Please prepare a deployment report with all the completed steps and remaining checks.',
+    requestKey: 'title',
+  });
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (naming(options)) throw new Error('Synthetic outage');
+      return answer('Report ready.');
+    },
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  expect((await services.sessions.session(profile.id, session.id)).title).toBe(
+    'Please prepare a deployment report with all the completed s…',
   );
-  expect(calls).toBe(1);
+  expect((await services.runs.run(profile.id, run.id)).status).toBe('completed');
+});
+
+it('leaves a named conversation alone', async () => {
+  const { services, profile, session, run } = await fixture();
+  let titled = 0;
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (naming(options)) titled++;
+      return answer('Saved.');
+    },
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  expect(titled).toBe(0);
+  expect((await services.sessions.session(profile.id, session.id)).title).toBe('Mac');
 });
 
 async function fixture(contextPolicy?: Record<string, number>, subscription = false) {
