@@ -55,6 +55,7 @@ import {
 import { plainText } from '../ui/markdown';
 import { Composer } from './composer';
 import { CrewDrawer, ModelNames, prettyModel } from './crew';
+import { ConversationDock } from './dock';
 import { History } from './history';
 import { SessionListeners } from './listeners';
 import { SessionModel } from './model-picker';
@@ -667,113 +668,119 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                     void refresh();
                   }}
                 />
-                {isGateway(active) && (
-                  <Composer
-                    key={`composer-${active.id}`}
-                    name={profile.name}
-                    machines={machines}
-                    remoteMachineId={active.remoteMachineId ?? null}
-                    projectControl={
-                      <ProjectSelect
-                        api={api}
-                        profileId={profile.id}
-                        projects={projects}
-                        projectId={active.projectId ?? null}
-                        onChange={(projectId) => moveToProject(active, projectId)}
-                      />
-                    }
-                    onMachineChange={(machineId) =>
-                      void api
-                        .setGatewaySessionTarget(
-                          profile.id,
-                          active.id,
-                          active.projectId ?? null,
-                          machineId,
-                        )
-                        .then(() => refresh())
-                        .catch((error: unknown) =>
-                          toast.error(
-                            error instanceof Error
-                              ? error.message
-                              : 'The machine could not be changed.',
-                          ),
-                        )
-                    }
-                    modelControl={
-                      <SessionModel
-                        key={`composer-model-${active.id}`}
-                        api={api}
-                        profileId={profile.id}
-                        session={active}
-                        channel={false}
-                        className="composer-model-control"
-                        saved={() => void refresh()}
-                      />
-                    }
-                    placeholder={
-                      activities.some(
-                        (run) => run.sessionId === active.id && run.status === 'waiting',
-                      )
-                        ? 'Answer to continue…'
-                        : undefined
-                    }
-                    upload={(file) => api.upload(profile.id, active.id, file)}
-                    send={(text, mediaIds) => api.send(profile.id, active.id, text, mediaIds)}
-                    onSent={() => {
-                      setSent((value) => value + 1);
-                      void refresh();
-                    }}
-                  />
-                )}
-                {(isMessaging(active) || kindOf(active) === 'agent') && (
-                  // Where a chat has its composer, a channel's conversation has its settings:
-                  // whether the agent answers this contact, and on which model.
-                  <section
-                    className="agent-toolbar"
-                    aria-label="Agent settings for this conversation"
-                  >
-                    <div className="agent-toolbar-box">
-                      <SessionModel
-                        key={`toolbar-model-${active.id}`}
-                        api={api}
-                        profileId={profile.id}
-                        session={active}
-                        channel={isMessaging(active)}
-                        className="composer-model-control"
-                        menuAlign="start"
-                        saved={() => void refresh()}
-                      />
-                      <span className="grow" />
-                      {isMessaging(active) &&
-                        activeContact &&
-                        channels.some(
-                          (channel) =>
-                            channel.id === activeContact.channelId && channel.enabled === false,
-                        ) && <Badge tone="warn">Channel paused</Badge>}
-                      {activeContact && activeContact.status !== 'approved' && (
-                        <Badge>Contact {activeContact.status}</Badge>
-                      )}
-                      {isMessaging(active) && activeContact && (
-                        <div className="agent-toolbar-switch">
-                          <span>AI replies</span>
-                          <Switch
-                            label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
-                            checked={activeContact.aiEnabled ?? true}
-                            disabled={busy}
-                            onChange={(aiEnabled) =>
-                              void mutate(
-                                () =>
-                                  api.updateContact(profile.id, activeContact.id, { aiEnabled }),
-                                aiEnabled
-                                  ? 'AI replies are on for this contact. Messages paused before are not replayed.'
-                                  : 'AI replies are off for this contact, queued replies included.',
-                              )
-                            }
+                {(isGateway(active) || isMessaging(active) || kindOf(active) === 'agent') && (
+                  <ConversationDock key={`dock-${active.id}`}>
+                    {isGateway(active) && (
+                      <Composer
+                        key={`composer-${active.id}`}
+                        name={profile.name}
+                        machines={machines}
+                        remoteMachineId={active.remoteMachineId ?? null}
+                        projectControl={
+                          <ProjectSelect
+                            api={api}
+                            profileId={profile.id}
+                            projects={projects}
+                            projectId={active.projectId ?? null}
+                            onChange={(projectId) => moveToProject(active, projectId)}
                           />
+                        }
+                        onMachineChange={(machineId) =>
+                          void api
+                            .setGatewaySessionTarget(
+                              profile.id,
+                              active.id,
+                              active.projectId ?? null,
+                              machineId,
+                            )
+                            .then(() => refresh())
+                            .catch((error: unknown) =>
+                              toast.error(
+                                error instanceof Error
+                                  ? error.message
+                                  : 'The machine could not be changed.',
+                              ),
+                            )
+                        }
+                        modelControl={
+                          <SessionModel
+                            key={`composer-model-${active.id}`}
+                            api={api}
+                            profileId={profile.id}
+                            session={active}
+                            channel={false}
+                            className="composer-model-control"
+                            saved={() => void refresh()}
+                          />
+                        }
+                        placeholder={
+                          activities.some(
+                            (run) => run.sessionId === active.id && run.status === 'waiting',
+                          )
+                            ? 'Answer to continue…'
+                            : undefined
+                        }
+                        upload={(file) => api.upload(profile.id, active.id, file)}
+                        send={(text, mediaIds) => api.send(profile.id, active.id, text, mediaIds)}
+                        onSent={() => {
+                          setSent((value) => value + 1);
+                          void refresh();
+                        }}
+                      />
+                    )}
+                    {(isMessaging(active) || kindOf(active) === 'agent') && (
+                      // Where a chat has its composer, a channel's conversation has its settings:
+                      // whether the agent answers this contact, and on which model.
+                      <section
+                        className="agent-toolbar"
+                        aria-label="Agent settings for this conversation"
+                      >
+                        <div className="agent-toolbar-box">
+                          <SessionModel
+                            key={`toolbar-model-${active.id}`}
+                            api={api}
+                            profileId={profile.id}
+                            session={active}
+                            channel={isMessaging(active)}
+                            className="composer-model-control"
+                            menuAlign="start"
+                            saved={() => void refresh()}
+                          />
+                          <span className="grow" />
+                          {isMessaging(active) &&
+                            activeContact &&
+                            channels.some(
+                              (channel) =>
+                                channel.id === activeContact.channelId && channel.enabled === false,
+                            ) && <Badge tone="warn">Channel paused</Badge>}
+                          {activeContact && activeContact.status !== 'approved' && (
+                            <Badge>Contact {activeContact.status}</Badge>
+                          )}
+                          {isMessaging(active) && activeContact && (
+                            <div className="agent-toolbar-switch">
+                              <span>AI replies</span>
+                              <Switch
+                                label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
+                                checked={activeContact.aiEnabled ?? true}
+                                disabled={busy}
+                                onChange={(aiEnabled) =>
+                                  void mutate(
+                                    () =>
+                                      api.updateContact(profile.id, activeContact.id, {
+                                        aiEnabled,
+                                      }),
+                                    aiEnabled
+                                      ? 'AI replies are on for this contact. Messages paused before are not replayed.'
+                                      : 'AI replies are off for this contact, queued replies included.',
+                                  )
+                                }
+                              />
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </section>
+                      </section>
+                    )}
+                  </ConversationDock>
                 )}
               </div>
               <CrewDrawer api={api} profileId={profile.id} />

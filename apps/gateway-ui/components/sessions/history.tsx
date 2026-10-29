@@ -342,57 +342,61 @@ export function History({
           )}
         </div>
       </section>
-      {error && (
-        <div className="history-error" role="alert">
-          <p>{error}</p>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setLoading(true);
-              setRetry((value) => value + 1);
-            }}
-          >
-            Try again
-          </Button>
-        </div>
-      )}
-      {run && waiting(run) && run.question && (
-        <div className="run-status run-waiting" role="status">
-          <Badge tone="accent">{statusLabels.waiting}</Badge>
-          <p>{run.question.prompt}</p>
-          {run.question.choices && api.answerRun && (
-            <div className="run-waiting-choices">
-              {run.question.choices.map((choice) => (
-                <Button
-                  key={choice}
-                  variant="secondary"
-                  disabled={answering}
-                  onClick={() => {
-                    setAnswering(true);
-                    void api
-                      .answerRun?.(profileId, run.id, choice)
-                      .then(() => onAnswered?.())
-                      .catch(() => undefined)
-                      .finally(() => setAnswering(false));
-                  }}
-                >
-                  {choice}
-                </Button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      {/* The dots already say the agent is working; the bar speaks only when a turn went wrong. */}
-      {run && ['failed', 'interrupted', 'cancelled'].includes(run.status) && (
-        <div className="run-status">
-          <Badge tone={run.status === 'cancelled' ? 'neutral' : 'bad'}>
-            {statusLabels[run.status]}
-          </Badge>
-          {run.error && <p className="text-bad">{run.error}</p>}
-        </div>
-      )}
-      <CrewDock agents={subagents} />
+      {/* What sits just above the composer: errors, a question waiting, agents at work. It
+          floats with the composer over the end of the conversation. */}
+      <div className="history-tray">
+        {error && (
+          <div className="history-error" role="alert">
+            <p>{error}</p>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setLoading(true);
+                setRetry((value) => value + 1);
+              }}
+            >
+              Try again
+            </Button>
+          </div>
+        )}
+        {run && waiting(run) && run.question && (
+          <div className="run-status run-waiting" role="status">
+            <Badge tone="accent">{statusLabels.waiting}</Badge>
+            <p>{run.question.prompt}</p>
+            {run.question.choices && api.answerRun && (
+              <div className="run-waiting-choices">
+                {run.question.choices.map((choice) => (
+                  <Button
+                    key={choice}
+                    variant="secondary"
+                    disabled={answering}
+                    onClick={() => {
+                      setAnswering(true);
+                      void api
+                        .answerRun?.(profileId, run.id, choice)
+                        .then(() => onAnswered?.())
+                        .catch(() => undefined)
+                        .finally(() => setAnswering(false));
+                    }}
+                  >
+                    {choice}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {/* The dots already say the agent is working; the bar speaks only when a turn went wrong. */}
+        {run && ['failed', 'interrupted', 'cancelled'].includes(run.status) && (
+          <div className="run-status">
+            <Badge tone={run.status === 'cancelled' ? 'neutral' : 'bad'}>
+              {statusLabels[run.status]}
+            </Badge>
+            {run.error && <p className="text-bad">{run.error}</p>}
+          </div>
+        )}
+        <CrewDock agents={subagents} />
+      </div>
     </div>
   );
 }
