@@ -244,6 +244,9 @@ it.each([false, true])(
 
       const session = await services.sessions.createSession(profile.id, { title: 'MCP' });
 
+      // What is tested here is the server's answer, not the approval in front of it.
+      await services.sessions.setProtection(profile.id, session.id, { protection: 'full' });
+
       const run = await services.runs.submit(profile.id, session.id, {
         text: 'Find docs',
         requestKey: 'mcp',
@@ -383,6 +386,9 @@ it.each(['disconnect', 'isError', 'readOnlyError', 'validationError'])(
       await services.mcp.replace({ servers: [{ name: 'effects', url: `${origin}/mcp` }] });
 
       const session = await services.sessions.createSession(profile.id, { title: 'Effects' });
+
+      // What is tested here is the server's answer, not the approval in front of it.
+      await services.sessions.setProtection(profile.id, session.id, { protection: 'full' });
 
       const run = await services.runs.submit(profile.id, session.id, {
         text: 'Do it',
@@ -734,6 +740,8 @@ process.stdin.on('data', (chunk) => {
     ],
   });
   const session = await services.sessions.createSession(profile.id, { title: 'Closed' });
+  // What is tested here is the server's answer, not the approval in front of it.
+  await services.sessions.setProtection(profile.id, session.id, { protection: 'full' });
   const run = await services.runs.submit(profile.id, session.id, {
     text: 'Do it',
     requestKey: 'closed-client',

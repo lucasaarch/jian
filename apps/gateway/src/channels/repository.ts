@@ -1,4 +1,10 @@
-import { channelSchema, contactSchema, deliverySchema } from '@jian/contracts';
+import {
+  type ChannelMessages,
+  channelSchema,
+  contactSchema,
+  DEFAULT_CHANNEL_MESSAGES,
+  deliverySchema,
+} from '@jian/contracts';
 import {
   and,
   asc,
@@ -42,6 +48,9 @@ export function toChannel(row: ChannelRow & { metaConfigured?: boolean }): Chann
       type: row.type,
       allowAllContacts: row.allowAllContacts,
       enabled: row.enabled,
+      // A chat channel always answers with its full wording: what the owner left alone is the
+      // default, so a field added later reaches channels saved before it.
+      ...(row.type === 'api' ? {} : { messages: { ...DEFAULT_CHANNEL_MESSAGES, ...row.messages } }),
       ...(row.type === 'whatsapp-business' && row.metaConfigured !== undefined
         ? { whatsappBusinessStatus: row.metaConfigured ? 'configured' : 'pending' }
         : {}),
@@ -152,6 +161,22 @@ export async function setAllowAllContacts(
   await db.update(channels).set({ allowAllContacts: value }).where(eq(channels.id, id));
 }
 
+/** What the owner changed of the wording, merged over what they changed before. */
+export async function setChannelMessages(
+  db: Queryable,
+  id: string,
+  messages: Partial<ChannelMessages>,
+): Promise<void> {
+  const [row] = await db
+    .select({ messages: channels.messages })
+    .from(channels)
+    .where(eq(channels.id, id));
+  await db
+    .update(channels)
+    .set({ messages: { ...row?.messages, ...messages } })
+    .where(eq(channels.id, id));
+}
+
 export async function setChannelEnabled(
   db: Queryable,
   id: string,
@@ -190,6 +215,7 @@ export function toContact(row: ContactRow, type: ChannelType): ContactRecord {
       ...(row.title ? { displayName: row.title } : {}),
       status: row.status,
       aiEnabled: row.aiEnabled,
+      canApprove: row.canApprove,
       ...(row.sessionId ? { sessionId: row.sessionId } : {}),
       ...(typeof row.heldMessage === 'string' ? { message: row.heldMessage } : {}),
       ...(row.avatar ? { avatar: row.avatar } : {}),
@@ -229,6 +255,7 @@ function toContactRow(contact: ContactRecord): typeof contacts.$inferInsert {
     status: contact.status,
     aiEnabled: contact.aiEnabled,
     aiPausedAt: contact.aiPausedAt ? new Date(contact.aiPausedAt) : null,
+    canApprove: contact.canApprove,
     sessionId: contact.sessionId ?? null,
     heldMessage: contact.message ?? null,
     heldMessageId: contact.requestKey ?? null,

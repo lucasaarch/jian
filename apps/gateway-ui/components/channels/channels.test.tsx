@@ -123,6 +123,7 @@ const customer: Contact = {
   displayName: 'Customer',
   status: 'approved',
   aiEnabled: true,
+  canApprove: false,
   scope: 'direct',
   createdAt: '2026-10-23T12:00:00Z',
   updatedAt: '2026-10-23T12:00:00Z',

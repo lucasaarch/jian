@@ -47,6 +47,8 @@ Memories are explicit, versioned and shared across the profile; there is no weig
 
 A turn that runs out of anything it is bounded by — tool calls or tokens — is not thrown away: one more bounded request, carrying the current compacted context and no tools at all, turns the work into an answer that says what was found and what is still unknown.
 
+A run that cannot go on alone waits, carrying either a question or an approval, and holds no lease while it does. The decision or the answer completes it and queues a continuation in the same conversation; an approved action is stored on that continuation and runs once, before its first model call, so a crash in between can lose the action but never repeat it.
+
 An agent waiting on a colleague waits for less than a minute. Past that the call is not lost and nobody is held: the answer is addressed to the conversation that asked and arrives there as an ordinary turn once it lands, so the agent that asked passes it on itself. A failure travels the same way.
 
 The isolation between profiles has one declared door, and it carries data only: a profile discovers the others of the installation and speaks to one of them, but what crosses is text. Discovery returns an identifier, a name and the summary the owner wrote — never instructions, identity, skills, memories, credentials or history. Every other read stays bound to the calling profile; no tool and no route reads another profile's records.

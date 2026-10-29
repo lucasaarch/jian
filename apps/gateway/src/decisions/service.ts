@@ -42,13 +42,13 @@ const USAGE_DAYS = 7;
 const CHARS_PER_TOKEN = 4;
 
 const ALL_ON: DecisionUses = {
-  actions: true,
   outside: true,
   turn: true,
   memories: true,
   learning: true,
   groups: true,
   delegation: true,
+  replies: true,
 };
 
 /** The three kinds of question Jev answers. The id a question is filed under is never sent. */

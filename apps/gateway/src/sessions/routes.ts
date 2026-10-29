@@ -13,6 +13,7 @@ type SessionRouteServices = {
       | 'deleteSession'
       | 'renameSession'
       | 'setModel'
+      | 'setProtection'
       | 'setGatewayTarget'
       | 'setObjective'
       | 'overview'
@@ -66,6 +67,12 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
     '/v1/profiles/:profileId/sessions/:sessionId/model',
     async (request) =>
       deps.sessions.setModel(request.params.profileId, request.params.sessionId, request.body),
+  );
+
+  app.put<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/protection',
+    async (request) =>
+      deps.sessions.setProtection(request.params.profileId, request.params.sessionId, request.body),
   );
 
   app.put<{ Params: SessionParams }>(

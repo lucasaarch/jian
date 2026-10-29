@@ -526,6 +526,13 @@
       "when": 1793240000000,
       "tag": "0074_remote-machines-for-every-agent",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793241000000,
+      "tag": "0075_protection-and-approvals",
+      "breakpoints": true
     }
   ]
 }

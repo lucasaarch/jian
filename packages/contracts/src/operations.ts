@@ -49,6 +49,7 @@ import {
   profileSchema,
   sessionModelSchema,
   sessionObjectiveInputSchema,
+  sessionProtectionSchema,
   sessionRenameSchema,
   sessionSchema,
   submitSchema,
@@ -75,6 +76,7 @@ import {
   profileStatsSchema,
   revisionRecordSchema,
   runAnswerSchema,
+  runApprovalInputSchema,
   runRecordSchema,
   runTimelineSchema,
   sessionRecordSchema,
@@ -447,6 +449,17 @@ export const operations: Operation[] = [
     operationId: 'continueRun',
     access: 'admin',
     body: continuationSchema,
+    response: runRecordSchema,
+    status: 202,
+  },
+  {
+    // The panel's approve and reject. A WhatsApp or Telegram conversation is decided in its
+    // own chat, by a contact allowed to, and refuses this route.
+    method: 'POST',
+    path: `${profile}/runs/:runId/approval`,
+    operationId: 'decideApproval',
+    access: 'admin',
+    body: runApprovalInputSchema,
     response: runRecordSchema,
     status: 202,
   },
@@ -907,6 +920,14 @@ export const operations: Operation[] = [
     operationId: 'setSessionModel',
     access: 'admin',
     body: sessionModelSchema,
+    response: sessionRecordSchema,
+  },
+  {
+    method: 'PUT',
+    path: `${session}/protection`,
+    operationId: 'setSessionProtection',
+    access: 'admin',
+    body: sessionProtectionSchema,
     response: sessionRecordSchema,
   },
   {

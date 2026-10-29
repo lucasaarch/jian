@@ -54,10 +54,37 @@ export const channelInputSchema = z
     },
   );
 
+/** A word a person replies with, as typed: matched without case or accents. */
+const replyWordSchema = z.string().trim().min(1).max(40);
+
+/**
+ * What a chat channel says when the agent needs a decision, and the replies it takes as one.
+ * Each channel keeps its own, so the wording fits how people write there.
+ * - approval: {title} {detail} {confirm} {yes} {no}
+ * - question: {prompt} {options}
+ * The word lists are the owner's replies, so they may mix languages.
+ */
+export const channelMessagesSchema = z.strictObject({
+  approval: z.string().trim().min(1).max(1000),
+  question: z.string().trim().min(1).max(1000),
+  approveWords: z.array(replyWordSchema).min(1).max(20),
+  rejectWords: z.array(replyWordSchema).min(1).max(20),
+});
+
+export const DEFAULT_CHANNEL_MESSAGES: z.infer<typeof channelMessagesSchema> = {
+  approval:
+    'I need your approval to continue.\n\n{title}\n{detail}\n\nReply {yes} to {confirm}, or {no} to stop.',
+  question: '{prompt}\n\n{options}',
+  approveWords: ['yes', 'y', 'approve', 'ok', 'sim', 's'],
+  rejectWords: ['no', 'n', 'reject', 'não', 'nao'],
+};
+
 export const channelPatchSchema = z.union([
   z.strictObject({ enabled: z.boolean() }),
   z.strictObject({ allowAllContacts: z.boolean() }),
   z.strictObject({ whatsappBusiness: whatsappBusinessCompletionSchema }),
+  // What is left out keeps its current wording.
+  z.strictObject({ messages: channelMessagesSchema.partial() }),
 ]);
 
 export const channelSchema = z.strictObject({
@@ -67,6 +94,8 @@ export const channelSchema = z.strictObject({
   enabled: z.boolean().default(true),
   allowAllContacts: z.boolean().default(false),
   whatsappBusinessStatus: z.enum(['pending', 'configured']).optional(),
+  /** On WhatsApp and Telegram: how approvals and questions read there. */
+  messages: channelMessagesSchema.optional(),
   createdAt: z.iso.datetime(),
   revokedAt: z.iso.datetime().optional(),
 });
@@ -87,6 +116,12 @@ export const contactSchema = z.strictObject({
   displayName: z.string().max(100).optional(),
   status: z.enum(['pending', 'approved', 'blocked']),
   aiEnabled: z.boolean().default(true),
+  /**
+   * Whether this contact may approve the agent's actions from their chat. Off unless the owner
+   * turns it on: the person on the other end of a channel is not the owner by default. On a
+   * group, it lets anyone who writes in the room approve.
+   */
+  canApprove: z.boolean().default(false),
   sessionId: z.uuid().optional(),
   message: z.string().max(8000).optional().describe('The message held until the owner decides.'),
   avatar: z
@@ -98,7 +133,11 @@ export const contactSchema = z.strictObject({
   updatedAt: z.iso.datetime(),
 });
 
-export const contactPatchSchema = z.strictObject({ aiEnabled: z.boolean() });
+export const contactPatchSchema = z
+  .strictObject({ aiEnabled: z.boolean().optional(), canApprove: z.boolean().optional() })
+  .refine((patch) => patch.aiEnabled !== undefined || patch.canApprove !== undefined, {
+    message: 'Change at least one setting',
+  });
 
 export const ingressSchema = z.strictObject({
   actorId: z.string().min(1).max(100),
@@ -319,3 +358,5 @@ export type ConversationScope = z.infer<typeof conversationScopeSchema>;
 export type GroupTurn = z.infer<typeof groupTurnSchema>;
 
 export type Group = z.infer<typeof groupSchema>;
+
+export type ChannelMessages = z.infer<typeof channelMessagesSchema>;

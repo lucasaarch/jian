@@ -4,6 +4,7 @@ import {
   channelPatchSchema,
   type channelSchema,
   contactPatchSchema,
+  DEFAULT_CHANNEL_MESSAGES,
   type deliverySchema,
   type Group,
   type GroupTurn,
@@ -23,6 +24,7 @@ import type { Media } from '../media/service.js';
 import type { ProfileReader } from '../profiles/port.js';
 import { isUniqueViolation } from '../providers/repository.js';
 import type { RunWriter } from '../runs/port.js';
+import { findWaitingSessionRun } from '../runs/repository.js';
 import { issueToken, verifyToken } from '../security/tokens.js';
 import type { Vault } from '../security/vault.js';
 import type { SessionWriter } from '../sessions/port.js';
@@ -59,6 +61,12 @@ import {
 import { plainText } from './plain.js';
 import { ChannelRegistry } from './registry.js';
 import {
+  approvalMessage,
+  questionMessage,
+  readApprovalReply,
+  readQuestionReply,
+} from './replies.js';
+import {
   findChannel,
   findContactByChat,
   findContactByIdentity,
@@ -79,6 +87,7 @@ import {
   markPictureSynced,
   setAllowAllContacts,
   setChannelEnabled,
+  setChannelMessages,
   setContactAvatar,
   updateDelivery,
 } from './repository.js';
@@ -198,7 +207,7 @@ type ChannelServices = {
   store: Store;
   vault: Vault;
   media?: Media;
-  decisions?: Pick<Decisions, 'ask'>;
+  decisions?: Pick<Decisions, 'ask' | 'judge'>;
 };
 
 export class Channels {
@@ -504,6 +513,12 @@ export class Channels {
           await this.discardInbox(tx, id);
           await this.cancelAutomationRuns(tx, profileId, id);
         }
+      } else if ('messages' in data) {
+        if (channel.type === 'api') {
+          throw new GatewayError(400, 'Approval and question wording is for WhatsApp and Telegram');
+        }
+        await setChannelMessages(tx, id, data.messages);
+        updated = assertFound(await findChannel(tx, id), 'Channel');
       } else {
         await setAllowAllContacts(tx, id, data.allowAllContacts);
         updated = { ...channel, ...data };
@@ -577,11 +592,11 @@ export class Channels {
   }
 
   async updateContact(profileId: string, id: string, input: unknown) {
-    const { aiEnabled } = contactPatchSchema.parse(input);
+    const patch = contactPatchSchema.parse(input);
     return this.services.store.transaction(profileId, async (tx) => {
       const previous = await this.people.read(profileId, id, tx);
-      const contact = await this.people.setAiEnabled(profileId, id, aiEnabled, tx);
-      if (!aiEnabled || !previous.aiEnabled) {
+      const contact = await this.people.setSettings(profileId, id, patch, tx);
+      if (patch.aiEnabled !== undefined && (!patch.aiEnabled || !previous.aiEnabled)) {
         await this.discardInbox(tx, contact.channelId, contact.chatId);
         await this.cancelAutomationRuns(tx, profileId, contact.channelId, contact.chatId);
       }
@@ -1446,6 +1461,7 @@ export class Channels {
     author?: { id: string; name?: string },
   ) {
     const sessionId = assertFound(contact.sessionId ?? null, 'Session');
+    const reading = await this.readReply(channel, contact, sessionId, text, author);
 
     const run = await this.services.runs
       .submit(
@@ -1462,6 +1478,7 @@ export class Channels {
           activity: 'channel',
           ...(group ? { group } : {}),
           ...(author ? { author } : {}),
+          ...reading,
           beforeSubmit: (tx) => this.assertAutomation(tx, channel, contact),
         },
       )
@@ -1497,6 +1514,53 @@ export class Channels {
     }
 
     return run;
+  }
+
+  /**
+   * What a message means to the run waiting in its conversation, read before the submission
+   * lock because Jev may be asked. An approval is decided only by a conversation the owner let
+   * approve — on a group, the room's flag covers whoever writes there — and anyone else's
+   * message is ordinary, leaving it pending. A reply to a question may name a choice.
+   */
+  private async readReply(
+    channel: ChannelRecord,
+    contact: ContactRecord,
+    sessionId: string,
+    text: string,
+    author?: { id: string; name?: string },
+  ): Promise<{
+    approval?: { id: string; decision: 'approve' | 'reject'; note?: string };
+    answer?: string;
+  }> {
+    const waiting = await findWaitingSessionRun(
+      this.services.store.db,
+      channel.profileId,
+      sessionId,
+    );
+    // In a room the text carries its author's name; the reply itself is what follows it.
+    const said =
+      author?.name && text.startsWith(`${author.name}: `)
+        ? text.slice(author.name.length + 2)
+        : text;
+    const judge = this.services.decisions?.judge;
+
+    if (waiting?.approval && !waiting.approval.decision) {
+      if (!contact.canApprove) return {};
+      const read = await readApprovalReply(
+        judge,
+        channel.messages ?? DEFAULT_CHANNEL_MESSAGES,
+        waiting.approval,
+        said,
+      );
+      return { approval: { id: waiting.approval.id, ...read } };
+    }
+
+    if (waiting?.question?.choices?.length) {
+      const answer = await readQuestionReply(judge, waiting.question, said);
+      return answer === said ? {} : { answer };
+    }
+
+    return {};
   }
 
   private async notify(
@@ -1683,14 +1747,27 @@ export class Channels {
         }
 
         if (run.status === 'waiting') {
-          // Flush earlier commentary, then send the question once and close this delivery.
-          // The resume run gets its own delivery after the owner answers.
+          // Flush earlier commentary, then send the question or the approval once and close
+          // this delivery, in the channel's own wording. The resume run gets its own delivery
+          // after the reply.
           await this.saySoFar(delivery, commentary);
-          text = run.output ?? run.question?.prompt ?? '';
-          spoken = Boolean(text);
-          if (run.question?.choices?.length) {
-            poll = { question: run.question.prompt, options: run.question.choices };
+          const wording =
+            (await findChannel(this.services.store.db, delivery.channelId))?.messages ??
+            DEFAULT_CHANNEL_MESSAGES;
+
+          if (run.approval) {
+            const asked = approvalMessage(wording, run.approval);
+            text = asked.text;
+            poll = { question: asked.text, options: asked.options };
+          } else if (run.question) {
+            text = questionMessage(wording, run.question);
+            if (run.question.choices?.length) {
+              poll = { question: text, options: run.question.choices };
+            }
+          } else {
+            text = run.output ?? '';
           }
+          spoken = Boolean(text);
           if (!text) continue;
         } else {
           // The reason the gateway stored is already redacted and one line: saying it here is what
@@ -2069,8 +2146,9 @@ export class Channels {
             chatId: delivery.chatId,
             text: part,
             people,
-            // Attach choices only on the first chunk so Telegram shows one reply keyboard.
-            ...(index === 0 && poll ? { poll } : {}),
+            // Choices ride on the last bubble, as its own text: one reply keyboard, under the
+            // line that asks, and no bubble said twice.
+            ...(index === parts.length - 1 && poll ? { poll: { ...poll, question: part } } : {}),
           },
           context,
         );

@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { checkpoints, profileRevisions, runs } from '../storage/schema.js';
+import type { RunAction } from './action.js';
 
 type RunRow = typeof runs.$inferSelect;
 type CheckpointRow = typeof checkpoints.$inferSelect;
@@ -70,6 +71,7 @@ function toRun(row: RunRow, document: Profile): Run {
     ...(row.commentary?.length ? { commentary: row.commentary } : {}),
     ...(row.relayTo ? { relayTo: row.relayTo } : {}),
     ...(row.question ? { question: row.question } : {}),
+    ...(row.approval ? { approval: row.approval } : {}),
     ...(row.leaseOwner === null ? {} : { leaseOwner: row.leaseOwner }),
     ...(row.leaseUntil === null ? {} : { leaseUntil: row.leaseUntil }),
     createdAt: row.createdAt.toISOString(),
@@ -101,6 +103,7 @@ function toRow(run: Run): typeof runs.$inferInsert {
     commentary: run.commentary ?? null,
     relayTo: run.relayTo ?? null,
     question: run.question ?? null,
+    approval: run.approval ?? null,
     leaseOwner: run.leaseOwner ?? null,
     leaseUntil: run.leaseUntil ?? null,
     createdAt: new Date(run.createdAt),
@@ -175,6 +178,21 @@ export async function insertRun(db: Queryable, run: Run): Promise<Run | null> {
 
 export async function updateRun(db: Queryable, run: Run): Promise<void> {
   await db.update(runs).set(toRow(run)).where(eq(runs.id, run.id));
+}
+
+/** The action a run holds, complete. Kept out of `Run` so no read of a run can serve it. */
+export async function readRunAction(db: Queryable, runId: string): Promise<RunAction | null> {
+  const [row] = await db.select({ action: runs.action }).from(runs).where(eq(runs.id, runId));
+
+  return row?.action ?? null;
+}
+
+export async function writeRunAction(
+  db: Queryable,
+  runId: string,
+  action: RunAction | null,
+): Promise<void> {
+  await db.update(runs).set({ action }).where(eq(runs.id, runId));
 }
 
 /**

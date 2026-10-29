@@ -12,7 +12,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { ACTION_KINDS, actionGuard, guardTools } from '../src/agent/guard.js';
 import { profileTools } from '../src/agent/tools.js';
 import { sandboxAbi } from '../src/agent/workspace.js';
 import { Decisions } from '../src/decisions/service.js';
@@ -66,34 +65,14 @@ afterAll(() => {
   }
 });
 
-/** A synthetic Jev that gives every question it is asked the same probability of yes. */
-const everyNoul =
-  (risk: number, asked = 0) =>
-  (init?: RequestInit) => {
-    const { questions } = JSON.parse(String(init?.body)) as { questions: Record<string, unknown> };
-
-    return Response.json({
-      answers: Object.fromEntries(
-        Object.keys(questions).map((id) => [
-          id,
-          { type: 'noul', noul: id === 'asked' ? asked : risk },
-        ]),
-      ),
-    });
-  };
-
-async function toolsFor(allowShell: boolean, jev?: (init?: RequestInit) => Response) {
+async function toolsFor(allowShell: boolean) {
   const services = await testServices();
   const decisions = new Decisions(
     services.store,
     services.gatewayVault,
-    async (_input, init) => jev?.(init) ?? Response.json({}),
+    async () => Response.json({}),
     () => {},
   );
-
-  if (jev) {
-    await decisions.configure({ provider: 'jev', apiKey: 'jev-synthetic' });
-  }
 
   const profile = await services.profiles.createProfile({
     name: 'Atlas',
@@ -108,9 +87,6 @@ async function toolsFor(allowShell: boolean, jev?: (init?: RequestInit) => Respo
   });
 
   const tools = profileTools({ ...services, decisions, store: services.store }, run);
-
-  // As the runtime does once the whole set is known.
-  guardTools(tools, actionGuard(decisions.judge, run), (name) => ACTION_KINDS[name]);
 
   return { tools, home: join(root, profile.id) };
 }
@@ -401,33 +377,5 @@ describe('working on code', () => {
         limit: 50,
       }),
     ).toEqual({ matches: `${file}:2:const b = 2;` });
-  });
-
-  it('holds back an action Jev judges destructive, and runs nothing', async () => {
-    const { tools, home } = await toolsFor(true, everyNoul(0.95));
-    const file = join(home, 'keep.txt');
-
-    mkdirSync(home, { recursive: true });
-    writeFileSync(file, 'dados');
-
-    expect(await sh(tools.run_command, `rm ${file}`)).toMatchObject({
-      held: expect.stringContaining('Held back'),
-    });
-    expect(readFileSync(file, 'utf8')).toBe('dados');
-  });
-
-  it('runs when Jev sees no risk, has no key, does not answer, or the request asked for it', async () => {
-    const safe = everyNoul(0.05);
-    const down = () => new Response('overloaded', { status: 529 });
-
-    // Each set of tools is used before the next is built: every test store starts empty.
-    for (const jev of [safe, undefined, down, everyNoul(0.95, 0.95)]) {
-      const { tools } = await toolsFor(true, jev);
-
-      expect(await sh(tools.run_command, 'echo oi')).toMatchObject({
-        exitCode: 0,
-        stdout: 'oi\n',
-      });
-    }
   });
 });

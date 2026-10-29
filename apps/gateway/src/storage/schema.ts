@@ -1,5 +1,6 @@
 import type {
   AgentCallOrigin,
+  ChannelMessages,
   ContextPolicy,
   GroupTurn,
   Identity,
@@ -7,8 +8,10 @@ import type {
   ModelConfig,
   ModelSelection,
   Profile,
+  ProtectionMode,
   ProviderCredential,
   ReasoningEffort,
+  RunApproval,
   RunProgress,
   RunQuestion,
   SessionObjective,
@@ -35,6 +38,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import type { RunAction } from '../runs/action.js';
 
 /**
  * A column holds what the gateway filters, sorts or constrains on. JSONB holds what it only
@@ -306,6 +310,8 @@ export const sessions = pgTable(
       .default('off'),
     // Absent until the owner or agent sets what this conversation is working toward.
     objective: jsonb('objective').$type<SessionObjective>(),
+    // Whether the agent asks before it acts here. Every conversation starts asking.
+    protection: text('protection').$type<ProtectionMode>().notNull().default('ask'),
     createdAt,
   },
   (table) => [
@@ -364,6 +370,11 @@ export const runs = pgTable(
     relayTo: uuid('relay_to').references(() => sessions.id, { onDelete: 'set null' }),
     // Owner question that parked this run; present only while status is waiting.
     question: jsonb('question').$type<RunQuestion>(),
+    // The action that parked this run, and later how it was decided.
+    approval: jsonb('approval').$type<RunApproval>(),
+    // The action itself, exactly as the agent called it: never served, only executed. Pending
+    // on the run that parked; approved on the continuation that runs it, once.
+    action: jsonb('action').$type<RunAction>(),
     // What the person said while this run was already going. Read and cleared between steps.
     steer: text('steer'),
     leaseOwner: text('lease_owner'),
@@ -738,6 +749,8 @@ export const channels = pgTable(
     // The profile picture last put on the account, as `<address>:<hash>` or `<address>:none`.
     pictureSynced: text('picture_synced'),
     allowAllContacts: boolean('allow_all_contacts').notNull().default(false),
+    // How approvals and questions read on this channel; absent keeps the defaults.
+    messages: jsonb('messages').$type<Partial<ChannelMessages>>(),
     enabled: boolean('enabled').notNull().default(true),
     automationPausedAt: timestamp('automation_paused_at', { withTimezone: true }),
     webhookTokenHash: text('webhook_token_hash').notNull(),
@@ -833,6 +846,7 @@ export const contacts = pgTable(
     status: contactStatus('status').notNull(),
     aiEnabled: boolean('ai_enabled').notNull().default(true),
     aiPausedAt: timestamp('ai_paused_at', { withTimezone: true }),
+    canApprove: boolean('can_approve').notNull().default(false),
     sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'set null' }),
     // The first message, kept until approval releases it exactly once.
     heldMessage: jsonb('held_message'),
