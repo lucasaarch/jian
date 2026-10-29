@@ -489,26 +489,24 @@
   .conversation-list > header {
     @apply grid gap-3 border-b border-line px-4 pb-4 pt-4;
   }
-  .conversation-list h1 {
-    @apply text-3xl;
+  .chat-channel-bar {
+    @apply flex items-center gap-2;
+  }
+  /* One height for both controls, 46px: what the select measures with its padding and border.
+     Pinning both keeps them level even if the select's content changes. */
+  .chat-channel-bar .select-trigger,
+  .chat-channel-bar > .icon-button {
+    @apply h-11.5;
+  }
+  .chat-channel-bar > .icon-button {
+    @apply w-11.5 shrink-0;
   }
   .chat-channel-select {
-    @apply relative min-w-0;
+    @apply min-w-0 flex-1;
   }
-  .chat-channel-trigger {
-    @apply flex items-center gap-2 rounded-sm text-left text-ink;
-  }
-  .chat-channel-trigger > svg {
-    @apply shrink-0 text-muted;
-  }
-  .chat-channel-menu,
   .conversation-context-menu {
     @apply z-50 min-w-48 overflow-hidden rounded-sm border border-line bg-surface p-1.5 text-sm text-ink shadow-xl;
   }
-  .chat-channel-menu {
-    @apply absolute left-0 top-full mt-2;
-  }
-  .chat-channel-option,
   .conversation-context-menu button {
     @apply flex min-h-10 w-full items-center rounded px-3 py-2 text-left outline-none hover:bg-accent-soft hover:text-accent focus-visible:bg-accent-soft focus-visible:text-accent;
   }
@@ -517,9 +515,6 @@
   }
   .conversation-context-menu button[data-danger="true"] {
     @apply text-bad;
-  }
-  .chat-channel-option {
-    @apply gap-2;
   }
   .conversation-scroll {
     @apply min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3;

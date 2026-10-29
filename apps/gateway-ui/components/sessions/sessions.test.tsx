@@ -216,18 +216,15 @@ it('opens the channel selector and filters the conversation list', async () => {
   } as Session;
   const result = await render({ sessions: [gateway, session] });
 
-  await act(async () =>
-    result.element.querySelector<HTMLButtonElement>('.chat-channel-trigger')?.click(),
+  const trigger = result.element.querySelector<HTMLButtonElement>('[aria-label="Channel"]');
+  await act(async () => trigger?.click());
+  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (item) => item.textContent === 'WhatsApp Business (Meta)',
   );
-  const option = [
-    ...result.element.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'),
-  ].find((button) => button.textContent === 'WhatsApp Business (Meta)');
   expect(option).toBeDefined();
   await act(async () => option?.click());
 
-  expect(result.element.querySelector('.chat-channel-trigger')?.textContent).toContain(
-    'WhatsApp Business (Meta)',
-  );
+  expect(trigger?.textContent).toContain('WhatsApp Business (Meta)');
   expect(
     [...result.element.querySelectorAll('.conversation-item strong')].map(
       (item) => item.textContent,
