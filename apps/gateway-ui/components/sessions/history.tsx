@@ -331,19 +331,16 @@ export function History({
               // A finished agent's report is the agent's mail; its card already says it ended.
               const report = reportOf(message, subagents);
               // The line the gateway writes for an approval or a question becomes its card.
+              // A run that stops to ask ends on the line it asked with: its last word is the
+              // card, whatever the gateway wrote in it.
               const asked = message.runId ? asks.get(message.runId) : undefined;
-              const approval =
+              const asking =
                 message.role === 'assistant' &&
-                asked?.approval &&
-                message.content.startsWith('Waiting for approval: ')
-                  ? asked.approval
-                  : undefined;
-              const question =
-                message.role === 'assistant' &&
-                asked?.question &&
-                message.content.startsWith(asked.question.prompt)
-                  ? asked.question
-                  : undefined;
+                !messages
+                  .slice(index + 1)
+                  .some((later) => later.runId === message.runId && later.role === 'assistant');
+              const approval = asking && asked?.approval ? asked.approval : undefined;
+              const question = asking && asked?.question ? asked.question : undefined;
               const thought =
                 answering && (steps?.length || handedOff) ? (
                   <ThoughtLine working={false} steps={traceOf(steps ?? [])} {...span(answering)} />

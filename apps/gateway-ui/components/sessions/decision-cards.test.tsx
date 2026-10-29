@@ -134,3 +134,10 @@ it('answers a question from its choices in the panel’s own chat', async () => 
   await act(async () => button('dev')?.click());
   expect(answerRun).toHaveBeenCalledWith('profile', 'run', 'dev');
 });
+
+it('finds the card by the run that asked, whatever the gateway wrote for it', async () => {
+  await show({ approval }, 'Pending: the agent wants to clean up storage.');
+
+  expect(element.textContent).toContain('Needs approval');
+  expect(element.textContent).not.toContain('Pending: the agent wants');
+});
