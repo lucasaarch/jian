@@ -4,6 +4,7 @@ import { Combobox } from '@base-ui/react/combobox';
 import { Select as BaseSelect } from '@base-ui/react/select';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { type ReactNode, useRef, useState } from 'react';
+import { matchesQuery } from '@/lib/search';
 
 export type SelectOption = {
   value: string;
@@ -62,26 +63,9 @@ function OptionContent({ option }: { option: SelectOption }) {
   );
 }
 
-/** Both modes share a trigger; long lists add filtering without changing the field API. */
-/** Case and accents are not what anyone searches by. */
-const fold = (text: string) =>
-  text
-    .normalize('NFD')
-    .replace(/\p{M}+/gu, '')
-    .toLowerCase();
-
-/**
- * Every word typed must appear in the option's name or in the line under it, so an option can
- * be found by what it says as well as by what it is called.
- */
-function matches(option: SelectOption, query: string) {
-  const haystack = fold(`${option.label} ${option.detail ?? ''}`);
-
-  return fold(query)
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((word) => haystack.includes(word));
-}
+/** An option is found by its name or by the line under it. */
+const matches = (option: SelectOption, query: string) =>
+  matchesQuery(`${option.label} ${option.detail ?? ''}`, query);
 
 function defaultMultipleValue(selected: SelectOption[]) {
   if (selected.length === 0) return null;

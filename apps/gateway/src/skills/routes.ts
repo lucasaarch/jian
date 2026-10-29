@@ -30,10 +30,6 @@ export function registerSkillRoutes(app: FastifyInstance, deps: SkillRouteServic
     }));
   });
 
-  app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/skill-catalog', async (request) =>
-    available(deps).catalog(request.query),
-  );
-
   app.post<{ Params: ProfileParams }>('/v1/profiles/:profileId/skills/import', async (request) =>
     available(deps).importSkill(request.params.profileId, request.body),
   );

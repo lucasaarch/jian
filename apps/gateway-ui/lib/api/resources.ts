@@ -92,12 +92,6 @@ export const resourceCalls = (client: Client) => ({
     ),
   builtinSkills: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/built-in-skills', { params: profile(profileId) })),
-  skillCatalog: (profileId: string, url: string) =>
-    result(
-      client.GET('/v1/profiles/{profileId}/skill-catalog', {
-        params: { path: { profileId }, query: { url } },
-      }),
-    ),
   importSkill: (profileId: string, url: string) =>
     result(
       client.POST('/v1/profiles/{profileId}/skills/import', {

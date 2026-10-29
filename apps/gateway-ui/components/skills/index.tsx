@@ -16,7 +16,6 @@ import {
   SectionHeading,
 } from '../ui';
 import { BuiltinSkills } from './built-in';
-import { SkillCatalog } from './catalog';
 import { SkillImport } from './import';
 import { SkillForm } from './skill-form';
 import { SkillView } from './skill-view';
@@ -135,7 +134,7 @@ export function Skills({ api, mutate, busy }: SectionActions) {
           </div>
         ) : (
           <p className="rounded-md bg-surface px-5 py-4 text-sm">
-            No skill installed. Pick one from the catalogs below, or import from your repository.
+            No skill installed. Write one, or import one from a repository.
           </p>
         )}
       </section>
@@ -147,7 +146,6 @@ export function Skills({ api, mutate, busy }: SectionActions) {
           close={() => setOpen(undefined)}
         />
       )}
-      <SkillCatalog profile={profile} api={api} mutate={mutate} busy={busy} />
       {editing !== undefined && (
         <SkillForm
           skill={skill}
