@@ -36,7 +36,7 @@ import { keys } from '@/lib/query/keys';
 import { useCrew } from '@/lib/stores/crew';
 import { useLayout } from '@/lib/stores/layout';
 import { useDeleteConversation, useRefresh } from '@/lib/workspace';
-import type { Run, Session } from '../../lib/api';
+import type { ProtectionMode, Run, Session } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
 import type { SectionActions } from '../props';
 import {
@@ -61,6 +61,7 @@ import { SessionListeners } from './listeners';
 import { SessionModel } from './model-picker';
 import { statusOf } from './progress';
 import { ProjectSelect } from './project-select';
+import { SessionProtection } from './protection-menu';
 
 const objectiveTone = {
   open: 'good',
@@ -102,6 +103,8 @@ const kindOf = (session: Session): Kind =>
       : 'api';
 
 const isGateway = (session: Session) => session.channel === GATEWAY_SESSION_CHANNEL;
+/** The chat a channel's conversation is answered in, as people call it. */
+const chatName = (session: Session) => (session.channel === 'telegram' ? 'Telegram' : 'WhatsApp');
 const isMessaging = (session: Session) =>
   ['whatsapp', 'whatsapp-business', 'telegram'].includes(session.channel);
 
@@ -221,6 +224,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   const [draftProjectId, setDraftProjectId] = useState<string | null>(null);
   const [draftMachineId, setDraftMachineId] = useState<string | null>(null);
   const [draftModel, setDraftModel] = useState<Session['model']>();
+  const [draftProtection, setDraftProtection] = useState<ProtectionMode>('ask');
   const draftSession = useRef<Promise<Session> | null>(null);
   const [renaming, setRenaming] = useState<Session>();
   const [renameTitle, setRenameTitle] = useState('');
@@ -476,6 +480,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                 setDraftProjectId(null);
                 setDraftMachineId(null);
                 setDraftModel(undefined);
+                setDraftProtection('ask');
                 draftSession.current = null;
               }}
             >
@@ -564,15 +569,23 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
             }
             onMachineChange={setDraftMachineId}
             modelControl={
-              <SessionModel
-                api={api}
-                profileId={profile.id}
-                channel={false}
-                draftModel={draftModel}
-                onDraftChange={setDraftModel}
-                className="composer-model-control"
-                saved={() => void refresh()}
-              />
+              <>
+                <SessionProtection
+                  api={api}
+                  profileId={profile.id}
+                  draft={draftProtection}
+                  onDraftChange={setDraftProtection}
+                />
+                <SessionModel
+                  api={api}
+                  profileId={profile.id}
+                  channel={false}
+                  draftModel={draftModel}
+                  onDraftChange={setDraftModel}
+                  className="composer-model-control"
+                  saved={() => void refresh()}
+                />
+              </>
             }
             name={profile.name}
             upload={async (file) => {
@@ -582,6 +595,10 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
             send={async (text, mediaIds) => {
               const session = await ensureDraftSession();
               if (draftModel) await api.setSessionModel(profile.id, session.id, draftModel);
+              // A conversation starts asking first; only a different choice needs saving.
+              if (draftProtection !== 'ask') {
+                await api.setSessionProtection(profile.id, session.id, draftProtection);
+              }
               await api.renameSession(
                 profile.id,
                 session.id,
@@ -654,6 +671,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                   sessionId={active.id}
                   revision={sent}
                   group={active.scope === 'group' || activeContact?.scope === 'group'}
+                  chat={isMessaging(active) ? chatName(active) : undefined}
                   empty={
                     isGateway(active)
                       ? `Write to ${profile.name} below.`
@@ -703,23 +721,33 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                             )
                         }
                         modelControl={
-                          <SessionModel
-                            key={`composer-model-${active.id}`}
-                            api={api}
-                            profileId={profile.id}
-                            session={active}
-                            channel={false}
-                            className="composer-model-control"
-                            saved={() => void refresh()}
-                          />
+                          <>
+                            <SessionProtection
+                              key={`composer-protection-${active.id}`}
+                              api={api}
+                              profileId={profile.id}
+                              session={active}
+                              saved={() => void refresh()}
+                            />
+                            <SessionModel
+                              key={`composer-model-${active.id}`}
+                              api={api}
+                              profileId={profile.id}
+                              session={active}
+                              channel={false}
+                              className="composer-model-control"
+                              saved={() => void refresh()}
+                            />
+                          </>
                         }
-                        placeholder={
-                          activities.some(
+                        placeholder={(() => {
+                          const waits = activities.find(
                             (run) => run.sessionId === active.id && run.status === 'waiting',
-                          )
-                            ? 'Answer to continue…'
-                            : undefined
-                        }
+                          );
+                          // Writing instead of deciding declines, and the words reach the agent.
+                          if (waits?.approval) return 'Write to decline and say why…';
+                          return waits ? 'Answer to continue…' : undefined;
+                        })()}
                         upload={(file) => api.upload(profile.id, active.id, file)}
                         send={(text, mediaIds) => api.send(profile.id, active.id, text, mediaIds)}
                         onSent={() => {
@@ -736,6 +764,14 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                         aria-label="Agent settings for this conversation"
                       >
                         <div className="agent-toolbar-box">
+                          <SessionProtection
+                            key={`toolbar-protection-${active.id}`}
+                            api={api}
+                            profileId={profile.id}
+                            session={active}
+                            align="start"
+                            saved={() => void refresh()}
+                          />
                           <SessionModel
                             key={`toolbar-model-${active.id}`}
                             api={api}

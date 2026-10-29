@@ -1,0 +1,68 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: The card's parts are styled per state and do not overlap. */
+@reference "tailwindcss";
+@reference "./themes.css";
+
+/* Approvals and questions in the conversation: a box with a small outlined chip saying what
+   it is, the title, the detail on a darker panel, and the decision at the foot. Colors are the
+   runtime tokens; the Tailwind `--color-*` names do not exist at runtime. */
+@layer components {
+  .decision-card {
+    @apply grid w-full gap-3 rounded-xl border p-4;
+    background: var(--surface);
+    border-color: var(--line);
+    animation: thought-rise 220ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .decision-chip {
+    @apply justify-self-start rounded-md border px-2 py-0.5 text-xs font-medium;
+    border-color: var(--control);
+    color: var(--ink);
+  }
+  .decision-chip[data-tone="good"] {
+    border-color: color-mix(in srgb, var(--good) 55%, transparent);
+    color: var(--good);
+  }
+  .decision-chip[data-tone="bad"] {
+    border-color: color-mix(in srgb, var(--bad) 55%, transparent);
+    color: var(--bad);
+  }
+  .decision-title {
+    @apply m-0 text-[15px] font-medium leading-snug;
+    color: var(--ink);
+  }
+  .decision-body {
+    @apply grid gap-2 rounded-lg px-3.5 py-3 text-sm;
+    background: var(--canvas);
+    color: var(--muted);
+  }
+  .decision-body > p {
+    @apply m-0 leading-relaxed;
+  }
+  .decision-state {
+    color: var(--ink);
+  }
+  .decision-request > button {
+    @apply inline-flex items-center gap-1.5 text-sm transition-colors;
+    color: var(--muted);
+  }
+  .decision-request > button:hover {
+    color: var(--ink);
+  }
+  .decision-request > button > svg {
+    @apply shrink-0 transition-transform;
+  }
+  .decision-request[data-open] > button > svg {
+    @apply rotate-90;
+  }
+  .decision-request pre {
+    @apply mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md p-3 font-mono text-xs;
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .decision-choices {
+    @apply m-0 grid list-decimal gap-1 pl-5;
+    color: var(--ink);
+  }
+  .decision-footer {
+    @apply flex flex-wrap justify-end gap-2;
+  }
+}

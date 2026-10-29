@@ -9,6 +9,7 @@ import type { SectionActions } from '../props';
 import { Badge, Button, Confirm, Field, Secret, SectionHeading, Switch } from '../ui';
 import { Conversations } from './conversations';
 import { kinds } from './kinds';
+import { ChannelMessages } from './messages';
 import { MetaCallback, MetaCredentials, MetaLimits } from './meta';
 import { Pairing } from './pairing';
 
@@ -251,6 +252,18 @@ export function Channels(props: SectionActions) {
                         }
                       />
                     </div>
+                    {kind.type !== 'api' && (
+                      <ChannelMessages
+                        channel={channel}
+                        busy={busy}
+                        save={(messages) =>
+                          mutate(
+                            () => api.updateChannel(profile.id, channel.id, { messages }),
+                            'Messages saved.',
+                          )
+                        }
+                      />
+                    )}
                     <div className="flex flex-wrap items-center gap-3">
                       <Button
                         variant="danger"

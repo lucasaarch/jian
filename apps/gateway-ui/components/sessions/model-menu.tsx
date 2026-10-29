@@ -24,11 +24,11 @@ export type ModelEntry = {
 const same = (entry: ModelEntry, selection?: ModelSelection) =>
   entry.providerId === selection?.providerId && entry.modelId === selection?.modelId;
 
-/** A popup that opens above its trigger, as the composer sits at the bottom of the screen. */
 /** Which edge of its trigger a menu lines up with: the end on the right of a bar, the start on its left. */
 export type MenuAlign = 'start' | 'end';
 
-function Menu({
+/** A popup that opens above its trigger, as the composer sits at the bottom of the screen. */
+export function Menu({
   label,
   trigger,
   disabled,

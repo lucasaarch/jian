@@ -1,6 +1,6 @@
 import { type Client, profile } from './params';
 import { result } from './result';
-import type { MediaUpload, ModelSelection, ProjectChoice } from './types';
+import type { MediaUpload, ModelSelection, ProjectChoice, ProtectionMode } from './types';
 
 /**
  * Sessions, messages and execution history. Gateway chats are owner-written; channel
@@ -78,6 +78,13 @@ export const sessionCalls = (client: Client) => ({
         body: { model },
       }),
     ),
+  setSessionProtection: (profileId: string, sessionId: string, protection: ProtectionMode) =>
+    result(
+      client.PUT('/v1/profiles/{profileId}/sessions/{sessionId}/protection', {
+        params: { path: { profileId, sessionId } },
+        body: { protection },
+      }),
+    ),
   setGatewaySessionTarget: (
     profileId: string,
     sessionId: string,
@@ -113,6 +120,14 @@ export const sessionCalls = (client: Client) => ({
     result(
       client.GET('/v1/profiles/{profileId}/runs/{runId}', {
         params: { path: { profileId, runId } },
+      }),
+    ),
+  // Each press is its own decision; the key only stops one request from landing twice.
+  decideApproval: (profileId: string, runId: string, decision: 'approve' | 'reject') =>
+    result(
+      client.POST('/v1/profiles/{profileId}/runs/{runId}/approval', {
+        params: { path: { profileId, runId } },
+        body: { decision, requestKey: crypto.randomUUID() },
       }),
     ),
   answerRun: (profileId: string, runId: string, text: string) =>

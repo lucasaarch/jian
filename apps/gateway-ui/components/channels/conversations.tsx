@@ -5,7 +5,7 @@ import { useAgent, useContacts, useGroups } from '@/lib/query/agent';
 import type { Channel, Contact } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionActions } from '../props';
-import { Badge, Button, Face } from '../ui';
+import { Badge, Button, Face, Switch } from '../ui';
 import { kinds } from './kinds';
 
 const agents = (count: number) => (count === 1 ? '1 agent' : `${count} agents`);
@@ -50,6 +50,14 @@ export function Conversations({
       contact.status === 'pending'
         ? `${name} declined.`
         : `${name} revoked. The agent no longer answers there.`,
+    );
+
+  const trust = (contact: Contact, name: string, canApprove: boolean) =>
+    mutate(
+      () => api.updateContact(profile.id, contact.id, { canApprove }),
+      canApprove
+        ? `${name} can now approve what the agent asks to do.`
+        : `${name} can no longer approve actions.`,
     );
 
   // A request is a decision, not a row: it gets room for who wrote, what they said, and the
@@ -127,6 +135,26 @@ export function Conversations({
         </div>
         {contact.status === 'approved' ? (
           <>
+            {channel.type !== 'api' && (
+              // Approving actions is trust beyond talking to the agent: it runs what the agent
+              // asked to do. A room shares one answer, so anyone in it can give it.
+              <div className="contact-approver">
+                <span>
+                  <strong>Can approve actions</strong>
+                  <small>
+                    {contact.scope === 'group'
+                      ? "Anyone's yes in this group runs what the agent asked to do"
+                      : 'Their yes in the chat runs what the agent asked to do'}
+                  </small>
+                </span>
+                <Switch
+                  label={`${name} can approve actions`}
+                  checked={contact.canApprove ?? false}
+                  disabled={busy}
+                  onChange={(canApprove) => void trust(contact, name, canApprove)}
+                />
+              </div>
+            )}
             <Badge tone="good">Approved</Badge>
             <Button
               variant="quiet"

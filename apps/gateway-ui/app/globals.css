@@ -9,6 +9,7 @@
 @import "./styles/thought-line.css";
 @import "./styles/crew.css";
 @import "./styles/model-menu.css";
+@import "./styles/decision.css";
 
 @layer base {
   /* Scrollbars that belong to the panel: thin, no track, a rounded thumb in the ink at low

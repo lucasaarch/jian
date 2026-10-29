@@ -28,6 +28,20 @@
   .model-trigger > svg {
     @apply shrink-0;
   }
+  /* Protection reads at a glance: the shield, and in Full access the warning ink on it. */
+  .protection-trigger {
+    @apply inline-flex min-w-0 items-center gap-1.5;
+  }
+  .protection-trigger > svg {
+    @apply shrink-0;
+  }
+  .protection-trigger[data-mode="full"] > svg {
+    color: var(--warn);
+  }
+  .model-menu .model-option > svg:first-child {
+    @apply shrink-0;
+    color: var(--muted);
+  }
 
   /* As wide as what it lists, within the screen, and opening above the composer. */
   .model-menu {
@@ -98,5 +112,12 @@
   }
   .model-option.static {
     @apply cursor-default;
+  }
+}
+
+/* A narrow composer keeps the shield and drops the words beside it; the menu still names them. */
+@container composer (max-width: 32rem) {
+  .composer-actions .protection-trigger .model-trigger-name {
+    @apply sr-only;
   }
 }
