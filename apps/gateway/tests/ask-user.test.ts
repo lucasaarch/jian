@@ -25,7 +25,10 @@ const answer = (text: string) => ({
 it('parks the run as waiting and resumes when the owner answers', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);
-  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const session = await services.sessions.createSession(profile.id, {
+    channel: 'api',
+    title: 'Questions',
+  });
   await services.sessions.setObjective(profile.id, session.id, {
     text: 'Ship mid-run questions',
     status: 'open',
@@ -133,7 +136,11 @@ it('answers a waiting run through the explicit answer API', async () => {
   let step = 0;
   await new AgentRuntime(services, () =>
     mockModel({
-      doGenerate: async () => {
+      doGenerate: async (options) => {
+        // The conversation's title, asked for beside the turn.
+        if (JSON.stringify(options.prompt).includes('You name a conversation')) {
+          return answer('Shipping decision');
+        }
         step++;
         if (step === 1) {
           return {
@@ -156,6 +163,8 @@ it('answers a waiting run through the explicit answer API', async () => {
   ).execute(profile.id, run.id);
 
   expect((await services.runs.run(profile.id, run.id)).status).toBe('waiting');
+  // A turn that stops to ask still names its conversation.
+  expect((await services.sessions.session(profile.id, session.id)).title).toBe('Shipping decision');
 
   const resume = await services.runs.answerRun(profile.id, run.id, {
     text: 'Yes, ship it',

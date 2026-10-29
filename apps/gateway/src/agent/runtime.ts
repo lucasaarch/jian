@@ -77,6 +77,7 @@ import { mcpOutcomeUncertain } from './mcp-errors.js';
 import { Narrator } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
+import { plainTitle, type TitleModel, writeTitle } from './title.js';
 import { reason, toolFailure } from './tool-failure.js';
 import { deferTools, profileTools, type ToolServices } from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
@@ -131,11 +132,19 @@ export class AgentRuntime {
     private options: RuntimeOptions = {},
   ) {}
 
-  /** Naming is cosmetic and must not spend a separate, uncounted model request. */
-  private async nameConversation(run: Run, secrets: Set<string>) {
-    const opening = redactText(run.input, secrets).trim().replace(/\s+/g, ' ');
-    const title = opening.length <= 60 ? opening : `${opening.slice(0, 59).trimEnd()}…`;
-    await this.services.sessions.nameIfUnnamed(run.profileId, run.sessionId, title).catch(() => {});
+  /**
+   * Names a conversation from its first message, with the conversation's own model and beside
+   * the turn rather than in it. The request is counted on the run; when the model cannot
+   * answer, the opening itself is the title, as before there was one to ask.
+   */
+  private async nameConversation(run: Run, secrets: Set<string>, title: TitleModel) {
+    const opening = redactText(run.input, secrets);
+
+    if (!opening.trim()) return;
+
+    const written = await writeTitle(title, opening);
+    const named = written ? redactText(written, secrets) : plainTitle(opening);
+    await this.services.sessions.nameIfUnnamed(run.profileId, run.sessionId, named).catch(() => {});
   }
 
   /**
@@ -294,6 +303,8 @@ export class AgentRuntime {
     let approvedCallId: string | undefined;
     // What writes an approval's card: the run's own model, once it is known.
     let describer: Describer | undefined;
+    // The conversation's title being written beside the turn, waited on only once it is over.
+    let naming: Promise<void> | undefined;
     // The connected services' own names for their tools, for a card the model could not write.
     let mcpCatalog: McpEntry[] = [];
     let lastCompactionAttempt = -4;
@@ -689,6 +700,16 @@ export class AgentRuntime {
       };
 
       describer = { model, subscription, account, config };
+
+      if (!session.title && !learning) {
+        const options = cardOptions(config);
+        naming = this.nameConversation(run, secrets, {
+          model,
+          subscription,
+          ...(options ? { providerOptions: options } : {}),
+          account: (usage, text) => account(usage, 0, text, 0),
+        });
+      }
 
       // Built once for the turn and held. Rebuilding it every step — the same memories, the
       // same skills, a different list of what the profile happens to be doing — changed the
@@ -1109,14 +1130,12 @@ export class AgentRuntime {
           secrets,
           mcpCatalog.find((entry) => entry.name === pausedCall?.toolName),
         );
-        await this.nameConversation(run, secrets);
         return;
       }
 
       if (askUser) {
         const question = buildRunQuestion(askUser, nowIso(Date.now));
         await this.services.lifecycle.wait(profileId, runId, owner, question);
-        await this.nameConversation(run, secrets);
         return;
       }
 
@@ -1203,8 +1222,6 @@ export class AgentRuntime {
             console.error(`jian: run ${runId} could not be looked back on — ${describe(error)}`),
           );
       }
-
-      await this.nameConversation(run, secrets);
     } catch (error) {
       if (pausedCall || error instanceof ApprovalPause) {
         const call = pausedCall ?? (error instanceof ApprovalPause ? error.call : undefined);
@@ -1222,7 +1239,6 @@ export class AgentRuntime {
               `jian: run ${runId} could not wait for approval — ${redactText(describe(waitError), secrets)}`,
             ),
           );
-          await this.nameConversation(run, secrets).catch(() => {});
         }
         return;
       }
@@ -1240,7 +1256,6 @@ export class AgentRuntime {
                   `jian: run ${runId} could not wait for an answer — ${redactText(describe(waitError), secrets)}`,
                 ),
               );
-            await this.nameConversation(run, secrets).catch(() => {});
           }
           return;
         }
@@ -1278,6 +1293,8 @@ export class AgentRuntime {
       clearInterval(pulse);
       clearInterval(watchdog);
       this.controllers.delete(runId);
+      // Before the outbound client closes: the title's request goes out through it.
+      await naming?.catch(() => {});
       await Promise.allSettled(clients.map((client) => client.close()));
 
       if (ownsOutbound) {
