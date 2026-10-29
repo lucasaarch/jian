@@ -41,6 +41,7 @@ export type ModelDefaults = JsonResponse<'getModelDefaults', 200>;
 export type ModelSelection = NonNullable<ModelDefaults['conversation']>;
 export type ProtectionMode = RequestBody<'setSessionProtection'>['protection'];
 export type RunApproval = NonNullable<RunTimeline['approval']>;
+export type RunQuestion = NonNullable<RunTimeline['question']>;
 export type ReasoningEffort = NonNullable<ModelSelection['reasoningEffort']>;
 export type ProviderModelList = JsonResponse<'listProviderModels', 200>;
 export type ProviderModel = ProviderModelList['models'][number];
