@@ -67,6 +67,22 @@ describe('HTTP services', () => {
     expect(skills.map((skill) => skill.name)).toContain('managing-yourself');
   });
 
+  it('says which field a request got wrong and why, not only that it was invalid', async () => {
+    const { app } = await setup();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers,
+      payload: { name: 'Atlas', instructions: 'Help.', allowWebSearch: true },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: 'Invalid request',
+      issues: [{ path: 'allowWebSearch', message: 'must NOT have additional properties' }],
+    });
+  });
+
   it('registers a provider from a typed key, runs with it and never echoes the secret', async () => {
     const { app, services } = await setup();
 

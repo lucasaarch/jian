@@ -43,8 +43,12 @@ function message(status: number, detail: Detail | undefined): string {
     return 'Rate limit reached. Wait a minute before trying again.';
   }
 
+  // Each refused field with the reason, so a failure says what to fix and not only where.
   if (detail?.issues?.length) {
-    return `Check these fields: ${detail.issues.map((issue) => issue.path).join(', ')}.`;
+    const issues = detail.issues.map(({ path, message }) =>
+      path ? `${path}: ${message}` : message,
+    );
+    return `${detail.error ?? 'Invalid request'}. ${issues.join('; ')}.`;
   }
 
   return detail?.error ?? `The request could not be completed (${status}).`;

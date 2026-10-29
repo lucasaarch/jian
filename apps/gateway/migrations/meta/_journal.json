@@ -484,6 +484,13 @@
       "when": 1793234000000,
       "tag": "0068_profile-capabilities-always-on",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1793235000000,
+      "tag": "0069_profile-revisions-drop-capabilities",
+      "breakpoints": true
     }
   ]
 }

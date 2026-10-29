@@ -61,6 +61,16 @@ export function configureSecurity(app: FastifyInstance, options: { token: string
       });
     }
 
+    // Fastify's own schema check refuses a request before any route reads it; its findings are
+    // as worth returning as Zod's.
+    const validation = (error as { validation?: SchemaIssue[] }).validation;
+    if (Array.isArray(validation)) {
+      return reply.code(400).send({
+        error: 'Invalid request',
+        issues: validation.map(issueOf),
+      });
+    }
+
     if (error instanceof GatewayError) {
       return reply.code(error.statusCode).send({ error: error.message });
     }
@@ -78,4 +88,14 @@ export function configureSecurity(app: FastifyInstance, options: { token: string
 
     return reply.code(500).send({ error: 'Internal server error' });
   });
+}
+
+type SchemaIssue = { instancePath?: string; message?: string; params?: Record<string, unknown> };
+
+/** `/identity/goals/0` reads `identity.goals.0`; an unknown key is named in the path itself. */
+function issueOf({ instancePath = '', message = 'is invalid', params }: SchemaIssue) {
+  const extra = typeof params?.additionalProperty === 'string' ? [params.additionalProperty] : [];
+  const path = [...instancePath.split('/').filter(Boolean), ...extra].join('.');
+
+  return { path, message };
 }
