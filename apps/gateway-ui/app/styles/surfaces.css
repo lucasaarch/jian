@@ -916,13 +916,15 @@
     background: #0d1117;
     color: #e6edf3;
   }
-  :is(.viewer-code, .code-diff-lines) :is(.hljs-keyword, .hljs-doctag, .hljs-template-tag) {
+  :is(.viewer-code, .code-diff-lines, .decision-request pre)
+    :is(.hljs-keyword, .hljs-doctag, .hljs-template-tag) {
     color: #ff7b72;
   }
-  :is(.viewer-code, .code-diff-lines) :is(.hljs-title, .hljs-title.class_, .hljs-title.function_) {
+  :is(.viewer-code, .code-diff-lines, .decision-request pre)
+    :is(.hljs-title, .hljs-title.class_, .hljs-title.function_) {
     color: #d2a8ff;
   }
-  :is(.viewer-code, .code-diff-lines)
+  :is(.viewer-code, .code-diff-lines, .decision-request pre)
     :is(
       .hljs-attr,
       .hljs-attribute,
@@ -937,27 +939,29 @@
     ) {
     color: #79c0ff;
   }
-  :is(.viewer-code, .code-diff-lines) :is(.hljs-regexp, .hljs-string) {
+  :is(.viewer-code, .code-diff-lines, .decision-request pre) :is(.hljs-regexp, .hljs-string) {
     color: #a5d6ff;
   }
-  :is(.viewer-code, .code-diff-lines) :is(.hljs-built_in, .hljs-symbol, .hljs-type) {
+  :is(.viewer-code, .code-diff-lines, .decision-request pre)
+    :is(.hljs-built_in, .hljs-symbol, .hljs-type) {
     color: #ffa657;
   }
-  :is(.viewer-code, .code-diff-lines) :is(.hljs-comment, .hljs-code, .hljs-formula) {
+  :is(.viewer-code, .code-diff-lines, .decision-request pre)
+    :is(.hljs-comment, .hljs-code, .hljs-formula) {
     color: #8b949e;
   }
-  :is(.viewer-code, .code-diff-lines)
+  :is(.viewer-code, .code-diff-lines, .decision-request pre)
     :is(.hljs-name, .hljs-quote, .hljs-selector-tag, .hljs-selector-pseudo) {
     color: #7ee787;
   }
-  :is(.viewer-code, .code-diff-lines) .hljs-section {
+  :is(.viewer-code, .code-diff-lines, .decision-request pre) .hljs-section {
     @apply font-bold;
     color: #79c0ff;
   }
-  :is(.viewer-code, .code-diff-lines) .hljs-bullet {
+  :is(.viewer-code, .code-diff-lines, .decision-request pre) .hljs-bullet {
     color: #f2cc60;
   }
-  :is(.viewer-code, .code-diff-lines) .hljs-emphasis {
+  :is(.viewer-code, .code-diff-lines, .decision-request pre) .hljs-emphasis {
     @apply italic;
   }
   .viewer-code .hljs-strong {
