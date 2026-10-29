@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Capabilities } from '@/components/skills';
 import { Button, GitHubLogo, SectionHeading } from '@/components/ui';
+import { githubOutcome } from '@/lib/github';
 import { agentPath } from '@/lib/navigation';
 import { useAgent } from '@/lib/query/agent';
 import { useReportFailure } from '@/lib/query/notify';
@@ -28,16 +29,12 @@ export function Integrations({ tab }: { tab: IntegrationTab }) {
   // GitHub sends the owner back here with the outcome in the query; it is said once, then dropped.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const result = params.get('github');
-    if (result) {
-      if (result === 'failed') toast.error('GitHub authorization did not complete. Try again.');
-      else
-        toast.success(
-          result === 'connected'
-            ? 'GitHub account connected.'
-            : 'GitHub App registered. Open its details to connect accounts.',
-        );
+    const outcome = githubOutcome(params);
+    if (outcome) {
+      if (outcome.failed) toast.error(outcome.text, { duration: 12_000 });
+      else toast.success(outcome.text);
       params.delete('github');
+      params.delete('reason');
       const query = params.toString();
       window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
     }

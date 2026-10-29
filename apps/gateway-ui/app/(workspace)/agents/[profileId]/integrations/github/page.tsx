@@ -5,6 +5,7 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { githubOutcome } from '@/lib/github';
 import { agentPath } from '@/lib/navigation';
 import { useAgent } from '@/lib/query/agent';
 import { panelApi } from '@/lib/query/client';
@@ -35,11 +36,12 @@ export default function GitHubIntegrationDetailsPage() {
   // GitHub sends the owner back here with the outcome in the query; it is said once, then dropped.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const result = params.get('github');
-    if (result) {
-      if (result === 'connected') toast.success('GitHub account connected.');
-      else toast.error('GitHub authorization failed.');
+    const outcome = githubOutcome(params);
+    if (outcome) {
+      if (outcome.failed) toast.error(outcome.text, { duration: 12_000 });
+      else toast.success(outcome.text);
       params.delete('github');
+      params.delete('reason');
       const query = params.toString();
       window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
     }
