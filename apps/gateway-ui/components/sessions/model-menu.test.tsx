@@ -44,13 +44,12 @@ async function open(value: ModelSelection, onChange = vi.fn()) {
   );
   const trigger = container.querySelector('button') as HTMLButtonElement;
   await act(async () => trigger.click());
-  const hover = async (name: string) => {
-    const row = [
-      ...document.querySelectorAll<HTMLButtonElement>('.model-menu-list .model-option'),
-    ].find((item) => item.textContent?.includes(name));
-    await act(async () => row?.focus());
+  // The options open only from the button at the end of a model's row.
+  const more = async (name: string) => {
+    const button = document.querySelector<HTMLButtonElement>(`[aria-label="${name} options"]`);
+    await act(async () => button?.click());
   };
-  return { trigger, onChange, hover };
+  return { trigger, onChange, more };
 }
 
 it('reads the model and its effort in the trigger', async () => {
@@ -65,15 +64,19 @@ it('reads the model and its effort in the trigger', async () => {
 });
 
 it('offers Fast only on a model that takes it, and switching it on picks that model', async () => {
-  const { onChange, hover } = await open({
+  const { onChange, more } = await open({
     providerId: 'p',
     modelId: 'claude-sonnet-5-5',
     reasoningEffort: 'medium',
   });
 
+  // Closed until a row asks for it, and a model without Fast offers no switch.
+  expect(document.querySelector('.model-menu-options')).toBeNull();
+  await more('Claude Sonnet 5.5');
+  expect(document.querySelector('.model-menu-options')).not.toBeNull();
   expect(document.querySelector('[role="switch"]')).toBeNull();
 
-  await hover('Claude Opus 5.5');
+  await more('Claude Opus 5.5');
   const fast = document.querySelector<HTMLButtonElement>('[role="switch"]');
   expect(fast).not.toBeNull();
   await act(async () => fast?.click());
@@ -88,13 +91,13 @@ it('offers Fast only on a model that takes it, and switching it on picks that mo
 });
 
 it('an effort picked beside another model switches to that model with it', async () => {
-  const { onChange, hover } = await open({
+  const { onChange, more } = await open({
     providerId: 'p',
     modelId: 'claude-sonnet-5-5',
     reasoningEffort: 'low',
   });
 
-  await hover('Claude Opus 5.5');
+  await more('Claude Opus 5.5');
   const high = [
     ...document.querySelectorAll<HTMLButtonElement>('.model-menu-options .model-option'),
   ].find((item) => item.textContent === 'High');

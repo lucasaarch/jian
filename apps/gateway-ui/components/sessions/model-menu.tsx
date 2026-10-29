@@ -1,7 +1,7 @@
 'use client';
 
 import { Popover } from '@base-ui/react/popover';
-import { Check, ChevronDown, Search } from 'lucide-react';
+import { Check, ChevronDown, Ellipsis, Search } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import type { ModelSelection, ReasoningEffort } from '@/lib/api';
 import { matchesQuery } from '@/lib/search';
@@ -29,9 +29,9 @@ const same = (entry: ModelEntry, selection?: ModelSelection) =>
 
 /**
  * The model, its effort and its speed, behind one compact trigger: "Claude Opus 5.5 Low". The
- * list is on the left, searchable; what the model under the pointer offers is on the right, so
- * a model and how it thinks are picked in one place, and choosing an effort or Fast for a model
- * that is not the current one switches to it.
+ * list is searchable; a row's "more" button, shown on hover, opens what that model offers beside
+ * it, so a model and how it thinks are picked in one place, and choosing an effort or Fast for a
+ * model that is not the current one switches to it.
  */
 export function ModelMenu({
   label,
@@ -49,10 +49,10 @@ export function ModelMenu({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const current = models.find((entry) => same(entry, value));
-  // What the options panel describes: the model the pointer or the keyboard is on, else the
-  // current one.
+  // The model whose options are open beside the list, from the "more" button at the end of its
+  // row; none until one is asked for, so the list alone is what the menu usually is.
   const [focus, setFocus] = useState<string>();
-  const shown = models.find((entry) => `${entry.providerId}:${entry.modelId}` === focus) ?? current;
+  const shown = models.find((entry) => `${entry.providerId}:${entry.modelId}` === focus);
   const listed = models.filter((entry) => matchesQuery(`${entry.name} ${entry.provider}`, query));
 
   /** The model with what it can keep of the current effort and speed. */
@@ -118,14 +118,11 @@ export function ModelMenu({
                   const chosen = same(entry, value);
 
                   return (
-                    <li key={key}>
+                    <li key={key} className="model-row" data-open={shown === entry || undefined}>
                       <button
                         type="button"
                         className="model-option"
                         aria-pressed={chosen}
-                        data-focused={shown === entry || undefined}
-                        onPointerEnter={() => setFocus(key)}
-                        onFocus={() => setFocus(key)}
                         onClick={() => {
                           choose(entry);
                           setOpen(false);
@@ -143,6 +140,17 @@ export function ModelMenu({
                           <span className="model-option-detail">No longer offered</span>
                         )}
                       </button>
+                      {(entry.efforts.length > 0 || entry.fast) && (
+                        <button
+                          type="button"
+                          className="model-more"
+                          aria-label={`${entry.name} options`}
+                          aria-expanded={shown === entry}
+                          onClick={() => setFocus(shown === entry ? undefined : key)}
+                        >
+                          <Ellipsis size={16} aria-hidden="true" />
+                        </button>
+                      )}
                     </li>
                   );
                 })}

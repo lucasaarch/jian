@@ -87,10 +87,42 @@
     @apply flex w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 py-2 text-left outline-none transition-colors;
     color: var(--ink);
   }
-  button.model-option:hover,
-  button.model-option:focus-visible,
-  .model-option[data-focused] {
+  .model-menu-options button.model-option:hover,
+  .model-menu-options button.model-option:focus-visible {
     background: var(--accent-soft);
+  }
+  /* A row: the model, and at its end the button that opens its options. The row lights up as
+     one, and the button shows only while the row is pointed at, focused, or open. */
+  .model-row {
+    @apply relative flex items-center rounded-md transition-colors;
+  }
+  .model-row:hover,
+  .model-row:focus-within,
+  .model-row[data-open] {
+    background: var(--accent-soft);
+  }
+  .model-row > .model-option {
+    @apply pr-10;
+  }
+  .model-more {
+    @apply absolute right-1.5 grid h-7 w-7 place-items-center rounded-md opacity-0 transition-opacity;
+    color: var(--muted);
+  }
+  .model-more:hover,
+  .model-more[aria-expanded="true"] {
+    background: var(--line);
+    color: var(--ink);
+  }
+  .model-row:hover .model-more,
+  .model-row:focus-within .model-more,
+  .model-row[data-open] .model-more {
+    @apply opacity-100;
+  }
+  /* No pointer to hover with: the button stays in sight. */
+  @media (hover: none) {
+    .model-more {
+      @apply opacity-100;
+    }
   }
   .model-option[aria-pressed="true"] .model-option-name {
     @apply font-medium;
