@@ -42,7 +42,7 @@ function Counts({ diff }: { diff: Pick<CodeDiff, 'additions' | 'deletions'> }) {
 const sign = { add: '+', del: '-', context: '' } as const;
 
 /** One file's change, as a review tool shows it: line numbers on both sides and a gutter. */
-function FileDiff({ diff, open: initiallyOpen }: { diff: CodeDiff; open: boolean }) {
+export function FileDiff({ diff, open: initiallyOpen }: { diff: CodeDiff; open: boolean }) {
   const [open, setOpen] = useState(initiallyOpen);
   const body = useId();
 

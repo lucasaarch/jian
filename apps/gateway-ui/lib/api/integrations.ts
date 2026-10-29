@@ -1,6 +1,6 @@
 import type { Client } from './params';
 import { result } from './result';
-import type { McpServer } from './types';
+import type { GitHubMergeMethod, McpServer } from './types';
 
 export const integrationCalls = (client: Client) => ({
   githubIntegration: () => result(client.GET('/v1/integrations/github')),
@@ -18,6 +18,35 @@ export const integrationCalls = (client: Client) => ({
     result(
       client.DELETE('/v1/integrations/github/installations/{accountId}', {
         params: { path: { accountId } },
+      }),
+    ),
+  // Read as the installation on the repository's account; one it cannot see is a 404.
+  githubPull: (owner: string, repo: string, number: number) =>
+    result(
+      client.GET('/v1/integrations/github/pulls/{owner}/{repo}/{number}', {
+        params: { path: { owner, repo, number } },
+      }),
+    ),
+  githubIssue: (owner: string, repo: string, number: number) =>
+    result(
+      client.GET('/v1/integrations/github/issues/{owner}/{repo}/{number}', {
+        params: { path: { owner, repo, number } },
+      }),
+    ),
+  // At most 20 at a time; each answers in order, unreachable when the App cannot see it.
+  resolveGithubLinks: (urls: string[]) =>
+    result(client.POST('/v1/integrations/github/links', { body: { urls } })),
+  // The head the owner saw goes with it: GitHub refuses if the branch moved since.
+  mergeGithubPull: (
+    owner: string,
+    repo: string,
+    number: number,
+    body: { method: GitHubMergeMethod; expectedHeadSha: string; profileId?: string },
+  ) =>
+    result(
+      client.POST('/v1/integrations/github/pulls/{owner}/{repo}/{number}/merge', {
+        params: { path: { owner, repo, number } },
+        body,
       }),
     ),
   mcpServers: () => result(client.GET('/v1/mcp-servers')),

@@ -13,6 +13,9 @@ export const keys = {
   groups: ['groups'] as const,
   githubIntegration: ['integrations', 'github'] as const,
   githubRepositories: ['integrations', 'github', 'repositories'] as const,
+  githubLink: (url: string) => ['integrations', 'github', 'links', url] as const,
+  githubItem: (kind: 'pull' | 'issue', owner: string, repo: string, number: number) =>
+    ['integrations', 'github', kind, owner.toLowerCase(), repo.toLowerCase(), number] as const,
   remoteMachines: ['remote-machines'] as const,
   mcpServers: ['mcp-servers'] as const,
   releases: ['releases'] as const,

@@ -1,7 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, type RefObject, useContext, useEffect, useRef, useState } from 'react';
 import { Orb } from '@/components/ui';
 import type { GatewayApi, Message, ModelSelection, Subagent, ToolStep } from '@/lib/api';
 import { useCrew } from '@/lib/stores/crew';
@@ -191,6 +191,31 @@ export function CrewDock({ agents }: { agents: Subagent[] }) {
   );
 }
 
+/**
+ * In on open, and back to what opened it on close, so the keyboard does not lose its place.
+ * Escape closes. `shown` is what the drawer shows, undefined while it shows nothing.
+ */
+export function useDrawerFocus(
+  shown: string | undefined,
+  closer: RefObject<HTMLButtonElement | null>,
+) {
+  const close = useCrew((state) => state.close);
+
+  useEffect(() => {
+    if (!shown) return;
+    closer.current?.focus();
+    const keys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    document.addEventListener('keydown', keys);
+
+    return () => {
+      document.removeEventListener('keydown', keys);
+      useCrew.getState().opener?.focus({ preventScroll: true });
+    };
+  }, [shown, close, closer]);
+}
+
 const reasons = {
   agent: (tier: string) => `Chosen by the agent: ${tier}`,
   jev: (tier: string) => `Jev picked ${tier}`,
@@ -220,20 +245,7 @@ export function CrewDrawer({
   const runId = agent?.runId;
   const place = agent?.sessionId;
 
-  // In on open, and back to what opened it on close, so the keyboard does not lose its place.
-  useEffect(() => {
-    if (!following) return;
-    closer.current?.focus();
-    const keys = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') close();
-    };
-    document.addEventListener('keydown', keys);
-
-    return () => {
-      document.removeEventListener('keydown', keys);
-      useCrew.getState().opener?.focus({ preventScroll: true });
-    };
-  }, [following, close]);
+  useDrawerFocus(agent ? following : undefined, closer);
 
   useEffect(() => {
     if (!runId || !place) return;
