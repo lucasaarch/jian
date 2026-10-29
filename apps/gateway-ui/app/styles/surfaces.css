@@ -118,6 +118,75 @@
   .workspace {
     @apply ml-60;
   }
+  .sidebar-footer button.sidebar-collapse {
+    @apply mt-0 mb-1 w-full;
+  }
+  .sidebar-footer button,
+  .sidebar-github {
+    @apply relative;
+  }
+  /* The sidebar narrowed to a rail of icons. Only on a screen that keeps it beside the page:
+     a phone opens it whole, over everything. Labels stay for screen readers, and each link
+     carries its name as a tooltip. */
+  @media (min-width: 761px) {
+    .sidebar {
+      transition: width 200ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .workspace {
+      transition: margin-left 200ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .app-shell[data-sidebar="collapsed"] {
+      & .sidebar {
+        @apply w-16;
+      }
+      & .workspace {
+        @apply ml-16;
+      }
+      & .sidebar .brand {
+        @apply justify-center px-0;
+      }
+      & .sidebar .brand > span:last-child,
+      & .sidebar .sidebar-label,
+      & .sidebar .profile-trigger-copy,
+      & .nav-group a > span:not(.nav-count) {
+        @apply sr-only;
+      }
+      & .profile-selector {
+        @apply px-2;
+      }
+      & .profile-selector .select-trigger {
+        @apply justify-center px-1.5;
+      }
+      & .profile-selector .select-chevron,
+      & .nav-label,
+      & .sidebar-stars {
+        @apply hidden;
+      }
+      & .sidebar-nav {
+        @apply px-2;
+      }
+      & .nav-group {
+        @apply mb-4;
+      }
+      & .nav-group a {
+        @apply justify-center px-0;
+      }
+      & .nav-count,
+      & .release-update-count {
+        @apply absolute right-1 top-0.5 h-4 min-h-4 min-w-4 px-1 text-[10px];
+      }
+      & .sidebar-footer {
+        @apply px-2;
+      }
+      & .sidebar-footer button,
+      & .sidebar-github {
+        @apply w-full justify-center;
+      }
+      & .sidebar-footer .theme-switcher {
+        @apply flex-col;
+      }
+    }
+  }
   .topbar {
     @apply hidden;
   }
@@ -434,6 +503,19 @@
   .messenger {
     @apply grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)];
   }
+  /* The list put away: the conversation takes the whole area. A phone shows one or the other
+     already, so the choice applies only beside a wider screen. */
+  @media (min-width: 761px) {
+    .messenger[data-list="collapsed"] {
+      @apply grid-cols-1;
+    }
+    .messenger[data-list="collapsed"] .conversation-list {
+      @apply hidden;
+    }
+  }
+  .chat-list-toggle {
+    @apply shrink-0;
+  }
   .conversation-list {
     @apply flex min-h-0 flex-col border-r border-line bg-surface;
   }
@@ -531,8 +613,18 @@
   .draft-empty .empty {
     @apply w-full max-w-3xl;
   }
+  /* The conversation reads in one column, centred, however wide the screen: the history
+     scrolls edge to edge, so its scrollbar stays at the edge, but what it holds keeps to the
+     column, and the composer lines up with it. */
   .conversation-pane {
+    --chat-column: 52rem;
     @apply flex min-h-0 min-w-0 flex-col;
+  }
+  .conversation-pane .message-list,
+  .conversation-pane .session-history > .history-error,
+  .conversation-pane .composer > * {
+    @apply mx-auto w-full;
+    max-width: var(--chat-column);
   }
   .conversation-pane > header {
     @apply flex items-center gap-3 border-b border-line px-6 py-4;
@@ -587,7 +679,8 @@
     @apply px-6 py-4;
   }
   .conversation-pane .run-status {
-    @apply mx-6 mb-4;
+    @apply mx-auto mb-4;
+    width: min(var(--chat-column), calc(100% - 3rem));
   }
   /* The composer as AI chats draw it: one rounded box holding the files, the text and the
      buttons, floating over the end of the conversation. */
@@ -1261,7 +1354,11 @@
     @apply px-3;
   }
   .conversation-pane .run-status {
-    @apply mx-3;
+    width: min(var(--chat-column), calc(100% - 1.5rem));
+  }
+  .chat-list-toggle,
+  .sidebar-footer button.sidebar-collapse {
+    @apply hidden;
   }
   .composer {
     @apply px-3 pb-3;

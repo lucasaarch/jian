@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui';
 import { currentSection } from '@/lib/navigation';
 import { panelApi } from '@/lib/query/client';
 import { useProfiles } from '@/lib/query/profile';
+import { useLayout, useSavedLayout } from '@/lib/stores/layout';
 import { useShell } from '@/lib/stores/shell';
 import { useAdoptProfile } from '@/lib/workspace';
 
@@ -43,6 +44,8 @@ function Shell({ children }: { children: ReactNode }) {
   const adopt = useAdoptProfile();
   const { creating, setCreating } = useShell();
   const [mobile, setMobile] = useState(false);
+  const collapsed = useLayout((state) => state.sidebar);
+  useSavedLayout();
 
   useEffect(() => {
     if (!mobile) {
@@ -98,12 +101,13 @@ function Shell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div className="app-shell">
+      <div className="app-shell" data-sidebar={collapsed ? 'collapsed' : 'expanded'}>
         <a href="#main-content" className="skip-link">
           Skip to content
         </a>
         <Sidebar
           open={mobile}
+          collapsed={collapsed}
           onNavigate={() => setMobile(false)}
           onCreateProfile={() => {
             setMobile(false);
