@@ -12,6 +12,7 @@ import { queries } from '@/lib/query/profile';
 import { notifyError, useActions, useRefresh } from '@/lib/workspace';
 import {
   Button,
+  buttonClass,
   Empty,
   Field,
   GitHubLogo,
@@ -127,15 +128,18 @@ export default function ProjectsPage() {
           </Button>
         </form>
       ) : (
-        <Empty title="Connect GitHub to add a project">
-          Connect an account once in{' '}
-          <Link href={agentPath(profile.id, 'integrations')} className="text-accent underline">
-            Integrations
-          </Link>
-          . Its repositories will be available to every agent.
+        <Empty
+          title="Connect GitHub to add a project"
+          action={
+            <Link href={agentPath(profile.id, 'integrations')} className={buttonClass('secondary')}>
+              Open Integrations
+            </Link>
+          }
+        >
+          Connect an account once. Its repositories will be available to every agent.
         </Empty>
       )}
-      {projects.length ? (
+      {projects.length > 0 && (
         <div className="resource-list">
           {projects.map((project) => (
             <ResourceRow
@@ -164,7 +168,8 @@ export default function ProjectsPage() {
             />
           ))}
         </div>
-      ) : (
+      )}
+      {!projects.length && Boolean(integration?.accounts.length) && (
         <Empty title="No projects yet">
           Add a repository to organize its coding conversations.
         </Empty>

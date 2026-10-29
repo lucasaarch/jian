@@ -34,8 +34,8 @@ type NavigationGroup = (typeof navigationGroups)[number]['id'];
 
 /** Routes are ordered within their section in the order shown by the sidebar. */
 export const navigation: NavigationItem[] = [
-  { path: 'sessions', label: 'Chats', icon: MessageSquare, group: 'workspace' },
   { path: '', label: 'Overview', icon: LayoutDashboard, group: 'workspace' },
+  { path: 'sessions', label: 'Chats', icon: MessageSquare, group: 'workspace' },
   { path: 'projects', label: 'Projects', icon: FolderGit2, group: 'workspace' },
   { path: 'identity', label: 'Identity', icon: Fingerprint, group: 'agent-setup' },
   { path: 'models', label: 'Model defaults', icon: Cpu, group: 'agent-setup' },
