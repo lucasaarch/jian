@@ -5,7 +5,6 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Orb } from '@/components/ui';
 import type { GatewayApi, Message, ModelSelection, Subagent, ToolStep } from '@/lib/api';
 import { useCrew } from '@/lib/stores/crew';
-import { plainText } from '../ui/markdown';
 import { MessageMedia } from './media';
 import { ChatMessage } from './message';
 import { statusOf, traceOf } from './progress';
@@ -67,19 +66,14 @@ function Elapsed({ agent }: { agent: Subagent }) {
   );
 }
 
-/** What the agent is on now, or how it ended, in one line. */
+/**
+ * What the agent is on, or what stopped it, in one line. A finished agent has none: its check
+ * says it is done, and its report is a click away in the drawer.
+ */
 function nowOf(agent: Subagent) {
   if (agent.status === 'queued') return 'Waiting to start';
   if (agent.status === 'running') return statusOf(agent).label;
-  if (agent.status === 'completed') {
-    // The report is Markdown; one line of it reads as plain words.
-    return (
-      plainText(agent.output ?? '')
-        .split('\n')
-        .find((line) => line.trim())
-        ?.trim() || 'Done'
-    );
-  }
+  if (agent.status === 'completed') return undefined;
   return agent.error ?? statusLabels[agent.status];
 }
 
@@ -117,7 +111,7 @@ function AgentCard({ agent }: { agent: Subagent }) {
         <WorkMark working={working} failed={failed} orb={statusOf(agent).state} />
         <strong>{agent.name}</strong>
       </span>
-      <span className="crew-now">{nowOf(agent)}</span>
+      {nowOf(agent) && <span className="crew-now">{nowOf(agent)}</span>}
       <span className="crew-bar" aria-hidden="true" />
       <span className="crew-foot">
         <TierChip tier={agent.tier} />
