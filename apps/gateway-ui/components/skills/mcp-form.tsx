@@ -3,7 +3,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { McpServer, McpValue } from '../../lib/api';
-import { Button, Field, Modal, StackedFields } from '../ui';
+import { Button, Field, IconButton, Modal, StackedFields } from '../ui';
 import { Select } from '../ui/select';
 
 type Draft = {
@@ -281,15 +281,13 @@ function ValueRows({
             // biome-ignore lint/suspicious/noArrayIndexKey: a row is identified by its position.
             key={index}
             action={
-              <button
-                type="button"
-                className="icon-button"
+              <IconButton
                 aria-label={`Remove ${value.name || label}`}
                 disabled={busy}
                 onClick={() => set(list.filter((_, at) => at !== index))}
               >
                 <Trash2 size={15} />
-              </button>
+              </IconButton>
             }
           >
             <input

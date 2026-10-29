@@ -1,12 +1,12 @@
 'use client';
 
-import { Brain, Link2, Pencil, Search, Trash2 } from 'lucide-react';
+import { Brain, Link2, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useAgent, useMemories } from '@/lib/query/agent';
 import type { Memory } from '../../lib/api';
 import { date } from '../../lib/format';
 import type { SectionActions } from '../props';
-import { Badge, Confirm, Empty, ResourceRow, SectionHeading } from '../ui';
+import { Badge, Confirm, Empty, IconButton, ResourceRow, SearchField, SectionHeading } from '../ui';
 import { MemoryEditor } from './editor';
 
 /**
@@ -45,16 +45,13 @@ export function Memories({ api, mutate, busy }: SectionActions) {
         description="What the agent kept across its conversations. Linked memories are recalled together."
       />
       <div className="memory-toolbar">
-        <div className="search-field">
-          <Search size={16} />
-          <input
-            type="search"
-            aria-label="Search memories"
-            value={query}
-            placeholder="Search"
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
+        <SearchField
+          type="search"
+          aria-label="Search memories"
+          value={query}
+          placeholder="Search"
+          onChange={(event) => setQuery(event.target.value)}
+        />
       </div>
       {found.length ? (
         <div className="resource-list">
@@ -92,22 +89,15 @@ export function Memories({ api, mutate, busy }: SectionActions) {
                 }
                 actions={
                   <>
-                    <button
-                      type="button"
-                      className="icon-button"
+                    <IconButton
                       aria-label={`Edit ${item.key}`}
                       onClick={() => setEditing(item.key)}
                     >
                       <Pencil size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label={`Delete ${item.key}`}
-                      onClick={() => setRemoving(item)}
-                    >
+                    </IconButton>
+                    <IconButton aria-label={`Delete ${item.key}`} onClick={() => setRemoving(item)}>
                       <Trash2 size={16} />
-                    </button>
+                    </IconButton>
                   </>
                 }
               />

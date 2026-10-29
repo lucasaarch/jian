@@ -441,15 +441,6 @@
   .chat-channel-bar {
     @apply flex items-center gap-2;
   }
-  /* One height for both controls, 46px: what the select measures with its padding and border.
-     Pinning both keeps them level even if the select's content changes. */
-  .chat-channel-bar .select-trigger,
-  .chat-channel-bar > .icon-button {
-    @apply h-11.5;
-  }
-  .chat-channel-bar > .icon-button {
-    @apply w-11.5 shrink-0;
-  }
   .chat-channel-select {
     @apply min-w-0 flex-1;
   }
@@ -617,44 +608,11 @@
   .composer-actions {
     @apply flex items-center gap-1;
   }
-  .select-trigger.composer-select-ghost {
-    @apply h-9 min-h-9 w-auto max-w-40 shrink-0 gap-1 rounded-md border-transparent bg-transparent px-2 py-1 text-xs text-muted;
-  }
-  .select-trigger.composer-select-ghost:hover:not(:disabled),
-  .select-trigger.composer-select-ghost:focus-visible,
-  .select-trigger.composer-select-ghost[data-popup-open] {
-    @apply border-transparent bg-canvas text-ink;
-  }
-  .select-trigger.composer-select-ghost .select-value {
-    @apply gap-1.5;
-  }
-  .select-trigger.composer-select-ghost .select-chevron {
-    @apply h-3.5 w-3.5;
-  }
-  .select-popup.composer-machine-popup {
-    width: 18rem;
-    min-width: 18rem;
-  }
-  .select-popup.composer-machine-popup .select-option-copy small {
-    white-space: nowrap;
-  }
-  .select-popup.composer-model-popup {
-    width: 20rem;
-    min-width: 20rem;
-  }
-  .select-popup.composer-model-popup .select-option-copy > span {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .select-popup.composer-model-popup .select-option-copy small {
-    white-space: nowrap;
-  }
   .composer-model-control.session-model {
     @apply flex w-auto min-w-0 shrink gap-1;
   }
-  .composer-model-control .select-trigger.composer-select-ghost {
+  /* Two selects share this spot in the composer, so each gives up a little width. */
+  .composer-model-control .select-trigger {
     @apply max-w-36;
   }
   .composer-hint {

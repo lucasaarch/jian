@@ -1,13 +1,13 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Check, Download, ExternalLink, LoaderCircle, Search } from 'lucide-react';
+import { Check, Download, ExternalLink, LoaderCircle } from 'lucide-react';
 import { useState } from 'react';
 import type { Profile } from '@/lib/api';
 import { keys } from '@/lib/query/keys';
 import type { GatewayApi } from '../../lib/api';
 import type { SectionActions } from '../props';
-import { Button, Confirm, ProviderLogo } from '../ui';
+import { Button, buttonClass, Confirm, ProviderLogo, SearchField } from '../ui';
 
 const sources = [
   {
@@ -79,15 +79,12 @@ export function SkillCatalog({
             </button>
           ))}
         </fieldset>
-        <div className="search-field">
-          <Search size={16} />
-          <input
-            aria-label="Search the catalog"
-            placeholder="Search skills…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
+        <SearchField
+          aria-label="Search the catalog"
+          placeholder="Search skills…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
       </div>
       <p className="catalog-note">
         Imports the instructions in SKILL.md. Scripts and supporting files are not installed.
@@ -123,7 +120,12 @@ export function SkillCatalog({
                     {source.publisher}
                   </span>
                   <span className="catalog-actions">
-                    <a className="button quiet" href={entry.url} target="_blank" rel="noreferrer">
+                    <a
+                      className={buttonClass('quiet')}
+                      href={entry.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       <ExternalLink size={14} />
                       View
                     </a>

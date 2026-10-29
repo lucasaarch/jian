@@ -17,7 +17,16 @@ import { keys } from '@/lib/query/keys';
 import type { Schedule } from '../../lib/api';
 import { browserTimeZone, describeCron, inZone } from '../../lib/time';
 import type { SectionActions } from '../props';
-import { Badge, Button, Confirm, Empty, ResourceRow, SectionHeading, Switch } from '../ui';
+import {
+  Badge,
+  Button,
+  Confirm,
+  Empty,
+  IconButton,
+  ResourceRow,
+  SectionHeading,
+  Switch,
+} from '../ui';
 import { conversationName } from './conversations';
 import { ScheduleEditor } from './editor';
 import { ScheduleHistory } from './history';
@@ -130,19 +139,15 @@ export function Schedules({ api, mutate, busy }: SectionActions) {
           actions={
             <>
               {item.cron && (
-                <button
-                  type="button"
-                  className="icon-button"
+                <IconButton
                   aria-label={`History of ${item.name}`}
                   title="History"
                   onClick={() => setHistory(item)}
                 >
                   <History size={16} />
-                </button>
+                </IconButton>
               )}
-              <button
-                type="button"
-                className="icon-button"
+              <IconButton
                 aria-label={`Run ${item.name} now`}
                 title="Run now"
                 disabled={busy}
@@ -151,23 +156,13 @@ export function Schedules({ api, mutate, busy }: SectionActions) {
                 }
               >
                 <Play size={16} />
-              </button>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label={`Edit ${item.name}`}
-                onClick={() => setEditing(item)}
-              >
+              </IconButton>
+              <IconButton aria-label={`Edit ${item.name}`} onClick={() => setEditing(item)}>
                 <Pencil size={16} />
-              </button>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label={`Delete ${item.name}`}
-                onClick={() => setRemoving(item)}
-              >
+              </IconButton>
+              <IconButton aria-label={`Delete ${item.name}`} onClick={() => setRemoving(item)}>
                 <Trash2 size={16} />
-              </button>
+              </IconButton>
               {!done(item) && (
                 <Switch
                   checked={item.enabled}

@@ -60,4 +60,7 @@
   --font-sans: "IBM Plex Sans Variable", sans-serif;
   --font-display: "IBM Plex Sans Variable", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
+  /* The height every control shares: what an input measures with its padding, line and border.
+     A button, select or icon button beside a field takes it and lines up without a fix. */
+  --spacing-control: 2.875rem;
 }

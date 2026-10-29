@@ -11,7 +11,7 @@ import { keys } from '@/lib/query/keys';
 import type { GatewayApi } from '../../lib/api';
 import { LOCALE } from '../../lib/format';
 import { Avatar } from '../profile/avatar-field';
-import { Button, CountUp, SectionHeading, Spinner } from '../ui';
+import { Button, buttonClass, CountUp, SectionHeading, Spinner } from '../ui';
 import { Select } from '../ui/select';
 import { duration } from './format';
 import { ActivityHeatmap } from './heatmap';
@@ -86,7 +86,7 @@ export function Overview({ api }: { api: GatewayApi }) {
           <Avatar name={profile.name} avatar={profile.avatar} className="profile-avatar" />
           <h2>{profile.name}</h2>
         </div>
-        <Link href={agentPath(profile.id, 'identity')} className="button quiet">
+        <Link href={agentPath(profile.id, 'identity')} className={buttonClass('quiet')}>
           <Settings2 size={16} />
           Edit agent
         </Link>
@@ -120,13 +120,14 @@ export function Overview({ api }: { api: GatewayApi }) {
       <section className="stat-section" aria-labelledby="usage-heading">
         <header>
           <h2 id="usage-heading">Usage</h2>
-          <Select
-            value={String(days)}
-            onValueChange={(value) => setDays(Number(value))}
-            options={periods}
-            aria-label="Period"
-            className="stat-period"
-          />
+          <div className="stat-period">
+            <Select
+              value={String(days)}
+              onValueChange={(value) => setDays(Number(value))}
+              options={periods}
+              aria-label="Period"
+            />
+          </div>
         </header>
         <UsageSummary stats={stats} />
       </section>

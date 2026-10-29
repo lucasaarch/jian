@@ -13,7 +13,6 @@ import {
   GraduationCap,
   MessagesSquare,
   Plus,
-  Search,
   SlidersHorizontal,
   Terminal,
 } from 'lucide-react';
@@ -36,7 +35,19 @@ import { useDeleteConversation, useRefresh } from '@/lib/workspace';
 import type { Run, Session } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
 import type { SectionActions } from '../props';
-import { Badge, Button, Empty, Field, Modal, Orb, Switch, TelegramLogo, WhatsAppLogo } from '../ui';
+import {
+  Badge,
+  Button,
+  Empty,
+  Field,
+  IconButton,
+  Modal,
+  Orb,
+  SearchField,
+  Switch,
+  TelegramLogo,
+  WhatsAppLogo,
+} from '../ui';
 import { plainText } from '../ui/markdown';
 import { Composer } from './composer';
 import { History } from './history';
@@ -407,9 +418,8 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                 }}
               />
             </div>
-            <button
-              type="button"
-              className="icon-button"
+            <IconButton
+              size="control"
               aria-label="New chat"
               disabled={busy || draft}
               onClick={() => {
@@ -423,17 +433,14 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
               }}
             >
               <Plus size={18} />
-            </button>
+            </IconButton>
           </div>
-          <div className="search-field">
-            <Search size={16} />
-            <input
-              aria-label="Search conversations"
-              placeholder="Search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
+          <SearchField
+            aria-label="Search conversations"
+            placeholder="Search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
         </header>
         <div className="conversation-scroll">
           {unassignedChats.length > 0 && (
@@ -476,9 +483,8 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       {draft && (
         <section className="conversation-pane" aria-label="New chat">
           <header>
-            <button
-              type="button"
-              className="icon-button conversation-back"
+            <IconButton
+              className="conversation-back"
               aria-label="Back to the conversations"
               onClick={() => {
                 setDraft(false);
@@ -486,7 +492,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
               }}
             >
               <ArrowLeft size={18} />
-            </button>
+            </IconButton>
             <div className="grow">
               <h2>New chat</h2>
               <small>Chats</small>
@@ -544,14 +550,13 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       {active && (
         <section className="conversation-pane" aria-label={nameOf(active)}>
           <header>
-            <button
-              type="button"
-              className="icon-button conversation-back"
+            <IconButton
+              className="conversation-back"
               aria-label="Back to the conversations"
               onClick={() => open(undefined)}
             >
               <ArrowLeft size={18} />
-            </button>
+            </IconButton>
             <div className="grow">
               <h2>{nameOf(active)}</h2>
               <small>
