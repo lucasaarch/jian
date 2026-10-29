@@ -86,9 +86,19 @@
     opacity: 0;
     transform: translateY(-4px) scale(0.98);
   }
+  /* The list takes the room left below the trigger, less only what shares the popup with it:
+     the search field and the footer. Reserving for them when they are absent cut a lone option
+     in half under a trigger near the bottom of the screen. */
   .select-list {
     @apply overflow-y-auto overscroll-contain p-1.5;
-    max-height: min(320px, var(--available-height, 320px) - 100px);
+    max-height: min(320px, var(--available-height, 320px) - 12px);
+  }
+  .select-popup:has(.select-search) .select-list,
+  .select-popup:has(.select-footer) .select-list {
+    max-height: min(320px, var(--available-height, 320px) - 60px);
+  }
+  .select-popup:has(.select-search):has(.select-footer) .select-list {
+    max-height: min(320px, var(--available-height, 320px) - 108px);
   }
   .select-option {
     @apply flex min-h-10 cursor-pointer items-center gap-3 rounded px-3 py-2.5 outline-none;
