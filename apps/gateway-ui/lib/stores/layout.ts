@@ -6,8 +6,6 @@ import { create } from 'zustand';
 const SAVED = 'jian-layout';
 
 type Panels = {
-  /** The app's sidebar narrowed to its icons. */
-  sidebar: boolean;
   /** The chat list out of the way, leaving the conversation the whole area. */
   chatList: boolean;
 };
@@ -20,13 +18,12 @@ type Panels = {
 export const useLayout = create<
   Panels & { toggle: (panel: keyof Panels) => void; load: (saved: Panels) => void }
 >()((set, get) => ({
-  sidebar: false,
   chatList: false,
   toggle: (panel) => {
     set({ [panel]: !get()[panel] });
-    const { sidebar, chatList } = get();
+    const { chatList } = get();
     try {
-      window.localStorage.setItem(SAVED, JSON.stringify({ sidebar, chatList }));
+      window.localStorage.setItem(SAVED, JSON.stringify({ chatList }));
     } catch {
       // No storage: the choice holds for this visit.
     }
@@ -41,7 +38,7 @@ export function useSavedLayout() {
   useEffect(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(SAVED) ?? '{}') as Partial<Panels>;
-      load({ sidebar: saved.sidebar === true, chatList: saved.chatList === true });
+      load({ chatList: saved.chatList === true });
     } catch {
       // Nothing saved, or nothing readable: stay expanded.
     }

@@ -9,14 +9,7 @@ import { useBusy, useWorkingAgentId } from '@/lib/workspace';
 import { Avatar } from '../profile/avatar-field';
 import { Select } from '../ui/select';
 
-export function ProfileSwitcher({
-  onCreate,
-  compact = false,
-}: {
-  onCreate: () => void;
-  /** In the narrowed sidebar the trigger is only the avatar, so the list sizes to its names. */
-  compact?: boolean;
-}) {
+export function ProfileSwitcher({ onCreate }: { onCreate: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const profiles = useProfiles().data ?? [];
@@ -38,7 +31,6 @@ export function ProfileSwitcher({
       <Select
         aria-label="Active agent"
         variant="subtle"
-        popup={compact ? 'content' : 'anchor'}
         value={selected}
         onValueChange={select}
         disabled={busy}
