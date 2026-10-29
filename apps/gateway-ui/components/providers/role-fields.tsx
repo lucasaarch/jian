@@ -2,7 +2,7 @@
 
 import { supportsModelRole, supportsProviderRole } from '@jian/contracts';
 import Link from 'next/link';
-import { useAgentPath } from '@/lib/workspace';
+import { settingsPath } from '@/lib/navigation';
 import type { ModelCatalog, ModelSelection, Provider, ProviderModel } from '../../lib/api';
 import { Field } from '../ui';
 import { Select, type SelectOption } from '../ui/select';
@@ -207,7 +207,6 @@ export function RoleFields({
   busy: boolean;
   change: (role: Role, patch: Partial<RoleValue>) => void;
 }) {
-  const pathTo = useAgentPath();
   const { provider, list, allowed } = describeRole(value, catalog, configured);
   const choices = modelChoices(role.key, catalog, configured);
   const current = value.disabled ? 'disabled' : choiceOf(value.providerId, value.modelId);
@@ -277,7 +276,7 @@ export function RoleFields({
         </Field>
         {role.key === 'image' && !value.disabled && !hasOpenAIKey && (
           <p className="note">
-            <Link href={pathTo('providers')}>Configure an OpenAI API key in Providers.</Link>{' '}
+            <Link href={settingsPath('providers')}>Configure an OpenAI API key in Providers.</Link>{' '}
             ChatGPT login does not authorize image generation.
           </p>
         )}

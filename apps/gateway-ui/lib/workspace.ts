@@ -9,7 +9,7 @@ import type { Mutation, Profile } from './api';
 import { agentPath } from './navigation';
 import { panelApi } from './query/client';
 import { keys } from './query/keys';
-import { queries } from './query/profile';
+import { queries, useProfiles } from './query/profile';
 import { useLastProfile } from './stores/last-profile';
 
 /**
@@ -31,11 +31,25 @@ export function useProfileId(): string | undefined {
 }
 
 /**
- * Links to a section of the open agent. With none open there is no section to go to; the root
- * opens the agent the owner had open last.
+ * The agent the owner is working with: the one in the address, or, on a gateway screen that
+ * belongs to none, the one they had open last while it still exists.
+ */
+export function useWorkingAgentId(): string | undefined {
+  const inAddress = useProfileId();
+  const last = useLastProfile((state) => state.profileId);
+  const profiles = useProfiles().data ?? [];
+
+  if (inAddress) return inAddress;
+
+  return (profiles.find((profile) => profile.id === last) ?? profiles[0])?.id;
+}
+
+/**
+ * Links to a section of the agent being worked with. With none there is no section to go to;
+ * the root offers to create one.
  */
 export function useAgentPath(): (path: string) => string {
-  const profileId = useProfileId();
+  const profileId = useWorkingAgentId();
 
   return useCallback((path) => (profileId ? agentPath(profileId, path) : '/'), [profileId]);
 }
