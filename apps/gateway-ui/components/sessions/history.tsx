@@ -4,7 +4,15 @@ import { Fragment, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { subscribe } from '@/lib/events';
 import { useCrew } from '@/lib/stores/crew';
-import type { GatewayApi, Person, Run, RunApproval, Subagent, ToolStep } from '../../lib/api';
+import type {
+  GatewayApi,
+  Person,
+  Run,
+  RunApproval,
+  RunQuestion,
+  Subagent,
+  ToolStep,
+} from '../../lib/api';
 import { Badge, Button, Empty, Spinner } from '../ui';
 import { CodeChanges } from './code-change';
 import { CrewCards, CrewDock, reportOf } from './crew';
@@ -60,10 +68,7 @@ export function History({
   const [tools, setTools] = useState(new Map<string, ToolStep[]>());
   // What each run asked the owner to decide or answer, from the timeline.
   const [asks, setAsks] = useState(
-    new Map<
-      string,
-      { approval?: RunApproval; question?: { prompt: string; choices?: string[] } }
-    >(),
+    new Map<string, { approval?: RunApproval; question?: RunQuestion }>(),
   );
   // In an agent conversation this profile started, the other agent's runs and their tools.
   const [callTools, setCallTools] = useState(new Map<string, ToolStep[]>());
@@ -344,6 +349,12 @@ export function History({
                   .some((later) => later.runId === message.runId && later.role === 'assistant');
               const approval = asking && asked?.approval ? asked.approval : undefined;
               const question = asking && asked?.question ? asked.question : undefined;
+              // What the gateway wrote around a pause stays out of the conversation: the note
+              // that tells the agent to carry on always, and the reply that answered or
+              // decided, which its card already shows.
+              const pause =
+                message.purpose === 'resume' ||
+                (message.purpose === 'answer' && Boolean(asked?.question || asked?.approval));
               const thought =
                 answering && (steps?.length || handedOff) ? (
                   <>
@@ -358,7 +369,7 @@ export function History({
 
               return (
                 <Fragment key={message.id}>
-                  {report ? null : approval && message.runId ? (
+                  {report || pause ? null : approval && message.runId ? (
                     <div className="chat-line theirs">
                       {thought}
                       <ApprovalCard

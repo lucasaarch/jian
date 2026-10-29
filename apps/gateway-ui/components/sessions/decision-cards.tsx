@@ -1,12 +1,9 @@
 'use client';
 
-import { ChevronRight } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import type { RunApproval } from '@/lib/api';
+import type { RunApproval, RunQuestion } from '@/lib/api';
 import { Button } from '../ui';
-
-/** The question a waiting run asks, as the timeline carries it. */
-type Question = { prompt: string; choices?: string[] };
 
 function Card({
   chip,
@@ -113,8 +110,10 @@ export function ApprovalCard({
 }
 
 /**
- * A question the agent is waiting on. Its choices answer it here, except in a channel's chat,
- * where the person answers in the chat and this card only shows what was asked.
+ * A question the agent asked, as a list of its choices, the one it recommends marked. Pending,
+ * a choice answers it here, except in a channel's chat, where the person answers in the chat
+ * and this card only shows what was asked. Answered, it stays: the chosen row is checked and
+ * the rest step back, or the answer is quoted when it was written rather than picked.
  */
 export function QuestionCard({
   question,
@@ -122,45 +121,71 @@ export function QuestionCard({
   busy = false,
   onAnswer,
 }: {
-  question: Question;
+  question: RunQuestion;
   chat?: string;
   busy?: boolean;
   onAnswer?: (choice: string) => void;
 }) {
   const choices = question.choices ?? [];
+  const answered = question.answer !== undefined;
+  const picked = answered ? choices.find((choice) => choice === question.answer) : undefined;
+  const answering = !answered && !chat && Boolean(onAnswer);
+  const by = question.answeredBy === 'owner' ? ' by you' : chat ? ` in ${chat}` : '';
 
   return (
-    <Card
-      chip="Question"
-      title={question.prompt}
-      footer={
-        choices.length > 0 && !chat && onAnswer
-          ? choices.map((choice) => (
-              <Button
-                key={choice}
-                variant="secondary"
-                disabled={busy}
-                onClick={() => onAnswer(choice)}
-              >
-                {choice}
-              </Button>
-            ))
-          : undefined
-      }
-    >
-      {chat ? (
-        <>
-          {choices.length > 0 && (
-            <ol className="decision-choices">
-              {choices.map((choice) => (
-                <li key={choice}>{choice}</li>
-              ))}
-            </ol>
-          )}
-          <p className="decision-state">Waiting for an answer in {chat}.</p>
-        </>
-      ) : (
-        !choices.length && <p className="decision-state">Answer below to continue.</p>
+    <Card chip="Question" tone={answered ? 'good' : 'neutral'} title={question.prompt}>
+      {choices.length > 0 && (
+        <ul className="decision-options" aria-label="Choices">
+          {choices.map((choice) => {
+            const chosen = choice === picked;
+            const content = (
+              <>
+                <span className="decision-mark" aria-hidden="true">
+                  {chosen && <Check size={12} strokeWidth={3} />}
+                </span>
+                <span className="decision-option-text">{choice}</span>
+                {choice === question.recommended && (
+                  <span className="decision-recommended">Recommended</span>
+                )}
+              </>
+            );
+
+            return (
+              <li key={choice}>
+                {answering ? (
+                  <button
+                    type="button"
+                    className="decision-option"
+                    disabled={busy}
+                    onClick={() => onAnswer?.(choice)}
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div
+                    className="decision-option"
+                    data-chosen={chosen || undefined}
+                    data-muted={(answered && !chosen) || undefined}
+                    aria-current={chosen || undefined}
+                  >
+                    {content}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {answered && !picked && (
+        <p className="decision-answer">
+          <span>Answered{by}</span>
+          {question.answer}
+        </p>
+      )}
+      {answered && picked && <p className="decision-state">Answered{by}.</p>}
+      {!answered && chat && <p className="decision-state">Waiting for an answer in {chat}.</p>}
+      {!answered && !chat && !choices.length && (
+        <p className="decision-state">Answer below to continue.</p>
       )}
     </Card>
   );

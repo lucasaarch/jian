@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { GatewayApi, RunApproval } from '../../lib/api';
+import type { GatewayApi, RunApproval, RunQuestion } from '../../lib/api';
 import { History } from './history';
 
 vi.mock('../../lib/events', () => ({ subscribe: () => () => undefined }));
@@ -140,4 +140,144 @@ it('finds the card by the run that asked, whatever the gateway wrote for it', as
 
   expect(element.textContent).toContain('Needs approval');
   expect(element.textContent).not.toContain('Pending: the agent wants');
+});
+
+/** A conversation of several turns, each run's timeline beside it. */
+async function conversation(
+  timelines: Array<{ runId: string; approval?: RunApproval; question?: RunQuestion }>,
+  said: Array<{
+    runId: string;
+    role: 'user' | 'assistant';
+    content: string;
+    purpose?: 'answer' | 'resume';
+  }>,
+) {
+  const answerRun = vi.fn(async () => ({}));
+  const api = {
+    messages: async () =>
+      said.map((item, index) => ({
+        ...message(item.content),
+        id: `message-${index}`,
+        runId: item.runId,
+        role: item.role,
+        ...(item.purpose ? { purpose: item.purpose } : {}),
+        createdAt: `2026-10-29T10:0${index}:00.000Z`,
+      })),
+    activities: async () => [],
+    timeline: async () => timelines.map((item) => ({ steps: [], ...item })),
+    answerRun,
+  } as unknown as GatewayApi;
+
+  await act(async () => root.render(<History api={api} profileId="profile" sessionId="session" />));
+  return { answerRun };
+}
+
+const asked: RunQuestion = {
+  id: '00000000-0000-4000-8000-0000000000b1',
+  prompt: 'Which provider should I wire first?',
+  choices: ['Gemini Live', 'OpenAI Realtime, with the longer setup the docs describe'],
+  recommended: 'Gemini Live',
+  askedAt: '2026-10-29T10:00:00.000Z',
+};
+
+it('lists the choices as rows, the recommended one marked, and a row answers', async () => {
+  const { answerRun } = await conversation(
+    [{ runId: 'run', question: asked }],
+    [{ runId: 'run', role: 'assistant', content: 'Which provider should I wire first?' }],
+  );
+
+  const rows = [...element.querySelectorAll('.decision-options li')];
+  expect(rows).toHaveLength(2);
+  expect(rows[0]?.querySelector('.decision-recommended')?.textContent).toBe('Recommended');
+  expect(rows[1]?.querySelector('.decision-recommended')).toBeNull();
+
+  const second = rows[1]?.querySelector('button');
+  await act(async () => second?.click());
+  expect(answerRun).toHaveBeenCalledWith('profile', 'run', asked.choices?.[1]);
+});
+
+it('keeps an answered question with its answer marked, and hides the turns around it', async () => {
+  await conversation(
+    [
+      {
+        runId: 'run',
+        question: {
+          ...asked,
+          answer: 'Gemini Live',
+          answeredAt: asked.askedAt,
+          answeredBy: 'owner',
+        },
+      },
+      { runId: 'next' },
+    ],
+    [
+      { runId: 'run', role: 'assistant', content: 'Which provider should I wire first?' },
+      { runId: 'run', role: 'user', content: 'Gemini Live', purpose: 'answer' },
+      {
+        runId: 'next',
+        role: 'user',
+        content: 'The owner answered the mid-run question. Continue the work with this answer.',
+        purpose: 'resume',
+      },
+      { runId: 'next', role: 'assistant', content: 'Wiring Gemini Live now.' },
+    ],
+  );
+
+  expect(element.querySelectorAll('.decision-options button')).toHaveLength(0);
+  expect(element.querySelector('[data-chosen]')?.textContent).toContain('Gemini Live');
+  expect(element.textContent).toContain('Answered by you.');
+  expect(element.textContent).not.toContain('The owner answered');
+  // The answer lives in the card, not in a bubble of its own.
+  expect([...element.querySelectorAll('.chat-line.mine')].map((line) => line.textContent)).toEqual(
+    [],
+  );
+  expect(element.textContent).toContain('Wiring Gemini Live now.');
+});
+
+it('quotes an answer that was written rather than picked', async () => {
+  await conversation(
+    [
+      {
+        runId: 'run',
+        question: { ...asked, answer: 'Neither, wait for Monday', answeredBy: 'owner' },
+      },
+    ],
+    [{ runId: 'run', role: 'assistant', content: 'Which provider should I wire first?' }],
+  );
+
+  expect(element.querySelector('[data-chosen]')).toBeNull();
+  expect(element.querySelector('.decision-answer')?.textContent).toContain(
+    'Neither, wait for Monday',
+  );
+});
+
+it('leaves the note after an approval out of the conversation', async () => {
+  await conversation(
+    [
+      {
+        runId: 'run',
+        approval: {
+          ...approval,
+          decision: 'approved',
+          decidedBy: 'owner',
+          decidedAt: approval.askedAt,
+        },
+      },
+      { runId: 'next' },
+    ],
+    [
+      { runId: 'run', role: 'assistant', content: `Waiting for approval: ${approval.title}` },
+      {
+        runId: 'next',
+        role: 'user',
+        content: 'The owner approved the action you asked to take. It has already run.',
+        purpose: 'resume',
+      },
+      { runId: 'next', role: 'assistant', content: 'Cleaned up.' },
+    ],
+  );
+
+  expect(element.textContent).toContain('Approved');
+  expect(element.textContent).not.toContain('The owner approved');
+  expect(element.textContent).toContain('Cleaned up.');
 });
