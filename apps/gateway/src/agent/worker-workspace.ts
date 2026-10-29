@@ -19,9 +19,16 @@ export type WorkerGitAccess = {
   sshCommand?: string;
 };
 
-/** Seed known_hosts and wire GIT_SSH_COMMAND for the profile's own shell. */
-export async function prepareProfileGitAccess(profileId: string): Promise<WorkerGitAccess> {
+/** What writes the installation's SSH keys into a workspace before git can use them. */
+export type SshKeySync = { sync(home: string): Promise<void> };
+
+/** Seed known_hosts, write the installation's keys and wire GIT_SSH_COMMAND for the shell. */
+export async function prepareProfileGitAccess(
+  profileId: string,
+  keys?: SshKeySync,
+): Promise<WorkerGitAccess> {
   const home = await workspaceOf(profileId);
+  await keys?.sync(home);
   const ssh = await prepareProfileSshAccess(home);
   const access: WorkerGitAccess = {
     readOnly: [],
@@ -39,10 +46,13 @@ export async function prepareProfileGitAccess(profileId: string): Promise<Worker
  * optional `repositories` are named roots in that home, not detached worktrees Jian creates.
  * If a task needs isolation, the agent creates a normal `git worktree` inside the project.
  */
-export async function prepareWorkerWorkspace(run: Run): Promise<WorkerGitAccess> {
+export async function prepareWorkerWorkspace(
+  run: Run,
+  keys?: SshKeySync,
+): Promise<WorkerGitAccess> {
   if (!run.subagent) return { readOnly: [], writable: [] };
 
-  const access = await prepareProfileGitAccess(run.profileId);
+  const access = await prepareProfileGitAccess(run.profileId, keys);
   const profileHome = await workspaceOf(run.profileId);
 
   for (const [index, asked] of (run.subagent.repositories ?? []).entries()) {

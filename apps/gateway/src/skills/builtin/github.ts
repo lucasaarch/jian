@@ -47,7 +47,7 @@ load the ones you will call with \`load_mcp_tools\`. Searches that work:
 
 - **Not a checkout.** For work on files with tests and builds, clone the repository in your
   workspace with the shell and work there; the App's token never reaches the shell, which uses
-  the profile's SSH keys. Use the server for what lives on GitHub:
+  the installation's SSH keys. Use the server for what lives on GitHub:
   issues, reviews, pull requests, runs, alerts, and small file edits.
 - **Not a wait.** To be told when checks finish or a pull request closes, use
   \`create_subscription\` instead of asking again and again.

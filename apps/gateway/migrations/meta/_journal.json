@@ -512,6 +512,13 @@
       "when": 1793238000000,
       "tag": "0072_remove-stickers",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793239000000,
+      "tag": "0073_gateway-ssh-keys",
+      "breakpoints": true
     }
   ]
 }

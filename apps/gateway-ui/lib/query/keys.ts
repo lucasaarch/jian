@@ -9,6 +9,7 @@ export const keys = {
   providers: ['providers'] as const,
   providerModels: (providerId: string) => ['providers', providerId, 'models'] as const,
   modelDefaults: ['model-defaults'] as const,
+  sshKeys: ['ssh-keys'] as const,
   groups: ['groups'] as const,
   githubIntegration: ['integrations', 'github'] as const,
   githubRepositories: (accountId: string) =>
@@ -29,7 +30,6 @@ export const keys = {
   schedules: (profileId: string) => ['profile', profileId, 'schedules'] as const,
   scheduleHistory: (profileId: string, scheduleId: string) =>
     ['profile', profileId, 'schedules', scheduleId, 'history'] as const,
-  sshKeys: (profileId: string) => ['profile', profileId, 'ssh-keys'] as const,
   media: (profileId: string, mediaId: string) => ['profile', profileId, 'media', mediaId] as const,
   channelConnection: (profileId: string, channelId: string) =>
     ['profile', profileId, 'channels', channelId, 'connection'] as const,

@@ -298,8 +298,8 @@ export class AgentRuntime {
       // The skills a run offers follow the servers it has, GitHub's included.
       const skillServers = learning ? installed : servers;
       const gitAccess = run.subagent
-        ? await prepareWorkerWorkspace(run)
-        : await prepareProfileGitAccess(run.profileId);
+        ? await prepareWorkerWorkspace(run, this.services.sshKeys)
+        : await prepareProfileGitAccess(run.profileId, this.services.sshKeys);
       const tools: ToolSet = {
         ...profileTools(this.services, run, gitAccess, session.remoteMachineId, skillServers),
         ...this.services.media?.tools(run, async (usage) => {

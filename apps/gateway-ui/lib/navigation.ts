@@ -46,11 +46,11 @@ export const navigation: NavigationItem[] = [
   { path: 'memories', label: 'Memories', icon: BookOpen, group: 'agent-setup' },
   { path: 'skills', label: 'Skills', icon: Sparkles, group: 'agent-setup' },
   { path: 'channels', label: 'Channels', icon: Smartphone, group: 'connections' },
-  { path: 'ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'connections' },
   { path: 'schedules', label: 'Schedules', icon: AlarmClock, group: 'automation' },
   { path: 'providers', label: 'Providers', icon: Plug, group: 'gateway' },
   { path: 'models', label: 'Model defaults', icon: Cpu, group: 'gateway' },
   { path: 'integrations', label: 'Integrations', icon: Cable, group: 'gateway' },
+  { path: 'ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'gateway' },
   { path: 'remote', label: 'Remote Control', icon: Monitor, group: 'gateway' },
 ];
 

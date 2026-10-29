@@ -3,7 +3,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, KeyRound, Plus, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
-import { useAgent } from '@/lib/query/agent';
 import { keys as cache } from '@/lib/query/keys';
 import type { SshKey } from '../../lib/api';
 import { date } from '../../lib/format';
@@ -21,17 +20,16 @@ import {
 } from '../ui';
 
 export function SshKeys({ api, mutate, busy }: SectionActions) {
-  const profile = useAgent();
   const client = useQueryClient();
   // Read through the section's own client, which a story hands in.
   const list = useQuery({
-    queryKey: cache.sshKeys(profile.id),
-    queryFn: () => api.sshKeys(profile.id),
+    queryKey: cache.sshKeys,
+    queryFn: () => api.sshKeys(),
   });
   const keys = list.data ?? [];
   // A key added or removed shows at once, before the reload that follows every action.
   const setKeys = (change: (current: SshKey[]) => SshKey[]) =>
-    client.setQueryData<SshKey[]>(cache.sshKeys(profile.id), (current = []) => change(current));
+    client.setQueryData<SshKey[]>(cache.sshKeys, (current = []) => change(current));
   const [name, setName] = useState('');
   const [removing, setRemoving] = useState<SshKey>();
   const [creating, setCreating] = useState(false);
@@ -46,7 +44,7 @@ export function SshKeys({ api, mutate, busy }: SectionActions) {
     let result: SshKey | undefined;
     if (
       await mutate(async () => {
-        result = await api.createSshKey(profile.id, { name: label });
+        result = await api.createSshKey({ name: label });
         setKeys((current) => [...current, result as SshKey]);
       }, 'SSH key created.')
     ) {
@@ -69,7 +67,7 @@ export function SshKeys({ api, mutate, busy }: SectionActions) {
     <>
       <SectionHeading
         title="SSH keys"
-        description="Keys stored privately in this profile’s workspace for Git and SSH access."
+        description="Keys every agent uses for Git and SSH access. The private part stays encrypted in the gateway."
         action={
           <Button type="button" onClick={() => setCreating(true)}>
             <Plus size={16} /> Create SSH key
@@ -106,12 +104,12 @@ export function SshKeys({ api, mutate, busy }: SectionActions) {
           ))}
         </div>
       ) : (
-        <Empty title="No SSH keys">Create one when this profile needs Git or SSH access.</Empty>
+        <Empty title="No SSH keys">Create one when an agent needs Git or SSH access.</Empty>
       )}
       {creating && (
         <Modal
           title="Create SSH key"
-          description="The gateway creates an Ed25519 key and stores the private part in this profile’s workspace."
+          description="The gateway creates an Ed25519 key and stores the private part encrypted. Every agent can use it."
           close={() => setCreating(false)}
           footer={
             <>
@@ -139,7 +137,7 @@ export function SshKeys({ api, mutate, busy }: SectionActions) {
       {created && (
         <Modal
           title={`${created.name} created`}
-          description="Add this public key to the Git or SSH service that should trust this profile."
+          description="Add this public key to the Git or SSH service that should trust your agents."
           close={() => setCreated(undefined)}
           footer={
             <Button
@@ -165,11 +163,11 @@ export function SshKeys({ api, mutate, busy }: SectionActions) {
       {removing && (
         <Confirm
           title={`Delete ${removing.name}?`}
-          description="This permanently removes the private key from the profile workspace."
+          description="This permanently removes the private key for every agent."
           busy={busy}
           close={() => setRemoving(undefined)}
           confirm={async () => {
-            if (await mutate(() => api.deleteSshKey(profile.id, removing.id), 'SSH key deleted.')) {
+            if (await mutate(() => api.deleteSshKey(removing.id), 'SSH key deleted.')) {
               setKeys((current) => current.filter((key) => key.id !== removing.id));
               setRemoving(undefined);
             }

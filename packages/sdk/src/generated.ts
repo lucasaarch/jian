@@ -222,7 +222,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/ssh-keys": {
+    "/v1/ssh-keys": {
         parameters: {
             query?: never;
             header?: never;
@@ -240,7 +240,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/ssh-keys/{keyId}": {
+    "/v1/ssh-keys/{keyId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3312,9 +3312,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                profileId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -3423,9 +3421,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                profileId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -3541,7 +3537,6 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                profileId: string;
                 keyId: string;
             };
             cookie?: never;

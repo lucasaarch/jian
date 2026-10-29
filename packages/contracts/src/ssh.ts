@@ -4,6 +4,7 @@ export const sshKeyCreateSchema = z.strictObject({
   name: z.string().trim().min(1).max(80),
 });
 
+/** A key of the installation, shared by every agent. Its private half never leaves the gateway. */
 export const sshKeySchema = z.strictObject({
   id: z.uuid(),
   name: z.string(),

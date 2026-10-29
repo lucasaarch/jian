@@ -201,6 +201,22 @@ export const mcpSecretMoves = pgTable(
   (table) => [primaryKey({ columns: [table.profileId, table.fromName] })],
 );
 
+/**
+ * The installation's SSH keys, shared by every agent. The private half is in the gateway vault
+ * as `ssh-key:<id>`; each run writes the keys into the workspace that uses them.
+ */
+export const sshKeys = pgTable(
+  'ssh_keys',
+  {
+    id: uuid('id').primaryKey(),
+    name: text('name').notNull(),
+    publicKey: text('public_key').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    createdAt,
+  },
+  (table) => [uniqueIndex('ssh_keys_public_key').on(table.publicKey)],
+);
+
 /** GitHub App installations belong to the Jian installation, not an individual agent. */
 export const githubInstallations = pgTable(
   'github_installations',
