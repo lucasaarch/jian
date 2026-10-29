@@ -161,11 +161,12 @@ for (const aiEnabled of [true, false]) {
         contact,
       ],
     });
-    expect(result.control?.closest('.conversation-pane > header')).not.toBeNull();
+    // In the conversation's toolbar below it, not in its header.
+    expect(result.control?.closest('.agent-toolbar')).not.toBeNull();
+    expect(result.element.querySelector('.conversation-pane > header [role="switch"]')).toBeNull();
     expect(result.control?.getAttribute('aria-label')).toBe('AI replies for Customer');
     expect(result.control?.getAttribute('aria-checked')).toBe(String(aiEnabled));
-    expect(result.element.textContent).toContain('Channel automation paused');
-    expect(result.element.textContent).toContain('never replayed');
+    expect(result.element.textContent).toContain('Channel paused');
     await act(async () => result.control?.click());
     expect(result.updateContact).toHaveBeenCalledExactlyOnceWith(profile.id, contact.id, {
       aiEnabled: !aiEnabled,
@@ -197,8 +198,11 @@ it('disables while busy and leaves the flag unchanged on authorization/save erro
   expect(failed.control?.getAttribute('aria-checked')).toBe('true');
 });
 
-it('does not offer AI controls for other channels or unmatched contacts', async () => {
-  for (const channel of ['whatsapp', 'telegram', 'api', 'agent', 'learning']) {
+it('offers AI replies on every messaging channel, and nowhere else', async () => {
+  for (const channel of ['whatsapp', 'telegram']) {
+    expect((await render({ channel })).control).not.toBeNull();
+  }
+  for (const channel of ['api', 'agent', 'learning']) {
     expect((await render({ channel })).control).toBeNull();
   }
   expect((await render({ contacts: [] })).control).toBeNull();

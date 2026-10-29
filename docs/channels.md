@@ -14,7 +14,7 @@ For WhatsApp Business, manual service in the Business app is untouched **if the 
 
 ### Pause AI in one Business chat
 
-Open the contact's chat in **Conversations**. Its header contains the **AI replies** switch for WhatsApp Business, separate from Approve/Revoke in Channels. `contact.aiEnabled` defaults to `true`. The host-only `PATCH /v1/profiles/{profileId}/contacts/{id}` accepts `{ "aiEnabled": false }` to pause and `{ "aiEnabled": true }` to resume; clients use `api.updateContact(profileId, id, { aiEnabled })`.
+Open the contact's chat in **Conversations**. Below the conversation, where a chat has its composer, the agent toolbar holds the **AI replies** switch for that contact or group, on WhatsApp (Baileys), WhatsApp Business and Telegram alike, beside the conversation's model and effort; it is separate from Approve/Revoke in Channels. Off, the agent stops answering that contact and its queued replies are dropped; on WhatsApp (Baileys) and Telegram the contact's messages are not kept while it is off, and nothing paused is replayed when it comes back on. `contact.aiEnabled` defaults to `true`. The host-only `PATCH /v1/profiles/{profileId}/contacts/{id}` accepts `{ "aiEnabled": false }` to pause and `{ "aiEnabled": true }` to resume; clients use `api.updateContact(profileId, id, { aiEnabled })`.
 
 A chat pause prevents AI runs and AI output, including queued replies. Incoming messages are acknowledged and ignored while paused, never automatically replayed on resume. Already in-flight network requests may finish. Toggling AI does not approve a pending/blocked contact; approval does not override a pause. Both the channel and chat must be enabled, and normal approval and Meta customer-service-window restrictions still apply.
 

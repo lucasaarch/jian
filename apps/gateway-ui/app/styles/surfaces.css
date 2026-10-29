@@ -590,17 +590,17 @@
   .session-listener-meta {
     @apply flex flex-wrap gap-x-2 text-muted;
   }
-  .session-model {
-    @apply grid shrink-0 grid-cols-[minmax(0,14rem)_minmax(0,10rem)] gap-2;
+  /* A channel's conversation has, where a chat has its composer, its agent settings: whether
+     the agent answers this contact, and on which model. Same column, same box, no text. */
+  .agent-toolbar {
+    @apply px-6 pb-5 pt-2;
   }
-  .session-model-mobile {
-    @apply hidden;
+  .agent-toolbar-box {
+    @apply mx-auto flex w-full min-w-0 items-center gap-2 rounded-2xl border border-line bg-surface p-2;
+    max-width: var(--chat-column);
   }
-  .session-model-mobile > summary {
-    @apply cursor-pointer list-none;
-  }
-  .session-model-mobile > summary::-webkit-details-marker {
-    display: none;
+  .agent-toolbar-switch {
+    @apply flex h-9 shrink-0 items-center gap-2.5 px-2 text-sm text-ink;
   }
   /* In the pane the history runs edge to edge; only the messages keep the inner margin. */
   .conversation-pane .session-history {
@@ -1208,17 +1208,8 @@
   .conversation-pane > header {
     @apply px-3;
   }
-  .session-model-desktop {
-    @apply hidden;
-  }
-  .session-model-mobile {
-    @apply relative block;
-  }
-  .session-model-mobile .session-model {
-    @apply grid-cols-2;
-  }
-  .session-model-mobile-panel {
-    @apply absolute right-0 top-full z-10 w-[min(22rem,calc(100vw-1.5rem))] border border-line bg-surface p-3 shadow-xl;
+  .agent-toolbar {
+    @apply px-3 pb-3;
   }
 }
 
