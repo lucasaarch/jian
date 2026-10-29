@@ -465,6 +465,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
             </div>
             <IconButton
               size="control"
+              variant="primary"
               aria-label="New chat"
               disabled={busy || draft}
               onClick={() => {

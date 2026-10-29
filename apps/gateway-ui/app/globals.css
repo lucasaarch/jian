@@ -181,6 +181,12 @@
   .icon-button:disabled {
     @apply cursor-default opacity-50 hover:bg-transparent hover:text-muted;
   }
+  .icon-button.primary {
+    @apply bg-accent text-on-accent hover:bg-accent-hover hover:text-on-accent;
+  }
+  .icon-button.primary:disabled {
+    @apply opacity-40 hover:bg-accent hover:text-on-accent;
+  }
   .theme-switcher {
     @apply flex items-center gap-1 rounded-sm border border-line bg-surface p-1;
   }
