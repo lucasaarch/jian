@@ -29,8 +29,8 @@ Telegram chat or group, the person receives it on that channel, as a message fro
 other conversation receives it in its inbox, which \`read_inbox\` reads.
 
 Anything else goes there with its own tool and that conversation's \`sessionId\`:
-\`send_file\`, \`send_sticker\`, \`generate_image\` and \`generate_speech\` all take one. A
-sticker, a file or a voice note written into a text message arrives as text — never do that.
+\`send_file\`, \`generate_image\` and \`generate_speech\` all take one. A file or a voice
+note written into a text message arrives as text — never do that.
 
 - Write because someone here asked you to. An agent that messages people on its own gets
   blocked.

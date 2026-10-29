@@ -196,7 +196,7 @@ export const telegramUpdateSchema = z.object({
       audio: telegramFileSchema.optional(),
       video: telegramFileSchema.optional(),
       video_note: telegramFileSchema.optional(),
-      // Only a still sticker is WebP; an animated or video one is kept out of the collection.
+      // Only a still sticker is a WebP picture, read as one; an animated or video one is not.
       sticker: telegramFileSchema
         .extend({
           emoji: z.string().max(20).optional(),

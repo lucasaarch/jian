@@ -27,7 +27,6 @@ import { Sessions } from './sessions/service.js';
 import { Settings } from './settings/service.js';
 import { SshKeys } from './ssh/service.js';
 import { Stats } from './stats/service.js';
-import { Stickers } from './stickers/service.js';
 import type { Store } from './storage/database.js';
 import { Subscriptions } from './subscriptions/service.js';
 import { Work } from './tasks/service.js';
@@ -47,7 +46,6 @@ export type Services = {
   runs: Runs;
   peers: Peers;
   learning: Learning;
-  stickers: Stickers;
   stats: Stats;
   subscriptionUsage: SubscriptionUsageReader;
   schedules: Schedules;
@@ -127,7 +125,6 @@ export function buildServices({
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),
     learning: new Learning({ store, profiles, sessions, runs, judge: decisions.judge }, clock),
-    stickers: new Stickers(store, media, providers),
     // Without a catalog nothing has a list price, and every model counts as unknown.
     stats: new Stats(
       store,

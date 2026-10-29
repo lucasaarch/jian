@@ -105,17 +105,14 @@ export const contextOf = (message: WAMessage): proto.IContextInfo | undefined =>
 const REMEMBERED_MESSAGES = 500;
 
 /**
- * How a file goes out: a sticker as a sticker, a picture or a video as one, an Ogg recording
- * as a voice note, other audio as a track, and anything else as a document under its name. A
- * sticker and a voice note take no caption, so their text is lost; the gateway sends generated
- * speech and stickers without one.
+ * How a file goes out: a picture or a video as one, an Ogg recording as a voice note, other
+ * audio as a track, and anything else as a document under its name. A voice note takes no
+ * caption, so its text is lost; the gateway sends generated speech without one.
  */
 export function outgoingMedia(media: InlineMedia, text: string): AnyMessageContent {
   const data = Buffer.from(media.data, 'base64');
   const caption = text ? { caption: text } : {};
 
-  // A sticker takes no caption.
-  if (media.sticker) return { sticker: data };
   if (media.mimeType.startsWith('image/'))
     return { image: data, mimetype: media.mimeType, ...caption };
   if (media.mimeType.startsWith('video/'))

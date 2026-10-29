@@ -167,7 +167,7 @@ export const statsFor = (days: number) => {
       { name: 'fetch_url', calls: Math.round(58 * scale), failed: 4 },
       { name: 'remember', calls: Math.round(41 * scale), failed: 0 },
       { name: 'create_schedule', calls: Math.round(12 * scale), failed: 0 },
-      { name: 'send_sticker', calls: Math.round(9 * scale), failed: 0 },
+      { name: 'send_file', calls: Math.round(9 * scale), failed: 0 },
     ],
   };
 };

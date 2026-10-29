@@ -110,7 +110,7 @@ it('keeps a saved channel override visible until changing the shared default upd
     setModelDefaults,
   );
   try {
-    expect(view.element.querySelectorAll('.model-card')).toHaveLength(7);
+    expect(view.element.querySelectorAll('.model-card')).toHaveLength(6);
     expect(view.card.textContent).toContain('A separate channel default is saved');
     const option = Array.from(document.querySelectorAll('[role="option"]')).find((item) =>
       item.textContent?.includes('claude-sonnet-5'),
@@ -144,7 +144,6 @@ it('offers image generation only where it works, and explains the missing OpenAI
 });
 
 it.each([
-  ['Sticker analysis', 'sticker'],
   ['Incoming audio', 'audio'],
   ['Text to speech', 'speech'],
   ['Image generation', 'image'],

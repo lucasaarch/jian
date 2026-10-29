@@ -117,8 +117,6 @@ export const inlineMediaSchema = z.strictObject({
     .max(Math.ceil(MAX_MEDIA_BYTES / 3) * 4)
     .regex(/^[A-Za-z0-9+/]+={0,2}$/),
   voice: z.boolean().optional(),
-  // A sticker, not a photo: it goes out as one, and the agent keeps it to send again.
-  sticker: z.boolean().optional(),
   // The file name it had, shown on a document and used when it is downloaded again.
   name: z.string().trim().min(1).max(200).optional(),
 });
@@ -127,38 +125,9 @@ export const mediaRecordSchema = z.strictObject({
   profileId: z.uuid(),
   mimeType: mediaMimeSchema,
   name: z.string().optional(),
-  sticker: z.boolean().optional(),
   bytes: z.number().int().positive().max(MAX_MEDIA_BYTES),
   createdAt: z.iso.datetime(),
 });
 export const mediaContentSchema = mediaRecordSchema.extend({ data: z.string() });
 export type InlineMedia = z.infer<typeof inlineMediaSchema>;
 export type MediaRecord = z.infer<typeof mediaRecordSchema>;
-
-/** A word to find a sticker by: lowercase, a feeling, a reaction or what it shows. */
-export const stickerTagSchema = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .regex(/^[\p{L}\p{N}][\p{L}\p{N} -]{0,30}$/u);
-
-export const stickerTagsSchema = z.strictObject({ tags: z.array(stickerTagSchema).max(12) });
-
-/** A sticker the agent has seen and may send: what it shows, and how often it was sent. */
-export const stickerSchema = z.strictObject({
-  id: z.uuid(),
-  profileId: z.uuid(),
-  // Written by the image-analysis model when the sticker is first kept; absent until then.
-  description: z.string().optional(),
-  tags: z.array(stickerTagSchema).max(12),
-  // How often the agent sent it, and how often people in its chats did.
-  uses: z.number().int().nonnegative(),
-  seen: z.number().int().nonnegative(),
-  createdAt: z.iso.datetime(),
-  lastUsedAt: z.iso.datetime().optional(),
-});
-export const stickerImageSchema = stickerSchema.extend({
-  mimeType: z.literal('image/webp'),
-  data: z.string(),
-});
-export type Sticker = z.infer<typeof stickerSchema>;

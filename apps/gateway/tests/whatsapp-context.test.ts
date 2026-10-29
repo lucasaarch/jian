@@ -34,6 +34,9 @@ it('names a sticker, a voice note and a file when they are quoted or sent bare',
     async () => Buffer.from('webp'),
   );
 
+  // A sticker someone sends is read as the picture it is.
   expect(sent.text).toBe('[Sticker]');
-  expect(sent.media?.[0]?.mimeType).toBe('image/webp');
+  expect(sent.media).toEqual([
+    { mimeType: 'image/webp', data: Buffer.from('webp').toString('base64') },
+  ]);
 });

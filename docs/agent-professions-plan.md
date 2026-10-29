@@ -18,7 +18,7 @@ Fora da primeira entrega: catálogo comercial, promoções, CRM, editor/marketpl
 | Contratos | `packages/contracts/src/profile.ts`: `profileSchema`, `profilePatchSchema` | Sem profissão. Patch deriva da criação: excluir explicitamente campo imutável. `allowShell` é legado e ignorado no enforcement. |
 | Perfis | `apps/gateway/src/profiles/service.ts`, `repository.ts` | Criação/edição transacionais, versão otimista, escrita de documento completo. Revisões interpretadas pelo schema atual. |
 | Dados | `apps/gateway/src/storage/schema.ts`, `apps/gateway/migrations/` | PostgreSQL/Drizzle; perfil em colunas, revisões em JSON. Reutilizar migrations. |
-| Execução | `apps/gateway/src/agent/runtime.ts`: `execute` | Combina perfil, mídia, web, stickers e MCP; prepara Git/workspace. Run usa perfil congelado. |
+| Execução | `apps/gateway/src/agent/runtime.ts`: `execute` | Combina perfil, mídia, web e MCP; prepara Git/workspace. Run usa perfil congelado. |
 | Ferramentas | `apps/gateway/src/agent/tools.ts`: `profileTools`, `deferTools`, `offeredGroups` | Shell/files incondicionais. Loader não autoriza por profissão. Self-management inclui criar perfis. |
 | Skills | `apps/gateway/src/skills/builtin/index.ts` | `builtinSkills`, `availableSkills`, `findSkill`; SHELL sempre incluído; skill própria pode sobrepor built-in. |
 | Contexto | `apps/gateway/src/context/build.ts`, `service.ts` | Publica perfil/skills; precisa usar política efetiva do runtime. |

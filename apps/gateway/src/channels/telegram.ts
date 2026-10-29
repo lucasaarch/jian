@@ -35,12 +35,12 @@ type TelegramMessage = NonNullable<z.infer<typeof telegramUpdateSchema>['message
  * several sizes and names only documents; the rest take their type from the kind of message.
  */
 function fileOf(message: TelegramMessage) {
+  // A still sticker is a WebP picture and arrives as one; an animated or video one is not read.
   const sticker = message.sticker;
   if (sticker && !sticker.is_animated && !sticker.is_video)
     return {
       ...sticker,
       mimeType: 'image/webp',
-      sticker: true,
       label: sticker.emoji ? `[Sticker ${sticker.emoji}]` : '[Sticker]',
     } as const;
   const photo = message.photo?.at(-1);
@@ -81,7 +81,6 @@ function answered(quoted: Quoted) {
 
 /** How the Bot API sends each kind of file, and the form field it expects it in. */
 function sendMethodOf(media: InlineMedia) {
-  if (media.sticker) return { method: 'sendSticker', field: 'sticker' } as const;
   if (media.mimeType.startsWith('image/') && media.mimeType !== 'image/gif')
     return { method: 'sendPhoto', field: 'photo' } as const;
   if (media.mimeType === 'audio/ogg' && !media.name)
@@ -227,7 +226,6 @@ export class TelegramChannel implements Channel {
             mimeType: file.mimeType,
             data: bytes.toString('base64'),
             ...('voice' in file ? { voice: true } : {}),
-            ...('sticker' in file ? { sticker: true } : {}),
             ...('name' in file && file.name ? { name: file.name } : {}),
           },
         ],
