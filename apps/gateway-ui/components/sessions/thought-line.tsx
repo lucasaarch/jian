@@ -29,6 +29,28 @@ const at = (moment?: string | number) =>
   moment === undefined ? undefined : typeof moment === 'number' ? moment : Date.parse(moment);
 
 /**
+ * The mark at the head of work: the orb while it runs, then how it ended, a check or a cross,
+ * in the orb's own place and size so nothing shifts when it settles.
+ */
+export function WorkMark({
+  working,
+  failed = false,
+  orb = 'composing',
+}: {
+  working: boolean;
+  failed?: boolean;
+  orb?: OrbState;
+}) {
+  if (working) return <Orb state={orb} />;
+
+  return (
+    <span className="work-mark" data-failed={failed || undefined} aria-hidden="true">
+      {failed ? <X size={14} strokeWidth={2.6} /> : <Check size={14} strokeWidth={2.6} />}
+    </span>
+  );
+}
+
+/**
  * What the agent is doing, as one line that breathes while it works and settles into how long
  * it took. The orb is its mark; the steps it went through fold beneath it, open while it works
  * and folded once it is done, a click away.
@@ -45,8 +67,11 @@ export function ThoughtLine({
   steps = [],
   startedAt,
   finishedAt,
+  failed = false,
 }: {
   working: boolean;
+  /** It ended without finishing: the settled mark is a cross, not a check. */
+  failed?: boolean;
   label?: string;
   doneLabel?: string;
   orb?: OrbState;
@@ -94,7 +119,7 @@ export function ThoughtLine({
         disabled={!foldable}
         onClick={() => setOpen((value) => !value)}
       >
-        <Orb state={orb} paused={!working} />
+        <WorkMark working={working} failed={failed} orb={orb} />
         <span className="thought-labels" aria-hidden="true">
           <span className="thought-label working" data-active={working || undefined}>
             {label}

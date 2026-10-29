@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Orb } from '@/components/ui';
 import type { GatewayApi, Message, ModelSelection, Subagent, ToolStep } from '@/lib/api';
@@ -10,7 +10,7 @@ import { MessageMedia } from './media';
 import { ChatMessage } from './message';
 import { statusOf, traceOf } from './progress';
 import { statusLabels } from './status';
-import { ThoughtLine } from './thought-line';
+import { ThoughtLine, WorkMark } from './thought-line';
 
 const tierNames = { light: 'Light', standard: 'Standard', deep: 'Deep' } as const;
 
@@ -114,7 +114,7 @@ function AgentCard({ agent }: { agent: Subagent }) {
       }
     >
       <span className="crew-card-top">
-        <Orb state={statusOf(agent).state} paused={!working} />
+        <WorkMark working={working} failed={failed} orb={statusOf(agent).state} />
         <strong>{agent.name}</strong>
       </span>
       <span className="crew-now">{nowOf(agent)}</span>
@@ -153,9 +153,9 @@ export function CrewCards({ agents }: { agents: Subagent[] }) {
 /**
  * The gateway hands a finished agent's report back as a message in the conversation, written
  * for the agent that reads it: `Subagent "name" (role) finished.`, then `Run <id> status: …`.
- * It is the agent's mail, not the owner's words, so the conversation shows it as one line
- * naming the agent. The run id ties it to an agent of this conversation; text that only looks
- * like a report stays a message.
+ * It is the agent's mail, not the owner's words, and the agent's card already says it ended, so
+ * the conversation does not show it. The run id ties it to an agent of this conversation; text
+ * that only looks like a report stays a message.
  */
 export function reportOf(message: Pick<Message, 'role' | 'content'>, agents: Subagent[]) {
   if (message.role !== 'user') return undefined;
@@ -164,27 +164,6 @@ export function reportOf(message: Pick<Message, 'role' | 'content'>, agents: Sub
   }
 
   return agents.find((agent) => message.content.includes(`\nRun ${agent.runId} status: `));
-}
-
-/** Where an agent's report came back: one line, and a click away from what it did. */
-export function ReportLine({ agent }: { agent: Subagent }) {
-  const follow = useCrew((state) => state.follow);
-  const done = agent.status === 'completed';
-
-  return (
-    <button
-      type="button"
-      className="crew-report"
-      data-state={done ? 'done' : 'failed'}
-      onClick={(event) => follow(agent.runId, event.currentTarget)}
-    >
-      {done ? <Check size={14} aria-hidden="true" /> : <X size={14} aria-hidden="true" />}
-      <span>
-        <strong>{agent.name}</strong>{' '}
-        {done ? 'handed its report back' : 'stopped without finishing'}
-      </span>
-    </button>
-  );
 }
 
 /**
@@ -297,7 +276,11 @@ export function CrewDrawer({
     <aside className="crew-drawer" aria-label={agent.name}>
       <header>
         <div className="crew-drawer-title">
-          <Orb state={statusOf(agent).state} paused={!working} />
+          <WorkMark
+            working={working}
+            failed={agent.status !== 'completed'}
+            orb={statusOf(agent).state}
+          />
           <h2>{agent.name}</h2>
           <button
             ref={closer}
@@ -323,6 +306,7 @@ export function CrewDrawer({
           working={working}
           label={nowOf(agent)}
           doneLabel={agent.status === 'completed' ? 'Finished in' : 'Stopped after'}
+          failed={!working && agent.status !== 'completed'}
           orb={statusOf(agent).state}
           steps={traceOf(steps)}
           startedAt={agent.createdAt}
