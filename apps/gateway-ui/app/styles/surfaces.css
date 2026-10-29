@@ -420,8 +420,11 @@
   .session-history {
     @apply flex min-h-0 min-w-0 flex-1 flex-col px-6 pb-4 pt-3;
   }
+  /* The history keeps the reader's place itself (follow-bottom.ts); the browser's own anchoring,
+     where it exists, would correct the same shift a second time. */
   .message-history {
     @apply min-h-0 flex-1 overscroll-contain overflow-auto p-1;
+    overflow-anchor: none;
   }
 
   /* Chats: the whole area beside the app's sidebar, like a messaging app. */

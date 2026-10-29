@@ -236,7 +236,7 @@ export function CrewDrawer({
 
     return () => {
       document.removeEventListener('keydown', keys);
-      useCrew.getState().opener?.focus();
+      useCrew.getState().opener?.focus({ preventScroll: true });
     };
   }, [following, close]);
 
