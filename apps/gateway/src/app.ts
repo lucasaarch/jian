@@ -10,7 +10,7 @@ import { Coordination } from './coordination/service.js';
 import { registerDecisionRoutes } from './decisions/routes.js';
 import { registerEventRoutes } from './http/events.js';
 import { registerMetaRoutes } from './http/meta.js';
-import { configureSecurity } from './http/security.js';
+import { configureSecurity, isOwner } from './http/security.js';
 import { registerPanelNotice } from './http/ui.js';
 import type { GitHubIntegrations } from './integrations/github.js';
 import { registerIntegrationRoutes } from './integrations/routes.js';
@@ -97,7 +97,14 @@ export function createApp(
       directives: { mediaSrc: ["'self'", 'data:'], frameSrc: ["'self'", 'blob:'] },
     },
   });
-  void app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
+  // The limit guards the doors anyone can knock on. The owner is exempt: the panel reaches the
+  // gateway through its own web server, so every tab shares one address, and a chat that keeps
+  // its runs, timeline and agents current would otherwise lock its own owner out.
+  void app.register(rateLimit, {
+    max: 120,
+    timeWindow: '1 minute',
+    allowList: (request) => isOwner(request, options.token),
+  });
 
   app.addHook('onSend', async (_request, reply, payload) => {
     reply.header(
