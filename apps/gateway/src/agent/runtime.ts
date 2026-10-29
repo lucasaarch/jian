@@ -1034,6 +1034,14 @@ export class AgentRuntime {
               abortSignal: signal,
               context: undefined,
             } as unknown as Parameters<NonNullable<typeof target.execute>>[1]);
+            // A call the model makes is closed by the step that made it; this one runs before
+            // any step, so it closes itself, or the timeline would call it unfinished and keep
+            // its diff from the conversation.
+            await this.services.lifecycle.checkpoint(profileId, runId, owner, {
+              phase: 'tool-completed',
+              toolName: approved.toolName,
+              toolCallId: approved.toolCallId,
+            });
           } catch (error) {
             if (externalUncertain) throw error;
             outcome = { error: error instanceof Error ? error.message : 'The action failed.' };
