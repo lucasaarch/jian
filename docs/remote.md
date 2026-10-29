@@ -1,39 +1,29 @@
 # Remote Control
 
 Remote Control connects a Windows, Mac, or Linux computer to the gateway with an outbound
-HTTPS polling connection. It does not open a port or expose SSH. Profiles must be explicitly
-authorized for a machine; the default is no profiles. An authorized profile can execute
-arbitrary shell commands automatically as the local user, with that user's filesystem and
-process permissions, plus screenshot and file transfer tools. Only enable it for agents and
-machines you trust. This is not a sandbox.
+HTTPS polling connection. It does not open a port or expose SSH. Every agent of the
+installation may use every connected machine: it can execute arbitrary shell commands
+automatically as the local user, with that user's filesystem and process permissions, plus
+screenshot and file transfer tools. Only connect machines you trust every agent with. This is
+not a sandbox.
 
 ## Add a machine
 
-The admin API uses the gateway bearer token. Create a machine with an empty access list by
-omitting `allowedProfileIds`, or grant profile UUIDs at creation. The returned worker token is
-shown once; keep it private.
+The admin API uses the gateway bearer token. The returned worker token is shown once; keep it
+private.
 
 ```sh
 curl -fsS -X POST https://gateway.example/v1/remote/machines \
   -H "Authorization: Bearer $JIAN_GATEWAY_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Lucas Mac","allowedProfileIds":["PROFILE_UUID"]}'
+  -d '{"name":"Lucas Mac"}'
 ```
 
-To change authorization later, replace the entire list (an empty list revokes every profile):
-
-```sh
-curl -fsS -X PATCH https://gateway.example/v1/remote/machines/MACHINE_UUID/access \
-  -H "Authorization: Bearer $JIAN_GATEWAY_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"allowedProfileIds":["PROFILE_UUID"]}'
-```
-
-The panel’s Remote Control page shows npm/npx installers after you create a machine. Those
-commands install `@jian-ai/remote-control` and embed the one-time token — no clone of Jian is
-required. The token is shown only once; treat the install command as a secret. **Rotate
-credentials** on an existing machine issues a new token (invalidates the old one) and shows
-`configure` / `install` one-liners the same way.
+After you create a machine, the panel’s Remote Control page shows one command to run on it: it
+installs `jian-remote` from npm and connects it with the one-time token — no clone of Jian is
+required. The token is shown only once; treat the command as a secret. **Rotate credentials**
+on an existing machine issues a new token (invalidates the old one) and shows the one
+`jian-remote configure` command that hands it to the installed worker.
 
 ## Install the worker
 
@@ -41,20 +31,10 @@ Install Node.js 24+ on the computer. The published package is `@jian-ai/remote-c
 `jian-remote`), versioned with each Jian release. The panel pins the running gateway version
 when known; otherwise use `@latest`.
 
-Any OS (npx) — copy from the panel, or substitute your values:
+Copy the command from the panel, or substitute your values — the same on every OS:
 
 ```sh
-npx --yes @jian-ai/remote-control@latest install \
-  --gateway 'https://gateway.example' \
-  --machine 'MACHINE_UUID' \
-  --token 'WORKER_TOKEN'
-```
-
-Global install:
-
-```sh
-npm install -g @jian-ai/remote-control@latest
-jian-remote install \
+npm install -g @jian-ai/remote-control@latest && jian-remote install \
   --gateway 'https://gateway.example' \
   --machine 'MACHINE_UUID' \
   --token 'WORKER_TOKEN'
@@ -66,8 +46,6 @@ Credentials stay in `~/.config/jian-remote/config.json`. To refresh the worker *
 the gateway (or `@latest`) and restart the service:
 
 ```sh
-npx --yes @jian-ai/remote-control@latest update
-# or, when installed globally:
 jian-remote update
 # optional pin:
 jian-remote update --version 0.6.0
@@ -97,8 +75,6 @@ restart the service without wiping the LaunchAgent / systemd unit / Windows task
 ```sh
 # Token only (machine id and gateway stay as stored):
 jian-remote configure --token 'WORKER_TOKEN'
-# Or via npx:
-npx --yes @jian-ai/remote-control@latest configure --token 'WORKER_TOKEN'
 
 # Gateway URL and/or machine id as well:
 jian-remote configure --gateway 'https://gateway.example' --token 'WORKER_TOKEN'
@@ -136,11 +112,11 @@ clear error. Local gateway builds with no `JIAN_VERSION` skip the gate.
 
 Until an auto-update succeeds across a major.minor skew, the worker will not stay online.
 If both the gateway script and npm are unreachable, run
-`npx @jian-ai/remote-control@GATEWAY_VERSION update` once on that machine (or fix network to
+`jian-remote update --version GATEWAY_VERSION` once on that machine (or fix network to
 the gateway / registry).
 
 The installer stores the credential with owner-only permissions under `~/.config/jian-remote`,
-copies the worker script there (so npx and global installs share one service path), and
+copies the worker script there (so the service runs one fixed path), and
 installs a per-user LaunchAgent on macOS, a systemd service on Linux, or a Task Scheduler
 logon task on Windows. The Windows task runs only in the current user's session.
 
@@ -196,8 +172,8 @@ JPEG, then **scales and recompresses** on the machine (longest side ≤ 1920, qu
 until the binary is under ~280 KB) so base64 fits the channel. Cutting base64 mid-stream used to
 decode as a corrupt image (often a solid grey lower half). The gateway rejects incomplete JPEGs
 instead of storing them. File pull/push still need to stay under the same ~300 KB binary budget;
-larger files need an owner-arranged transfer via `run_remote_command`. Do not authorize profiles
-that should not have access to those local privileges.
+larger files need an owner-arranged transfer via `run_remote_command`. Do not connect a machine
+whose local privileges any agent of the installation should not have.
 
 ### Starts again after reboot
 
@@ -252,7 +228,7 @@ A healthy log starts with a line like `Connected to Jian Remote at https://… (
 with `KeepAlive` means it is crashing and restarting — read the log. If
 `launchctl print` shows repeated exits and the system log mentions
 `Library not loaded: @rpath/libnode`, the app bundle is missing shared libs — run
-`npx @jian-ai/remote-control@latest update` (0.8.4+) to rematerialize `Contents/lib`, or
+`jian-remote update` (0.8.4+) to rematerialize `Contents/lib`, or
 point the LaunchAgent at your real `node` temporarily (see the 0.8.4 release note).
 
 Restart without re-entering the token:
@@ -260,7 +236,7 @@ Restart without re-entering the token:
 ```sh
 jian-remote restart
 # or refresh the binary then restart:
-npx --yes @jian-ai/remote-control@latest update
+jian-remote update
 # low-level launchd bounce (prefer jian-remote restart):
 launchctl kickstart -k "gui/$(id -u)/com.jian.remote"
 ```
@@ -268,7 +244,7 @@ launchctl kickstart -k "gui/$(id -u)/com.jian.remote"
 ### If the machine stays Offline
 
 1. Confirm the computer can reach the gateway over HTTPS.
-2. Run `npx @jian-ai/remote-control@latest update` (or restart the local service). Re-running
+2. Run `jian-remote update` (or restart the local service). Re-running
    install is only needed if the config was deleted. On macOS, `update` also refreshes the
    LaunchAgent (`ProcessType=Interactive`) so App Nap does not freeze the poller when the
    screen is locked.
@@ -284,10 +260,8 @@ launchctl kickstart -k "gui/$(id -u)/com.jian.remote"
 
 The agent always receives the `remote` tool group when Remote Control is configured on the
 gateway: `list_remote_machines`, `run_remote_command`, `remote_computer`, `pull_remote_file`,
-and `push_remote_file`. Listing returns only machines explicitly authorized for that profile;
-each action checks that authorization again. **Machine ACL is the only gate** for remote shell
-and computer use — not the deprecated profile `allowShell` flag (workspace shell on the gateway
-is always available and confined to the profile workspace). Results include exit code, output,
+and `push_remote_file`. Every agent sees and may use every connected machine; there is no
+per-machine list of agents. Results include exit code, output,
 and timeout status. A machine must be online to accept work. Computer use additionally needs
 a worker capability `computer-macos-v1`, `computer-linux-v1`, or `computer-windows-v1`. The
 built-in `remote-control` skill describes when to use each tool.
@@ -335,7 +309,7 @@ desktop is unlocked. The panel and `list_remote_machines` also expose `uiState`:
 
 A locked Mac that still looks **Offline** is usually an old LaunchAgent without
 `ProcessType=Interactive` (App Nap freezing the Node poll loop) or true system sleep
-(lid closed without power policy). Run `npx @jian-ai/remote-control@latest update` (or
+(lid closed without power policy). Run `jian-remote update` (or
 re-install) so launchd rewrites the plist, then check `~/.config/jian-remote/worker.log`.
 
 While a computer-use session is open the worker holds `caffeinate` assertions so idle
@@ -368,8 +342,7 @@ API key for notarytool):
 Without those secrets, Publish still ships an ad-hoc–signed helper (same class as today’s
 **Jian Remote.app**).
 
-To revoke a profile, replace `allowedProfileIds` using the access endpoint above. To disconnect
-and invalidate the machine token, delete the machine:
+To disconnect a machine and invalidate its token, delete it:
 
 ```sh
 curl -fsS -X DELETE https://gateway.example/v1/remote/machines/MACHINE_UUID \

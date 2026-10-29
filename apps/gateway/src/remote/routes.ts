@@ -49,11 +49,6 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
     reply.code(201).send(await deps.remote.create(request.body)),
   );
 
-  app.patch<{ Params: { machineId: string } }>(
-    '/v1/remote/machines/:machineId/access',
-    async (request) => deps.remote.setAccess(request.params.machineId, request.body),
-  );
-
   app.post<{ Params: { machineId: string } }>(
     '/v1/remote/machines/:machineId/rotate',
     async (request) => deps.remote.rotate(request.params.machineId),
@@ -79,6 +74,14 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
           ? request.headers['x-jian-remote-ui-state']
           : undefined,
       ),
+  );
+
+  // A worker that stops says so, so the panel shows it offline at once instead of after the
+  // presence window runs out.
+  app.post<{ Params: { machineId: string } }>(
+    '/v1/remote/worker/:machineId/disconnect',
+    async (request) =>
+      deps.remote.disconnect(request.params.machineId, request.headers.authorization ?? ''),
   );
 
   app.post<{ Params: { machineId: string; taskId: string } }>(

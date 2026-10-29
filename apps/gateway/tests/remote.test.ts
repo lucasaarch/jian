@@ -2,41 +2,43 @@ import { expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { testServices } from './helpers/services.js';
 
-it('shares machines per profile and executes an authorized worker task', async () => {
+it('lets every agent use every machine, and runs a task through the worker', async () => {
   const services = await testServices();
   const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
   const other = await services.profiles.createProfile({ name: 'Other', instructions: 'Help.' });
-  const created = await services.remote.create({ name: 'MacBook', allowedProfileIds: [owner.id] });
+  const created = await services.remote.create({ name: 'MacBook' });
 
   expect(created.token).toHaveLength(43);
-  expect(await services.remote.listForProfile(owner.id)).toHaveLength(1);
-  expect(await services.remote.listForProfile(other.id)).toEqual([]);
-  await expect(
-    services.remote.execute(other.id, created.id, { command: 'whoami' }),
-  ).rejects.toMatchObject({ statusCode: 403 });
 
-  const pending = services.remote.execute(owner.id, created.id, { command: 'printf hello' });
-  let polled: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
-  for (let attempt = 0; attempt < 20 && !polled.task; attempt++) {
-    polled = await services.remote.poll(created.id, `Bearer ${created.token}`, 'darwin-arm64');
-    if (!polled.task) await new Promise((resolve) => setTimeout(resolve, 5));
+  // Two agents, one machine: each runs a command there, with nothing granted first.
+  for (const [profile, text] of [
+    [owner, 'hello'],
+    [other, 'again'],
+  ] as const) {
+    const pending = services.remote.execute(profile.id, created.id, { command: `printf ${text}` });
+    let polled: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
+    for (let attempt = 0; attempt < 20 && !polled.task; attempt++) {
+      polled = await services.remote.poll(created.id, `Bearer ${created.token}`, 'darwin-arm64');
+      if (!polled.task) await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(polled.task).toMatchObject({ kind: 'shell', command: `printf ${text}` });
+    if (!polled.task) throw new Error('Worker did not receive the task');
+    const taskId = polled.task.id;
+    await services.remote.complete(created.id, taskId, `Bearer ${created.token}`, {
+      taskId,
+      exitCode: 0,
+      stdout: text,
+      stderr: '',
+      timedOut: false,
+    });
+    await expect(pending).resolves.toMatchObject({ taskId, exitCode: 0, stdout: text });
   }
-  expect(polled.task).toMatchObject({ kind: 'shell', command: 'printf hello' });
-  if (!polled.task) throw new Error('Worker did not receive the task');
-  const taskId = polled.task.id;
-  await services.remote.complete(created.id, taskId, `Bearer ${created.token}`, {
-    taskId,
-    exitCode: 0,
-    stdout: 'hello',
-    stderr: '',
-    timedOut: false,
-  });
-  await expect(pending).resolves.toMatchObject({ taskId, exitCode: 0, stdout: 'hello' });
 
-  await services.remote.setAccess(created.id, { allowedProfileIds: [other.id] });
   await expect(
-    services.remote.execute(owner.id, created.id, { command: 'whoami' }),
-  ).rejects.toMatchObject({ statusCode: 403 });
+    services.remote.execute(owner.id, '00000000-0000-4000-8000-000000000000', {
+      command: 'whoami',
+    }),
+  ).rejects.toMatchObject({ statusCode: 404 });
   await expect(services.remote.poll(created.id, 'Bearer invalid', undefined)).rejects.toMatchObject(
     { statusCode: 401 },
   );
@@ -44,6 +46,24 @@ it('shares machines per profile and executes an authorized worker task', async (
   await expect(services.remote.list()).resolves.toMatchObject([
     { id: created.id, platform: 'win32-x64' },
   ]);
+});
+
+it('shows a worker offline as soon as it says it is stopping', async () => {
+  const services = await testServices();
+  const created = await services.remote.create({ name: 'MacBook' });
+
+  await services.remote.poll(created.id, `Bearer ${created.token}`, 'darwin-arm64');
+  expect((await services.remote.list())[0]?.online).toBe(true);
+
+  await expect(services.remote.disconnect(created.id, 'Bearer invalid')).rejects.toMatchObject({
+    statusCode: 401,
+  });
+  await services.remote.disconnect(created.id, `Bearer ${created.token}`);
+  expect((await services.remote.list())[0]?.online).toBe(false);
+
+  // The next poll brings it back.
+  await services.remote.poll(created.id, `Bearer ${created.token}`, 'darwin-arm64');
+  expect((await services.remote.list())[0]?.online).toBe(true);
 });
 
 it('serves the worker script without authentication so install one-liners can download it', async () => {
@@ -184,7 +204,7 @@ it('authenticates the worker API with its machine token, not the gateway admin t
 it('queues computer-use tasks when the worker advertises computer-macos-v1', async () => {
   const services = await testServices();
   const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
-  const created = await services.remote.create({ name: 'MacBook', allowedProfileIds: [owner.id] });
+  const created = await services.remote.create({ name: 'MacBook' });
 
   await services.remote.poll(
     created.id,
@@ -193,7 +213,7 @@ it('queues computer-use tasks when the worker advertises computer-macos-v1', asy
     'computer-macos-v1',
     'unlocked',
   );
-  const listed = await services.remote.listForProfile(owner.id);
+  const listed = await services.remote.list();
   expect(listed[0]?.capabilities).toContain('computer-macos-v1');
   expect(listed[0]?.uiState).toBe('unlocked');
   expect(listed[0]?.online).toBe(true);
@@ -233,10 +253,7 @@ it('queues computer-use tasks when the worker advertises computer-macos-v1', asy
 it('keeps a locked Mac online and still queues Computer Use and shell (no soft 409)', async () => {
   const services = await testServices();
   const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
-  const created = await services.remote.create({
-    name: 'Locked Mac',
-    allowedProfileIds: [owner.id],
-  });
+  const created = await services.remote.create({ name: 'Locked Mac' });
 
   await services.remote.poll(
     created.id,
@@ -245,7 +262,7 @@ it('keeps a locked Mac online and still queues Computer Use and shell (no soft 4
     'computer-macos-v1',
     'locked',
   );
-  const listed = await services.remote.listForProfile(owner.id);
+  const listed = await services.remote.list();
   expect(listed[0]).toMatchObject({ online: true, uiState: 'locked' });
 
   const click = services.remote.executeComputer(owner.id, created.id, {
@@ -305,10 +322,7 @@ it('keeps a locked Mac online and still queues Computer Use and shell (no soft 4
 it('queues computer-use tasks for Linux workers advertising computer-linux-v1', async () => {
   const services = await testServices();
   const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
-  const created = await services.remote.create({
-    name: 'Desk Linux',
-    allowedProfileIds: [owner.id],
-  });
+  const created = await services.remote.create({ name: 'Desk Linux' });
 
   await services.remote.poll(
     created.id,
@@ -346,7 +360,7 @@ it('queues computer-use tasks for Linux workers advertising computer-linux-v1', 
 it('queues computer-use tasks for Windows workers advertising computer-windows-v1', async () => {
   const services = await testServices();
   const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
-  const created = await services.remote.create({ name: 'Desk Win', allowedProfileIds: [owner.id] });
+  const created = await services.remote.create({ name: 'Desk Win' });
 
   await services.remote.poll(
     created.id,
@@ -388,7 +402,7 @@ it('queues computer-use tasks for Windows workers advertising computer-windows-v
 it('accepts a large remote result that previously hit the default 256 KiB body limit', async () => {
   const services = await testServices();
   const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
-  const created = await services.remote.create({ name: 'Shot', allowedProfileIds: [owner.id] });
+  const created = await services.remote.create({ name: 'Shot' });
   const pending = services.remote.execute(owner.id, created.id, { command: 'printf shot' });
   let polled: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
   for (let attempt = 0; attempt < 20 && !polled.task; attempt++) {

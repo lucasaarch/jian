@@ -82,7 +82,6 @@ import {
 } from './records.js';
 import { releasesSchema, repositorySchema } from './releases.js';
 import {
-  remoteMachineAccessSchema,
   remoteMachineCreatedSchema,
   remoteMachineCreateSchema,
   remoteMachineDeleteSchema,
@@ -224,15 +223,6 @@ export const operations: Operation[] = [
     status: 201,
   },
   {
-    method: 'PATCH',
-    path: '/v1/remote/machines/:machineId/access',
-    operationId: 'setRemoteMachineAccess',
-    access: 'admin',
-    params: z.strictObject({ machineId: z.uuid() }),
-    body: remoteMachineAccessSchema,
-    response: remoteMachineSchema,
-  },
-  {
     method: 'POST',
     path: '/v1/remote/machines/:machineId/rotate',
     operationId: 'rotateRemoteMachineCredentials',
@@ -255,6 +245,14 @@ export const operations: Operation[] = [
     access: 'webhook',
     params: z.strictObject({ machineId: z.uuid() }),
     response: remoteWorkerPollSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/remote/worker/:machineId/disconnect',
+    operationId: 'disconnectRemoteWorker',
+    access: 'webhook',
+    params: z.strictObject({ machineId: z.uuid() }),
+    response: remoteWorkerResultSchema,
   },
   {
     method: 'POST',

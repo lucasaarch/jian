@@ -99,7 +99,7 @@ export type ToolServices = {
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
   work?: Pick<Work, 'spawnInConversation'>;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove' | 'sync'>;
-  remote?: Pick<Remote, 'listForProfile' | 'execute' | 'executeComputer'>;
+  remote?: Pick<Remote, 'list' | 'execute' | 'executeComputer'>;
 };
 
 export function profileTools(
@@ -589,8 +589,8 @@ export function profileTools(
     }),
   });
 
-  // Workspace-confined shell/files are always available. Remote Control is gated only by
-  // each machine’s allowedProfileIds — not by the deprecated allowShell profile flag.
+  // Workspace-confined shell and files are always available, and so is every Remote Control
+  // machine; a conversation aimed at one machine works there instead of locally.
   if (!remoteTarget) Object.assign(tools, shellTools(run.profileId, gitAccess));
   if (services.remote) {
     Object.assign(tools, remoteTools(run, services.remote, services.store, remoteTarget));

@@ -8,7 +8,6 @@ export const remoteMachineSchema = z.strictObject({
   name: z.string(),
   platform: z.string(),
   online: z.boolean(),
-  allowedProfileIds: z.array(z.uuid()),
   createdAt: z.iso.datetime(),
   /** Worker advertised capabilities (e.g. computer-macos-v1 / linux / windows). */
   capabilities: z.array(z.string()).default([]),
@@ -19,17 +18,14 @@ export const remoteMachineSchema = z.strictObject({
   uiState: remoteUiStateSchema.default('unknown'),
 });
 
+/** Every agent may use every machine; a machine is only a name and a worker token. */
 export const remoteMachineCreateSchema = z.strictObject({
   name: z.string().trim().min(1).max(80),
-  allowedProfileIds: z.array(z.uuid()).max(100).default([]),
 });
 
 export const remoteMachineCreatedSchema = remoteMachineSchema.extend({ token: z.string().min(32) });
 /** Same shape as create: machine fields plus the new worker token (shown once). */
 export const remoteMachineRotatedSchema = remoteMachineCreatedSchema;
-export const remoteMachineAccessSchema = z.strictObject({
-  allowedProfileIds: z.array(z.uuid()).max(100),
-});
 
 export const remoteCommandSchema = z.strictObject({
   command: z.string().min(1).max(8000),

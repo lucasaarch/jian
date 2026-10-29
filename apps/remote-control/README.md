@@ -5,25 +5,19 @@ over outbound HTTPS polling.
 
 ## Install
 
-```sh
-npm install -g @jian-ai/remote-control
-jian-remote install --gateway https://gateway.example --machine MACHINE_UUID --token WORKER_TOKEN
-```
-
-Or without a global install:
+The Remote Control page of the panel shows this command with your values filled in:
 
 ```sh
-npx @jian-ai/remote-control@latest install \
-  --gateway https://gateway.example \
-  --machine MACHINE_UUID \
-  --token WORKER_TOKEN
+npm install -g @jian-ai/remote-control && jian-remote install \
+  --gateway https://gateway.example --machine MACHINE_UUID --token WORKER_TOKEN
 ```
 
 ## Update
 
+The worker keeps itself on the gateway's version. To update by hand:
+
 ```sh
-npx @jian-ai/remote-control@latest update
-# or: jian-remote update [--version 0.6.0]
+jian-remote update [--version 0.6.0]
 ```
 
 Reads `~/.config/jian-remote` (no token, machine id, or gateway flags), installs a compatible

@@ -4,14 +4,13 @@ import {
   remoteCommandSchema,
   remoteComputerCommandSchema,
   remoteComputerParamsSchema,
-  remoteMachineAccessSchema,
   remoteMachineCreateSchema,
   remoteResultSchema,
 } from '@jian/contracts';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { GatewayError } from '../core/errors.js';
 import type { Store } from '../storage/database.js';
-import { profiles, remoteMachines, remoteTasks } from '../storage/schema.js';
+import { remoteMachines, remoteTasks } from '../storage/schema.js';
 
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
 const present = (lastSeen: Date | null, now: number) =>
@@ -57,7 +56,6 @@ function publicMachine(
   name: string;
   platform: string;
   online: boolean;
-  allowedProfileIds: string[];
   createdAt: string;
   capabilities: string[];
   uiState: RemoteUiState;
@@ -67,7 +65,6 @@ function publicMachine(
     name: machine.name,
     platform: machine.platform,
     online: present(machine.lastSeenAt, now),
-    allowedProfileIds: machine.allowedProfileIds,
     createdAt: machine.createdAt.toISOString(),
     capabilities: machine.capabilities ?? [],
     uiState: parseUiState(machine.uiState),
@@ -91,7 +88,6 @@ export class Remote {
 
   async create(input: unknown) {
     const data = remoteMachineCreateSchema.parse(input);
-    await this.assertProfiles(data.allowedProfileIds);
     const id = randomUUID();
     const token = randomBytes(32).toString('base64url');
     const createdAt = new Date(this.clock());
@@ -101,7 +97,6 @@ export class Remote {
       name: data.name,
       platform,
       tokenHash: tokenHash(token),
-      allowedProfileIds: data.allowedProfileIds,
       capabilities: [],
       createdAt,
     });
@@ -110,24 +105,11 @@ export class Remote {
       name: data.name,
       platform,
       online: false,
-      allowedProfileIds: data.allowedProfileIds,
       createdAt: createdAt.toISOString(),
       capabilities: [] as string[],
       uiState: 'unknown' as const,
       token,
     };
-  }
-
-  async setAccess(machineId: string, input: unknown) {
-    const { allowedProfileIds } = remoteMachineAccessSchema.parse(input);
-    await this.assertProfiles(allowedProfileIds);
-    const [machine] = await this.store.db
-      .update(remoteMachines)
-      .set({ allowedProfileIds })
-      .where(eq(remoteMachines.id, machineId))
-      .returning();
-    if (!machine) throw new GatewayError(404, 'Remote machine not found');
-    return publicMachine(machine, this.clock());
   }
 
   /** Issue a new worker token and invalidate the previous hash. Token is returned once. */
@@ -151,20 +133,9 @@ export class Remote {
     return machine;
   }
 
-  async listForProfile(profileId: string) {
-    const rows = await this.store.db
-      .select()
-      .from(remoteMachines)
-      .orderBy(asc(remoteMachines.createdAt));
-    const now = this.clock();
-    return rows
-      .filter((machine) => machine.allowedProfileIds.includes(profileId))
-      .map((machine) => publicMachine(machine, now));
-  }
-
   async execute(profileId: string, machineId: string, input: unknown, signal?: AbortSignal) {
     const data = remoteCommandSchema.parse(input);
-    await this.machineForProfile(profileId, machineId);
+    await this.machine(machineId);
     return this.waitForTask(
       profileId,
       machineId,
@@ -186,7 +157,7 @@ export class Remote {
     signal?: AbortSignal,
   ) {
     const data = remoteComputerCommandSchema.parse(input);
-    const machine = await this.machineForProfile(profileId, machineId);
+    const machine = await this.machine(machineId);
     if (!present(machine.lastSeenAt, this.clock())) {
       throw new GatewayError(503, 'Remote machine is offline');
     }
@@ -335,20 +306,12 @@ export class Remote {
         uiState,
       })
       .where(eq(remoteMachines.id, machineId));
-    if (!machine.allowedProfileIds.length) return { task: null };
-    const tasks = await this.store.db
+    const [next] = await this.store.db
       .select()
       .from(remoteTasks)
-      .where(
-        and(
-          eq(remoteTasks.machineId, machineId),
-          eq(remoteTasks.status, 'queued'),
-          inArray(remoteTasks.profileId, machine.allowedProfileIds),
-        ),
-      )
+      .where(and(eq(remoteTasks.machineId, machineId), eq(remoteTasks.status, 'queued')))
       .orderBy(asc(remoteTasks.createdAt))
-      .limit(20);
-    const next = tasks.find((task) => machine.allowedProfileIds.includes(task.profileId));
+      .limit(1);
     if (!next) return { task: null };
     const [claimed] = await this.store.db
       .update(remoteTasks)
@@ -398,6 +361,16 @@ export class Remote {
     };
   }
 
+  /** The worker is stopping: offline now, rather than when its last poll grows old. */
+  async disconnect(machineId: string, authorization: string) {
+    await this.authenticate(machineId, authorization);
+    await this.store.db
+      .update(remoteMachines)
+      .set({ lastSeenAt: null })
+      .where(eq(remoteMachines.id, machineId));
+    return { ok: true as const };
+  }
+
   async workerUpdateAuthorized(machineId: string, authorization: string) {
     await this.authenticate(machineId, authorization);
   }
@@ -421,14 +394,14 @@ export class Remote {
     return { ok: true as const };
   }
 
-  private async machineForProfile(profileId: string, machineId: string) {
+  /** Every agent may use every machine; only an unknown one is refused. */
+  private async machine(machineId: string) {
     const [machine] = await this.store.db
       .select()
       .from(remoteMachines)
       .where(eq(remoteMachines.id, machineId))
       .limit(1);
-    if (!machine?.allowedProfileIds.includes(profileId))
-      throw new GatewayError(403, 'This profile is not allowed to use that remote machine');
+    if (!machine) throw new GatewayError(404, 'Remote machine not found');
     return machine;
   }
 
@@ -446,19 +419,6 @@ export class Remote {
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected))
       throw new GatewayError(401, 'Unauthorized');
     return machine;
-  }
-
-  private async assertProfiles(ids: string[]) {
-    const unique = new Set(ids);
-    if (unique.size !== ids.length) throw new GatewayError(400, 'Profile ids must be unique');
-    const rows = ids.length
-      ? await this.store.db
-          .select({ id: profiles.id })
-          .from(profiles)
-          .where(inArray(profiles.id, ids))
-      : [];
-    if (rows.length !== ids.length)
-      throw new GatewayError(404, 'One or more profiles were not found');
   }
 }
 

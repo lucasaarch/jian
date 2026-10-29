@@ -228,11 +228,13 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
     }
   }, [selected]);
 
-  // The machines a chat can run on; none when the list cannot be read. Shares the cache with
-  // Remote Control, through the section's own client.
+  // The machines a chat can run on, every one of them; none when the list cannot be read.
+  // Shares the cache with Remote Control, through the section's own client, and is read again
+  // now and then so a machine that connects or stops shows up without a reload.
   const { data: machines = [] } = useQuery({
     queryKey: keys.remoteMachines,
     queryFn: () => api.remoteMachines(),
+    refetchInterval: 15_000,
   });
 
   useEffect(() => {
@@ -505,7 +507,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
             key="draft-composer"
             draft
             projects={projects}
-            machines={machines.filter((machine) => machine.allowedProfileIds.includes(profile.id))}
+            machines={machines}
             projectId={draftProjectId}
             remoteMachineId={draftMachineId}
             onProjectChange={setDraftProjectId}
@@ -674,9 +676,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
               key={`composer-${active.id}`}
               name={profile.name}
               projects={projects}
-              machines={machines.filter((machine) =>
-                machine.allowedProfileIds.includes(profile.id),
-              )}
+              machines={machines}
               projectId={active.projectId ?? null}
               remoteMachineId={active.remoteMachineId ?? null}
               onProjectChange={(projectId) =>

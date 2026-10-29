@@ -96,7 +96,6 @@ export const remoteMachines = pgTable('remote_machines', {
   name: text('name').notNull(),
   platform: text('platform').notNull(),
   tokenHash: text('token_hash').notNull(),
-  allowedProfileIds: jsonb('allowed_profile_ids').$type<string[]>().notNull().default([]),
   /** From the worker’s x-jian-remote-capabilities header on poll. */
   capabilities: jsonb('capabilities').$type<string[]>().notNull().default([]),
   /**

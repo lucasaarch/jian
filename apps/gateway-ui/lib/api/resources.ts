@@ -9,15 +9,8 @@ export const resourceCalls = (client: Client) => ({
   deleteSshKey: (keyId: string) =>
     result(client.DELETE('/v1/ssh-keys/{keyId}', { params: { path: { keyId } } })),
   remoteMachines: () => result(client.GET('/v1/remote/machines')),
-  createRemoteMachine: (body: { name: string; allowedProfileIds: string[] }) =>
+  createRemoteMachine: (body: { name: string }) =>
     result(client.POST('/v1/remote/machines', { body })),
-  setRemoteMachineAccess: (machineId: string, allowedProfileIds: string[]) =>
-    result(
-      client.PATCH('/v1/remote/machines/{machineId}/access', {
-        params: { path: { machineId } },
-        body: { allowedProfileIds },
-      }),
-    ),
   rotateRemoteMachineCredentials: (machineId: string) =>
     result(
       client.POST('/v1/remote/machines/{machineId}/rotate', {
