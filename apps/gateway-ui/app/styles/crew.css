@@ -41,8 +41,10 @@
   .crew-card:hover {
     border-color: var(--control);
   }
+  /* The card being followed: a step up from hover, not a frame around it. */
   .crew-card[aria-pressed="true"] {
-    border-color: var(--ink);
+    background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+    border-color: var(--control);
   }
   .crew-card-top {
     @apply flex min-w-0 items-center gap-2;

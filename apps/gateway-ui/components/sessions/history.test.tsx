@@ -123,7 +123,9 @@ it('shows the agents a turn handed work to as cards, and follows one in the draw
 
     completed = true;
     await act(async () => root.render(page(1)));
-    expect(card?.textContent).toContain('Build passed.');
+    // A finished card says so by its mark alone; the report is read in the drawer.
+    expect(card?.textContent).not.toContain('Build passed.');
+    expect(card?.querySelector('.work-mark')).not.toBeNull();
     expect(element.querySelector('.crew-drawer')?.textContent).toContain('Build passed.');
 
     await act(async () => {
