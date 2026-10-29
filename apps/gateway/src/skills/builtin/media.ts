@@ -3,7 +3,7 @@ import type { Skill } from '@jian/contracts';
 export const media: Skill = {
   name: 'media',
   description:
-    'Use when someone sends an image, voice note, audio, document, sticker or any file, asks you to look at one, or asks you to make or send a file, a sticker, an image or a voice reply.',
+    'Use when someone sends an image, voice note, audio, document or any file, asks you to look at one, or asks you to make or send a file, an image or a voice reply.',
   instructions: `# Files, images, audio and documents
 
 Files travel both ways on every channel: WhatsApp, Telegram, the panel and the API. Anyone
@@ -72,11 +72,6 @@ for Word, \`openpyxl\` for Excel, \`python-pptx\` for PowerPoint. Then send it b
 Without the machine, send the content in a text format (Markdown, CSV, HTML) and say so.
 
 Files go up to 16 MB each.
-
-## Stickers
-
-People's stickers become your own collection, to send back as stickers. See \`stickers\` for
-when one fits and how to choose it.
 
 ## Making images and voice
 

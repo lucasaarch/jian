@@ -110,13 +110,6 @@ export const roles = [
     tools: true,
   },
   {
-    key: 'sticker',
-    label: 'Sticker analysis',
-    hint: 'Describes and tags the stickers the agent keeps, once each. Uses the image analysis model unless another model is selected.',
-    runtime: true,
-    tools: false,
-  },
-  {
     key: 'audio',
     label: 'Incoming audio',
     hint: 'Voice notes and audio files share this model. Gemini also describes relevant sounds; Whisper, from OpenAI, Groq or your own server, transcribes the speech.',

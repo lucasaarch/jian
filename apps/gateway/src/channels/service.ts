@@ -27,7 +27,6 @@ import { issueToken, verifyToken } from '../security/tokens.js';
 import type { Vault } from '../security/vault.js';
 import type { SessionWriter } from '../sessions/port.js';
 import { insertMessage } from '../sessions/repository.js';
-import type { Stickers } from '../stickers/service.js';
 import type { Queryable, Store } from '../storage/database.js';
 import {
   channelInbox,
@@ -199,7 +198,6 @@ type ChannelServices = {
   store: Store;
   vault: Vault;
   media?: Media;
-  stickers?: Pick<Stickers, 'keep'>;
   decisions?: Pick<Decisions, 'ask'>;
 };
 
@@ -1166,15 +1164,6 @@ export class Channels {
       },
     );
     if (!intake) return { accepted: false };
-    // Every sticker from a conversation the owner approved joins the agent's collection, sent to
-    // it or not: that is how the collection grows with the people it talks to.
-    if (intake.status === 'approved' && this.services.stickers) {
-      for (const media of data.media ?? []) {
-        if (media.sticker)
-          await this.services.stickers.keep(channel.profileId, media).catch(() => undefined);
-      }
-    }
-
     if (intake.status !== 'approved') {
       return { accepted: false, contact: intake.status };
     }
@@ -1211,7 +1200,7 @@ export class Channels {
       data.scope === 'group' ? `${data.displayName ?? data.actorId}: ${data.text}` : data.text;
 
     const author = data.scope === 'group' ? authorOf(data) : undefined;
-    let run: Awaited<ReturnType<typeof this.submit>>;
+    let run: Awaited<ReturnType<Channels['submit']>>;
 
     try {
       run = await this.submit(
@@ -2049,7 +2038,6 @@ export class Channels {
               mimeType: media.mimeType as import('@jian/contracts').InlineMedia['mimeType'],
               data: media.data,
               ...(media.name ? { name: media.name } : {}),
-              ...(media.sticker ? { sticker: true } : {}),
             },
             people,
           },

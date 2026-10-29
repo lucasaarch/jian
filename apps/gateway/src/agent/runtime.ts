@@ -34,7 +34,6 @@ import {
   ponytailMode,
 } from '../sessions/repository.js';
 import { findSkill } from '../skills/builtin/index.js';
-import type { Stickers } from '../stickers/service.js';
 import type { WebSearch } from '../web/service.js';
 import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
@@ -75,7 +74,6 @@ export type RuntimeServices = ToolServices & {
   media?: Pick<Media, 'prepare' | 'tools'>;
   web?: Pick<WebSearch, 'tools'>;
   learning?: Pick<Learning, 'consider'>;
-  stickers?: Pick<Stickers, 'tools'>;
   objectives?: Pick<ObjectiveContinuation, 'continueAfter'>;
 };
 
@@ -319,7 +317,6 @@ export class AgentRuntime {
           );
         }),
         ...this.services.web?.tools(),
-        ...this.services.stickers?.tools(run),
         compact_context: tool({
           description:
             'Request a context checkpoint before continuing a long task. The gateway summarizes older turns with the configured compaction model after this tool returns, preserving recent work and the latest request. Automatic compaction remains active.',

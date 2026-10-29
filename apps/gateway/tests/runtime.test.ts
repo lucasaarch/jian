@@ -379,7 +379,7 @@ it('keeps Caveman opt-in and scoped to the owner, conversation and agent switch'
   expect(disabledPrompt).not.toContain('Caveman — concise replies');
 });
 
-it('hides disabled generation tools but keeps saved stickers available to the agent', async () => {
+it('hides disabled generation tools but keeps the other media tools available', async () => {
   const { services, profile, run } = await fixture();
   let step = 0;
   const model = mockModel({
@@ -402,8 +402,8 @@ it('hides disabled generation tools but keeps saved stickers available to the ag
       expect(names).not.toContain('generate_image');
       expect(names).not.toContain('generate_speech');
       expect(names).not.toContain('list_speech_voices');
-      expect(names).toContain('find_stickers');
-      expect(names).toContain('send_sticker');
+      expect(names).toContain('send_file');
+      expect(names).toContain('analyze_media');
       return answer('Done.');
     },
   });

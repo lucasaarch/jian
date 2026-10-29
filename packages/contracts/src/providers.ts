@@ -113,7 +113,6 @@ export const modelRoleSchema = z.enum([
   'audio',
   'speech',
   'transcription',
-  'sticker',
 ]);
 
 export const executedModelRoles = modelRoleSchema.options;
@@ -122,7 +121,6 @@ export const optionalModelRoles: ReadonlySet<ModelRole> = new Set([
   'vision',
   'audio',
   'speech',
-  'sticker',
 ]);
 
 // Required agent roles use the provider-preferred fallback when omitted. Optional activities default off.
@@ -141,8 +139,6 @@ export const modelDefaultsInputSchema = z.strictObject({
   vision: optionalRoleSelection,
   audio: optionalRoleSelection,
   speech: optionalRoleSelection,
-  // Describes and tags the stickers the agent keeps. Unset, it is the image-analysis model.
-  sticker: optionalRoleSelection,
   transcription: roleSelection.describe(
     'Deprecated compatibility alias for audio. Incoming audio uses audio when both have a model selected.',
   ),
@@ -212,7 +208,7 @@ export function supportsModelRole(
       !/live|native-audio|tts/.test(id) &&
       (!model.known || model.inputModalities.includes('audio'))
     );
-  if (role === 'vision' || role === 'sticker')
+  if (role === 'vision')
     return (
       !/image|tts|live|native-audio/.test(id) &&
       (!model.known || model.inputModalities.includes('image'))

@@ -34,14 +34,7 @@ import {
   githubManifestSchema,
   githubRepositorySchema,
 } from './integrations.js';
-import {
-  inlineMediaSchema,
-  mediaContentSchema,
-  mediaRecordSchema,
-  stickerImageSchema,
-  stickerSchema,
-  stickerTagsSchema,
-} from './media.js';
+import { inlineMediaSchema, mediaContentSchema, mediaRecordSchema } from './media.js';
 import {
   builtinSkillSchema,
   gatewaySessionInputSchema,
@@ -1150,45 +1143,6 @@ export const operations: Operation[] = [
     access: 'admin',
     query: statsQuerySchema,
     response: profileStatsSchema,
-  },
-  {
-    method: 'GET',
-    path: `${profile}/stickers`,
-    operationId: 'listStickers',
-    access: 'admin',
-    response: z.array(stickerSchema),
-  },
-  {
-    method: 'DELETE',
-    path: `${profile}/stickers`,
-    operationId: 'forgetAllStickers',
-    access: 'admin',
-    response: z.strictObject({ removed: z.number().int().nonnegative() }),
-  },
-  {
-    method: 'GET',
-    path: `${profile}/stickers/:stickerId`,
-    operationId: 'getSticker',
-    access: 'admin',
-    params: z.strictObject({ profileId: z.uuid(), stickerId: z.uuid() }),
-    response: stickerImageSchema,
-  },
-  {
-    method: 'PUT',
-    path: `${profile}/stickers/:stickerId/tags`,
-    operationId: 'tagSticker',
-    access: 'admin',
-    params: z.strictObject({ profileId: z.uuid(), stickerId: z.uuid() }),
-    body: stickerTagsSchema,
-    response: stickerSchema,
-  },
-  {
-    method: 'DELETE',
-    path: `${profile}/stickers/:stickerId`,
-    operationId: 'forgetSticker',
-    access: 'admin',
-    params: z.strictObject({ profileId: z.uuid(), stickerId: z.uuid() }),
-    response: stickerSchema,
   },
   {
     method: 'GET',

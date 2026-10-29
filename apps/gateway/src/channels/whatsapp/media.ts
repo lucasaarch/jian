@@ -63,7 +63,6 @@ export async function readWhatsAppContent(
           mimeType: mediaMimeOf(attachment.mimetype, name),
           data: data.toString('base64'),
           ...(content?.audioMessage?.ptt ? { voice: true } : {}),
-          ...(content?.stickerMessage ? { sticker: true } : {}),
           ...(name ? { name } : {}),
         },
       ],

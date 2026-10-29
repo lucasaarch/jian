@@ -325,7 +325,6 @@ describe('the skills every profile carries', () => {
         'schedules',
         'subscriptions',
         'media',
-        'stickers',
       ]),
     );
   });

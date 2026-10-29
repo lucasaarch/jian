@@ -34,7 +34,6 @@ import { registerSkillRoutes } from './skills/routes.js';
 import type { Skills } from './skills/service.js';
 import { registerSshRoutes } from './ssh/routes.js';
 import { registerStatsRoutes } from './stats/routes.js';
-import { registerStickerRoutes } from './stickers/routes.js';
 import type { Store } from './storage/database.js';
 import { registerSubscriptionRoutes } from './subscriptions/routes.js';
 import { registerWorkRoutes } from './tasks/routes.js';
@@ -137,7 +136,6 @@ export function createApp(
     registerProjectRoutes(routes, options.projects);
     registerSessionRoutes(routes, { ...options, coordination });
     registerMemoryRoutes(routes, options);
-    registerStickerRoutes(routes, options);
     registerStatsRoutes(routes, options);
     registerScheduleRoutes(routes, options);
     registerSubscriptionRoutes(routes, options);
