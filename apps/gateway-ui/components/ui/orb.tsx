@@ -9,7 +9,16 @@ import { useAppearance } from '../../lib/appearance';
  * light ink and a filter keeps each dot's brightness as its opacity and fills it with the
  * accent: the depth of the animation survives in the monochrome palette.
  */
-export function Orb({ state = 'composing', size = 20 }: { state?: OrbState; size?: OrbSize }) {
+export function Orb({
+  state = 'composing',
+  size = 20,
+  paused = false,
+}: {
+  state?: OrbState;
+  size?: OrbSize;
+  /** Held still, as the mark of work that has ended. */
+  paused?: boolean;
+}) {
   const { still } = useAppearance();
   const filter = useId().replace(/:/g, '');
 
@@ -30,7 +39,7 @@ export function Orb({ state = 'composing', size = 20 }: { state?: OrbState; size
         state={state}
         size={size}
         theme="dark"
-        paused={still}
+        paused={still || paused}
         style={{ filter: `url(#${filter})` }}
       />
     </span>

@@ -2,6 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import type { GatewayApi, Run } from '../../lib/api';
+import { CrewDrawer } from './crew';
 import { History } from './history';
 
 let hear: ((event: { type: string }) => void) | undefined;
@@ -41,7 +42,7 @@ it('centers a spinner while a conversation is loading', async () => {
   }
 });
 
-it('shows a conversation subagent and its private transcript beside the parent turn', async () => {
+it('shows the agents a turn handed work to as cards, and follows one in the drawer', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   let completed = false;
   let childReads = 0;
@@ -74,6 +75,18 @@ it('shows a conversation subagent and its private transcript beside the parent t
         role: 'execute' as const,
         status: completed ? ('completed' as const) : ('running' as const),
         input: 'Check the build.',
+        tier: 'deep' as const,
+        tierBy: 'jev' as const,
+        modelSelection: { providerId: 'provider', modelId: 'claude-opus-5-5' },
+        progress: completed
+          ? undefined
+          : {
+              phase: 'tool' as const,
+              tool: 'run_command',
+              text: '',
+              steps: 2,
+              updatedAt: '2026-09-22T00:00:30Z',
+            },
         ...(completed ? { output: 'Build passed.' } : {}),
         createdAt: '2026-09-22T00:00:00Z',
         updatedAt: '2026-09-22T00:01:00Z',
@@ -84,27 +97,99 @@ it('shows a conversation subagent and its private transcript beside the parent t
   const element = document.createElement('div');
   document.body.append(element);
   const root = createRoot(element);
+  const page = (revision = 0) => (
+    <>
+      <History api={api} profileId="profile" sessionId="parent-session" revision={revision} />
+      <CrewDrawer api={api} profileId="profile" />
+    </>
+  );
   try {
-    await act(async () =>
-      root.render(<History api={api} profileId="profile" sessionId="parent-session" />),
-    );
-    const activity = element.querySelector<HTMLElement>('.subagent-activity');
-    const button = activity?.querySelector<HTMLButtonElement>('button');
-    expect(button?.textContent).toContain('Verifier');
-    expect(button?.textContent).toContain('Running');
+    await act(async () => root.render(page()));
+    const card = element.querySelector<HTMLButtonElement>('.crew-card');
+    expect(card?.textContent).toContain('Verifier');
+    expect(card?.textContent).toContain('Running a command');
+    expect(card?.textContent).toContain('Deep');
+    expect(card?.textContent).toContain('Claude Opus 5.5');
+    // The transcript is read only for the agent the owner follows.
     expect(childReads).toBe(0);
-    await act(async () => button?.click());
+    expect(element.querySelector('.crew-drawer')).toBeNull();
+
+    await act(async () => card?.click());
+    const drawer = element.querySelector('.crew-drawer');
     expect(childReads).toBe(1);
-    expect(button?.getAttribute('aria-expanded')).toBe('true');
-    expect(activity?.textContent).toContain('Check the build.');
+    expect(card?.getAttribute('aria-pressed')).toBe('true');
+    expect(drawer?.textContent).toContain('Jev picked Deep');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Close');
+
     completed = true;
-    await act(async () =>
-      root.render(
-        <History api={api} profileId="profile" sessionId="parent-session" revision={1} />,
-      ),
-    );
-    expect(button?.textContent).toContain('Completed');
-    expect(activity?.textContent).toContain('Build passed.');
+    await act(async () => root.render(page(1)));
+    expect(card?.textContent).toContain('Build passed.');
+    expect(element.querySelector('.crew-drawer')?.textContent).toContain('Build passed.');
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
+    expect(element.querySelector('.crew-drawer')).toBeNull();
+    expect(document.activeElement).toBe(card);
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+
+it('keeps a dock above the composer only while an agent works, and it opens the drawer', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  let status: 'running' | 'completed' = 'running';
+  const api = {
+    messages: async () => [
+      {
+        id: 'parent-message',
+        profileId: 'profile',
+        sessionId: 'parent-session',
+        runId: 'parent-run',
+        role: 'assistant' as const,
+        content: 'Handing it off.',
+        createdAt: '2026-09-22T00:00:00Z',
+      },
+    ],
+    activities: async () => [],
+    conversationSubagents: async () => [
+      {
+        runId: 'child-run',
+        parentRunId: 'parent-run',
+        sessionId: 'child-session',
+        name: 'Changelog entry',
+        role: 'execute' as const,
+        status,
+        input: 'Add the entry.',
+        tier: 'light' as const,
+        tierBy: 'agent' as const,
+        createdAt: '2026-09-22T00:00:00Z',
+        updatedAt: '2026-09-22T00:00:20Z',
+      },
+    ],
+    timeline: async () => [],
+  };
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  const page = (revision = 0) => (
+    <>
+      <History api={api} profileId="profile" sessionId="parent-session" revision={revision} />
+      <CrewDrawer api={api} profileId="profile" />
+    </>
+  );
+  try {
+    await act(async () => root.render(page()));
+    const dock = element.querySelector<HTMLButtonElement>('.crew-dock');
+    expect(dock?.textContent).toContain('1 agent working');
+
+    await act(async () => dock?.click());
+    expect(element.querySelector('.crew-drawer')?.textContent).toContain('Chosen by the agent');
+
+    status = 'completed';
+    await act(async () => root.render(page(1)));
+    expect(element.querySelector('.crew-dock')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     element.remove();
@@ -231,12 +316,16 @@ it('keeps tool history visible when a failed run never wrote an answer', async (
       root.render(<History api={api} profileId="profile" sessionId="session" />),
     );
     expect(element.textContent).toContain('Review the change');
-    expect(element.textContent).toContain('Used 1 tool');
+    expect(element.querySelector('.thought-trace')?.textContent).toContain(
+      'Reading a large result',
+    );
     timelineFails = true;
     await act(async () =>
       root.render(<History api={api} profileId="profile" sessionId="session" revision={1} />),
     );
-    expect(element.textContent).toContain('Used 1 tool');
+    expect(element.querySelector('.thought-trace')?.textContent).toContain(
+      'Reading a large result',
+    );
   } finally {
     await act(async () => root.unmount());
     element.remove();

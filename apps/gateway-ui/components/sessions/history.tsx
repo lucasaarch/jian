@@ -2,16 +2,16 @@
 
 import { Fragment, useEffect, useState } from 'react';
 import { subscribe } from '@/lib/events';
-import type { GatewayApi, Person, Run, ToolStep } from '../../lib/api';
+import { useCrew } from '@/lib/stores/crew';
+import type { GatewayApi, Person, Run, Subagent, ToolStep } from '../../lib/api';
 import { Badge, Button, Empty, Spinner } from '../ui';
+import { CrewCards, CrewDock, ReportLine, reportOf } from './crew';
 import { useFollowBottom } from './follow-bottom';
 import { MessageMedia } from './media';
 import { authored, ChatMessage } from './message';
-import { RunProgress } from './progress';
+import { LiveTurn, traceOf } from './progress';
 import { running, statusLabels, waiting } from './status';
-import { ToolTimeline } from './timeline';
-
-type Subagent = Awaited<ReturnType<GatewayApi['conversationSubagents']>>[number];
+import { ThoughtLine } from './thought-line';
 
 export function History({
   api,
@@ -145,6 +145,12 @@ export function History({
     };
   }, [api, profileId, sessionId, retry, revision, group, heard]);
 
+  // The drawer beside the conversation follows these agents from outside the history.
+  useEffect(() => {
+    useCrew.getState().show(sessionId, subagents);
+  }, [sessionId, subagents]);
+  useEffect(() => () => useCrew.getState().leave(sessionId), [sessionId]);
+
   useEffect(() => {
     if (!subagents.some((child) => child.status === 'queued' || child.status === 'running')) return;
     const timer = setInterval(() => setHeard((value) => value + 1), 1500);
@@ -250,41 +256,69 @@ export function History({
                   : undefined;
               const who = (item: typeof message) =>
                 answers(item) ? 'agent' : (authored(item).id ?? authored(item).name ?? '');
+              // A turn's time runs from the first message about it to the last one said in it.
+              const span = (runId: string) => {
+                const about = messages.filter((item) => turn(item) === runId);
+                return { startedAt: about[0]?.createdAt, finishedAt: about.at(-1)?.createdAt };
+              };
+              const live = isRunning && run?.id === message.runId;
+              const crew =
+                message.runId && !live && messages[index + 1]?.runId !== message.runId
+                  ? subagents.filter((child) => child.parentRunId === message.runId)
+                  : [];
+              const handedOff =
+                opensAnswer && answering
+                  ? subagents.some((child) => child.parentRunId === answering)
+                  : false;
+
+              const report = reportOf(message, subagents);
 
               return (
                 <Fragment key={message.id}>
-                  <ChatMessage
-                    message={message}
-                    group={group}
-                    people={people}
-                    opensRun={!previous || who(previous) !== who(message)}
-                    before={steps && <ToolTimeline steps={steps} />}
-                  >
-                    {api.media && (
-                      <MessageMedia
-                        api={{ media: api.media }}
-                        profileId={profileId}
-                        content={message.content}
-                      />
-                    )}
-                  </ChatMessage>
-                  {unansweredSteps && (
+                  {report ? (
                     <div className="chat-line theirs">
-                      <ToolTimeline steps={unansweredSteps} />
+                      <ReportLine agent={report} />
+                    </div>
+                  ) : (
+                    <ChatMessage
+                      message={message}
+                      group={group}
+                      people={people}
+                      opensRun={!previous || who(previous) !== who(message)}
+                      before={
+                        answering &&
+                        (steps?.length || handedOff) && (
+                          <ThoughtLine
+                            working={false}
+                            steps={traceOf(steps ?? [])}
+                            {...span(answering)}
+                          />
+                        )
+                      }
+                    >
+                      {api.media && (
+                        <MessageMedia
+                          api={{ media: api.media }}
+                          profileId={profileId}
+                          content={message.content}
+                        />
+                      )}
+                    </ChatMessage>
+                  )}
+                  {unansweredSteps && message.runId && (
+                    <div className="chat-line theirs">
+                      <ThoughtLine
+                        working={false}
+                        steps={traceOf(unansweredSteps)}
+                        {...span(message.runId)}
+                      />
                     </div>
                   )}
-                  {message.runId &&
-                    messages[index + 1]?.runId !== message.runId &&
-                    subagents
-                      .filter((child) => child.parentRunId === message.runId)
-                      .map((child) => (
-                        <SubagentEntry
-                          api={api}
-                          profileId={profileId}
-                          run={child}
-                          key={child.runId}
-                        />
-                      ))}
+                  {crew.length > 0 && (
+                    <div className="chat-line theirs">
+                      <CrewCards agents={crew} />
+                    </div>
+                  )}
                 </Fragment>
               );
             })
@@ -292,22 +326,12 @@ export function History({
             !error && <Empty title="No messages in this session">{empty}</Empty>
           )}
           {!loading && pendingCall && callRun && running(callRun) && (
-            <RunProgress
-              run={callRun}
-              toolShown={Boolean(
-                callTools.get(callRun.id)?.some((step) => step.status === 'running'),
-              )}
-            >
-              <ToolTimeline steps={callTools.get(callRun.id) ?? []} live />
-            </RunProgress>
+            <LiveTurn run={callRun} steps={callTools.get(callRun.id) ?? []} />
           )}
           {!loading && run && isRunning && (
-            <RunProgress
-              run={run}
-              toolShown={Boolean(tools.get(run.id)?.some((step) => step.status === 'running'))}
-            >
-              <ToolTimeline steps={tools.get(run.id) ?? []} live />
-            </RunProgress>
+            <LiveTurn run={run} steps={tools.get(run.id) ?? []}>
+              <CrewCards agents={subagents.filter((child) => child.parentRunId === run.id)} />
+            </LiveTurn>
           )}
         </div>
       </section>
@@ -361,84 +385,7 @@ export function History({
           {run.error && <p className="text-bad">{run.error}</p>}
         </div>
       )}
+      <CrewDock agents={subagents} />
     </div>
-  );
-}
-
-function SubagentEntry({
-  api,
-  profileId,
-  run,
-}: {
-  api: Pick<GatewayApi, 'messages'> & Partial<Pick<GatewayApi, 'media' | 'timeline'>>;
-  profileId: string;
-  run: Subagent;
-}) {
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Awaited<ReturnType<GatewayApi['messages']>>>();
-  const [steps, setSteps] = useState<ToolStep[]>([]);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!open) return;
-    let stopped = false;
-    const read = async () => {
-      try {
-        const [history, timeline] = await Promise.all([
-          api.messages(profileId, run.sessionId),
-          api.timeline?.(profileId, run.sessionId).catch(() => []) ?? [],
-        ]);
-        if (stopped) return;
-        setMessages(history);
-        setSteps(timeline.find((item) => item.runId === run.runId)?.steps ?? []);
-        setError('');
-      } catch (failure) {
-        if (!stopped)
-          setError(
-            failure instanceof Error ? failure.message : 'Could not load subagent activity.',
-          );
-      }
-    };
-    void read();
-    const active = run.status === 'queued' || run.status === 'running';
-    const timer = active ? setInterval(() => void read(), 1500) : undefined;
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
-  }, [api, profileId, run.runId, run.sessionId, run.status, open]);
-
-  return (
-    <section className="subagent-activity">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={`subagent-${run.runId}`}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <strong>{run.name}</strong>
-        <span>{statusLabels[run.status]}</span>
-      </button>
-      <div className="subagent-transcript" id={`subagent-${run.runId}`} hidden={!open}>
-        {!messages && !error && <Spinner size={20} />}
-        {error && <p className="text-bad">{error}</p>}
-        {steps.length > 0 && <ToolTimeline steps={steps} live={run.status === 'running'} />}
-        {messages?.map((entry) => (
-          <ChatMessage key={entry.id} message={entry} group={false} people={new Map()} opensRun>
-            {api.media && (
-              <MessageMedia
-                api={{ media: api.media }}
-                profileId={profileId}
-                content={entry.content}
-              />
-            )}
-          </ChatMessage>
-        ))}
-        {!messages?.some((entry) => entry.role === 'assistant') && run.output && (
-          <p className="whitespace-pre-wrap text-sm">{run.output}</p>
-        )}
-        {run.error && <p className="text-bad">{run.error}</p>}
-      </div>
-    </section>
   );
 }

@@ -30,9 +30,11 @@ import {
   useChannels,
   useContacts,
   useProjects,
+  useProviderModels,
   useSessions,
 } from '@/lib/query/agent';
 import { keys } from '@/lib/query/keys';
+import { useCrew } from '@/lib/stores/crew';
 import { useLayout } from '@/lib/stores/layout';
 import { useDeleteConversation, useRefresh } from '@/lib/workspace';
 import type { Run, Session } from '../../lib/api';
@@ -53,6 +55,7 @@ import {
 } from '../ui';
 import { plainText } from '../ui/markdown';
 import { Composer } from './composer';
+import { CrewDrawer, ModelNames, prettyModel } from './crew';
 import { History } from './history';
 import { SessionListeners } from './listeners';
 import { SessionModel } from './model-picker';
@@ -209,6 +212,12 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   // in the URL or a new chat is being written.
   const reading = draft || Boolean(selected);
   const listCollapsed = useLayout((state) => state.chatList);
+  const following = useCrew((state) => state.following);
+  const providerModels = useProviderModels();
+  // Agents' models by the name their provider gives, the id read as a name when it gives none.
+  const modelName = ({ providerId, modelId }: { providerId: string; modelId: string }) =>
+    providerModels[providerId]?.models.find((model) => model.id === modelId)?.displayName ??
+    prettyModel(modelId);
   const [draftProjectId, setDraftProjectId] = useState<string | null>(null);
   const [draftMachineId, setDraftMachineId] = useState<string | null>(null);
   const [draftModel, setDraftModel] = useState<Session['model']>();
@@ -533,7 +542,6 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
             </IconButton>
             <div className="grow">
               <h2>New chat</h2>
-              <small>Chats</small>
             </div>
           </header>
           <div className="draft-empty">
@@ -604,15 +612,17 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
             </IconButton>
             <div className="grow">
               <h2>{nameOf(active)}</h2>
-              <small>
-                {isGateway(active)
-                  ? 'Chats'
-                  : kinds.find((item) => item.kind === kindOf(active))?.name}
-                {active.scope === 'group' || activeContact?.scope === 'group' ? ' · Group' : ''}
-                {activeContact && activeContact.displayName !== activeContact.actorId
-                  ? ` · ${activeContact.actorId}`
-                  : ''}
-              </small>
+              {/* A channel's conversation says where it comes from and with whom; a chat of the
+                  panel's own needs no line saying so. */}
+              {!isGateway(active) && (
+                <small>
+                  {kinds.find((item) => item.kind === kindOf(active))?.name}
+                  {active.scope === 'group' || activeContact?.scope === 'group' ? ' · Group' : ''}
+                  {activeContact && activeContact.displayName !== activeContact.actorId
+                    ? ` · ${activeContact.actorId}`
+                    : ''}
+                </small>
+              )}
               {active.objective && (
                 <p className="session-objective">
                   <Badge tone={objectiveTone[active.objective.status]} dot={false}>
@@ -693,81 +703,92 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
               </>
             )}
           </header>
-          <History
-            key={active.id}
-            api={api}
-            profileId={profile.id}
-            sessionId={active.id}
-            revision={sent}
-            group={active.scope === 'group' || activeContact?.scope === 'group'}
-            empty={
-              isGateway(active)
-                ? `Write to ${profile.name} below.`
-                : 'Messages arriving through the channel show up here.'
-            }
-            initialRun={activities
-              .filter((run) => run.sessionId === active.id)
-              .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
-              .at(-1)}
-            onAnswered={() => {
-              setSent((value) => value + 1);
-              void refresh();
-            }}
-          />
-          {isGateway(active) && (
-            <Composer
-              key={`composer-${active.id}`}
-              name={profile.name}
-              machines={machines}
-              remoteMachineId={active.remoteMachineId ?? null}
-              projectControl={
-                <ProjectSelect
+          <ModelNames.Provider value={modelName}>
+            <div className="conversation-main" data-following={following ? true : undefined}>
+              <div className="conversation-chat">
+                <History
+                  key={active.id}
                   api={api}
                   profileId={profile.id}
-                  projects={projects}
-                  projectId={active.projectId ?? null}
-                  onChange={(projectId) => moveToProject(active, projectId)}
+                  sessionId={active.id}
+                  revision={sent}
+                  group={active.scope === 'group' || activeContact?.scope === 'group'}
+                  empty={
+                    isGateway(active)
+                      ? `Write to ${profile.name} below.`
+                      : 'Messages arriving through the channel show up here.'
+                  }
+                  initialRun={activities
+                    .filter((run) => run.sessionId === active.id)
+                    .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
+                    .at(-1)}
+                  onAnswered={() => {
+                    setSent((value) => value + 1);
+                    void refresh();
+                  }}
                 />
-              }
-              onMachineChange={(machineId) =>
-                void api
-                  .setGatewaySessionTarget(
-                    profile.id,
-                    active.id,
-                    active.projectId ?? null,
-                    machineId,
-                  )
-                  .then(() => refresh())
-                  .catch((error: unknown) =>
-                    toast.error(
-                      error instanceof Error ? error.message : 'The machine could not be changed.',
-                    ),
-                  )
-              }
-              modelControl={
-                <SessionModel
-                  key={`composer-model-${active.id}`}
-                  api={api}
-                  profileId={profile.id}
-                  session={active}
-                  channel={false}
-                  className="composer-model-control"
-                  saved={() => void refresh()}
-                />
-              }
-              placeholder={
-                activities.some((run) => run.sessionId === active.id && run.status === 'waiting')
-                  ? 'Answer to continue…'
-                  : undefined
-              }
-              upload={(file) => api.upload(profile.id, active.id, file)}
-              send={(text, mediaIds) => api.send(profile.id, active.id, text, mediaIds)}
-              onSent={() => {
-                setSent((value) => value + 1);
-                void refresh();
-              }}
-            />
-          )}
+                {isGateway(active) && (
+                  <Composer
+                    key={`composer-${active.id}`}
+                    name={profile.name}
+                    machines={machines}
+                    remoteMachineId={active.remoteMachineId ?? null}
+                    projectControl={
+                      <ProjectSelect
+                        api={api}
+                        profileId={profile.id}
+                        projects={projects}
+                        projectId={active.projectId ?? null}
+                        onChange={(projectId) => moveToProject(active, projectId)}
+                      />
+                    }
+                    onMachineChange={(machineId) =>
+                      void api
+                        .setGatewaySessionTarget(
+                          profile.id,
+                          active.id,
+                          active.projectId ?? null,
+                          machineId,
+                        )
+                        .then(() => refresh())
+                        .catch((error: unknown) =>
+                          toast.error(
+                            error instanceof Error
+                              ? error.message
+                              : 'The machine could not be changed.',
+                          ),
+                        )
+                    }
+                    modelControl={
+                      <SessionModel
+                        key={`composer-model-${active.id}`}
+                        api={api}
+                        profileId={profile.id}
+                        session={active}
+                        channel={false}
+                        className="composer-model-control"
+                        saved={() => void refresh()}
+                      />
+                    }
+                    placeholder={
+                      activities.some(
+                        (run) => run.sessionId === active.id && run.status === 'waiting',
+                      )
+                        ? 'Answer to continue…'
+                        : undefined
+                    }
+                    upload={(file) => api.upload(profile.id, active.id, file)}
+                    send={(text, mediaIds) => api.send(profile.id, active.id, text, mediaIds)}
+                    onSent={() => {
+                      setSent((value) => value + 1);
+                      void refresh();
+                    }}
+                  />
+                )}
+              </div>
+              <CrewDrawer api={api} profileId={profile.id} />
+            </div>
+          </ModelNames.Provider>
         </section>
       )}
       {!active && !draft && (

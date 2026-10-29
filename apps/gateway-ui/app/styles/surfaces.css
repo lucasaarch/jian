@@ -622,6 +622,7 @@
      scrolls instead. */
   .composer-box {
     @apply grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-2xl border border-line bg-surface p-3 transition-colors;
+    container: composer / inline-size;
   }
   .composer-box[data-dragging="true"] {
     @apply border-dashed border-accent bg-accent-soft;
@@ -636,8 +637,27 @@
   .composer-actions {
     @apply flex items-center gap-1;
   }
+  /* One line, always: options that do not fit scroll sideways rather than wrap or slide under
+     the buttons beside them. */
   .composer-options {
-    @apply flex min-w-0 items-center gap-1;
+    @apply flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto;
+    scrollbar-width: none;
+  }
+  .composer-options > * {
+    @apply shrink-0;
+  }
+  /* A narrow composer — a phone, or a desktop pane squeezed by the sidebar and the chat list —
+     gives the options the first row whole, fading at the edge so a cut option reads as more to
+     scroll to, and keeps attach, the microphone and send on the second. Measured on the composer
+     itself, since the screen's width says nothing about the pane's. */
+  @container composer (max-width: 32rem) {
+    .composer-actions {
+      @apply flex-wrap gap-y-2;
+    }
+    .composer-options {
+      @apply order-first -mx-1 basis-full px-1;
+      mask-image: linear-gradient(to right, black calc(100% - 1.5rem), transparent);
+    }
   }
   .composer-model-control.session-model {
     @apply flex w-auto min-w-0 shrink gap-1;
@@ -1066,139 +1086,6 @@
     @apply max-w-[80%] rounded-2xl px-4 py-2.5;
     background: color-mix(in srgb, var(--ink) 7%, transparent);
   }
-  .subagent-activity {
-    @apply mb-5 max-w-xl rounded-xl border border-line bg-surface px-4 py-3;
-  }
-  .subagent-activity > button {
-    @apply flex w-full cursor-pointer items-center justify-between gap-3 text-left text-sm text-ink;
-  }
-  .subagent-activity > button span {
-    @apply text-xs text-muted;
-  }
-  .subagent-transcript {
-    @apply mt-4 border-t border-line pt-4;
-  }
-  .subagent-transcript .chat-line {
-    @apply mb-3;
-  }
-  /* The tools behind an answer: a summary line that opens a vertical timeline, a mark per
-     tool on a thread that joins them. */
-  .tool-timeline {
-    @apply mb-2 w-full max-w-xl;
-  }
-  .timeline-summary {
-    @apply inline-flex items-center gap-1 rounded-full py-0.5 text-xs font-medium text-muted transition-colors hover:text-ink;
-  }
-  .timeline-failed {
-    @apply text-bad;
-  }
-  .timeline-chevron {
-    @apply shrink-0 transition-transform;
-  }
-  [aria-expanded="true"] > .timeline-chevron {
-    @apply rotate-180;
-  }
-  .timeline-summary {
-    animation: viewer-fade 300ms ease-out;
-  }
-  /* Opening grows the height at an even pace that lengthens with the list, up to 700ms, and each
-     step fades in as the height reaches it: its delay is its place in the list times the whole.
-     Closing fades every step at once, then folds. A step added while open slides in alone. */
-  .tool-timeline {
-    --open: calc(min(var(--n), 16) * 30ms + 220ms);
-  }
-  .timeline-wrap {
-    display: grid;
-    grid-template-rows: 0fr;
-    margin-top: 0;
-    transition-property: grid-template-rows, margin-top;
-    transition-duration: calc(var(--open) * 0.6);
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    /* Closing: the fold waits for the steps to fade. */
-    transition-delay: 120ms;
-  }
-  .timeline-wrap[data-open="true"] {
-    grid-template-rows: 1fr;
-    margin-top: 0.5rem;
-    transition-duration: var(--open);
-    transition-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1);
-    transition-delay: 0ms;
-  }
-  .tool-timeline[data-live="true"] .timeline-wrap {
-    margin-top: 0;
-  }
-  .timeline {
-    @apply grid min-h-0 overflow-hidden;
-  }
-  .timeline-step {
-    opacity: 0;
-    translate: 0 -4px;
-    transition:
-      opacity 120ms ease-in,
-      translate 120ms ease-in;
-  }
-  .timeline-wrap[data-open="true"] .timeline-step {
-    opacity: 1;
-    translate: 0 0;
-    transition-timing-function: ease-out;
-    transition-duration: 220ms;
-    transition-delay: calc(var(--i) / var(--n) * var(--open) * 0.9);
-  }
-  /* While the agent works each new tool is the news: it comes in at once, not after the rest. */
-  .tool-timeline[data-live="true"] .timeline-step {
-    transition-delay: 0ms;
-  }
-  @starting-style {
-    .timeline-wrap[data-open="true"] .timeline-step {
-      opacity: 0;
-      translate: 0 -4px;
-    }
-  }
-  .timeline-mark {
-    animation: mark-pop 260ms cubic-bezier(0.3, 1.4, 0.5, 1);
-  }
-  .timeline-step {
-    @apply relative flex items-center gap-3 py-1 text-sm text-ink;
-  }
-  /* The thread: from under one mark to the next, stopping at the last. */
-  .timeline-step:not(:last-child)::before {
-    @apply absolute -bottom-1 left-[9px] top-6 w-px bg-line;
-    content: "";
-  }
-  .timeline-mark {
-    @apply relative z-[1] grid h-5 w-5 shrink-0 place-items-center rounded-full border border-line bg-surface text-muted;
-  }
-  .timeline-step[data-status="done"] .timeline-mark {
-    @apply border-accent bg-accent text-on-accent;
-  }
-  .timeline-step[data-status="failed"] .timeline-mark,
-  .timeline-step[data-status="uncertain"] .timeline-mark,
-  .timeline-step[data-status="refused"] .timeline-mark {
-    @apply border-bad bg-bad-soft text-bad;
-  }
-  .timeline-step[data-status="running"] .timeline-mark {
-    @apply border-0 bg-transparent;
-  }
-  .timeline-label {
-    @apply min-w-0 truncate;
-  }
-  .timeline-step[data-status="running"] .timeline-label {
-    @apply font-medium text-accent;
-  }
-  .timeline-outcome {
-    @apply shrink-0 text-xs text-bad;
-  }
-  /* Right after the label, where the eye already is. */
-  .timeline-time {
-    @apply shrink-0 font-mono text-[11px] text-muted;
-  }
-  /* The agent at work: the orb and what it is on, in the accent, where the answer will go. */
-  .chat-line .run-phase {
-    @apply flex items-center gap-2 text-sm font-medium text-accent;
-  }
-  .chat-line .run-phase + .chat-text {
-    @apply mt-1.5;
-  }
   /* In a group each person's run of messages opens with their face and name; the rest of the
      run lines up under it. */
   /* A schedule's instruction, arriving at its time: set apart from what people wrote. */
@@ -1303,20 +1190,6 @@
   }
   .composer {
     @apply px-3 pb-3;
-  }
-  /* The options take the first row whole and scroll sideways; the attach, the microphone and
-     send keep the second, in reach of a thumb. */
-  .composer-actions {
-    @apply flex-wrap gap-y-2;
-  }
-  .composer-options {
-    @apply order-first -mx-1 basis-full overflow-x-auto px-1;
-    scrollbar-width: none;
-    /* Fades out at the edge, so an option cut there reads as more to scroll to. */
-    mask-image: linear-gradient(to right, black calc(100% - 1.5rem), transparent);
-  }
-  .composer-options > * {
-    @apply shrink-0;
   }
   /* Under 16px, iOS zooms the page in on focus. */
   .composer-box textarea,
