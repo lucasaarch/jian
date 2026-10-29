@@ -96,4 +96,4 @@ Looking at the screen, and local HTTP tests, prove neither PostgreSQL persistenc
 
 Incoming audio uses one selection for WhatsApp voice notes and attached audio files. It preserves speech verbatim and adds relevant sound context when the model supports it. The deprecated API `transcription` field is a compatibility alias for `audio`; existing selections are preserved, with `audio` taking precedence.
 
-The composer microphone control records a voice note attachment. Audio calls are not part of the panel.
+The composer microphone records a voice note attachment. A tap starts it and a second tap attaches it; a press held longer than 300 ms attaches on release, and sliding left while held, or Escape, discards it. While it records, the button opens into a capsule with the elapsed time and the level of the microphone it is recording from. Audio calls are not part of the panel.

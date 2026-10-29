@@ -13,21 +13,15 @@ export function useRecorder() {
   const recorder = useRef<MediaRecorder>(null);
   const chunks = useRef<Blob[]>([]);
   const [recording, setRecording] = useState(false);
-  const [seconds, setSeconds] = useState(0);
+  // The microphone while it records, for whatever draws its level.
+  const [stream, setStream] = useState<MediaStream>();
 
   const release = useCallback(() => {
     for (const track of recorder.current?.stream.getTracks() ?? []) track.stop();
     recorder.current = null;
     setRecording(false);
+    setStream(undefined);
   }, []);
-
-  useEffect(() => {
-    if (!recording) return;
-    const started = Date.now();
-    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 250);
-
-    return () => clearInterval(timer);
-  }, [recording]);
 
   // Leaving the screen mid-recording must not leave the microphone on.
   useEffect(() => release, [release]);
@@ -43,7 +37,7 @@ export function useRecorder() {
     };
     next.start(250);
     recorder.current = next;
-    setSeconds(0);
+    setStream(stream);
     setRecording(true);
   }, []);
 
@@ -68,5 +62,5 @@ export function useRecorder() {
     release();
   }, [release]);
 
-  return { recording, seconds, start, stop, cancel };
+  return { recording, stream, start, stop, cancel };
 }

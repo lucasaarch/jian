@@ -1,16 +1,6 @@
 'use client';
 
-import {
-  ArrowUp,
-  FileText,
-  LaptopMinimal,
-  LoaderCircle,
-  Mic,
-  Plus,
-  Square,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { ArrowUp, FileText, LaptopMinimal, LoaderCircle, Plus, Trash2, X } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { MediaUpload, RemoteMachine } from '../../lib/api';
 import {
@@ -24,6 +14,7 @@ import { useRecorder } from '../../lib/recorder';
 import { AudioPlayer } from '../ui';
 import { Select, type SelectOption } from '../ui/select';
 import { size } from './media';
+import { VoicePill } from './voice-pill';
 
 type Attachment = {
   key: string;
@@ -38,9 +29,6 @@ type Attachment = {
   mimeType?: MediaUpload['mimeType'];
   voice?: boolean;
 };
-
-const clock = (seconds: number) =>
-  `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
 /**
  * The owner's side of the gateway conversation. Each file uploads the moment it is attached,
@@ -318,7 +306,7 @@ export function Composer({
         {recorder.recording ? (
           <div className="composer-recording" role="status">
             <span className="recording-dot" aria-hidden="true" />
-            Recording {clock(recorder.seconds)}
+            Recording a voice note
           </div>
         ) : (
           <textarea
@@ -406,25 +394,15 @@ export function Composer({
           )}
           {modelControl}
           <span className="grow" />
-          {recorder.recording ? (
-            <button
-              type="button"
-              className="composer-tool recording"
-              aria-label="Stop recording"
-              onClick={() => void finish()}
-            >
-              <Square size={14} fill="currentColor" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="composer-tool"
-              aria-label="Record a voice note"
-              onClick={() => void record()}
-            >
-              <Mic size={18} />
-            </button>
-          )}
+          <VoicePill
+            listening={recorder.recording}
+            stream={recorder.stream}
+            onStart={() => void record()}
+            // Sliding away and Escape mean no; every other way of stopping keeps the note.
+            onStop={(reason) =>
+              reason === 'cancel' || reason === 'escape' ? recorder.cancel() : void finish()
+            }
+          />
           <button type="submit" className="composer-send" aria-label="Send" disabled={!canSend}>
             {sending ? <LoaderCircle size={18} className="spin" /> : <ArrowUp size={18} />}
           </button>
