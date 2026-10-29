@@ -1,8 +1,14 @@
 import type { McpServer } from '@jian/contracts';
 import { mcpValueSecret } from './mcp-connect.js';
 
+/**
+ * The server acts as the Jian GitHub App, and GitHub keeps a person's own data from an App's
+ * installation token: stars and "who am I" answer 403 whatever the App's permissions. Their
+ * toolset is left out, and `get_me` switched off, so the agent never plans around them.
+ */
 export const GITHUB_MCP_TOOLSETS =
-  'default,actions,code_security,dependabot,discussions,git,labels,secret_protection,security_advisories,stargazers';
+  'default,actions,code_security,dependabot,discussions,git,labels,secret_protection,security_advisories';
+const USER_ONLY_TOOLS = ['get_me'];
 
 const GITHUB_MCP_URL = 'https://api.githubcopilot.com/mcp/';
 
@@ -36,7 +42,7 @@ export function githubMcpServer(name: string): McpServer {
     headers: [{ name: 'Authorization' }, { name: 'X-MCP-Toolsets' }],
     args: [],
     env: [],
-    disabledTools: [],
+    disabledTools: USER_ONLY_TOOLS,
   };
 }
 

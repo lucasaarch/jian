@@ -20,6 +20,10 @@ to ask for.
   on that account. Pick the server of the account that owns the repository.
 - A 404 on a repository usually means the App was not granted it, not that it does not exist.
 - You act as the App, not as the owner: what you write shows as the App's bot account.
+- **Not reachable, by GitHub's design**: anything that belongs to a person rather than to a
+  repository — their stars, their profile as "the authenticated user", their notifications.
+  GitHub refuses an App's token there whatever its permissions, so those tools are left out.
+  Say so plainly when asked, and offer the shell's \`gh\` if the profile is signed in there.
 
 ## Finding the tools
 
@@ -37,7 +41,7 @@ load the ones you will call with \`load_mcp_tools\`. Searches that work:
 | Workflow runs, logs, re-runs | "list workflow runs", "get job logs", "rerun" |
 | Code scanning, Dependabot, secret scanning alerts | "code scanning alerts", "dependabot", "secret scanning" |
 | Releases, tags, commits | "list releases", "list tags", "get commit" |
-| Discussions, stars, advisories | "discussions", "starred", "security advisories" |
+| Discussions, security advisories | "discussions", "security advisories" |
 
 ## What it is not
 
