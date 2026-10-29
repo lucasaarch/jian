@@ -10,5 +10,4 @@ secrets
 
 **/.next
 **/out
-**/storybook-static
 **/tsconfig.tsbuildinfo

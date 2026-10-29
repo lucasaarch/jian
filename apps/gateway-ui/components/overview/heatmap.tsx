@@ -1,6 +1,8 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { type MouseEvent, useEffect, useRef, useState } from 'react';
+import { keys } from '@/lib/query/keys';
 import type { ActivityDay, GatewayApi, Profile } from '../../lib/api';
 
 /** A year, laid out as the calendar lays it out: one column per week, Sunday at the top. */
@@ -74,27 +76,20 @@ function calendar(days: Map<string, ActivityDay>): Cell[] {
 }
 
 export function ActivityHeatmap({ profile, api }: { profile: Profile; api: GatewayApi }) {
-  const [days, setDays] = useState<ActivityDay[]>();
-  const [error, setError] = useState('');
+  // The calendar of this browser's zone, read once per visit to the overview.
+  const calendarQuery = useQuery({
+    queryKey: keys.activityCalendar(profile.id, zone()),
+    queryFn: () => api.activityCalendar(profile.id, zone()),
+  });
+  const days = calendarQuery.data;
+  const error = calendarQuery.error
+    ? calendarQuery.error instanceof Error
+      ? calendarQuery.error.message
+      : 'Could not load.'
+    : '';
   const [hover, setHover] = useState<{ cell: Cell; x: number; y: number }>();
   const panel = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let alive = true;
-
-    api
-      .activityCalendar(profile.id, zone())
-      .then((calendarDays) => alive && setDays(calendarDays))
-      .catch(
-        (failure) =>
-          alive && setError(failure instanceof Error ? failure.message : 'Could not load.'),
-      );
-
-    return () => {
-      alive = false;
-    };
-  }, [api, profile.id]);
 
   // The newest week sits at the right edge, so a panel narrower than the year would open
   // showing last autumn and hide today.

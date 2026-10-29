@@ -142,10 +142,10 @@
   .integration-tabs {
     @apply mb-6 flex gap-1 border-b border-line;
   }
-  .integration-tabs button {
+  .integration-tabs a {
     @apply -mb-px border-b-2 border-transparent px-4 py-2.5 text-sm text-muted transition-colors;
   }
-  .integration-tabs button[aria-selected="true"] {
+  .integration-tabs a[aria-selected="true"] {
     @apply border-ink text-ink;
   }
   .integration-app-card {

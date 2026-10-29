@@ -3,12 +3,12 @@
 import { Save, Scale, Trash2 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { date } from '../../lib/format';
-import type { SectionProps } from '../props';
+import type { SectionActions } from '../props';
 import { Badge, Button, Field, ProviderLogo, ResourceRow } from '../ui';
 import { DecisionsControls } from './decisions-controls';
 
 type Status = { configured: boolean; updatedAt?: string };
-type RowProps = Pick<SectionProps, 'api' | 'mutate' | 'busy'>;
+type RowProps = Pick<SectionActions, 'api' | 'mutate' | 'busy'>;
 
 /**
  * A service the whole installation shares through one key. These sit beside the model
@@ -42,7 +42,7 @@ function ServiceKeyRow<S extends Status>({
     status: S,
     change: (action: () => Promise<S>, done: string) => Promise<boolean>,
   ) => ReactNode;
-} & Pick<SectionProps, 'mutate' | 'busy'>) {
+} & Pick<SectionActions, 'mutate' | 'busy'>) {
   const [status, setStatus] = useState<S>();
   const [open, setOpen] = useState(false);
   const [formError, setFormError] = useState('');

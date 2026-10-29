@@ -1,4 +1,5 @@
-import { act } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 
@@ -26,6 +27,13 @@ vi.mock('../../lib/api', () => ({
   }),
 }));
 
+// A cache of its own per render; the releases are read once and the dialog shares them.
+const withCache = (ui: ReactNode) => (
+  <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>
+);
+// The cache tells its readers on the next tick, not within the one that answered.
+const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
 it('shows what changed once, as text, and marks it read on close', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   // happy-dom has no modal dialogs; the component only needs the calls to exist.
@@ -43,8 +51,9 @@ it('shows what changed once, as text, and marks it read on close', async () => {
 
   try {
     await act(async () => {
-      root.render(<ReleaseNotes />);
+      root.render(withCache(<ReleaseNotes />));
     });
+    await settle();
 
     expect(element.querySelector('h2')?.textContent).toBe("What's new in Jian 2.2.0");
     expect(element.textContent).toContain('Agents search the web.');
@@ -60,6 +69,7 @@ it('shows what changed once, as text, and marks it read on close', async () => {
     await act(async () => {
       button?.click();
     });
+    await settle();
 
     expect(seen).toHaveBeenCalledTimes(1);
     expect(element.querySelector('dialog')).toBeNull();
@@ -91,13 +101,18 @@ it('opens every release on request, newest first, and marks nothing read', async
   try {
     await act(async () => {
       root.render(
-        <ReleaseNotes>
-          <Open />
-        </ReleaseNotes>,
+        withCache(
+          <>
+            <ReleaseNotes />
+            <Open />
+          </>,
+        ),
       );
     });
+    await settle();
     // The update dialog comes first; reading it is what the history is opened after.
     await act(async () => button('Got it')?.click());
+    await settle();
     seen.mockClear();
 
     await act(async () => button('Release notes')?.click());

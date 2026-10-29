@@ -5,6 +5,7 @@ import {
   GATEWAY_SESSION_CHANNEL,
   LEARNING_SESSION_CHANNEL,
 } from '@jian/contracts';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Bot,
@@ -17,12 +18,24 @@ import {
   SlidersHorizontal,
   Terminal,
 } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
 import { type ComponentType, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { agentPath } from '@/lib/navigation';
+import {
+  useActivities,
+  useAgent,
+  useAgents,
+  useChannels,
+  useContacts,
+  useProjects,
+  useSessions,
+} from '@/lib/query/agent';
+import { keys } from '@/lib/query/keys';
+import { useDeleteConversation, useRefresh } from '@/lib/workspace';
 import type { Run, Session } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
-import { useWorkspace } from '../../lib/workspace';
-import type { SectionProps } from '../props';
+import type { SectionActions } from '../props';
 import { Badge, Button, Empty, Field, Modal, Orb, Switch, TelegramLogo, WhatsAppLogo } from '../ui';
 import { plainText } from '../ui/markdown';
 import { Composer } from './composer';
@@ -140,39 +153,49 @@ function preview(text: string) {
   );
 }
 
-export function Sessions({
-  profile,
-  data,
-  api,
-  initialSession,
-  mutate,
-  busy,
-}: SectionProps & { initialSession?: string }) {
-  const [selected, setSelected] = useState(initialSession);
-  // On a phone the list and the conversation take turns; this is which one is showing.
-  const [reading, setReading] = useState(Boolean(initialSession));
+export function Sessions({ api, mutate, busy }: SectionActions) {
+  const profile = useAgent();
+  const sessions = useSessions();
+  const contacts = useContacts();
+  const channels = useChannels();
+  const projects = useProjects();
+  const activities = useActivities();
+  const router = useRouter();
+  // The open conversation is the URL's: a link, a reload or the back button all land on it.
+  const { sessionId } = useParams<{ sessionId?: string }>();
+  const selected = sessionId ? decodeURIComponent(sessionId) : undefined;
+  const open = (id: string | undefined, replace = false) => {
+    const href = agentPath(profile.id, id ? `sessions/${encodeURIComponent(id)}` : 'sessions');
+
+    if (replace) router.replace(href);
+    else router.push(href);
+  };
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState(false);
+  // On a phone the list and the conversation take turns: the conversation shows while one is
+  // in the URL or a new chat is being written.
+  const reading = draft || Boolean(selected);
   const [draftProjectId, setDraftProjectId] = useState<string | null>(null);
   const [draftMachineId, setDraftMachineId] = useState<string | null>(null);
   const [draftModel, setDraftModel] = useState<Session['model']>();
-  const [machines, setMachines] = useState<import('../../lib/api').RemoteMachine[]>([]);
   const draftSession = useRef<Promise<Session> | null>(null);
   const [renaming, setRenaming] = useState<Session>();
   const [renameTitle, setRenameTitle] = useState('');
-  const initial = data.sessions.find((session) => session.id === initialSession);
-  const initialContact = data.contacts.find(
-    (contact) => contact.sessionId === initialSession && contact.profileId === profile.id,
-  );
-  const initialChannelId = initial
-    ? isGateway(initial)
-      ? GATEWAY_SESSION_CHANNEL
-      : (initialContact?.channelId ??
-        data.channels.find((channel) => channel.type === initial.channel && !channel.revokedAt)
-          ?.id ??
-        GATEWAY_SESSION_CHANNEL)
-    : GATEWAY_SESSION_CHANNEL;
-  const [channelFilter, setChannelFilter] = useState(initialChannelId);
+  // The channel a conversation is listed under, so one opened by its address is in view.
+  const channelOf = (id: string | undefined) => {
+    const session = sessions.find((item) => item.id === id);
+
+    if (!session || isGateway(session)) return GATEWAY_SESSION_CHANNEL;
+
+    return (
+      contacts.find(
+        (contact) => contact.sessionId === session.id && contact.profileId === profile.id,
+      )?.channelId ??
+      channels.find((channel) => channel.type === session.channel && !channel.revokedAt)?.id ??
+      GATEWAY_SESSION_CHANNEL
+    );
+  };
+  const [channelFilter, setChannelFilter] = useState(() => channelOf(selected));
   const [channelMenuOpen, setChannelMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     session: Session;
@@ -183,12 +206,24 @@ export function Sessions({
   // Bumped by a sent message, so the open history reads again instead of waiting for its poll.
   const [sent, setSent] = useState(0);
 
+  // A conversation opened from elsewhere — a schedule's history, a project — while this screen
+  // stays mounted: leave any unsent new chat and show the channel it belongs to.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only a change of address re-aims the list.
   useEffect(() => {
-    void api
-      .remoteMachines()
-      .then(setMachines)
-      .catch(() => setMachines([]));
-  }, [api]);
+    if (!selected) return;
+    setDraft(false);
+    draftSession.current = null;
+    if (sessions.some((session) => session.id === selected)) {
+      setChannelFilter(channelOf(selected));
+    }
+  }, [selected]);
+
+  // The machines a chat can run on; none when the list cannot be read. Shares the cache with
+  // Remote Control, through the section's own client.
+  const { data: machines = [] } = useQuery({
+    queryKey: keys.remoteMachines,
+    queryFn: () => api.remoteMachines(),
+  });
 
   useEffect(() => {
     if (contextMenu) menuButton.current?.focus();
@@ -219,7 +254,9 @@ export function Sessions({
     return () => document.removeEventListener('pointerdown', close);
   }, [channelMenuOpen]);
 
-  const { profiles, refresh, deleteConversation } = useWorkspace();
+  const profiles = useAgents();
+  const refresh = useRefresh();
+  const deleteConversation = useDeleteConversation();
   const ensureDraftSession = () => {
     if (!draftSession.current) {
       draftSession.current = api.createGatewaySession(profile.id, draftProjectId, draftMachineId);
@@ -227,7 +264,7 @@ export function Sessions({
     return draftSession.current;
   };
   const contactOf = (session: Session) =>
-    data.contacts.find(
+    contacts.find(
       (contact) => contact.sessionId === session.id && contact.profileId === profile.id,
     );
   const peerOf = (session: Session) =>
@@ -236,7 +273,7 @@ export function Sessions({
   // the title the agent gave it. The stored title of the others carries a channel prefix.
   const nameOf = (session: Session) => {
     if (isGateway(session)) {
-      const project = data.projects.find((item) => item.id === session.projectId);
+      const project = projects.find((item) => item.id === session.projectId);
       return session.title ?? (project ? `${project.name} · New chat` : 'New chat');
     }
     const kind = kindOf(session);
@@ -250,7 +287,7 @@ export function Sessions({
   };
 
   const lastAt = (session: Session) => session.lastMessage?.at ?? session.createdAt;
-  const connectedChannels = data.channels.filter(
+  const connectedChannels = channels.filter(
     (channel) =>
       !channel.revokedAt &&
       (channel.type !== 'whatsapp-business' || channel.whatsappBusinessStatus === 'configured'),
@@ -287,11 +324,11 @@ export function Sessions({
   };
   // The run at work in each conversation, which the list shows as the conversation does.
   const working = new Map(
-    data.activities
+    activities
       .filter((run) => run.status === 'queued' || run.status === 'running')
       .map((run) => [run.sessionId, run]),
   );
-  const visibleSessions = data.sessions.filter(matchesChannel);
+  const visibleSessions = sessions.filter(matchesChannel);
   const matches = (session: Session) =>
     `${nameOf(session)} ${session.lastMessage?.text ?? ''}`
       .toLocaleLowerCase()
@@ -306,7 +343,7 @@ export function Sessions({
   const gatewaySessions = visibleSessions
     .filter((session) => isGateway(session) && matches(session))
     .sort((a, b) => lastAt(b).localeCompare(lastAt(a)));
-  const gatewayGroups = data.projects
+  const gatewayGroups = projects
     .map((project) => ({
       id: project.id,
       name: project.name,
@@ -345,8 +382,7 @@ export function Sessions({
       onClick={() => {
         setDraft(false);
         draftSession.current = null;
-        setSelected(session.id);
-        setReading(true);
+        open(session.id);
       }}
     >
       <span className="conversation-text">
@@ -404,7 +440,7 @@ export function Sessions({
                         setChannelFilter(option.id);
                         setDraft(false);
                         draftSession.current = null;
-                        setSelected(undefined);
+                        if (selected) open(undefined);
                         setChannelMenuOpen(false);
                       }}
                     >
@@ -422,13 +458,12 @@ export function Sessions({
               disabled={busy || draft}
               onClick={() => {
                 setChannelFilter(GATEWAY_SESSION_CHANNEL);
-                setSelected(undefined);
+                if (selected) open(undefined);
                 setDraft(true);
                 setDraftProjectId(null);
                 setDraftMachineId(null);
                 setDraftModel(undefined);
                 draftSession.current = null;
-                setReading(true);
               }}
             >
               <Plus size={18} />
@@ -489,7 +524,10 @@ export function Sessions({
               type="button"
               className="icon-button conversation-back"
               aria-label="Back to the conversations"
-              onClick={() => setReading(false)}
+              onClick={() => {
+                setDraft(false);
+                draftSession.current = null;
+              }}
             >
               <ArrowLeft size={18} />
             </button>
@@ -504,7 +542,7 @@ export function Sessions({
           <Composer
             key="draft-composer"
             draft
-            projects={data.projects}
+            projects={projects}
             machines={machines.filter((machine) => machine.allowedProfileIds.includes(profile.id))}
             projectId={draftProjectId}
             remoteMachineId={draftMachineId}
@@ -514,7 +552,6 @@ export function Sessions({
               <SessionModel
                 api={api}
                 profileId={profile.id}
-                data={data}
                 channel={false}
                 draftModel={draftModel}
                 onDraftChange={setDraftModel}
@@ -538,7 +575,8 @@ export function Sessions({
               await api.send(profile.id, session.id, text, mediaIds);
               draftSession.current = null;
               setDraft(false);
-              setSelected(session.id);
+              // The draft became this conversation; going back should not return to the draft.
+              open(session.id, true);
             }}
             onSent={() => {
               setSent((value) => value + 1);
@@ -554,7 +592,7 @@ export function Sessions({
               type="button"
               className="icon-button conversation-back"
               aria-label="Back to the conversations"
-              onClick={() => setReading(false)}
+              onClick={() => open(undefined)}
             >
               <ArrowLeft size={18} />
             </button>
@@ -603,7 +641,7 @@ export function Sessions({
                         )
                       }
                     />
-                    {data.channels.some(
+                    {channels.some(
                       (channel) =>
                         channel.id === activeContact.channelId &&
                         channel.profileId === profile.id &&
@@ -628,7 +666,6 @@ export function Sessions({
                     api={api}
                     profileId={profile.id}
                     session={active}
-                    data={data}
                     channel={isMessaging(active)}
                     saved={() => void refresh()}
                   />
@@ -642,7 +679,6 @@ export function Sessions({
                       api={api}
                       profileId={profile.id}
                       session={active}
-                      data={data}
                       channel={isMessaging(active)}
                       saved={() => void refresh()}
                     />
@@ -663,7 +699,7 @@ export function Sessions({
                 ? `Write to ${profile.name} below.`
                 : 'Messages arriving through the channel show up here.'
             }
-            initialRun={data.activities
+            initialRun={activities
               .filter((run) => run.sessionId === active.id)
               .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
               .at(-1)}
@@ -676,7 +712,7 @@ export function Sessions({
             <Composer
               key={`composer-${active.id}`}
               name={profile.name}
-              projects={data.projects}
+              projects={projects}
               machines={machines.filter((machine) =>
                 machine.allowedProfileIds.includes(profile.id),
               )}
@@ -718,16 +754,13 @@ export function Sessions({
                   api={api}
                   profileId={profile.id}
                   session={active}
-                  data={data}
                   channel={false}
                   className="composer-model-control"
                   saved={() => void refresh()}
                 />
               }
               placeholder={
-                data.activities.some(
-                  (run) => run.sessionId === active.id && run.status === 'waiting',
-                )
+                activities.some((run) => run.sessionId === active.id && run.status === 'waiting')
                   ? 'Answer to continue…'
                   : undefined
               }
@@ -780,7 +813,7 @@ export function Sessions({
               const target = contextMenu.session;
               setContextMenu(undefined);
               void deleteConversation(target.id).then((deleted) => {
-                if (deleted && selected === target.id) setSelected(undefined);
+                if (deleted && selected === target.id) open(undefined, true);
               });
             }}
           >

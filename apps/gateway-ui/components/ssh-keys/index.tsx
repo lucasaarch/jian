@@ -1,33 +1,38 @@
 'use client';
 
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, KeyRound, Plus, Trash2 } from 'lucide-react';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useState } from 'react';
+import { useAgent } from '@/lib/query/agent';
+import { keys as cache } from '@/lib/query/keys';
 import type { SshKey } from '../../lib/api';
 import { date } from '../../lib/format';
-import type { SectionProps } from '../props';
+import type { SectionActions } from '../props';
 import { Badge, Button, Confirm, Empty, Field, Modal, ResourceRow, SectionHeading } from '../ui';
 
-export function SshKeys({ profile, api, mutate, busy }: SectionProps) {
-  const [keys, setKeys] = useState<SshKey[]>([]);
+export function SshKeys({ api, mutate, busy }: SectionActions) {
+  const profile = useAgent();
+  const client = useQueryClient();
+  // Read through the section's own client, which a story hands in.
+  const list = useQuery({
+    queryKey: cache.sshKeys(profile.id),
+    queryFn: () => api.sshKeys(profile.id),
+  });
+  const keys = list.data ?? [];
+  // A key added or removed shows at once, before the reload that follows every action.
+  const setKeys = (change: (current: SshKey[]) => SshKey[]) =>
+    client.setQueryData<SshKey[]>(cache.sshKeys(profile.id), (current = []) => change(current));
   const [name, setName] = useState('');
   const [removing, setRemoving] = useState<SshKey>();
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<SshKey>();
   const [copied, setCopied] = useState<string>();
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    void api
-      .sshKeys(profile.id)
-      .then(setKeys)
-      .catch(() => setError('Could not load SSH keys.'));
-  }, [api, profile.id]);
+  const error = list.error ? 'Could not load SSH keys.' : '';
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
     const label = name.trim();
     if (!label) return;
-    setError('');
     let result: SshKey | undefined;
     if (
       await mutate(async () => {

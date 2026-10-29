@@ -3,9 +3,10 @@
 import { Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { useAgent } from '@/lib/query/agent';
+import { useDeleteProfile, useRefresh } from '@/lib/workspace';
 import type { GatewayApi, Profile } from '../../lib/api';
 import { useAutosave } from '../../lib/autosave';
-import { useWorkspace } from '../../lib/workspace';
 import { Button, Confirm, Field, Modal, SectionHeading } from '../ui';
 import { AvatarField } from './avatar-field';
 
@@ -96,16 +97,10 @@ export function NewProfileDialog({
   );
 }
 
-export function ProfileEditor({
-  profile,
-  api,
-  busy,
-}: {
-  profile: Profile;
-  api: GatewayApi;
-  busy: boolean;
-}) {
-  const { deleteProfile, refresh } = useWorkspace();
+export function ProfileEditor({ api, busy }: { api: GatewayApi; busy: boolean }) {
+  const profile = useAgent();
+  const deleteProfile = useDeleteProfile();
+  const refresh = useRefresh();
   const [deleting, setDeleting] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [working, setWorking] = useState(false);

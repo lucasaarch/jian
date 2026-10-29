@@ -1,12 +1,24 @@
 'use client';
 
 import { Plus } from 'lucide-react';
-import { useWorkspace } from '../../lib/workspace';
+import { usePathname, useRouter } from 'next/navigation';
+import { agentPath, currentSection } from '@/lib/navigation';
+import { useProfiles } from '@/lib/query/profile';
+import { useBusy, useProfileId } from '@/lib/workspace';
 import { Avatar } from '../profile/avatar-field';
 import { Select } from '../ui/select';
 
 export function ProfileSwitcher({ onCreate }: { onCreate: () => void }) {
-  const { profiles, profile, selected, select, busy } = useWorkspace();
+  const router = useRouter();
+  const pathname = usePathname();
+  const profiles = useProfiles().data ?? [];
+  const selected = useProfileId() ?? '';
+  const profile = profiles.find((item) => item.id === selected);
+  const busy = useBusy();
+  // Another agent opens on the same section; anything deeper, such as one conversation,
+  // belonged to the agent being left.
+  const select = (profileId: string) =>
+    router.push(agentPath(profileId, currentSection(pathname)?.path));
   return (
     <div className="profile-selector">
       <Select

@@ -1,8 +1,9 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { Channel, Contact, GatewayApi, ProfileData, Session } from '../../lib/api';
-import { profiles } from '../../stories/fixtures';
+import { AgentCache } from '@/test/agent';
+import { profile } from '@/test/fixtures';
+import type { Channel, Contact, GatewayApi, Session } from '../../lib/api';
 import { Sessions } from '.';
 
 const { deleteConversation } = vi.hoisted(() => ({
@@ -10,8 +11,10 @@ const { deleteConversation } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../lib/workspace', () => ({
-  useWorkspace: () => ({ profiles: [], refresh: vi.fn(), setNotice: vi.fn(), deleteConversation }),
+  useRefresh: () => vi.fn(),
+  useDeleteConversation: () => deleteConversation,
 }));
+
 vi.mock('./history', () => ({ History: () => <div>History</div> }));
 vi.mock('./listeners', () => ({ SessionListeners: () => null }));
 vi.mock('./model-picker', () => ({ SessionModel: () => null }));
@@ -22,8 +25,6 @@ afterEach(async () => {
   document.body.innerHTML = '';
 });
 
-const profile = profiles[0];
-if (!profile) throw new Error('Missing profile fixture');
 const session = {
   id: 'business-session',
   profileId: profile.id,
@@ -91,43 +92,45 @@ async function render({
   roots.push(root);
   await act(async () =>
     root.render(
-      <Sessions
+      // The conversation is the one in the URL.
+      <AgentCache
         profile={profile}
-        data={
-          {
-            sessions,
-            projects: [],
-            activities: [],
-            contacts: contacts.map((item) => ({ ...item, aiEnabled, status })),
-            channels: [
-              {
-                id: 'business',
-                profileId: profile.id,
-                type: 'whatsapp-business',
-                whatsappBusinessStatus: 'configured',
-                enabled: false,
-              } as Channel,
-            ],
-          } as unknown as ProfileData
-        }
-        api={
-          {
-            updateContact,
-            updateChannel,
-            approveContact,
-            blockContact,
-            deleteSession,
-            createGatewaySession,
-            renameSession,
-            send: sendMessage,
-            // The chat offers the remote machines it can run on; none are connected here.
-            remoteMachines: vi.fn(async () => []),
-          } as unknown as GatewayApi
-        }
-        mutate={mutate}
-        busy={busy}
-        initialSession={session.id}
-      />,
+        params={{ sessionId: 'business-session' }}
+        slices={{
+          sessions,
+          projects: [],
+          activities: [],
+          contacts: contacts.map((item) => ({ ...item, aiEnabled, status })),
+          channels: [
+            {
+              id: 'business',
+              profileId: profile.id,
+              type: 'whatsapp-business',
+              whatsappBusinessStatus: 'configured',
+              enabled: false,
+            } as Channel,
+          ],
+        }}
+      >
+        <Sessions
+          api={
+            {
+              updateContact,
+              updateChannel,
+              approveContact,
+              blockContact,
+              deleteSession,
+              createGatewaySession,
+              renameSession,
+              send: sendMessage,
+              // The chat offers the remote machines it can run on; none are connected here.
+              remoteMachines: vi.fn(async () => []),
+            } as unknown as GatewayApi
+          }
+          mutate={mutate}
+          busy={busy}
+        />
+      </AgentCache>,
     ),
   );
   const control = element.querySelector<HTMLButtonElement>('[role="switch"]');

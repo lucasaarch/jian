@@ -3,22 +3,26 @@
 import { ChevronDown, Unplug } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useAgent, useChannels, useContacts } from '@/lib/query/agent';
 import type { Channel, ChannelType, NewChannel } from '../../lib/api';
 import { date } from '../../lib/format';
-import type { SectionProps } from '../props';
+import type { SectionActions } from '../props';
 import { Badge, Button, Confirm, Field, Secret, SectionHeading, Switch } from '../ui';
 import { Conversations } from './conversations';
 import { kinds } from './kinds';
 import { MetaCallback, MetaCredentials, MetaLimits } from './meta';
 import { Pairing } from './pairing';
 
-export function Channels(props: SectionProps) {
-  const { profile, data, api, mutate, busy } = props;
+export function Channels(props: SectionActions) {
+  const { api, mutate, busy } = props;
+  const profile = useAgent();
+  const channels = useChannels();
+  const contacts = useContacts();
   // A channel with someone waiting opens on its own: the decision is why the owner came here.
   const [editing, setEditing] = useState<ChannelType | undefined>(
     () =>
-      data.channels.find((channel) =>
-        data.contacts.some(
+      channels.find((channel) =>
+        contacts.some(
           (contact) => contact.channelId === channel.id && contact.status === 'pending',
         ),
       )?.type,
@@ -30,7 +34,7 @@ export function Channels(props: SectionProps) {
   const [error, setError] = useState('');
 
   const connected = (type: ChannelType) =>
-    data.channels.find((channel) => channel.type === type && !channel.revokedAt);
+    channels.find((channel) => channel.type === type && !channel.revokedAt);
 
   const webhook = (channel: Channel) =>
     channel.type === 'telegram'
@@ -75,12 +79,11 @@ export function Channels(props: SectionProps) {
   };
 
   const waiting = (channel: Channel) =>
-    data.contacts.filter(
-      (contact) => contact.channelId === channel.id && contact.status === 'pending',
-    ).length;
+    contacts.filter((contact) => contact.channelId === channel.id && contact.status === 'pending')
+      .length;
 
   const reach = (channel: Channel) => {
-    const decided = data.contacts.filter(
+    const decided = contacts.filter(
       (contact) => contact.channelId === channel.id && contact.status === 'approved',
     );
     const groups = decided.filter((contact) => contact.scope === 'group').length;

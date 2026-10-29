@@ -1,11 +1,15 @@
 'use client';
 
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, GraduationCap, MessageSquareText, MessagesSquare, Settings2 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
-import type { GatewayApi, Profile, ProfileData, ProfileStats } from '../../lib/api';
+import { useEffect, useState } from 'react';
+import { subscribe } from '@/lib/events';
+import { agentPath } from '@/lib/navigation';
+import { useAgent } from '@/lib/query/agent';
+import { keys } from '@/lib/query/keys';
+import type { GatewayApi } from '../../lib/api';
 import { LOCALE } from '../../lib/format';
-import { useEvents } from '../../lib/workspace';
 import { Avatar } from '../profile/avatar-field';
 import { Button, CountUp, SectionHeading, Spinner } from '../ui';
 import { Select } from '../ui/select';
@@ -16,57 +20,44 @@ import { ChannelCards, periods, Tile, UsageSummary } from './usage';
 /**
  * The stats of the open profile, read again when a turn moves: a run's usage is written at the
  * end of each step, so the numbers climb while the agent works. Reads are spaced, since several
- * events arrive together.
+ * events arrive together. Changing the period keeps the last numbers until the new ones land.
  */
 function useStats(api: GatewayApi, profileId: string, days: number) {
-  const subscribe = useEvents();
-  const [stats, setStats] = useState<ProfileStats>();
-  const [failed, setFailed] = useState(false);
-  const [retry, setRetry] = useState(0);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const client = useQueryClient();
+  // A failure is shown with a button to try again, so the read is not retried behind it.
+  const query = useQuery({
+    queryKey: keys.stats(profileId, days),
+    queryFn: () => api.stats(profileId, days),
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
 
   useEffect(() => {
-    let active = true;
-    if (retry > 0) setFailed(false);
-    const read = () =>
-      api
-        .stats(profileId, days)
-        .then((value) => {
-          if (active) {
-            setStats(value);
-            setFailed(false);
-          }
-        })
-        .catch(() => {
-          if (active) setFailed(true);
-        });
-
-    void read();
-
+    let timer: ReturnType<typeof setTimeout>;
     const stop = subscribe((event) => {
       if (!event.type.startsWith('run.') && !event.type.startsWith('memory.')) return;
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => void read(), 1500);
+      clearTimeout(timer);
+      timer = setTimeout(
+        () => void client.invalidateQueries({ queryKey: keys.stats(profileId, days) }),
+        1500,
+      );
     });
 
     return () => {
-      active = false;
       stop();
-      clearTimeout(timer.current);
+      clearTimeout(timer);
     };
-  }, [api, profileId, days, subscribe, retry]);
+  }, [client, profileId, days]);
 
-  return { stats, failed, retry: () => setRetry((value) => value + 1) };
+  return {
+    stats: query.data,
+    failed: query.isError,
+    retry: () => void query.refetch(),
+  };
 }
 
-export function Overview({
-  profile,
-  api,
-}: {
-  profile: Profile;
-  data: ProfileData;
-  api: GatewayApi;
-}) {
+export function Overview({ api }: { api: GatewayApi }) {
+  const profile = useAgent();
   const [days, setDays] = useState(30);
   const { stats, failed, retry } = useStats(api, profile.id, days);
 
@@ -95,7 +86,7 @@ export function Overview({
           <Avatar name={profile.name} avatar={profile.avatar} className="profile-avatar" />
           <h2>{profile.name}</h2>
         </div>
-        <Link href="/identity" className="button quiet">
+        <Link href={agentPath(profile.id, 'identity')} className="button quiet">
           <Settings2 size={16} />
           Edit agent
         </Link>

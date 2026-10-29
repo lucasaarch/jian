@@ -1,9 +1,11 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, Check, LoaderCircle, X } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import type { GatewayApi, Schedule, ScheduleRun } from '../../lib/api';
+import { agentPath } from '@/lib/navigation';
+import { keys } from '@/lib/query/keys';
+import type { GatewayApi, Schedule } from '../../lib/api';
 import { inZone } from '../../lib/time';
 import { statusLabels } from '../sessions/status';
 import { Badge, Empty, Modal } from '../ui';
@@ -23,17 +25,16 @@ export function ScheduleHistory({
   schedule: Schedule;
   close: () => void;
 }) {
-  const [entries, setEntries] = useState<ScheduleRun[]>();
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    void api
-      .scheduleHistory(profileId, schedule.id)
-      .then(setEntries)
-      .catch((failure) =>
-        setError(failure instanceof Error ? failure.message : 'The history could not load.'),
-      );
-  }, [api, profileId, schedule.id]);
+  const history = useQuery({
+    queryKey: keys.scheduleHistory(profileId, schedule.id),
+    queryFn: () => api.scheduleHistory(profileId, schedule.id),
+  });
+  const entries = history.data;
+  const error = history.error
+    ? history.error instanceof Error
+      ? history.error.message
+      : 'The history could not load.'
+    : '';
 
   return (
     <Modal title={schedule.name} description="The last 30 days." close={close}>
@@ -84,7 +85,10 @@ export function ScheduleHistory({
                   </div>
                   {entry.error && <p className="run-error">{entry.error}</p>}
                   {entry.runId && (
-                    <Link href={`/sessions?session=${schedule.sessionId}`} onClick={close}>
+                    <Link
+                      href={agentPath(profileId, `sessions/${schedule.sessionId}`)}
+                      onClick={close}
+                    >
                       Open the conversation
                       <ArrowUpRight size={13} />
                     </Link>

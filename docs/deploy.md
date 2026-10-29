@@ -255,7 +255,7 @@ Until this change the gateway served the panel itself, at `/ui/`. The panel is n
 
 **Your own containers or Kubernetes.** Add the web server as in [way 2](#way-2--the-images-on-their-own) or [way 3](#way-3--kubernetes), at the gateway's version, point `JIAN_GATEWAY_URL` at the gateway, move the public port or the Ingress to it, and set `JIAN_TRUSTED_PROXIES` on the gateway.
 
-Panel addresses lose their `/ui` prefix: the web server redirects `/ui/...` to the same page at the root, so bookmarks keep working. An app installed from the old panel should be removed and installed again from the new address.
+Panel addresses change: each screen now lives under the agent it belongs to, `/agents/:profileId/...`, and old `/ui/...` bookmarks no longer lead anywhere — open the panel at its root. An app installed from the old panel should be removed and installed again from the new address.
 
 ## Published tags
 

@@ -1,7 +1,9 @@
 'use client';
 
 import { supportsModelRole, supportsProviderRole } from '@jian/contracts';
-import type { ModelSelection, ProfileData, Provider, ProviderModel } from '../../lib/api';
+import Link from 'next/link';
+import { useAgentPath } from '@/lib/workspace';
+import type { ModelCatalog, ModelSelection, Provider, ProviderModel } from '../../lib/api';
 import { Field } from '../ui';
 import { Select, type SelectOption } from '../ui/select';
 import { efforts, modelLabel, optionalRoles, type Role, type roles } from './catalog';
@@ -59,13 +61,13 @@ export const providerName = (provider: Provider) =>
  */
 export function modelChoices(
   role: Role,
-  data: ProfileData,
+  catalog: ModelCatalog,
   configured: Provider[],
 ): SelectOption[] {
   return configured
     .filter((provider) => supportsProviderRole(provider, role))
     .flatMap((provider) =>
-      (data.providerModels[provider.id]?.models ?? [])
+      (catalog.providerModels[provider.id]?.models ?? [])
         .filter(
           (model) => isSelectableModel(provider, model) && supportsModelRole(provider, model, role),
         )
@@ -81,10 +83,10 @@ export function modelChoices(
 /** New conversation model choices start at Low when that model exposes reasoning levels. */
 export function withDefaultEffort(
   selection: ModelSelection | undefined,
-  data: ProfileData,
+  catalog: ModelCatalog,
 ): ModelSelection | undefined {
   if (!selection || selection.reasoningEffort) return selection;
-  const efforts = data.providerModels[selection.providerId]?.models.find(
+  const efforts = catalog.providerModels[selection.providerId]?.models.find(
     (model) => model.id === selection.modelId,
   )?.reasoningEfforts;
   const effort = efforts?.includes('low') ? 'low' : efforts?.[0];
@@ -94,10 +96,10 @@ export function withDefaultEffort(
 /** The chat default follows a configured Anthropic Opus, then GPT-6 Astra, then a live model. */
 export function preferredModelSelection(
   role: Role,
-  data: ProfileData,
+  catalog: ModelCatalog,
   configured: Provider[],
 ): ModelSelection | undefined {
-  const choices = modelChoices(role, data, configured);
+  const choices = modelChoices(role, catalog, configured);
   const byProvider = (provider: Provider | undefined) =>
     provider ? choices.filter((choice) => choice.value.startsWith(`${provider.id}:`)) : [];
   const anthropic = configured.filter((provider) => provider.kind === 'anthropic');
@@ -128,14 +130,14 @@ export function preferredModelSelection(
       providerId: choice.value.slice(0, separator),
       modelId: choice.value.slice(separator + 1),
     },
-    data,
+    catalog,
   );
 }
 
 /** What one activity can offer and has chosen, read the same by its card and its dialog. */
-export function describeRole(value: RoleValue, data: ProfileData, configured: Provider[]) {
+export function describeRole(value: RoleValue, catalog: ModelCatalog, configured: Provider[]) {
   const provider = configured.find((item) => item.id === value.providerId);
-  const list = value.providerId ? data.providerModels[value.providerId] : undefined;
+  const list = value.providerId ? catalog.providerModels[value.providerId] : undefined;
   const selected = (list?.models ?? []).find((model) => model.id === value.modelId);
   const allowed = efforts.filter((effort) => selected?.reasoningEfforts.includes(effort.value));
 
@@ -191,7 +193,7 @@ function voiceOptions(provider: string): SelectOption[] {
 export function RoleFields({
   role,
   value,
-  data,
+  catalog,
   configured,
   hasOpenAIKey,
   busy,
@@ -199,14 +201,15 @@ export function RoleFields({
 }: {
   role: (typeof roles)[number];
   value: RoleValue;
-  data: ProfileData;
+  catalog: ModelCatalog;
   configured: Provider[];
   hasOpenAIKey: boolean;
   busy: boolean;
   change: (role: Role, patch: Partial<RoleValue>) => void;
 }) {
-  const { provider, list, allowed } = describeRole(value, data, configured);
-  const choices = modelChoices(role.key, data, configured);
+  const pathTo = useAgentPath();
+  const { provider, list, allowed } = describeRole(value, catalog, configured);
+  const choices = modelChoices(role.key, catalog, configured);
   const current = value.disabled ? 'disabled' : choiceOf(value.providerId, value.modelId);
 
   return (
@@ -240,7 +243,7 @@ export function RoleFields({
                 const split = choice.indexOf(':');
                 const selection = withDefaultEffort(
                   { providerId: choice.slice(0, split), modelId: choice.slice(split + 1) },
-                  data,
+                  catalog,
                 );
 
                 change(role.key, {
@@ -274,8 +277,8 @@ export function RoleFields({
         </Field>
         {role.key === 'image' && !value.disabled && !hasOpenAIKey && (
           <p className="note">
-            <a href="/providers">Configure an OpenAI API key in Providers.</a> ChatGPT login does
-            not authorize image generation.
+            <Link href={pathTo('providers')}>Configure an OpenAI API key in Providers.</Link>{' '}
+            ChatGPT login does not authorize image generation.
           </p>
         )}
         {role.key === 'speech' && !value.disabled && provider && value.modelId && (

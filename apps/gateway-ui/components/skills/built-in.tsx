@@ -1,9 +1,12 @@
 'use client';
 
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Eye, ShieldCheck } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import type { Profile } from '@/lib/api';
+import { keys } from '@/lib/query/keys';
 import type { BuiltinSkill } from '../../lib/api';
-import type { SectionProps } from '../props';
+import type { SectionActions } from '../props';
 import { Button, ResourceRow, Switch } from '../ui';
 import { SkillView } from './skill-view';
 
@@ -16,27 +19,20 @@ export function BuiltinSkills({
   api,
   mutate,
   busy,
-}: Pick<SectionProps, 'profile' | 'api' | 'mutate' | 'busy'>) {
-  const [skills, setSkills] = useState<BuiltinSkill[]>();
-  const [error, setError] = useState('');
+}: SectionActions & { profile: Profile }) {
   const [open, setOpen] = useState<string>();
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a toggle bumps the version, and the enabled flags are what must be read again.
-  useEffect(() => {
-    let alive = true;
-
-    api
-      .builtinSkills(profile.id)
-      .then((list) => alive && setSkills(list))
-      .catch(
-        (failure) =>
-          alive && setError(failure instanceof Error ? failure.message : 'Could not load.'),
-      );
-
-    return () => {
-      alive = false;
-    };
-  }, [api, profile.id, profile.version]);
+  // Keyed by the profile's version: a toggle, here or by the agent, changes which are enabled.
+  const builtIn = useQuery({
+    queryKey: [...keys.builtinSkills(profile.id), profile.version],
+    queryFn: () => api.builtinSkills(profile.id),
+    placeholderData: keepPreviousData,
+  });
+  const skills = builtIn.data;
+  const error = builtIn.error
+    ? builtIn.error instanceof Error
+      ? builtIn.error.message
+      : 'Could not load.'
+    : '';
 
   const toggle = (skill: BuiltinSkill) =>
     mutate(

@@ -2,15 +2,11 @@
 
 import { Download } from 'lucide-react';
 import { useState } from 'react';
-import type { SectionProps } from '../props';
+import type { Profile } from '@/lib/api';
+import type { SectionActions } from '../props';
 import { Button, Field } from '../ui';
 
-export function SkillImport({
-  profile,
-  api,
-  mutate,
-  busy,
-}: Pick<SectionProps, 'profile' | 'api' | 'mutate' | 'busy'>) {
+export function SkillImport({ profile, api, mutate, busy }: SectionActions & { profile: Profile }) {
   const [url, setUrl] = useState('');
 
   return (

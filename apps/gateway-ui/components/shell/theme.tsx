@@ -1,46 +1,61 @@
 'use client';
 
 import { Moon, Sun } from 'lucide-react';
-import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { flushSync } from 'react-dom';
+import { create } from 'zustand';
 import { revealTheme } from './theme-reveal';
 
 type Theme = 'dark' | 'light';
-type ThemeContextValue = {
+
+const SAVED = 'jian-theme';
+
+/**
+ * The theme is this browser's choice, kept under `jian-theme` as a bare word. The page renders
+ * dark first and takes the saved theme once mounted, so the server and the first client render
+ * agree.
+ */
+const useTheme = create<{
   theme: Theme;
   setTheme: (theme: Theme, origin?: { x: number; y: number }) => void;
-};
-const ThemeContext = createContext<ThemeContextValue>({
+}>()((set, get) => ({
   theme: 'dark',
-  setTheme: () => undefined,
-});
-
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('dark');
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem('jian-theme');
-    if (saved === 'light' || saved === 'dark') setThemeState(saved);
-  }, []);
-
-  const setTheme = (next: Theme, origin = { x: window.innerWidth / 2, y: 0 }) => {
-    if (next === theme) return;
-    window.localStorage.setItem('jian-theme', next);
+  setTheme: (next, origin = { x: window.innerWidth / 2, y: 0 }) => {
+    if (next === get().theme) return;
+    try {
+      window.localStorage.setItem(SAVED, next);
+    } catch {
+      // Storage can be off; the theme still changes for this visit.
+    }
     revealTheme(origin, () => {
-      flushSync(() => setThemeState(next));
+      flushSync(() => set({ theme: next }));
       document.documentElement.dataset.theme = next;
     });
-  };
+  },
+}));
+
+/** Puts the saved theme on the page and keeps the page on the chosen one. Renders nothing. */
+export function ThemeSync() {
+  const theme = useTheme((state) => state.theme);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(SAVED);
+      if (saved === 'light' || saved === 'dark') useTheme.setState({ theme: saved });
+    } catch {
+      // No storage, no saved theme.
+    }
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
-  return <ThemeContext.Provider value={{ theme, setTheme }}>{children}</ThemeContext.Provider>;
+  return null;
 }
 
 export function ThemeSwitcher() {
-  const { theme, setTheme } = useContext(ThemeContext);
+  const { theme, setTheme } = useTheme();
 
   return (
     <fieldset className="theme-switcher">

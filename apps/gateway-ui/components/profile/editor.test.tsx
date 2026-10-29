@@ -1,10 +1,12 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
+import { AgentCache } from '@/test/agent';
 import type { GatewayApi, Profile } from '../../lib/api';
 
 vi.mock('../../lib/workspace', () => ({
-  useWorkspace: () => ({ deleteProfile: vi.fn(), refresh: vi.fn(async () => {}) }),
+  useDeleteProfile: () => vi.fn(),
+  useRefresh: () => vi.fn(async () => {}),
 }));
 
 const profile = {
@@ -49,7 +51,11 @@ async function render() {
   const root = createRoot(element);
 
   await act(async () => {
-    root.render(<ProfileEditor profile={profile} api={api} busy={false} />);
+    root.render(
+      <AgentCache profile={profile}>
+        <ProfileEditor api={api} busy={false} />
+      </AgentCache>,
+    );
   });
 
   const type = async (name: string, value: string) => {

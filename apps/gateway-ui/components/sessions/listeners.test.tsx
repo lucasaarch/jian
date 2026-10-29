@@ -1,14 +1,9 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { expect, it, vi } from 'vitest';
+import { expect, it } from 'vitest';
 import type { GatewayApi, Subscription } from '../../lib/api';
 import { SessionListeners } from './listeners';
-
-vi.mock('../../lib/workspace', () => ({
-  useWorkspace: () => ({
-    subscribe: () => () => undefined,
-  }),
-}));
 
 const base: Subscription = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -72,14 +67,17 @@ it('lists active listeners for the open conversation', async () => {
   try {
     await act(async () =>
       root.render(
-        <SessionListeners
-          api={api as GatewayApi}
-          profileId={base.profileId}
-          sessionId={base.sessionId}
-        />,
+        <QueryClientProvider client={new QueryClient()}>
+          <SessionListeners
+            api={api as GatewayApi}
+            profileId={base.profileId}
+            sessionId={base.sessionId}
+          />
+        </QueryClientProvider>,
       ),
     );
-    await act(async () => undefined);
+    // The cache tells its readers on the next tick.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
     expect(element.querySelector('.session-listeners')).not.toBeNull();
     expect(element.textContent).toContain('PR 53 Check');
@@ -109,14 +107,17 @@ it('renders nothing when this conversation has no active listeners', async () =>
   try {
     await act(async () =>
       root.render(
-        <SessionListeners
-          api={api as GatewayApi}
-          profileId={base.profileId}
-          sessionId={base.sessionId}
-        />,
+        <QueryClientProvider client={new QueryClient()}>
+          <SessionListeners
+            api={api as GatewayApi}
+            profileId={base.profileId}
+            sessionId={base.sessionId}
+          />
+        </QueryClientProvider>,
       ),
     );
-    await act(async () => undefined);
+    // The cache tells its readers on the next tick.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(element.querySelector('.session-listeners')).toBeNull();
   } finally {
     await act(async () => root.unmount());

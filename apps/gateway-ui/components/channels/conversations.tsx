@@ -1,9 +1,10 @@
 'use client';
 
 import { ShieldOff, UserCheck, UserX } from 'lucide-react';
+import { useAgent, useContacts, useGroups } from '@/lib/query/agent';
 import type { Channel, Contact } from '../../lib/api';
 import { date } from '../../lib/format';
-import type { SectionProps } from '../props';
+import type { SectionActions } from '../props';
 import { Badge, Button, Face } from '../ui';
 import { kinds } from './kinds';
 
@@ -16,15 +17,17 @@ const agents = (count: number) => (count === 1 ? '1 agent' : `${count} agents`);
  */
 export function Conversations({
   channel,
-  profile,
-  data,
   api,
   mutate,
   busy,
-}: SectionProps & { channel: Channel }) {
+}: SectionActions & { channel: Channel }) {
+  const profile = useAgent();
+  const contacts = useContacts();
+  // The groups the gateway knows, with their members; distinct from this channel's group contacts.
+  const rooms = useGroups();
   // Waiting first, then approved, then revoked: what needs a decision is never below the fold.
   const order = { pending: 0, approved: 1, blocked: 2 } as const;
-  const mine = data.contacts
+  const mine = contacts
     .filter((contact) => contact.channelId === channel.id)
     .sort((a, b) => order[a.status] - order[b.status]);
   const groups = mine.filter((contact) => contact.scope === 'group');
@@ -160,7 +163,7 @@ export function Conversations({
           <h3>Groups</h3>
           {groups.length ? (
             groups.map((contact) => {
-              const room = data.groups.find(
+              const room = rooms.find(
                 (group) => group.type === contact.type && group.chatId === contact.chatId,
               );
               const others = (room?.profiles ?? []).filter(
