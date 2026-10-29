@@ -69,7 +69,7 @@ export function useRefresh(): () => Promise<void> {
 }
 
 /** Runs an action, shows its outcome and reloads the agent. False means it failed. */
-export function useMutate(): Mutation {
+function useMutate(): Mutation {
   const refresh = useRefresh();
   const { mutateAsync } = useMutation({
     mutationFn: async ({

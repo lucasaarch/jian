@@ -9,7 +9,7 @@
  */
 
 /** Where the gateway listens, seen from this server. Compose names the service `gateway`. */
-export function gatewayUrl(): string {
+function gatewayUrl(): string {
   return process.env.JIAN_GATEWAY_URL ?? 'http://127.0.0.1:4310';
 }
 

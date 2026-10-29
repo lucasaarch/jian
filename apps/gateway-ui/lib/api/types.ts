@@ -30,11 +30,9 @@ export type McpStatus = JsonResponse<'checkMcpServer', 200>;
 export type Run = JsonResponse<'getRun', 200>;
 export type Message = JsonResponse<'listMessages', 200>[number];
 export type Person = JsonResponse<'listSessionPeople', 200>[number];
-export type RunTimeline = JsonResponse<'listSessionTimeline', 200>[number];
+type RunTimeline = JsonResponse<'listSessionTimeline', 200>[number];
 export type ToolStep = RunTimeline['steps'][number];
 export type ActivityDay = JsonResponse<'getActivityCalendar', 200>[number];
-export type Delivery = JsonResponse<'listDeliveries', 200>[number];
-export type Connection = JsonResponse<'getChannelConnection', 200>;
 
 export type Provider = JsonResponse<'listProviders', 200>[number];
 export type ModelDefaults = JsonResponse<'getModelDefaults', 200>;
@@ -48,7 +46,6 @@ export type MediaUpload = RequestBody<'uploadMedia'>;
 export type ScheduleInput = RequestBody<'createSchedule'>;
 export type SchedulePatch = RequestBody<'updateSchedule'>;
 export type Schedule = JsonResponse<'listSchedules', 200>[number];
-export type ScheduleRun = JsonResponse<'listScheduleRuns', 200>[number];
 export type Subscription = JsonResponse<'listSubscriptions', 200>[number];
 export type ProfilePatch = RequestBody<'updateProfile'>;
 export type NewChannel = RequestBody<'createChannel'>;
@@ -58,13 +55,7 @@ export type ModelDefaultsInput = RequestBody<'setModelDefaults'>;
 export type DecisionsStatus = JsonResponse<'getDecisions', 200>;
 export type DecisionsSettingsPatch = RequestBody<'updateDecisionsSettings'>;
 export type SshKey = JsonResponse<'listSshKeys', 200>[number];
-export type NewSshKey = RequestBody<'createSshKey'>;
 export type RemoteMachine = JsonResponse<'listRemoteMachines', 200>[number];
-export type NewRemoteMachine = RequestBody<'createRemoteMachine'>;
-export type CreatedRemoteMachine = JsonResponse<'createRemoteMachine', 201>;
-export type GitHubIntegration = JsonResponse<'githubIntegration', 200>;
-export type GitHubAccount = GitHubIntegration['accounts'][number];
-export type GitHubRepository = JsonResponse<'githubRepositories', 200>[number];
 
 /** What a model is chosen from: the providers, the models each offers, the agent's defaults. */
 export type ModelCatalog = {

@@ -73,7 +73,7 @@ db-reset: ## Delete the development database volume and start an empty one
 
 ##@ Quality
 
-check: ## Lint, typecheck, unit tests, build and contract drift
+check: ## Lint, panel dead code, typecheck, unit tests, build and contract drift
 	pnpm run check
 
 test: ## Unit tests, no Docker and no provider

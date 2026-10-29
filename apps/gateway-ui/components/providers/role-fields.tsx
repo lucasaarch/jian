@@ -51,7 +51,7 @@ function isSelectableModel(provider: Provider, model: ProviderModel) {
   return true;
 }
 
-export const providerName = (provider: Provider) =>
+const providerName = (provider: Provider) =>
   `${provider.name}${provider.kind === 'openai' ? (provider.authMode === 'codex' ? ' · ChatGPT' : ' · API key') : ''}`;
 
 /**
@@ -135,7 +135,7 @@ export function preferredModelSelection(
 }
 
 /** What one activity can offer and has chosen, read the same by its card and its dialog. */
-export function describeRole(value: RoleValue, catalog: ModelCatalog, configured: Provider[]) {
+function describeRole(value: RoleValue, catalog: ModelCatalog, configured: Provider[]) {
   const provider = configured.find((item) => item.id === value.providerId);
   const list = value.providerId ? catalog.providerModels[value.providerId] : undefined;
   const selected = (list?.models ?? []).find((model) => model.id === value.modelId);

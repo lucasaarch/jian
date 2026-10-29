@@ -1,6 +1,6 @@
 import { MAX_MEDIA_BYTES, MAX_MESSAGE_MEDIA, mediaMimeOf } from '@jian/contracts';
 
-export { MAX_MEDIA_BYTES, MAX_MESSAGE_MEDIA };
+export { MAX_MESSAGE_MEDIA };
 
 /** Past this many characters a paste is a document, not something to type around. */
 export const PASTE_AS_FILE_CHARS = 2_000;

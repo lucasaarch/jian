@@ -1,0 +1,5 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Registered by URL from components/shell/service-worker.tsx, never imported.
+  "ignore": ["public/sw.js"]
+}
