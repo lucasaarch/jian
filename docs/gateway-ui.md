@@ -96,6 +96,6 @@ Looking at the screen, and local HTTP tests, prove neither PostgreSQL persistenc
 
 Incoming audio uses one selection for WhatsApp voice notes and attached audio files. It preserves speech verbatim and adds relevant sound context when the model supports it. The deprecated API `transcription` field is a compatibility alias for `audio`; existing selections are preserved, with `audio` taking precedence.
 
-A conversation reads in one centred column, 52rem wide however wide the screen, with the composer lined up under it. On a desktop the app's sidebar narrows to a rail of icons and the chat list hides, each from its own button; the browser remembers both under `jian-layout`, and a phone keeps its own layout, one screen at a time.
+A conversation reads in one centred column, 52rem wide however wide the screen, with the composer lined up under it. On a desktop the chat list hides from a button beside the conversation's title; the browser remembers that under `jian-layout`, and a phone keeps its own layout, one screen at a time.
 
 The composer microphone records a voice note attachment. A tap starts it and a second tap attaches it; a press held longer than 300 ms attaches on release, and sliding left while held, or Escape, discards it. While it records, the button opens into a capsule with the elapsed time and the level of the microphone it is recording from. Audio calls are not part of the panel.

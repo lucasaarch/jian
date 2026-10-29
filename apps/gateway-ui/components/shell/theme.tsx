@@ -66,7 +66,7 @@ export function ThemeSwitcher() {
         onClick={(event) => setTheme('dark', { x: event.clientX, y: event.clientY })}
         aria-pressed={theme === 'dark'}
       >
-        <Moon size={15} /> <span className="sidebar-label">Dark</span>
+        <Moon size={15} /> Dark
       </button>
       <button
         type="button"
@@ -74,7 +74,7 @@ export function ThemeSwitcher() {
         onClick={(event) => setTheme('light', { x: event.clientX, y: event.clientY })}
         aria-pressed={theme === 'light'}
       >
-        <Sun size={15} /> <span className="sidebar-label">Light</span>
+        <Sun size={15} /> Light
       </button>
     </fieldset>
   );

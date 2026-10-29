@@ -118,75 +118,6 @@
   .workspace {
     @apply ml-60;
   }
-  .sidebar-footer button.sidebar-collapse {
-    @apply mt-0 mb-1 w-full;
-  }
-  .sidebar-footer button,
-  .sidebar-github {
-    @apply relative;
-  }
-  /* The sidebar narrowed to a rail of icons. Only on a screen that keeps it beside the page:
-     a phone opens it whole, over everything. Labels stay for screen readers, and each link
-     carries its name as a tooltip. */
-  @media (min-width: 761px) {
-    .sidebar {
-      transition: width 200ms cubic-bezier(0.23, 1, 0.32, 1);
-    }
-    .workspace {
-      transition: margin-left 200ms cubic-bezier(0.23, 1, 0.32, 1);
-    }
-    .app-shell[data-sidebar="collapsed"] {
-      & .sidebar {
-        @apply w-16;
-      }
-      & .workspace {
-        @apply ml-16;
-      }
-      & .sidebar .brand {
-        @apply justify-center px-0;
-      }
-      & .sidebar .brand > span:last-child,
-      & .sidebar .sidebar-label,
-      & .sidebar .profile-trigger-copy,
-      & .nav-group a > span:not(.nav-count) {
-        @apply sr-only;
-      }
-      & .profile-selector {
-        @apply px-2;
-      }
-      & .profile-selector .select-trigger {
-        @apply justify-center px-1.5;
-      }
-      & .profile-selector .select-chevron,
-      & .nav-label,
-      & .sidebar-stars {
-        @apply hidden;
-      }
-      & .sidebar-nav {
-        @apply px-2;
-      }
-      & .nav-group {
-        @apply mb-4;
-      }
-      & .nav-group a {
-        @apply justify-center px-0;
-      }
-      & .nav-count,
-      & .release-update-count {
-        @apply absolute right-1 top-0.5 h-4 min-h-4 min-w-4 px-1 text-[10px];
-      }
-      & .sidebar-footer {
-        @apply px-2;
-      }
-      & .sidebar-footer button,
-      & .sidebar-github {
-        @apply w-full justify-center;
-      }
-      & .sidebar-footer .theme-switcher {
-        @apply flex-col;
-      }
-    }
-  }
   .topbar {
     @apply hidden;
   }
@@ -1356,8 +1287,7 @@
   .conversation-pane .run-status {
     width: min(var(--chat-column), calc(100% - 1.5rem));
   }
-  .chat-list-toggle,
-  .sidebar-footer button.sidebar-collapse {
+  .chat-list-toggle {
     @apply hidden;
   }
   .composer {
