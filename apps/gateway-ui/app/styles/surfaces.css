@@ -73,12 +73,6 @@
   .sidebar-footer > div {
     @apply flex items-center gap-2;
   }
-  .live-dot {
-    @apply h-1.5 w-1.5 rounded-full bg-good;
-  }
-  .live-dot.offline {
-    @apply bg-bad;
-  }
   .sidebar-footer button,
   .sidebar-github {
     @apply mt-3 flex items-center gap-2 py-1 hover:text-accent;
@@ -211,9 +205,6 @@
   .field > small {
     @apply text-xs leading-relaxed text-muted;
   }
-  .form-grid {
-    @apply grid grid-cols-2 gap-x-5;
-  }
   .check-row {
     @apply flex cursor-pointer gap-3 py-2.5;
   }
@@ -242,24 +233,6 @@
   .mini-avatar img {
     @apply h-full w-full object-cover;
   }
-  .memory-grid {
-    @apply grid grid-cols-2 gap-5;
-  }
-  .memory-card {
-    @apply relative rounded-sm border border-line bg-surface p-6;
-  }
-  .memory-card header {
-    @apply mb-4 flex items-center justify-between gap-3;
-  }
-  .memory-card header code {
-    @apply text-accent;
-  }
-  .memory-card > p {
-    @apply whitespace-pre-wrap break-words text-sm leading-7 text-ink;
-  }
-  .memory-card > small {
-    @apply mt-6 block font-mono text-[10px] text-muted;
-  }
   .pairing-stage {
     @apply my-4 flex min-h-72 flex-col items-center justify-center gap-4 text-center text-muted;
   }
@@ -271,27 +244,6 @@
   }
   .success-orbit {
     @apply grid h-20 w-20 place-items-center rounded-full bg-good-soft text-good;
-  }
-  .request-panel {
-    @apply mb-6 rounded-sm border border-warn bg-warn-soft p-6;
-  }
-  .request-panel > header {
-    @apply flex items-center gap-3 text-warn;
-  }
-  .request-panel h2 {
-    @apply text-ink;
-  }
-  .request-panel header p {
-    @apply mt-1 text-xs;
-  }
-  .request-row {
-    @apply mt-4 flex flex-wrap items-center gap-4 border-t border-line pt-4;
-  }
-  .request-row small {
-    @apply mt-1 block text-xs text-muted;
-  }
-  .request-message {
-    @apply mt-2 break-words text-sm text-ink;
   }
   .danger-zone {
     @apply mt-16 flex flex-wrap items-center gap-5 rounded-lg border border-bad/40 bg-bad-soft px-6 py-5;
@@ -479,9 +431,6 @@
   }
   .messenger {
     @apply grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)];
-  }
-  .messenger.empty-state {
-    @apply grid-cols-1 place-items-center;
   }
   .conversation-list {
     @apply flex min-h-0 flex-col border-r border-line bg-surface;
@@ -1117,9 +1066,6 @@
     @apply max-w-[80%] rounded-2xl px-4 py-2.5;
     background: color-mix(in srgb, var(--ink) 7%, transparent);
   }
-  .chat-line.pending .chat-text.muted {
-    @apply text-sm text-muted;
-  }
   .subagent-activity {
     @apply mb-5 max-w-xl rounded-xl border border-line bg-surface px-4 py-3;
   }
@@ -1301,11 +1247,6 @@
   }
 }
 
-@media (max-width: 1100px) {
-  .memory-grid {
-    @apply grid-cols-1;
-  }
-}
 @media (max-width: 760px) {
   .sidebar-footer {
     padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
@@ -1344,9 +1285,6 @@
   }
   .main-content {
     @apply px-5 pt-6;
-  }
-  .form-grid {
-    @apply grid-cols-1;
   }
   .resource-row {
     @apply gap-3 p-4;

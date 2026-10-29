@@ -13,7 +13,7 @@ import { queries } from './profile';
  */
 
 /** The agent in the URL. Throws outside `/agents/:id`, where no section is rendered. */
-export function useAgentId(): string {
+function useAgentId(): string {
   const { profileId } = useParams<{ profileId?: string }>();
 
   if (!profileId) throw new Error('useAgentId outside an agent route');
@@ -40,7 +40,7 @@ export const useChannels = () => useSuspenseQuery(queries.channels(useAgentId())
 export const useContacts = () => useSuspenseQuery(queries.contacts(useAgentId())).data;
 export const useMemories = () => useSuspenseQuery(queries.memories(useAgentId())).data;
 export const useActivities = () => useSuspenseQuery(queries.activities(useAgentId())).data;
-export const useModelDefaults = () => useSuspenseQuery(queries.modelDefaults(useAgentId())).data;
+const useModelDefaults = () => useSuspenseQuery(queries.modelDefaults(useAgentId())).data;
 export const useGroups = () => useSuspenseQuery(queries.groups()).data;
 export const useProviders = () => useSuspenseQuery(queries.providers()).data;
 

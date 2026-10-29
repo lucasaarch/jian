@@ -3,18 +3,6 @@
 @reference "./themes.css";
 
 @layer components {
-  .activity-empty {
-    @apply flex min-h-52 flex-col items-start justify-center gap-3 rounded-lg bg-surface/70 p-7;
-  }
-  .activity-empty > svg {
-    @apply mb-1 text-accent;
-  }
-  .activity-empty h3 {
-    @apply font-display text-3xl font-medium;
-  }
-  .activity-empty p {
-    @apply text-sm;
-  }
   .login-layout {
     @apply grid min-h-dvh grid-cols-[1.1fr_1fr];
   }

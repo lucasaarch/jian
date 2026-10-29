@@ -133,9 +133,6 @@
     @apply mb-8 border-b border-line pb-8;
   }
 
-  .providers-grid {
-    @apply grid-cols-1 min-[1050px]:grid-cols-2;
-  }
   .provider-symbol {
     @apply font-display text-3xl font-medium;
   }
@@ -366,9 +363,6 @@
   .resource-icon.tile {
     @apply border border-line bg-surface text-ink;
   }
-  .expandable-row .skill-body {
-    @apply mb-4;
-  }
   .expandable-row h3 {
     @apply flex flex-wrap items-center gap-2;
   }
@@ -479,9 +473,6 @@
     @apply mb-4;
   }
 
-  .overview-live {
-    @apply flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted;
-  }
   .overview-profile {
     @apply flex flex-wrap items-center justify-between gap-5 border border-line bg-surface px-6 py-5;
   }
@@ -490,18 +481,6 @@
   }
   .overview-profile .profile-avatar {
     @apply h-12 w-12 rounded-sm border border-line;
-  }
-  .activity-row {
-    @apply flex items-start gap-3 border-b border-line py-4;
-  }
-  .activity-row > svg {
-    @apply mt-1 text-muted;
-  }
-  .activity-row small {
-    @apply text-[10px] text-muted;
-  }
-  .eyebrow {
-    @apply font-mono text-[10px] uppercase tracking-[.16em] text-muted;
   }
 }
 
@@ -603,9 +582,6 @@
   }
   .skill-import .button {
     @apply min-h-[46px];
-  }
-  .skill-marketplace {
-    @apply mt-10 border-t border-line pt-8;
   }
   .catalog-toolbar {
     @apply mb-4 flex flex-wrap items-center justify-between gap-4;

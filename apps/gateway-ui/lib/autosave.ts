@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 /** Long enough that a word being typed is not a save; short enough to feel immediate. */
-export const TYPING_DELAY_MS = 800;
+const TYPING_DELAY_MS = 800;
 
 /**
  * Saves shortly after the last change, one save at a time. A change during a save waits for it

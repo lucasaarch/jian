@@ -146,9 +146,6 @@
   .grow {
     @apply min-w-0 flex-1;
   }
-  .muted {
-    @apply text-muted;
-  }
   .small {
     @apply text-xs;
   }
@@ -217,18 +214,6 @@
   }
   .section-row {
     @apply mb-4 flex flex-wrap items-center justify-between gap-3;
-  }
-  .subsection {
-    @apply mt-8;
-  }
-  .subsection > h2 {
-    @apply mb-4;
-  }
-  .tag-list {
-    @apply mt-3 flex flex-wrap gap-1.5;
-  }
-  .tag-list > * {
-    @apply rounded-sm border border-line bg-surface px-2 py-0.5 text-xs text-muted;
   }
   .boot {
     @apply grid min-h-dvh place-items-center text-accent;

@@ -9,7 +9,7 @@ import { Markdown } from '../ui/markdown';
  * How a member is known when they gave no name: their number on WhatsApp, their id elsewhere.
  * A WhatsApp member that arrives under an internal id (`@lid`) has no number to show.
  */
-export const handleOf = (id: string) => {
+const handleOf = (id: string) => {
   const phone = /^(\d+)@(c\.us|s\.whatsapp\.net)$/.exec(id);
 
   return phone ? `+${phone[1]}` : id.replace(/@lid$/, '');
@@ -46,7 +46,7 @@ export function authored(message: Message) {
  * The quote the gateway writes above a reply, and the line it writes for a reaction, read back
  * out of the text so the panel can draw them as a messenger does.
  */
-export function quoted(text: string) {
+function quoted(text: string) {
   const reaction =
     /^\[Reacted (.+?) to (your message|.+?'s message|a message)(?:: "([\s\S]*)")?\]$/.exec(text);
 
