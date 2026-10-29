@@ -11,6 +11,7 @@ export * from './providers.js';
 export * from './records.js';
 export * from './releases.js';
 export * from './remote.js';
+export * from './run-progress.js';
 export * from './schedules.js';
 export * from './security.js';
 export * from './skills.js';

@@ -5,12 +5,22 @@ import { findChannel, findContactBySession } from '../channels/repository.js';
 import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import type { Judge } from '../decisions/service.js';
 import { findMedia } from '../media/repository.js';
+import type { TierModels } from '../providers/tiers.js';
 import type { Runs } from '../runs/service.js';
 import type { SessionReader } from '../sessions/port.js';
 import type { Sessions } from '../sessions/service.js';
 import type { Store } from '../storage/database.js';
 import { mediaAssets, runs } from '../storage/schema.js';
+import { chooseTier } from './tier.js';
+
+/** A spawn key reused for different work: the one refusal a fallback model cannot change. */
+class SpawnKeyConflict extends GatewayError {
+  constructor() {
+    super(409, 'Spawn key was already used for different work');
+  }
+}
 
 /** Conversation subagents: scoped workers with a private session and a durable handoff. */
 export class Work {
@@ -23,15 +33,24 @@ export class Work {
     ): Promise<void>;
   };
 
+  /** The model for each tier. Absent, every subagent keeps its parent's model. */
+  private tiers?: Pick<TierModels, 'pick'>;
+
   constructor(
     private readonly store: Store,
     private readonly sessions: SessionReader & Pick<Sessions, 'taskSession'>,
     private readonly runs: Pick<Runs, 'run' | 'submit'>,
     private readonly clock: Clock = Date.now,
+    /** Asked for a tier the agent left open. */
+    private readonly judge?: Judge,
   ) {}
 
   useDeliveries(deliveries: NonNullable<Work['deliveries']>) {
     this.deliveries = deliveries;
+  }
+
+  useTiers(tiers: Pick<TierModels, 'pick'>) {
+    this.tiers = tiers;
   }
 
   private async copyImage(
@@ -76,6 +95,8 @@ export class Work {
         input: runs.input,
         output: runs.output,
         error: runs.error,
+        modelSelection: runs.modelSelection,
+        progress: runs.progress,
         createdAt: runs.createdAt,
         updatedAt: runs.updatedAt,
       })
@@ -102,6 +123,10 @@ export class Work {
         input: child.input,
         ...(child.output ? { output: child.output } : {}),
         ...(child.error ? { error: child.error } : {}),
+        ...(subagent.tier ? { tier: subagent.tier } : {}),
+        ...(subagent.tierBy ? { tierBy: subagent.tierBy } : {}),
+        ...(child.modelSelection ? { modelSelection: child.modelSelection } : {}),
+        ...(child.progress ? { progress: child.progress } : {}),
         createdAt: child.createdAt.toISOString(),
         updatedAt: child.updatedAt.toISOString(),
       };
@@ -119,6 +144,8 @@ export class Work {
       input: run.input,
       ...(run.output ? { output: run.output } : {}),
       ...(run.error ? { error: run.error } : {}),
+      ...(subagent.tier ? { tier: subagent.tier } : {}),
+      ...(run.modelSelection ? { model: run.modelSelection.modelId } : {}),
       createdAt: run.createdAt,
       updatedAt: run.updatedAt,
     };
@@ -183,57 +210,85 @@ export class Work {
     if (parent.subagent)
       throw new GatewayError(403, 'Only the principal agent can spawn subagents');
     const data = conversationSubagentInputSchema.parse(input);
+    // Over the agent's own words only: the tier and model resolved from them may differ on a
+    // retry, and a retry must still find the run it already started.
     const inputHash = createHash('sha256').update(JSON.stringify(data)).digest('hex');
     if (!spawnKey || spawnKey.length > 120) throw new GatewayError(400, 'Invalid spawn key');
-    return this.store.transaction(parent.profileId, async (tx) => {
-      const [existing] = await tx
-        .select({ id: runs.id })
-        .from(runs)
-        .where(
-          and(
-            eq(runs.profileId, parent.profileId),
-            sql`${runs.subagent}->>'parentRunId' = ${parent.id}`,
-            sql`${runs.subagent}->>'spawnKey' = ${spawnKey}`,
-          ),
+
+    // A retry returns what it started without asking Jev again.
+    const previous = await this.spawned(this.store.db, parent, spawnKey, inputHash);
+    if (previous) return previous;
+
+    const { tier, tierBy } = await chooseTier(this.judge, data);
+    const tierModel = await this.tiers
+      ?.pick(tier, parent.modelSelection?.providerId)
+      .catch(() => null);
+    const start = (model: Run['modelSelection']) =>
+      this.store.transaction(parent.profileId, async (tx) => {
+        const existing = await this.spawned(tx, parent, spawnKey, inputHash);
+        if (existing) return existing;
+        const session = await this.sessions.taskSession(parent.profileId, data.name, tx);
+        const mediaIds = await Promise.all(
+          (data.mediaIds ?? []).map((id) => this.copyImage(tx, parent.profileId, id, session.id)),
         );
-      if (existing) {
-        const previous = await this.runs.run(parent.profileId, existing.id, tx);
-        if (previous.subagent?.inputHash !== inputHash)
-          throw new GatewayError(409, 'Spawn key was already used for different work');
-        return this.execution(previous);
-      }
-      const session = await this.sessions.taskSession(parent.profileId, data.name, tx);
-      const mediaIds = await Promise.all(
-        (data.mediaIds ?? []).map((id) => this.copyImage(tx, parent.profileId, id, session.id)),
-      );
-      const child = await this.runs.submit(
-        parent.profileId,
-        session.id,
-        {
-          text: data.brief,
-          ...(mediaIds.length ? { mediaIds } : {}),
-          requestKey: `subagent:${parent.id}:${createHash('sha256').update(spawnKey).digest('hex')}`,
-          ...(parent.modelSelection ? { model: parent.modelSelection } : {}),
-        },
-        {
-          transaction: tx,
-          subagent: {
-            parentRunId: parent.id,
-            spawnKey,
-            inputHash,
-            role: data.role,
-            name: data.name,
-            identity: data.identity,
-            repositories: data.repositories ?? [],
+        const child = await this.runs.submit(
+          parent.profileId,
+          session.id,
+          {
+            text: data.brief,
+            ...(mediaIds.length ? { mediaIds } : {}),
+            requestKey: `subagent:${parent.id}:${createHash('sha256').update(spawnKey).digest('hex')}`,
+            ...(model ? { model } : {}),
           },
-        },
-      );
-      await recordEvent(tx, this.clock, parent.profileId, 'conversation.subagent.spawned', {
-        parentSessionId: parent.sessionId,
-        parentRunId: parent.id,
-        runId: child.id,
+          {
+            transaction: tx,
+            subagent: {
+              parentRunId: parent.id,
+              spawnKey,
+              inputHash,
+              role: data.role,
+              name: data.name,
+              identity: data.identity,
+              repositories: data.repositories ?? [],
+              tier,
+              tierBy,
+            },
+          },
+        );
+        await recordEvent(tx, this.clock, parent.profileId, 'conversation.subagent.spawned', {
+          parentSessionId: parent.sessionId,
+          parentRunId: parent.id,
+          runId: child.id,
+        });
+        return this.execution(child);
       });
-      return this.execution(child);
-    });
+
+    if (!tierModel) return start(parent.modelSelection);
+    try {
+      return await start(tierModel);
+    } catch (error) {
+      // A tier's model the gateway cannot resolve right now — a credential gone stale, a model
+      // withdrawn — must not cost the work: it runs on the parent's model, as before tiers.
+      if (error instanceof SpawnKeyConflict) throw error;
+      return start(parent.modelSelection);
+    }
+  }
+
+  /** The run an earlier spawn with this key started, or a 409 when the key named other work. */
+  private async spawned(tx: Store['db'], parent: Run, spawnKey: string, inputHash: string) {
+    const [existing] = await tx
+      .select({ id: runs.id })
+      .from(runs)
+      .where(
+        and(
+          eq(runs.profileId, parent.profileId),
+          sql`${runs.subagent}->>'parentRunId' = ${parent.id}`,
+          sql`${runs.subagent}->>'spawnKey' = ${spawnKey}`,
+        ),
+      );
+    if (!existing) return null;
+    const previous = await this.runs.run(parent.profileId, existing.id, tx);
+    if (previous.subagent?.inputHash !== inputHash) throw new SpawnKeyConflict();
+    return this.execution(previous);
   }
 }

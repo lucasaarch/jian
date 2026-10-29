@@ -1,4 +1,4 @@
-import type { ModelSelection, ProviderRecord } from '@jian/contracts';
+import type { ModelSelection, ProviderRecord, ReasoningEffort } from '@jian/contracts';
 import { bareModelId } from './capabilities.js';
 import type { CatalogEntry, ModelCatalog } from './catalog-source.js';
 import type { ProviderModels } from './discovery.js';
@@ -11,8 +11,6 @@ import type { ProviderAdmin } from './port.js';
  * public catalog filters out models that cannot take and return text, and the newest compatible
  * model wins. A model the catalog does not know is skipped rather than guessed at.
  */
-type Candidate = { id: string; displayName?: string; entry: CatalogEntry };
-
 export class ModelFallback {
   constructor(
     private readonly providers: ProviderAdmin,
@@ -61,28 +59,57 @@ export class ModelFallback {
     }
 
     for (const { provider, models } of available) {
-      const best = models.sort(
-        (a, b) =>
-          (b.entry.releaseDate ?? '').localeCompare(a.entry.releaseDate ?? '') ||
-          (b.entry.contextWindow ?? 0) - (a.entry.contextWindow ?? 0) ||
-          a.id.localeCompare(b.id),
-      )[0];
+      const best = models.sort(newestFirst)[0];
       if (best) return { providerId: provider.id, modelId: best.id };
     }
     return null;
   }
 
-  private async conversational(provider: ProviderRecord): Promise<Candidate[]> {
-    const listed = await this.models.list(provider.id).catch(() => null);
-    return (listed?.models ?? []).flatMap((model) => {
-      const entry = this.catalog?.lookup(provider.kind, bareModelId(model.id));
-      // Both directions have to be text; an image or audio model cannot answer a chat.
-      if (!entry?.inputModalities.includes('text') || !entry.outputModalities.includes('text')) {
-        return [];
-      }
-      return [
-        { id: model.id, ...(model.displayName ? { displayName: model.displayName } : {}), entry },
-      ];
-    });
+  private conversational(provider: ProviderRecord): Promise<Candidate[]> {
+    return conversationalModels(provider, this.models, this.catalog);
   }
 }
+
+/** A model that can hold a conversation, with what the catalog knows of it. */
+export type Candidate = {
+  id: string;
+  displayName?: string;
+  entry: CatalogEntry;
+  /** What the provider reports, else what the catalog does: empty when the model has none. */
+  reasoningEfforts: ReasoningEffort[];
+};
+
+/**
+ * The models of one provider that take and return text. The catalog is what tells a chat model
+ * from an embedding or an image one, so a model it does not know is left out, not guessed at.
+ */
+export async function conversationalModels(
+  provider: ProviderRecord,
+  models: Pick<ProviderModels, 'list'>,
+  catalog?: ModelCatalog,
+): Promise<Candidate[]> {
+  const listed = await models.list(provider.id).catch(() => null);
+  return (listed?.models ?? []).flatMap((model) => {
+    const entry = catalog?.lookup(provider.kind, bareModelId(model.id));
+    // Both directions have to be text; an image or audio model cannot answer a chat.
+    if (!entry?.inputModalities.includes('text') || !entry.outputModalities.includes('text')) {
+      return [];
+    }
+    return [
+      {
+        id: model.id,
+        ...(model.displayName ? { displayName: model.displayName } : {}),
+        entry,
+        reasoningEfforts: model.reasoningEfforts.length
+          ? model.reasoningEfforts
+          : entry.reasoningEfforts,
+      },
+    ];
+  });
+}
+
+/** Newest first, then the larger context, then by id so the order never wavers. */
+export const newestFirst = (a: Candidate, b: Candidate) =>
+  (b.entry.releaseDate ?? '').localeCompare(a.entry.releaseDate ?? '') ||
+  (b.entry.contextWindow ?? 0) - (a.entry.contextWindow ?? 0) ||
+  a.id.localeCompare(b.id);

@@ -36,6 +36,13 @@ same profile workspace as you (same HOME and repository checkouts). This call re
 the worker is queued; its result comes back into this conversation after it finishes. Do
 not duplicate its work while it runs.
 
+Set \`tier\` to the model the work needs: \`light\` for small, well-defined work (one file, a
+lookup, a rename, a short text), \`standard\` for a bounded change with tests to run, \`deep\`
+for work across several files or systems, risky work, or work that needs a plan. Leave it out
+and Decisions reads the brief and picks; without Decisions it is \`standard\`. Each tier runs on
+a model the installation offers, the owner's subscriptions first. The spawn result names the
+model the worker got.
+
 Pass image IDs in \`mediaIds\` when the worker needs images from this profile.
 
 For code work, optionally pass absolute Git repository roots in \`repositories\` so the

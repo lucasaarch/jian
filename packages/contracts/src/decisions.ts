@@ -17,7 +17,8 @@ export const decisionProviderSchema = z.enum(['jev']);
  * - turn: before each turn, which memories and skill fit it and whether it is light;
  * - memories: a new memory about a subject already kept;
  * - learning: whether finished work holds something worth keeping;
- * - groups: whether a group message is speaking to an agent.
+ * - groups: whether a group message is speaking to an agent;
+ * - delegation: how much model a subagent's work needs, when the agent leaves it open.
  */
 export const decisionUseSchema = z.enum([
   'actions',
@@ -26,6 +27,7 @@ export const decisionUseSchema = z.enum([
   'memories',
   'learning',
   'groups',
+  'delegation',
 ]);
 
 export const decisionsInputSchema = z.strictObject({
@@ -40,6 +42,7 @@ export const decisionUsesSchema = z.strictObject({
   memories: z.boolean(),
   learning: z.boolean(),
   groups: z.boolean(),
+  delegation: z.boolean(),
 });
 
 /** Which decisions the owner wants to ask Jev about. */

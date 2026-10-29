@@ -2963,6 +2963,99 @@
                       "error": {
                         "type": "string"
                       },
+                      "tier": {
+                        "type": "string",
+                        "enum": [
+                          "light",
+                          "standard",
+                          "deep"
+                        ]
+                      },
+                      "tierBy": {
+                        "type": "string",
+                        "enum": [
+                          "agent",
+                          "jev",
+                          "default"
+                        ]
+                      },
+                      "modelSelection": {
+                        "type": "object",
+                        "properties": {
+                          "providerId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "modelId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "reasoningEffort": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "minimal",
+                              "low",
+                              "medium",
+                              "high",
+                              "xhigh",
+                              "max"
+                            ]
+                          },
+                          "voiceName": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          }
+                        },
+                        "required": [
+                          "providerId",
+                          "modelId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "progress": {
+                        "type": "object",
+                        "properties": {
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "thinking",
+                              "tool",
+                              "writing"
+                            ]
+                          },
+                          "tool": {
+                            "type": "string",
+                            "maxLength": 100
+                          },
+                          "text": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 8000
+                          },
+                          "steps": {
+                            "default": 0,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          }
+                        },
+                        "required": [
+                          "phase",
+                          "text",
+                          "steps",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
@@ -4139,6 +4232,9 @@
                         },
                         "groups": {
                           "type": "boolean"
+                        },
+                        "delegation": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -4147,7 +4243,8 @@
                         "turn",
                         "memories",
                         "learning",
-                        "groups"
+                        "groups",
+                        "delegation"
                       ],
                       "additionalProperties": false
                     },
@@ -4169,7 +4266,8 @@
                               "turn",
                               "memories",
                               "learning",
-                              "groups"
+                              "groups",
+                              "delegation"
                             ]
                           },
                           "requests": {
@@ -4388,6 +4486,9 @@
                         },
                         "groups": {
                           "type": "boolean"
+                        },
+                        "delegation": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -4396,7 +4497,8 @@
                         "turn",
                         "memories",
                         "learning",
-                        "groups"
+                        "groups",
+                        "delegation"
                       ],
                       "additionalProperties": false
                     },
@@ -4418,7 +4520,8 @@
                               "turn",
                               "memories",
                               "learning",
-                              "groups"
+                              "groups",
+                              "delegation"
                             ]
                           },
                           "requests": {
@@ -4593,6 +4696,9 @@
                       },
                       "groups": {
                         "type": "boolean"
+                      },
+                      "delegation": {
+                        "type": "boolean"
                       }
                     },
                     "additionalProperties": false
@@ -4645,6 +4751,9 @@
                         },
                         "groups": {
                           "type": "boolean"
+                        },
+                        "delegation": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -4653,7 +4762,8 @@
                         "turn",
                         "memories",
                         "learning",
-                        "groups"
+                        "groups",
+                        "delegation"
                       ],
                       "additionalProperties": false
                     },
@@ -4675,7 +4785,8 @@
                               "turn",
                               "memories",
                               "learning",
-                              "groups"
+                              "groups",
+                              "delegation"
                             ]
                           },
                           "requests": {
@@ -4865,6 +4976,9 @@
                         },
                         "groups": {
                           "type": "boolean"
+                        },
+                        "delegation": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -4873,7 +4987,8 @@
                         "turn",
                         "memories",
                         "learning",
-                        "groups"
+                        "groups",
+                        "delegation"
                       ],
                       "additionalProperties": false
                     },
@@ -4895,7 +5010,8 @@
                               "turn",
                               "memories",
                               "learning",
-                              "groups"
+                              "groups",
+                              "delegation"
                             ]
                           },
                           "requests": {
@@ -7964,6 +8080,22 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "light",
+                            "standard",
+                            "deep"
+                          ]
+                        },
+                        "tierBy": {
+                          "type": "string",
+                          "enum": [
+                            "agent",
+                            "jev",
+                            "default"
+                          ]
                         }
                       },
                       "required": [
@@ -8608,6 +8740,22 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "light",
+                            "standard",
+                            "deep"
+                          ]
+                        },
+                        "tierBy": {
+                          "type": "string",
+                          "enum": [
+                            "agent",
+                            "jev",
+                            "default"
+                          ]
                         }
                       },
                       "required": [
@@ -23822,6 +23970,22 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "light",
+                            "standard",
+                            "deep"
+                          ]
+                        },
+                        "tierBy": {
+                          "type": "string",
+                          "enum": [
+                            "agent",
+                            "jev",
+                            "default"
+                          ]
                         }
                       },
                       "required": [
@@ -28156,6 +28320,22 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "light",
+                            "standard",
+                            "deep"
+                          ]
+                        },
+                        "tierBy": {
+                          "type": "string",
+                          "enum": [
+                            "agent",
+                            "jev",
+                            "default"
+                          ]
                         }
                       },
                       "required": [
@@ -30195,6 +30375,22 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "tier": {
+                            "type": "string",
+                            "enum": [
+                              "light",
+                              "standard",
+                              "deep"
+                            ]
+                          },
+                          "tierBy": {
+                            "type": "string",
+                            "enum": [
+                              "agent",
+                              "jev",
+                              "default"
+                            ]
                           }
                         },
                         "required": [
@@ -30814,6 +31010,22 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "light",
+                            "standard",
+                            "deep"
+                          ]
+                        },
+                        "tierBy": {
+                          "type": "string",
+                          "enum": [
+                            "agent",
+                            "jev",
+                            "default"
+                          ]
                         }
                       },
                       "required": [
@@ -31432,6 +31644,22 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "light",
+                            "standard",
+                            "deep"
+                          ]
+                        },
+                        "tierBy": {
+                          "type": "string",
+                          "enum": [
+                            "agent",
+                            "jev",
+                            "default"
+                          ]
                         }
                       },
                       "required": [
