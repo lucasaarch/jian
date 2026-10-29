@@ -137,9 +137,10 @@ Reconnect with `Last-Event-ID`. Slow clients are throttled and disconnected.
 ## Memory, tools and identity
 
 `identity` separates role, tone, goals and boundaries from the general instructions.
-Changes carry an `expectedVersion`, and each run pins one version. `allowSelfManagement`
-lets an agent edit its name, instructions and skills and derive new profiles **without
-inherited provider access**; it can never grant itself new permissions.
+Changes carry an `expectedVersion`, and each run pins one version. Every agent can edit its
+own name, instructions and skills and derive new profiles **without inherited provider
+access**; it can never grant itself new permissions. Every agent also searches the web,
+learns from its work and talks with the other agents; none of these is a switch.
 
 Memories carry a key, content, origin and version, and only the agent writes them: the
 API lists them and removes one, it does not create or edit. Context retrieval picks

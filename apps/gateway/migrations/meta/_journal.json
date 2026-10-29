@@ -477,6 +477,13 @@
       "when": 1793233000000,
       "tag": "0067_github-manifest-state",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1793234000000,
+      "tag": "0068_profile-capabilities-always-on",
+      "breakpoints": true
     }
   ]
 }

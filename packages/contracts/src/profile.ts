@@ -255,31 +255,14 @@ export const profileSchema = z.strictObject({
     .max(20)
     .default([...OPT_IN_SKILLS]),
   mcpServers: z.array(mcpSchema).default([]),
-  allowSelfManagement: z.boolean().default(false),
   /**
    * Deprecated. Workspace-confined shell and file tools are always available; the panel no
    * longer exposes this switch. Kept on the wire so older clients keep parsing. Ignored for
    * enforcement — treated as always on. Remote Control is gated by machine ACL only.
    */
   allowShell: z.boolean().default(true),
-  /**
-   * Searching the web and reading public pages, through the installation's search service.
-   * What comes back is written by strangers, so it reaches the agent as data to weigh.
-   */
-  allowWebSearch: z.boolean().default(false),
-  /**
-   * After a turn worth looking back on — many tools, an error it recovered from, or enough
-   * turns since the last look — the agent reviews it in the background and keeps what it
-   * learned as a skill or a memory, in its Learning conversation.
-   */
-  learnFromWork: z.boolean().default(true),
   /** Deprecated compatibility field. Sticker analysis in model defaults controls this now. */
   useStickers: z.boolean().default(false),
-  /**
-   * Whether this profile takes part in conversations between agents. Off, the others no longer
-   * see it or reach it, and it loses them too: the wall runs both ways.
-   */
-  reachableByAgents: z.boolean().default(true),
 });
 
 export const profilePatchSchema = profileSchema.partial().extend({
@@ -295,12 +278,8 @@ export const profilePatchSchema = profileSchema.partial().extend({
   skills: z.array(skillSchema).max(20).optional(),
   disabledSkills: z.array(skillNameSchema).max(20).optional(),
   mcpServers: z.array(mcpSchema).optional(),
-  allowSelfManagement: z.boolean().optional(),
   allowShell: z.boolean().optional(),
-  allowWebSearch: z.boolean().optional(),
-  learnFromWork: z.boolean().optional(),
   useStickers: z.boolean().optional(),
-  reachableByAgents: z.boolean().optional(),
 });
 
 /** The channel of chats the owner starts with a profile through the panel. */

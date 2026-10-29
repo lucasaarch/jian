@@ -5,7 +5,6 @@ import { testServices } from './helpers/services.js';
 
 const token = 'synthetic-web-admin-token-32-characters';
 const admin = { authorization: `Bearer ${token}` };
-const model = { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' };
 
 const call = async (tool: unknown, input: unknown) =>
   (tool as { execute: (i: unknown, c: unknown) => Promise<unknown> }).execute(input, {
@@ -22,19 +21,7 @@ async function setup(respond: (url: string, init?: RequestInit) => Response) {
 
     return respond(String(input), init);
   });
-  const runFor = async (allowWebSearch: boolean) => {
-    const profile = await services.profiles.createProfile({
-      name: 'Zero Two',
-      instructions: 'Help.',
-      model,
-      allowWebSearch,
-    });
-    const session = await services.sessions.createSession(profile.id, { title: 'Web' });
-
-    return services.runs.submit(profile.id, session.id, { text: 'Oi', requestKey: 'one' });
-  };
-
-  return { services, web, requests, runFor };
+  return { services, web, requests };
 }
 
 const tavily = () =>
@@ -43,16 +30,9 @@ const tavily = () =>
   });
 
 describe('searching the web', () => {
-  it('hands out nothing unless the owner switched it on for this profile', async () => {
-    const { web, runFor } = await setup(tavily);
-
-    expect(web.tools(await runFor(false))).toEqual({});
-    expect(Object.keys(web.tools(await runFor(true)))).toEqual(['web_search', 'fetch_url']);
-  });
-
   it('asks for the key before searching, and sends it only to the search service', async () => {
-    const { web, requests, runFor } = await setup(tavily);
-    const tools = web.tools(await runFor(true));
+    const { web, requests } = await setup(tavily);
+    const tools = web.tools();
     const input = { query: 'o que é JEV', maxResults: 5, topic: 'general' };
 
     await expect(call(tools.web_search, input)).rejects.toThrow('not configured');
@@ -75,10 +55,8 @@ describe('searching the web', () => {
   });
 
   it('says a refused key in words, without echoing what the service answered', async () => {
-    const { web, runFor } = await setup(
-      () => new Response('{"detail":"tvly-synthetic"}', { status: 401 }),
-    );
-    const tools = web.tools(await runFor(true));
+    const { web } = await setup(() => new Response('{"detail":"tvly-synthetic"}', { status: 401 }));
+    const tools = web.tools();
 
     await web.configure({ provider: 'tavily', apiKey: 'tvly-synthetic' });
 
@@ -89,14 +67,14 @@ describe('searching the web', () => {
 
   it('reads a page as text, a slice at a time, and refuses what is not text', async () => {
     const html = `<html><head><title>JEV &amp; co</title><style>p{}</style></head><body><script>evil()</script><p>Primeiro</p><p>${'a'.repeat(25_000)}</p></body></html>`;
-    const { web, runFor } = await setup((url) =>
+    const { web } = await setup((url) =>
       url === 'http://example.com/jev'
         ? new Response(null, { status: 301, headers: { location: 'https://example.com/jev' } })
         : url.endsWith('.png')
           ? new Response('x', { headers: { 'content-type': 'image/png' } })
           : new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } }),
     );
-    const tools = web.tools(await runFor(true));
+    const tools = web.tools();
 
     const first = (await call(tools.fetch_url, { url: 'http://example.com/jev', offset: 0 })) as {
       url: string;

@@ -1,4 +1,4 @@
-import type { Run, WebSearchStatus } from '@jian/contracts';
+import type { WebSearchStatus } from '@jian/contracts';
 import { webSearchInputSchema } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { eq } from 'drizzle-orm';
@@ -248,11 +248,7 @@ export class WebSearch {
     };
   }
 
-  tools(run: Run): ToolSet {
-    if (!run.profile.allowWebSearch) {
-      return {};
-    }
-
+  tools(): ToolSet {
     return {
       web_search: tool({
         description:

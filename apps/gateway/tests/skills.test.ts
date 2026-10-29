@@ -292,13 +292,13 @@ describe('the skills every profile carries', () => {
       instructions: 'Help.',
       model,
       allowShell: true,
-      allowWebSearch: true,
       mcpServers: [{ name: 'docs', transport: 'http', url: 'https://mcp.example.test/mcp' }],
     });
     const names = (profile: typeof plain) => availableSkills(profile).map((skill) => skill.name);
 
-    // Workspace shell / remote-control skills are always on; web and MCP still follow switches.
+    // Shell, remote-control and web skills are always on; MCP follows the configured servers.
     for (const skill of [
+      'web-research',
       'machine-tools',
       'remote-control',
       'coding-work',
@@ -312,7 +312,7 @@ describe('the skills every profile carries', () => {
       expect(names(plain)).toContain(skill);
       expect(names(equipped)).toContain(skill);
     }
-    for (const skill of ['web-research', 'mcp-servers', 'github-mcp']) {
+    for (const skill of ['mcp-servers', 'github-mcp']) {
       expect(names(plain)).not.toContain(skill);
       expect(names(equipped)).toContain(skill);
     }
@@ -350,9 +350,6 @@ describe('the skills every profile carries', () => {
 
   it('keeps every built-in skill within what a skill may be', () => {
     for (const skill of builtinSkills({
-      allowSelfManagement: true,
-      allowWebSearch: true,
-      reachableByAgents: true,
       mcpServers: [
         {
           name: 'x',
@@ -371,12 +368,7 @@ describe('the skills every profile carries', () => {
   });
 
   it('keeps product identity separate from operational guidance', () => {
-    const skills = builtinSkills({
-      allowSelfManagement: false,
-      allowWebSearch: false,
-      reachableByAgents: false,
-      mcpServers: [],
-    });
+    const skills = builtinSkills({ mcpServers: [] });
     const about = skills.find((skill) => skill.name === 'about-jian');
     const activity = skills.find((skill) => skill.name === 'activity');
     const configuration = skills.find((skill) => skill.name === 'jian-configuration');
@@ -391,27 +383,18 @@ describe('the skills every profile carries', () => {
     expect(configuration?.instructions).toContain('JIAN_TIME_ZONE');
   });
 
-  it('offers them without the profile storing one, and keeps self-management out of reach', async () => {
+  it('offers them without the profile storing one', async () => {
     const services = await testServices();
     const plain = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
       model,
     });
-    const managing = await services.profiles.createProfile({
-      name: 'Zero',
-      instructions: 'Help.',
-      model,
-      allowSelfManagement: true,
-    });
 
     expect(plain.skills).toEqual([]);
-
-    const offered = availableSkills(plain).map((skill) => skill.name);
-
-    expect(offered).toContain('owner-and-contacts');
-    expect(offered).not.toContain('managing-yourself');
-    expect(availableSkills(managing).map((skill) => skill.name)).toContain('managing-yourself');
+    expect(availableSkills(plain).map((skill) => skill.name)).toEqual(
+      expect.arrayContaining(['owner-and-contacts', 'managing-yourself']),
+    );
   });
 
   it('always explains workspace shell and Remote Control (allowShell is deprecated)', async () => {

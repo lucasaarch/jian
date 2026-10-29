@@ -1267,7 +1267,7 @@ it('redacts an escaped host credential from tool prompts, artifacts, checkpoints
 
 it('creates a child profile without inheriting provider access', async () => {
   const services = await testServices();
-  const profile = await services.profiles.createProfile({ ...input, allowSelfManagement: true });
+  const profile = await services.profiles.createProfile(input);
   const session = await services.sessions.createSession(profile.id, { title: 'Parent' });
 
   const run = await services.runs.submit(profile.id, session.id, {
@@ -1325,7 +1325,6 @@ it('creates a child profile without inheriting provider access', async () => {
 
   expect(child?.model.apiKeyEnv).toBeUndefined();
   expect(child?.model.providerId).toBeUndefined();
-  expect(child?.allowSelfManagement).toBe(false);
 });
 
 it('answers with what it has when the agent exhausts its tool budget', async () => {

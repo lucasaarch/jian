@@ -21,14 +21,13 @@ const readMemories = (id: string) => ({
   warnings: [],
 });
 
-async function profileWith(learnFromWork = true) {
+async function profileWith() {
   const services = await testServices();
   const profile = await services.profiles.createProfile({
     name: 'Atlas',
     instructions: 'Help.',
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
     allowShell: true,
-    learnFromWork,
   });
   const session = await services.sessions.createSession(profile.id, { title: 'Work' });
 
@@ -100,19 +99,6 @@ it('looks back on a turn that did a lot of work, once, with only memories and sk
   expect(offered).not.toContain('run_command');
   expect(offered).not.toContain('send_session_message');
   expect(await looks(f)).toHaveLength(1);
-});
-
-it('never looks back when the owner switched learning off', async () => {
-  const f = await profileWith(false);
-
-  await turn(f, 12, 'big');
-
-  expect(await looks(f)).toEqual([]);
-  expect(
-    (await f.services.sessions.sessions(f.profile.id)).some(
-      (session) => session.channel === LEARNING_SESSION_CHANNEL,
-    ),
-  ).toBe(false);
 });
 
 it('tells the agent how full its context is when the turn starts', async () => {

@@ -23107,28 +23107,12 @@
                         "additionalProperties": false
                       }
                     },
-                    "allowSelfManagement": {
-                      "default": false,
-                      "type": "boolean"
-                    },
                     "allowShell": {
-                      "default": true,
-                      "type": "boolean"
-                    },
-                    "allowWebSearch": {
-                      "default": false,
-                      "type": "boolean"
-                    },
-                    "learnFromWork": {
                       "default": true,
                       "type": "boolean"
                     },
                     "useStickers": {
                       "default": false,
-                      "type": "boolean"
-                    },
-                    "reachableByAgents": {
-                      "default": true,
                       "type": "boolean"
                     },
                     "id": {
@@ -23163,12 +23147,8 @@
                     "skills",
                     "disabledSkills",
                     "mcpServers",
-                    "allowSelfManagement",
                     "allowShell",
-                    "allowWebSearch",
-                    "learnFromWork",
                     "useStickers",
-                    "reachableByAgents",
                     "id",
                     "version",
                     "createdAt",
@@ -23790,28 +23770,12 @@
                           "additionalProperties": false
                         }
                       },
-                      "allowSelfManagement": {
-                        "default": false,
-                        "type": "boolean"
-                      },
                       "allowShell": {
-                        "default": true,
-                        "type": "boolean"
-                      },
-                      "allowWebSearch": {
-                        "default": false,
-                        "type": "boolean"
-                      },
-                      "learnFromWork": {
                         "default": true,
                         "type": "boolean"
                       },
                       "useStickers": {
                         "default": false,
-                        "type": "boolean"
-                      },
-                      "reachableByAgents": {
-                        "default": true,
                         "type": "boolean"
                       },
                       "id": {
@@ -23846,12 +23810,8 @@
                       "skills",
                       "disabledSkills",
                       "mcpServers",
-                      "allowSelfManagement",
                       "allowShell",
-                      "allowWebSearch",
-                      "learnFromWork",
                       "useStickers",
-                      "reachableByAgents",
                       "id",
                       "version",
                       "createdAt",
@@ -24449,28 +24409,12 @@
                       "additionalProperties": false
                     }
                   },
-                  "allowSelfManagement": {
-                    "default": false,
-                    "type": "boolean"
-                  },
                   "allowShell": {
-                    "default": true,
-                    "type": "boolean"
-                  },
-                  "allowWebSearch": {
-                    "default": false,
-                    "type": "boolean"
-                  },
-                  "learnFromWork": {
                     "default": true,
                     "type": "boolean"
                   },
                   "useStickers": {
                     "default": false,
-                    "type": "boolean"
-                  },
-                  "reachableByAgents": {
-                    "default": true,
                     "type": "boolean"
                   }
                 },
@@ -24908,28 +24852,12 @@
                         "additionalProperties": false
                       }
                     },
-                    "allowSelfManagement": {
-                      "default": false,
-                      "type": "boolean"
-                    },
                     "allowShell": {
-                      "default": true,
-                      "type": "boolean"
-                    },
-                    "allowWebSearch": {
-                      "default": false,
-                      "type": "boolean"
-                    },
-                    "learnFromWork": {
                       "default": true,
                       "type": "boolean"
                     },
                     "useStickers": {
                       "default": false,
-                      "type": "boolean"
-                    },
-                    "reachableByAgents": {
-                      "default": true,
                       "type": "boolean"
                     },
                     "id": {
@@ -24964,12 +24892,8 @@
                     "skills",
                     "disabledSkills",
                     "mcpServers",
-                    "allowSelfManagement",
                     "allowShell",
-                    "allowWebSearch",
-                    "learnFromWork",
                     "useStickers",
-                    "reachableByAgents",
                     "id",
                     "version",
                     "createdAt",
@@ -25600,28 +25524,12 @@
                         "additionalProperties": false
                       }
                     },
-                    "allowSelfManagement": {
-                      "default": false,
-                      "type": "boolean"
-                    },
                     "allowShell": {
-                      "default": true,
-                      "type": "boolean"
-                    },
-                    "allowWebSearch": {
-                      "default": false,
-                      "type": "boolean"
-                    },
-                    "learnFromWork": {
                       "default": true,
                       "type": "boolean"
                     },
                     "useStickers": {
                       "default": false,
-                      "type": "boolean"
-                    },
-                    "reachableByAgents": {
-                      "default": true,
                       "type": "boolean"
                     },
                     "id": {
@@ -25656,12 +25564,8 @@
                     "skills",
                     "disabledSkills",
                     "mcpServers",
-                    "allowSelfManagement",
                     "allowShell",
-                    "allowWebSearch",
-                    "learnFromWork",
                     "useStickers",
-                    "reachableByAgents",
                     "id",
                     "version",
                     "createdAt",
@@ -26244,22 +26148,10 @@
                       "additionalProperties": false
                     }
                   },
-                  "allowSelfManagement": {
-                    "type": "boolean"
-                  },
                   "allowShell": {
                     "type": "boolean"
                   },
-                  "allowWebSearch": {
-                    "type": "boolean"
-                  },
-                  "learnFromWork": {
-                    "type": "boolean"
-                  },
                   "useStickers": {
-                    "type": "boolean"
-                  },
-                  "reachableByAgents": {
                     "type": "boolean"
                   },
                   "expectedVersion": {
@@ -26701,28 +26593,12 @@
                         "additionalProperties": false
                       }
                     },
-                    "allowSelfManagement": {
-                      "default": false,
-                      "type": "boolean"
-                    },
                     "allowShell": {
-                      "default": true,
-                      "type": "boolean"
-                    },
-                    "allowWebSearch": {
-                      "default": false,
-                      "type": "boolean"
-                    },
-                    "learnFromWork": {
                       "default": true,
                       "type": "boolean"
                     },
                     "useStickers": {
                       "default": false,
-                      "type": "boolean"
-                    },
-                    "reachableByAgents": {
-                      "default": true,
                       "type": "boolean"
                     },
                     "id": {
@@ -26757,12 +26633,8 @@
                     "skills",
                     "disabledSkills",
                     "mcpServers",
-                    "allowSelfManagement",
                     "allowShell",
-                    "allowWebSearch",
-                    "learnFromWork",
                     "useStickers",
-                    "reachableByAgents",
                     "id",
                     "version",
                     "createdAt",
@@ -27850,28 +27722,12 @@
                               "additionalProperties": false
                             }
                           },
-                          "allowSelfManagement": {
-                            "default": false,
-                            "type": "boolean"
-                          },
                           "allowShell": {
-                            "default": true,
-                            "type": "boolean"
-                          },
-                          "allowWebSearch": {
-                            "default": false,
-                            "type": "boolean"
-                          },
-                          "learnFromWork": {
                             "default": true,
                             "type": "boolean"
                           },
                           "useStickers": {
                             "default": false,
-                            "type": "boolean"
-                          },
-                          "reachableByAgents": {
-                            "default": true,
                             "type": "boolean"
                           },
                           "id": {
@@ -27906,12 +27762,8 @@
                           "skills",
                           "disabledSkills",
                           "mcpServers",
-                          "allowSelfManagement",
                           "allowShell",
-                          "allowWebSearch",
-                          "learnFromWork",
                           "useStickers",
-                          "reachableByAgents",
                           "id",
                           "version",
                           "createdAt",
