@@ -1,4 +1,9 @@
-import { codeDiffSchema, type RunTimeline, type ToolStep } from '@jian/contracts';
+import {
+  codeDiffSchema,
+  imageAspectSchema,
+  type RunTimeline,
+  type ToolStep,
+} from '@jian/contracts';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { checkpoints, runs } from '../storage/schema.js';
@@ -53,6 +58,8 @@ export async function sessionTimeline(
       reason: sql<string | null>`${checkpoints.data}->>'reason'`,
       // Only a write's own diff checkpoint carries one; every other row reads null here.
       diff: sql<unknown>`${checkpoints.data}->'diff'`,
+      // Only an image being drawn is asked for one; every other row reads null here.
+      aspectRatio: sql<string | null>`${checkpoints.data}->'input'->>'aspectRatio'`,
     })
     .from(checkpoints)
     .where(
@@ -80,11 +87,16 @@ export async function sessionTimeline(
     timelines.set(row.runId, steps);
 
     if (row.phase === 'tool-started' && row.toolCallId && row.toolName) {
+      const aspect =
+        row.toolName === 'generate_image'
+          ? imageAspectSchema.safeParse(row.aspectRatio ?? '1:1')
+          : undefined;
       steps.set(row.toolCallId, {
         toolCallId: row.toolCallId,
         toolName: row.toolName,
         status: 'running',
         startedAt: row.at.toISOString(),
+        ...(aspect?.success ? { aspectRatio: aspect.data } : {}),
       });
       continue;
     }

@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, isAbsolute } from 'node:path';
 import {
+  type ImageAspect,
   type InlineMedia,
+  imageAspectSchema,
   inlineMediaSchema,
   MAX_MEDIA_BYTES,
   MAX_MESSAGE_MEDIA,
@@ -555,8 +557,16 @@ export class Media {
       generate_image: tool({
         description:
           'Generate an image using this profile’s selected image model. Stores the image and queues it for delivery in this conversation. Never claim delivery before it is confirmed.',
-        inputSchema: z.object({ prompt: z.string().min(1).max(8000), sessionId: elsewhere }),
-        execute: async ({ prompt, sessionId }, options) =>
+        inputSchema: z.object({
+          prompt: z.string().min(1).max(8000),
+          aspectRatio: imageAspectSchema
+            .default('1:1')
+            .describe(
+              'Width to height. Square unless the person asked for a shape or the use calls for one: 16:9 for a wallpaper or a banner, 9:16 for a phone screen or a story.',
+            ),
+          sessionId: elsewhere,
+        }),
+        execute: async ({ prompt, aspectRatio, sessionId }, options) =>
           this.generate(
             run,
             'image',
@@ -567,6 +577,7 @@ export class Media {
             account,
             undefined,
             sessionId,
+            aspectRatio,
           ),
       }),
       list_speech_voices: tool({
@@ -620,6 +631,7 @@ export class Media {
     account?: MediaMeter,
     instructions?: string,
     sessionId?: string,
+    aspectRatio?: ImageAspect,
   ) {
     const target = await this.destination(run, sessionId);
     const sourceKey = createHash('sha256')
@@ -653,6 +665,7 @@ export class Media {
         deadline,
         account,
         instructions,
+        aspectRatio,
       ),
     );
     const media = kind === 'speech' ? await voiceNote(generated, deadline) : generated;

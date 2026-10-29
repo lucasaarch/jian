@@ -438,6 +438,12 @@ export const codeDiffSchema = z.strictObject({
   truncated: z.boolean().optional(),
 });
 
+/**
+ * The shapes an image can be asked for in, width to height. Gemini draws each as asked; OpenAI
+ * offers fewer sizes and gets the nearest of its own.
+ */
+export const imageAspectSchema = z.enum(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']);
+
 export const toolStepSchema = z.strictObject({
   toolCallId: z.string(),
   toolName: z.string(),
@@ -447,6 +453,8 @@ export const toolStepSchema = z.strictObject({
   error: z.string().optional(),
   /** What a file write changed, for the tools that write files. */
   diff: codeDiffSchema.optional(),
+  /** The shape an image being drawn was asked for, so its frame takes it before it exists. */
+  aspectRatio: imageAspectSchema.optional(),
 });
 
 export const runTimelineSchema = z.strictObject({
@@ -460,6 +468,7 @@ export const runTimelineSchema = z.strictObject({
 
 export type ToolStep = z.infer<typeof toolStepSchema>;
 export type CodeDiff = z.infer<typeof codeDiffSchema>;
+export type ImageAspect = z.infer<typeof imageAspectSchema>;
 export type RunTimeline = z.infer<typeof runTimelineSchema>;
 export type RunApproval = z.infer<typeof runApprovalSchema>;
 
