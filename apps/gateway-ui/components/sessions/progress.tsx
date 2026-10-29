@@ -1,12 +1,12 @@
 'use client';
 
 import type { OrbState } from 'thinking-orbs';
-import type { Run } from '../../lib/api';
-import { Orb } from '../ui';
+import type { Run, ToolStep } from '@/lib/api';
 import { Markdown } from '../ui/markdown';
+import { ThoughtLine, type ThoughtStep } from './thought-line';
 
 /** What the panel calls each tool, so the owner reads an action instead of a function name. */
-export const toolLabels: Record<string, string> = {
+const toolLabels: Record<string, string> = {
   analyze_media: 'looking at an attachment',
   send_file: 'sending a file',
   save_attachment: 'saving an attachment',
@@ -55,10 +55,13 @@ export const toolLabels: Record<string, string> = {
   update_identity: 'adjusting its own identity',
   read_identity: 'rereading its own identity',
   create_profile: 'creating an agent',
+  spawn_subagent: 'handing work to an agent',
+  ask_jev: 'asking Jev',
+  ask_user: 'asking you',
 };
 
 /** The orb's animation for each tool: looking things up, working with its hands, or asking. */
-export const toolOrbs: Record<string, OrbState> = {
+const toolOrbs: Record<string, OrbState> = {
   web_search: 'searching',
   fetch_url: 'searching',
   search_history: 'searching',
@@ -74,7 +77,11 @@ export const toolOrbs: Record<string, OrbState> = {
  * What the agent is on, in a few words, and the orb that goes with it: the same in the list of
  * conversations and in the open one, since both read the same run.
  */
-export function statusOf(run: Run): { label: string; state: OrbState; tool: boolean } {
+export function statusOf(run: Pick<Run, 'status' | 'progress'>): {
+  label: string;
+  state: OrbState;
+  tool: boolean;
+} {
   const progress = run.progress;
   const tool =
     progress?.phase === 'tool'
@@ -100,37 +107,59 @@ export function statusOf(run: Run): { label: string; state: OrbState; tool: bool
   };
 }
 
+const failures: Partial<Record<ToolStep['status'], string>> = {
+  failed: 'Failed',
+  refused: 'Refused by the server',
+  uncertain: 'Outcome unknown',
+  stopped: 'Did not finish',
+};
+
+/** The tools of a turn as the Thought Line's trace, in the words the panel uses for them. */
+export function traceOf(steps: ToolStep[]): ThoughtStep[] {
+  return steps.map((step) => {
+    const label = toolLabels[step.toolName] ?? step.toolName.replaceAll('_', ' ');
+    const failed = failures[step.status];
+
+    return {
+      key: step.toolCallId,
+      text: `${label[0]?.toUpperCase()}${label.slice(1)}`,
+      status: step.status === 'running' ? 'running' : failed ? 'failed' : 'done',
+      ...(failed ? { note: step.error ? `${failed}: ${step.error}` : failed } : {}),
+    };
+  });
+}
+
 /**
- * What the agent is doing, while it does it, where its answer will appear: the thinking orb
- * and a line saying what it is on, then the answer as it is written. The panel is the only
- * surface that names tools; a chat channel gets the answer and nothing else.
+ * The agent at work, where its answer will appear: the Thought Line saying what it is on, with
+ * the tools so far beneath it, then the answer as it is written. The panel is the only surface
+ * that names tools; a chat channel gets the answer and nothing else.
  */
-export function RunProgress({
+export function LiveTurn({
   run,
+  steps,
   children,
-  toolShown = false,
 }: {
   run: Run;
-  /** The timeline above already shows the tool at work, with its own orb. */
-  toolShown?: boolean;
-  /** The tools used so far, shown above the status line. */
+  steps: ToolStep[];
+  /** The agents this turn handed work to. */
   children?: React.ReactNode;
 }) {
   const progress = run.progress;
   const { label, state, tool } = statusOf(run);
-  // Writing is shown by the words themselves: the orb gives way to them, and they are drawn as
-  // the finished answer will be, so nothing reflows when the run ends.
+  // Writing is shown by the words themselves, drawn as the finished answer will be, so nothing
+  // reflows when the run ends.
   const writing = !tool && Boolean(progress?.text);
 
   return (
     <article className="chat-line pending theirs" aria-live="polite">
+      <ThoughtLine
+        working
+        label={writing ? 'Writing' : label}
+        orb={state}
+        steps={traceOf(steps)}
+        startedAt={run.createdAt}
+      />
       {children}
-      {!writing && !(tool && toolShown) && (
-        <span className="run-phase">
-          <Orb state={state} />
-          {label}
-        </span>
-      )}
       {writing && (
         <div className="chat-text markdown streaming">
           <Markdown text={progress?.text ?? ''} breaks />

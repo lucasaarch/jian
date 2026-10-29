@@ -97,6 +97,7 @@ async function render({
         profile={profile}
         params={{ sessionId: 'business-session' }}
         slices={{
+          providers: [],
           sessions,
           projects: [],
           activities: [],
