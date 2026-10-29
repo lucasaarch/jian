@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { LogOut, ScrollText, Star, X } from 'lucide-react';
+import { LogOut, PanelLeftClose, PanelLeftOpen, ScrollText, Star, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -12,6 +12,7 @@ import {
   settingsPath,
 } from '@/lib/navigation';
 import { queries } from '@/lib/query/profile';
+import { useLayout } from '@/lib/stores/layout';
 import { useAgentPath, useLoading, useSignOut, useWorkingAgentId } from '@/lib/workspace';
 import { useReleaseNotes } from '../releases/dialog';
 import { GitHubLogo, IconButton, Mark } from '../ui';
@@ -20,10 +21,13 @@ import { ThemeSwitcher } from './theme';
 
 export function Sidebar({
   open,
+  collapsed,
   onNavigate,
   onCreateProfile,
 }: {
   open: boolean;
+  /** Narrowed to its icons, on a screen wide enough to keep it beside the page. */
+  collapsed: boolean;
   onNavigate: () => void;
   onCreateProfile: () => void;
 }) {
@@ -39,6 +43,7 @@ export function Sidebar({
   // Requests waiting on the owner, shown wherever they are in the panel.
   const pending = contacts.data?.filter((contact) => contact.status === 'pending').length ?? 0;
   const hrefOf = useAgentPath();
+  const toggle = useLayout((state) => state.toggle);
 
   return (
     <aside
@@ -58,7 +63,7 @@ export function Sidebar({
         <Mark className={loading ? 'connecting' : contacts.data ? 'connected' : ''} />
         <span>Jian</span>
       </Link>
-      <ProfileSwitcher onCreate={onCreateProfile} />
+      <ProfileSwitcher onCreate={onCreateProfile} compact={collapsed} />
       <nav className="sidebar-nav" aria-label="Main navigation">
         {navigationGroups.map((group) => (
           <div className="nav-group" key={group.id}>
@@ -71,6 +76,8 @@ export function Sidebar({
                   href={isGatewayItem(item) ? settingsPath(item.path) : hrefOf(item.path)}
                   className={active === item ? 'active' : ''}
                   aria-current={active === item ? 'page' : undefined}
+                  // Narrowed, the label is read out but not drawn; the tooltip draws it.
+                  title={collapsed ? item.label : undefined}
                   onClick={onNavigate}
                 >
                   <item.icon size={18} strokeWidth={1.7} />
@@ -87,6 +94,17 @@ export function Sidebar({
         ))}
       </nav>
       <div className="sidebar-footer">
+        <button
+          type="button"
+          className="sidebar-collapse"
+          aria-expanded={!collapsed}
+          aria-controls="main-navigation"
+          title={collapsed ? 'Expand the sidebar' : undefined}
+          onClick={() => toggle('sidebar')}
+        >
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          <span className="sidebar-label">{collapsed ? 'Expand' : 'Collapse'}</span>
+        </button>
         <ThemeSwitcher />
         <GitHubLink />
         <button
@@ -98,7 +116,7 @@ export function Sidebar({
           }}
         >
           <ScrollText size={16} />
-          Release notes
+          <span className="sidebar-label">Release notes</span>
           {behind > 0 && (
             <span className="release-update-count">
               {behind}
@@ -108,7 +126,7 @@ export function Sidebar({
         </button>
         <button type="button" onClick={() => void signOut()}>
           <LogOut size={16} />
-          Sign out
+          <span className="sidebar-label">Sign out</span>
         </button>
       </div>
     </aside>
@@ -127,7 +145,7 @@ function GitHubLink() {
   return (
     <a className="sidebar-github" href={REPOSITORY} target="_blank" rel="noreferrer">
       <GitHubLogo size={16} />
-      GitHub
+      <span className="sidebar-label">GitHub</span>
       {stars !== undefined && (
         <span className="sidebar-stars">
           <Star size={12} aria-hidden="true" />

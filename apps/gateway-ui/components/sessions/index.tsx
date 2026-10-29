@@ -12,6 +12,8 @@ import {
   CheckCheck,
   GraduationCap,
   MessagesSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   SlidersHorizontal,
   Terminal,
@@ -31,6 +33,7 @@ import {
   useSessions,
 } from '@/lib/query/agent';
 import { keys } from '@/lib/query/keys';
+import { useLayout } from '@/lib/stores/layout';
 import { useDeleteConversation, useRefresh } from '@/lib/workspace';
 import type { Run, Session } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
@@ -165,6 +168,24 @@ function preview(text: string) {
   );
 }
 
+/** Puts the chat list away or brings it back. A phone shows one or the other already. */
+function ListToggle() {
+  const collapsed = useLayout((state) => state.chatList);
+  const toggle = useLayout((state) => state.toggle);
+
+  return (
+    <IconButton
+      className="chat-list-toggle"
+      aria-label={collapsed ? 'Show the chat list' : 'Hide the chat list'}
+      aria-expanded={!collapsed}
+      aria-controls="chat-list"
+      onClick={() => toggle('chatList')}
+    >
+      {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+    </IconButton>
+  );
+}
+
 export function Sessions({ api, mutate, busy }: SectionActions) {
   const profile = useAgent();
   const sessions = useSessions();
@@ -187,6 +208,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   // On a phone the list and the conversation take turns: the conversation shows while one is
   // in the URL or a new chat is being written.
   const reading = draft || Boolean(selected);
+  const listCollapsed = useLayout((state) => state.chatList);
   const [draftProjectId, setDraftProjectId] = useState<string | null>(null);
   const [draftMachineId, setDraftMachineId] = useState<string | null>(null);
   const [draftModel, setDraftModel] = useState<Session['model']>();
@@ -412,8 +434,12 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   );
 
   return (
-    <div className="messenger" data-reading={reading}>
-      <aside className="conversation-list" aria-label="Conversations">
+    <div
+      className="messenger"
+      data-reading={reading}
+      data-list={listCollapsed ? 'collapsed' : 'open'}
+    >
+      <aside id="chat-list" className="conversation-list" aria-label="Conversations">
         <header>
           <div className="chat-channel-bar">
             <div className="chat-channel-select">
@@ -494,6 +520,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       {draft && (
         <section className="conversation-pane" aria-label="New chat">
           <header>
+            <ListToggle />
             <IconButton
               className="conversation-back"
               aria-label="Back to the conversations"
@@ -567,6 +594,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       {active && (
         <section className="conversation-pane" aria-label={nameOf(active)}>
           <header>
+            <ListToggle />
             <IconButton
               className="conversation-back"
               aria-label="Back to the conversations"
@@ -744,6 +772,11 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       )}
       {!active && !draft && (
         <section className="conversation-pane">
+          {listCollapsed && (
+            <header>
+              <ListToggle />
+            </header>
+          )}
           <div className="draft-empty">
             <Empty title="No conversations here">Choose a conversation or create a new chat.</Empty>
           </div>
