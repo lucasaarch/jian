@@ -186,7 +186,7 @@ export function ChatMessage({
 
   if (!mine || !group) {
     return (
-      <article className={`chat-line ${mine ? 'mine' : 'theirs'}`}>
+      <article className={`chat-line ${mine ? 'mine' : 'theirs'}`} data-message-id={message.id}>
         {before}
         {clean(message.content) &&
           (mine ? (
@@ -207,7 +207,10 @@ export function ChatMessage({
   const name = person?.name ?? author.name ?? (author.id ? handleOf(author.id) : 'Someone');
 
   return (
-    <article className={`chat-line mine member ${opensRun ? 'opens' : ''}`}>
+    <article
+      className={`chat-line mine member ${opensRun ? 'opens' : ''}`}
+      data-message-id={message.id}
+    >
       {opensRun ? (
         <Face name={name} picture={person?.avatar} className="chat-face" />
       ) : (

@@ -138,9 +138,9 @@ export function CodeChanges({ steps, fresh = false }: { steps: ToolStep[]; fresh
 
         return (
           <section key={step.toolCallId} className="code-change" aria-label={summaryOf(step)}>
+            {/* The counts are the file's, on its own header below: once is enough. */}
             <p className="code-change-row">
               <span className="code-change-summary">{summaryOf(step)}</span>
-              <Counts diff={step.diff} />
             </p>
             <FileDiff diff={step.diff} open={fresh || lines <= SHORT} />
           </section>

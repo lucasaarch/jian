@@ -53,7 +53,7 @@ afterEach(() => {
 it('shows what an edit changed, line by line, numbered on each side', () => {
   act(() => root.render(<CodeChanges steps={[step({ diff })]} />));
 
-  expect(container.querySelector('.code-change-row')?.textContent).toBe('Applied 1 edit+2−1');
+  expect(container.querySelector('.code-change-row')?.textContent).toBe('Applied 1 edit');
   expect(container.querySelector('.code-diff-path')?.textContent).toBe(diff.path);
   expect(container.querySelector('.code-diff-hunk')?.textContent).toBe(
     '@@ -18,3 +18,4 @@ export function withRetry(',
