@@ -391,8 +391,9 @@
   .note {
     @apply my-4 text-xs leading-relaxed;
   }
+  /* Open, with no card around it: an empty screen reads the same in a chat and on a page. */
   .empty {
-    @apply rounded-sm border border-line bg-surface px-6 py-14 text-center;
+    @apply px-6 py-14 text-center;
   }
   .empty-orbit {
     @apply mx-auto mb-5 grid h-16 w-16 place-items-center bg-accent-soft;
@@ -527,7 +528,7 @@
     @apply flex min-h-0 flex-1 items-center justify-center px-6;
   }
   .draft-empty .empty {
-    @apply w-full max-w-3xl border-0 bg-transparent;
+    @apply w-full max-w-3xl;
   }
   .conversation-pane {
     @apply flex min-h-0 min-w-0 flex-col;
@@ -921,9 +922,6 @@
   /* Only a phone has a list to go back to. */
   .conversation-pane .conversation-back {
     @apply hidden;
-  }
-  .message-history .empty {
-    @apply border-0;
   }
   /* A chat as AI chats lay it out: the reader's side in a pill on the right, the other side
      as plain text across the column. The column keeps lines short enough to read. */
