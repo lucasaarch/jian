@@ -595,7 +595,7 @@
     @apply grid gap-2 px-6 pb-5 pt-2;
   }
   .composer-box {
-    @apply grid gap-2 rounded-3xl border border-line bg-surface p-3 transition-colors;
+    @apply grid gap-2 rounded-2xl border border-line bg-surface p-3 transition-colors;
   }
   .composer-box[data-dragging="true"] {
     @apply border-dashed border-accent bg-accent-soft;
@@ -648,17 +648,18 @@
   .attachment {
     @apply relative;
   }
+  /* Every attachment is one tile tall, whatever it carries, so the row reads as one row. */
   .attachment.image img {
-    @apply h-16 w-16 rounded-xl border border-line object-cover;
+    @apply h-14 w-14 rounded-xl border border-line bg-canvas object-cover;
   }
   .attachment.audio .audio-player {
-    @apply w-72;
+    @apply h-14 w-72 bg-canvas py-0;
   }
   .attachment[data-state="failed"] {
     @apply rounded-xl ring-1 ring-bad;
   }
   .attachment-file {
-    @apply flex h-16 w-56 items-center gap-3 rounded-xl border border-line bg-canvas px-3;
+    @apply flex h-14 w-56 items-center gap-3 rounded-xl border border-line bg-canvas px-3;
   }
   .attachment-busy {
     @apply absolute inset-0 grid place-items-center rounded-xl bg-surface/70 text-accent;
@@ -893,7 +894,7 @@
   }
   /* A voice note: the round button, the waveform that fills in as it plays, time and speed. */
   .audio-player {
-    @apply flex w-80 max-w-full items-center gap-3 rounded-2xl border border-line bg-surface px-3 py-2;
+    @apply flex w-80 max-w-full items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2;
   }
   .audio-toggle {
     @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-on-accent;

@@ -13,12 +13,15 @@ export function policy(nonce: string, development = process.env.NODE_ENV === 'de
     `script-src 'self' 'nonce-${nonce}'${development ? " 'unsafe-eval'" : ''}`,
     "default-src 'self'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
+    // A file attached in the composer previews from a blob address the panel creates for it,
+    // before it is sent: the picture, the voice note, and the read that draws its waveform and
+    // finds its length. Only this origin can mint one, so `blob:` admits nothing from outside.
+    "img-src 'self' data: blob:",
     "font-src 'self'",
-    "connect-src 'self'",
+    "connect-src 'self' blob:",
     // Videos and voice notes play from data addresses the panel builds from an attachment it
     // already fetched through the API.
-    "media-src 'self' data:",
+    "media-src 'self' data: blob:",
     // The viewer opens a PDF from a blob address the panel itself creates, in a frame. That
     // document inherits this policy, and the browser's reader draws it as an embedded object,
     // so both have to accept the panel's own blobs or the page stays blank.
