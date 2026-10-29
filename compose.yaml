@@ -30,6 +30,7 @@ services:
     # `docker compose up -d --build`. The image line above stays, naming the local build.
     # build:
     #   context: .
+    #   dockerfile: apps/gateway/Dockerfile
     environment:
       # The database is reached over the compose network, never from the host, so this
       # ignores the DATABASE_URL that `make setup` wrote for local development.

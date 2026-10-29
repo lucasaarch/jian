@@ -391,13 +391,15 @@ const choice = (x, names) =>
   x === null ||
   (exact(x, ['name', 'confidence']) && names.includes(x.name) && confidence(x.confidence));
 const dottedTokens = (s) => s.match(/\b[\w-]+(?:\.[\w-]+)+\b/g) ?? [];
+// A scheme only counts as a whole word: without the boundary, `file:` matched inside an
+// ordinary `profile:` and blocked a correct English proposal (issue #91).
 const safeOutput = (s, prose) => {
   if (
     !text(s) ||
     !s.trim() ||
     secret.test(s) ||
     privateText.test(s) ||
-    /(?:[a-z][a-z\d+.-]*:\/\/|(?:mailto|javascript|data|file):|www\.|<|>|&(?:lt|gt|#\d+|#x[a-f\d]+);|\[[^\]]*\]\s*\()/im.test(
+    /(?:[a-z][a-z\d+.-]*:\/\/|\b(?:mailto|javascript|data|file):|www\.|<|>|&(?:lt|gt|#\d+|#x[a-f\d]+);|\[[^\]]*\]\s*\()/im.test(
       s,
     )
   )

@@ -231,11 +231,12 @@ export const BusinessAutomationControls: Story = {
       'aria-checked',
       'true',
     );
-    await expect(canvas.getByText('Approved', { exact: true })).toBeVisible();
+    // The disclosure fades in after opening; visibility is checked once it has settled.
+    await waitFor(() => expect(canvas.getByText('Approved', { exact: true })).toBeVisible());
     await expect(channel).toHaveAttribute('aria-checked', 'true');
     await userEvent.click(channel);
     await expect(channel).toHaveAttribute('aria-checked', 'false');
-    await expect(canvas.getByText('Paused', { exact: true })).toBeVisible();
+    await waitFor(() => expect(canvas.getByText('Paused', { exact: true })).toBeVisible());
   },
 };
 

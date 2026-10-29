@@ -85,6 +85,19 @@ const clone = (x) => structuredClone(x);
 const ready = (x) => assert.equal(x.state ?? x.decision?.state, 'ready');
 const blocked = (x) => assert.equal(x.state ?? x.decision?.state, 'blocked');
 
+test('ordinary words ending in a scheme name do not count as a link', () => {
+  const i = input({
+    title: 'Per-profile environment variables',
+    body: 'Add a section on the profile: name and value. Keep the metadata: owner only.',
+  });
+  ready(core.validateProposal(proposal(i), i));
+
+  for (const link of ['Open file:/etc/passwd now.', 'Load data:text/plain,hello here.']) {
+    const p = proposal(i);
+    blocked(core.validateProposal({ ...p, translation: { ...p.translation, body: link } }, i));
+  }
+});
+
 test('English translation replaces native title and body without losing protected technical content', () => {
   const source = {
     title: 'Falha ao salvar',

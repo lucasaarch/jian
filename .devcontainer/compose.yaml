@@ -19,7 +19,7 @@ services:
     image: jian-gateway-devcontainer
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: apps/gateway/Dockerfile
     environment:
       DATABASE_URL: postgres://jian:jian-devcontainer-db-password@postgres:5432/jian
       JIAN_API_TOKEN: jian-devcontainer-test-token-only
