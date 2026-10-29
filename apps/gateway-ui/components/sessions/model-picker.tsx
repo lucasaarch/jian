@@ -13,7 +13,7 @@ import {
   withDefaultEffort,
 } from '../providers/role-fields';
 import { ProviderLogo } from '../ui';
-import { type ModelEntry, ModelMenu } from './model-menu';
+import { EffortMenu, type ModelEntry, ModelMenu } from './model-menu';
 
 /**
  * The model one conversation runs on, over the profile's defaults, and its reasoning effort.
@@ -147,6 +147,14 @@ export function SessionModel({
       <ModelMenu
         label="Model for this conversation"
         models={entries}
+        value={model}
+        disabled={busy}
+        onChange={(next) => void save(next)}
+      />
+      <EffortMenu
+        model={entries.find(
+          (entry) => entry.providerId === model?.providerId && entry.modelId === model?.modelId,
+        )}
         value={model}
         disabled={busy}
         onChange={(next) => void save(next)}
