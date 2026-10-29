@@ -1,5 +1,6 @@
 import { skillSchema } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
+import { githubMcpServer } from '../src/agent/github-mcp.js';
 import { profileTools } from '../src/agent/tools.js';
 import { availableSkills, builtinSkills, findSkill } from '../src/skills/builtin/index.js';
 import { parseSkillDocument } from '../src/skills/document.js';
@@ -346,6 +347,24 @@ describe('the skills every profile carries', () => {
     });
 
     expect(availableSkills(on).map((skill) => skill.name)).toContain('discernment-nudge');
+  });
+
+  it('teaches GitHub only to a run the integration attached its server to', async () => {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({
+      name: 'Atlas',
+      instructions: 'Help.',
+      model,
+    });
+    const attached = { ...profile, mcpServers: [githubMcpServer('github')] };
+    const configured = {
+      ...profile,
+      mcpServers: [{ ...githubMcpServer('mine'), auth: 'oauth' as const, headers: [] }],
+    };
+
+    expect(findSkill(profile, 'github')).toBeUndefined();
+    expect(findSkill(configured, 'github')).toBeUndefined();
+    expect(findSkill(attached, 'github')?.instructions).toContain('search_mcp_tools');
   });
 
   it('keeps every built-in skill within what a skill may be', () => {

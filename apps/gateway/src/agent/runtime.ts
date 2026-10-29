@@ -41,6 +41,7 @@ import {
   GITHUB_MCP_TOOLSETS,
   githubMcpCredentialKey,
   githubMcpServer,
+  githubMcpServerName,
   githubMcpToolsetsKey,
 } from './github-mcp.js';
 import { ACTION_KINDS, actionGuard, guardTools, mcpActionKind } from './guard.js';
@@ -255,32 +256,32 @@ export class AgentRuntime {
       let mcpRun = learning ? { ...run, profile: { ...run.profile, mcpServers: [] } } : run;
       let mcpVault = this.options.vault;
       let githubMcpFailure: { name: string; reason: string } | undefined;
-      if (!learning && session.projectId && this.options.github) {
+      // GitHub is attached to every conversation once an account is connected: the project's
+      // repository alone in a project bound to one, each connected account anywhere else.
+      if (!learning && this.options.github) {
         try {
-          const access = await this.options.github.mcpAccess(profileId, session.projectId);
-          if (access) {
+          const reach = await this.options.github.mcpAccess(profileId, session.projectId);
+          const taken = new Set(run.profile.mcpServers.map((server) => server.name));
+          const headers = new Map<string, string>();
+          const servers = reach.map((access) => {
+            const name = githubMcpServerName(reach.length > 1 ? access.login : undefined, taken);
+            taken.add(name);
             secrets.add(access.token);
-            let name = 'github';
-            for (
-              let suffix = 2;
-              run.profile.mcpServers.some((server) => server.name === name);
-              suffix++
-            ) {
-              name = `github_${suffix}`;
-            }
-            const server = githubMcpServer(name);
+            headers.set(githubMcpCredentialKey(name), `Bearer ${access.token}`);
+            headers.set(githubMcpToolsetsKey(name), GITHUB_MCP_TOOLSETS);
+            return githubMcpServer(name);
+          });
+          if (servers.length) {
             mcpRun = {
               ...run,
-              profile: { ...run.profile, mcpServers: [...run.profile.mcpServers, server] },
+              profile: { ...run.profile, mcpServers: [...run.profile.mcpServers, ...servers] },
             };
             const ordinaryVault = this.options.vault;
             mcpVault = {
               read: (owner, key) =>
-                owner === profileId && key === githubMcpCredentialKey(name)
-                  ? Promise.resolve(`Bearer ${access.token}`)
-                  : owner === profileId && key === githubMcpToolsetsKey(name)
-                    ? Promise.resolve(GITHUB_MCP_TOOLSETS)
-                    : (ordinaryVault?.read(owner, key) ?? Promise.resolve(undefined)),
+                owner === profileId && headers.has(key)
+                  ? Promise.resolve(headers.get(key))
+                  : (ordinaryVault?.read(owner, key) ?? Promise.resolve(undefined)),
             };
           }
         } catch (error) {
@@ -293,11 +294,13 @@ export class AgentRuntime {
           };
         }
       }
+      // The skills a run offers follow the servers it has, GitHub's included.
+      const skillRun = learning ? run : mcpRun;
       const gitAccess = run.subagent
         ? await prepareWorkerWorkspace(run)
         : await prepareProfileGitAccess(run.profileId);
       const tools: ToolSet = {
-        ...profileTools(this.services, run, gitAccess, session.remoteMachineId),
+        ...profileTools(this.services, skillRun, gitAccess, session.remoteMachineId),
         ...this.services.media?.tools(run, async (usage) => {
           await account(
             {
@@ -361,7 +364,7 @@ export class AgentRuntime {
         console.warn(`jian: MCP server ${server.name} is unavailable — ${server.reason}`);
       }
 
-      const context = await this.services.contexts.context(run);
+      const context = await this.services.contexts.context(skillRun);
       const cavemanSkill = findSkill(run.profile, 'caveman');
       let currentCavemanMode: CavemanMode = cavemanSkill
         ? await cavemanMode(this.services.store.db, profileId, run.sessionId)

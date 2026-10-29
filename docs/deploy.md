@@ -213,10 +213,13 @@ To enable **Integrations → GitHub**, set `JIAN_PUBLIC_URL` to the externally r
 of this installation (the web server's). In the panel, choose **Create GitHub App** and confirm Jian's manifest on GitHub.
 GitHub returns the generated credentials directly to Jian, which stores them encrypted in the
 gateway vault. Jian requests repository write access for the official GitHub MCP toolsets,
-including Actions, Issues, Pull Requests, repository contents and security findings. Installation
-tokens are minted per run and restricted to the repository selected by that profile's Project;
-tokens are not stored. Each installed GitHub account is shared by all Jian agents, while Projects
-remain profile-specific. GitHub requires existing App owners to update the App's permissions and
+including Actions, Issues, Pull Requests, repository contents and security findings. Once an
+account is connected, every agent conversation gets GitHub's MCP server: a chat in a GitHub-backed
+Project gets a token restricted to that Project's repository, and any other chat gets one token per
+connected account, covering the repositories the App was granted there. Tokens stay in the
+gateway's memory, reused until five minutes before GitHub expires them, and are never stored.
+Each installed GitHub account is shared by all Jian agents, while Projects remain
+profile-specific. GitHub requires existing App owners to update the App's permissions and
 approve the change for each installation; Integrations → Apps → GitHub shows any missing App
 permissions and links to the relevant GitHub settings.
 
