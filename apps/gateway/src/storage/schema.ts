@@ -59,7 +59,6 @@ export const profiles = pgTable('profiles', {
   mcpServers: jsonb('mcp_servers').$type<McpServer[]>().notNull().default([]),
   // Deprecated product switch — always on; column kept for older rows / API compatibility.
   allowShell: boolean('allow_shell').notNull().default(true),
-  useStickers: boolean('use_stickers').notNull().default(false),
   version: integer('version').notNull(),
   createdAt,
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -200,23 +199,19 @@ export const githubInstallationStates = pgTable('github_installation_states', {
   createdAt,
 });
 
-/** A role per row, so a role added later needs no column. */
-export const modelDefaults = pgTable(
-  'model_defaults',
-  {
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => profiles.id, { onDelete: 'cascade' }),
-    role: text('role').notNull(),
-    // Null on both means the role is configured as empty, which is not the same as unset.
-    providerId: uuid('provider_id'),
-    modelId: text('model_id'),
-    reasoningEffort: text('reasoning_effort').$type<ReasoningEffort>(),
-    voiceName: text('voice_name'),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [primaryKey({ columns: [table.profileId, table.role] })],
-);
+/**
+ * The installation's models, one row per role so a role added later needs no column. Every
+ * agent runs on these; a conversation may choose its own over them.
+ */
+export const modelDefaults = pgTable('model_defaults', {
+  role: text('role').primaryKey(),
+  // Null on both means the role is configured as empty, which is not the same as unset.
+  providerId: uuid('provider_id'),
+  modelId: text('model_id'),
+  reasoningEffort: text('reasoning_effort').$type<ReasoningEffort>(),
+  voiceName: text('voice_name'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 /** Repositories belong to one profile; a chat can reference only that profile's project. */
 export const projects = pgTable(

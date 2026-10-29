@@ -434,7 +434,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/model-defaults": {
+    "/v1/model-defaults": {
         parameters: {
             query?: never;
             header?: never;
@@ -5732,9 +5732,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                profileId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5830,10 +5828,6 @@ export interface operations {
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
                             voiceName?: string;
                         } | null;
-                        /** Format: uuid */
-                        id: string;
-                        /** Format: uuid */
-                        profileId: string;
                         /** Format: date-time */
                         updatedAt: string;
                     };
@@ -5926,9 +5920,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                profileId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -6113,10 +6105,6 @@ export interface operations {
                             reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
                             voiceName?: string;
                         } | null;
-                        /** Format: uuid */
-                        id: string;
-                        /** Format: uuid */
-                        profileId: string;
                         /** Format: date-time */
                         updatedAt: string;
                     };
@@ -11281,8 +11269,6 @@ export interface operations {
                         }[];
                         /** @default true */
                         allowShell: boolean;
-                        /** @default false */
-                        useStickers: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -11524,8 +11510,6 @@ export interface operations {
                         }[];
                         /** @default true */
                         allowShell: boolean;
-                        /** @default false */
-                        useStickers: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -11761,8 +11745,6 @@ export interface operations {
                     }[];
                     /** @default true */
                     allowShell?: boolean;
-                    /** @default false */
-                    useStickers?: boolean;
                 };
             };
         };
@@ -11906,8 +11888,6 @@ export interface operations {
                         }[];
                         /** @default true */
                         allowShell: boolean;
-                        /** @default false */
-                        useStickers: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -12151,8 +12131,6 @@ export interface operations {
                         }[];
                         /** @default true */
                         allowShell: boolean;
-                        /** @default false */
-                        useStickers: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -12462,7 +12440,6 @@ export interface operations {
                         disabledTools?: string[];
                     }[];
                     allowShell?: boolean;
-                    useStickers?: boolean;
                     expectedVersion: number;
                 };
             };
@@ -12607,8 +12584,6 @@ export interface operations {
                         }[];
                         /** @default true */
                         allowShell: boolean;
-                        /** @default false */
-                        useStickers: boolean;
                         /** Format: uuid */
                         id: string;
                         version: number;
@@ -12964,8 +12939,6 @@ export interface operations {
                             }[];
                             /** @default true */
                             allowShell: boolean;
-                            /** @default false */
-                            useStickers: boolean;
                             /** Format: uuid */
                             id: string;
                             version: number;

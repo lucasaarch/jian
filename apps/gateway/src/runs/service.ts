@@ -100,7 +100,7 @@ export class Runs {
     sessionId: string,
     activity: 'conversation' | 'channel',
   ): Promise<boolean> {
-    const defaults = await readModelDefaults(this.store.db, profileId, nowIso(this.clock));
+    const defaults = await readModelDefaults(this.store.db, nowIso(this.clock));
     const session = await this.sessions.session(profileId, sessionId).catch(() => undefined);
     const selection = session?.model ?? defaults[activity] ?? defaults.conversation;
 
@@ -253,7 +253,7 @@ export class Runs {
         return inFlight;
       }
 
-      const defaults = await readModelDefaults(tx, profileId, nowIso(this.clock));
+      const defaults = await readModelDefaults(tx, nowIso(this.clock));
       const candidates = data.model
         ? [data.model]
         : [session.model, defaults[activity] ?? defaults.conversation, automatic];
@@ -298,7 +298,6 @@ export class Runs {
       if (chosen && selection && selectedAutomatically) {
         await writeModelDefaults(
           tx,
-          profileId,
           { ...defaults, conversation: selection },
           new Date(this.clock()),
         );
@@ -540,7 +539,7 @@ export class Runs {
     // Model fallback was resolved before the outer transaction when possible; here reuse the
     // waiting run's frozen model so the resume stays on the same choice.
     const profile = waiting.profile;
-    const defaults = await readModelDefaults(tx, profileId, nowIso(this.clock));
+    const defaults = await readModelDefaults(tx, nowIso(this.clock));
     const candidates = [
       waiting.modelSelection,
       session.model,

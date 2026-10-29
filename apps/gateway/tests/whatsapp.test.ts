@@ -753,7 +753,7 @@ it.each(['image', 'speech'] as const)(
         kind: 'openai',
         secret: 'synthetic-openai-media-key-1234567890',
       });
-      await f.services.providers.setModelDefaults(f.profile.id, {
+      await f.services.providers.setModelDefaults({
         [kind]: {
           providerId: provider.id,
           modelId: kind === 'image' ? 'gpt-image-2' : 'gpt-4o-mini-tts',

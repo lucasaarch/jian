@@ -48,7 +48,7 @@ export function agentClient({ profile, profiles = [profile], slices = {}, params
     defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
   });
   const id = profile.id;
-  const { providerModels, groups, providers, ...owned } = slices;
+  const { providerModels, groups, providers, modelDefaults, ...owned } = slices;
   const byAgent = {
     sessions: keys.sessions,
     projects: keys.projects,
@@ -56,12 +56,12 @@ export function agentClient({ profile, profiles = [profile], slices = {}, params
     contacts: keys.contacts,
     memories: keys.memories,
     activities: keys.activities,
-    modelDefaults: keys.modelDefaults,
   } as const;
 
   cache.setQueryData(keys.profiles, profiles);
   if (groups) cache.setQueryData(keys.groups, groups);
   if (providers) cache.setQueryData(keys.providers, providers);
+  if (modelDefaults) cache.setQueryData(keys.modelDefaults, modelDefaults);
   for (const list of Object.values(providerModels ?? {})) {
     cache.setQueryData(keys.providerModels(list.providerId), list);
   }

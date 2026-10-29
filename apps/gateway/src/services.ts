@@ -84,7 +84,7 @@ export function buildServices({
   github?: Pick<GitHubIntegrations, 'repository'>;
 }): Services {
   const profiles = new Profiles(store, vault, clock);
-  const providers = new Providers(store, profiles, gatewayVault, clock, catalog);
+  const providers = new Providers(store, gatewayVault, clock, catalog);
   const sessions = new Sessions(store, profiles, clock);
   const projects = new Projects(store, profiles, clock, github);
   const memories = new Memories(store, profiles, sessions, clock);

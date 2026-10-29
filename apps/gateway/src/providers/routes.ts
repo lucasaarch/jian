@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import { GatewayError } from '../core/errors.js';
-import type { ProfileParams } from '../http/params.js';
 import type { CodexLogin } from './codex/login.js';
 import type { ProviderModels } from './discovery.js';
 import type { ProviderAdmin } from './port.js';
@@ -49,11 +48,7 @@ export function registerProviderRoutes(app: FastifyInstance, deps: ProviderRoute
     deps.providers.revokeProvider(request.params.providerId),
   );
 
-  app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/model-defaults', async (request) =>
-    deps.providers.modelDefaults(request.params.profileId),
-  );
+  app.get('/v1/model-defaults', async () => deps.providers.modelDefaults());
 
-  app.put<{ Params: ProfileParams }>('/v1/profiles/:profileId/model-defaults', async (request) =>
-    deps.providers.setModelDefaults(request.params.profileId, request.body),
-  );
+  app.put('/v1/model-defaults', async (request) => deps.providers.setModelDefaults(request.body));
 }

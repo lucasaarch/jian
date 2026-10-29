@@ -261,8 +261,6 @@ export const profileSchema = z.strictObject({
    * enforcement — treated as always on. Remote Control is gated by machine ACL only.
    */
   allowShell: z.boolean().default(true),
-  /** Deprecated compatibility field. Sticker analysis in model defaults controls this now. */
-  useStickers: z.boolean().default(false),
 });
 
 export const profilePatchSchema = profileSchema.partial().extend({
@@ -279,7 +277,6 @@ export const profilePatchSchema = profileSchema.partial().extend({
   disabledSkills: z.array(skillNameSchema).max(20).optional(),
   mcpServers: z.array(mcpSchema).optional(),
   allowShell: z.boolean().optional(),
-  useStickers: z.boolean().optional(),
 });
 
 /** The channel of chats the owner starts with a profile through the panel. */

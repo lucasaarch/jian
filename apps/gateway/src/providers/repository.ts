@@ -118,10 +118,9 @@ export async function markProviderRevoked(db: Queryable, id: string, at: Date): 
  */
 export async function readModelDefaults(
   db: Queryable,
-  profileId: string,
   fallbackUpdatedAt: string,
 ): Promise<ModelDefaultsRecord> {
-  const rows = await db.select().from(modelDefaults).where(eq(modelDefaults.profileId, profileId));
+  const rows = await db.select().from(modelDefaults);
   const supportedRows = rows.filter((row) =>
     modelRoleSchema.options.includes(row.role as ModelRole),
   );
@@ -163,8 +162,6 @@ export async function readModelDefaults(
 
   return modelDefaultsRecordSchema.parse({
     ...selections,
-    id: profileId,
-    profileId,
     updatedAt: latest ? latest.toISOString() : fallbackUpdatedAt,
   });
 }
@@ -172,24 +169,15 @@ export async function readModelDefaults(
 /** Every current role keeps a row; unknown legacy roles remain untouched for safe rollback. */
 export async function writeModelDefaults(
   db: Queryable,
-  profileId: string,
   selections: RoleSelections,
   at: Date,
 ): Promise<void> {
-  await db
-    .delete(modelDefaults)
-    .where(
-      and(
-        eq(modelDefaults.profileId, profileId),
-        inArray(modelDefaults.role, modelRoleSchema.options),
-      ),
-    );
+  await db.delete(modelDefaults).where(inArray(modelDefaults.role, modelRoleSchema.options));
 
   const rows = modelRoleSchema.options.map((role) => {
     const selection = selections[role];
 
     return {
-      profileId,
       role,
       providerId:
         selection === 'disabled' ? DISABLED_PROVIDER_ID : selection ? selection.providerId : null,

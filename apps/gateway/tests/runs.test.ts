@@ -37,7 +37,7 @@ it('runs on a host provider credential without registering a provider by hand', 
     services.runs.submit(profile.id, session.id, { text: 'Hello', requestKey: 'unchosen' }),
   ).rejects.toMatchObject({ statusCode: 409 });
 
-  await services.providers.setModelDefaults(profile.id, {
+  await services.providers.setModelDefaults({
     conversation: {
       providerId: anthropic?.id ?? '',
       modelId: 'claude-sonnet-4-5',
@@ -67,7 +67,7 @@ it('replaces one provider key and refuses the model default left behind', async 
       secret: `synthetic-${name}`,
     });
   const old = await add('old');
-  await services.providers.setModelDefaults(profile.id, {
+  await services.providers.setModelDefaults({
     conversation: { providerId: old.id, modelId: 'gpt-4.1' },
   });
   const current = await add('current');
@@ -79,7 +79,7 @@ it('replaces one provider key and refuses the model default left behind', async 
     services.runs.submit(profile.id, session.id, { text: 'Hello', requestKey: 'stale' }),
   ).rejects.toMatchObject({ statusCode: 409 });
 
-  await services.providers.setModelDefaults(profile.id, {
+  await services.providers.setModelDefaults({
     conversation: { providerId: current.id, modelId: 'gpt-4.1' },
   });
 
@@ -109,7 +109,7 @@ it('freezes the chosen model and its context budget per run', async () => {
   const large = { providerId: provider.id, modelId: 'gpt-4.1-mini' };
   const small = { providerId: provider.id, modelId: 'internal-preview' };
 
-  await services.providers.setModelDefaults(profile.id, { conversation: small, channel: large });
+  await services.providers.setModelDefaults({ conversation: small, channel: large });
 
   const chosen = await services.runs.submit(profile.id, session.id, {
     text: 'First',
@@ -140,12 +140,10 @@ it('freezes the chosen model and its context budget per run', async () => {
     }),
   ).rejects.toMatchObject({ statusCode: 409 });
 
-  // A credential belongs to the installation, so a second profile chooses the same one.
-  const other = await services.profiles.createProfile({ name: 'Other', instructions: 'Help.' });
-
-  await expect(
-    services.providers.setModelDefaults(other.id, { conversation: large }),
-  ).resolves.toMatchObject({ profileId: other.id });
+  // A credential and the models chosen with it belong to the installation, not one agent.
+  await expect(services.providers.setModelDefaults({ conversation: large })).resolves.toMatchObject(
+    { conversation: large },
+  );
 
   await services.providers.revokeProvider(provider.id);
 
@@ -170,7 +168,7 @@ it('runs one conversation on its own model and leaves the others on the defaults
   });
   const own = { providerId: provider.id, modelId: 'gpt-4.1-mini', reasoningEffort: 'low' as const };
 
-  await services.providers.setModelDefaults(profile.id, {
+  await services.providers.setModelDefaults({
     conversation: { providerId: provider.id, modelId: 'gpt-4.1' },
   });
   await services.sessions.setModel(profile.id, session.id, { model: own });

@@ -33,7 +33,7 @@ it('connects ChatGPT through device login without exposing tokens', async () => 
   expect(JSON.stringify(provider)).not.toContain('synthetic-refresh');
   expect(await login.accessToken(provider?.id ?? '')).toBe(token);
   const session = await services.sessions.createSession(profile.id, { title: 'ChatGPT' });
-  await services.providers.setModelDefaults(profile.id, {
+  await services.providers.setModelDefaults({
     conversation: { providerId: provider?.id ?? '', modelId: 'gpt-5.1-codex' },
   });
 

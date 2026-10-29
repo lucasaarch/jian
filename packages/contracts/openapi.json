@@ -6281,7 +6281,7 @@
         }
       }
     },
-    "/v1/profiles/{profileId}/model-defaults": {
+    "/v1/model-defaults": {
       "get": {
         "operationId": "getModelDefaults",
         "security": [
@@ -6290,18 +6290,7 @@
           }
         ],
         "description": "Required permission: admin.",
-        "parameters": [
-          {
-            "name": "profileId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Success",
@@ -6740,16 +6729,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "profileId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time",
@@ -6766,8 +6745,6 @@
                     "speech",
                     "sticker",
                     "transcription",
-                    "id",
-                    "profileId",
                     "updatedAt"
                   ],
                   "additionalProperties": false
@@ -6875,18 +6852,7 @@
           }
         ],
         "description": "Required permission: admin.",
-        "parameters": [
-          {
-            "name": "profileId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            }
-          }
-        ],
+        "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -7768,16 +7734,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "profileId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time",
@@ -7794,8 +7750,6 @@
                     "speech",
                     "sticker",
                     "transcription",
-                    "id",
-                    "profileId",
                     "updatedAt"
                   ],
                   "additionalProperties": false
@@ -17117,10 +17071,6 @@
                       "default": true,
                       "type": "boolean"
                     },
-                    "useStickers": {
-                      "default": false,
-                      "type": "boolean"
-                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -17154,7 +17104,6 @@
                     "disabledSkills",
                     "mcpServers",
                     "allowShell",
-                    "useStickers",
                     "id",
                     "version",
                     "createdAt",
@@ -17699,10 +17648,6 @@
                         "default": true,
                         "type": "boolean"
                       },
-                      "useStickers": {
-                        "default": false,
-                        "type": "boolean"
-                      },
                       "id": {
                         "type": "string",
                         "format": "uuid",
@@ -17736,7 +17681,6 @@
                       "disabledSkills",
                       "mcpServers",
                       "allowShell",
-                      "useStickers",
                       "id",
                       "version",
                       "createdAt",
@@ -18256,10 +18200,6 @@
                   "allowShell": {
                     "default": true,
                     "type": "boolean"
-                  },
-                  "useStickers": {
-                    "default": false,
-                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -18700,10 +18640,6 @@
                       "default": true,
                       "type": "boolean"
                     },
-                    "useStickers": {
-                      "default": false,
-                      "type": "boolean"
-                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -18737,7 +18673,6 @@
                     "disabledSkills",
                     "mcpServers",
                     "allowShell",
-                    "useStickers",
                     "id",
                     "version",
                     "createdAt",
@@ -19291,10 +19226,6 @@
                       "default": true,
                       "type": "boolean"
                     },
-                    "useStickers": {
-                      "default": false,
-                      "type": "boolean"
-                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -19328,7 +19259,6 @@
                     "disabledSkills",
                     "mcpServers",
                     "allowShell",
-                    "useStickers",
                     "id",
                     "version",
                     "createdAt",
@@ -19833,9 +19763,6 @@
                   "allowShell": {
                     "type": "boolean"
                   },
-                  "useStickers": {
-                    "type": "boolean"
-                  },
                   "expectedVersion": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
@@ -20279,10 +20206,6 @@
                       "default": true,
                       "type": "boolean"
                     },
-                    "useStickers": {
-                      "default": false,
-                      "type": "boolean"
-                    },
                     "id": {
                       "type": "string",
                       "format": "uuid",
@@ -20316,7 +20239,6 @@
                     "disabledSkills",
                     "mcpServers",
                     "allowShell",
-                    "useStickers",
                     "id",
                     "version",
                     "createdAt",
@@ -21165,10 +21087,6 @@
                             "default": true,
                             "type": "boolean"
                           },
-                          "useStickers": {
-                            "default": false,
-                            "type": "boolean"
-                          },
                           "id": {
                             "type": "string",
                             "format": "uuid",
@@ -21202,7 +21120,6 @@
                           "disabledSkills",
                           "mcpServers",
                           "allowShell",
-                          "useStickers",
                           "id",
                           "version",
                           "createdAt",

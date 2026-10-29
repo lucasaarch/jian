@@ -1,12 +1,14 @@
 /**
  * Every cache key the panel uses. Anything about one profile lives under `['profile', id]`, so
  * a refresh of that profile is one invalidation and never reaches another profile's data.
- * Installation-wide resources — the profiles themselves, providers, groups — sit at the root.
+ * Installation-wide resources — the profiles themselves, providers, model defaults, groups —
+ * sit at the root.
  */
 export const keys = {
   profiles: ['profiles'] as const,
   providers: ['providers'] as const,
   providerModels: (providerId: string) => ['providers', providerId, 'models'] as const,
+  modelDefaults: ['model-defaults'] as const,
   groups: ['groups'] as const,
   githubIntegration: ['integrations', 'github'] as const,
   githubRepositories: (accountId: string) =>
@@ -23,7 +25,6 @@ export const keys = {
   contacts: (profileId: string) => ['profile', profileId, 'contacts'] as const,
   memories: (profileId: string) => ['profile', profileId, 'memories'] as const,
   activities: (profileId: string) => ['profile', profileId, 'activities'] as const,
-  modelDefaults: (profileId: string) => ['profile', profileId, 'model-defaults'] as const,
   schedules: (profileId: string) => ['profile', profileId, 'schedules'] as const,
   scheduleHistory: (profileId: string, scheduleId: string) =>
     ['profile', profileId, 'schedules', scheduleId, 'history'] as const,

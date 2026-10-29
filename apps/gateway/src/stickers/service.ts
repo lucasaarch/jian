@@ -73,7 +73,7 @@ export class Stickers {
     private readonly store: Store,
     private readonly media: StickerMedia,
     private readonly defaults: {
-      modelDefaults(profileId: string): Promise<Pick<ModelDefaultsRecord, 'sticker'>>;
+      modelDefaults(): Promise<Pick<ModelDefaultsRecord, 'sticker'>>;
     },
   ) {}
 
@@ -81,7 +81,7 @@ export class Stickers {
   async keep(profileId: string, input: InlineMedia): Promise<void> {
     if (input.mimeType !== 'image/webp') return;
     // Switched off, a sticker costs nothing: not kept, not described.
-    if ((await this.defaults.modelDefaults(profileId)).sticker === 'disabled') return;
+    if ((await this.defaults.modelDefaults()).sticker === 'disabled') return;
 
     const hash = createHash('sha256').update(input.data).digest('hex');
     const [kept] = await this.store.db

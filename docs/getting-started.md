@@ -73,7 +73,7 @@ Every administrative call needs `Authorization: Bearer <JIAN_API_TOKEN>`, includ
    registration or model allowlist is required.
 3. Read what that account can call with
    `GET /v1/profiles/{profileId}/providers/{providerId}/models`, then pick a model per
-   role with `PUT /v1/profiles/{profileId}/model-defaults`. `conversation` is what a run
+   role with `PUT /v1/model-defaults`, shared by every agent. `conversation` is what a run
    falls back to; the gateway never picks a model on its own.
 4. Create a session and post to
    `POST /v1/profiles/{profileId}/sessions/{sessionId}/messages` with `text` and a

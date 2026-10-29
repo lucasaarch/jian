@@ -60,13 +60,13 @@ async function setup(respond: () => Promise<Response>, catalog?: ModelCatalog) {
 
 it('keeps the saved default and the last list when the provider is unreachable', async () => {
   let reachable = true;
-  const { services, profile, provider, models, advance } = await setup(async () => {
+  const { services, provider, models, advance } = await setup(async () => {
     if (!reachable) throw new Error('connect ECONNREFUSED');
 
     return listing('claude-sonnet-4-5', 'claude-opus-4-5');
   });
 
-  await services.providers.setModelDefaults(profile.id, {
+  await services.providers.setModelDefaults({
     conversation: { providerId: provider.id, modelId: 'claude-sonnet-4-5', reasoningEffort: 'low' },
   });
 
@@ -86,7 +86,7 @@ it('keeps the saved default and the last list when the provider is unreachable',
   expect(offline.fetchedAt).toBe(fresh.fetchedAt);
 
   // The outage must not reach into stored configuration.
-  expect((await services.providers.modelDefaults(profile.id)).conversation).toEqual({
+  expect((await services.providers.modelDefaults()).conversation).toEqual({
     providerId: provider.id,
     modelId: 'claude-sonnet-4-5',
     reasoningEffort: 'low',
@@ -123,7 +123,7 @@ it('answers inside the cache window without reaching the provider again', async 
 });
 
 it('takes what the public catalog knows and marks the model it does not cover', async () => {
-  const { services, profile, provider, models } = await setup(
+  const { services, provider, models } = await setup(
     async () => listing('claude-sonnet-4-5', 'claude-next-experimental'),
     testCatalog({
       'claude-sonnet-4-5': {
@@ -153,14 +153,14 @@ it('takes what the public catalog knows and marks the model it does not cover', 
   });
 
   // Unknown capabilities never make a model unselectable.
-  const saved = await services.providers.setModelDefaults(profile.id, {
+  const saved = await services.providers.setModelDefaults({
     conversation: { providerId: provider.id, modelId: 'claude-next-experimental' },
   });
 
   expect(saved.conversation?.modelId).toBe('claude-next-experimental');
 
   // Nor does an uncatalogued model refuse an effort: the provider is the one who knows.
-  const withEffort = await services.providers.setModelDefaults(profile.id, {
+  const withEffort = await services.providers.setModelDefaults({
     conversation: {
       providerId: provider.id,
       modelId: 'claude-next-experimental',
@@ -172,7 +172,7 @@ it('takes what the public catalog knows and marks the model it does not cover', 
 
   // A level the catalog does contradict is still refused.
   await expect(
-    services.providers.setModelDefaults(profile.id, {
+    services.providers.setModelDefaults({
       conversation: {
         providerId: provider.id,
         modelId: 'claude-sonnet-4-5',
@@ -287,17 +287,13 @@ it('lets the owner change one model default while a stored role is no longer off
       reasoning_options: [{ type: 'effort', values: ['low', 'high'] }],
     },
   });
-  const { services, profile, provider } = await setup(
-    async () => listing('claude-sonnet-4-5'),
-    catalog,
-  );
+  const { services, provider } = await setup(async () => listing('claude-sonnet-4-5'), catalog);
   const { writeModelDefaults } = await import('../src/providers/repository.js');
   const selection = { providerId: provider.id, modelId: 'claude-sonnet-4-5' as const };
 
   // Plant a vision choice that today's catalog rejects for image analysis.
   await writeModelDefaults(
     services.store.db,
-    profile.id,
     {
       conversation: selection,
       channel: selection,
@@ -312,7 +308,7 @@ it('lets the owner change one model default while a stored role is no longer off
     new Date(),
   );
 
-  const saved = await services.providers.setModelDefaults(profile.id, {
+  const saved = await services.providers.setModelDefaults({
     conversation: { ...selection, reasoningEffort: 'high' },
     channel: selection,
     compaction: null,
@@ -327,7 +323,7 @@ it('lets the owner change one model default while a stored role is no longer off
 
   // A change to the stale role still has to pass today's checks.
   await expect(
-    services.providers.setModelDefaults(profile.id, {
+    services.providers.setModelDefaults({
       conversation: { ...selection, reasoningEffort: 'high' },
       channel: selection,
       compaction: null,
