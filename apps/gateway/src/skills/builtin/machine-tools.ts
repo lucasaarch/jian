@@ -82,7 +82,7 @@ the image. Install what the task needs, not what might be handy, and say what yo
 
 ## Logins and keys
 
-- \`git push\` to a private repository uses the profile's SSH key; there is no other GitHub
+- \`git push\` to a private repository uses the installation's SSH keys; there is no other GitHub
   login in the workspace.
 - SSH keys: create them with the SSH key tools (\`ssh-keys\` skill), not \`ssh-keygen\`. The
   gateway points \`git\` at those identities and seeds GitHub’s host keys in

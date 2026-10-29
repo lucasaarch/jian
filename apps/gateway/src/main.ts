@@ -26,6 +26,7 @@ import { createSafeFetch } from './security/outbound.js';
 import { Vault } from './security/vault.js';
 import { buildServices } from './services.js';
 import { Skills } from './skills/service.js';
+import { importWorkspaceSshKeys } from './ssh/import.js';
 import { type StartupStage, startupFailure } from './startup.js';
 import { PostgresStore } from './storage/postgres.js';
 
@@ -267,6 +268,8 @@ try {
   await store.migrate();
   // Secrets of the MCP servers migration 0071 made the installation's; nothing once done.
   await moveMcpSecrets(store, vault, gatewayVault);
+  // SSH keys that still live only as files in an agent's workspace; nothing once imported.
+  await importWorkspaceSshKeys(store, gatewayVault);
   startupStage = 'queue';
   await queue?.start();
 

@@ -98,7 +98,7 @@ export type ToolServices = {
   settings?: { timeZone(): Promise<string> };
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
   work?: Pick<Work, 'spawnInConversation'>;
-  sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove'>;
+  sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove' | 'sync'>;
   remote?: Pick<Remote, 'listForProfile' | 'execute' | 'executeComputer'>;
 };
 
@@ -116,23 +116,23 @@ export function profileTools(
   const tools: ToolSet = {
     list_ssh_keys: tool({
       description:
-        'List this profile’s SSH keys. Returns names, public keys and fingerprints only; private keys never leave the workspace.',
+        'List the installation’s SSH keys, shared by every agent. Returns names, public keys and fingerprints only; private keys are never returned.',
       inputSchema: z.object({}),
-      execute: async () => services.sshKeys.list(run.profileId),
+      execute: async () => services.sshKeys.list(),
     }),
 
     create_ssh_key: tool({
       description:
-        'Create an Ed25519 SSH key for this profile through Jian. Never use ssh-keygen or create SSH keys through the shell.',
+        'Create an Ed25519 SSH key through Jian, shared by every agent of the installation. It is in your workspace from the next run. Never use ssh-keygen or create SSH keys through the shell.',
       inputSchema: z.object({ name: z.string().trim().min(1).max(80) }),
-      execute: async ({ name }) => services.sshKeys.create(run.profileId, { name }),
+      execute: async ({ name }) => services.sshKeys.create({ name }),
     }),
 
     delete_ssh_key: tool({
       description:
-        'Delete one of this profile’s SSH keys. List the keys first and use the returned id.',
+        'Delete one of the installation’s SSH keys, for every agent. List the keys first and use the returned id.',
       inputSchema: z.object({ id: z.uuid() }),
-      execute: async ({ id }) => services.sshKeys.remove(run.profileId, id),
+      execute: async ({ id }) => services.sshKeys.remove(id),
     }),
 
     list_activities: tool({

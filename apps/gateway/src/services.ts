@@ -153,7 +153,7 @@ export function buildServices({
     objectives: new ObjectiveContinuation(store, sessions, runs, clock),
     vault,
     gatewayVault,
-    sshKeys: new SshKeys(profiles),
+    sshKeys: new SshKeys(store, gatewayVault),
     mcp: new McpServers(store, gatewayVault, clock),
     remote: new Remote(store, clock),
   };
