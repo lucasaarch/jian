@@ -60,6 +60,44 @@ export type GitHubInstallation = GitHubIntegrationAccount & {
 /** A panel path, `/agents/:id/integrations[/github]`; the route's schema has checked it. */
 export type GitHubReturnPath = string;
 
+/**
+ * Why connecting an account failed, as the panel is told in `?reason=` and the log records it.
+ * GitHub has already installed the App by then, so this is the only trace of what went wrong.
+ */
+export type GitHubFailure =
+  | 'denied'
+  | 'incomplete'
+  | 'expired'
+  | 'authorization'
+  | 'not-owner'
+  | 'github'
+  | 'save'
+  | 'gateway';
+
+export class GitHubConnectionFailure extends Error {
+  constructor(
+    readonly reason: GitHubFailure,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+  }
+}
+
+/** Runs one step of a connection, so a failure names the step it happened in. */
+async function step<T>(reason: GitHubFailure, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof GitHubConnectionFailure) throw error;
+    throw new GitHubConnectionFailure(
+      reason,
+      error instanceof Error ? error.message : String(error),
+      { cause: error },
+    );
+  }
+}
+
 const userInstallationsResponse = z.object({
   installations: z.array(z.object({ id: z.number().int().positive().safe() })),
 });
@@ -304,22 +342,39 @@ export class GitHubIntegrations {
     return { url: url.toString() };
   }
 
-  async finish(state: string, code: string, installationId: number) {
+  /**
+   * Records the installation GitHub just made, once the user GitHub authorized is shown to own
+   * it. A failure is returned rather than thrown: GitHub already installed the App, so the caller
+   * has to log why Jian did not record it, and still send the owner back.
+   */
+  async finish(
+    state: string,
+    code: string,
+    installationId: number,
+  ): Promise<{ location: string; failure?: GitHubConnectionFailure }> {
     const config = await this.requireConfig();
     const stateRow = await this.consumeState(state, 'installation');
-    if (!stateRow) throw new GatewayError(400, 'This GitHub authorization has expired.');
+    if (!stateRow) {
+      return {
+        location: await this.failedRedirect(state, 'expired'),
+        failure: new GitHubConnectionFailure(
+          'expired',
+          'The authorization state is unknown, expired or was already used.',
+        ),
+      };
+    }
 
     try {
-      const userToken = await this.exchangeCode(config, code);
-      const authorized = await this.authorizedInstallations(userToken);
+      const userToken = await step('authorization', () => this.exchangeCode(config, code));
+      const authorized = await step('github', () => this.authorizedInstallations(userToken));
       if (!authorized.some((installation) => installation.id === installationId)) {
-        throw new GatewayError(
-          403,
-          'The authorized GitHub account does not own this installation.',
+        throw new GitHubConnectionFailure(
+          'not-owner',
+          `The authorized GitHub account cannot reach installation ${installationId}; it reaches ${authorized.length} installation(s) of this App.`,
         );
       }
 
-      const installation = await this.getInstallation(config, installationId);
+      const installation = await step('github', () => this.getInstallation(config, installationId));
       const account = githubIntegrationAccountSchema.parse({
         accountId: installation.account.accountId,
         login: installation.account.login,
@@ -328,38 +383,52 @@ export class GitHubIntegrations {
         connectedAt: new Date(this.clock()).toISOString(),
         id: randomUUID(),
       });
-      const [saved] = await this.store.transaction('gateway', async (tx) =>
-        tx
-          .insert(githubInstallations)
-          .values({
-            id: account.id,
-            installationId,
-            accountId: account.accountId,
-            login: account.login,
-            type: account.type,
-            avatarUrl: account.avatarUrl ?? null,
-            connectedAt: new Date(this.clock()),
-          })
-          .onConflictDoUpdate({
-            target: githubInstallations.installationId,
-            set: {
+      const [saved] = await step('save', () =>
+        this.store.transaction('gateway', async (tx) =>
+          tx
+            .insert(githubInstallations)
+            .values({
+              id: account.id,
+              installationId,
               accountId: account.accountId,
               login: account.login,
               type: account.type,
               avatarUrl: account.avatarUrl ?? null,
-            },
-          })
-          .returning(),
+              connectedAt: new Date(this.clock()),
+            })
+            .onConflictDoUpdate({
+              target: githubInstallations.installationId,
+              set: {
+                accountId: account.accountId,
+                login: account.login,
+                type: account.type,
+                avatarUrl: account.avatarUrl ?? null,
+              },
+            })
+            .returning(),
+        ),
       );
 
-      if (!saved) throw new GatewayError(500, 'GitHub account could not be saved.');
-      return `${stateRow.returnOrigin}?github=connected`;
-    } catch {
-      return `${stateRow.returnOrigin}?github=failed`;
+      if (!saved) throw new GitHubConnectionFailure('save', 'The account was not saved.');
+      return { location: `${stateRow.returnOrigin}?github=connected` };
+    } catch (error) {
+      const failure =
+        error instanceof GitHubConnectionFailure
+          ? error
+          : new GitHubConnectionFailure(
+              'gateway',
+              error instanceof Error ? error.message : String(error),
+              { cause: error },
+            );
+
+      return {
+        location: `${stateRow.returnOrigin}?github=failed&reason=${failure.reason}`,
+        failure,
+      };
     }
   }
 
-  async failedRedirect(state: string | undefined) {
+  async failedRedirect(state: string | undefined, reason?: GitHubFailure) {
     const row = state
       ? await this.store.transaction('gateway', async (tx) => {
           const [pending] = await tx
@@ -372,7 +441,7 @@ export class GitHubIntegrations {
     // Without its state there is no telling which agent started it; the panel's root opens one.
     const origin =
       row?.returnOrigin ?? (this.publicUrl ? new URL('/', this.publicUrl).toString() : '/');
-    return `${origin}?github=failed`;
+    return `${origin}?github=failed${reason ? `&reason=${reason}` : ''}`;
   }
 
   async repositories(accountId: string): Promise<GitHubRepository[]> {
@@ -496,7 +565,9 @@ export class GitHubIntegrations {
       },
       signal: init.signal ?? AbortSignal.timeout(15_000),
     });
-    if (!response.ok) throw new GatewayError(502, `GitHub answered ${response.status}.`);
+    if (!response.ok) {
+      throw new GatewayError(502, `GitHub answered ${response.status} to ${url.pathname}.`);
+    }
     return response;
   }
 
@@ -512,9 +583,18 @@ export class GitHubIntegrations {
       signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) throw new GatewayError(502, `GitHub answered ${response.status}.`);
-    const token = (await response.json()) as { access_token?: unknown };
+    // GitHub answers a refused code with 200 and an `error`; that word is what says why.
+    const token = (await response.json()) as {
+      access_token?: unknown;
+      error?: unknown;
+      error_description?: unknown;
+    };
     if (typeof token.access_token !== 'string' || !token.access_token) {
-      throw new GatewayError(400, 'GitHub did not return an authorization token.');
+      const why =
+        typeof token.error === 'string'
+          ? ` (${token.error}${typeof token.error_description === 'string' ? `: ${token.error_description}` : ''})`
+          : '';
+      throw new GatewayError(400, `GitHub did not return an authorization token${why}.`);
     }
     return token.access_token;
   }

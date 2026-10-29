@@ -28,30 +28,57 @@ export function registerIntegrationRoutes(app: FastifyInstance, github: GitHubIn
     async (request) => github.start(request.headers.origin ?? '', request.body.returnPath),
   );
 
+  // GitHub has installed the App by the time it comes back here, so a failure is logged with its
+  // reason — never the code or the state — and the owner is still sent back to the panel.
   app.get<{
     Querystring: {
       code?: string;
       state?: string;
       installation_id?: number;
+      setup_action?: string;
       error?: string;
     };
   }>('/v1/integrations/github/callback', async (request, reply) => {
     reply.header('cache-control', 'no-store');
-    if (
-      request.query.error ||
-      !request.query.code ||
-      !request.query.state ||
-      !request.query.installation_id
-    ) {
-      return reply.redirect(await github.failedRedirect(request.query.state), 302);
+    const {
+      code,
+      state,
+      installation_id: installationId,
+      setup_action: setupAction,
+    } = request.query;
+    const context = { installationId, setupAction };
+
+    if (request.query.error || !code || !state || !installationId) {
+      const reason = request.query.error ? 'denied' : 'incomplete';
+      request.log.warn(
+        {
+          github: {
+            ...context,
+            reason,
+            error: request.query.error,
+            code: Boolean(code),
+            state: Boolean(state),
+          },
+        },
+        'GitHub came back without an authorized installation',
+      );
+      return reply.redirect(await github.failedRedirect(state, reason), 302);
     }
     try {
-      return reply.redirect(
-        await github.finish(request.query.state, request.query.code, request.query.installation_id),
-        302,
+      const { location, failure } = await github.finish(state, code, installationId);
+      if (failure) {
+        request.log.warn(
+          { github: { ...context, reason: failure.reason }, err: failure },
+          'GitHub installation could not be connected',
+        );
+      }
+      return reply.redirect(location, 302);
+    } catch (error) {
+      request.log.warn(
+        { github: { ...context, reason: 'gateway' }, err: error },
+        'GitHub installation could not be connected',
       );
-    } catch {
-      return reply.redirect(await github.failedRedirect(request.query.state), 302);
+      return reply.redirect(await github.failedRedirect(state, 'gateway'), 302);
     }
   });
 
