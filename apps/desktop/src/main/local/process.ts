@@ -105,7 +105,7 @@ function announceMove(): void {
 }
 
 /** The address in the gateway's one line of its own on stdout, among Fastify's log lines. */
-export function listening(line: string): string | undefined {
+function listening(line: string): string | undefined {
   try {
     const parsed = JSON.parse(line) as { listening?: unknown };
     return typeof parsed.listening === 'string' ? parsed.listening : undefined;

@@ -1,21 +1,7 @@
-import { toast, useThemeChoice } from '@jian/ui';
-import { MoonStar, RefreshCw, Settings2, Sun } from 'lucide-react';
+import { openUpdates, toggleSidebar, useThemeChoice } from '@jian/ui';
+import { MoonStar, PanelLeft, RefreshCw, Settings2, Sun } from 'lucide-react';
 import { createElement, useMemo } from 'react';
-import { desktop } from '../desktop';
 import { type AppCommand, useCommands } from './registry';
-
-/** What an update check found, said where the owner is looking. */
-async function checkForUpdates() {
-  const pending = toast.loading('Checking for updates…');
-  const found = await desktop().checkForUpdates();
-  toast.dismiss(pending);
-  if (found.state === 'unavailable')
-    toast.info('Updates come with the installed app; this one runs from source.');
-  else if (found.state === 'latest') toast.success(`Jian ${found.version} is the latest release.`);
-  else if (found.state === 'available')
-    toast.success(`Jian ${found.version} is downloading; it installs when you quit.`);
-  else toast.error(`Could not check for updates: ${found.reason}`);
-}
 
 /** The commands of the window itself, whatever gateway is open. */
 export function useWindowCommands(openSettings: () => void): void {
@@ -32,6 +18,14 @@ export function useWindowCommands(openSettings: () => void): void {
         run: openSettings,
       },
       {
+        id: 'sidebar',
+        title: 'Toggle sidebar',
+        keywords: ['chats', 'list', 'hide', 'show', 'collapse'],
+        icon: createElement(PanelLeft, { size: 15 }),
+        keys: { key: 'b' },
+        run: toggleSidebar,
+      },
+      {
         id: 'theme',
         title: next === 'light' ? 'Switch to light theme' : 'Switch to dark theme',
         keywords: ['appearance', 'theme', 'dark', 'light', 'mode'],
@@ -43,7 +37,7 @@ export function useWindowCommands(openSettings: () => void): void {
         title: 'Check for updates',
         keywords: ['update', 'version', 'release', 'upgrade'],
         icon: createElement(RefreshCw, { size: 15 }),
-        run: () => void checkForUpdates(),
+        run: () => openUpdates({ check: true }),
       },
     ];
   }, [theme, setTheme, openSettings]);

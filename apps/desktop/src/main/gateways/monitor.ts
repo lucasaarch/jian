@@ -2,12 +2,16 @@ import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { createJianClient } from '@jian/sdk';
 import type { GatewayStatus, GatewaySummary } from '../../shared/bridge';
 import { timedFetch } from './fetch';
-import { compatible } from './rules';
+import { compatible, gatewayName } from './rules';
 import type { GatewayStore, StoredGateway } from './store';
 
-/** How often a gateway is asked how it stands, in ms; slower while it is not answering. */
+/**
+ * How often a gateway is asked how it stands, in ms; a little slower while it is not answering.
+ * Not much slower: the window holds its reads while the gateway is away, and they go on only
+ * once it is seen answering again.
+ */
 const EVERY_MS = 15_000;
-const OFFLINE_EVERY_MS = 60_000;
+const OFFLINE_EVERY_MS = 20_000;
 const TIMEOUT_MS = 8_000;
 
 type Session = {
@@ -29,7 +33,7 @@ export type Reply = {
 };
 
 /** The panel's own rule: a chat of the panel the agent wrote in since the owner last read it. */
-export function unread(session: Session): boolean {
+function unread(session: Session): boolean {
   return (
     session.channel === GATEWAY_SESSION_CHANNEL &&
     session.lastMessage?.role === 'assistant' &&
@@ -64,7 +68,7 @@ export class GatewayMonitor {
       const watch = this.watches.get(gateway.id);
       return {
         id: gateway.id,
-        name: gateway.name,
+        name: gatewayName(gateway),
         local: gateway.local === true,
         url: gateway.url,
         status: watch?.status ?? 'connecting',
@@ -133,11 +137,23 @@ export class GatewayMonitor {
       return;
     }
     if (!profiles.data) throw new Error('unreachable');
+    watch.status = 'online';
 
+    // It answers: that is settled. Counting unread chats reads every agent's list, and one slow
+    // or failed list only leaves the count as it was; it never makes the gateway look away.
+    await this.count(gateway, client, profiles.data, watch).catch(() => undefined);
+  }
+
+  private async count(
+    gateway: StoredGateway,
+    client: ReturnType<typeof createJianClient>,
+    profiles: { id: string; name: string }[],
+    watch: Watch,
+  ): Promise<void> {
     const first = !watch.known;
     const known = watch.known ?? new Map<string, string>();
     let count = 0;
-    for (const profile of profiles.data) {
+    for (const profile of profiles) {
       const sessions = await client.GET('/v1/profiles/{profileId}/sessions', {
         params: { path: { profileId: profile.id } },
       });
@@ -162,6 +178,5 @@ export class GatewayMonitor {
     }
     watch.known = known;
     watch.unread = count;
-    watch.status = 'online';
   }
 }

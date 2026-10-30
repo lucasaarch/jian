@@ -2,6 +2,7 @@
  * What the main process and the window say to each other. The window never sees a gateway's
  * token: it names gateways by id, and the main process signs every request on its way out.
  */
+import type { UpdatesBridge } from './updates';
 
 export type GatewayStatus =
   /** Not asked yet since the app started or the gateway was added. */
@@ -16,6 +17,7 @@ export type GatewayStatus =
 
 export type GatewaySummary = {
   id: string;
+  /** What it is called: this computer, or the host it answers at. */
   name: string;
   /** The gateway this app runs on this computer: always there, first, and never removed. */
   local: boolean;
@@ -28,18 +30,9 @@ export type GatewaySummary = {
   unread: number;
 };
 
-export type NewGateway = { name: string; url: string; token: string };
+export type NewGateway = { url: string; token: string };
 
 export type AddGatewayResult = { ok: true; gateway: GatewaySummary } | { ok: false; error: string };
-
-/** What a check for a new release of the app found. */
-export type UpdateCheck =
-  /** A build from source has no releases to compare with. */
-  | { state: 'unavailable' }
-  | { state: 'latest'; version: string }
-  /** Downloading; it installs on the next quit. */
-  | { state: 'available'; version: string }
-  | { state: 'failed'; reason: string };
 
 /** A place in a gateway's panel to open: where a notification leads. */
 export type OpenTarget = { gatewayId: string; path: string };
@@ -51,7 +44,6 @@ export interface DesktopBridge {
   platform: string;
   gateways(): Promise<GatewaySummary[]>;
   addGateway(gateway: NewGateway): Promise<AddGatewayResult>;
-  renameGateway(id: string, name: string): Promise<void>;
   removeGateway(id: string): Promise<void>;
   /** A new host token for a gateway that refused the saved one, checked before it is kept. */
   replaceToken(id: string, token: string): Promise<{ ok: true } | { ok: false; error: string }>;
@@ -63,7 +55,8 @@ export interface DesktopBridge {
    */
   showing(gatewayId: string | null): void;
   openAtLogin(): Promise<boolean>;
-  checkForUpdates(): Promise<UpdateCheck>;
+  /** The app's own releases: checked on start and every few hours, downloaded in the background. */
+  updates: UpdatesBridge;
   /** The window's own buttons, which the title bar draws on Windows and Linux. */
   windowControls: {
     minimize(): void;
@@ -72,6 +65,17 @@ export interface DesktopBridge {
     onMaximized(listener: (maximized: boolean) => void): () => void;
   };
   setOpenAtLogin(open: boolean): Promise<void>;
+  /**
+   * This computer as a machine on the app's server gateways, so agents there can use its shell
+   * and Computer Use. One switch for the whole computer, on by default; turned off, every worker
+   * stops and the records stay on the gateways. The app's own gateway never has one.
+   */
+  machines: {
+    /** This computer's machine on a gateway: its id there, once registered, and whether agents may use it. */
+    state(gatewayId: string): Promise<{ machineId: string | null; sharing: boolean }>;
+    setSharing(on: boolean): Promise<void>;
+    onChanged(listener: () => void): () => void;
+  };
 }
 
 /** The id of the gateway this computer runs, among the ones the owner connected. */

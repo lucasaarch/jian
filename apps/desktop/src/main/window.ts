@@ -3,17 +3,23 @@ import { BrowserWindow, shell } from 'electron';
 import { APP_ORIGIN } from '../shared/bridge';
 import { submitInBrowser } from './forms';
 import { resourcesDir } from './tray';
+import { keepWindowState, savedPlace } from './window-state';
+
+const MINIMUM = { width: 720, height: 520 };
 
 /**
  * The one window. Closing it hides it: the app keeps watching its gateways from the tray, and the
  * next open shows the same panel where it was, without loading it again.
  */
 export function createWindow(options: { quitting: () => boolean }): BrowserWindow {
+  // Where it was left, on a screen that is still there; the first time, a size and the centre.
+  const { bounds, saved } = savedPlace(MINIMUM);
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
-    minWidth: 720,
-    minHeight: 520,
+    ...bounds,
+    minWidth: MINIMUM.width,
+    minHeight: MINIMUM.height,
     show: false,
     title: 'Jian',
     backgroundColor: '#050505',
@@ -32,6 +38,7 @@ export function createWindow(options: { quitting: () => boolean }): BrowserWindo
     },
   });
 
+  keepWindowState(window, saved);
   window.once('ready-to-show', () => window.show());
   window.on('close', (event) => {
     if (options.quitting()) return;

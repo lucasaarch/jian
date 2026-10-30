@@ -1,26 +1,26 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { SidebarBar } from '@jian/ui';
 import { useEffect, useSyncExternalStore } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
 import { desktop } from '../desktop';
 import { navigationFor } from '../gateways/navigation';
-import { placeName } from './place';
 import { WindowControls } from './window-controls';
 
 const drag = '[-webkit-app-region:drag]';
-const noDrag = '[-webkit-app-region:no-drag]';
-const button = `${noDrag} grid size-7 place-items-center rounded-md text-muted hover:bg-accent-soft hover:text-ink disabled:pointer-events-none disabled:opacity-35`;
 
 const idle = () => () => {};
 
 /**
- * The app's own title bar, in place of the system's: the window moves by it, it says where the
- * panel is and in which gateway, and it goes back and forward through the panel's history. On
- * macOS the traffic lights sit at its left; elsewhere its right end holds the window's buttons.
+ * The app's own title bar, in place of the system's, drawn over the top of the window rather than
+ * above it: the sidebar and whatever is open beside it run up to the window's edge. The window
+ * moves by that whole top strip. Its left end is the chat sidebar's top — put it away, search,
+ * back and forward. On macOS the traffic lights sit at its left; elsewhere the window's own
+ * buttons float at the right, over what is open there.
  */
 export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
   const mac = desktop().platform === 'darwin';
   const memory = gateway ? navigationFor(gateway.id) : undefined;
-  const pathname = useSyncExternalStore(memory?.subscribe ?? idle, memory?.current ?? (() => ''));
+  // Read to follow the navigation, so back and forward come alive as it moves.
+  useSyncExternalStore(memory?.subscribe ?? idle, memory?.current ?? (() => ''));
   const canBack = memory?.canGoBack() ?? false;
   const canForward = memory?.canGoForward() ?? false;
 
@@ -43,47 +43,33 @@ export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
     return () => window.removeEventListener('keydown', keys);
   }, [memory, mac]);
 
+  const shortcuts = mac
+    ? { sidebar: '⌘B', search: '⌘K', back: '⌘[', forward: '⌘]' }
+    : { sidebar: 'Ctrl+B', search: 'Ctrl+K', back: 'Alt+←', forward: 'Alt+→' };
+
   return (
-    <header
-      className={`${drag} flex h-(--title-bar) shrink-0 select-none items-center gap-1 border-b border-line bg-canvas`}
-    >
-      {/* Room for the traffic lights, which macOS draws over this end of the bar. */}
-      <div className={mac ? 'w-19 shrink-0' : 'w-1.5 shrink-0'} />
-      <button
-        type="button"
-        className={button}
-        onClick={() => memory?.back()}
-        disabled={!canBack}
-        aria-label="Back"
-        title={mac ? 'Back (⌘[)' : 'Back (Alt+←)'}
-      >
-        <ChevronLeft size={16} />
-      </button>
-      <button
-        type="button"
-        className={button}
-        onClick={() => memory?.forward()}
-        disabled={!canForward}
-        aria-label="Forward"
-        title={mac ? 'Forward (⌘])' : 'Forward (Alt+→)'}
-      >
-        <ChevronRight size={16} />
-      </button>
-      <p className="min-w-0 flex-1 truncate px-2 text-center text-xs text-muted">
-        {gateway ? (
-          <>
-            <span className="text-ink">{placeName(pathname)}</span>
-            <span aria-hidden="true"> · </span>
-            {gateway.name}
-          </>
-        ) : (
-          'Jian'
-        )}
-      </p>
-      {/* On macOS, as wide as the traffic lights with back and forward: the place sits centred. */}
-      <div className={mac ? 'w-35 shrink-0' : 'shrink-0'}>
-        {!mac && <WindowControls className={noDrag} />}
-      </div>
-    </header>
+    <>
+      {/* Behind everything, so it is only a place to hold the window by: what is drawn over it
+          and can be pressed is left out of the drag by the app's styles. */}
+      <div aria-hidden="true" className={`${drag} absolute inset-x-0 top-0 h-(--title-bar)`} />
+      <header className="absolute top-0 left-0 z-30 flex h-(--title-bar) select-none">
+        <SidebarBar
+          // Room for the traffic lights, which macOS draws over this end of the bar.
+          leading={<div className={mac ? 'w-19 shrink-0' : 'w-1.5 shrink-0'} />}
+          shortcuts={shortcuts}
+          {...(memory
+            ? {
+                history: {
+                  back: () => memory.back(),
+                  forward: () => memory.forward(),
+                  canBack,
+                  canForward,
+                },
+              }
+            : {})}
+        />
+      </header>
+      {!mac && <WindowControls className="absolute top-0 right-0 z-30" />}
+    </>
   );
 }

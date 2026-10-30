@@ -5,8 +5,27 @@
 @source ".";
 
 :root {
-  /* The app's title bar above the chats and its status bar under them; the chats fill the rest. */
+  /* The strip the window is held by, drawn over the top of the chats rather than above them,
+     and the status bar under them; the chats fill the rest. */
   --title-bar: 2.5rem;
   --status-bar: 2.25rem;
-  --app-height: calc(100dvh - var(--title-bar) - var(--status-bar));
+  --app-height: calc(100dvh - var(--status-bar));
+  /* What the panel keeps clear at the top of the sidebar for the strip's buttons. */
+  --chrome-top: var(--title-bar);
+}
+
+/* The window moves by its top strip, under everything; what can be pressed there still is. */
+:is(
+  button,
+  a,
+  input,
+  textarea,
+  select,
+  summary,
+  label,
+  [role="button"],
+  [role="switch"],
+  [contenteditable="true"]
+) {
+  -webkit-app-region: no-drag;
 }

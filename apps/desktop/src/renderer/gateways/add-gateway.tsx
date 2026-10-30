@@ -26,7 +26,6 @@ export function AddGateway({
     setBusy(true);
     setError('');
     const result = await desktop().addGateway({
-      name: String(form.get('name') ?? ''),
       url: String(form.get('url') ?? ''),
       token: String(form.get('token') ?? ''),
     });
@@ -37,8 +36,8 @@ export function AddGateway({
   };
 
   return (
-    <Overlay open={open} onOpenChange={onOpenChange} title="Connect a gateway">
-      <form onSubmit={submit} className="m-auto grid w-full max-w-md gap-5 p-8">
+    <Overlay open={open} onOpenChange={onOpenChange} title="Connect a gateway" size="form">
+      <form onSubmit={submit} className="grid w-full gap-5 p-7">
         <header className="grid gap-1">
           <h2 className="text-xl font-semibold tracking-tight">Connect a gateway</h2>
           <p className="text-sm text-muted">
@@ -53,14 +52,6 @@ export function AddGateway({
           required
           autoComplete="off"
           spellCheck={false}
-        />
-        <TextField
-          label="Name"
-          name="name"
-          placeholder="Home server"
-          hint="How the status bar shows it. The address’s host when empty."
-          maxLength={60}
-          autoComplete="off"
         />
         <TextField
           label="Host token"

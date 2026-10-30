@@ -4,15 +4,25 @@
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
     "moduleResolution": "bundler",
-    "types": ["node"],
+    "types": ["node", "electron-vite/node"],
     "strict": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "noUncheckedIndexedAccess": true,
+    // @jian/remote-core is compiled from its TypeScript source, which imports with .ts.
+    "allowImportingTsExtensions": true,
     "composite": true,
     "tsBuildInfoFile": "out/.tsbuildinfo/tsconfig.node",
     "emitDeclarationOnly": true,
     "outDir": "out/.types/node"
   },
-  "include": ["electron.vite.config.ts", "src/main", "src/preload", "src/shared", "tests"]
+  // The release scripts written in TypeScript run on Node itself, which strips the types.
+  "include": [
+    "electron.vite.config.ts",
+    "src/main",
+    "src/preload",
+    "src/shared",
+    "tests",
+    "scripts/*.ts"
+  ]
 }

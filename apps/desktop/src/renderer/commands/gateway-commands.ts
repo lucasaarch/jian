@@ -1,5 +1,5 @@
-import { newChatPath, useProfileId, useRouter } from '@jian/ui';
-import { MessageSquarePlus } from 'lucide-react';
+import { agentSettingsPath, newChatPath, searchChats, useProfileId, useRouter } from '@jian/ui';
+import { MessageSquarePlus, Search, UserCog } from 'lucide-react';
 import { createElement, useMemo } from 'react';
 import { type AppCommand, useCommands } from './registry';
 
@@ -18,6 +18,21 @@ export function useGatewayCommands(): void {
               icon: createElement(MessageSquarePlus, { size: 15 }),
               keys: { key: 'n' },
               run: () => router.push(newChatPath(profileId)),
+            },
+            {
+              id: 'search-chats',
+              title: 'Search chats',
+              keywords: ['find', 'conversation', 'go to'],
+              icon: createElement(Search, { size: 15 }),
+              keys: { key: 'k' },
+              run: searchChats,
+            },
+            {
+              id: 'agent-settings',
+              title: 'Agent settings',
+              keywords: ['identity', 'name', 'instructions', 'reset', 'delete', 'agent'],
+              icon: createElement(UserCog, { size: 15 }),
+              run: () => router.push(agentSettingsPath(profileId)),
             },
           ]
         : [],

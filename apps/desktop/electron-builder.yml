@@ -14,6 +14,12 @@ extraResources:
     to: .
     filter: ['*.png']
 npmRebuild: false
+# Every file names its CPU, x64 included: Publish merges one OS's CPUs into one update file, and
+# electron-updater downloads the file whose name carries this machine's arch.
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+# Always latest*.yml, a candidate's too, so a release has one set of update files to look for;
+# GitHub keeps candidates as prereleases, which an installed stable release never sees.
+detectUpdateChannel: false
 # The local gateway, compiled with its production dependencies (scripts/stage-gateway.mjs).
 afterPack: scripts/after-pack.mjs
 asar: true
@@ -25,22 +31,32 @@ protocols:
 mac:
   # macOS takes a single category; Linux lists it under developer tools as well.
   category: public.app-category.productivity
-  # One download per CPU: the local gateway's native dependencies are built for one.
+  # One download per CPU, packaged on a machine of that CPU: the local gateway's native
+  # dependencies are installed for the machine that packages it. So no target names an arch;
+  # `--arm64`/`--x64`, or this machine's, decides. The zip is what an installed app updates from.
   target:
-    - target: dmg
-      arch: [arm64, x64]
-    - target: zip
-      arch: [arm64, x64]
+    - dmg
+    - zip
   hardenedRuntime: true
+  # The Computer Use helper for this computer's machine on the gateways: one universal binary,
+  # as packages/remote-core/native/build-macos.sh writes it. Signed with the app.
+  extraResources:
+    - from: ../../packages/remote-core/native/bin/macos
+      to: computer-helpers/macos
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   # Notarized when Publish has the App Store Connect key (APPLE_API_KEY, _ID, _ISSUER).
   notarize: true
 
 win:
+  # One installer per CPU, each packaged on its own (see mac). It updates in place, from a
+  # blockmap, downloading only the blocks that changed.
   target:
-    - target: nsis
-      arch: [x64, arm64]
+    - nsis
+  # One helper per CPU (native/build-windows.sh); the worker picks this one's.
+  extraResources:
+    - from: ../../packages/remote-core/native/bin/windows
+      to: computer-helpers/windows
 
 nsis:
   oneClick: true
@@ -52,14 +68,20 @@ linux:
   desktop:
     entry:
       Categories: Development;Utility;
+  # The AppImage updates itself in place. The .deb is the system's package manager's to update;
+  # an app installed from it says a release is out and links to it.
   target:
-    - target: AppImage
-      arch: [x64, arm64]
-    - target: deb
-      arch: [x64, arm64]
+    - AppImage
+    - deb
   maintainer: Jian contributors
+  # One helper per CPU (native/build-linux.sh); the worker picks this one's.
+  extraResources:
+    - from: ../../packages/remote-core/native/bin/linux
+      to: computer-helpers/linux
 
 # Releases are the repository's own GitHub releases, where electron-updater looks for new ones.
+# Packaging never publishes (`--publish never`): Publish uploads every OS's files to the one
+# release its tag creates, with the note in docs/releases, which the update files carry too.
 publish:
   provider: github
   owner: lucasaarch

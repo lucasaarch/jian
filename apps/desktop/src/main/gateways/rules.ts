@@ -41,3 +41,16 @@ export function compatible(appVersion: string, gatewayVersion: string | undefine
   const gateway = releaseLine(gatewayVersion);
   return !app || !gateway || app === gateway;
 }
+
+/**
+ * What a gateway is called: the app's own is this computer, any other is where it answers. Its
+ * address is unique among the app's gateways, so it needs no name of its own besides.
+ */
+export function gatewayName(gateway: { local?: boolean; url: string }): string {
+  if (gateway.local) return 'This computer';
+  try {
+    return new URL(gateway.url).host;
+  } catch {
+    return gateway.url;
+  }
+}
