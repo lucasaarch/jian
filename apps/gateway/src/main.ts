@@ -85,6 +85,7 @@ const gateway = await createGateway({
     ? { executor: new BossExecutor(new PgBoss(config.data.DATABASE_URL)) }
     : {}),
   channels: 'all',
+  mode: 'server',
   allowPrivateOrigins: [
     ...config.data.JIAN_ALLOW_PRIVATE_ORIGINS.split(',')
       .map((value) => value.trim())

@@ -757,6 +757,9 @@ export const operations: Operation[] = [
         .string()
         .regex(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/)
         .optional(),
+      // `local` is the gateway a desktop app runs on the owner's computer: no channels and no
+      // webhooks, as nothing outside reaches it. The panel leaves out what cannot work there.
+      mode: z.enum(['server', 'local']).optional(),
     }),
   },
   {

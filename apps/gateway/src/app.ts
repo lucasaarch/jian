@@ -10,6 +10,7 @@ import { Coordination } from './coordination/service.js';
 import { registerDecisionRoutes } from './decisions/routes.js';
 import { registerEventRoutes } from './http/events.js';
 import { registerMetaRoutes } from './http/meta.js';
+import { registerReturnPages } from './http/returned.js';
 import { configureSecurity, isOwner } from './http/security.js';
 import { registerPanelNotice } from './http/ui.js';
 import type { GitHubIntegrations } from './integrations/github.js';
@@ -52,6 +53,8 @@ export function createApp(
     github?: GitHubIntegrations;
     channels?: Channels;
     whatsapp?: WhatsAppConnections;
+    /** `local` for the gateway a desktop app runs, which serves no panel notice of its own. */
+    mode?: 'server' | 'local';
     maxStreams?: number;
     /**
      * Who may set X-Forwarded-For and -Proto. The rate limits key on the address they name, and
@@ -141,7 +144,7 @@ export function createApp(
         new GitHubItems(options.github, options.store),
       );
     }
-    registerMetaRoutes(routes);
+    registerMetaRoutes(routes, options.mode ?? 'server');
     registerSecurityRoutes(routes, options);
     registerSshRoutes(routes, options);
     registerPushRoutes(routes, options);
@@ -167,7 +170,9 @@ export function createApp(
 
     registerEventRoutes(routes, options);
 
-    registerPanelNotice(routes);
+    // The server's panel moved to its own container; a desktop app's panel is the app itself.
+    if (options.mode === 'local') registerReturnPages(routes);
+    else registerPanelNotice(routes);
   });
 
   return app;

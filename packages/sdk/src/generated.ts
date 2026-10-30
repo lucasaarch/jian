@@ -11395,6 +11395,8 @@ export interface operations {
                         /** @constant */
                         service: "jian";
                         version?: string;
+                        /** @enum {string} */
+                        mode?: "server" | "local";
                     };
                 };
             };
