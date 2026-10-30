@@ -6,37 +6,36 @@
    agents use when one is followed. Colours are the runtime tokens; the Tailwind `--color-*`
    names do not exist at runtime. */
 @layer components {
-  /* Inline with the words around it, never wider than the line it sits on. */
-  .github-card {
-    @apply mx-0.5 inline-flex max-w-full items-center gap-2 rounded-lg border px-2.5 py-1 align-middle text-[13px] leading-5 transition-colors;
-    background: var(--surface);
-    border-color: var(--line);
-    color: var(--ink);
+  /* A reference in the text, as GitHub writes one: the mark coloured by where the item stands,
+     and its number in the link colour. */
+  .github-ref {
+    @apply mx-0.5 inline-flex items-baseline gap-1 rounded-sm px-0.5 align-baseline font-medium transition-colors;
+    color: var(--accent);
   }
-  .github-card:hover,
-  .github-card[aria-pressed="true"] {
-    border-color: var(--control);
+  .github-ref > svg {
+    @apply shrink-0 self-center;
+    color: var(--good);
   }
-  .github-card:focus-visible {
+  .github-ref[data-state="merged"] > svg,
+  .github-ref[data-kind="issue"][data-state="closed"] > svg {
+    color: var(--merged);
+  }
+  .github-ref[data-kind="pull"][data-state="closed"] > svg {
+    color: var(--bad);
+  }
+  .github-ref[data-state="draft"] > svg {
+    color: var(--muted);
+  }
+  .github-ref:hover,
+  .github-ref[aria-pressed="true"] {
+    @apply underline underline-offset-2;
+  }
+  .github-ref[aria-pressed="true"] {
+    background: var(--accent-soft);
+  }
+  .github-ref:focus-visible {
     @apply outline-2 outline-offset-2;
     outline-color: var(--ink);
-  }
-  .github-card-mark {
-    @apply shrink-0;
-    color: var(--muted);
-  }
-  /* The title gives way first, down to a few words, then the repository; the number never. */
-  .github-card-where {
-    @apply min-w-0 truncate font-mono text-xs;
-    color: var(--muted);
-  }
-  .github-card-number {
-    @apply -ml-1 shrink-0 font-mono text-xs;
-    color: var(--muted);
-  }
-  .github-card-title {
-    @apply min-w-20 max-w-80 truncate font-medium;
-    flex-shrink: 2;
   }
 
   .github-state {
@@ -57,15 +56,33 @@
     color: var(--bad);
   }
 
-  .github-checks {
-    @apply inline-grid h-5 w-5 shrink-0 place-items-center rounded-full;
-    color: var(--good);
+  /* While GitHub answers: the drawer's own shape, breathing, where its parts will be. */
+  .github-skeleton {
+    @apply flex min-h-0 flex-1 flex-col;
   }
-  .github-checks[data-state="failing"] {
-    color: var(--bad);
+  .github-skeleton-head {
+    @apply grid gap-2.5 border-b px-4 pb-4 pt-3;
+    border-color: var(--line);
   }
-  .github-checks[data-state="pending"] {
-    color: var(--warn);
+  .github-skeleton-row {
+    @apply flex items-center gap-2;
+  }
+  .github-skeleton-body {
+    @apply grid content-start gap-2.5 px-4 py-4;
+  }
+  .github-skeleton-gap {
+    @apply h-2;
+  }
+  .skeleton {
+    @apply block rounded-md;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--ink) 6%, transparent) 0%,
+      color-mix(in srgb, var(--ink) 11%, transparent) 50%,
+      color-mix(in srgb, var(--ink) 6%, transparent) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-sweep 1.4s ease-in-out infinite;
   }
 
   /* The drawer: a bar that holds its place while the item loads, then the item. */
@@ -243,5 +260,20 @@
   .github-comments .github-author {
     @apply text-xs;
     color: var(--muted);
+  }
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
   }
 }

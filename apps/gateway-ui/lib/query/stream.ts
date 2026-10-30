@@ -23,6 +23,13 @@ function affected(event: GatewayEvent, profileId: string): QueryKey[] {
   // The agent writes schedules too, and every run changes when one ran last.
   if (type.startsWith('schedule.')) return [keys.schedules(profileId)];
   if (type.startsWith('subscription.')) return [keys.subscriptions(profileId)];
+  // A merge made in another tab or window: its references and drawer read it again.
+  if (type === 'github.pull.merged') {
+    return [
+      ['integrations', 'github', 'links'],
+      ['integrations', 'github', 'pull'],
+    ];
+  }
 
   return [];
 }

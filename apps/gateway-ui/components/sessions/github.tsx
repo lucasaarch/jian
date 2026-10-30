@@ -2,7 +2,21 @@
 
 import { Popover } from '@base-ui/react/popover';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, CircleDashed, ExternalLink, GitMerge, Wrench, X } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  CircleCheck,
+  CircleDashed,
+  CircleDot,
+  ExternalLink,
+  GitMerge,
+  GitPullRequest,
+  GitPullRequestClosed,
+  GitPullRequestDraft,
+  type LucideIcon,
+  Wrench,
+  X,
+} from 'lucide-react';
 import { type CSSProperties, type ReactNode, useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button, buttonClass, Face, GitHubLogo, Modal } from '@/components/ui';
@@ -26,8 +40,14 @@ type DrawerApi = Pick<GatewayApi, 'githubPull' | 'githubIssue' | 'mergeGithubPul
 type Reachable = Extract<GitHubLinkSummary, { reachable: true }>;
 type State = Reachable['state'];
 
-/** How long a card's summary is trusted before the next render asks again. */
+/**
+ * How long a card's summary is trusted, and how often an open one asks again: a pull request
+ * merged or closed elsewhere shows as such within about this long. The gateway keeps a summary
+ * as long, so asking sooner would only read its copy.
+ */
 const CARD_STALE_MS = 30_000;
+/** How often an open pull request in the drawer is read again, for its checks and its state. */
+const OPEN_PULL_MS = 15_000;
 /** While GitHub works out whether a pull request merges, ask again this often. */
 const MERGEABLE_RETRY_MS = 3_000;
 /** More files than this and each one starts closed: the list is read before the code. */
@@ -45,62 +65,49 @@ function StateChip({ state, draft }: { state: State; draft?: boolean }) {
   );
 }
 
-type ChecksSummary = { passing: number; failing: number; pending: number };
+type Shown = State | 'draft';
 
-function checksState(summary?: ChecksSummary) {
-  if (!summary) return undefined;
-  if (summary.failing) return 'failing' as const;
-  if (summary.pending) return 'pending' as const;
-  return summary.passing ? ('passing' as const) : undefined;
-}
-
-const checksNames = {
-  failing: 'Checks failing',
-  pending: 'Checks running',
-  passing: 'Checks passing',
+/** GitHub's own marks for where an item stands, so a reference reads at a glance. */
+const pullMarks: Record<Shown, LucideIcon> = {
+  open: GitPullRequest,
+  draft: GitPullRequestDraft,
+  merged: GitMerge,
+  closed: GitPullRequestClosed,
+};
+const issueMarks: Record<Shown, LucideIcon> = {
+  open: CircleDot,
+  draft: CircleDot,
+  merged: CircleCheck,
+  closed: CircleCheck,
 };
 
-function ChecksMark({ summary }: { summary?: ChecksSummary }) {
-  const state = checksState(summary);
-
-  if (!state) return null;
-  return (
-    <span className="github-checks" data-state={state} title={checksNames[state]}>
-      {state === 'failing' ? (
-        <X size={13} aria-hidden="true" />
-      ) : state === 'pending' ? (
-        <CircleDashed size={13} aria-hidden="true" />
-      ) : (
-        <Check size={13} aria-hidden="true" />
-      )}
-      <span className="sr-only">{checksNames[state]}</span>
-    </span>
-  );
-}
-
-/** A link to a pull request or an issue, shown as what it is. Clicking follows it in the drawer. */
+/**
+ * A link to a pull request or an issue, as a reference: its mark, coloured by where it stands,
+ * and its number. The rest is a hover away; clicking follows it in the drawer.
+ */
 function GitHubCard({ summary, href }: { summary: Reachable; href: string }) {
   const open = useCrew((state) => state.open);
   const close = useCrew((state) => state.close);
   const following = useCrew((state) => state.following);
   const item: GitHubItem = { ...summary, url: href };
   const followed = following === itemKey(item);
+  const shown: Shown = summary.draft && summary.state === 'open' ? 'draft' : summary.state;
+  const Mark = (summary.kind === 'pull' ? pullMarks : issueMarks)[shown];
+  const standing = shown === 'draft' ? 'Draft' : stateNames[summary.state];
+  const where = `${summary.owner}/${summary.repo} #${summary.number}`;
 
   return (
     <button
       type="button"
-      className="github-card"
+      className="github-ref"
+      data-kind={summary.kind}
+      data-state={shown}
       aria-pressed={followed}
+      aria-label={`${summary.kind === 'pull' ? 'Pull request' : 'Issue'} ${where}: ${summary.title}, ${standing}`}
+      title={`${where} · ${summary.title} · ${standing}`}
       onClick={(event) => (followed ? close() : open(item, event.currentTarget))}
     >
-      <GitHubLogo size={15} className="github-card-mark" />
-      <span className="github-card-where">
-        {summary.owner}/{summary.repo}
-      </span>
-      <span className="github-card-number">#{summary.number}</span>
-      <span className="github-card-title">{summary.title}</span>
-      <StateChip state={summary.state} draft={summary.draft} />
-      {summary.kind === 'pull' && <ChecksMark summary={summary.checks} />}
+      <Mark size={14} aria-hidden="true" />#{summary.number}
     </button>
   );
 }
@@ -118,6 +125,11 @@ function GitHubLink({
     queryKey: keys.githubLink(href),
     queryFn: () => load(href),
     staleTime: CARD_STALE_MS,
+    // Only what can still change is asked again: a merged or closed one stays as it is.
+    refetchInterval: (query) => {
+      const summary = query.state.data;
+      return summary?.reachable && summary.state === 'open' ? CARD_STALE_MS : false;
+    },
   });
 
   if (data?.reachable) return <GitHubCard summary={data} href={href} />;
@@ -316,18 +328,31 @@ function PullView({
         profileId,
       });
       toast.success(merged.message);
-      setConfirming(undefined);
+      // Merged at once, in the drawer and in every reference to it. Not read again: GitHub's
+      // reads can still say open for a moment, and a merge never comes undone.
+      client.setQueryData<GitHubPull>(
+        keys.githubItem('pull', pull.owner, pull.repo, pull.number),
+        (known) => (known ? { ...known, state: 'merged' } : known),
+      );
+      client.setQueriesData<GitHubLinkSummary>(
+        { queryKey: ['integrations', 'github', 'links'] },
+        (known) =>
+          known?.reachable &&
+          known.owner.toLowerCase() === pull.owner.toLowerCase() &&
+          known.repo.toLowerCase() === pull.repo.toLowerCase() &&
+          known.number === pull.number
+            ? { ...known, state: 'merged' }
+            : known,
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'GitHub did not merge it.');
-      setConfirming(undefined);
+      // Refused: the head moved or a rule stood in the way, so read where it stands now.
+      await client.invalidateQueries({
+        queryKey: keys.githubItem('pull', pull.owner, pull.repo, pull.number),
+      });
     } finally {
       setBusy(false);
-      await Promise.all([
-        client.invalidateQueries({
-          queryKey: keys.githubItem('pull', pull.owner, pull.repo, pull.number),
-        }),
-        client.invalidateQueries({ queryKey: ['integrations', 'github', 'links'] }),
-      ]);
+      setConfirming(undefined);
     }
   };
 
@@ -552,6 +577,41 @@ function IssueView({ issue }: { issue: GitHubIssue }) {
 }
 
 /**
+ * The drawer's shape while GitHub answers: the title, where it stands, its branches and actions,
+ * then its description, so the item fills in where its parts will be.
+ */
+function DrawerSkeleton() {
+  return (
+    <div className="github-skeleton" role="status" aria-label="Reading it from GitHub">
+      <div className="github-skeleton-head">
+        <span className="skeleton" style={{ width: '88%', height: '1.1rem' }} />
+        <span className="skeleton" style={{ width: '55%', height: '1.1rem' }} />
+        <span className="github-skeleton-row">
+          <span className="skeleton" style={{ width: '3.25rem', height: '1.35rem' }} />
+          <span className="skeleton" style={{ width: '9rem', height: '0.85rem' }} />
+        </span>
+        <span className="skeleton" style={{ width: '62%', height: '1.25rem' }} />
+        <span className="github-skeleton-row">
+          <span className="skeleton" style={{ width: '6.5rem', height: '2.25rem' }} />
+          <span className="skeleton" style={{ width: '8.5rem', height: '2.25rem' }} />
+        </span>
+      </div>
+      <div className="github-skeleton-body">
+        {['94%', '100%', '86%', '72%', '0', '98%', '90%', '64%'].map((width, index) =>
+          width === '0' ? (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed shape, never reordered.
+            <span key={index} className="github-skeleton-gap" />
+          ) : (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed shape, never reordered.
+            <span key={index} className="skeleton" style={{ width, height: '0.8rem' }} />
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * A pull request or an issue followed beside the conversation, in the agents' drawer. Without
  * `send` the conversation is answered elsewhere, WhatsApp or Telegram, and the drawer only reads,
  * as its approvals do.
@@ -583,9 +643,11 @@ export function GitHubDrawer({
     queryFn: () => api.githubPull(item?.owner ?? '', item?.repo ?? '', item?.number ?? 0),
     enabled: Boolean(item) && isPull,
     refetchInterval: (query) =>
-      query.state.data?.state === 'open' && query.state.data.mergeable === 'unknown'
-        ? MERGEABLE_RETRY_MS
-        : false,
+      query.state.data?.state !== 'open'
+        ? false
+        : query.state.data.mergeable === 'unknown'
+          ? MERGEABLE_RETRY_MS
+          : OPEN_PULL_MS,
   });
 
   useDrawerFocus(item ? following : undefined, closer);
@@ -613,16 +675,14 @@ export function GitHubDrawer({
         <PullView api={api} pull={pull.data} profileId={profileId} send={send} onSent={onSent} />
       ) : !isPull && issue.data ? (
         <IssueView issue={issue.data} />
-      ) : (
+      ) : current.error ? (
         <div className="crew-drawer-body">
-          {current.error ? (
-            <p className="text-bad">
-              {current.error instanceof Error ? current.error.message : 'GitHub did not answer.'}
-            </p>
-          ) : (
-            <p className="github-none">Reading it from GitHub…</p>
-          )}
+          <p className="text-bad">
+            {current.error instanceof Error ? current.error.message : 'GitHub did not answer.'}
+          </p>
         </div>
+      ) : (
+        <DrawerSkeleton />
       )}
     </aside>
   );
