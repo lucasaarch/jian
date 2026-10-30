@@ -1326,16 +1326,12 @@
     @apply w-64;
   }
   /* A phone shows the list or the conversation, never both. */
-  /* Hung between the top and the bottom of the screen, lifted only by the keyboard (see
-     lib/viewport.ts): no height is measured, so it cannot end short of the bottom. */
   .main-content.fill {
-    @apply fixed inset-x-0 h-auto max-w-none p-0;
-    top: calc(var(--viewport-top, 0px) + var(--shell-top));
-    bottom: var(--tab-bar);
+    @apply max-w-none p-0;
+    height: calc(100dvh - var(--shell-top) - var(--tab-bar));
   }
-  .app-shell:has(.messenger[data-reading="true"]) .main-content.fill,
-  :root[data-keyboard] .main-content.fill {
-    bottom: var(--keyboard-inset, 0px);
+  .app-shell:has(.messenger[data-reading="true"]) .main-content.fill {
+    height: calc(100dvh - var(--shell-top));
   }
   /* What a new chat says before its first message steps aside for the keyboard, and never
      spills over the header in the room left. */

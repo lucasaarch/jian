@@ -8,7 +8,7 @@ function Probe() {
   return null;
 }
 
-it('follows a keyboard over the screen, and puts back a page it shifted when it goes', () => {
+it('says when a keyboard is open, and puts back a page it shifted when it goes', () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const listeners = new Map<string, () => void>();
   const view = {
@@ -36,16 +36,12 @@ it('follows a keyboard over the screen, and puts back a page it shifted when it 
   Object.defineProperty(window, 'scrollY', { value: 120, configurable: true });
   act(() => listeners.get('resize')?.());
   expect(root.hasAttribute('data-keyboard')).toBe(true);
-  // 844 laid out, 508 visible from 120 down: the keyboard covers the last 216.
-  expect(root.style.getPropertyValue('--keyboard-inset')).toBe('216px');
-  expect(root.style.getPropertyValue('--viewport-top')).toBe('120px');
   expect(scrollTo).not.toHaveBeenCalled();
 
   // It closes with the page still shifted: the page goes back to the top.
   Object.assign(view, { height: 844, offsetTop: 0 });
   act(() => listeners.get('resize')?.());
   expect(root.hasAttribute('data-keyboard')).toBe(false);
-  expect(root.style.getPropertyValue('--keyboard-inset')).toBe('0px');
   expect(scrollTo).toHaveBeenCalledWith(0, 0);
 
   // An installed app can see a little less than it lays out with no keyboard at all: that is
@@ -53,8 +49,7 @@ it('follows a keyboard over the screen, and puts back a page it shifted when it 
   Object.assign(view, { height: 810, offsetTop: 0 });
   act(() => listeners.get('resize')?.());
   expect(root.hasAttribute('data-keyboard')).toBe(false);
-  expect(root.style.getPropertyValue('--keyboard-inset')).toBe('0px');
 
   act(() => react.unmount());
-  expect(root.style.getPropertyValue('--keyboard-inset')).toBe('');
+  expect(root.hasAttribute('data-keyboard')).toBe(false);
 });
