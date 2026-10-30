@@ -22,6 +22,7 @@ type SessionRouteServices = {
       | 'setObjective'
       | 'overview'
       | 'timeline'
+      | 'context'
       | 'markRead'
     >;
   runs: RunWriter;
@@ -151,6 +152,11 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
   app.get<{ Params: SessionParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId/timeline',
     async (request) => deps.sessions.timeline(request.params.profileId, request.params.sessionId),
+  );
+
+  app.get<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/context',
+    async (request) => deps.sessions.context(request.params.profileId, request.params.sessionId),
   );
 
   app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/history', async (request) =>

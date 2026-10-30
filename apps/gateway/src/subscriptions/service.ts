@@ -52,7 +52,7 @@ type RunSubmitter = {
     profileId: string,
     sessionId: string,
     input: unknown,
-    options?: { transaction?: Queryable },
+    options?: { transaction?: Queryable; purpose?: 'resume' },
   ): Promise<Run>;
 };
 
@@ -383,7 +383,9 @@ export class Subscriptions {
             text,
             requestKey: `subscription:${subscription.id}:${wake.deliveryKey}`,
           },
-          { transaction: tx },
+          // The listener's wake-up, for the agent: the owner wrote none of it, so the chat
+          // shows only what the agent does with it.
+          { transaction: tx, purpose: 'resume' },
         );
 
         await insertDelivery(tx, {
@@ -491,7 +493,9 @@ export class Subscriptions {
             text,
             requestKey: `subscription:${subscriptionId}:${deliveryId}`,
           },
-          { transaction: tx },
+          // The listener's wake-up, for the agent: the owner wrote none of it, so the chat
+          // shows only what the agent does with it.
+          { transaction: tx, purpose: 'resume' },
         );
 
         await insertDelivery(tx, {

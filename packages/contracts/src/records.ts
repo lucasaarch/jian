@@ -462,6 +462,38 @@ export const toolStepSchema = z.strictObject({
   aspectRatio: imageAspectSchema.optional(),
 });
 
+/**
+ * How full a conversation's context is and what it has cost: the prompt of the last call to the
+ * model against the room the run fitted it into, the turns' tokens added up, and the last time
+ * older turns were folded into a summary. `used` is null before any call was made here.
+ */
+export const sessionContextSchema = z.strictObject({
+  /** Input tokens of the last call: the provider's count where it gave one, else the estimate. */
+  used: z.number().int().nonnegative().nullable(),
+  /** The input a call may take: the model's window less what is kept back for its answer. */
+  limit: z.number().int().positive(),
+  /** The model's whole window. */
+  window: z.number().int().positive(),
+  /** Past this many tokens the gateway compacts the context on its own. */
+  compactAt: z.number().int().positive(),
+  measuredAt: timestamp.nullable(),
+  model: z.strictObject({ provider: z.string(), modelId: z.string() }).nullable(),
+  /** Every turn of the conversation added up. */
+  totals: z.strictObject({
+    inputTokens: z.number().nonnegative(),
+    cachedInputTokens: z.number().nonnegative(),
+    outputTokens: z.number().nonnegative(),
+    turns: z.number().int().nonnegative(),
+  }),
+  compacted: z
+    .strictObject({
+      at: timestamp,
+      beforeTokens: z.number().int().nonnegative(),
+      afterTokens: z.number().int().nonnegative(),
+    })
+    .nullable(),
+});
+
 export const runTimelineSchema = z.strictObject({
   runId: uuid,
   steps: z.array(toolStepSchema),
@@ -475,6 +507,7 @@ export type ToolStep = z.infer<typeof toolStepSchema>;
 export type CodeDiff = z.infer<typeof codeDiffSchema>;
 export type ImageAspect = z.infer<typeof imageAspectSchema>;
 export type RunTimeline = z.infer<typeof runTimelineSchema>;
+export type SessionContext = z.infer<typeof sessionContextSchema>;
 export type RunApproval = z.infer<typeof runApprovalSchema>;
 
 export const continuationSchema = z.strictObject({

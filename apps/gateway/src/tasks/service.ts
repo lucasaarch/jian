@@ -196,7 +196,8 @@ export class Work {
             .filter(Boolean)
             .join('\n'),
         },
-        { transaction: tx },
+        // The gateway telling the agent its subagent is done: not the owner's words.
+        { transaction: tx, purpose: 'resume' },
       );
       await this.deliveries?.deliverRun(profileId, principal.sessionId, followUp.id, tx);
       await tx

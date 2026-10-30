@@ -53,6 +53,7 @@ import { findSkill } from '../skills/builtin/index.js';
 import type { WebSearch } from '../web/service.js';
 import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
+import { compactNote, isCompactCommand } from './compact-command.js';
 import { splitDiff } from './diff.js';
 import { githubGitTools } from './github-git.js';
 import { localPlace, remotePlace } from './github-git-place.js';
@@ -313,6 +314,10 @@ export class AgentRuntime {
     let mcpCatalog: McpEntry[] = [];
     let lastCompactionAttempt = -4;
     let compactionRequested = false;
+    // A turn that is only `/compact`: the context is compacted before the first call, and the
+    // agent, told what it came to, says so and does nothing else.
+    let compactCommand = false;
+    let compactedTo: { beforeTokens: number; afterTokens: number } | undefined;
 
     const progress = new ProgressReporter((snapshot) =>
       this.services.lifecycle.progress(runId, owner, snapshot),
@@ -504,6 +509,8 @@ export class AgentRuntime {
       }
 
       const context = await this.services.contexts.context(run, skillServers);
+      compactCommand = isCompactCommand(run.input);
+      if (compactCommand) compactionRequested = true;
       const cavemanSkill = findSkill(run.profile, skillServers, 'caveman');
       let currentCavemanMode: CavemanMode = cavemanSkill
         ? await cavemanMode(this.services.store.db, profileId, run.sessionId)
@@ -975,16 +982,18 @@ export class AgentRuntime {
               if (compacted) {
                 const summary = redactText(compacted.summary, secrets);
                 // Save the tool work before replacing the request. A later turn can resume it.
+                const afterTokens = promptTokens({
+                  ...config,
+                  instructions: codingInstructions,
+                  messages: compacted.messages,
+                  tools: activeTools,
+                });
+                compactedTo = { beforeTokens: before, afterTokens };
                 await this.services.lifecycle.checkpoint(profileId, runId, owner, {
                   phase: 'context-compacted',
                   summary,
                   beforeTokens: before,
-                  afterTokens: promptTokens({
-                    ...config,
-                    instructions: codingInstructions,
-                    messages: compacted.messages,
-                    tools: activeTools,
-                  }),
+                  afterTokens,
                 });
                 await this.services.sessions.summarize(
                   profileId,
@@ -1008,6 +1017,15 @@ export class AgentRuntime {
                 phase: 'compaction-failed',
                 reason: reason(error, secrets),
               });
+            }
+          }
+
+          if (compactCommand && stepNumber === 0) {
+            const at = messages.findLastIndex((message) => message.role === 'user');
+            if (at >= 0) {
+              messages = messages.map((message, index) =>
+                index === at ? { role: 'user', content: compactNote(compactedTo) } : message,
+              ) as ModelMessage[];
             }
           }
 
@@ -1066,7 +1084,7 @@ export class AgentRuntime {
               config.provider === 'anthropic'
                 ? cacheable(fitted.messages, cacheTtl, 3)
                 : fitted.messages,
-            activeTools: activeNames,
+            activeTools: compactCommand ? [] : activeNames,
             maxOutputTokens: policy.outputTokens,
             providerOptions: withOpenAiPromptCache(
               reasoning,
