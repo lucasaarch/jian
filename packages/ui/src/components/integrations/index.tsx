@@ -1,15 +1,14 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import { githubOutcome } from '../../lib/github';
+import { useState } from 'react';
 import { settingsPath } from '../../lib/navigation';
 import { useReportFailure } from '../../lib/query/notify';
 import { queries } from '../../lib/query/profile';
 import { notifyError, useActions } from '../../lib/workspace';
 import { Link } from '../../platform/navigation';
 import { Button, GitHubLogo, SectionHeading } from '../ui';
+import { useGithubOutcome } from './github-outcome';
 import { McpServers } from './mcp-servers';
 
 /** Each tab is a route of its own, so a link or a reload opens the one it names. */
@@ -24,19 +23,7 @@ export function Integrations({ tab }: { tab: IntegrationTab }) {
   );
   const [connecting, setConnecting] = useState(false);
 
-  // GitHub sends the owner back here with the outcome in the query; it is said once, then dropped.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const outcome = githubOutcome(params);
-    if (outcome) {
-      if (outcome.failed) toast.error(outcome.text, { duration: 12_000 });
-      else toast.success(outcome.text);
-      params.delete('github');
-      params.delete('reason');
-      const query = params.toString();
-      window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
-    }
-  }, []);
+  useGithubOutcome();
 
   const register = async () => {
     setConnecting(true);

@@ -23,6 +23,11 @@ export type LinkProps = AnchorHTMLAttributes<HTMLAnchorElement> & {
  */
 export type Navigation = {
   pathname: string;
+  /**
+   * The query of the address, without `?`, for a host whose router keeps it apart from the
+   * browser's: the panel reads `window.location` when a host leaves it out.
+   */
+  search?: string;
   push(href: string): void;
   replace(href: string): void;
   back(): void;
@@ -82,8 +87,9 @@ export function createMemoryNavigation(initial = '/') {
     forward,
     canGoBack: () => index > 0,
     canGoForward: () => index < history.length - 1,
-    navigation: (pathname: string): Navigation => ({
-      pathname,
+    navigation: (href: string): Navigation => ({
+      pathname: href.split('?')[0] ?? '/',
+      search: href.split('?')[1] ?? '',
       push,
       replace,
       back,
@@ -120,6 +126,12 @@ function useNavigation(): Navigation {
 }
 
 export const usePathname = () => useNavigation().pathname;
+
+/** The query of the address the panel is at, from the host's router or the browser's. */
+export function useSearchParams(): URLSearchParams {
+  const { search } = useNavigation();
+  return useMemo(() => new URLSearchParams(search ?? window.location.search), [search]);
+}
 
 /** How the panel moves, shaped as Next's router so a screen reads the same on any host. */
 export function useRouter() {

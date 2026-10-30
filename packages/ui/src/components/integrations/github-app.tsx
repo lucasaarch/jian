@@ -2,9 +2,8 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import { githubOutcome } from '../../lib/github';
 import { settingsPath } from '../../lib/navigation';
 import { panelApi } from '../../lib/query/client';
 import { keys } from '../../lib/query/keys';
@@ -13,6 +12,7 @@ import { queries } from '../../lib/query/profile';
 import { notifyError } from '../../lib/workspace';
 import { Link } from '../../platform/navigation';
 import { Button, Empty, GitHubLogo, ResourceRow, SectionHeading } from '../ui';
+import { useGithubOutcome } from './github-outcome';
 
 export function GitHubApp() {
   const api = panelApi();
@@ -25,19 +25,7 @@ export function GitHubApp() {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState<string>();
 
-  // GitHub sends the owner back here with the outcome in the query; it is said once, then dropped.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const outcome = githubOutcome(params);
-    if (outcome) {
-      if (outcome.failed) toast.error(outcome.text, { duration: 12_000 });
-      else toast.success(outcome.text);
-      params.delete('github');
-      params.delete('reason');
-      const query = params.toString();
-      window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
-    }
-  }, []);
+  useGithubOutcome();
 
   const connect = async () => {
     setConnecting(true);
