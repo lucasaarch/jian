@@ -58,14 +58,21 @@ export const sessionCalls = (client: Client) => ({
         params: { path: { profileId, sessionId } },
       }),
     ),
-  send: (profileId: string, sessionId: string, text: string, mediaIds: string[] = []) =>
+  send: (
+    profileId: string,
+    sessionId: string,
+    text: string,
+    mediaIds: string[] = [],
+    // Each press is a new message; the key only stops one request from landing twice, and
+    // a message sent again after a failure keeps its own.
+    requestKey: string = crypto.randomUUID(),
+  ) =>
     result(
       client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/messages', {
         params: { path: { profileId, sessionId } },
-        // Each press is a new message; the key only stops one request from landing twice.
         body: {
           text,
-          requestKey: crypto.randomUUID(),
+          requestKey,
           ...(mediaIds.length ? { mediaIds } : {}),
         },
       }),
@@ -102,6 +109,13 @@ export const sessionCalls = (client: Client) => ({
       client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/media', {
         params: { path: { profileId, sessionId } },
         body: file,
+      }),
+    ),
+  /** How full the conversation's context is and what its turns have cost. */
+  context: (profileId: string, sessionId: string) =>
+    result(
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/context', {
+        params: { path: { profileId, sessionId } },
       }),
     ),
   timeline: (profileId: string, sessionId: string) =>

@@ -15,6 +15,12 @@ const supported = () =>
   'PushManager' in window &&
   'Notification' in window;
 
+/**
+ * A native host shows system notifications itself, for every conversation the owner is not
+ * reading: the panel then adds none of its own.
+ */
+export const hostNotifies = () => gatewayConnection().push === false;
+
 export function pushOnHere() {
   try {
     return localStorage.getItem(FLAG) === 'on';

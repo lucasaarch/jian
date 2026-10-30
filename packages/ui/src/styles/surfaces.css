@@ -710,6 +710,18 @@
   .chat-line {
     @apply mb-6 flex w-full flex-col;
   }
+  /* Work alone on its line belongs to the turn around it: close to what the agent said before
+     it, and as close to what it says next as the first stretch sits inside its message. Before
+     a message of the owner's, a new turn, it keeps the space between turns. */
+  .chat-line.work .thought-line {
+    @apply mb-0;
+  }
+  .chat-line.theirs + .chat-line.work {
+    @apply -mt-2;
+  }
+  .chat-line.work:has(+ .chat-line.theirs) {
+    @apply mb-2;
+  }
   .chat-text {
     @apply whitespace-pre-wrap break-words text-[15px] leading-7 text-ink;
   }
@@ -803,6 +815,29 @@
   .chat-line.mine .chat-text {
     @apply rounded-2xl px-4 py-2.5 text-left;
     background: color-mix(in srgb, var(--ink) 7%, transparent);
+  }
+  /* A message on its way: its bubble as it will be, a quiet word under it; one that did not go
+     takes the bad ink, with why, and the way to send it again or let it go. */
+  .outgoing[data-state="sending"] .chat-line.mine .chat-text {
+    @apply opacity-80;
+  }
+  .outgoing[data-state="failed"] .chat-line.mine .chat-text {
+    background: color-mix(in srgb, var(--bad) 14%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 45%, transparent);
+  }
+  .outgoing-state {
+    @apply mt-1.5 flex max-w-full items-center justify-end gap-2 self-end text-xs;
+    color: var(--muted);
+  }
+  .outgoing[data-state="failed"] .outgoing-state {
+    color: var(--bad);
+  }
+  .outgoing-state button {
+    @apply inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 font-medium transition-colors;
+  }
+  .outgoing-state button:hover {
+    background: var(--glass-hover);
+    color: var(--ink);
   }
   .chat-line.member .chat-text {
     @apply max-w-[80%];

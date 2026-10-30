@@ -19,6 +19,7 @@ import {
 } from '../../lib/query/agent';
 import { keys } from '../../lib/query/keys';
 import { useCrew } from '../../lib/stores/crew';
+import { sendNow } from '../../lib/stores/outbox';
 import { useRefresh } from '../../lib/workspace';
 import { useParams, useRouter, useSearchParams } from '../../platform/navigation';
 import type { SectionActions } from '../props';
@@ -26,6 +27,7 @@ import { GitHubLogo } from '../ui';
 import { AgentToolbar } from './agent-toolbar';
 import { ChatTarget } from './chat-target';
 import { Composer } from './composer';
+import { ContextRing } from './context-ring';
 import { ModelNames, prettyModel } from './crew';
 import { CrewDrawer } from './crew-drawer';
 import { ConversationDock } from './dock';
@@ -100,17 +102,21 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: A new last message is read as it arrives.
   useEffect(() => {
     if (!onScreen) return;
+    // Read means in front of the owner: a window left open behind another app is not being
+    // read, and what arrives there is theirs to be notified about.
     const mark = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && document.hasFocus()) {
         void api.markSessionRead(profile.id, onScreen).catch(() => {});
       }
     };
     mark();
     const timer = setInterval(mark, READING_MS);
     document.addEventListener('visibilitychange', mark);
+    window.addEventListener('focus', mark);
     return () => {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', mark);
+      window.removeEventListener('focus', mark);
     };
   }, [onScreen, active?.lastMessage?.at]);
 
@@ -225,6 +231,15 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                           }
                           modelControl={
                             <>
+                              <ContextRing
+                                key={`composer-context-${active.id}`}
+                                profileId={profile.id}
+                                sessionId={active.id}
+                                compact={async () => {
+                                  await api.send(profile.id, active.id, '/compact');
+                                  answered();
+                                }}
+                              />
                               <SessionProtection
                                 key={`composer-protection-${active.id}`}
                                 api={api}
@@ -253,7 +268,18 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                                 : undefined
                           }
                           upload={(file) => api.upload(profile.id, active.id, file)}
-                          send={(text, mediaIds) => api.send(profile.id, active.id, text, mediaIds)}
+                          // Shown in the conversation at once and sent behind it, as a messenger
+                          // does: one that fails stays there to be sent again.
+                          send={async (text, mediaIds) =>
+                            sendNow({
+                              sessionId: active.id,
+                              text,
+                              mediaIds,
+                              deliver: (key) =>
+                                api.send(profile.id, active.id, text, mediaIds, key),
+                              delivered: answered,
+                            })
+                          }
                           onSent={answered}
                         />
                       ) : (
