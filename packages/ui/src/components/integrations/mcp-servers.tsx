@@ -40,21 +40,27 @@ export function McpServers({ api, mutate, busy }: SectionActions) {
     }
 
     setEditing(undefined);
-    if (tab) await signIn(next.name, tab);
+    if (next.auth === 'oauth') await signIn(next.name, tab);
   };
 
-  // A check of the saved server is what starts its sign-in and answers with the address.
-  const signIn = async (name: string, tab: Window) => {
+  // A check of the saved server is what starts its sign-in and answers with the address. With
+  // no tab opened beforehand — a blocked popup, or a desktop app that opens sign-ins in the
+  // system's browser — the address is opened now instead.
+  const signIn = async (name: string, tab: Window | null) => {
     const status = await api.checkMcpServer(name).catch(() => undefined);
 
     if (status?.authorizationUrl) {
+      if (!tab) {
+        window.open(status.authorizationUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
       // The sign-in page is someone else's: it gets no handle on this one.
       tab.opener = null;
       tab.location.href = status.authorizationUrl;
       return;
     }
 
-    tab.close();
+    tab?.close();
     // Already signed in needs nothing; anything else is said where the owner is looking.
     if (!status?.reachable) {
       toast.error(
