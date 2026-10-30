@@ -1,7 +1,5 @@
-import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Remote } from './service.js';
-import { workerScriptBytes } from './worker-script.js';
 
 /**
  * Contract allows ~400 KiB stdout + 50 KiB stderr. Default Fastify bodyLimit is 256 KiB,
@@ -10,39 +8,6 @@ import { workerScriptBytes } from './worker-script.js';
 const REMOTE_RESULT_BODY_LIMIT = 512 * 1024;
 
 export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remote }): void {
-  // Public: legacy curl installers and the worker's self-update still fetch this script.
-  app.get<{ Params: { machineId: string } }>(
-    '/v1/remote/worker/:machineId/update',
-    { config: { workerAuth: true } },
-    async (request, reply) => {
-      await deps.remote.workerUpdateAuthorized(
-        request.params.machineId,
-        request.headers.authorization ?? '',
-      );
-      const script = workerScriptBytes();
-      if (!script) return reply.code(404).send({ error: 'Worker script not found' });
-      const etag = `"${createHash('sha256').update(script).digest('hex')}"`;
-      if (request.headers['if-none-match'] === etag)
-        return reply.code(304).header('ETag', etag).send();
-      return reply
-        .type('text/javascript; charset=utf-8')
-        .header('ETag', etag)
-        .header('Cache-Control', 'no-cache')
-        .send(script);
-    },
-  );
-
-  app.get('/jian-remote.mjs', { config: { publicUiAsset: true } }, async (_request, reply) => {
-    const script = workerScriptBytes();
-    if (!script) return reply.code(404).send({ error: 'Worker script not found' });
-
-    return reply
-      .type('text/javascript; charset=utf-8')
-      .header('Content-Disposition', 'attachment; filename="jian-remote.mjs"')
-      .header('Cache-Control', 'no-cache')
-      .send(script);
-  });
-
   app.get('/v1/remote/machines', async () => deps.remote.list());
 
   app.post('/v1/remote/machines', async (request, reply) =>
@@ -52,6 +17,12 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
   app.post<{ Params: { machineId: string } }>(
     '/v1/remote/machines/:machineId/rotate',
     async (request) => deps.remote.rotate(request.params.machineId),
+  );
+
+  // The owner, from the panel: no agent asked, so the task belongs to no profile.
+  app.post<{ Params: { machineId: string } }>(
+    '/v1/remote/machines/:machineId/update',
+    async (request) => deps.remote.update(null, request.params.machineId),
   );
 
   app.delete<{ Params: { machineId: string } }>('/v1/remote/machines/:machineId', async (request) =>
@@ -72,6 +43,9 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
           : undefined,
         typeof request.headers['x-jian-remote-ui-state'] === 'string'
           ? request.headers['x-jian-remote-ui-state']
+          : undefined,
+        typeof request.headers['x-jian-remote-version'] === 'string'
+          ? request.headers['x-jian-remote-version']
           : undefined,
       ),
   );

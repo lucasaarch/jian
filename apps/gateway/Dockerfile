@@ -66,7 +66,6 @@ COPY packages/ui/package.json packages/ui/package.json
 COPY packages/remote-core/package.json packages/remote-core/package.json
 RUN pnpm install --frozen-lockfile
 COPY apps/gateway apps/gateway
-COPY apps/remote-control apps/remote-control
 COPY packages packages
 # The release notes ride in the build, so the panel can say what changed in this version.
 COPY docs/releases docs/releases

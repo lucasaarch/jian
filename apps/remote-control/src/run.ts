@@ -1,22 +1,24 @@
-import { rmSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import {
   createWorkerState,
   detectCapabilities,
   runWorker,
   sayGoodbye,
-  workerBase,
+  workerChildEnv,
   workerHeaders,
 } from '@jian/remote-core';
-import { loadConfig } from './config.ts';
+import { type Config, loadConfig } from './config.ts';
 import { acquireWorkerLock, readWorkerLockPid } from './lock.ts';
 import { log } from './log.ts';
+import { type Installer, npmInstaller } from './npm.ts';
 import { statePath, workerLockPath } from './paths.ts';
-import { reconcileWorkerWithGateway } from './update.ts';
+import { npmUpdater } from './self-update.ts';
 import { PACKAGE_VERSION } from './version.ts';
 
 /**
- * The worker as the OS service runs it: one per machine, held by a lock, on the gateway's
- * release, telling the gateway when it stops. The polling itself is @jian/remote-core's.
+ * The worker as the OS service runs it: one per machine, held by a lock, telling the gateway
+ * when it stops, and updating itself when asked if npm installed it. The polling itself is
+ * @jian/remote-core's.
  */
 export async function run() {
   await acquireWorkerLock();
@@ -32,7 +34,9 @@ export async function run() {
     pid: process.pid,
     machine: config.machineId,
   });
-  const capabilities = await detectCapabilities();
+  const installer = installedWithNpm(config);
+  // The gateway sends update tasks only to a worker that says it can carry them out.
+  const capabilities = [...(await detectCapabilities()), ...(installer ? ['update-npm'] : [])];
   const mac = await macBehaviour();
   const headers = () =>
     workerHeaders({
@@ -74,8 +78,17 @@ export async function run() {
     state,
     capabilities,
     uiState: mac.uiState,
-    reconcile: (current) => reconcileWorkerWithGateway(config, workerBase(config), current),
+    ...(installer ? { update: npmUpdater(installer) } : {}),
   });
+}
+
+/**
+ * How this worker was installed with npm: as `install` recorded it, or — for one installed
+ * before it did — as npm on the service's own PATH still shows it.
+ */
+function installedWithNpm(config: Config): Installer | undefined {
+  if (config.installer && existsSync(config.installer.npm)) return config.installer;
+  return npmInstaller(workerChildEnv());
 }
 
 /**

@@ -15,6 +15,7 @@ export const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
   remote_computer: 'machine',
   pull_remote_file: 'machine',
   push_remote_file: 'machine',
+  update_remote_machine: 'machine',
   write_file: 'machine',
   edit_file: 'machine',
   send_file: 'message',
@@ -145,6 +146,10 @@ const PLAIN: Record<
     title: 'Copy a file to a connected machine',
     detail: field(input, 'path'),
     confirm: 'Copy',
+  }),
+  update_remote_machine: () => ({
+    title: "Update Jian Remote on a connected machine to this gateway's release",
+    confirm: 'Update',
   }),
   send_file: (input) => ({ title: 'Send a file', detail: field(input, 'path'), confirm: 'Send' }),
   send_session_message: (input) => ({

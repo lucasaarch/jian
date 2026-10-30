@@ -17,6 +17,7 @@ import {
   ResourceRow,
   SectionHeading,
 } from '../ui';
+import { behind, MachineUpdate } from './update';
 
 type Props = { api: GatewayApi };
 type Machine = Awaited<ReturnType<GatewayApi['remoteMachines']>>[number];
@@ -219,9 +220,11 @@ export function RemoteMachines({ api }: Props) {
                 icon={<Monitor size={20} strokeWidth={1.6} />}
                 name={machine.name}
                 description={
-                  machine.online
-                    ? 'Connected. Every agent can use it.'
-                    : 'Not connected. Run the install command on it, or start its worker.'
+                  machine.outdated
+                    ? 'Connected, on another release than this gateway. Update it so agents can use it.'
+                    : machine.online
+                      ? 'Connected. Every agent can use it.'
+                      : 'Not connected. Run the install command on it, or start its worker.'
                 }
                 badges={
                   <>
@@ -237,6 +240,17 @@ export function RemoteMachines({ api }: Props) {
                       <Badge tone="neutral" dot={false}>
                         Display asleep
                       </Badge>
+                    )}
+                    {machine.outdated ? (
+                      <Badge tone="warn" dot={false}>
+                        Update needed
+                      </Badge>
+                    ) : (
+                      behind(machine, version) && (
+                        <Badge tone="neutral" dot={false}>
+                          Update available
+                        </Badge>
+                      )
                     )}
                     {machine.platform !== 'unknown' && (
                       <Badge tone="neutral" dot={false}>
@@ -261,6 +275,12 @@ export function RemoteMachines({ api }: Props) {
                 }
               >
                 <div className="connection-form">
+                  <MachineUpdate
+                    api={api}
+                    machine={machine}
+                    gatewayVersion={version}
+                    onUpdated={refresh}
+                  />
                   <div className="remote-access-actions">
                     <Button
                       type="button"
@@ -336,7 +356,7 @@ export function RemoteMachines({ api }: Props) {
             <p className="note">
               Needs Node.js 24+ on the computer and HTTPS access to this gateway. The command
               includes the worker token; clear shell history if you share that terminal. The worker
-              starts again on login and keeps itself on this gateway’s version. On the computer,{' '}
+              starts again on login; update it here, or ask an agent to. On the computer,{' '}
               <code>jian-remote status</code> says how it stands and <code>jian-remote logs</code>{' '}
               what it did.
             </p>

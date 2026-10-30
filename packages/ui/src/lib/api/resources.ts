@@ -23,6 +23,12 @@ export const resourceCalls = (client: Client) => ({
         params: { path: { machineId } },
       }),
     ),
+  updateRemoteMachine: (machineId: string) =>
+    result(
+      client.POST('/v1/remote/machines/{machineId}/update', {
+        params: { path: { machineId } },
+      }),
+    ),
   deleteRemoteMachine: (machineId: string) =>
     result(client.DELETE('/v1/remote/machines/{machineId}', { params: { path: { machineId } } })),
   conversationSubagents: (profileId: string, sessionId: string) =>

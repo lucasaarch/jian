@@ -99,7 +99,7 @@ export type ToolServices = {
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
   work?: Pick<Work, 'spawnInConversation'>;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove' | 'sync'>;
-  remote?: Pick<Remote, 'list' | 'execute' | 'executeComputer'>;
+  remote?: Pick<Remote, 'list' | 'execute' | 'executeComputer' | 'update'>;
 };
 
 export function profileTools(
@@ -725,13 +725,14 @@ export const TOOL_GROUPS = {
   },
   remote: {
     summary:
-      'list Remote Control machines, run commands there, drive the Mac screen (remote_computer), and pull or push files',
+      'list Remote Control machines, run commands there, drive the Mac screen (remote_computer), pull or push files, and update their Jian Remote',
     tools: [
       'list_remote_machines',
       'run_remote_command',
       'remote_computer',
       'pull_remote_file',
       'push_remote_file',
+      'update_remote_machine',
     ],
   },
   web: {

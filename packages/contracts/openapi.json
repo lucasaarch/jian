@@ -2589,6 +2589,21 @@
                           "display_asleep",
                           "unknown"
                         ]
+                      },
+                      "version": {
+                        "default": null,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "outdated": {
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "updatable": {
+                        "default": false,
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -2598,7 +2613,10 @@
                       "online",
                       "createdAt",
                       "capabilities",
-                      "uiState"
+                      "uiState",
+                      "version",
+                      "outdated",
+                      "updatable"
                     ],
                     "additionalProperties": false
                   }
@@ -2772,6 +2790,21 @@
                         "unknown"
                       ]
                     },
+                    "version": {
+                      "default": null,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "outdated": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "updatable": {
+                      "default": false,
+                      "type": "boolean"
+                    },
                     "token": {
                       "type": "string",
                       "minLength": 32
@@ -2785,6 +2818,9 @@
                     "createdAt",
                     "capabilities",
                     "uiState",
+                    "version",
+                    "outdated",
+                    "updatable",
                     "token"
                   ],
                   "additionalProperties": false
@@ -2950,6 +2986,21 @@
                         "unknown"
                       ]
                     },
+                    "version": {
+                      "default": null,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "outdated": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "updatable": {
+                      "default": false,
+                      "type": "boolean"
+                    },
                     "token": {
                       "type": "string",
                       "minLength": 32
@@ -2963,7 +3014,162 @@
                     "createdAt",
                     "capabilities",
                     "uiState",
+                    "version",
+                    "outdated",
+                    "updatable",
                     "token"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/remote/machines/{machineId}/update": {
+      "post": {
+        "operationId": "updateRemoteMachine",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Required permission: admin.",
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "from": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "to": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "from",
+                    "to",
+                    "message"
                   ],
                   "additionalProperties": false
                 }
@@ -3244,7 +3450,8 @@
                           "type": "string",
                           "enum": [
                             "shell",
-                            "computer"
+                            "computer",
+                            "update"
                           ]
                         },
                         "command": {
@@ -3351,6 +3558,19 @@
                           },
                           "required": [
                             "action"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "update": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "string",
+                              "pattern": "^(latest|\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?)$"
+                            }
+                          },
+                          "required": [
+                            "version"
                           ],
                           "additionalProperties": false
                         }
@@ -3705,6 +3925,22 @@
                     },
                     "required": [
                       "ok"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "update": {
+                    "type": "object",
+                    "properties": {
+                      "from": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "from",
+                      "to"
                     ],
                     "additionalProperties": false
                   }

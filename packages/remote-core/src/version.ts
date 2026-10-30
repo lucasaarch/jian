@@ -85,7 +85,7 @@ export function versionsCompatible(
     local: local.raw,
     gateway: gateway.raw,
     required: `${gateway.major}.${gateway.minor}`,
-    message: `This remote-control ${local.raw} is incompatible with gateway ${gateway.raw}. Jian requires the same major.minor (${gateway.major}.${gateway.minor}). Connected workers try to self-update to the gateway version automatically; if that fails, run: jian-remote update --version ${gateway.raw}`,
+    message: `This remote-control ${local.raw} is incompatible with gateway ${gateway.raw}. Jian requires the same major.minor (${gateway.major}.${gateway.minor}). Update it from the panel, or run: jian-remote update --version ${gateway.raw}`,
   };
 }
 
@@ -95,31 +95,6 @@ export function compatibilityError(
 ): string | null {
   const result = versionsCompatible(localVersion, gatewayVersion);
   return result.ok ? null : result.message;
-}
-
-/**
- * True when the worker should self-update so its PACKAGE_VERSION matches the gateway release.
- * Covers patch bumps and major.minor skew (fleet upgrade to the gateway’s version). Dev /
- * unversioned gateways never force a match.
- */
-export function shouldMatchGatewayVersion(
-  localVersion: string | undefined,
-  gatewayVersion: string | undefined,
-): boolean {
-  if (isDevVersion(gatewayVersion)) return false;
-  const gateway = parseRelease(gatewayVersion);
-  if (!gateway) return false;
-  if (isDevVersion(localVersion)) return true;
-  const local = parseRelease(localVersion);
-  if (!local) return true;
-  return local.raw !== gateway.raw;
-}
-
-/** Soft ceiling so a failed fleet update does not KeepAlive-spin every few seconds. */
-export function nextUpdateBackoffMs(failureCount: unknown): number {
-  const n = Math.max(0, Number(failureCount) || 0);
-  // 5s, 10s, … then cap at 30 minutes (2^9 * 5s = 2560s > 30m).
-  return Math.min(30 * 60_000, 5_000 * 2 ** Math.min(n, 9));
 }
 
 /** Public /health carries the gateway release so install/update can gate without a worker token. */

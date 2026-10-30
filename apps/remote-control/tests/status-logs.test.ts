@@ -68,7 +68,7 @@ test('the running worker keeps its connection and what it ran where status reads
   assert.equal(read().connected, true);
   worker.ran('shell', true, 120);
   worker.ran('computer', false, 40);
-  assert.deepEqual(read().tasks, { total: 2, failed: 1, shell: 1, computer: 1 });
+  assert.deepEqual(read().tasks, { total: 2, failed: 1, shell: 1, computer: 1, update: 0 });
   assert.deepEqual(
     { kind: read().lastTask.kind, ok: read().lastTask.ok },
     { kind: 'computer', ok: false },

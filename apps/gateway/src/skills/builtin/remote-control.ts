@@ -17,7 +17,10 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
 ## The tools
 
 - \`list_remote_machines\` — the connected machines: id, name, platform, online, uiState,
-  capabilities.
+  capabilities, version, outdated, updatable.
+- \`update_remote_machine\` — bring a machine's Jian Remote to this gateway's release. It
+  restarts on the new one when done. Only machines with \`updatable: true\` (installed with
+  npm) can; for the others, tell the owner to run \`jian-remote update\` on that computer.
 - \`run_remote_command\` — shell on that computer (PowerShell on Windows, \`/bin/sh\` on
   macOS/Linux). Open apps, install software, Git, builds, scripts — anything a local user
   would type. Prefer \`remote_computer\` for GUI and screenshots, and pull/push for files.
@@ -41,6 +44,8 @@ succeeded unless the tool result confirms it (exit code, stdout, or \`ok: true\`
    \`uiState: locked\` means the Mac is locked but still **online**: keep using shell, files,
    and Computer Use. The worker wakes the display and attempts the action; only treat a
    failed tool result as failure — do not invent “offline” or skip work because of uiState.
+   \`outdated: true\` means its Jian Remote is on another release than this gateway: every
+   other tool refuses it until \`update_remote_machine\` brings it up to date.
    Computer use needs capability \`computer-macos-v1\`, \`computer-linux-v1\`, or
    \`computer-windows-v1\` (updated Jian Remote on that OS).
 2. Say one short line before a slow or visible action ("Opening Calculator on Mark.").

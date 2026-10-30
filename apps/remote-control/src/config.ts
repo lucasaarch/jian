@@ -1,11 +1,15 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import type { WorkerConfig } from '@jian/remote-core';
 import { args, option } from './args.ts';
+import type { Installer } from './npm.ts';
 import { configDir, configPath } from './paths.ts';
 import { runChecked } from './service.ts';
 
-/** What `install` writes to the config file and every other command reads back. */
-export type Config = WorkerConfig;
+/**
+ * What `install` writes to the config file and every other command reads back. `installer`
+ * is how this worker updates itself, when it was installed with npm.
+ */
+export type Config = WorkerConfig & { installer?: Installer };
 
 async function readStdin(): Promise<string> {
   let value = '';

@@ -17,7 +17,7 @@ export function fitResult(
 ): { result: RemoteResult; body: string } {
   let stdout = result.stdout ?? '';
   let stderr = result.stderr ?? '';
-  const computer = result.computer;
+  const { computer, update } = result;
   const pack = () =>
     JSON.stringify({
       taskId: result.taskId,
@@ -26,6 +26,7 @@ export function fitResult(
       stderr,
       timedOut: Boolean(result.timedOut),
       ...(computer ? { computer } : {}),
+      ...(update ? { update } : {}),
     });
   let body = pack();
   if (Buffer.byteLength(body) <= budget) {

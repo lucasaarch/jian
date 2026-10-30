@@ -135,3 +135,67 @@ it('gives the same install command again after a rotation, with the new token', 
     element.remove();
   }
 });
+
+it('marks a machine on another release and updates it from the panel', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  let version = '1.3.2';
+  const updateRemoteMachine = vi.fn(async () => {
+    version = '1.4.0';
+    return {
+      ok: true,
+      from: '1.3.2',
+      to: '1.4.0',
+      message: 'Updated Jian Remote from 1.3.2 to 1.4.0.',
+    };
+  });
+  const api = {
+    remoteMachines: async () => [
+      {
+        id: machine,
+        name: 'Studio Mac',
+        platform: 'darwin-arm64',
+        online: true,
+        createdAt: '2026-10-29T12:00:00Z',
+        capabilities: ['update-npm'],
+        uiState: 'unlocked' as const,
+        version,
+        outdated: version !== '1.4.0',
+        updatable: true,
+      },
+    ],
+    releases: async () => ({ version: '1.4.0', notes: [], unseen: [] }),
+    updateRemoteMachine,
+  } as unknown as GatewayApi;
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  const press = (text: string) =>
+    act(async () => {
+      [...document.querySelectorAll('button')]
+        .find((button) => button.textContent?.trim() === text)
+        ?.click();
+    });
+
+  try {
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <RemoteMachines api={api} />
+        </QueryClientProvider>,
+      );
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(element.textContent).toContain('Update needed');
+    await press('Manage');
+    expect(element.textContent).toContain('Agents cannot use it until it is updated.');
+    await press('Update');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(updateRemoteMachine).toHaveBeenCalledWith(machine);
+    expect(element.textContent).toContain('Updated Jian Remote from 1.3.2 to 1.4.0.');
+    expect(element.textContent).not.toContain('Update needed');
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
