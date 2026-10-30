@@ -334,7 +334,7 @@ it('keeps tool history visible when a failed run never wrote an answer', async (
   }
 });
 
-it('draws a turn under way once: its working line and its diff head what it has said', async () => {
+it('lays a turn out in the order it happened, its working line at the end', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const working: Run = {
     id: 'working-run',
@@ -345,28 +345,29 @@ it('draws a turn under way once: its working line and its diff head what it has 
     status: 'running',
     progress: {
       phase: 'tool',
-      tool: 'edit_file',
+      tool: 'run_command',
       text: '',
       steps: 2,
-      updatedAt: '2026-09-29T17:58:20Z',
+      updatedAt: '2026-09-29T17:58:22Z',
     },
     createdAt: '2026-09-29T17:58:17Z',
-    updatedAt: '2026-09-29T17:58:20Z',
+    updatedAt: '2026-09-29T17:58:22Z',
   };
-  const message = (id: string, role: 'user' | 'assistant', content: string) => ({
+  const message = (id: string, role: 'user' | 'assistant', content: string, at: string) => ({
     id,
     profileId: 'profile',
     sessionId: 'session',
     runId: working.id,
     role,
     content,
-    createdAt: working.createdAt,
+    createdAt: at,
   });
   const api = {
-    // What the agent said before its tool is already a message while the turn goes on.
+    // What the agent said before each tool is already a message while the turn goes on.
     messages: async () => [
-      message('request', 'user', 'Add a test'),
-      message('said', 'assistant', 'I will add the test.'),
+      message('request', 'user', 'Add a test', '2026-09-29T17:58:17Z'),
+      message('said', 'assistant', 'I will add the test.', '2026-09-29T17:58:18Z'),
+      message('next', 'assistant', 'Now running the suite.', '2026-09-29T17:58:21Z'),
     ],
     activities: async () => [working],
     timeline: async () => [
@@ -377,8 +378,8 @@ it('draws a turn under way once: its working line and its diff head what it has 
             toolCallId: 'edit-1',
             toolName: 'edit_file',
             status: 'done' as const,
-            startedAt: '2026-09-29T17:58:18Z',
-            finishedAt: '2026-09-29T17:58:19Z',
+            startedAt: '2026-09-29T17:58:19Z',
+            finishedAt: '2026-09-29T17:58:20Z',
             diff: {
               path: 'src/a.ts',
               additions: 1,
@@ -397,6 +398,12 @@ it('draws a turn under way once: its working line and its diff head what it has 
               ],
             },
           },
+          {
+            toolCallId: 'command-1',
+            toolName: 'run_command',
+            status: 'running' as const,
+            startedAt: '2026-09-29T17:58:22Z',
+          },
         ],
       },
     ],
@@ -404,6 +411,12 @@ it('draws a turn under way once: its working line and its diff head what it has 
   const element = document.createElement('div');
   document.body.append(element);
   const root = createRoot(element);
+  const follows = (first: Node | null | undefined, second: Node | null | undefined) =>
+    Boolean(
+      first && second && first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  const said = (text: string) =>
+    [...element.querySelectorAll('.chat-text')].find((item) => item.textContent?.includes(text));
 
   try {
     await act(async () =>
@@ -411,18 +424,23 @@ it('draws a turn under way once: its working line and its diff head what it has 
         <History api={api} profileId="profile" sessionId="session" initialRun={working} />,
       ),
     );
-    expect(element.querySelectorAll('.thought-line')).toHaveLength(1);
+    const lines = [...element.querySelectorAll('.thought-line')];
+    const diff = element.querySelector('.code-diff');
+    expect(lines).toHaveLength(2);
     expect(element.querySelectorAll('.code-diff')).toHaveLength(1);
-    // Still working, and above what it said rather than below it.
-    const line = element.querySelector('.thought-line');
-    expect(line?.hasAttribute('data-working')).toBe(true);
-    const said = [...element.querySelectorAll('.chat-text')].find((item) =>
-      item.textContent?.includes('I will add the test.'),
-    );
-    expect(said).toBeDefined();
-    expect(
-      (line?.compareDocumentPosition(said as Node) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+
+    // The edit sits under the line that announced it, before the next thing said.
+    const [settled, live] = lines;
+    expect(settled?.hasAttribute('data-working')).toBe(false);
+    expect(follows(said('I will add the test.'), settled)).toBe(true);
+    expect(follows(settled, diff)).toBe(true);
+    expect(follows(diff, said('Now running the suite.'))).toBe(true);
+
+    // What it is doing now is at the end, with only the tools since its last line.
+    expect(live?.hasAttribute('data-working')).toBe(true);
+    expect(follows(said('Now running the suite.'), live)).toBe(true);
+    expect(live?.textContent).toContain('Running a command');
+    expect(live?.textContent).not.toContain('Editing a file');
   } finally {
     await act(async () => root.unmount());
     element.remove();
