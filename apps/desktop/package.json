@@ -5,6 +5,7 @@
   "private": true,
   "description": "Jian for the desktop: the whole panel, for every gateway you run",
   "license": "Apache-2.0",
+  "homepage": "https://usejian.app",
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {

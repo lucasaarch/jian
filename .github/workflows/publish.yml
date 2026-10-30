@@ -5,12 +5,20 @@ name: Publish
 # architectures, publishes `@jian-ai/remote-control` at the same version, packages the desktop app
 # for macOS, Windows and Linux at that version too, and publishes the GitHub release with that note
 # and the app's installers and update files. The app and the gateway share a major.minor, so they
-# always release together. `workflow_dispatch` stays for building an image by hand, and publishes
-# no release, npm package or app.
+# always release together. `workflow_dispatch` builds the images by hand, or, with `desktop`, packages
+# the app for the systems named as a release would — signed, notarized, stamped 0.0.0-test.<run> — and
+# leaves the installers as the run's artifacts, to try a change to the packaging before tagging. It
+# publishes no release, npm package or app, and builds no image then.
 on:
   push:
     tags: ['v*.*.*']
   workflow_dispatch:
+    inputs:
+      desktop:
+        description: Package the desktop app for these systems, without publishing anything
+        type: choice
+        options: [none, all, mac, win, linux]
+        default: none
 permissions: {}
 jobs:
   # Before anything is built, a tag without a valid note stops here.
@@ -38,8 +46,9 @@ jobs:
   # is the panel's server and always ships at the gateway's version: compose pairs them.
   build:
     needs: notes
-    # A dispatch has no tag and no note to check, so a skipped check is not a failed one.
-    if: ${{ !cancelled() && needs.notes.result != 'failure' }}
+    # A dispatch has no tag and no note to check, so a skipped check is not a failed one. A dispatch
+    # that packages the app builds no image.
+    if: ${{ !cancelled() && needs.notes.result != 'failure' && (github.event_name != 'workflow_dispatch' || inputs.desktop == 'none') }}
     strategy:
       fail-fast: false
       matrix:
@@ -156,7 +165,7 @@ jobs:
   # Developer ID–sign (see docs/remote.md); do not paste certificates into chat or logs.
   computer-helper:
     needs: notes
-    if: ${{ !cancelled() && needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ !cancelled() && (needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' && inputs.desktop != 'none') }}
     # macOS 14 runners are being retired, failing in scheduled brownouts first: 1.1.1's app and
     # worker never built because of one.
     runs-on: macos-15
@@ -230,7 +239,7 @@ jobs:
   # Linux computer-use helpers, x64 and arm64: static musl binaries that run on any distro.
   computer-helper-linux:
     needs: notes
-    if: ${{ !cancelled() && needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ !cancelled() && (needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' && inputs.desktop != 'none') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -252,7 +261,7 @@ jobs:
   # Windows computer-use helpers, x64 and arm64, built with MSVC and the C runtime linked in.
   computer-helper-windows:
     needs: notes
-    if: ${{ !cancelled() && needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ !cancelled() && (needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' && inputs.desktop != 'none') }}
     runs-on: windows-latest
     permissions:
       contents: read
@@ -357,19 +366,34 @@ jobs:
   # its installers and update files for the release job, which uploads them to the tag's release.
   # macOS must be signed and notarized: Squirrel.Mac installs nothing else. Windows is signed only
   # when the optional WINDOWS_CSC_LINK secret is set.
+  # Every system and CPU the app is packaged for; a dispatch keeps the systems it names.
+  targets:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' && inputs.desktop != 'none'
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        env:
+          ONLY: ${{ inputs.desktop || 'all' }}
+        run: |
+          all='[
+            {"os":"mac","arch":"arm64","runner":"macos-15","helper":"computer-helper","helpers":"macos"},
+            {"os":"mac","arch":"x64","runner":"macos-15-intel","helper":"computer-helper","helpers":"macos"},
+            {"os":"win","arch":"x64","runner":"windows-2025","helper":"computer-helper-windows","helpers":"windows"},
+            {"os":"win","arch":"arm64","runner":"windows-11-arm","helper":"computer-helper-windows","helpers":"windows"},
+            {"os":"linux","arch":"x64","runner":"ubuntu-24.04","helper":"computer-helper-linux","helpers":"linux"},
+            {"os":"linux","arch":"arm64","runner":"ubuntu-24.04-arm","helper":"computer-helper-linux","helpers":"linux"}
+          ]'
+          echo "matrix=$(jq -c --arg only "$ONLY" '[.[] | select($only == "all" or .os == $only)]' <<< "$all")" >> "$GITHUB_OUTPUT"
+
   desktop:
-    needs: [notes, computer-helper, computer-helper-linux, computer-helper-windows]
-    if: ${{ !cancelled() && needs.notes.result == 'success' && needs.computer-helper.result == 'success' && needs.computer-helper-linux.result == 'success' && needs.computer-helper-windows.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    needs: [notes, targets, computer-helper, computer-helper-linux, computer-helper-windows]
+    if: ${{ !cancelled() && needs.notes.result != 'failure' && needs.targets.result == 'success' && needs.computer-helper.result == 'success' && needs.computer-helper-linux.result == 'success' && needs.computer-helper-windows.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: mac, arch: arm64, runner: macos-15, helper: computer-helper, helpers: macos }
-          - { os: mac, arch: x64, runner: macos-15-intel, helper: computer-helper, helpers: macos }
-          - { os: win, arch: x64, runner: windows-2025, helper: computer-helper-windows, helpers: windows }
-          - { os: win, arch: arm64, runner: windows-11-arm, helper: computer-helper-windows, helpers: windows }
-          - { os: linux, arch: x64, runner: ubuntu-24.04, helper: computer-helper-linux, helpers: linux }
-          - { os: linux, arch: arm64, runner: ubuntu-24.04-arm, helper: computer-helper-linux, helpers: linux }
+        include: ${{ fromJSON(needs.targets.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     # Notarization waits on Apple, which is usually minutes and sometimes far more.
     timeout-minutes: 90
@@ -389,18 +413,28 @@ jobs:
       - name: Check the runner's CPU
         run: test "$(node -p process.arch)" = '${{ matrix.arch }}'
       - run: pnpm install --frozen-lockfile
+      # A dispatch is no release: its build says so in its version, which no installed app takes
+      # for one, as an update is only ever read from a published release.
       - name: Stamp the version from the tag
         working-directory: apps/desktop
         run: |
-          node scripts/release-version.ts "$GITHUB_REF_NAME"
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          tag="$GITHUB_REF_NAME"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then tag="v0.0.0-test.$GITHUB_RUN_NUMBER"; fi
+          node scripts/release-version.ts "$tag"
+          echo "VERSION=${tag#v}" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
+        if: github.event_name != 'workflow_dispatch'
         with:
           name: notes
           path: ${{ runner.temp }}/notes
       # electron-builder writes it into the update files, where the app reads what a release brings.
       - name: Put the note in the update files
-        run: cp "$RUNNER_TEMP/notes/notes.md" apps/desktop/build/release-notes.md
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            echo "A test build of $GITHUB_SHA, not a release." > apps/desktop/build/release-notes.md
+          else
+            cp "$RUNNER_TEMP/notes/notes.md" apps/desktop/build/release-notes.md
+          fi
       - uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.helper }}
@@ -457,7 +491,20 @@ jobs:
           pnpm --filter @jian/sdk build
           pnpm exec electron-vite build
           node scripts/stage-gateway.mjs
-          pnpm exec electron-builder --publish never --${{ matrix.arch }}
+          # Stapling asks Apple for the ticket notarization just made, and the connection to it
+          # sometimes drops (Error 68): 1.1.2's arm64 build failed so. The app is notarized by then,
+          # so only that failure packages again, twice at most; anything else fails at once.
+          log="$RUNNER_TEMP/electron-builder.log"
+          for attempt in 1 2 3; do
+            if pnpm exec electron-builder --publish never --${{ matrix.arch }} 2>&1 | tee "$log"; then
+              break
+            fi
+            if [ '${{ matrix.os }}' != mac ] || [ "$attempt" = 3 ] || ! grep -q 'Failed to staple' "$log"; then
+              exit 1
+            fi
+            echo "::warning::Apple's ticket could not be stapled (attempt $attempt): packaging again."
+            sleep 30
+          done
       - name: Check what was packaged
         working-directory: apps/desktop/release
         run: |
