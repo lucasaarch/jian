@@ -4,6 +4,22 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.1.3 — 2026-10-30
+
+The desktop app for Linux, which 1.1.2 could not package, and Mac builds that no longer fail when Apple's servers drop the connection while stapling.
+
+### The desktop app
+
+* **Linux:** the AppImage and the `.deb`, for x64 and ARM. 1.1.2's Linux builds stopped before packaging, as a `.deb` names the project's home page and the app named none; it is usejian.app.
+* **Mac builds that ride out Apple's servers:** stapling asks Apple for the ticket notarization has just issued, and the connection sometimes drops. 1.1.2's Apple silicon build failed so and was built again by hand; packaging now tries again by itself, twice at most, and only for that.
+
+Everything 1.1.2 brought is in this release; its note says what changed.
+
+### Upgrading
+
+* From 1.1.0 or 1.1.2, recreate the gateway and web containers with the 1.1.3 images, or follow the `latest` tags. No migration runs, and nothing changes for the gateway, the web panel or a machine's worker.
+* The desktop app updates itself to this release.
+
 ## 1.1.2 — 2026-10-30
 
 The status bar tells what is under way — an agent at work or waiting for you, this computer in use, the Claude and Codex windows — and the tray and the command palette reach much more, on the web too. Pages load as skeletons, a failed step says why, agents can throw confetti, and the app builds for every system again.
