@@ -1,5 +1,11 @@
 'use client';
 
+/** The desktop app's screen and settings, drawn with the glass kit. */
+export { AgentPicker } from './app/agent-picker';
+export { AgentSettings } from './app/agent-settings';
+export { Appearance } from './app/appearance';
+export { ChatsApp } from './app/chats';
+export { CreateAgent } from './app/create-agent';
 export { Notifications } from './components/shell/notice';
 export { QueryProvider } from './components/shell/query';
 export { ThemeSync } from './components/shell/theme';
@@ -11,6 +17,7 @@ export { VersionMismatch } from './components/shell/version-mismatch';
 export { SignIn } from './components/sign-in';
 /** The panel's own controls, for what a host draws around it in the same look. */
 export { Button, Field, Mark } from './components/ui';
+export * from './kit';
 export { settingsPath } from './lib/navigation';
 export { connectGateway, type GatewayConnection } from './platform/gateway';
 export {
