@@ -521,7 +521,13 @@ jobs:
               app="$(find . -maxdepth 2 -name Jian.app -type d | head -n 1)"
               codesign --verify --deep --strict --verbose=2 "$app"
               spctl --assess --type execute --verbose=2 "$app"
-              xcrun stapler validate "$app"
+              # Validating asks Apple too, over the same connection that drops (Error 68).
+              for attempt in 1 2 3; do
+                if xcrun stapler validate "$app"; then break; fi
+                if [ "$attempt" = 3 ]; then exit 1; fi
+                echo "::warning::Apple could not be asked to validate the ticket (attempt $attempt)."
+                sleep 20
+              done
               meta=latest-mac.yml
               ;;
             win)

@@ -23,7 +23,7 @@ Messages appear the moment they are sent, and one that fails stays to be sent ag
 * **A gateway that cannot start says why:** the app's own gateway writes everything to local-gateway.log in the app's log folder, and when it ends before it is ready the window shows its last words, with Try again now and Show the log, instead of loading for ever. Every desktop build now starts the gateway it packaged, the way the app does, and fails when it does not answer.
 * **Where a closed window went:** on Windows and Linux, closing the window leaves Jian running in the notification area; the first time, a notification says so and how to quit it.
 * **Linux:** the AppImage and the `.deb`, for x64 and ARM. 1.1.2's Linux builds stopped before packaging, as a `.deb` names the project's home page and the app named none; it is usejian.app.
-* **Mac builds that ride out Apple's servers:** stapling asks Apple for the ticket notarization has just issued, and the connection sometimes drops. 1.1.2's Apple silicon build failed so and was built again by hand; packaging now tries again by itself, twice at most, and only for that.
+* **Mac builds that ride out Apple's servers:** stapling asks Apple for the ticket notarization has just issued, and the connection sometimes drops. 1.1.2's Apple silicon build failed so and was built again by hand; packaging, and the check of the ticket after it, now try again by themselves, twice at most, and only for that.
 
 ### English throughout
 
