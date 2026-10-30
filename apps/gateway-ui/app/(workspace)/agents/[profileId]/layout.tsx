@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { type ReactNode, Suspense, useEffect } from 'react';
+import { ChatNotices } from '@/components/notifications/chat-notices';
 import { Loading, NoAgents } from '@/components/shell/states';
 import { buttonClass, Empty } from '@/components/ui';
 import { useProfiles } from '@/lib/query/profile';
@@ -48,6 +49,7 @@ function OpenAgent({ profileId, children }: { profileId: string; children: React
   // page waits for the slices it reads; a failed one lands on error.tsx beside this layout.
   return (
     <div key={profileId} className="page-enter">
+      <ChatNotices profileId={profileId} />
       <Suspense fallback={<Loading />}>{children}</Suspense>
     </div>
   );

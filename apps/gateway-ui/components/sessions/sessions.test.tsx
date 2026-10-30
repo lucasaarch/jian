@@ -75,6 +75,7 @@ async function render({
     channel: 'gateway',
   }));
   const renameSession = vi.fn(async () => ({}));
+  const markSessionRead = vi.fn(async () => ({}));
   const sendMessage = vi.fn(async () => ({}));
   const notices: string[] = [];
   const mutate = vi.fn(async (action: () => Promise<unknown>) => {
@@ -123,6 +124,7 @@ async function render({
               deleteSession,
               createGatewaySession,
               renameSession,
+              markSessionRead,
               send: sendMessage,
               // The chat offers the remote machines it can run on; none are connected here.
               remoteMachines: vi.fn(async () => []),
@@ -145,6 +147,7 @@ async function render({
     deleteSession,
     createGatewaySession,
     renameSession,
+    markSessionRead,
     sendMessage,
     mutate,
     notices,
@@ -323,4 +326,33 @@ it('renames a chat from its context menu', async () => {
 
   expect(result.renameSession).toHaveBeenCalledWith(profile.id, 'gateway-chat', 'New title');
   expect(result.mutate).toHaveBeenCalled();
+});
+
+it('lists the chat spoken in last first, marks one written in since it was read, and reads the open one', async () => {
+  const chat = (id: string, title: string, at: string, readAt: string) => ({
+    ...session,
+    id,
+    channel: 'gateway',
+    title,
+    readAt,
+    lastMessage: { role: 'assistant' as const, text: 'Done.', at },
+  });
+  const result = await render({
+    sessions: [
+      chat('older-chat', 'Release notes', '2026-10-30T10:00:00.000Z', '2026-10-30T09:00:00.000Z'),
+      chat('newer-chat', 'Deploy', '2026-10-30T11:00:00.000Z', '2026-10-30T11:30:00.000Z'),
+    ],
+  });
+  const rows = [...result.element.querySelectorAll('.conversation-item')];
+
+  expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual([
+    'Deploy',
+    'Release notes',
+  ]);
+  // The agent wrote in the older chat after it was last read.
+  expect(rows[1]?.hasAttribute('data-unread')).toBe(true);
+  expect(rows[1]?.querySelector('[aria-label="Unread"]')).not.toBeNull();
+  expect(rows[0]?.hasAttribute('data-unread')).toBe(false);
+  // The chat on screen is the one spoken in last, and it is read as it shows.
+  expect(result.markSessionRead).toHaveBeenCalledWith(profile.id, 'newer-chat');
 });

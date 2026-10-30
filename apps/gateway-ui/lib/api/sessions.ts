@@ -147,6 +147,13 @@ export const sessionCalls = (client: Client) => ({
         },
       }),
     ),
+  /** The owner read this chat up to now; said again while it stays on screen. */
+  markSessionRead: (profileId: string, sessionId: string) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/read', {
+        params: { path: { profileId, sessionId } },
+      }),
+    ),
   /** Starts the chat's agent on a pull request's conflicts, from a brief the chat does not show. */
   fixGithubConflicts: (
     profileId: string,

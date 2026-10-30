@@ -1,16 +1,11 @@
 'use client';
 
-import {
-  AGENT_SESSION_CHANNEL,
-  GATEWAY_SESSION_CHANNEL,
-  LEARNING_SESSION_CHANNEL,
-} from '@jian/contracts';
+import { AGENT_SESSION_CHANNEL, GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Bot,
   CheckCheck,
-  GraduationCap,
   MessagesSquare,
   PanelLeftClose,
   PanelLeftOpen,
@@ -35,9 +30,11 @@ import {
 import { keys } from '@/lib/query/keys';
 import { useCrew } from '@/lib/stores/crew';
 import { useLayout } from '@/lib/stores/layout';
+import { unread } from '@/lib/unread';
 import { useDeleteConversation, useRefresh } from '@/lib/workspace';
 import type { ProtectionMode, Run, Session } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
+import { PushToggle } from '../notifications/push-toggle';
 import type { SectionActions } from '../props';
 import {
   Badge,
@@ -69,7 +66,7 @@ import { SessionProtection } from './protection-menu';
  * The kinds of conversation a profile has, besides chats started in Jian and the one where it
  * looks back on its work. A channel the panel does not know reads as API.
  */
-type Kind = 'whatsapp' | 'whatsapp-business' | 'telegram' | 'agent' | 'api' | 'learning';
+type Kind = 'whatsapp' | 'whatsapp-business' | 'telegram' | 'agent' | 'api';
 
 const kinds: { kind: Kind; name: string; icon: ComponentType<{ size?: number }> }[] = [
   { kind: 'whatsapp', name: 'WhatsApp (Baileys)', icon: WhatsAppLogo },
@@ -77,20 +74,24 @@ const kinds: { kind: Kind; name: string; icon: ComponentType<{ size?: number }> 
   { kind: 'telegram', name: 'Telegram', icon: TelegramLogo },
   { kind: 'agent', name: 'Agents', icon: Bot },
   { kind: 'api', name: 'API Server', icon: Terminal },
-  { kind: 'learning', name: 'Learning', icon: GraduationCap },
 ];
 
 const kindOf = (session: Session): Kind =>
-  session.channel === LEARNING_SESSION_CHANNEL
-    ? 'learning'
-    : session.channel === 'whatsapp' ||
-        session.channel === 'whatsapp-business' ||
-        session.channel === 'telegram' ||
-        session.channel === AGENT_SESSION_CHANNEL
-      ? (session.channel as Kind)
-      : 'api';
+  session.channel === 'whatsapp' ||
+  session.channel === 'whatsapp-business' ||
+  session.channel === 'telegram' ||
+  session.channel === AGENT_SESSION_CHANNEL
+    ? (session.channel as Kind)
+    : 'api';
 
 const isGateway = (session: Session) => session.channel === GATEWAY_SESSION_CHANNEL;
+/**
+ * While a chat is on screen the panel says it was read, now and then: what arrives in it is
+ * read as it arrives, and the gateway sends no notification about a chat being looked at.
+ */
+const READING_MS = 30_000;
+/** The width below which the list and the conversation take turns, as the styles have it. */
+const PHONE = '(max-width: 760px)';
 /** The chat a channel's conversation is answered in, as people call it. */
 const chatName = (session: Session) => (session.channel === 'telegram' ? 'Telegram' : 'WhatsApp');
 const isMessaging = (session: Session) =>
@@ -152,10 +153,6 @@ function preview(text: string) {
   const scheduled = /^\[Scheduled: ([^\]]+)\]/.exec(text);
 
   if (scheduled) return `⏰ ${scheduled[1]}`;
-
-  const learning = /^\[Learning\] ([^\n]*)/.exec(text);
-
-  if (learning) return learning[1] ?? '';
 
   return plainText(
     text
@@ -316,7 +313,6 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
     const stored = session.title?.replace(/^(Agent|WhatsApp|Telegram)\s·\s/, '');
 
     if (kind === 'api') return session.title ?? 'Untitled conversation';
-    if (kind === 'learning') return 'What it learned';
     if (kind === 'agent') return peerOf(session)?.name ?? stored ?? 'Agent';
 
     return contactOf(session)?.displayName ?? stored ?? 'Unknown contact';
@@ -357,7 +353,6 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
     session: Session,
   ) => {
     event.preventDefault();
-    if (session.channel === LEARNING_SESSION_CHANNEL) return;
     setContextMenu({
       session,
       left: Math.max(8, Math.min(event.clientX, window.innerWidth - 200)),
@@ -385,20 +380,51 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   const gatewaySessions = visibleSessions
     .filter((session) => isGateway(session) && matches(session))
     .sort((a, b) => lastAt(b).localeCompare(lastAt(a)));
-  const gatewayGroups = projects
-    .map((project) => ({
+  // Chats by repository, General for those in none; the group spoken in last comes first, as
+  // the conversation spoken in last does within it.
+  const gatewayGroups = [
+    {
+      id: 'general',
+      name: 'General',
+      sessions: gatewaySessions.filter((session) => !session.projectId),
+    },
+    ...projects.map((project) => ({
       id: project.id,
       name: project.name,
       sessions: gatewaySessions.filter((session) => session.projectId === project.id),
-    }))
-    .filter((group) => group.sessions.length);
-  const unassignedChats = gatewaySessions.filter((session) => !session.projectId);
+    })),
+  ]
+    .filter((group) => group.sessions.length)
+    .sort((a, b) =>
+      lastAt(b.sessions[0] as Session).localeCompare(lastAt(a.sessions[0] as Session)),
+    );
   const active = draft
     ? undefined
     : (visibleSessions.find((session) => session.id === selected) ??
       gatewaySessions[0] ??
       groups[0]?.sessions[0]);
   const activeContact = active && contactOf(active);
+  const onScreen = active && isGateway(active) ? active.id : undefined;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A new last message is read as it arrives.
+  useEffect(() => {
+    if (!onScreen) return;
+    // A phone shows the list alone until a conversation is opened: the first chat, which the
+    // pane would show beside it on a wider screen, is not on screen there.
+    if (onScreen !== selected && window.matchMedia(PHONE).matches) return;
+    const mark = () => {
+      if (document.visibilityState === 'visible') {
+        void api.markSessionRead(profile.id, onScreen).catch(() => {});
+      }
+    };
+    mark();
+    const timer = setInterval(mark, READING_MS);
+    document.addEventListener('visibilitychange', mark);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', mark);
+    };
+  }, [onScreen, selected, active?.lastMessage?.at]);
 
   // Where the conversation's objective stands and what it listens for, beside where it runs.
   const badges = (session: Session, side: 'top' | 'bottom' = 'top') => (
@@ -413,6 +439,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       type="button"
       key={session.id}
       className="conversation-item"
+      data-unread={unread(session) && active?.id !== session.id ? true : undefined}
       aria-current={active?.id === session.id ? 'true' : undefined}
       onContextMenu={(event) => openContextMenu(event, session)}
       onKeyDown={(event) => {
@@ -439,9 +466,14 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
         <strong>{nameOf(session)}</strong>
         <Preview session={session} run={working.get(session.id)} />
       </span>
-      <time dateTime={lastAt(session)} title={date(lastAt(session))}>
-        {when(lastAt(session))}
-      </time>
+      <span className="conversation-meta">
+        <time dateTime={lastAt(session)} title={date(lastAt(session))}>
+          {when(lastAt(session))}
+        </time>
+        {unread(session) && active?.id !== session.id && (
+          <span className="conversation-unread" role="img" aria-label="Unread" />
+        )}
+      </span>
     </button>
   );
 
@@ -467,6 +499,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                 }}
               />
             </div>
+            <PushToggle />
             <IconButton
               size="control"
               variant="primary"
@@ -494,15 +527,6 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
           />
         </header>
         <div className="conversation-scroll">
-          {unassignedChats.length > 0 && (
-            <section>
-              <h2>
-                General
-                <span>{unassignedChats.length}</span>
-              </h2>
-              {unassignedChats.map(row)}
-            </section>
-          )}
           {gatewayGroups.map((group) => (
             <section key={group.id}>
               <h2>
@@ -522,7 +546,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
               {sessions.map(row)}
             </section>
           ))}
-          {!groups.length && !gatewayGroups.length && !unassignedChats.length && (
+          {!groups.length && !gatewayGroups.length && (
             <p className="conversation-none">
               {visibleSessions.length
                 ? 'Nothing matches that search.'

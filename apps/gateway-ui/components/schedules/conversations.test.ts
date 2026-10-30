@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import type { Contact, Session } from '../../lib/api';
-import { conversationName } from './conversations';
+import { choices, conversationName } from './conversations';
 
 it('keeps Meta conversation destinations distinct from API and Baileys', () => {
   const session = {
@@ -19,4 +19,32 @@ it('keeps Meta conversation destinations distinct from API and Baileys', () => {
     'WhatsApp (Baileys)',
   );
   expect(conversationName({ ...session, channel: 'telegram' }, [], []).where).toBe('Telegram');
+});
+
+it('offers chats, WhatsApp, Telegram and API conversations, in that order and by name', () => {
+  const at = (id: string, channel: string, title: string | null) =>
+    ({ id, channel, title }) as Session;
+  const listed = choices(
+    [
+      at('api', 'api', 'Billing webhook'),
+      at('telegram', 'telegram', 'Telegram · Lee'),
+      at('chat-b', 'gateway', 'Release notes'),
+      at('whatsapp', 'whatsapp', 'WhatsApp · Maya'),
+      at('chat-a', 'gateway', 'deploy'),
+      at('chat-new', 'gateway', null),
+      at('agent', 'agent', 'Agent · Atlas'),
+      at('learning', 'learning', 'Learning'),
+    ],
+    [],
+    [],
+  );
+
+  expect(listed.map((choice) => [choice.provider, choice.name])).toEqual([
+    ['chats', 'deploy'],
+    ['chats', 'New chat'],
+    ['chats', 'Release notes'],
+    ['whatsapp', 'Maya'],
+    ['telegram', 'Lee'],
+    ['api', 'Billing webhook'],
+  ]);
 });
