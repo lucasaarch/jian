@@ -10,6 +10,7 @@ import { Providers } from '../components/providers';
 import { ModelDefaults } from '../components/providers/model-defaults';
 import { RemoteMachines } from '../components/remote';
 import { Schedules } from '../components/schedules';
+import { ServerOnly } from '../components/shell/server-only';
 import { Skills } from '../components/skills';
 import { SshKeys } from '../components/ssh-keys';
 import { panelApi } from '../lib/query/client';
@@ -20,7 +21,14 @@ import { useActions } from '../lib/workspace';
  * each of its routes to one, the web's pages and the native app's alike.
  */
 export const OverviewScreen = () => <Overview api={panelApi()} />;
-export const ChannelsScreen = () => <Channels {...useActions()} />;
+export const ChannelsScreen = () => (
+  <ServerOnly
+    title="Channels need a server"
+    why="This gateway runs on your computer, which is not always on to receive messages. Connect a gateway that runs on a server to reach agents from Telegram, WhatsApp or the API."
+  >
+    <Channels {...useActions()} />
+  </ServerOnly>
+);
 export const IdentityScreen = () => <ProfileEditor {...useActions()} />;
 export const MemoriesScreen = () => <Memories {...useActions()} />;
 export const SchedulesScreen = () => <Schedules {...useActions()} />;
@@ -30,5 +38,12 @@ export const ModelsScreen = () => <ModelDefaults {...useActions()} />;
 export const AppsScreen = () => <Integrations tab="apps" />;
 export const McpsScreen = () => <Integrations tab="mcps" />;
 export const GitHubAppScreen = GitHubApp;
-export const RemoteScreen = () => <RemoteMachines api={panelApi()} />;
+export const RemoteScreen = () => (
+  <ServerOnly
+    title="Remote Control needs a server"
+    why="Other computers cannot reach a gateway that runs on this one. Connect a gateway that runs on a server to control your machines from it."
+  >
+    <RemoteMachines api={panelApi()} />
+  </ServerOnly>
+);
 export const SshKeysScreen = () => <SshKeys {...useActions()} />;

@@ -23,6 +23,11 @@ export type NavigationItem = {
   label: string;
   icon: LucideIcon;
   group: NavigationGroup;
+  /**
+   * Only on a server: a desktop app's own gateway has no channels, and machines elsewhere cannot
+   * reach it to be controlled.
+   */
+  serverOnly?: true;
 };
 
 export const navigationGroups = [
@@ -43,13 +48,13 @@ export const navigation: NavigationItem[] = [
   { path: 'identity', label: 'Identity', icon: Fingerprint, group: 'agent-setup' },
   { path: 'memories', label: 'Memories', icon: BookOpen, group: 'agent-setup' },
   { path: 'skills', label: 'Skills', icon: Sparkles, group: 'agent-setup' },
-  { path: 'channels', label: 'Channels', icon: Smartphone, group: 'connections' },
+  { path: 'channels', label: 'Channels', icon: Smartphone, group: 'connections', serverOnly: true },
   { path: 'schedules', label: 'Schedules', icon: AlarmClock, group: 'automation' },
   { path: 'providers', label: 'Providers', icon: Plug, group: 'gateway' },
   { path: 'models', label: 'Model defaults', icon: Cpu, group: 'gateway' },
   { path: 'integrations', label: 'Integrations', icon: Cable, group: 'gateway' },
   { path: 'ssh-keys', label: 'SSH keys', icon: KeyRound, group: 'gateway' },
-  { path: 'remote', label: 'Remote Control', icon: Monitor, group: 'gateway' },
+  { path: 'remote', label: 'Remote Control', icon: Monitor, group: 'gateway', serverOnly: true },
 ];
 
 /** Whether an item is one of the gateway's own screens rather than an agent's. */

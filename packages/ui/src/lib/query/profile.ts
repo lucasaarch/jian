@@ -69,6 +69,13 @@ export const queries = {
       staleTime: Number.POSITIVE_INFINITY,
       retry: false,
     }),
+  /** What kind of gateway this is; it does not change while the panel runs. */
+  gateway: () =>
+    queryOptions({
+      queryKey: keys.gateway,
+      queryFn: () => panelApi().health(),
+      staleTime: Number.POSITIVE_INFINITY,
+    }),
   remoteMachines: () =>
     queryOptions({ queryKey: keys.remoteMachines, queryFn: () => panelApi().remoteMachines() }),
   mcpServers: () =>

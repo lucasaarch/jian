@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { LogOut, ScrollText, Star, X } from 'lucide-react';
+import { useAvailable } from '../../lib/gateway-mode';
 import {
   currentSection,
   isGatewayItem,
@@ -39,6 +40,7 @@ export function Sidebar({
   // Requests waiting on the owner, shown wherever they are in the panel.
   const pending = contacts.data?.filter((contact) => contact.status === 'pending').length ?? 0;
   const hrefOf = useAgentPath();
+  const available = useAvailable();
 
   return (
     <aside
@@ -60,12 +62,14 @@ export function Sidebar({
       </Link>
       <ProfileSwitcher onCreate={onCreateProfile} />
       <nav className="sidebar-nav" aria-label="Main navigation">
-        {navigationGroups.map((group) => (
-          <div className="nav-group" key={group.id}>
-            <span className="nav-label">{group.label}</span>
-            {navigation
-              .filter((item) => item.group === group.id)
-              .map((item) => (
+        {navigationGroups.map((group) => {
+          const items = navigation.filter((item) => item.group === group.id && available(item));
+          // A group whose sections this gateway does not have is left out with them.
+          if (items.length === 0) return null;
+          return (
+            <div className="nav-group" key={group.id}>
+              <span className="nav-label">{group.label}</span>
+              {items.map((item) => (
                 <Link
                   key={item.path}
                   href={isGatewayItem(item) ? settingsPath(item.path) : hrefOf(item.path)}
@@ -83,8 +87,9 @@ export function Sidebar({
                   )}
                 </Link>
               ))}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </nav>
       <div className="sidebar-footer">
         <ThemeSwitcher />

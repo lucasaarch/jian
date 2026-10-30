@@ -20,6 +20,7 @@ export const keys = {
   mcpServers: ['mcp-servers'] as const,
   releases: ['releases'] as const,
   repository: ['repository'] as const,
+  gateway: ['gateway'] as const,
   settings: ['settings'] as const,
 
   profile: (profileId: string) => ['profile', profileId] as const,
