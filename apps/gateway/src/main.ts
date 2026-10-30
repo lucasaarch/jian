@@ -1,34 +1,10 @@
 import { timeZoneSchema } from '@jian/contracts';
 import { PgBoss } from 'pg-boss';
 import { z } from 'zod';
-import { McpLogins } from './agent/mcp-login.js';
-import { AgentRuntime } from './agent/runtime.js';
-import { createApp } from './app.js';
-import { ApiChannel } from './channels/api.js';
-import { ChannelRegistry } from './channels/registry.js';
-import { Channels } from './channels/service.js';
-import { TelegramChannel } from './channels/telegram.js';
-import { WhatsAppChannel } from './channels/whatsapp/adapter.js';
-import { WhatsAppConnections } from './channels/whatsapp/connections.js';
-import { createWhatsAppDeviceFactory } from './channels/whatsapp/driver.js';
-import { WhatsAppBusinessChannel } from './channels/whatsapp-business.js';
-import { Coordination } from './coordination/service.js';
-import { GitHubIntegrations } from './integrations/github.js';
-import { moveMcpSecrets } from './mcp/move-secrets.js';
-import { ModelCatalog } from './providers/catalog-source.js';
-import { CodexLogin } from './providers/codex/login.js';
-import { ProviderModels } from './providers/discovery.js';
-import { ModelFallback } from './providers/fallback.js';
-import { TierModels } from './providers/tiers.js';
-import { RunQueue } from './runs/queue.js';
+import { createGateway } from './gateway.js';
+import { BossExecutor } from './runs/executors.js';
 import { SecretBox } from './security/crypto.js';
-import { GatewayVault } from './security/gateway-vault.js';
-import { createSafeFetch } from './security/outbound.js';
-import { Vault } from './security/vault.js';
-import { buildServices } from './services.js';
-import { Skills } from './skills/service.js';
-import { importWorkspaceSshKeys } from './ssh/import.js';
-import { type StartupStage, startupFailure } from './startup.js';
+import { startupFailure } from './startup.js';
 import { PostgresStore } from './storage/postgres.js';
 
 const config = z
@@ -100,7 +76,15 @@ try {
   process.exit(1);
 }
 
-const outbound = createSafeFetch({
+const gateway = await createGateway({
+  store,
+  box,
+  token: config.data.JIAN_API_TOKEN,
+  role: config.data.JIAN_ROLE,
+  ...(config.data.JIAN_ROLE !== 'api'
+    ? { executor: new BossExecutor(new PgBoss(config.data.DATABASE_URL)) }
+    : {}),
+  channels: 'all',
   allowPrivateOrigins: [
     ...config.data.JIAN_ALLOW_PRIVATE_ORIGINS.split(',')
       .map((value) => value.trim())
@@ -109,196 +93,30 @@ const outbound = createSafeFetch({
       ? [config.data.JIAN_CAVEMAN_PROXY_URL || 'http://127.0.0.1:8788']
       : []),
   ],
+  trustedProxies: config.data.JIAN_TRUSTED_PROXIES.split(',')
+    .map((value) => value.trim())
+    .filter(Boolean),
+  ...(config.data.JIAN_PUBLIC_URL ? { publicUrl: config.data.JIAN_PUBLIC_URL } : {}),
+  ...(config.data.JIAN_TIME_ZONE ? { timeZone: config.data.JIAN_TIME_ZONE } : {}),
 });
-
-// What each model can do is read from a catalog maintained outside this repository, so a model
-// released today works today. It goes out through the same guarded client as every other
-// provider call. Media routing loads it before deciding whether native vision is available.
-const catalog = new ModelCatalog(outbound.fetch);
-
-const vault = new Vault(store, box);
-// Vendor credentials belong to the installation; everything else a profile types is its own.
-const gatewayVault = new GatewayVault(store, box);
-const github = new GitHubIntegrations(
-  store,
-  gatewayVault,
-  config.data.JIAN_PUBLIC_URL,
-  outbound.fetch,
-  Date.now,
-);
-// The store rides along: several consumers read records no single area owns.
-const services = {
-  ...buildServices({
-    store,
-    vault,
-    gatewayVault,
-    catalog,
-    fetcher: outbound.fetch,
-    github,
-    ...(config.data.JIAN_PUBLIC_URL ? { publicUrl: config.data.JIAN_PUBLIC_URL } : {}),
-    ...(config.data.JIAN_TIME_ZONE ? { timeZone: config.data.JIAN_TIME_ZONE } : {}),
-  }),
-  store,
-};
-const codexLogin = new CodexLogin(services, gatewayVault);
-services.media.useCodexLogin(codexLogin);
-services.subscriptionUsage.useCodexLogin(codexLogin);
-
-const providerModels = new ProviderModels(
-  { providers: services.providers, vault: gatewayVault },
-  outbound.fetch,
-  { catalog, codexLogin },
-);
-
-// A profile answers as soon as a provider exists: with no model chosen, one is taken from what
-// the provider reports and written as the profile's default.
-services.runs.useFallback(new ModelFallback(services.providers, providerModels, catalog));
-// A subagent gets the model its tier calls for, subscriptions first.
-services.work.useTiers(new TierModels(services.providers, providerModels, catalog));
-
-// Skill import reaches GitHub through the same guarded client, and only for the owner.
-const skills = new Skills(services.profiles, outbound.fetch);
-
-// An MCP server that wants OAuth sends the owner's browser back here, so a gateway with no
-// public address configured cannot offer that sign-in at all.
-const mcpLogins = config.data.JIAN_PUBLIC_URL
-  ? new McpLogins(gatewayVault, config.data.JIAN_PUBLIC_URL, outbound.fetch)
-  : undefined;
-
-const coordination = new Coordination(services);
-const whatsapp = new WhatsAppConnections(store, box, createWhatsAppDeviceFactory());
-const channelRegistry = new ChannelRegistry([
-  new ApiChannel(),
-  new TelegramChannel(),
-  new WhatsAppBusinessChannel(),
-  new WhatsAppChannel(whatsapp),
-]);
-const channels = new Channels(services, outbound.fetch, channelRegistry);
-
-channels.usePublicUrl(config.data.JIAN_PUBLIC_URL);
-
-// A colleague's late answer has no incoming message to hang a delivery on; channels give it one.
-services.peers.useDeliveries(channels);
-// Nor has a run a schedule starts in a chat: its answer goes out the same way.
-services.schedules.useDeliveries(channels);
-// A completed subagent wakes its principal in the source chat, including its channel.
-services.work.useDeliveries(channels);
-// An open session objective queues the next slice the same way after a completed turn.
-services.objectives.useDeliveries(channels);
-// Answering a mid-run question from the panel resumes a channel run the same way.
-services.runs.useDeliveries(channels);
-// A matching GitHub event (poll or optional webhook) wakes the subscribed session the same way.
-services.subscriptions.useDeliveries(channels);
-// Private repositories are polled with the connected account's installation token.
-services.subscriptions.useGithub(outbound.fetch, github);
-
-/**
- * How often due schedules and Listening polls are looked for, in milliseconds. A schedule set
- * for 08:00 starts within this much of it; every worker looks, and a schedule starts once
- * however many do. Subscriptions poll GitHub on their own interval, checked on this tick.
- */
-const SCHEDULE_TICK_MS = 15_000;
-let scheduleTimer: ReturnType<typeof setInterval> | undefined;
-
-// Deleting a profile disconnects its channels first, inside the same transaction: a WhatsApp
-// socket a worker still holds open has to be told, not just left to find out from a missing row.
-services.profiles.useBeforeDelete((profileId, tx) => channels.revokeAll(profileId, tx));
-
-const runtime = new AgentRuntime(services, undefined, {
-  gatewayVault,
-  github,
-  ...(mcpLogins ? { mcpOAuth: mcpLogins.provider } : {}),
-  codexLogin,
-  outbound,
-  storeArtifact: (run, toolName, output) => coordination.storeArtifact(run, toolName, output),
-});
-
-const queue =
-  config.data.JIAN_ROLE !== 'api'
-    ? new RunQueue(new PgBoss(config.data.DATABASE_URL), services, runtime)
-    : undefined;
-
-const app =
-  config.data.JIAN_ROLE !== 'worker'
-    ? createApp({
-        ...services,
-        github,
-        codexLogin,
-        providerModels,
-        skills,
-        channels,
-        whatsapp,
-        ...(mcpLogins ? { mcpLogins } : {}),
-        fetcher: outbound.fetch,
-        token: config.data.JIAN_API_TOKEN,
-        trustedProxies: config.data.JIAN_TRUSTED_PROXIES.split(',')
-          .map((value) => value.trim())
-          .filter(Boolean),
-        onCancel: (id) => runtime.cancel(id),
-      })
-    : undefined;
-
-let stopping = false;
-
-async function shutdown() {
-  if (stopping) {
-    return;
-  }
-
-  stopping = true;
-  codexLogin.stop();
-  clearInterval(scheduleTimer);
-  // End long-lived event streams before waiting for HTTP shutdown.
-  app?.server.closeAllConnections();
-  await app?.close();
-  await queue?.stop();
-  await channels.stop();
-  await whatsapp.stop();
-  await outbound.close();
-  await store.close();
-}
 
 process.once('SIGINT', () => {
-  void shutdown();
+  void gateway.stop();
 });
 
 process.once('SIGTERM', () => {
-  void shutdown();
+  void gateway.stop();
 });
 
-let startupStage: StartupStage = 'database';
-
 try {
-  await store.migrate();
-  // Secrets of the MCP servers migration 0071 made the installation's; nothing once done.
-  await moveMcpSecrets(store, vault, gatewayVault);
-  // SSH keys that still live only as files in an agent's workspace; nothing once imported.
-  await importWorkspaceSshKeys(store, gatewayVault);
-  startupStage = 'queue';
-  await queue?.start();
-
-  if (config.data.JIAN_ROLE !== 'api') {
-    whatsapp.start((id, input, generation) => channels.receiveLinked(id, input, generation));
-    channels.start();
-    scheduleTimer = setInterval(() => {
-      void services.schedules
-        .fireDue()
-        .catch(() => console.error('jian: schedules could not be started; will retry'));
-      void services.subscriptions
-        .pollDue()
-        .catch(() => console.error('jian: subscription poll failed; will retry'));
-    }, SCHEDULE_TICK_MS);
-    scheduleTimer.unref();
-  }
-
-  if (app) {
-    startupStage = 'http';
-    await app.listen({ host: config.data.HOST, port: config.data.PORT });
-  } else {
-    console.info('Jian worker started');
-  }
+  const { url } = await gateway.start(
+    config.data.JIAN_ROLE !== 'worker'
+      ? { host: config.data.HOST, port: config.data.PORT }
+      : undefined,
+  );
+  if (!url) console.info('Jian worker started');
 } catch (error) {
-  console.error(startupFailure(startupStage, error));
-  await shutdown().catch(() => {});
+  console.error(startupFailure(gateway.stage(), error));
+  await gateway.stop().catch(() => {});
   process.exitCode = 1;
 }
