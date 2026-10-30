@@ -25,6 +25,8 @@ const MOVED_TO_SETTINGS = ['providers', 'models', 'integrations', 'remote', 'ssh
 export default function configuration() {
   return {
     output: 'standalone',
+    // The panel's screens ship as TypeScript source in @jian/ui, compiled with this app.
+    transpilePackages: ['@jian/ui'],
     // The workspace packages live above this app; tracing from here alone would leave
     // @jian/contracts and @jian/sdk out of the standalone tree.
     outputFileTracingRoot: fileURLToPath(new URL('../../', import.meta.url)),

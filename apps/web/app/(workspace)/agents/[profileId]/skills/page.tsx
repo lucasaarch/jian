@@ -1,8 +1,1 @@
-'use client';
-
-import { Skills } from '@/components/skills';
-import { useActions } from '@/lib/workspace';
-
-export default function Page() {
-  return <Skills {...useActions()} />;
-}
+export { SkillsScreen as default } from '@jian/ui';
