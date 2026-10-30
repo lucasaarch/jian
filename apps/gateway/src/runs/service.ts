@@ -263,6 +263,7 @@ export class Runs {
           role: 'user',
           content: data.text,
           ...(author ? { author } : {}),
+          ...(options.purpose ? { purpose: options.purpose } : {}),
           createdAt: nowIso(this.clock),
         });
 
@@ -373,6 +374,7 @@ export class Runs {
         role: 'user',
         content: data.text,
         ...(author ? { author } : {}),
+        ...(options.purpose ? { purpose: options.purpose } : {}),
         createdAt: nowIso(this.clock),
       };
 

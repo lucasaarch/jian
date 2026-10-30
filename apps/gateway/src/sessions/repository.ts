@@ -211,7 +211,10 @@ export async function lastMessages(
       createdAt: messages.createdAt,
     })
     .from(messages)
-    .where(eq(messages.profileId, profileId))
+    // A note telling the agent to carry on was never said in the conversation.
+    .where(
+      and(eq(messages.profileId, profileId), sql`${messages.purpose} IS DISTINCT FROM 'resume'`),
+    )
     .orderBy(messages.sessionId, desc(messages.createdAt));
 
   return new Map(rows.map(({ sessionId, ...last }) => [sessionId, last]));

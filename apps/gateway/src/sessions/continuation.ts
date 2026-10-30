@@ -82,7 +82,8 @@ export class ObjectiveContinuation {
           // Summary only — never re-inject a stored shell dump or stack as the wake text.
           text: objectiveContinuePrompt(objective.text),
         },
-        { transaction: tx },
+        // The gateway's nudge, not the owner's words: the agent reads it, the chat does not.
+        { transaction: tx, purpose: 'resume' },
       );
 
       await this.deliveries?.deliverRun(run.profileId, run.sessionId, followUp.id, tx);
