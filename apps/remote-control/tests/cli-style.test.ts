@@ -14,13 +14,13 @@ test('formatSuccessBlock uses a clear headline and indented facts without color 
     headline: 'Installed Jian Remote',
     facts: [
       ['Service', 'LaunchAgent started'],
-      ['Config', '/Users/lucas/.config/jian-remote/config.json'],
+      ['Config', '/Users/theo/.config/jian-remote/config.json'],
     ],
     color: false,
   });
   assert.match(text, /^✓ Installed Jian Remote\n/);
   assert.match(text, / {2}Service\s+LaunchAgent started/);
-  assert.match(text, / {2}Config\s+\/Users\/lucas\/\.config\/jian-remote\/config\.json/);
+  assert.match(text, / {2}Config\s+\/Users\/theo\/\.config\/jian-remote\/config\.json/);
   assert.equal(stripAnsi(text), text);
 });
 

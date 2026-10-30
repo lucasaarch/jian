@@ -923,7 +923,7 @@ describe('a Telegram group', () => {
           update_id: 900,
           message: {
             from: { id: 42, first_name: 'Ada' },
-            chat: { id: -500, type: 'supergroup', title: 'Equipe' },
+            chat: { id: -500, type: 'supergroup', title: 'Team' },
             new_chat_members: [{ id: 700, is_bot: true }],
           },
         },
@@ -943,7 +943,7 @@ describe('a Telegram group', () => {
             from: { id: 42, first_name: 'Ada' },
             chat: { id: 99 },
             photo: [{ file_id: 'x' }],
-            caption: 'olha isso',
+            caption: 'look at this',
           },
         },
       });
@@ -962,7 +962,7 @@ describe('a Telegram group', () => {
       update_id: id,
       message: {
         from: { id: 42, first_name: 'Ada' },
-        chat: { id: -500, type: 'supergroup', title: 'Equipe' },
+        chat: { id: -500, type: 'supergroup', title: 'Team' },
         text,
         ...extra,
       },
@@ -978,26 +978,26 @@ describe('a Telegram group', () => {
       });
 
     try {
-      await receive(1, 'oi');
+      await receive(1, 'hi');
       const [room] = await f.channels.contacts(f.profile.id);
 
       if (!room) throw new Error('Group request missing');
       await f.channels.approveContact(f.profile.id, room.id);
 
       // Written about the agent, not to it: read, and left unanswered.
-      expect(await receive(2, 'o P vem hoje?')).toMatchObject({
+      expect(await receive(2, 'is P coming today?')).toMatchObject({
         accepted: false,
         silence: 'unaddressed',
       });
 
       expect(
-        await receive(3, '@ZeroTwoBot vem hoje?', {
+        await receive(3, '@ZeroTwoBot are you coming today?', {
           entities: [{ type: 'mention', offset: 0, length: 11 }],
         }),
       ).toMatchObject({ accepted: true, runId: expect.any(String) });
 
       expect(
-        await receive(4, 'e amanhã?', { reply_to_message: { from: { id: 700 } } }),
+        await receive(4, 'and tomorrow?', { reply_to_message: { from: { id: 700 } } }),
       ).toMatchObject({ accepted: true, runId: expect.any(String) });
     } finally {
       await f.app.close();
@@ -1038,7 +1038,7 @@ describe('what a chat sees while the agent is still working', () => {
       await f.services.lifecycle.progress(run.id, 'worker', {
         phase: 'tool',
         tool: 'read_memories',
-        text: 'Deixa eu ver',
+        text: 'Let me check',
         steps: 1,
         updatedAt: new Date().toISOString(),
       });
@@ -1053,7 +1053,7 @@ describe('what a chat sees while the agent is still working', () => {
         run.id,
         'worker',
         'completed',
-        'Verifiquei aqui.\n\nEstá tudo certo, pode seguir.',
+        'I checked.\n\nEverything is fine, go ahead.',
       );
       await f.channels.dispatch();
 
@@ -1062,7 +1062,7 @@ describe('what a chat sees while the agent is still working', () => {
         .slice(beforeAnswer)
         .map((call) => call.body.text);
 
-      expect(sends).toEqual(['Verifiquei aqui.', 'Está tudo certo, pode seguir.']);
+      expect(sends).toEqual(['I checked.', 'Everything is fine, go ahead.']);
       expect(JSON.stringify(calls)).not.toContain('read_memories');
 
       const delivery = (await f.channels.deliveries(f.profile.id)).find(
@@ -1122,7 +1122,7 @@ describe('when Telegram refuses for flood control', () => {
       if (!run) throw new Error('Run missing');
 
       await f.services.lifecycle.claim(run.id, f.profile.id, 'worker');
-      await f.services.lifecycle.finish(f.profile.id, run.id, 'worker', 'completed', 'A resposta.');
+      await f.services.lifecycle.finish(f.profile.id, run.id, 'worker', 'completed', 'The answer.');
 
       // Refused: nothing left the gateway, so the answer stays queued instead of being lost.
       await f.channels.dispatch();
@@ -1143,7 +1143,7 @@ describe('when Telegram refuses for flood control', () => {
       now += 31_000;
       await f.channels.dispatch();
 
-      expect(sends.filter((text) => text === 'A resposta.')).toEqual(['A resposta.']);
+      expect(sends.filter((text) => text === 'The answer.')).toEqual(['The answer.']);
       expect(
         (await f.channels.deliveries(f.profile.id)).find((item) => item.runId === run.id)?.status,
       ).toBe('sent');
@@ -1258,14 +1258,14 @@ describe('markdown in a bubble that cannot draw it', () => {
         run.id,
         'worker',
         'completed',
-        '## Planos\n\n| Plano | Preco |\n| --- | --- |\n| Pro | R$ 90 |\n\nO **Pro** vale mais.',
+        '## Plans\n\n| Plan | Price |\n| --- | --- |\n| Pro | $90 |\n\nThe **Pro** is worth more.',
       );
       await f.channels.dispatch();
 
       const answer = sends.join('\n\n');
 
-      expect(answer).toContain('Pro\nPreco: R$ 90');
-      expect(answer).toContain('O Pro vale mais.');
+      expect(answer).toContain('Pro\nPrice: $90');
+      expect(answer).toContain('The Pro is worth more.');
       expect(answer).not.toContain('|');
       expect(answer).not.toContain('**');
       expect(answer).not.toContain('##');
@@ -1401,8 +1401,8 @@ describe('agents in the same Telegram group', () => {
           payload: {
             update_id: update,
             message: {
-              from: { id: 42, first_name: 'Lucas' },
-              chat: { id: -500, type: 'supergroup', title: 'Equipe' },
+              from: { id: 42, first_name: 'Theo' },
+              chat: { id: -500, type: 'supergroup', title: 'Team' },
               text,
               entities,
             },
@@ -1419,7 +1419,7 @@ describe('agents in the same Telegram group', () => {
       await channels.dispatch();
     };
 
-    await person('oi');
+    await person('hi');
     for (const agent of [miku, zero]) {
       const [room] = await channels.contacts(agent.profile.id);
 
@@ -1427,15 +1427,15 @@ describe('agents in the same Telegram group', () => {
       await channels.approveContact(agent.profile.id, room.id);
     }
 
-    await person('@miku_bot os links dos épicos', [{ type: 'mention', offset: 0, length: 9 }]);
+    await person('@miku_bot the links to the epics', [{ type: 'mention', offset: 0, length: 9 }]);
 
     // Miku says two paragraphs while working, sent as they come, then ends with the last one.
     const [working] = await services.runs.activities(miku.profile.id);
 
     if (!working) throw new Error('Run missing');
     await services.lifecycle.claim(working.id, miku.profile.id, 'worker');
-    await services.lifecycle.say(miku.profile.id, working.id, 'worker', 'Há dois épicos:');
-    await services.lifecycle.say(miku.profile.id, working.id, 'worker', '#299 Compatibilidade');
+    await services.lifecycle.say(miku.profile.id, working.id, 'worker', 'There are two epics:');
+    await services.lifecycle.say(miku.profile.id, working.id, 'worker', '#299 Compatibility');
     await channels.dispatch();
     await services.lifecycle.finish(
       miku.profile.id,
@@ -1453,14 +1453,16 @@ describe('agents in the same Telegram group', () => {
     const heard = await services.sessions.messages(zero.profile.id, zeroRoom.sessionId, 20);
 
     expect(heard.map((message) => message.content)).toContain(
-      'Miku: Há dois épicos:\n\n#299 Compatibilidade\n\n#300 Aliases',
+      'Miku: There are two epics:\n\n#299 Compatibility\n\n#300 Aliases',
     );
     // Heard, not called: Zero Two stays quiet.
     expect(await services.runs.activities(zero.profile.id)).toEqual([]);
 
     // An agent calls another by name, which only reaches it through the gateway here.
-    await person('@miku_bot pede pra Zero Two enviar', [{ type: 'mention', offset: 0, length: 9 }]);
-    await answer(miku.profile.id, 'Zero Two, manda os épicos pro Moabe.');
+    await person('@miku_bot ask Zero Two to send them', [
+      { type: 'mention', offset: 0, length: 9 },
+    ]);
+    await answer(miku.profile.id, 'Zero Two, send the epics to Nora.');
 
     const [called] = await services.runs.activities(zero.profile.id);
 
@@ -1509,7 +1511,7 @@ describe('contact pictures', () => {
       channels.receive(channel.id, {
         type: 'telegram',
         headers: { 'x-telegram-bot-api-secret-token': channel.webhookToken },
-        payload: { update_id: id, message: { from: { id: 42 }, chat: { id: 42 }, text: 'Oi' } },
+        payload: { update_id: id, message: { from: { id: 42 }, chat: { id: 42 }, text: 'Hi' } },
       });
 
     await write(1);
@@ -1577,7 +1579,7 @@ describe('who wrote in a group', () => {
           update_id: id,
           message: {
             from,
-            chat: { id: -500, type: 'supergroup', title: 'Equipe' },
+            chat: { id: -500, type: 'supergroup', title: 'Team' },
             text,
             ...(text.startsWith('@')
               ? { entities: [{ type: 'mention', offset: 0, length: 11 }] }
@@ -1586,7 +1588,7 @@ describe('who wrote in a group', () => {
         },
       });
 
-    await write(1, { id: 42, first_name: 'Ada' }, 'oi');
+    await write(1, { id: 42, first_name: 'Ada' }, 'hi');
     const [room] = await channels.contacts(profile.id);
 
     if (!room) throw new Error('Group request missing');
@@ -1594,8 +1596,8 @@ describe('who wrote in a group', () => {
     const sessionId = approved.sessionId ?? '';
 
     // One heard without being called, one addressed to the agent: both carry their author.
-    await write(2, { id: 43, first_name: 'Bia' }, 'bom dia');
-    await write(3, { id: 42, first_name: 'Ada' }, '@ZeroTwoBot resume?');
+    await write(2, { id: 43, first_name: 'Bia' }, 'good morning');
+    await write(3, { id: 42, first_name: 'Ada' }, '@ZeroTwoBot sum it up?');
 
     const authored = (await services.sessions.messages(profile.id, sessionId)).filter(
       (message) => message.author,

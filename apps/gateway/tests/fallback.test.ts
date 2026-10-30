@@ -71,7 +71,7 @@ describe('a profile with a provider but no model chosen', () => {
     const session = await services.sessions.createSession(profile.id, { title: 'First' });
 
     const run = await services.runs.submit(profile.id, session.id, {
-      text: 'Oi',
+      text: 'Hi',
       requestKey: 'first',
     });
 
@@ -125,7 +125,7 @@ describe('a profile with a provider but no model chosen', () => {
 
     const session = await services.sessions.createSession(profile.id, { title: 'Chosen' });
     const run = await services.runs.submit(profile.id, session.id, {
-      text: 'Oi',
+      text: 'Hi',
       requestKey: 'chosen',
     });
 

@@ -82,7 +82,7 @@ async function toolsFor(allowShell: boolean) {
   });
   const session = await services.sessions.createSession(profile.id, { title: 'Shell' });
   const run = await services.runs.submit(profile.id, session.id, {
-    text: 'Oi',
+    text: 'Hi',
     requestKey: 'one',
   });
 
@@ -120,7 +120,7 @@ describe('running commands on the machine the gateway runs on', () => {
   it('reports what a command printed and how it ended', async () => {
     const { tools } = await toolsFor(true);
 
-    expect(await sh(tools.run_command, 'echo oi')).toMatchObject({ exitCode: 0, stdout: 'oi\n' });
+    expect(await sh(tools.run_command, 'echo hi')).toMatchObject({ exitCode: 0, stdout: 'hi\n' });
 
     // A failure is a result to read, not an error that ends the run.
     expect(await sh(tools.run_command, 'exit 3')).toMatchObject({ exitCode: 3 });
@@ -212,20 +212,20 @@ describe('running commands on the machine the gateway runs on', () => {
 
   it('reads, writes and lists paths in the workspace', async () => {
     const { tools, home } = await toolsFor(true);
-    const file = join(home, 'nota.txt');
+    const file = join(home, 'note.txt');
 
-    await call(tools.write_file, { path: file, content: 'primeira linha\n' });
+    await call(tools.write_file, { path: file, content: 'first line\n' });
 
     expect(await call(tools.read_file, { path: file, offset: 1, limit: 2000 })).toMatchObject({
       totalLines: 1,
-      content: '1\tprimeira linha',
+      content: '1\tfirst line',
     });
 
-    await call(tools.write_file, { path: file, content: 'segunda' });
+    await call(tools.write_file, { path: file, content: 'second' });
 
-    expect(readFileSync(file, 'utf8')).toBe('segunda');
+    expect(readFileSync(file, 'utf8')).toBe('second');
     expect(await call(tools.list_directory, { path: home })).toMatchObject({
-      entries: expect.arrayContaining([{ name: 'nota.txt', kind: 'file' }]),
+      entries: expect.arrayContaining([{ name: 'note.txt', kind: 'file' }]),
     });
   });
 

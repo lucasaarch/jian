@@ -15,7 +15,7 @@ every time. The tools are in the \`skills\` group; load it with \`load_tools\`:
 - A **fact** — about a person, a decision, a preference — is a memory.
 - A **way of doing something** that repeats — steps, an order, a format, checks — is a skill.
 
-"Lucas likes the weekly summary on Mondays" is a memory. "How to write the weekly summary:
+"Theo likes the weekly summary on Mondays" is a memory. "How to write the weekly summary:
 what to gather, in what order, what to leave out" is a skill. If you find memories that are
 really a procedure, turn them into one skill and delete the memories.
 

@@ -19,9 +19,7 @@ GEMINI_API_TOKEN=
 `;
 try {
   await writeFile(new URL('../.env', import.meta.url), contents, { mode: 0o600, flag: 'wx' });
-  console.log(
-    '.env criado com credenciais locais. Configure a chave do provider antes de executar agentes.',
-  );
+  console.log('.env created with local credentials. Set the provider key before running agents.');
 } catch (error) {
   if (error.code === 'EEXIST') {
     const path = new URL('../.env', import.meta.url);
@@ -29,7 +27,7 @@ try {
     if (!/^\s*(?:export\s+)?JIAN_MASTER_KEYS\s*=/m.test(existing)) {
       await appendFile(path, `\nJIAN_ACTIVE_KEY_ID=v1\nJIAN_MASTER_KEYS='${masterKeys}'\n`);
       await chmod(path, 0o600);
-      console.log('Cofre configurado em .env; configurações existentes preservadas.');
-    } else console.log('.env já existe; nenhuma alteração feita.');
+      console.log('Vault configured in .env; existing settings kept.');
+    } else console.log('.env already exists; nothing changed.');
   } else throw error;
 }

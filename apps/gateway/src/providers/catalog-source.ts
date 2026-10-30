@@ -204,7 +204,7 @@ export class ModelCatalog {
 
       return { byProvider, fetchedAt: this.clock() };
     } catch (error) {
-      this.report(error instanceof Error ? error.message : 'erro desconhecido');
+      this.report(error instanceof Error ? error.message : 'unknown error');
 
       return undefined;
     }

@@ -93,7 +93,7 @@ export function commandEnvironment(
 
 function clip(text: string, limit: number): string {
   return text.length > limit
-    ? `${text.slice(0, limit)}\n… ${text.length - limit} caracteres omitidos`
+    ? `${text.slice(0, limit)}\n… ${text.length - limit} characters omitted`
     : text;
 }
 

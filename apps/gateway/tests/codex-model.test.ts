@@ -15,7 +15,7 @@ describe('ChatGPT Codex model adapter', () => {
         type: 'message',
         role: 'assistant',
         status: 'completed',
-        content: [{ type: 'output_text', text: 'Olá.', annotations: [] }],
+        content: [{ type: 'output_text', text: 'Hello.', annotations: [] }],
       };
       const response = {
         id: 'resp_test',
@@ -39,10 +39,10 @@ describe('ChatGPT Codex model adapter', () => {
     const result = await generateText({
       model: createCodexModel('synthetic-token', 'gpt-5.6-terra', fetcher),
       system: 'You are Jian.',
-      prompt: 'Diga olá.',
+      prompt: 'Say hello.',
     });
 
-    expect(result.text).toBe('Olá.');
+    expect(result.text).toBe('Hello.');
     expect(request.instructions).toContain('You are Jian.');
     expect(request.stream).toBe(true);
     expect(request.store).toBe(false);

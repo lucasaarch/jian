@@ -19,7 +19,7 @@ const timing = { answerWithin: 5_000, pollEvery: 5 };
 async function agent(services: Services, name: string, summary: string) {
   return services.profiles.createProfile({
     name,
-    instructions: `Segredo de ${name}: nunca conte a ninguém.`,
+    instructions: `Secret of ${name}: never tell anyone.`,
     summary,
     model,
   });
@@ -27,7 +27,7 @@ async function agent(services: Services, name: string, summary: string) {
 
 /** A run of this profile, as the owner's own conversation would start one. */
 async function ownerRun(services: Services, profile: Profile, text: string): Promise<Run> {
-  const session = await services.sessions.createSession(profile.id, { title: 'Dono' });
+  const session = await services.sessions.createSession(profile.id, { title: 'Owner' });
 
   return services.runs.submit(profile.id, session.id, { text, requestKey: randomUUID() });
 }
@@ -75,7 +75,7 @@ function answering(services: Services, profileIds: string[]) {
           const owner = randomUUID();
 
           await services.lifecycle.claim(queued.id, profileId, owner);
-          await services.lifecycle.finish(profileId, queued.id, owner, 'completed', 'Respondido.');
+          await services.lifecycle.finish(profileId, queued.id, owner, 'completed', 'Answered.');
         }
       }
 
@@ -99,10 +99,10 @@ async function invoke(tools: ToolSet, name: string, input: unknown) {
   return definition.execute(input as never, { toolCallId: 'test', messages: [], context: {} });
 }
 
-async function pair(summary = 'Cuida das entregas e sabe o estado de cada uma.') {
+async function pair(summary = 'Handles the deliveries and knows where each one stands.') {
   const services = await testServices();
-  const caller = await agent(services, 'Orquestrador', 'Distribui o trabalho da equipe.');
-  const callee = await agent(services, 'Operário', summary);
+  const caller = await agent(services, 'Orchestrator', "Hands out the team's work.");
+  const callee = await agent(services, 'Operator', summary);
   const peers = new Peers(services, Date.now, timing);
 
   return { services, caller, callee, peers };
@@ -114,7 +114,7 @@ describe('conversation between profiles', () => {
 
     await services.memories.remember(
       callee.id,
-      { key: 'contrato', content: 'Cláusula confidencial do operário', expectedVersion: 0 },
+      { key: 'contract', content: 'Confidential clause of the operator', expectedVersion: 0 },
       undefined,
     );
 
@@ -123,43 +123,43 @@ describe('conversation between profiles', () => {
     expect(found).toEqual([
       {
         id: callee.id,
-        name: 'Operário',
-        summary: 'Cuida das entregas e sabe o estado de cada uma.',
+        name: 'Operator',
+        summary: 'Handles the deliveries and knows where each one stands.',
       },
     ]);
 
     // Name and summary are the whole card: no instructions, identity, skills or memory.
-    expect(JSON.stringify(found)).not.toContain('Segredo');
-    expect(JSON.stringify(found)).not.toContain('Cláusula');
+    expect(JSON.stringify(found)).not.toContain('Secret');
+    expect(JSON.stringify(found)).not.toContain('Confidential clause');
     expect(await peers.agents(callee.id)).toEqual([
-      { id: caller.id, name: 'Orquestrador', summary: 'Distribui o trabalho da equipe.' },
+      { id: caller.id, name: 'Orchestrator', summary: "Hands out the team's work." },
     ]);
   });
 
   it('answers a colleague with text while every record stays on its own side', async () => {
     const { services, caller, callee, peers } = await pair();
-    const run = await ownerRun(services, caller, 'Como está a entrega?');
+    const run = await ownerRun(services, caller, 'How is the delivery going?');
 
     await services.memories.remember(
       callee.id,
-      { key: 'contrato', content: 'Cláusula confidencial do operário', expectedVersion: 0 },
+      { key: 'contract', content: 'Confidential clause of the operator', expectedVersion: 0 },
       undefined,
     );
 
     const asked = peers.ask(run, {
       toProfileId: callee.id,
-      text: 'Como está a entrega?',
-      requestKey: 'entrega-1',
+      text: 'How is the delivery going?',
+      requestKey: 'delivery-1',
     });
 
-    const answered = await answerOnce(services, callee.id, 'Entregue ontem.');
+    const answered = await answerOnce(services, callee.id, 'Delivered yesterday.');
     const answer = await asked;
 
     expect(answer).toEqual({
       fromProfileId: callee.id,
-      fromName: 'Operário',
+      fromName: 'Operator',
       status: 'answered',
-      text: 'Entregue ontem.',
+      text: 'Delivered yesterday.',
     });
 
     // The session the two share belongs to the called profile and is invisible to the caller.
@@ -185,7 +185,7 @@ describe('conversation between profiles', () => {
     );
 
     const kept = await new Coordination(services).storeArtifact(answered, 'remote_search', {
-      value: 'Cláusula confidencial do operário',
+      value: 'Confidential clause of the operator',
     });
 
     const tools = profileTools(services, run);
@@ -202,32 +202,32 @@ describe('conversation between profiles', () => {
       await invoke(tools, 'list_agents', {}),
     ]);
 
-    expect(reachable).not.toContain('Cláusula');
-    expect(reachable).not.toContain('Segredo de Operário');
+    expect(reachable).not.toContain('Confidential clause');
+    expect(reachable).not.toContain('Secret of Operator');
     expect(reachable).not.toContain(shared?.id);
   });
 
   it('keeps one thread per pair so colleagues do not start over', async () => {
     const { services, caller, callee, peers } = await pair();
-    const first = await ownerRun(services, caller, 'Primeira pergunta');
+    const first = await ownerRun(services, caller, 'First question');
 
     const one = peers.ask(first, {
       toProfileId: callee.id,
-      text: 'Qual o estado?',
-      requestKey: 'um',
+      text: 'What is the status?',
+      requestKey: 'one',
     });
 
-    const answeredOne = await answerOnce(services, callee.id, 'Em curso.');
+    const answeredOne = await answerOnce(services, callee.id, 'In progress.');
 
     await one;
 
     const two = peers.ask(first, {
       toProfileId: callee.id,
-      text: 'E agora?',
-      requestKey: 'dois',
+      text: 'And now?',
+      requestKey: 'two',
     });
 
-    const answeredTwo = await answerOnce(services, callee.id, 'Terminado.');
+    const answeredTwo = await answerOnce(services, callee.id, 'Done.');
 
     await two;
 
@@ -238,19 +238,19 @@ describe('conversation between profiles', () => {
       (message) => message.content,
     );
 
-    expect(thread).toEqual(['Qual o estado?', 'Em curso.', 'E agora?', 'Terminado.']);
+    expect(thread).toEqual(['What is the status?', 'In progress.', 'And now?', 'Done.']);
 
     // A third agent gets its own thread with the same colleague; it never joins this one.
-    const other = await agent(services, 'Auditor', 'Confere o que a equipe entrega.');
-    const from = await ownerRun(services, other, 'Confere a entrega');
+    const other = await agent(services, 'Auditor', 'Checks what the team delivers.');
+    const from = await ownerRun(services, other, 'Check the delivery');
 
     const third = peers.ask(from, {
       toProfileId: callee.id,
-      text: 'Está conforme?',
-      requestKey: 'tres',
+      text: 'Is it compliant?',
+      requestKey: 'three',
     });
 
-    const answeredThree = await answerOnce(services, callee.id, 'Está.');
+    const answeredThree = await answerOnce(services, callee.id, 'It is.');
 
     await third;
 
@@ -264,18 +264,18 @@ describe('conversation between profiles', () => {
 
   it('turns concurrent identical calls into one run of the called profile', async () => {
     const { services, caller, callee, peers } = await pair();
-    const run = await ownerRun(services, caller, 'Pergunta simultânea');
+    const run = await ownerRun(services, caller, 'Simultaneous question');
 
     const call = () =>
-      peers.ask(run, { toProfileId: callee.id, text: 'Relatório?', requestKey: 'mesmo' });
+      peers.ask(run, { toProfileId: callee.id, text: 'Report?', requestKey: 'same' });
 
     const both = Promise.all([call(), call()]);
 
-    await answerOnce(services, callee.id, 'Pronto.');
+    await answerOnce(services, callee.id, 'Ready.');
 
     expect(await both).toEqual([
-      { fromProfileId: callee.id, fromName: 'Operário', status: 'answered', text: 'Pronto.' },
-      { fromProfileId: callee.id, fromName: 'Operário', status: 'answered', text: 'Pronto.' },
+      { fromProfileId: callee.id, fromName: 'Operator', status: 'answered', text: 'Ready.' },
+      { fromProfileId: callee.id, fromName: 'Operator', status: 'answered', text: 'Ready.' },
     ]);
 
     expect(await runRows(services.store, callee.id)).toHaveLength(1);
@@ -289,7 +289,7 @@ describe('conversation between profiles', () => {
     const team = [];
 
     for (let index = 0; index <= AGENT_CALL_DEPTH_LIMIT + 1; index++) {
-      team.push(await agent(services, `Agente ${index}`, `Faz a etapa ${index}.`));
+      team.push(await agent(services, `Agent ${index}`, `Does step ${index}.`));
     }
 
     const [first, ...rest] = team;
@@ -299,14 +299,14 @@ describe('conversation between profiles', () => {
     );
 
     try {
-      let caller = await ownerRun(services, first as Profile, 'Começa a cadeia');
+      let caller = await ownerRun(services, first as Profile, 'Start the chain');
       const depths: number[] = [];
 
       for (const next of rest.slice(0, AGENT_CALL_DEPTH_LIMIT)) {
         await peers.ask(caller, {
           toProfileId: next.id,
-          text: 'Continue a cadeia',
-          requestKey: `passo-${next.id}`,
+          text: 'Continue the chain',
+          requestKey: `step-${next.id}`,
         });
 
         const [answered] = await runRows(services.store, next.id);
@@ -323,8 +323,8 @@ describe('conversation between profiles', () => {
       await expect(
         peers.ask(caller, {
           toProfileId: last?.id ?? '',
-          text: 'Mais uma volta',
-          requestKey: 'excedente',
+          text: 'One more round',
+          requestKey: 'over-budget',
         }),
       ).rejects.toThrow(/budget spent/);
 
@@ -336,24 +336,24 @@ describe('conversation between profiles', () => {
 
   it('refuses to reopen a conversation an agent already closed, or to call itself', async () => {
     const { services, caller, callee, peers } = await pair();
-    const run = await ownerRun(services, caller, 'Abre a conversa');
+    const run = await ownerRun(services, caller, 'Open the conversation');
 
     const asked = peers.ask(run, {
       toProfileId: callee.id,
-      text: 'Pode ajudar?',
-      requestKey: 'volta',
+      text: 'Can you help?',
+      requestKey: 'back',
     });
 
-    const answered = await answerOnce(services, callee.id, 'Ajudei.');
+    const answered = await answerOnce(services, callee.id, 'Helped.');
 
     await asked;
 
     await expect(
-      peers.ask(answered, { toProfileId: caller.id, text: 'E você?', requestKey: 'devolta' }),
+      peers.ask(answered, { toProfileId: caller.id, text: 'And you?', requestKey: 'back-again' }),
     ).rejects.toThrow(/already spoke/);
 
     await expect(
-      peers.ask(run, { toProfileId: caller.id, text: 'Eu mesmo', requestKey: 'eu' }),
+      peers.ask(run, { toProfileId: caller.id, text: 'Myself', requestKey: 'self' }),
     ).rejects.toThrow(/cannot call itself/);
 
     expect(await runRows(services.store, caller.id)).toHaveLength(1);
@@ -361,38 +361,38 @@ describe('conversation between profiles', () => {
 
   it('reports a colleague that failed or does not exist instead of staying silent', async () => {
     const { services, caller, callee, peers } = await pair();
-    const run = await ownerRun(services, caller, 'Pede o impossível');
+    const run = await ownerRun(services, caller, 'Ask for the impossible');
 
     const asked = peers.ask(run, {
       toProfileId: callee.id,
-      text: 'Faça o impossível',
-      requestKey: 'falha',
+      text: 'Do the impossible',
+      requestKey: 'failure',
     });
 
     await answerOnce(services, callee.id, 'Provider key is not configured', 'failed');
 
-    await expect(asked).rejects.toThrow(/Operário could not answer/);
+    await expect(asked).rejects.toThrow(/Operator could not answer/);
 
     await expect(
       peers.ask(run, {
         toProfileId: '00000000-0000-4000-8000-000000000001',
-        text: 'Alguém aí?',
-        requestKey: 'ausente',
+        text: 'Anyone there?',
+        requestKey: 'absent',
       }),
     ).rejects.toThrow(/Profile not found/);
   });
 
   it('records the call on both sides so the owner can audit who spoke to whom', async () => {
     const { services, caller, callee, peers } = await pair();
-    const run = await ownerRun(services, caller, 'Fala com o operário');
+    const run = await ownerRun(services, caller, 'Talk to the operator');
 
     const asked = peers.ask(run, {
       toProfileId: callee.id,
-      text: 'Relatório, por favor',
-      requestKey: 'auditoria',
+      text: 'Report, please',
+      requestKey: 'audit',
     });
 
-    const answered = await answerOnce(services, callee.id, 'Segue o relatório.');
+    const answered = await answerOnce(services, callee.id, 'Here is the report.');
 
     await asked;
 
@@ -406,14 +406,14 @@ describe('conversation between profiles', () => {
 
     expect(sent).toHaveLength(1);
     expect(sent[0]?.runId).toBe(run.id);
-    expect(sent[0]?.data).toMatchObject({ toProfileId: callee.id, toName: 'Operário', depth: 1 });
+    expect(sent[0]?.data).toMatchObject({ toProfileId: callee.id, toName: 'Operator', depth: 1 });
 
     expect(received).toHaveLength(1);
     expect(received[0]?.runId).toBe(answered.id);
 
     expect(received[0]?.data).toMatchObject({
       fromProfileId: caller.id,
-      fromName: 'Orquestrador',
+      fromName: 'Orchestrator',
       sessionId: answered.sessionId,
     });
   });
@@ -421,10 +421,10 @@ describe('conversation between profiles', () => {
 
 it('stops waiting on a slow colleague and carries the answer back when it lands', async () => {
   const { services, caller, callee } = await pair();
-  const session = await services.sessions.createSession(caller.id, { title: 'Pedido' });
+  const session = await services.sessions.createSession(caller.id, { title: 'Request' });
 
   const asking = await services.runs.submit(caller.id, session.id, {
-    text: 'Pergunta ao Operário',
+    text: 'Ask the Operator',
     requestKey: 'ask',
   });
 
@@ -433,7 +433,7 @@ it('stops waiting on a slow colleague and carries the answer back when it lands'
 
   const answer = await impatient.ask(await services.runs.run(caller.id, asking.id), {
     toProfileId: callee.id,
-    text: 'Como está a entrega?',
+    text: 'How is the delivery going?',
     requestKey: 'slow',
   });
 
@@ -445,16 +445,22 @@ it('stops waiting on a slow colleague and carries the answer back when it lands'
   // The asking turn is over by the time a late answer lands; while it is still going the
   // answer joins it as a redirect instead, which is the same door the owner writes through.
   await services.lifecycle.claim(asking.id, caller.id, 'caller');
-  await services.lifecycle.finish(caller.id, asking.id, 'caller', 'completed', 'Perguntei.');
+  await services.lifecycle.finish(caller.id, asking.id, 'caller', 'completed', 'Asked.');
 
   await services.lifecycle.claim(pending.id, callee.id, 'worker');
-  await services.lifecycle.finish(callee.id, pending.id, 'worker', 'completed', 'Entregue ontem.');
+  await services.lifecycle.finish(
+    callee.id,
+    pending.id,
+    'worker',
+    'completed',
+    'Delivered yesterday.',
+  );
   await impatient.deliverLate(callee.id, pending.id);
 
   const carried = (await services.runs.activities(caller.id)).find((item) => item.id !== asking.id);
 
   expect(carried?.sessionId).toBe(session.id);
-  expect(carried?.input).toContain('Entregue ontem.');
+  expect(carried?.input).toContain('Delivered yesterday.');
 
   // Addressed once: a second pass must not start the conversation again.
   await impatient.deliverLate(callee.id, pending.id);

@@ -7,10 +7,10 @@ import {
 } from '../src/macos-app.ts';
 
 test('macosAppBundlePaths put Jian Remote.app under Application Support', () => {
-  const paths = macosAppBundlePaths('/Users/lucas');
+  const paths = macosAppBundlePaths('/Users/theo');
   assert.equal(
     paths.appRoot,
-    '/Users/lucas/Library/Application Support/Jian Remote/Jian Remote.app',
+    '/Users/theo/Library/Application Support/Jian Remote/Jian Remote.app',
   );
   assert.equal(paths.executable, `${paths.appRoot}/Contents/MacOS/Jian Remote`);
   assert.equal(paths.libDir, `${paths.appRoot}/Contents/lib`);
@@ -30,18 +30,18 @@ test('LaunchAgent points at the app binary and associates the bundle id', () => 
   const xml = buildLaunchAgentPlist({
     label: 'com.jian.remote',
     executable:
-      '/Users/lucas/Library/Application Support/Jian Remote/Jian Remote.app/Contents/MacOS/Jian Remote',
-    script: '/Users/lucas/.config/jian-remote/jian-remote.mjs',
-    logPath: '/Users/lucas/.config/jian-remote/worker.log',
-    home: '/Users/lucas',
+      '/Users/theo/Library/Application Support/Jian Remote/Jian Remote.app/Contents/MacOS/Jian Remote',
+    script: '/Users/theo/.config/jian-remote/jian-remote.mjs',
+    logPath: '/Users/theo/.config/jian-remote/worker.log',
+    home: '/Users/theo',
     tmpDir: '/tmp',
   });
   assert.match(xml, /<key>Label<\/key>\s*<string>com\.jian\.remote<\/string>/);
   assert.match(
     xml,
-    /<string>\/Users\/lucas\/Library\/Application Support\/Jian Remote\/Jian Remote\.app\/Contents\/MacOS\/Jian Remote<\/string>/,
+    /<string>\/Users\/theo\/Library\/Application Support\/Jian Remote\/Jian Remote\.app\/Contents\/MacOS\/Jian Remote<\/string>/,
   );
-  assert.match(xml, /<string>\/Users\/lucas\/\.config\/jian-remote\/jian-remote\.mjs<\/string>/);
+  assert.match(xml, /<string>\/Users\/theo\/\.config\/jian-remote\/jian-remote\.mjs<\/string>/);
   assert.match(xml, /<string>run<\/string>/);
   assert.doesNotMatch(xml, /\/usr\/local\/bin\/node/);
   assert.match(xml, /<key>AssociatedBundleIdentifiers<\/key>/);
@@ -52,8 +52,8 @@ test('LaunchAgent points at the app binary and associates the bundle id', () => 
     xml,
     /<key>PATH<\/key>\s*<string>\/usr\/local\/bin:\/opt\/homebrew\/bin:\/usr\/bin:\/bin/,
   );
-  assert.match(xml, /<key>HOME<\/key>\s*<string>\/Users\/lucas<\/string>/);
-  assert.match(xml, /<key>WorkingDirectory<\/key>\s*<string>\/Users\/lucas<\/string>/);
+  assert.match(xml, /<key>HOME<\/key>\s*<string>\/Users\/theo<\/string>/);
+  assert.match(xml, /<key>WorkingDirectory<\/key>\s*<string>\/Users\/theo<\/string>/);
   assert.match(xml, /<key>ThrottleInterval<\/key>\s*<integer>10<\/integer>/);
   assert.match(xml, /<key>KeepAlive<\/key>\s*<true\/>/);
 });

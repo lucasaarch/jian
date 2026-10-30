@@ -4,49 +4,49 @@ import { plainText } from '../src/channels/plain.js';
 describe('what a bubble that does not render markdown receives', () => {
   it('turns a table into rows a phone can read', () => {
     const answer = [
-      'Os dois planos:',
+      'The two plans:',
       '',
-      '| Plano | Preço | Prazo |',
+      '| Plan | Price | Term |',
       '| --- | ---: | --- |',
-      '| Básico | R$ 30 | 12 meses |',
-      '| Pro | R$ 90 | 24 meses |',
+      '| Basic | $30 | 12 months |',
+      '| Pro | $90 | 24 months |',
     ].join('\n');
 
     // One message, not one per row: a blank line between rows is a message boundary, and a
     // table of twelve rows became twelve notifications.
     expect(plainText(answer)).toBe(
       [
-        'Os dois planos:',
+        'The two plans:',
         '',
-        'Básico',
-        'Preço: R$ 30',
-        'Prazo: 12 meses',
+        'Basic',
+        'Price: $30',
+        'Term: 12 months',
         '—',
         'Pro',
-        'Preço: R$ 90',
-        'Prazo: 24 meses',
+        'Price: $90',
+        'Term: 24 months',
       ].join('\n'),
     );
   });
 
   it('drops the marks that would arrive as punctuation', () => {
-    expect(plainText('# Título\n\n**Isso** é _importante_ e `exato`.')).toBe(
-      'Título\n\nIsso é importante e exato.',
+    expect(plainText('# Title\n\n**This** is _important_ and `exact`.')).toBe(
+      'Title\n\nThis is important and exact.',
     );
   });
 
   it('keeps the code inside a fence and loses only the fence', () => {
-    expect(plainText('Rode isto:\n\n```bash\nmake up\n```')).toBe('Rode isto:\n\nmake up');
+    expect(plainText('Run this:\n\n```bash\nmake up\n```')).toBe('Run this:\n\nmake up');
   });
 
   it('keeps a list readable and names a link instead of hiding it', () => {
-    expect(plainText('- Um\n- [Docs](https://exemplo.com)')).toBe(
-      '• Um\n• Docs: https://exemplo.com',
+    expect(plainText('- One\n- [Docs](https://example.com)')).toBe(
+      '• One\n• Docs: https://example.com',
     );
   });
 
   it('leaves ordinary text alone, asterisks and underscores included', () => {
-    const answer = 'O arquivo é run_agent.py e o preço subiu 3 * 2 vezes.';
+    const answer = 'The file is run_agent.py and the price went up 3 * 2 times.';
 
     expect(plainText(answer)).toBe(answer);
   });

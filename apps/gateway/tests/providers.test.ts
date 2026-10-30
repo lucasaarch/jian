@@ -224,8 +224,8 @@ it('sends the Claude Code identity as a system block of its own', async () => {
   await expect(
     generateText({
       model,
-      system: withClaudeCodeIdentity('Você é Zero Two.'),
-      prompt: 'Oi',
+      system: withClaudeCodeIdentity('You are Zero Two.'),
+      prompt: 'Hi',
       maxRetries: 0,
     }),
   ).rejects.toThrow();
@@ -234,7 +234,7 @@ it('sends the Claude Code identity as a system block of its own', async () => {
   // refused, and the same text split in two is accepted.
   expect(sent.system).toEqual([
     { type: 'text', text: CLAUDE_CODE_IDENTITY },
-    { type: 'text', text: 'Você é Zero Two.' },
+    { type: 'text', text: 'You are Zero Two.' },
   ]);
 });
 
@@ -318,7 +318,7 @@ it('keeps a prefix for an hour when a person is the one answering', async () => 
   await expect(
     generateText({
       model,
-      messages: cacheable([{ role: 'user', content: 'Oi' }], '1h'),
+      messages: cacheable([{ role: 'user', content: 'Hi' }], '1h'),
       maxRetries: 0,
     }),
   ).rejects.toThrow();

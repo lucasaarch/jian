@@ -128,8 +128,8 @@ describe('media providers', () => {
       expect(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe(
         'Leda',
       );
-      expect(body.contents[0].parts[0].text).toContain('Speaking style: Meiga e alegre.');
-      expect(body.contents[0].parts[0].text).toMatch(/text aloud.*Olá$/s);
+      expect(body.contents[0].parts[0].text).toContain('Speaking style: Gentle and cheerful.');
+      expect(body.contents[0].parts[0].text).toMatch(/text aloud.*Hello$/s);
       return Response.json({
         candidates: [
           {
@@ -151,11 +151,11 @@ describe('media providers', () => {
       'speech',
       { provider: 'google', modelId: 'gemini-2.5-flash-preview-tts' },
       'synthetic-key',
-      'Olá',
+      'Hello',
       'leda',
       signal,
       undefined,
-      'Meiga e alegre.',
+      'Gentle and cheerful.',
     );
     expect(audio.mimeType).toBe('audio/wav');
     expect(Buffer.from(audio.data, 'base64').subarray(0, 4).toString()).toBe('RIFF');
@@ -172,7 +172,7 @@ describe('media providers', () => {
         'speech',
         { provider: 'google', modelId: 'gemini-2.5-flash-preview-tts' },
         'synthetic-key',
-        'Olá',
+        'Hello',
         'shimmer',
         signal,
       ),
@@ -183,7 +183,7 @@ describe('media providers', () => {
   it('keeps speaking instructions separate from the text with OpenAI speech', async () => {
     const client = new MediaProviders(async (_url, options) => {
       expect(JSON.parse(String(options?.body))).toMatchObject({
-        input: 'Olá',
+        input: 'Hello',
         voice: 'nova',
         instructions: 'Speak cheerfully.',
       });
@@ -193,7 +193,7 @@ describe('media providers', () => {
       'speech',
       { provider: 'openai', modelId: 'gpt-4o-mini-tts' },
       'synthetic-key',
-      'Olá',
+      'Hello',
       'Nova',
       signal,
       undefined,
@@ -209,7 +209,7 @@ describe('media providers', () => {
         'speech',
         { provider: 'openai', modelId: 'tts-1' },
         'synthetic-key',
-        'Olá',
+        'Hello',
         'marin',
         signal,
       ),
@@ -223,7 +223,7 @@ describe('media providers', () => {
         'speech',
         { provider: 'openai', modelId: 'tts-1-hd' },
         'synthetic-key',
-        'Olá',
+        'Hello',
         undefined,
         signal,
         undefined,
@@ -388,13 +388,15 @@ it('transcribes an incoming voice note once and reuses the transcript on later s
     f.services.gatewayVault,
     async () => {
       calls++;
-      return Response.json({ candidates: [{ content: { parts: [{ text: 'Que horas são?' }] } }] });
+      return Response.json({
+        candidates: [{ content: { parts: [{ text: 'What time is it?' }] } }],
+      });
     },
   );
   for (let index = 0; index < 2; index++) {
     const messages: ModelMessage[] = [{ role: 'user', content: run.input }];
     await media.prepare(messages, run, AbortSignal.timeout(1000));
-    expect(JSON.stringify(messages)).toContain('Que horas são?');
+    expect(JSON.stringify(messages)).toContain('What time is it?');
   }
   expect(calls).toBe(1);
 });
@@ -484,7 +486,7 @@ it('carries an attachment reply into the conversation that asked the contact', a
 it('accounts for audio input and reasoning reported by Gemini', async () => {
   const client = new MediaProviders(async () =>
     Response.json({
-      candidates: [{ content: { parts: [{ text: 'A reunião começa às três.' }] } }],
+      candidates: [{ content: { parts: [{ text: 'The meeting starts at three.' }] } }],
       usageMetadata: {
         promptTokenCount: 88,
         candidatesTokenCount: 8,
@@ -520,7 +522,7 @@ it('uses the incoming audio model for both voice notes and attached audio files'
     transcription: { providerId: provider.id, modelId: 'gemini-legacy-test' },
   });
   await f.incoming(
-    'Ouça os dois',
+    'Listen to both',
     'two-audios',
     [true, false].map((voice) => ({
       mimeType: 'audio/ogg' as const,
@@ -544,13 +546,15 @@ it('uses the incoming audio model for both voice notes and attached audio files'
       expect(prompt).toContain('Do not summarize');
       expect(prompt).toContain('sounds');
       return Response.json({
-        candidates: [{ content: { parts: [{ text: 'Que horas são? [Campainha ao fundo.]' }] } }],
+        candidates: [
+          { content: { parts: [{ text: 'What time is it? [Doorbell in the background.]' }] } },
+        ],
       });
     },
   );
   const messages: ModelMessage[] = [{ role: 'user', content: run.input }];
   await media.prepare(messages, run, AbortSignal.timeout(1000));
-  expect(JSON.stringify(messages).match(/Que horas são/g)).toHaveLength(2);
+  expect(JSON.stringify(messages).match(/What time is it/g)).toHaveLength(2);
 });
 
 it('preserves a legacy transcription selection as the incoming audio default', async () => {

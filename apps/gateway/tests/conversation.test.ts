@@ -3,23 +3,23 @@ import { conversational } from '../src/channels/conversation.js';
 
 describe('an answer as a person would send it', () => {
   it('leaves a short reply as one message', () => {
-    expect(conversational('Pode sim.', 4000)).toEqual(['Pode sim.']);
+    expect(conversational('Sure, go ahead.', 4000)).toEqual(['Sure, go ahead.']);
   });
 
   it('sends one message per paragraph the agent wrote', () => {
-    const answer = 'Consegui ver aqui.\n\nO deploy está liberado.\n\nQuer que eu avise o time?';
+    const answer = 'I took a look.\n\nThe deploy is cleared.\n\nShould I let the team know?';
 
     expect(conversational(answer, 4000)).toEqual([
-      'Consegui ver aqui.',
-      'O deploy está liberado.',
-      'Quer que eu avise o time?',
+      'I took a look.',
+      'The deploy is cleared.',
+      'Should I let the team know?',
     ]);
   });
 
   it('keeps a list with nothing but the list, and its intro before it', () => {
-    expect(conversational('Os planos:\n\n• Básico\n• Pro', 4000)).toEqual([
-      'Os planos:',
-      '• Básico\n• Pro',
+    expect(conversational('The plans:\n\n• Basic\n• Pro', 4000)).toEqual([
+      'The plans:',
+      '• Basic\n• Pro',
     ]);
   });
 
@@ -39,11 +39,11 @@ describe('an answer as a person would send it', () => {
 
   it('never turns an answer into a notification storm', () => {
     const parts = conversational(
-      Array.from({ length: 30 }, (_, index) => `Parágrafo ${index}.`).join('\n\n'),
+      Array.from({ length: 30 }, (_, index) => `Paragraph ${index}.`).join('\n\n'),
       4000,
     );
 
     expect(parts).toHaveLength(8);
-    expect(parts.at(-1)).toContain('Parágrafo 29.');
+    expect(parts.at(-1)).toContain('Paragraph 29.');
   });
 });

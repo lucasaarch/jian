@@ -32,7 +32,7 @@ const answer = (text: string) => ({
 
 const TERMINAL_DUMP = [
   'Last login: Tue Oct 20 20:34:42 on ttys001',
-  'lucas@host ~ % curl -fsSL https://example.com/update | bash',
+  'theo@host ~ % curl -fsSL https://example.com/update | bash',
   'node:internal/modules/esm/get_format:218',
   '  throw new ERR_UNKNOWN_FILE_EXTENSION(ext, filepath)',
   '  ^',
@@ -73,8 +73,8 @@ describe('objective text sanitization', () => {
   });
 
   it('keeps a short goal line when a dump also carries one', () => {
-    const mixed = `Fix the remote worker install on Lucas’s laptop\n${TERMINAL_DUMP}`;
-    expect(sanitizeObjectiveText(mixed)).toBe('Fix the remote worker install on Lucas’s laptop');
+    const mixed = `Fix the remote worker install on Theo’s laptop\n${TERMINAL_DUMP}`;
+    expect(sanitizeObjectiveText(mixed)).toBe('Fix the remote worker install on Theo’s laptop');
   });
 
   it('shapes continue prompts around a short Goal summary', () => {
@@ -131,7 +131,7 @@ it('does not auto-seed an objective from casual or task-shaped chat', async () =
   const channel = await services.sessions.createSession(profile.id, { channel: 'whatsapp' });
 
   const casual =
-    'que pena, gostaria de ver uma continuação daquele cliffhanger da série que paramos ontem à noite';
+    'too bad, I wanted to see what comes after that cliffhanger in the show we stopped last night';
   await services.runs.submit(
     profile.id,
     panel.id,
@@ -192,7 +192,7 @@ it('keeps an open objective text when the owner chats again', async () => {
     profile.id,
     session.id,
     {
-      text: 'que pena, gostaria de ver uma continuação daquele cliffhanger da série',
+      text: 'too bad, I wanted to see what comes after that cliffhanger in the show',
       requestKey: 'chat-while-open',
     },
     { ownerMessage: true },
@@ -407,7 +407,7 @@ it('blocks on the owner and reopens when they reply', async () => {
     profile.id,
     session.id,
     {
-      text: 'que pena, gostaria de ver uma continuação — ainda estou pensando no provedor',
+      text: 'too bad, I wanted to see what comes next — still thinking about the provider',
       requestKey: 'reply',
     },
     { ownerMessage: true },
