@@ -1,4 +1,5 @@
 import type { RemoteResult } from '@jian/contracts';
+import { hostWording } from './host.ts';
 import type { Logger } from './log.ts';
 import { STDERR_CAP, STDOUT_CAP } from './shell.ts';
 
@@ -120,14 +121,14 @@ export async function postResult(
           continue;
         }
         log.warn(
-          'result post rejected: HTTP 413 even for a minimal stub. Not retrying. Restart the Jian Remote service or re-run install if the machine stays offline.',
+          `result post rejected: HTTP 413 even for a minimal stub. Not retrying. ${hostWording().restart} if the machine stays offline.`,
         );
         return;
       }
 
       if (PERMANENT_RESULT_STATUS.has(saved.status)) {
         log.warn(
-          `result post rejected: HTTP ${saved.status}. Not retrying. Restart the Jian Remote service or re-run install if the machine stays offline.`,
+          `result post rejected: HTTP ${saved.status}. Not retrying. ${hostWording().restart} if the machine stays offline.`,
         );
         return;
       }
@@ -139,7 +140,7 @@ export async function postResult(
       log.warn(message);
       if (failures >= 40) {
         log.warn(
-          'Gave up posting this result after repeated failures. The gateway task may stay open until the worker recovers; restart the Jian Remote service if Online stays red.',
+          `Gave up posting this result after repeated failures. The gateway task may stay open until the worker recovers. ${hostWording().restart} if Online stays red.`,
         );
         return;
       }

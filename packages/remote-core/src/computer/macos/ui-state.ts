@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { hostWording } from '../../host.ts';
 import type { ComputerAction, Preparation } from '../session.ts';
 import { helperPaths } from './helper.ts';
 import { wakeMacDisplay } from './power.ts';
@@ -78,11 +79,11 @@ const LOCKED_ACTION_HINT =
 function permissionHint(message: string, action: ComputerAction): string {
   if (action === 'screenshot') {
     return /accessib|not permitted|not authorized|Screen Recording/i.test(message)
-      ? ' Jian Remote needs Screen Recording (and Accessibility for input) in System Settings.'
+      ? ` ${hostWording().name} needs Screen Recording (and Accessibility for input) in System Settings.`
       : '';
   }
   return /accessib|not permitted|not authorized/i.test(message)
-    ? ' Jian Remote needs Accessibility (and Screen Recording for screenshots) in System Settings.'
+    ? ` ${hostWording().name} needs Accessibility (and Screen Recording for screenshots) in System Settings.`
     : '';
 }
 

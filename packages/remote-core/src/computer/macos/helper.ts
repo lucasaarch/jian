@@ -4,13 +4,14 @@ import { chmod, copyFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { installHelperBinary, packagedBinary } from '../helper-files.ts';
-import { helpersRoot } from '../helpers.ts';
+import { helpersInstallDir, helpersRoot } from '../helpers.ts';
 
 const HELPER_NAME = 'computer-helper';
 
 /** Where the helper runs from: outside the package, so an update replaces it in one place. */
 export function helperPaths(home = homedir()) {
-  const support = join(home, 'Library', 'Application Support', 'Jian Remote');
+  const support =
+    helpersInstallDir() ?? join(home, 'Library', 'Application Support', 'Jian Remote');
   return {
     support,
     binary: join(support, HELPER_NAME),

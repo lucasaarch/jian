@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import {
+  describeTask,
   executeShellTask,
   formatShellSpawnError,
   resolveShellCwd,
@@ -188,4 +189,26 @@ test('executeShellTask recovers when agent cwd is missing (real spawn)', async (
   assert.equal(result.exitCode, 0, result.stderr);
   assert.match(result.stdout, /recovered/);
   assert.match(result.stderr, /does not exist/);
+});
+
+test('a secret environment reaches the command alone, never the log or what is sent back', async () => {
+  const secret = 'synthetic-secret-token-0123456789';
+  const task = {
+    id: 'task-4',
+    kind: 'shell' as const,
+    command:
+      'printf "%s" "$JIAN_SYNTHETIC_SECRET" && printf "%s" "$JIAN_SYNTHETIC_SECRET" >&2 && test -n "$JIAN_SYNTHETIC_SECRET"',
+    cwd: null,
+    timeoutMs: 10_000,
+    env: { JIAN_SYNTHETIC_SECRET: secret },
+  };
+
+  const result = await executeShellTask(task);
+
+  // The command saw it (its test passed), and both streams came back masked.
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.stdout, '[secret]');
+  assert.equal(result.stderr, '[secret]');
+  assert.doesNotMatch(JSON.stringify(describeTask(task)), /synthetic-secret-token/);
+  assert.equal(process.env.JIAN_SYNTHETIC_SECRET, undefined);
 });

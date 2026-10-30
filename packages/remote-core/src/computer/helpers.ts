@@ -9,6 +9,19 @@ let root = fileURLToPath(new URL('../../native/bin/', import.meta.url));
 
 export const helpersRoot = (): string => root;
 
-export function useHelpersRoot(path: string): void {
+export function setHelpersRoot(path: string): void {
   root = path;
+}
+
+/**
+ * Where a helper is copied to run from, outside the package so an update replaces it in one
+ * place. Each system has the CLI's own place by default; a host beside it, the native app, says
+ * its own, so the two never overwrite each other's copy.
+ */
+let installDir: string | undefined;
+
+export const helpersInstallDir = (): string | undefined => installDir;
+
+export function setHelpersInstallDir(path: string): void {
+  installDir = path;
 }

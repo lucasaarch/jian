@@ -10,7 +10,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { RemoteResult, RemoteTask } from '@jian/contracts';
 import { installHelperBinary, packagedBinary } from './helper-files.ts';
-import { helpersRoot } from './helpers.ts';
+import { helpersInstallDir, helpersRoot } from './helpers.ts';
 import { ComputerSession, captureThroughHelper } from './session.ts';
 import { COMPUTER_CAPABILITIES } from './shared.ts';
 import { runComputerTask } from './task.ts';
@@ -22,7 +22,7 @@ const HELPER_NAME = 'computer-helper';
 
 /** Where the helper runs from: outside the package, so an update replaces it in one place. */
 function helperPaths(home = homedir()) {
-  const support = join(home, '.local', 'share', 'jian-remote');
+  const support = helpersInstallDir() ?? join(home, '.local', 'share', 'jian-remote');
   return {
     binary: join(support, HELPER_NAME),
     stamp: join(support, `${HELPER_NAME}.sha256`),
