@@ -17,6 +17,10 @@ npmRebuild: false
 # The local gateway, compiled with its production dependencies (scripts/stage-gateway.mjs).
 afterPack: scripts/after-pack.mjs
 asar: true
+# jian:// links open the app: the local gateway's pages after a GitHub sign-in link back with one.
+protocols:
+  - name: Jian
+    schemes: [jian]
 
 mac:
   # macOS takes a single category; Linux lists it under developer tools as well.

@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { BrowserWindow, shell } from 'electron';
 import { APP_ORIGIN } from '../shared/bridge';
+import { submitInBrowser } from './forms';
 import { resourcesDir } from './tray';
 
 /**
@@ -38,9 +39,11 @@ export function createWindow(options: { quitting: () => boolean }): BrowserWindo
     window.hide();
   });
 
-  // Links to the outside world open in the owner's browser, never inside the app.
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) void shell.openExternal(url);
+  // Links to the outside world open in the owner's browser, never inside the app; a form posted
+  // to a new tab is posted from there too.
+  window.webContents.setWindowOpenHandler(({ url, postBody }) => {
+    if (postBody && url.startsWith('https:')) void submitInBrowser(url, postBody);
+    else if (/^https?:/.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
   window.webContents.on('will-navigate', (event, url) => {
