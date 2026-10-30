@@ -48,7 +48,7 @@ jian-remote configure --gateway https://gateway.example --token WORKER_TOKEN
 
 Connected workers self-update to the gateway’s release (gateway `/update` script, npm
 fallback) including major.minor skew, then restart the OS service. Manual `install` /
-`update` still gate on `/health`. See [docs/remote.md](../../docs/remote.md).
+`update` still gate on `/health`.
 
 Requires Node.js 24+. Computer Use works on macOS, Linux (X11 + `xdotool`/`ffmpeg`), and
 Windows. Published builds include a prebuilt macOS `computer-helper` (no Xcode on the worker
@@ -58,4 +58,4 @@ let the worker compile with `swiftc` when Command Line Tools are installed.
 On macOS the LaunchAgent uses `ProcessType=Interactive` and an idle `caffeinate` so the worker
 keeps polling while the screen is locked (App Nap must not freeze timers). A locked Mac stays
 **online** (`uiState: locked` is advisory): the worker wakes the display and attempts
-Computer Use; it does not soft-refuse. See [docs/remote.md](../../docs/remote.md).
+Computer Use; it does not soft-refuse.

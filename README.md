@@ -59,9 +59,9 @@ make setup
 make up
 ```
 
-The same images run as plain containers against your own PostgreSQL, or in Kubernetes.
-[Deploying](docs/deploy.md) has the exact command for each, the environment variables, and
-how to move between versions.
+The same images run as plain containers against your own PostgreSQL, or in Kubernetes. What
+changed in each version, and what to do when updating to it, is in
+[docs/releases](docs/releases).
 
 ## Developing it
 
@@ -87,11 +87,6 @@ The Compose file contains fixed synthetic credentials strictly for local tests: 
 them with real data or outside this Dev Container. Rebuild the container after changing
 source so the production image includes those changes. Its database and `/home/node`
 workspace use separate volumes from `make up`.
-
-[Getting started](docs/getting-started.md) walks through creating the first profile and
-sending the first message. See also [architecture](docs/architecture.md),
-[deploying](docs/deploy.md), [security](docs/security.md), [channels](docs/channels.md),
-[the web panel](docs/web.md) and [Jian Remote](docs/remote.md).
 
 ## Status
 

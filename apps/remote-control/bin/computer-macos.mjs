@@ -605,7 +605,7 @@ export function probeMacUiState({ force = false } = {}) {
 
 /**
  * Prevent idle system sleep for the worker process so HTTPS polls keep firing when the
- * screen is locked. Does not claim lid-closed / clamshell immunity (see docs/remote.md).
+ * screen is locked. Does not claim lid-closed / clamshell immunity.
  */
 export function startWorkerIdleAssertion(pid = process.pid) {
   if (process.platform !== 'darwin') return null;
