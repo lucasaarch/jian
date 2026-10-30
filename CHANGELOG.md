@@ -6,18 +6,55 @@ Every release of Jian, newest first.
 
 ## 1.1.2 — 2026-10-30
 
-The desktop app for macOS, Windows and Linux, and the 1.1 worker on npm, which 1.1.1 could not build, on the release page installed apps update from.
+The status bar tells what is under way — an agent at work or waiting for you, this computer in use, the Claude and Codex windows — and the tray and the command palette reach much more, on the web too. Pages load as skeletons, a failed step says why, agents can throw confetti, and the app builds for every system again.
 
 ### The desktop app
 
-* **Every system, on one release:** 1.1.1's builds could not start, as the runners its Computer Use helper was built on are being retired. This release builds them on current ones, so it carries the app for macOS (Apple silicon and Intel), Windows (x64 and ARM) and Linux (x64 and ARM), with the Windows and Linux packaging fixes 1.1.1 brought, and `@jian-ai/remote-control` reaches npm with it.
+* **The status bar tells what is under way:** the chat the agent is working in, or how many, with the one waiting on you first and in amber. While an agent runs a command or drives the screen on this computer, the bar says so, and opens Machines. At the right, the Claude and Codex subscription windows, each with a small bar that turns amber near the end; the tooltip says when each starts afresh.
+* **The tray does more:** New Chat, Search Chats, every gateway with how it stands and its unread chats — choosing one switches the window to it — the switch that lets agents use this computer, Settings and Check for Updates.
+* **No reload by accident:** ⌘R, ⌘⇧R, F5 and Ctrl+R no longer reload the window. Reload App, in the command palette, does it behind glass that mists over the app and clears on the new page.
+* **Every system again:** macOS (Apple silicon and Intel), Windows (x64 and ARM) and Linux (x64 and ARM), built on current runners; 1.1.1's builds could not start.
 
-Everything 1.1.0 brought is in this release; its note says what changed and what upgrading needs, the one manual update of each machine's worker included.
+### The command palette
+
+* **On the web as well:** ⌘⇧P (Ctrl+Shift+P elsewhere) opens it in the browser. Keys the browser keeps for itself, such as ⌘N, are left to it; their commands stay in the list.
+* **Much more to reach:** New chat and Search chats, the agent's Overview, Schedules, Skills, Memories, Channels and settings, another agent to switch to or a new one to create, each settings page by name, the sidebar and the theme. The app adds its gateways — switch, or connect one — and its updates; the web, Sign out. The agent's commands come first.
+
+### The panel
+
+* **Skeletons instead of spinners:** the Overview, Schedules, Customize, every settings page and the lists in them load as the page they will be, so nothing jumps when the data arrives. The Overview's numbers and its year load apart, and a failure to read the numbers leaves the rest of the page in place.
+* **Why a step failed:** a step that failed, was refused or did not come back is marked with a dotted line; the pointer or the keyboard's focus shows what went wrong, in full, as the tool or the server said it.
+* **Confetti:** an agent can throw confetti over the conversation for a real celebration, or when you ask — from the corners and sides of the chat, in colour. It flies only where the chat is open in Jian, once, and not under reduced motion.
+* **A calmer change of theme:** the colours cross over in place instead of a growing circle, which left glass blurring nothing in Safari.
+* **Release notes in Settings › General,** in the app as on the web, opening at their top.
+* **Pills over the toolbar:** a conversation's objective and listeners sit above the agent's toolbar on the right, as over the composer, drawn as the app's pills.
+* **Voice messages:** a voice note is the player alone, fitted to its bubble, without a `[Voice message]` line above it.
+* **Text to read, not chrome to select:** the sidebar, bars, buttons, menus and selects no longer select as text; messages, Markdown, code and fields still do.
+
+### The Welcome
+
+* **The whole window:** the title bar's buttons and the status bar step aside, and the steps' footer, the corner logo and its line are gone.
+* **No scrolling:** the introduction follows the window's height as well as its width, and Give it a mind lays the providers out two to a line, so each fits a short window.
+* **Make it yours** comes in a part at a time, each letter of the name settles out of a blur as it is typed, and the picture and the line under the name cross over when they change at once.
+
+### Agents and tools
+
+* **A refusal says why:** when an MCP server answers a call with an error — Bitbucket, Atlassian or any other — what it said goes to the agent and to the owner's timeline. A server that gave no reason is reported as having given none, with what to check before calling again.
+* **`throw_confetti`:** the tool behind the confetti. On WhatsApp and Telegram it tells the agent there is no screen to throw it on.
+
+### API
+
+* **`GET /v1/subscription-usage`:** the Claude and Codex subscription windows alone, for every agent at once, from the gateway's cached reading.
+
+### Fixes
+
+* **WhatsApp pairing:** linking a phone no longer ends on an error under the account it linked; a code asked for as the phone linked, or between two codes, was read as one.
+* **A conversation loading** is announced to screen readers again.
 
 ### Upgrading
 
 * From 1.0, read the 1.1.0 note first: migrations 0079 and 0080 run at startup, and each machine's worker needs one update by hand.
-* From 1.1.0 or 1.1.1, recreate the gateway and web containers with the 1.1.2 images, or follow the `latest` tags. A 1.1.0 worker keeps working; Update under Machines brings it to 1.1.2.
+* From 1.1.0, recreate the gateway and web containers with the 1.1.2 images, or follow the `latest` tags. No migration runs. A 1.1.0 worker keeps working; Update under Machines brings it to 1.1.2.
 * The desktop app on 1.1.0 updates itself to this release.
 
 ## 1.1.1 — 2026-10-30
