@@ -56,9 +56,8 @@ test('jian-remote --version / -V / version print PACKAGE_VERSION and exit 0', ()
 test('help text documents version and stop/start/restart', () => {
   const result = spawnSync(process.execPath, [scriptPath], { encoding: 'utf8' });
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /version \| --version \| -V/);
+  assert.match(result.stdout, /^ {2}version$/m);
   assert.match(result.stdout, /stop \| start \| restart/);
-  assert.match(result.stdout, /jian-remote stop \| start \| restart/);
   assert.match(result.stdout, /install \[--system\]/);
   assert.match(result.stdout, /enable-linger|--system/);
 });

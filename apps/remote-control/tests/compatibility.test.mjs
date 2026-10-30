@@ -40,7 +40,7 @@ test('versionsCompatible skips the gate when the gateway has no release version'
 test('versionsCompatible rejects a dev worker against a released gateway', () => {
   const result = versionsCompatible('0.0.0-dev', '0.6.0');
   assert.equal(result.ok, false);
-  assert.match(result.message, /npx @jian-ai\/remote-control@0\.6\.0 update/);
+  assert.match(result.message, /jian-remote update --version 0\.6\.0/);
 });
 
 test('compatibilityError returns English guidance for a major.minor mismatch', () => {
@@ -48,6 +48,6 @@ test('compatibilityError returns English guidance for a major.minor mismatch', (
   assert.match(message, /incompatible with gateway 0\.6\.0/);
   assert.match(message, /same major\.minor \(0\.6\)/);
   assert.match(message, /self-update to the gateway version automatically/);
-  assert.match(message, /npx @jian-ai\/remote-control@0\.6\.0 update/);
+  assert.match(message, /jian-remote update --version 0\.6\.0/);
   assert.equal(compatibilityError('0.6.2', '0.6.0'), null);
 });

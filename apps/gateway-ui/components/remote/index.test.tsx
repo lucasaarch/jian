@@ -77,3 +77,61 @@ it('adds a machine for every agent and shows one install command', async () => {
     element.remove();
   }
 });
+
+it('gives the same install command again after a rotation, with the new token', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) {
+    this.setAttribute('open', '');
+  };
+  const rotated = 'synthetic-rotated-token-that-is-long-enough-5678';
+  const api = {
+    remoteMachines: async () => [
+      {
+        id: machine,
+        name: 'Studio Mac',
+        platform: 'darwin-arm64',
+        online: false,
+        createdAt: '2026-10-29T12:00:00Z',
+        capabilities: [],
+        uiState: 'unknown' as const,
+      },
+    ],
+    releases: async () => ({ version: '1.4.0', notes: [], unseen: [] }),
+    rotateRemoteMachineCredentials: vi.fn(async () => ({ id: machine, token: rotated })),
+  } as unknown as GatewayApi;
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  const press = (text: string) =>
+    act(async () => {
+      [...document.querySelectorAll('button')]
+        .find((button) => button.textContent?.trim() === text)
+        ?.click();
+    });
+
+  try {
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <RemoteMachines api={api} />
+        </QueryClientProvider>,
+      );
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    await press('Manage');
+    await press('Rotate credentials');
+    await press('Confirm');
+
+    // Rotating is how a lost install command is had again: the worker may not be there at all.
+    expect(
+      [...document.querySelectorAll<HTMLTextAreaElement>('.remote-created textarea')].map(
+        (command) => command.value,
+      ),
+    ).toEqual([
+      `npm install -g @jian-ai/remote-control@1.4.0 && jian-remote install --gateway '${window.location.origin}' --machine '${machine}' --token '${rotated}'`,
+    ]);
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
