@@ -28,6 +28,7 @@ import {
   decisionsStatusSchema,
 } from './decisions.js';
 import {
+  githubFixConflictsInputSchema,
   githubIssueSchema,
   githubItemParamsSchema,
   githubLinkSummarySchema,
@@ -971,6 +972,15 @@ export const operations: Operation[] = [
     access: 'admin',
     body: sessionProtectionSchema,
     response: sessionRecordSchema,
+  },
+  {
+    method: 'POST',
+    path: `${session}/github/fix-conflicts`,
+    operationId: 'fixGithubConflicts',
+    access: 'admin',
+    body: githubFixConflictsInputSchema,
+    response: runRecordSchema,
+    status: 202,
   },
   {
     method: 'PUT',

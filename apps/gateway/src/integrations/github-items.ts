@@ -55,6 +55,7 @@ const pullResponse = z.object({
   changed_files: z.number().nullish(),
   mergeable: z.boolean().nullish(),
   mergeable_state: z.string().nullish(),
+  comments: z.number().nullish(),
 });
 
 const repoResponse = z.object({
@@ -64,7 +65,12 @@ const repoResponse = z.object({
 });
 
 const reviewsResponse = z.array(
-  z.object({ user, state: z.string(), submitted_at: z.string().nullish() }),
+  z.object({
+    user,
+    state: z.string(),
+    submitted_at: z.string().nullish(),
+    body: z.string().nullish(),
+  }),
 );
 
 const checkRunsResponse = z.object({
@@ -199,6 +205,21 @@ export function githubLink(url: string): (Ref & { kind: 'pull' | 'issue' }) | un
   };
 }
 
+/**
+ * What the agent is asked when the owner presses Fix merge conflicts. Its own words would be
+ * the owner's; these are the gateway's, read by the agent and kept out of the conversation.
+ */
+export function conflictsBrief(ref: Ref) {
+  const url = `https://github.com/${ref.owner}/${ref.repo}/pull/${ref.number}`;
+
+  return [
+    `The owner asked you to resolve the merge conflicts in ${url}.`,
+    'Bring its base branch into its branch, settle each conflict so both sides keep what they meant,',
+    'run the checks that cover what you touched, and push the branch.',
+    'Then say in a few lines what conflicted and how you settled it.',
+  ].join(' ');
+}
+
 const keyOf = (ref: Ref) => `${ref.owner}/${ref.repo}#${ref.number}`.toLowerCase();
 
 export class GitHubItems {
@@ -220,11 +241,15 @@ export class GitHubItems {
     const base = `/repos/${ref.owner}/${ref.repo}`;
     const pull = await this.read(ref, `${base}/pulls/${ref.number}`, pullResponse);
     const sha = pull.head.sha;
-    const [repo, reviews, checks, files] = await Promise.all([
+    const [repo, reviews, checks, files, comments] = await Promise.all([
       this.optional(ref, base, repoResponse),
       this.optional(ref, `${base}/pulls/${ref.number}/reviews?per_page=100`, reviewsResponse),
       this.checks(ref, sha),
       this.optional(ref, `${base}/pulls/${ref.number}/files?per_page=${FILES}`, filesResponse),
+      // A pull request's conversation is its issue's.
+      pull.comments
+        ? this.lastComments(ref, `${base}/issues/${ref.number}`, pull.comments)
+        : Promise.resolve([]),
     ]);
     const latest = new Map<string, z.infer<typeof reviewsResponse>[number]>();
 
@@ -236,10 +261,10 @@ export class GitHubItems {
       reviewer: person(review.user) as { login: string },
       state: reviewState(review.state),
       ...(time(review.submitted_at) ? { submittedAt: time(review.submitted_at) } : {}),
+      ...(review.body?.trim() ? { body: clip(review.body, COMMENT_CHARS) } : {}),
     }));
     const changedFiles = pull.changed_files ?? files?.length ?? 0;
-
-    return {
+    const read: GitHubPull = {
       ...ref,
       url: pull.html_url,
       title: clip(pull.title, 1000),
@@ -279,7 +304,28 @@ export class GitHubItems {
         };
       }),
       ...(changedFiles > FILES ? { filesTruncated: true } : {}),
+      comments: comments.map((comment) => ({
+        ...(person(comment.user) ? { author: person(comment.user) } : {}),
+        body: clip(comment.body, COMMENT_CHARS),
+        createdAt: time(comment.created_at) ?? new Date(0).toISOString(),
+      })),
     };
+
+    // What the drawer just read is the newest word on it: the cards in the conversation read
+    // the same, instead of a summary from before.
+    this.keep(keyOf(ref), {
+      reachable: true,
+      kind: 'pull',
+      owner: ref.owner,
+      repo: ref.repo,
+      number: ref.number,
+      title: read.title,
+      state: read.state,
+      draft: read.draft,
+      checks: read.checks.summary,
+      mergeable: read.mergeable,
+    });
+    return read;
   }
 
   async issue(ref: Ref): Promise<GitHubIssue> {
@@ -395,13 +441,18 @@ export class GitHubItems {
       value = { reachable: false };
     }
 
+    this.keep(key, value);
+    return value;
+  }
+
+  /** The newest summary of an item, kept for the cards; the oldest goes once there are too many. */
+  private keep(key: string, value: CachedSummary) {
     this.summaries.delete(key);
-    this.summaries.set(key, { at: now, value });
+    this.summaries.set(key, { at: this.clock(), value });
     if (this.summaries.size > LINK_CACHE) {
       const oldest = this.summaries.keys().next().value;
       if (oldest !== undefined) this.summaries.delete(oldest);
     }
-    return value;
   }
 
   private async lookup(ref: Ref & { kind: 'pull' | 'issue' }): Promise<CachedSummary> {

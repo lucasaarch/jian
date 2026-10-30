@@ -51,6 +51,15 @@ export const githubReviewSchema = z.strictObject({
   reviewer: githubUserSchema,
   state: z.enum(['approved', 'changes_requested', 'commented', 'dismissed', 'pending']),
   submittedAt: z.iso.datetime().optional(),
+  /** What the reviewer wrote with it, Markdown; absent when they only chose a verdict. */
+  body: z.string().max(10_000).optional(),
+});
+
+/** A comment in an issue's or a pull request's conversation. */
+export const githubCommentSchema = z.strictObject({
+  author: githubUserSchema.optional(),
+  body: z.string().max(10_000),
+  createdAt: z.iso.datetime(),
 });
 
 export const githubPullFileSchema = z.strictObject({
@@ -97,6 +106,8 @@ export const githubPullSchema = z.strictObject({
   files: z.array(githubPullFileSchema).max(100),
   /** The pull request changes more files than are listed. */
   filesTruncated: z.boolean().optional(),
+  /** The last comments of its conversation, oldest first. */
+  comments: z.array(githubCommentSchema).max(30),
 });
 
 export const githubIssueSchema = z.strictObject({
@@ -112,15 +123,7 @@ export const githubIssueSchema = z.strictObject({
   labels: z.array(z.strictObject({ name: z.string().max(100), color: z.string().max(6) })).max(50),
   assignees: z.array(githubUserSchema).max(20),
   body: z.string().max(20_000),
-  comments: z
-    .array(
-      z.strictObject({
-        author: githubUserSchema.optional(),
-        body: z.string().max(10_000),
-        createdAt: z.iso.datetime(),
-      }),
-    )
-    .max(30),
+  comments: z.array(githubCommentSchema).max(30),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
   closedAt: z.iso.datetime().optional(),
@@ -155,6 +158,16 @@ export const githubMergeInputSchema = z.strictObject({
   expectedHeadSha: z.string().regex(/^[0-9a-f]{40}$/),
   /** The agent whose conversation the merge was made from, for its event feed. */
   profileId: z.uuid().optional(),
+});
+
+/**
+ * The pull request whose conflicts the agent of a chat should resolve. The gateway writes the
+ * brief itself, as a note the agent reads and the conversation does not show.
+ */
+export const githubFixConflictsInputSchema = z.strictObject({
+  owner: githubOwnerSchema,
+  repo: githubRepoSchema,
+  number: z.number().int().positive().max(10_000_000),
 });
 
 export const githubMergeResultSchema = z.strictObject({

@@ -1,6 +1,10 @@
+import { randomUUID } from 'node:crypto';
+import { GATEWAY_SESSION_CHANNEL, githubFixConflictsInputSchema } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import type { Coordination } from '../coordination/service.js';
+import { GatewayError } from '../core/errors.js';
 import type { ProfileParams, SessionParams } from '../http/params.js';
+import { conflictsBrief } from '../integrations/github-items.js';
 import type { RunWriter } from '../runs/port.js';
 import type { SessionWriter } from './port.js';
 import type { Sessions } from './service.js';
@@ -79,6 +83,32 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
     '/v1/profiles/:profileId/sessions/:sessionId/objective',
     async (request) =>
       deps.sessions.setObjective(request.params.profileId, request.params.sessionId, request.body),
+  );
+
+  // Pressed in the drawer of a chat the panel answers: the agent starts on it at once, and the
+  // conversation shows its work, not the brief. A channel's conversation would carry the work to
+  // the contact, so it is not one of them.
+  app.post<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/github/fix-conflicts',
+    async (request, reply) => {
+      const { profileId, sessionId } = request.params;
+      const pull = githubFixConflictsInputSchema.parse(request.body);
+      const session = await deps.sessions.session(profileId, sessionId);
+
+      if (session.channel !== GATEWAY_SESSION_CHANNEL) {
+        throw new GatewayError(409, 'Conflicts are fixed from a chat of the panel.');
+      }
+      return reply
+        .code(202)
+        .send(
+          await deps.runs.submit(
+            profileId,
+            sessionId,
+            { text: conflictsBrief(pull), requestKey: `fix-conflicts:${randomUUID()}` },
+            { purpose: 'resume' },
+          ),
+        );
+    },
   );
 
   app.get<{ Params: SessionParams }>(
