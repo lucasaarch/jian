@@ -421,6 +421,41 @@ it('merges with the method and the head the owner saw, and records it on the age
   expect(recorded[0]?.data).toMatchObject({ owner: 'octo-example', number: 7, method: 'squash' });
 });
 
+it('reads a pull request it merged as merged while GitHub still answers open', async () => {
+  // GitHub's reads lag its writes: the pull request below still says open after the merge.
+  const { app } = await gateway({
+    ...pullRoutes(),
+    [`PUT ${base}/pulls/7/merge`]: {
+      body: { sha: 'c'.repeat(40), merged: true, message: 'Pull Request successfully merged' },
+    },
+  });
+  const url = 'https://github.com/octo-example/site/pull/7';
+  const card = async () =>
+    (
+      await app.inject({
+        method: 'POST',
+        url: '/v1/integrations/github/links',
+        headers,
+        payload: { urls: [url] },
+      })
+    ).json()[0];
+
+  expect((await card()).state).toBe('open');
+  await app.inject({
+    method: 'POST',
+    url: '/v1/integrations/github/pulls/octo-example/site/7/merge',
+    headers,
+    payload: { method: 'squash', expectedHeadSha: head },
+  });
+
+  expect((await card()).state).toBe('merged');
+  const drawer = await app.inject({
+    url: '/v1/integrations/github/pulls/octo-example/site/7',
+    headers,
+  });
+  expect(drawer.json().state).toBe('merged');
+});
+
 it('answers 409 with GitHub’s reason when the merge is refused', async () => {
   const { app } = await gateway({
     [`PUT ${base}/pulls/7/merge`]: {
