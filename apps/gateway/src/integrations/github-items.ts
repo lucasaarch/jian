@@ -55,7 +55,6 @@ const pullResponse = z.object({
   changed_files: z.number().nullish(),
   mergeable: z.boolean().nullish(),
   mergeable_state: z.string().nullish(),
-  comments: z.number().nullish(),
 });
 
 const repoResponse = z.object({
@@ -69,7 +68,7 @@ const reviewsResponse = z.array(
     user,
     state: z.string(),
     submitted_at: z.string().nullish(),
-    body: z.string().nullish(),
+    html_url: z.string().nullish(),
   }),
 );
 
@@ -241,15 +240,11 @@ export class GitHubItems {
     const base = `/repos/${ref.owner}/${ref.repo}`;
     const pull = await this.read(ref, `${base}/pulls/${ref.number}`, pullResponse);
     const sha = pull.head.sha;
-    const [repo, reviews, checks, files, comments] = await Promise.all([
+    const [repo, reviews, checks, files] = await Promise.all([
       this.optional(ref, base, repoResponse),
       this.optional(ref, `${base}/pulls/${ref.number}/reviews?per_page=100`, reviewsResponse),
       this.checks(ref, sha),
       this.optional(ref, `${base}/pulls/${ref.number}/files?per_page=${FILES}`, filesResponse),
-      // A pull request's conversation is its issue's.
-      pull.comments
-        ? this.lastComments(ref, `${base}/issues/${ref.number}`, pull.comments)
-        : Promise.resolve([]),
     ]);
     const latest = new Map<string, z.infer<typeof reviewsResponse>[number]>();
 
@@ -261,7 +256,10 @@ export class GitHubItems {
       reviewer: person(review.user) as { login: string },
       state: reviewState(review.state),
       ...(time(review.submitted_at) ? { submittedAt: time(review.submitted_at) } : {}),
-      ...(review.body?.trim() ? { body: clip(review.body, COMMENT_CHARS) } : {}),
+      // Only GitHub's own page for it: the panel opens it in a new tab.
+      ...(review.html_url?.startsWith('https://github.com/') && review.html_url.length <= 1000
+        ? { url: review.html_url }
+        : {}),
     }));
     const changedFiles = pull.changed_files ?? files?.length ?? 0;
     const read: GitHubPull = {
@@ -304,11 +302,6 @@ export class GitHubItems {
         };
       }),
       ...(changedFiles > FILES ? { filesTruncated: true } : {}),
-      comments: comments.map((comment) => ({
-        ...(person(comment.user) ? { author: person(comment.user) } : {}),
-        body: clip(comment.body, COMMENT_CHARS),
-        createdAt: time(comment.created_at) ?? new Date(0).toISOString(),
-      })),
     };
 
     // What the drawer just read is the newest word on it: the cards in the conversation read

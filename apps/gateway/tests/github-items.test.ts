@@ -486,27 +486,24 @@ it('parses a patch whose hunk counts are left out, and holds none for an empty o
   expect(patchDiff('a.txt', '')).toBeUndefined();
 });
 
-it('reads a pull request’s conversation, and the cards read what the drawer just read', async () => {
+it('links each review to its page, and the cards read what the drawer just read', async () => {
   let state = 'open';
   const { app } = await gateway({
     ...pullRoutes(),
-    [`GET ${base}/pulls/7`]: () => ({ body: pull({ state, comments: 1 }) }),
+    [`GET ${base}/pulls/7`]: () => ({ body: pull({ state }) }),
     [`GET ${base}/pulls/7/reviews?per_page=100`]: {
       body: [
         {
           user: { login: 'sky-example' },
           state: 'CHANGES_REQUESTED',
           submitted_at: '2026-10-29T08:00:00Z',
-          body: 'The plans need prices.',
+          html_url: 'https://github.com/octo-example/site/pull/7#pullrequestreview-81',
         },
-      ],
-    },
-    [`GET ${base}/issues/7/comments?per_page=30&page=1`]: {
-      body: [
         {
           user: { login: 'lee-example' },
-          body: 'Prices are in the next commit.',
-          created_at: '2026-10-29T09:00:00Z',
+          state: 'APPROVED',
+          submitted_at: '2026-10-29T09:00:00Z',
+          html_url: 'https://elsewhere.example.test/review',
         },
       ],
     },
@@ -527,15 +524,20 @@ it('reads a pull request’s conversation, and the cards read what the drawer ju
     ).json();
 
   expect((await card()).state).toBe('open');
-  const read = await drawer();
-  expect(read.reviews.latest[0]).toMatchObject({ body: 'The plans need prices.' });
-  expect(read.comments).toEqual([
-    {
-      author: { login: 'lee-example' },
-      body: 'Prices are in the next commit.',
-      createdAt: '2026-10-29T09:00:00.000Z',
-    },
-  ]);
+  const reviews = (await drawer()).reviews.latest;
+  expect(
+    reviews.find(
+      (review: { reviewer: { login: string } }) => review.reviewer.login === 'sky-example',
+    ),
+  ).toMatchObject({
+    url: 'https://github.com/octo-example/site/pull/7#pullrequestreview-81',
+  });
+  // Only GitHub's own page is a review's link.
+  expect(
+    reviews.find(
+      (review: { reviewer: { login: string } }) => review.reviewer.login === 'lee-example',
+    )?.url,
+  ).toBeUndefined();
 
   // Closed on GitHub: the card kept its summary, until the drawer read it again.
   state = 'closed';
