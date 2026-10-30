@@ -362,8 +362,13 @@ export class RunLifecycle {
     return this.told(settled);
   }
 
-  // Expired ownership interrupts a run: replaying it could repeat completed external effects.
-  async recover() {
+  /**
+   * Expired ownership interrupts a run: replaying it could repeat completed external effects. A
+   * lease can lapse while its owner still works — the process stalled a minute under memory
+   * pressure, its renewals waiting behind the same stall — so a run whose owner is one of
+   * `alive`, this process's own turns still running, is renewed instead: nobody else has it.
+   */
+  async recover(alive: ReadonlySet<string> = new Set()) {
     const expired = await listExpiredRuns(this.store.db, this.clock(), 1000);
 
     for (const run of expired) {
@@ -374,7 +379,17 @@ export class RunLifecycle {
           return;
         }
 
-        const error = 'Worker lease expired. Inspect completed steps before starting another run.';
+        if (current.leaseOwner && alive.has(current.leaseOwner)) {
+          await updateRun(tx, {
+            ...current,
+            leaseUntil: this.clock() + 60_000,
+            updatedAt: nowIso(this.clock),
+          });
+          return;
+        }
+
+        const error =
+          'The agent stopped answering while it worked: the gateway restarted or ran out of memory. What it finished is kept; look at it before asking again.';
 
         await updateRun(tx, {
           ...current,

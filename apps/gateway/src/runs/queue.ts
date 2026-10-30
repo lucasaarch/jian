@@ -31,7 +31,7 @@ export class RunQueue {
   }
 
   private async dispatch() {
-    await this.services.lifecycle.recover();
+    await this.services.lifecycle.recover(this.runtime.liveOwners());
 
     for (const worker of await listUnreportedSubagents(this.services.store.db, 100)) {
       if (this.stopped) return;

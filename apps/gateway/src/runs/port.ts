@@ -95,5 +95,6 @@ export interface RunExecution {
 }
 
 export interface RunRecovery {
-  recover(): Promise<void>;
+  /** Interrupts runs whose owner is gone; `alive` names owners still working in this process. */
+  recover(alive?: ReadonlySet<string>): Promise<void>;
 }
