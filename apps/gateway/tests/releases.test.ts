@@ -1,6 +1,10 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
-import { compareVersions, ReleaseNotes } from '../src/releases/service.js';
+import { compareVersions, ReleaseNotes, readNotes } from '../src/releases/service.js';
 import { releaseReads } from '../src/storage/schema.js';
 import { testServices } from './helpers/services.js';
 
@@ -120,6 +124,28 @@ describe('the release notes the panel announces', () => {
       expect(seen.json()).toMatchObject({ version: '2.1.0', unseen: [] });
     } finally {
       await app.close();
+    }
+  });
+});
+
+describe('notes as a checkout leaves them', () => {
+  it('reads a note written with CRLF, and leaves out one it cannot read', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'jian-notes-'));
+    try {
+      writeFileSync(
+        join(directory, '1.0.0.md'),
+        '---\r\ndate: 2026-10-01\r\nsummary: The first.\r\n---\r\n\r\n### Added\r\n\r\n* A thing.\r\n',
+      );
+      writeFileSync(join(directory, '1.1.0.md'), '---\ndate: 2026-10-20\n---\n\n* Another.\n');
+      writeFileSync(join(directory, '1.2.0.md'), 'No front matter here.\n');
+
+      const notes = readNotes(pathToFileURL(`${directory}/`));
+
+      expect(notes.map((note) => note.version)).toEqual(['1.1.0', '1.0.0']);
+      expect(notes[1]).toMatchObject({ date: '2026-10-01', summary: 'The first.' });
+      expect(notes[1]?.body).toBe('### Added\n\n* A thing.');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
     }
   });
 });
