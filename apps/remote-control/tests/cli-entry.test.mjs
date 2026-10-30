@@ -35,7 +35,7 @@ test('npx-style symlink invocation prints usage instead of exiting silently', ()
   const result = spawnSync(process.execPath, [link], { encoding: 'utf8' });
   assert.equal(result.status, 0);
   assert.match(result.stdout, /Jian Remote worker/);
-  assert.match(result.stdout, /install --gateway/);
+  assert.match(result.stdout, /install \[--system\] --gateway/);
   assert.equal(result.stderr, '');
 
   rmSync(dir, { recursive: true, force: true });
@@ -59,14 +59,18 @@ test('configure without flags prints usage and exits non-zero', () => {
   assert.match(result.stderr, /Usage: jian-remote configure/);
 });
 
-test('help text documents configure alongside install and update', () => {
+test('help text offers one way to install, and status, logs and update beside it', () => {
   const result = spawnSync(process.execPath, [scriptPath], { encoding: 'utf8' });
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /configure \[--gateway/);
-  assert.match(result.stdout, /install --gateway/);
+  assert.match(result.stdout, /npm install -g @jian-ai\/remote-control, then jian-remote install/);
+  assert.match(result.stdout, /status \[--json\]/);
+  assert.match(
+    result.stdout,
+    /logs \[--lines N\] \[--level debug\|info\|warn\|error\] \[--follow\]/,
+  );
   assert.match(result.stdout, /update \[--version/);
   assert.match(result.stdout, /stop \| start \| restart/);
-  assert.match(result.stdout, /version \| --version \| -V/);
+  assert.doesNotMatch(result.stdout, /npx/);
 });
 
 test('importing the module for tests does not run the CLI', () => {

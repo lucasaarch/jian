@@ -3,12 +3,15 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   accessSync,
+  appendFileSync,
   existsSync,
   constants as fsConstants,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -17,6 +20,7 @@ import {
   chmod,
   copyFile,
   mkdir,
+  open,
   readdir,
   readFile,
   rename,
@@ -30,11 +34,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const configDir = join(homedir(), '.config', 'jian-remote');
 const configPath = join(configDir, 'config.json');
-/** Stable path the OS service runs — not the npx cache or a transient install location. */
+/** Stable path the OS service runs — not the npm global prefix, which an upgrade replaces. */
 const installedScript = join(configDir, 'jian-remote.mjs');
 /** Exclusive run lock — prevents KeepAlive / CLI races from leaving two pollers alive. */
 const workerLockPath = join(configDir, 'worker.pid');
 const updateStatePath = join(configDir, 'update-state.json');
+/** The worker's own log: what it did and when, the same on every OS whatever its service keeps. */
+const logPath = join(configDir, 'worker.log');
+/** Where the running worker says how it stands, for `status`; rewritten as that changes. */
+const statePath = join(configDir, 'state.json');
 const MACOS_LAUNCH_AGENT_LABEL = 'com.jian.remote';
 const LINUX_SERVICE_UNIT = 'jian-remote.service';
 /** Remembers whether Linux install used systemd --user or a system unit (headless/root VPS). */
@@ -63,6 +71,130 @@ export function parseCliInvocation(argv = args) {
   }
   const command = list[0] && !list[0].startsWith('-') ? list[0] : undefined;
   return { command, versionRequested: false };
+}
+
+/** Levels in order; `logs --level` shows one and those above it. */
+export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
+/** A log past this size moves aside to worker.log.1, so a busy worker never fills the disk. */
+const LOG_MAX_BYTES = 5 * 1024 * 1024;
+
+/** A value as a log reads it: bare when it can be, quoted when it holds spaces or quotes. */
+function logValue(value) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  return /^[^\s"=]+$/.test(text ?? '') ? text : JSON.stringify(text ?? '');
+}
+
+/**
+ * One line of the worker's log: the time in UTC, the level, what happened, then its facts as
+ * key=value. One line each, so `logs` can cut, filter and follow it without parsing.
+ */
+export function formatLogLine(level, message, fields = {}, at = new Date()) {
+  const facts = Object.entries(fields)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `${key}=${logValue(value)}`);
+  return `${at.toISOString()} ${level.toUpperCase().padEnd(5)} ${message}${facts.length ? ` ${facts.join(' ')}` : ''}\n`;
+}
+
+/** The level of a log line, or undefined for a line this format did not write. */
+export function logLineLevel(line) {
+  const match = /^\S+ (DEBUG|INFO|WARN|ERROR)\b/.exec(line);
+  return match ? match[1].toLowerCase() : undefined;
+}
+
+function writeLog(level, message, fields) {
+  const line = formatLogLine(level, message, fields);
+  try {
+    if (existsSync(logPath) && statSync(logPath).size > LOG_MAX_BYTES) {
+      renameSync(logPath, `${logPath}.1`);
+    }
+    appendFileSync(logPath, line, { mode: 0o600 });
+  } catch {
+    // A log that cannot be written must never stop the worker; the terminal still shows it.
+  }
+  // In a terminal (`run` by hand) the lines show there too; a service reads the file instead.
+  if (process.stdout.isTTY)
+    (level === 'error' || level === 'warn' ? process.stderr : process.stdout).write(line);
+}
+
+export const log = Object.fromEntries(
+  LOG_LEVELS.map((level) => [level, (message, fields) => writeLog(level, message, fields)]),
+);
+
+/** What a task is, in a few words for the log: the command, or the screen action. */
+export function describeTask(task) {
+  if (task.kind === 'computer') {
+    const { action, coordinate, key, text } = task.computer ?? {};
+    return {
+      kind: 'computer',
+      action,
+      ...(coordinate ? { at: coordinate.join(',') } : {}),
+      ...(key ? { key } : {}),
+      // What is typed can be a password: only its length is kept.
+      ...(text ? { chars: text.length } : {}),
+    };
+  }
+  const command = String(task.command ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return {
+    kind: 'shell',
+    command: command.length > 200 ? `${command.slice(0, 199)}…` : command,
+    ...(task.cwd ? { cwd: task.cwd } : {}),
+  };
+}
+
+/**
+ * How the running worker stands, kept in state.json for `status`: connection, versions, what
+ * it ran. Written whole each time, small, and only by the worker that holds the lock.
+ */
+export function createWorkerState({ path = statePath, now = () => new Date() } = {}) {
+  const state = {
+    pid: process.pid,
+    version: PACKAGE_VERSION,
+    startedAt: now().toISOString(),
+    connected: false,
+    tasks: { total: 0, failed: 0, shell: 0, computer: 0 },
+  };
+  let savedAt = 0;
+  const save = (force) => {
+    // Every poll touches lastContactAt; on disk it moves at most every few seconds.
+    if (!force && Date.now() - savedAt < 5_000) return;
+    savedAt = Date.now();
+    try {
+      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+      const temp = `${path}.${process.pid}.tmp`;
+      writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+      renameSync(temp, path);
+    } catch {
+      // `status` then shows the last state that could be written.
+    }
+  };
+  return {
+    state,
+    update(patch, force = true) {
+      Object.assign(state, patch);
+      save(force);
+    },
+    contact() {
+      const was = state.connected;
+      state.connected = true;
+      state.lastContactAt = now().toISOString();
+      save(!was);
+    },
+    lost(error) {
+      state.connected = false;
+      state.lastError = error;
+      state.lastErrorAt = now().toISOString();
+      save(true);
+    },
+    ran(kind, ok, durationMs) {
+      state.tasks.total += 1;
+      state.tasks[kind] = (state.tasks[kind] ?? 0) + 1;
+      if (!ok) state.tasks.failed += 1;
+      state.lastTask = { kind, ok, durationMs, at: now().toISOString() };
+      save(true);
+    },
+  };
 }
 
 /**
@@ -119,8 +251,12 @@ function paint(text, code, color) {
  * Tasteful success block for install/configure/update — headline plus aligned facts.
  * Keep facts short; avoid rainbow spam.
  */
-export function formatSuccessBlock({ headline, facts = [], color = shouldColorize() }) {
-  const mark = paint('✓', ANSI.green, color);
+export function formatSuccessBlock({
+  headline,
+  facts = [],
+  color = shouldColorize(),
+  mark = paint('✓', ANSI.green, color),
+}) {
   const title = paint(headline, ANSI.bold, color);
   const lines = [`${mark} ${title}`];
   const width = Math.min(12, Math.max(0, ...facts.map(([label]) => String(label).length)));
@@ -620,7 +756,7 @@ export function versionsCompatible(localVersion, gatewayVersion) {
       local: localVersion ?? 'unknown',
       gateway: gateway.raw,
       required: `${gateway.major}.${gateway.minor}`,
-      message: `This remote-control build (${localVersion ?? 'unknown'}) is not a released package and cannot connect to gateway ${gateway.raw}. Install a matching release: npx @jian-ai/remote-control@${gateway.raw} update`,
+      message: `This remote-control build (${localVersion ?? 'unknown'}) is not a released package and cannot connect to gateway ${gateway.raw}. Install a matching release: jian-remote update --version ${gateway.raw}`,
     };
   }
   const local = parseRelease(localVersion);
@@ -643,7 +779,7 @@ export function versionsCompatible(localVersion, gatewayVersion) {
     local: local.raw,
     gateway: gateway.raw,
     required: `${gateway.major}.${gateway.minor}`,
-    message: `This remote-control ${local.raw} is incompatible with gateway ${gateway.raw}. Jian requires the same major.minor (${gateway.major}.${gateway.minor}). Connected workers try to self-update to the gateway version automatically; if that fails, run: npx @jian-ai/remote-control@${gateway.raw} update`,
+    message: `This remote-control ${local.raw} is incompatible with gateway ${gateway.raw}. Jian requires the same major.minor (${gateway.major}.${gateway.minor}). Connected workers try to self-update to the gateway version automatically; if that fails, run: jian-remote update --version ${gateway.raw}`,
   };
 }
 
@@ -951,7 +1087,7 @@ async function materializeCompanionModules() {
   }
 }
 
-/** Copy a worker script into ~/.config so npx and global installs share one service path. */
+/** Copy a worker script into ~/.config, so an npm upgrade never moves the path the service runs. */
 async function materializeWorkerScript(sourceBytes) {
   await mkdir(configDir, { recursive: true, mode: 0o700 });
   if (sourceBytes) {
@@ -1494,11 +1630,8 @@ async function install() {
   }
   if (started.detail) facts.push(['Identity', started.detail]);
   printSuccess('Installed Jian Remote', facts);
-  printInfo('Upgrade later: npx @jian-ai/remote-control@latest update  (no token again)');
-  printInfo('Change URL or token: jian-remote configure --gateway … --token …');
-  printInfo(
-    'If Offline sticks: update or restart the service; check ~/.config/jian-remote/worker.log',
-  );
+  printInfo('See how it stands: jian-remote status');
+  printInfo('Read what it did: jian-remote logs');
 }
 
 /**
@@ -1584,7 +1717,7 @@ async function update() {
 
   let scriptBytes;
   let installedVersion = PACKAGE_VERSION;
-  // When this process already matches the target (typical: npx @jian-ai/remote-control@X update),
+  // When this process already matches the target (typical right after npm installed it),
   // copy ourselves. Require an **exact** semver match — same major.minor alone used to let a
   // global 0.8.1 CLI rewrite the installed script while the gateway was already on 0.8.2,
   // fighting auto-update and flip-flopping two pollers.
@@ -1908,7 +2041,7 @@ async function applyWorkerScriptAndRestart(updated, { sourceLabel }) {
   // Best-effort companions from this process’s package (gateway /update is main script only).
   await materializeCompanionModules();
   await clearUpdateState();
-  console.log(`Worker updated to ${checked.version} from ${sourceLabel}; restarting to apply it.`);
+  log.info(`Worker updated to ${checked.version} from ${sourceLabel}; restarting to apply it.`);
   await releaseWorkerLock();
   if (process.platform === 'win32') {
     // Task Scheduler has no KeepAlive; spawn the new script then exit this process.
@@ -1937,7 +2070,7 @@ async function updateIfNeeded(base, headers) {
     local = await readFile(fileURLToPath(import.meta.url));
   }
   if (isStaleInstalledWorker(PACKAGE_VERSION, local.toString('utf8'))) {
-    console.log(
+    log.info(
       `Worker process ${PACKAGE_VERSION} is stale (installed script is newer); restarting to load it.`,
     );
     await releaseWorkerLock();
@@ -2038,7 +2171,7 @@ async function reconcileWorkerWithGateway(config, base, headers) {
     // gateway could not stamp a newer script. Fall through to npm only when disk is wrong too.
     if (!changed && mustMatch) {
       if (gatewayRelease && installedVersion === gatewayRelease) {
-        console.log(
+        log.info(
           `Installed worker is ${installedVersion} but this process is ${PACKAGE_VERSION}; restarting to load the installed script.`,
         );
         await releaseWorkerLock();
@@ -2055,35 +2188,35 @@ async function reconcileWorkerWithGateway(config, base, headers) {
   const diskAlreadyMatches = Boolean(gatewayRelease) && installedVersion === gatewayRelease;
 
   if (gatewayUpdateError && (mustMatch || !compat.ok) && !diskAlreadyMatches) {
-    console.error(
+    log.warn(
       `Gateway self-update did not apply (${gatewayUpdateError.message}); trying npm for ${gatewayVersion}…`,
     );
     try {
       await updateFromNpm(gatewayVersion, config.gateway);
     } catch (npmError) {
       const recorded = await recordUpdateFailure(npmError);
-      console.error(
+      log.warn(
         `Automatic worker update failed (${recorded.lastError}). Will retry after ${(recorded.backoffMs / 1000).toFixed(0)}s. Credentials in ${configPath} were not changed.`,
       );
       await new Promise((resolveDelay) => setTimeout(resolveDelay, recorded.backoffMs));
       if (!compat.ok) {
-        console.error(
+        log.warn(
           compatibilityError(PACKAGE_VERSION, gatewayVersion) ??
             `This remote-control ${PACKAGE_VERSION} cannot connect to gateway ${gatewayVersion}.`,
         );
         process.exit(1);
       }
       // Compatible (same major.minor) but newer patch unavailable — keep running on the old build.
-      console.error('Continuing on the installed worker; will retry the update later.');
+      log.warn('Continuing on the installed worker; will retry the update later.');
       return gatewayVersion;
     }
   } else if (gatewayUpdateError && diskAlreadyMatches) {
-    console.error(
+    log.warn(
       `Worker update check reported ${gatewayUpdateError.message}; installed script already matches gateway ${gatewayRelease}. Not rewriting from npm.`,
     );
   } else if (gatewayUpdateError) {
     // Optional content refresh failed while still compatible — log and keep polling.
-    console.error(`Worker update check failed: ${gatewayUpdateError.message}`);
+    log.warn(`Worker update check failed: ${gatewayUpdateError.message}`);
   }
 
   if (!compat.ok) {
@@ -2091,7 +2224,7 @@ async function reconcileWorkerWithGateway(config, base, headers) {
     const recorded = await recordUpdateFailure(
       new Error(`Still incompatible with gateway ${gatewayVersion} after update attempts.`),
     );
-    console.error(
+    log.warn(
       compatibilityError(PACKAGE_VERSION, gatewayVersion) ??
         `This remote-control ${PACKAGE_VERSION} cannot connect to gateway ${gatewayVersion}.`,
     );
@@ -2121,15 +2254,13 @@ async function postResult(base, headers, result) {
 
       if (saved.status === 413) {
         if (shrinkStage === 'full') {
-          console.error(
-            'result post failed: HTTP 413 (payload too large); truncating and retrying',
-          );
+          log.warn('result post failed: HTTP 413 (payload too large); truncating and retrying');
           shrinkStage = 'half';
           ({ result: payload, body } = fitResult(payload, Math.floor(RESULT_BODY_BUDGET / 2)));
           continue;
         }
         if (shrinkStage === 'half') {
-          console.error('result still too large after truncation; sending a minimal stub');
+          log.warn('result still too large after truncation; sending a minimal stub');
           shrinkStage = 'minimal';
           ({ result: payload, body } = fitResult(
             {
@@ -2142,14 +2273,14 @@ async function postResult(base, headers, result) {
           ));
           continue;
         }
-        console.error(
+        log.warn(
           'result post rejected: HTTP 413 even for a minimal stub. Not retrying. Restart the Jian Remote service or re-run install if the machine stays offline.',
         );
         return;
       }
 
       if (PERMANENT_RESULT_STATUS.has(saved.status)) {
-        console.error(
+        log.warn(
           `result post rejected: HTTP ${saved.status}. Not retrying. Restart the Jian Remote service or re-run install if the machine stays offline.`,
         );
         return;
@@ -2159,9 +2290,9 @@ async function postResult(base, headers, result) {
     } catch (error) {
       failures += 1;
       const message = error instanceof Error ? error.message : String(error);
-      console.error(message);
+      log.warn(message);
       if (failures >= 40) {
-        console.error(
+        log.warn(
           'Gave up posting this result after repeated failures. The gateway task may stay open until the worker recovers; restart the Jian Remote service if Online stays red.',
         );
         return;
@@ -2178,6 +2309,8 @@ async function run() {
   // Set once the gateway is known: tells it this worker is stopping, so the panel shows the
   // machine offline at once instead of when its last poll grows old.
   let sayGoodbye = async () => {};
+  // Set once the state exists: a stopped worker says so, and `status` stops calling it online.
+  let markStopped = () => {};
   const shutdown = () => {
     try {
       stopMacIdle();
@@ -2193,6 +2326,8 @@ async function run() {
   };
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.once(signal, () => {
+      log.info('Worker stopping', { signal });
+      markStopped();
       void sayGoodbye().finally(() => {
         shutdown();
         process.exit(0);
@@ -2202,6 +2337,18 @@ async function run() {
   process.once('exit', shutdown);
 
   const config = await loadConfig();
+  const worker = createWorkerState();
+  markStopped = () => worker.update({ connected: false, stoppedAt: new Date().toISOString() });
+  worker.update({
+    gateway: config.gateway,
+    machineId: config.machineId,
+    platform: `${process.platform}-${process.arch}`,
+  });
+  log.info('Worker starting', {
+    version: PACKAGE_VERSION,
+    pid: process.pid,
+    machine: config.machineId,
+  });
   const capabilities = [];
   let probeMacUiState = () => 'unknown';
   try {
@@ -2243,16 +2390,20 @@ async function run() {
   // Match the gateway worker (including major.minor skew) before polling so fleets do not
   // crash-loop on refuse without attempting a self-update first.
   const gatewayVersion = await reconcileWorkerWithGateway(config, base, pollHeaders());
-  console.log(
-    `Connected to Jian Remote at ${config.gateway} (worker ${PACKAGE_VERSION}${gatewayVersion ? `, gateway ${gatewayVersion}` : ''}${capabilities.length ? `, capabilities ${capabilities.join(',')}` : ''})`,
-  );
+  worker.update({ gatewayVersion, capabilities });
+  log.info('Connected', {
+    gateway: config.gateway,
+    worker: PACKAGE_VERSION,
+    gatewayVersion,
+    capabilities: capabilities.join(','),
+  });
   let failures = 0;
   // First reconcile already ran; space the next check like the historical five-minute cadence.
   let nextUpdateCheck = Date.now() + 5 * 60_000;
   const delay = async (attempt) => {
     const ceiling = Math.min(60_000, 1000 * 2 ** Math.min(attempt, 6));
     const wait = Math.random() * ceiling;
-    console.error(`Retrying in ${(wait / 1000).toFixed(1)}s (attempt ${attempt})…`);
+    log.warn('Retrying', { inSeconds: (wait / 1000).toFixed(1), attempt });
     await new Promise((resolveDelay) => setTimeout(resolveDelay, wait));
   };
   while (true) {
@@ -2271,19 +2422,232 @@ async function run() {
         throw new Error(`poll failed: HTTP ${response.status} (gateway temporarily unavailable)`);
       }
       if (!response.ok) throw new Error(`poll failed: HTTP ${response.status}`);
-      if (failures > 0) console.log('Reconnected to Jian Remote.');
+      if (failures > 0) log.info('Reconnected', { gateway: config.gateway });
       failures = 0;
+      worker.contact();
       const { task } = await response.json();
       if (!task) {
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
         continue;
       }
+      const action = describeTask(task);
+      log.info('Task started', { task: task.id, ...action });
+      const startedAt = Date.now();
       const result = await execute(task);
+      const durationMs = Date.now() - startedAt;
+      const ok = action.kind === 'computer' ? result.computer?.ok !== false : result.exitCode === 0;
+      worker.ran(action.kind, ok, durationMs);
+      log[ok ? 'info' : 'warn']('Task finished', {
+        task: task.id,
+        kind: action.kind,
+        ok,
+        exitCode: result.exitCode,
+        timedOut: result.timedOut || undefined,
+        durationMs,
+        error: result.computer?.error,
+      });
       // Retry the result rather than rerunning the command after a transient network error.
       await postResult(base, headers, result);
     } catch (error) {
-      console.error(error instanceof Error ? error.message : error);
+      const message = error instanceof Error ? error.message : String(error);
+      worker.lost(message);
+      log.error('Poll failed', { error: message, attempt: failures + 1 });
       await delay(++failures);
+    }
+  }
+}
+
+/** A span of time as people say it: 42s, 3m 12s, 5h 2m, 2d 4h. */
+export function since(fromIso, now = Date.now()) {
+  const seconds = Math.max(0, Math.round((now - Date.parse(fromIso)) / 1000));
+  if (!Number.isFinite(seconds)) return 'unknown';
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}m`;
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+}
+
+/** The gateway's health, timed: how long a round trip takes from here, and its release. */
+async function pingGateway(gateway) {
+  const startedAt = performance.now();
+  try {
+    const response = await fetch(`${gateway}/health`, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(5_000),
+    });
+    const ms = Math.round(performance.now() - startedAt);
+    const body = response.ok ? await response.json().catch(() => ({})) : {};
+    return { ok: response.ok, ms, status: response.status, version: body?.version };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * Everything about this worker in one place: where it connects, whether it is running and
+ * connected, its versions and the gateway's, what it has run, and how far the gateway is now.
+ * `--json` prints the same as one object, for scripts.
+ */
+async function status() {
+  let config;
+  try {
+    config = JSON.parse(await readFile(configPath, 'utf8'));
+  } catch {
+    config = undefined;
+  }
+  let state;
+  try {
+    state = JSON.parse(await readFile(statePath, 'utf8'));
+  } catch {
+    state = undefined;
+  }
+  let installedVersion;
+  try {
+    installedVersion = readEmbeddedVersion((await readFile(installedScript)).toString('utf8'));
+  } catch {
+    installedVersion = undefined;
+  }
+  const pid = readWorkerLockPid();
+  const running = pid !== undefined && isPidAlive(pid);
+  const ping = config?.gateway ? await pingGateway(config.gateway) : undefined;
+  const connected = running && state?.pid === pid && state?.connected === true;
+  const report = {
+    installed: Boolean(config),
+    running,
+    connected,
+    ...(running ? { pid } : {}),
+    machineId: config?.machineId,
+    gateway: config?.gateway,
+    cli: PACKAGE_VERSION,
+    worker: installedVersion,
+    gatewayVersion: ping?.version ?? state?.gatewayVersion,
+    ping,
+    platform: `${process.platform}-${process.arch}`,
+    capabilities: state?.capabilities ?? [],
+    startedAt: running ? state?.startedAt : undefined,
+    lastContactAt: state?.lastContactAt,
+    lastError: state?.lastError ? { message: state.lastError, at: state.lastErrorAt } : undefined,
+    tasks: state?.tasks ?? { total: 0, failed: 0, shell: 0, computer: 0 },
+    lastTask: state?.lastTask,
+    log: logPath,
+  };
+
+  if (args.includes('--json')) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return;
+  }
+  if (!config) {
+    printInfo(
+      'Jian Remote is not installed here. Run the command the panel shows for this machine.',
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const color = shouldColorize();
+  const state_ = connected
+    ? paint('Connected', ANSI.green, color)
+    : running
+      ? paint('Running, not connected', ANSI.yellow, color)
+      : paint('Stopped', ANSI.red, color);
+  const tasks = report.tasks;
+  const facts = [
+    ['Status', state_],
+    ['Machine', config.machineId],
+    ['Gateway', config.gateway],
+    [
+      'Versions',
+      `worker ${installedVersion ?? 'not installed'} · cli ${PACKAGE_VERSION} · gateway ${report.gatewayVersion ?? 'unknown'}`,
+    ],
+    [
+      'Ping',
+      ping?.ok
+        ? `${ping.ms} ms`
+        : `unreachable${ping?.status ? ` (HTTP ${ping.status})` : ping?.error ? ` (${ping.error})` : ''}`,
+    ],
+    [
+      'Platform',
+      `${report.platform}${report.capabilities.length ? ` · ${report.capabilities.join(', ')}` : ''}`,
+    ],
+  ];
+  if (running)
+    facts.push([
+      'Process',
+      `pid ${pid}${report.startedAt ? `, up ${since(report.startedAt)}` : ''}`,
+    ]);
+  if (report.lastContactAt) facts.push(['Last contact', `${since(report.lastContactAt)} ago`]);
+  facts.push([
+    'Actions',
+    `${tasks.total} run (${tasks.shell ?? 0} shell, ${tasks.computer ?? 0} computer), ${tasks.failed} failed`,
+  ]);
+  if (report.lastTask) {
+    facts.push([
+      'Last action',
+      `${report.lastTask.kind}, ${report.lastTask.ok ? 'ok' : 'failed'}, ${report.lastTask.durationMs} ms, ${since(report.lastTask.at)} ago`,
+    ]);
+  }
+  if (report.lastError)
+    facts.push(['Last error', `${report.lastError.message} (${since(report.lastError.at)} ago)`]);
+  facts.push(['Log', logPath]);
+  const mark = connected
+    ? paint('✓', ANSI.green, color)
+    : paint(running ? '!' : '✗', running ? ANSI.yellow : ANSI.red, color);
+  process.stdout.write(formatSuccessBlock({ headline: 'Jian Remote', facts, color, mark }));
+  if (!connected) process.exitCode = 1;
+}
+
+/**
+ * The worker's log: the last lines (`--lines N`, 100 by default), from a level up
+ * (`--level warn`), and with `--follow` the new ones as they are written.
+ */
+async function logs() {
+  const count = Math.max(1, Number(option('--lines') ?? option('-n') ?? 100) || 100);
+  const level = option('--level');
+  if (level && !LOG_LEVELS.includes(level)) {
+    throw new Error(`--level takes one of ${LOG_LEVELS.join(', ')}`);
+  }
+  const floor = level ? LOG_LEVELS.indexOf(level) : 0;
+  const shown = (line) => {
+    if (!line) return false;
+    const at = logLineLevel(line);
+    // A line the format did not write (a crash the service caught) always shows.
+    return at === undefined || LOG_LEVELS.indexOf(at) >= floor;
+  };
+  let text = '';
+  try {
+    text = await readFile(logPath, 'utf8');
+  } catch {
+    printInfo(`No log yet at ${logPath}. It starts when the worker runs.`);
+    if (!args.includes('--follow') && !args.includes('-f')) return;
+  }
+  const lines = text.split('\n').filter(shown);
+  for (const line of lines.slice(-count)) process.stdout.write(`${line}\n`);
+  if (!args.includes('--follow') && !args.includes('-f')) return;
+
+  // Follow: read what was added since, every half second; a rotation starts the file over.
+  let offset = Buffer.byteLength(text);
+  let rest = '';
+  while (true) {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+    let size;
+    try {
+      size = statSync(logPath).size;
+    } catch {
+      continue;
+    }
+    if (size < offset) offset = 0;
+    if (size === offset) continue;
+    const handle = await open(logPath, 'r');
+    try {
+      const chunk = Buffer.alloc(size - offset);
+      await handle.read(chunk, 0, chunk.length, offset);
+      offset = size;
+      const parts = `${rest}${chunk.toString('utf8')}`.split('\n');
+      rest = parts.pop() ?? '';
+      for (const line of parts.filter(shown)) process.stdout.write(`${line}\n`);
+    } finally {
+      await handle.close();
     }
   }
 }
@@ -2312,26 +2676,27 @@ if (isCliEntry()) {
     else if (invocation.command === 'start') await cliStart();
     else if (invocation.command === 'restart') await cliRestart();
     else if (invocation.command === 'run') await run();
+    else if (invocation.command === 'status') await status();
+    else if (invocation.command === 'logs') await logs();
     else {
       const color = shouldColorize();
       const title = paint('Jian Remote', ANSI.bold, color);
       const pkg = paint('(@jian-ai/remote-control)', ANSI.dim, color);
       console.log(`${title} worker ${pkg}
-  version | --version | -V
-  install [--system] --gateway HTTPS_URL --machine UUID (--token VALUE | --token-prompt | --token-stdin)
-  configure [--gateway HTTPS_URL] [--machine UUID] (--token VALUE | --token-prompt | --token-stdin)
+  install [--system] --gateway HTTPS_URL --machine UUID --token VALUE
+  status [--json]
+  logs [--lines N] [--level debug|info|warn|error] [--follow]
   update [--version X.Y.Z|latest]
   stop | start | restart
-  run
+  version
 
-Install:    npm install -g @jian-ai/remote-control
-Or:         npx @jian-ai/remote-control@latest install --gateway … --machine … --token …
-            (Linux headless/root VPS: add --system, or use a normal user + loginctl enable-linger)
-Configure:  jian-remote configure --token …   (or --gateway / --machine; restarts the service)
-Update:     npx @jian-ai/remote-control@latest update
-            (upgrades the worker binary; reads ~/.config/jian-remote)
-Service:    jian-remote stop | start | restart
-Version:    jian-remote version`);
+Install:  run the command the panel shows when you add a machine or rotate its
+          credentials: npm install -g @jian-ai/remote-control, then jian-remote install.
+          Running it again replaces the credentials and restarts the worker.
+          (Linux headless/root VPS: add --system, or use a normal user + loginctl enable-linger)
+Status:   jian-remote status   (connection, machine, versions, ping, actions run)
+Logs:     jian-remote logs --follow
+Update:   jian-remote update   (the worker also keeps itself on the gateway's version)`);
     }
   } catch (error) {
     const color = shouldColorize({ isTTY: process.stderr.isTTY });

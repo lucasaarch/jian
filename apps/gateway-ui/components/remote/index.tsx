@@ -167,13 +167,12 @@ export function RemoteMachines({ api }: Props) {
   }
 
   const packageRef = `@jian-ai/remote-control@${packageTag}`;
-  // One command per situation, the same on every OS once Node.js 24+ is there: a new machine
-  // installs jian-remote and connects it; a rotated one already has it and takes the new token.
+  // One command, the same on every OS once Node.js 24+ is there, and the same after a rotation:
+  // it installs jian-remote, or brings it up to date, and connects it with these credentials.
+  // Rotating is also how a lost command is had again, so it never assumes the worker is there.
   const command = !reveal
     ? ''
-    : reveal.kind === 'created'
-      ? `npm install -g ${packageRef} && jian-remote install --gateway '${gatewayOrigin}' --machine '${reveal.id}' --token '${reveal.token}'`
-      : `jian-remote configure --gateway '${gatewayOrigin}' --token '${reveal.token}'`;
+    : `npm install -g ${packageRef} && jian-remote install --gateway '${gatewayOrigin}' --machine '${reveal.id}' --token '${reveal.token}'`;
 
   return (
     <>
@@ -325,22 +324,20 @@ export function RemoteMachines({ api }: Props) {
           }
           description={
             reveal.kind === 'rotated'
-              ? 'The previous worker token no longer works. Run this on the computer; the token is shown only once.'
-              : 'Run this on the computer. It installs jian-remote and connects it; the token is shown only once.'
+              ? 'The previous worker token no longer works. Run this on the computer to connect it again; the command is shown only once.'
+              : 'Run this on the computer. It installs jian-remote and connects it; the command is shown only once.'
           }
           close={() => setReveal(null)}
           footer={<Button onClick={() => setReveal(null)}>Done</Button>}
         >
           <div className="remote-created">
-            <CopyBlock
-              label={reveal.kind === 'rotated' ? 'Run on the computer' : 'Install on the computer'}
-              value={command}
-              ariaLabel="Copy command"
-            />
+            <CopyBlock label="Run on the computer" value={command} ariaLabel="Copy command" />
             <p className="note">
-              {reveal.kind === 'rotated'
-                ? 'The command includes the new token; clear shell history if you share that terminal. The old token stops working immediately.'
-                : 'Needs Node.js 24+ on the computer and HTTPS access to this gateway. The command includes the worker token; clear shell history if you share that terminal. The worker starts again on login and keeps itself on this gateway’s version. If it stays offline, check ~/.config/jian-remote/worker.log.'}
+              Needs Node.js 24+ on the computer and HTTPS access to this gateway. The command
+              includes the worker token; clear shell history if you share that terminal. The worker
+              starts again on login and keeps itself on this gateway’s version. On the computer,{' '}
+              <code>jian-remote status</code> says how it stands and <code>jian-remote logs</code>{' '}
+              what it did.
             </p>
           </div>
         </Modal>
@@ -349,7 +346,7 @@ export function RemoteMachines({ api }: Props) {
       {rotating && (
         <Confirm
           title={`Rotate credentials for ${rotating.name}?`}
-          description="Issues a new worker token and invalidates the current one. The machine stays registered; run configure on that computer with the new token."
+          description="Issues a new worker token and invalidates the current one. The machine stays registered; you get its install command again, with the new token, to run on that computer."
           busy={busy}
           close={() => setRotating(undefined)}
           confirm={() => void rotateCredentials(rotating)}

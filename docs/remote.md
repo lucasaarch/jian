@@ -22,8 +22,9 @@ curl -fsS -X POST https://gateway.example/v1/remote/machines \
 After you create a machine, the panel’s Remote Control page shows one command to run on it: it
 installs `jian-remote` from npm and connects it with the one-time token — no clone of Jian is
 required. The token is shown only once; treat the command as a secret. **Rotate credentials**
-on an existing machine issues a new token (invalidates the old one) and shows the one
-`jian-remote configure` command that hands it to the installed worker.
+on an existing machine issues a new token (invalidates the old one) and shows the same install
+command again with it. Running it on a computer that already has the worker replaces its
+credentials and restarts it, so rotating is also how you get a lost install command back.
 
 ## Install the worker
 
@@ -31,7 +32,8 @@ Install Node.js 24+ on the computer. The published package is `@jian-ai/remote-c
 `jian-remote`), versioned with each Jian release. The panel pins the running gateway version
 when known; otherwise use `@latest`.
 
-Copy the command from the panel, or substitute your values — the same on every OS:
+There is one way to install it: the command the panel shows, the same on every OS. Copy it, or
+substitute your values:
 
 ```sh
 npm install -g @jian-ai/remote-control@latest && jian-remote install \
@@ -67,22 +69,41 @@ Success prints a short English block (service kind + started/stopped/restarted).
 stop any previous worker (OS job + `~/.config/jian-remote/worker.pid`) before a new process
 runs, so two pollers cannot fight after a KeepAlive race.
 
-### Configure (change token or gateway URL)
-
-When the panel rotates credentials, or you move the gateway URL, rewrite the stored config and
-restart the service without wiping the LaunchAgent / systemd unit / Windows task:
+### Status
 
 ```sh
-# Token only (machine id and gateway stay as stored):
-jian-remote configure --token 'WORKER_TOKEN'
-
-# Gateway URL and/or machine id as well:
-jian-remote configure --gateway 'https://gateway.example' --token 'WORKER_TOKEN'
-jian-remote configure --machine 'MACHINE_UUID' --token 'WORKER_TOKEN'
+jian-remote status          # --json for the same as one object
 ```
 
-At least one of `--gateway`, `--machine`, or a `--token*` flag is required. Success prints what
-changed and that the service restarted; failure prints an English error and exits non-zero.
+One block with everything about the worker on this computer: whether it is running and
+connected, its machine id and gateway, the worker, CLI and gateway versions, how long a round
+trip to the gateway takes right now, the platform and its Computer Use capability, how long the
+process has been up, when it last heard from the gateway, how many actions it ran (shell and
+computer) and how many failed, the last action and the last error. It exits non-zero when the
+worker is not connected, so a script can check it.
+
+### Logs
+
+```sh
+jian-remote logs                    # the last 100 lines
+jian-remote logs --lines 500
+jian-remote logs --level warn       # warnings and errors only (debug, info, warn, error)
+jian-remote logs --follow           # keep printing new lines; Ctrl+C to stop
+```
+
+The worker writes its own log, `~/.config/jian-remote/worker.log`, on every OS: one line per
+event with the UTC time, the level and its facts as `key=value`:
+
+```text
+2026-10-30T12:00:00.123Z INFO  Connected gateway=https://gateway.example worker=1.0.6 gatewayVersion=1.0.6 capabilities=computer-macos-v1
+2026-10-30T12:00:04.511Z INFO  Task started task=… kind=shell command="pnpm test" cwd=/srv/app
+2026-10-30T12:00:19.002Z INFO  Task finished task=… kind=shell ok=true exitCode=0 durationMs=14491
+2026-10-30T12:03:10.870Z ERROR Poll failed error="poll failed: HTTP 503" attempt=1
+```
+
+Every action is logged when it starts and when it finishes, with its duration and outcome. A
+typed text is logged by its length only, never its content. The log moves aside to
+`worker.log.1` at 5 MB. Run by hand in a terminal, the worker prints the same lines there too.
 
 ### Version compatibility and fleet auto-update
 
@@ -219,11 +240,12 @@ launchctl print "gui/$(id -u)/com.jian.remote"
 # Or a short list line:
 launchctl list | grep com.jian.remote
 
-# Worker stdout/stderr (created once launchd starts the job)
-tail -f ~/.config/jian-remote/worker.log
+# The worker's log
+jian-remote logs --follow
 ```
 
-A healthy log starts with a line like `Connected to Jian Remote at https://… (worker …)`.
+`jian-remote status` says most of this at once. A healthy log has a line like
+`… INFO  Connected gateway=https://… worker=…`.
 `launchctl list` shows a PID (not `-`) when the process is up; a non-zero last-exit status
 with `KeepAlive` means it is crashing and restarting — read the log. If
 `launchctl print` shows repeated exits and the system log mentions
@@ -248,7 +270,7 @@ launchctl kickstart -k "gui/$(id -u)/com.jian.remote"
    install is only needed if the config was deleted. On macOS, `update` also refreshes the
    LaunchAgent (`ProcessType=Interactive`) so App Nap does not freeze the poller when the
    screen is locked.
-3. Read `~/.config/jian-remote/worker.log`. An incompatible-version error after auto-update
+3. Run `jian-remote status`, then `jian-remote logs --level warn`. An incompatible-version error after auto-update
    backoff means the worker could not download the gateway’s script (or npm package) —
    fix reachability or run `update` against the gateway’s version once. Repeated
    `HTTP 502`/`503` means the gateway is up and down — the worker backs off and reconnects.
@@ -272,8 +294,9 @@ built-in `remote-control` skill describes when to use each tool.
 clicks, move, type, key, scroll, drag, wait, `end_session`). Coordinates are pixels in the
 scaled JPEG the tool returns (`widthPx` × `heightPx`). Screenshots are compressed on the
 machine (longest side ≤ 1600, ~280 KB binary). The worker shows a **Jian overlay** pointer
-(geometric white arrow with a soft blue glow) while a session is open; after ~30s idle it
-stays visible but very translucent; `end_session` removes it.
+while a session is open: the same sprite on every OS (`assets/jian-pointer.png`, a white arrow
+with a blue stroke and glow), embedded in each platform's helper. After ~30s idle it stays
+visible but very translucent; `end_session` removes it.
 
 **Pointer UX:** the overlay is the visible agent cursor. Clicks briefly warp the system cursor
 to the target (required for HID injection) then **restore** the user’s previous position so
@@ -283,8 +306,8 @@ between positions (capped ~110 ms) so moves slide instead of teleporting.
 | OS | Capability | Screenshot | Input + overlay | Notes |
 | --- | --- | --- | --- | --- |
 | macOS | `computer-macos-v1` | `screencapture` + `sips` | Swift helper (`CGEvent` + AppKit panel) | Grant **Screen Recording** and **Accessibility** to **Jian Remote**. Published packages ship a prebuilt universal helper (no Xcode on the worker Mac). |
-| Linux | `computer-linux-v1` | `ffmpeg` x11grab | Python helper + `xdotool` (X11 overlay) | Needs `DISPLAY`, `xdotool`, `ffmpeg`, and `python3`. Pure Wayland without XWayland/`xdotool` is not advertised yet. |
-| Windows | `computer-windows-v1` | System.Drawing | PowerShell helper (`SendInput` + WinForms overlay) | Interactive desktop session (Task Scheduler logon task). |
+| Linux | `computer-linux-v1` | `ffmpeg` x11grab | Python helper + `xdotool` (X11 overlay) | Needs `DISPLAY`, `xdotool`, `ffmpeg`, and `python3`. With a compositor the sprite is drawn with its soft edge; without one, a shape mask cuts it out and the faint glow is dropped. Pure Wayland without XWayland/`xdotool` is not advertised yet. |
+| Windows | `computer-windows-v1` | System.Drawing | PowerShell helper (`SendInput` + layered-window overlay) | Interactive desktop session (Task Scheduler logon task). |
 
 Published `@jian-ai/remote-control` releases ship a **prebuilt universal** macOS `computer-helper`
 (arm64 + x86_64) built on macOS in the Publish workflow, plus the Linux/Windows helper scripts.
