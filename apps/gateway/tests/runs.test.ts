@@ -348,6 +348,11 @@ it('continues only reconciled stopped runs and preserves checkpoints without rep
 
   expect(next.continuationOf).toBe(run.id);
   expect(next.status).toBe('queued');
+  // The note carries the reconciliation for the agent; the conversation does not show it.
+  const note = (await services.sessions.messages(profile.id, run.sessionId)).find(
+    (message) => message.runId === next.id && message.role === 'user',
+  );
+  expect(note?.purpose).toBe('resume');
   expect(await services.lifecycle.checkpoints(profile.id, run.id)).toHaveLength(1);
   expect((await services.runs.run(profile.id, run.id)).status).toBe('interrupted');
 });
