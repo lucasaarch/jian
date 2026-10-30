@@ -1,5 +1,5 @@
-import { Button, Field, Mark } from '@jian/ui';
-import { ArrowRight, CircleHelp, Server, ShieldCheck } from 'lucide-react';
+import { Action, Overlay, TextField } from '@jian/ui';
+import { ShieldCheck } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
 import { desktop } from '../desktop';
@@ -9,11 +9,13 @@ import { desktop } from '../desktop';
  * checked against the gateway before the app keeps them.
  */
 export function AddGateway({
+  open,
+  onOpenChange,
   added,
-  cancel,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   added: (gateway: GatewaySummary) => void;
-  cancel: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -29,93 +31,64 @@ export function AddGateway({
       token: String(form.get('token') ?? ''),
     });
     setBusy(false);
-    if (result.ok) added(result.gateway);
-    else setError(result.error);
+    if (!result.ok) return setError(result.error);
+    added(result.gateway);
+    onOpenChange(false);
   };
 
   return (
-    <main className="login-layout min-h-(--app-height)">
-      <section className="login-story">
-        <span className="brand">
-          <Mark />
-          <span>Jian</span>
-        </span>
-        <div className="login-copy">
-          <div className="login-emblem" aria-hidden="true">
-            <Mark />
-          </div>
-          <h1>
-            Every gateway.
-            <br />
-            One place.
-          </h1>
-          <p>Your agents on each installation you run, side by side in one app.</p>
-        </div>
-        <small>Open by nature. Yours entirely.</small>
-      </section>
-      <section className="login-form-wrap">
-        <form className="login-form" onSubmit={submit}>
-          <div className="login-lock">
-            <Server size={24} />
-          </div>
-          <h2>Connect a gateway.</h2>
-          <p>One you run on a server: its address and host token, as you sign in on the web.</p>
-          <Field label="Address">
-            <input
-              name="url"
-              type="url"
-              placeholder="https://jian.example.com"
-              autoComplete="off"
-              spellCheck={false}
-              required
-            />
-          </Field>
-          <Field label="Name" hint="How the gateway bar shows it. The address’s host when empty.">
-            <input
-              name="name"
-              type="text"
-              placeholder="Home server"
-              autoComplete="off"
-              maxLength={60}
-            />
-          </Field>
-          <Field label="Host token">
-            <input
-              name="token"
-              type="password"
-              placeholder="Paste the gateway’s host token"
-              autoComplete="off"
-              spellCheck={false}
-              required
-            />
-          </Field>
-          {error && (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          )}
-          <Button type="submit" busy={busy}>
-            Connect
-            <ArrowRight size={17} />
-          </Button>
-          <Button variant="quiet" onClick={cancel}>
-            Cancel
-          </Button>
-          <p className="secure-note">
-            <ShieldCheck size={16} />
-            The token stays in this computer’s keychain and never reaches the panel itself.
+    <Overlay open={open} onOpenChange={onOpenChange} title="Connect a gateway">
+      <form onSubmit={submit} className="m-auto grid w-full max-w-md gap-5 p-8">
+        <header className="grid gap-1">
+          <h2 className="text-xl font-semibold tracking-tight">Connect a gateway</h2>
+          <p className="text-sm text-muted">
+            One you run on a server: its address and host token, as you sign in on the web.
           </p>
-          <details className="login-help">
-            <summary>
-              <CircleHelp size={15} />
-              Where do I find the token?
-            </summary>
-            <p>
-              Use the value of <code>JIAN_API_TOKEN</code> from the gateway’s server configuration.
-            </p>
-          </details>
-        </form>
-      </section>
-    </main>
+        </header>
+        <TextField
+          label="Address"
+          name="url"
+          type="url"
+          placeholder="https://jian.example.com"
+          required
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <TextField
+          label="Name"
+          name="name"
+          placeholder="Home server"
+          hint="How the status bar shows it. The address’s host when empty."
+          maxLength={60}
+          autoComplete="off"
+        />
+        <TextField
+          label="Host token"
+          name="token"
+          type="password"
+          placeholder="JIAN_API_TOKEN from the server"
+          required
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {error && (
+          <p role="alert" className="text-sm text-bad">
+            {error}
+          </p>
+        )}
+        <p className="flex items-center gap-2 text-xs text-muted">
+          <ShieldCheck size={14} />
+          The token stays in this computer’s keychain and never reaches the window.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Action tone="quiet" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Action>
+          <Action tone="primary" type="submit" busy={busy}>
+            Connect
+          </Action>
+        </div>
+      </form>
+    </Overlay>
   );
 }
