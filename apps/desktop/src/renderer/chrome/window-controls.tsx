@@ -2,8 +2,9 @@ import { Copy, Minus, Square, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { desktop } from '../desktop';
 
+// Over whatever is open at the top right, so they keep no ground of their own until pointed at.
 const control =
-  'grid h-(--title-bar) w-11 place-items-center text-muted hover:bg-accent-soft hover:text-ink';
+  'grid h-(--title-bar) w-11 place-items-center text-muted transition-colors hover:bg-glass-hover hover:text-ink';
 
 /**
  * Minimize, maximize and close, drawn by the app on Windows and Linux, where it takes the
@@ -29,7 +30,7 @@ export function WindowControls({ className = '' }: { className?: string }) {
       </button>
       <button
         type="button"
-        className={`${control} hover:bg-bad hover:text-on-accent`}
+        className={`${control} hover:bg-bad! hover:text-white!`}
         onClick={controls.close}
         aria-label="Close"
       >

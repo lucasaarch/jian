@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compatible, parseGatewayUrl } from '../src/main/gateways/rules';
+import { compatible, gatewayName, parseGatewayUrl } from '../src/main/gateways/rules';
 
 describe('a gateway address', () => {
   it('keeps the origin and path, without a trailing slash', () => {
@@ -29,5 +29,13 @@ describe('a gateway release the app can work with', () => {
   it('is never refused when either side is a development build', () => {
     expect(compatible('0.0.0-dev', '1.3.0')).toBe(true);
     expect(compatible('1.2.0', undefined)).toBe(true);
+  });
+});
+
+describe('what a gateway is called', () => {
+  it('is this computer for the app’s own, and the host it answers at for any other', () => {
+    expect(gatewayName({ local: true, url: 'http://127.0.0.1:60378' })).toBe('This computer');
+    expect(gatewayName({ url: 'https://jian.example.com' })).toBe('jian.example.com');
+    expect(gatewayName({ url: 'http://192.168.1.20:4310/jian' })).toBe('192.168.1.20:4310');
   });
 });

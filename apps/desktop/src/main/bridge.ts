@@ -4,16 +4,17 @@ import type { GatewayMonitor } from './gateways/monitor';
 import { parseGatewayUrl } from './gateways/rules';
 import { type GatewayStore, VAULT_MISSING, vaultAvailable } from './gateways/store';
 import { verify } from './gateways/verify';
-import { checkNow } from './updates';
+import type { ComputerSharing } from './machines/sharing';
 
 /** The calls the window may make; each one checks what it is given, as from any other caller. */
 export function serveBridge(deps: {
   store: GatewayStore;
   monitor: GatewayMonitor;
+  machines: ComputerSharing;
   window: () => BrowserWindow | undefined;
   showing: (gatewayId: string | null) => void;
-}): { changed(): void; open(target: OpenTarget): void } {
-  const { store, monitor } = deps;
+}): { changed(): void; machinesChanged(): void; open(target: OpenTarget): void } {
+  const { store, monitor, machines } = deps;
   const send = (channel: string, value: unknown) => deps.window()?.webContents.send(channel, value);
 
   // Read once, as the preload starts: the window knows its own release before it draws.
@@ -24,9 +25,6 @@ export function serveBridge(deps: {
 
   ipcMain.handle('gateways:add', async (_event, input: NewGateway): Promise<AddGatewayResult> => {
     if (!(await vaultAvailable())) return { ok: false, error: VAULT_MISSING };
-    const name = String(input?.name ?? '')
-      .trim()
-      .slice(0, 60);
     const token = String(input?.token ?? '').trim();
     const parsed = parseGatewayUrl(String(input?.url ?? ''));
     if ('error' in parsed) return { ok: false, error: parsed.error };
@@ -37,7 +35,6 @@ export function serveBridge(deps: {
     const checked = await verify(parsed.url, token, app.getVersion());
     if (!checked.ok) return checked;
     const gateway = await store.add({
-      name: name || new URL(parsed.url).host,
       url: parsed.url,
       token,
     });
@@ -49,19 +46,10 @@ export function serveBridge(deps: {
       : { ok: false, error: 'The gateway was not saved.' };
   });
 
-  ipcMain.handle('gateways:rename', async (_event, id: string, name: string) => {
-    const trimmed = String(name ?? '')
-      .trim()
-      .slice(0, 60);
-    // The app's own gateway keeps its name, as it cannot be removed either.
-    if (!store.get(id) || store.get(id)?.local || !trimmed) return;
-    await store.rename(id, trimmed);
-    send('gateways:changed', monitor.summaries());
-  });
-
   ipcMain.handle('gateways:remove', async (_event, id: string) => {
     if (store.get(id)?.local) return;
     monitor.forget(id);
+    await machines.forget(id);
     await store.remove(id);
     send('gateways:changed', monitor.summaries());
   });
@@ -94,14 +82,19 @@ export function serveBridge(deps: {
   // Closing hides the window into the tray, as the system's own close button would.
   ipcMain.on('window:close', () => deps.window()?.close());
 
-  ipcMain.handle('updates:check', () => checkNow());
   ipcMain.handle('settings:openAtLogin', () => app.getLoginItemSettings().openAtLogin);
   ipcMain.handle('settings:setOpenAtLogin', (_event, open: boolean) => {
     app.setLoginItemSettings({ openAtLogin: open === true });
   });
 
+  ipcMain.handle('machines:state', (_event, gatewayId: string) =>
+    machines.state(String(gatewayId ?? '')),
+  );
+  ipcMain.handle('machines:setSharing', (_event, on: boolean) => machines.setSharing(on === true));
+
   return {
     changed: () => send('gateways:changed', monitor.summaries()),
+    machinesChanged: () => send('machines:changed', null),
     open: (target) => send('window:open', target),
   };
 }

@@ -9,7 +9,6 @@ export type StoredGateway = {
   id: string;
   /** The app's own gateway, kept in memory: its address changes every launch. */
   local?: true;
-  name: string;
   url: string;
   /** The host token, encrypted with safeStorage and base64-encoded. */
   sealedToken: string;
@@ -75,7 +74,6 @@ export class GatewayStore {
     this.own = {
       id: LOCAL_GATEWAY_ID,
       local: true,
-      name: 'This computer',
       url: url ?? '',
       sealedToken: '',
       addedAt: '',
@@ -95,11 +93,10 @@ export class GatewayStore {
     return this.tokens.get(gateway.id) ?? '';
   }
 
-  async add(input: { name: string; url: string; token: string }): Promise<StoredGateway> {
+  async add(input: { url: string; token: string }): Promise<StoredGateway> {
     if (!(await vaultAvailable())) throw new Error(VAULT_MISSING);
     const gateway: StoredGateway = {
       id: randomUUID(),
-      name: input.name,
       url: input.url,
       sealedToken: await seal(input.token),
       addedAt: new Date().toISOString(),
@@ -116,13 +113,6 @@ export class GatewayStore {
     this.tokens.set(id, token);
     this.gateways = this.gateways.map((gateway) =>
       gateway.id === id ? { ...gateway, sealedToken } : gateway,
-    );
-    await this.save();
-  }
-
-  async rename(id: string, name: string): Promise<void> {
-    this.gateways = this.gateways.map((gateway) =>
-      gateway.id === id ? { ...gateway, name } : gateway,
     );
     await this.save();
   }

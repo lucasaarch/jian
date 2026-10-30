@@ -1,56 +1,35 @@
 import { Picker, PickerAction, PickerRow } from '@jian/ui';
 import { Laptop, Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { GatewayStatus, GatewaySummary } from '../../shared/bridge';
+import type { GatewaySummary } from '../../shared/bridge';
+import { STATUS_DOT, STATUS_SAID } from './status';
 
-const DOT: Record<GatewayStatus, string> = {
-  online: 'bg-good',
-  connecting: 'bg-muted',
-  incompatible: 'bg-warn',
-  offline: 'bg-bad',
-  unauthorized: 'bg-bad',
-};
-
-const SAID: Record<GatewayStatus, string> = {
-  online: 'Connected',
-  connecting: 'Connecting',
-  incompatible: 'Another release',
-  offline: 'Not answering',
-  unauthorized: 'Token refused',
-};
-
-/** Where a gateway is, as people say it: its host, without the scheme. */
-function hostOf(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
+/** Said under a gateway only when it is not connected: connected is what the dot already says. */
+function detailOf(gateway: GatewaySummary): string | undefined {
+  return gateway.status === 'online' ? undefined : STATUS_SAID[gateway.status];
 }
 
 function Mark({ gateway }: { gateway: GatewaySummary }) {
   return gateway.local ? (
     <Laptop size={14} aria-hidden="true" />
   ) : (
-    <span className={`size-2 rounded-full ${DOT[gateway.status]}`} aria-hidden="true" />
+    <span className={`size-2 rounded-full ${STATUS_DOT[gateway.status]}`} aria-hidden="true" />
   );
 }
 
 /**
  * The gateway in use, in the status bar: every one the app knows, how each stands and its
- * unread chats; switching shows its agents, its gear opens its connection.
+ * unread chats; switching shows its agents. Each one's details are in the app's settings.
  */
 export function GatewayPicker({
   gateways,
   current,
   select,
-  openSettings,
   connect,
 }: {
   gateways: GatewaySummary[];
   current?: GatewaySummary;
   select: (id: string) => void;
-  openSettings: (id: string) => void;
   connect: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -86,17 +65,19 @@ export function GatewayPicker({
         </PickerAction>
       }
     >
-      {gateways.map((gateway) => (
-        <PickerRow
-          key={gateway.id}
-          leading={<Mark gateway={gateway} />}
-          label={gateway.unread > 0 ? `${gateway.name} · ${gateway.unread} unread` : gateway.name}
-          detail={`${gateway.local ? 'On this computer' : hostOf(gateway.url)} · ${SAID[gateway.status]}`}
-          selected={gateway.id === current?.id}
-          onPick={close(() => select(gateway.id))}
-          onSettings={close(() => openSettings(gateway.id))}
-        />
-      ))}
+      {gateways.map((gateway) => {
+        const detail = detailOf(gateway);
+        return (
+          <PickerRow
+            key={gateway.id}
+            leading={<Mark gateway={gateway} />}
+            label={gateway.unread > 0 ? `${gateway.name} · ${gateway.unread} unread` : gateway.name}
+            {...(detail ? { detail } : {})}
+            selected={gateway.id === current?.id}
+            onPick={close(() => select(gateway.id))}
+          />
+        );
+      })}
     </Picker>
   );
 }

@@ -23,7 +23,7 @@ const Context = createContext<Registry | null>(null);
 const mac = () => desktop().platform === 'darwin';
 
 /** How a binding is written beside the command, the way the system writes its own. */
-export function shortcutOf(keys: AppCommand['keys']): string | undefined {
+function shortcutOf(keys: AppCommand['keys']): string | undefined {
   if (!keys) return undefined;
   const key = keys.key.length === 1 ? keys.key.toUpperCase() : keys.key;
   if (mac()) return `${keys.shift ? '⇧' : ''}⌘${key}`;

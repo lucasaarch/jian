@@ -1,4 +1,4 @@
-import { Button, Field, Mark } from '@jian/ui';
+import { Action, TextField } from '@jian/ui';
 import { CloudOff, KeyRound, TriangleAlert } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
@@ -23,21 +23,6 @@ function Notice({
         <h1 className="text-lg font-semibold">{title}</h1>
         {children}
       </section>
-    </main>
-  );
-}
-
-/** The app's own gateway, between the app opening and the gateway answering. */
-export function Starting() {
-  return (
-    <main
-      className="grid h-(--app-height) place-items-center bg-canvas text-ink"
-      aria-busy="true"
-      aria-label="Starting Jian"
-    >
-      <span className="size-12 animate-pulse text-ink [&_svg]:size-full">
-        <Mark />
-      </span>
     </main>
   );
 }
@@ -73,9 +58,9 @@ export function Unreachable({ gateway, retry }: { gateway: GatewaySummary; retry
         The app could not reach <span className="font-mono text-ink">{gateway.url}</span>. It keeps
         trying in the background and opens the panel as soon as the gateway answers.
       </p>
-      <Button variant="secondary" onClick={retry}>
+      <Action tone="outline" onClick={retry}>
         Try again now
-      </Button>
+      </Action>
     </Notice>
   );
 }
@@ -101,23 +86,22 @@ function ReplaceToken({ gateway, done }: { gateway: GatewaySummary; done: () => 
         in this computer’s keychain.
       </p>
       <form className="flex w-full flex-col gap-2" onSubmit={submit}>
-        <Field label="Host token">
-          <input
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-          />
-        </Field>
+        <TextField
+          label="Host token"
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          value={token}
+          onChange={(event) => setToken(event.target.value)}
+        />
         {error && (
-          <p className="form-error" role="alert">
+          <p className="text-sm text-bad" role="alert">
             {error}
           </p>
         )}
-        <Button type="submit" busy={saving} disabled={!token.trim()}>
+        <Action type="submit" tone="primary" busy={saving} disabled={!token.trim()}>
           Save token
-        </Button>
+        </Action>
       </form>
     </Notice>
   );

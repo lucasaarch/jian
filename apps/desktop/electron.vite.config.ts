@@ -19,5 +19,12 @@ export default defineConfig({
   },
   renderer: {
     plugins: [react(), tailwindcss()],
+    // The window loads from jian://app, which the main process passes to this server in
+    // development; hot reload would look for its socket at that scheme's host, which has none.
+    server: {
+      port: 5173,
+      strictPort: true,
+      hmr: { protocol: 'ws', host: 'localhost', clientPort: 5173 },
+    },
   },
 });

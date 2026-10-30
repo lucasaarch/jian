@@ -1,30 +1,33 @@
 import {
-  AgentPicker,
-  AgentSettings,
+  AppSettings,
   ChatsApp,
   CreateAgent,
   connectGateway,
   NavigationProvider,
   QueryProvider,
+  useGatewayOnline,
 } from '@jian/ui';
-import { type ReactNode, useMemo, useState, useSyncExternalStore } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { type GatewaySummary, gatewayOrigin } from '../../shared/bridge';
 import { useGatewayCommands } from '../commands/gateway-commands';
+import { desktop } from '../desktop';
+import { appHost, gatewaySettings } from '../settings/hosts';
+import { useThisComputer } from '../settings/this-computer';
 import { navigationFor } from './navigation';
-import { Starting, Unreachable } from './states';
+import { Unreachable } from './states';
 
 /**
- * One gateway, as the window shows it: its agent's chats, with the status bar beneath, which
- * gets the agent chooser here, where the gateway's agents can be read. The app remounts it for
- * another gateway (its key is the gateway's id): each starts with its own cache and connection,
- * and returns to its own place.
+ * One gateway, as the window shows it: its agents' chats, the agent chooser at the sidebar's
+ * foot. The app remounts it for another gateway (its key is the gateway's id): each starts with
+ * its own cache and connection, and returns to its own place.
  */
 export function GatewayPanel({
   gateway,
-  statusBar,
+  settings,
 }: {
   gateway: GatewaySummary;
-  statusBar: (agent?: ReactNode) => ReactNode;
+  /** The app's settings, opened from anywhere in the window and drawn here with this gateway's. */
+  settings: { open: boolean; onOpenChange: (open: boolean) => void };
 }) {
   // Before the first query this panel makes: every request goes to the main process, which
   // signs it for this gateway. Web Push is off, since the app shows system notifications itself.
@@ -43,40 +46,38 @@ export function GatewayPanel({
   const href = useSyncExternalStore(memory.subscribe, memory.current);
   const navigation = useMemo(() => memory.navigation(href), [memory, href]);
   const [creating, setCreating] = useState(false);
-  const [agentSettings, setAgentSettings] = useState<string>();
-
-  // The app's own gateway takes a moment after launch; the window waits for it, not for a login.
-  if (gateway.local && gateway.status !== 'online') {
-    return (
-      <>
-        <Starting />
-        {statusBar()}
-      </>
-    );
-  }
+  // Out of reach — seen not answering, or the app's own still starting with no address yet —
+  // the panel shows what it kept and waits for it. One still being reached is asked at once: a
+  // read held until the first look would leave whatever was never kept loading meanwhile.
+  const thisComputer = useThisComputer(gateway);
+  useGatewayOnline(
+    gateway.status !== 'offline' && !(gateway.status === 'connecting' && !gateway.url),
+  );
   // The panel goes to sign in when it cannot read the gateway; here there is nothing to type,
   // only a gateway that does not answer or no longer takes the token.
   if (navigation.pathname === '/sign-in') {
     return (
       <>
         <Unreachable gateway={gateway} retry={() => memory.go('/')} />
-        {statusBar()}
+        {/* Nothing of the gateway can be read here: only the app's own settings. */}
+        <AppSettings open={settings.open} onOpenChange={settings.onOpenChange} host={appHost} />
       </>
     );
   }
 
   return (
-    <QueryProvider>
+    // Everything read from this gateway is kept on this computer, as a messaging app keeps its
+    // chats: it opens at once, and still reads while the gateway cannot be reached.
+    <QueryProvider keep={{ key: gateway.id, release: desktop().version }}>
       <NavigationProvider navigation={navigation}>
         <ChatsApp createAgent={() => setCreating(true)} />
         <GatewayCommands />
-        {statusBar(
-          <AgentPicker openSettings={setAgentSettings} createAgent={() => setCreating(true)} />,
-        )}
         <CreateAgent open={creating} onOpenChange={setCreating} />
-        <AgentSettings
-          profileId={agentSettings}
-          onOpenChange={(open) => !open && setAgentSettings(undefined)}
+        <AppSettings
+          open={settings.open}
+          onOpenChange={settings.onOpenChange}
+          host={appHost}
+          gateway={{ ...gatewaySettings(gateway), ...(thisComputer ? { thisComputer } : {}) }}
         />
       </NavigationProvider>
     </QueryProvider>

@@ -15,7 +15,12 @@ const here = fileURLToPath(new URL('..', import.meta.url));
 const bin = join(here, 'node_modules', '.bin');
 const env = { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ''}` };
 
-if (process.platform === 'darwin') env.ELECTRON_OVERRIDE_DIST_PATH = renamedElectron();
+if (process.platform === 'darwin') {
+  const dist = renamedElectron();
+  // `electron .` reads the folder; electron-vite reads only the binary's own path.
+  env.ELECTRON_OVERRIDE_DIST_PATH = dist;
+  env.ELECTRON_EXEC_PATH = join(dist, electronBinary());
+}
 
 const [program, args] =
   command === 'dev' ? ['electron-vite', ['dev', ...rest]] : ['electron', ['.', ...rest]];
@@ -26,6 +31,12 @@ const child = spawn(program, args, {
   shell: process.platform === 'win32',
 });
 child.on('exit', (code) => process.exit(code ?? 0));
+
+/** Where Electron keeps its binary inside its folder, as its own package writes it down. */
+function electronBinary() {
+  const electron = dirname(createRequire(import.meta.url).resolve('electron/package.json'));
+  return readFileSync(join(electron, 'path.txt'), 'utf8');
+}
 
 function renamedElectron() {
   const electron = dirname(createRequire(import.meta.url).resolve('electron/package.json'));

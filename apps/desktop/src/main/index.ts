@@ -2,20 +2,45 @@ import { join } from 'node:path';
 import { app, type BrowserWindow, powerMonitor } from 'electron';
 import { LOCAL_GATEWAY_ID, type OpenTarget } from '../shared/bridge';
 import { serveBridge } from './bridge';
+import { timedFetch } from './gateways/fetch';
 import { GatewayMonitor } from './gateways/monitor';
+import { gatewayName } from './gateways/rules';
 import { GatewayStore } from './gateways/store';
 import { linkIn, linkTarget } from './link-target';
 import { claimLinks } from './links';
 import { localCredentials } from './local/credentials';
 import { LocalGateway } from './local/process';
+import { MachineFile } from './machines/entries';
+import { logMachines, UtilityWorkerHost } from './machines/host';
+import { thisComputer } from './machines/identity';
+import { MachineRegistry } from './machines/registry';
+import { ComputerSharing } from './machines/sharing';
 import { Notifier } from './notify';
 import { handleScheme, registerScheme } from './protocol';
 import { createTray, resourcesDir } from './tray';
-import { keepUpdated } from './updates';
+import { appUpdates } from './updates/electron';
+import type { UpdateFlow } from './updates/flow';
+import { serveUpdates } from './updates/ipc';
 import { createWindow, reveal } from './window';
 
 // One app, one window: a second launch only brings the first one forward.
-if (!app.requestSingleInstanceLock()) app.exit(0);
+if (!holdsLock()) app.exit(0);
+
+/**
+ * From source, a rebuild restarts the app while the old process still stops its gateway and
+ * holds the lock: the new one waits for it, up to 15 seconds, instead of leaving at once. It
+ * blocks, as nothing else may start before the lock is decided.
+ */
+function holdsLock(): boolean {
+  if (app.requestSingleInstanceLock()) return true;
+  if (app.isPackaged) return false;
+  const pause = new Int32Array(new SharedArrayBuffer(4));
+  for (let waited = 0; waited < 15_000; waited += 250) {
+    Atomics.wait(pause, 0, 0, 250);
+    if (app.requestSingleInstanceLock()) return true;
+  }
+  return false;
+}
 
 registerScheme();
 
@@ -29,22 +54,60 @@ let pending: OpenTarget | undefined;
 const store = new GatewayStore();
 const notifier = new Notifier((target) => open(target));
 const monitor = new GatewayMonitor(store, app.getVersion(), {
-  changed: () => bridge.changed(),
+  changed: () => {
+    bridge.changed();
+    machines.sync();
+  },
   replied: (reply) => {
     const seen = window?.isVisible() && window.isFocused() && showing === reply.gatewayId;
     if (seen) return;
-    const name = store.get(reply.gatewayId)?.name ?? '';
+    const gateway = store.get(reply.gatewayId);
+    const name = gateway ? gatewayName(gateway) : '';
     notifier.reply(reply, name, store.list().length > 1);
   },
+});
+// This computer as a machine on every server gateway the app knows, while it answers. Read
+// once the app is ready, beside the rest of its start rather than before it: the window and the
+// local gateway never wait on the vault for a machine's token.
+const machineFile = new MachineFile();
+const machinesLoaded = app.whenReady().then(() =>
+  machineFile.load().catch((error: unknown) => {
+    logMachines(`The saved machines could not be read: ${String(error)}`);
+  }),
+);
+const machines: ComputerSharing = new ComputerSharing({
+  registry: new MachineRegistry({
+    entries: machineFile,
+    fetch: timedFetch(10_000),
+    identity: thisComputer,
+  }),
+  host: new UtilityWorkerHost({ refused: (gatewayId) => machines.refused(gatewayId) }),
+  setting: machineFile,
+  gateways: () =>
+    monitor.summaries().flatMap((summary) => {
+      const gateway = store.get(summary.id);
+      if (!gateway) return [];
+      const access = { ...gateway, local: gateway.local === true, token: store.token(gateway) };
+      return [{ gateway: access, online: summary.status === 'online' }];
+    }),
+  changed: () => bridge.machinesChanged(),
+  log: logMachines,
+  loaded: machinesLoaded,
 });
 const bridge = serveBridge({
   store,
   monitor,
+  machines,
   window: () => window,
   showing: (id) => {
     showing = id;
   },
 });
+let updates: UpdateFlow | undefined;
+const updatesBridge = serveUpdates(
+  () => updates,
+  () => window,
+);
 
 function open(target?: OpenTarget): void {
   if (!window) return;
@@ -72,15 +135,21 @@ claimLinks();
 app.on('window-all-closed', () => {});
 let local: LocalGateway | undefined;
 let stopped = false;
-// The app's own gateway is stopped before the app ends, so its database closes cleanly.
+let stopping: Promise<void> | undefined;
+// The app's own gateway is stopped before the app ends, so its database closes cleanly, and
+// this computer's workers tell their gateways it went offline. Once, whoever asks first: a quit,
+// or an update about to hand the app to its installer.
+const stopAll = () => {
+  stopping ??= Promise.allSettled([local?.stop(), machines.stopAll()]).then(() => {
+    stopped = true;
+  });
+  return stopping;
+};
 app.on('before-quit', (event) => {
   quitting = true;
-  if (stopped || !local) return;
+  if (stopped) return;
   event.preventDefault();
-  void local.stop().finally(() => {
-    stopped = true;
-    app.quit();
-  });
+  void stopAll().finally(() => app.quit());
 });
 app.on('activate', () => open());
 
@@ -111,10 +180,23 @@ void app.whenReady().then(async () => {
   // Windows and Linux start the app with the link as an argument.
   const launchLink = linkIn(process.argv);
   if (launchLink) pending = linkTarget(launchLink);
+  updates = appUpdates({
+    window: () => window,
+    show: () => {
+      open();
+      updatesBridge.show();
+    },
+    changed: (state) => updatesBridge.changed(state),
+    // An install closes the window before the app quits: it must close, not hide into the tray.
+    prepare: async () => {
+      quitting = true;
+      await stopAll();
+    },
+  });
   window = createWindow({ quitting: () => quitting });
   window.webContents.on('did-finish-load', () => {
     if (pending) bridge.open(pending);
   });
   createTray({ open: () => open(), quit: () => app.quit() });
-  keepUpdated();
+  updates.start();
 });
