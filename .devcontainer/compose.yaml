@@ -6,7 +6,7 @@ services:
     image: jian-web-devcontainer
     build:
       context: ..
-      dockerfile: apps/gateway-ui/Dockerfile
+      dockerfile: apps/web/Dockerfile
     environment:
       JIAN_GATEWAY_URL: http://gateway:4310
     depends_on:

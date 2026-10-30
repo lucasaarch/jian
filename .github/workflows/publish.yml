@@ -43,8 +43,8 @@ jobs:
         include:
           - { image: gateway, file: apps/gateway/Dockerfile, runner: ubuntu-24.04, platform: linux/amd64, arch: amd64 }
           - { image: gateway, file: apps/gateway/Dockerfile, runner: ubuntu-24.04-arm, platform: linux/arm64, arch: arm64 }
-          - { image: web, file: apps/gateway-ui/Dockerfile, runner: ubuntu-24.04, platform: linux/amd64, arch: amd64 }
-          - { image: web, file: apps/gateway-ui/Dockerfile, runner: ubuntu-24.04-arm, platform: linux/arm64, arch: arm64 }
+          - { image: web, file: apps/web/Dockerfile, runner: ubuntu-24.04, platform: linux/amd64, arch: amd64 }
+          - { image: web, file: apps/web/Dockerfile, runner: ubuntu-24.04-arm, platform: linux/arm64, arch: arm64 }
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read

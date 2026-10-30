@@ -12,7 +12,7 @@ services:
     # To run your own build, uncomment this as well as the gateway's.
     # build:
     #   context: .
-    #   dockerfile: apps/gateway-ui/Dockerfile
+    #   dockerfile: apps/web/Dockerfile
     environment:
       JIAN_GATEWAY_URL: http://gateway:4310
     ports:

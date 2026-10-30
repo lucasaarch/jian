@@ -7,7 +7,7 @@ TypeScript on Node 24+, Fastify, PostgreSQL, pg-boss.
 
 ```text
 apps/gateway/         HTTP API, runtime, workers, tests
-apps/gateway-ui/      Next.js panel, standalone server in front of the gateway (`jian-web` image)
+apps/web/             Next.js panel, standalone server in front of the gateway (`jian-web` image)
 apps/remote-control/  Published npm worker (`@jian-ai/remote-control`)
 packages/contracts/   Zod schemas — the source of the HTTP contract
 packages/sdk/         Generated TypeScript client

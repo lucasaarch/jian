@@ -50,7 +50,7 @@ own zones.
 ## The web panel
 
 The panel is its own Next.js server, in front of the gateway. `pnpm build` compiles both;
-`pnpm start` runs the gateway on `:4310`, and `pnpm --filter @jian/gateway-ui start` the panel
+`pnpm start` runs the gateway on `:4310`, and `pnpm --filter @jian/web start` the panel
 on `http://localhost:3000/`, passing `/v1` on to the gateway. Sign in with the server's
 `JIAN_API_TOKEN`.
 
@@ -167,7 +167,7 @@ callback to this gateway MCP OAuth callback, and enter the client id and secret 
 server — GitHub's auth server does not support dynamic client registration. Docker+PAT
 (`ghcr.io/github/github-mcp-server`) remains an alternative. Connecting an account under
 **Integrations → GitHub** needs none of this: the official server is attached to every chat —
-see `docs/gateway-ui.md` and `docs/deploy.md`. The image ships no `gh`.
+see `docs/web.md` and `docs/deploy.md`. The image ships no `gh`.
 
 ## Verification
 

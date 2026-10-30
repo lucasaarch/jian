@@ -16,8 +16,8 @@
       "!apps/gateway/migrations",
       "!packages/contracts/openapi.json",
       "!!**/.next",
-      "!!apps/gateway-ui/out",
-      "!apps/gateway-ui/next-env.d.ts"
+      "!!apps/web/out",
+      "!apps/web/next-env.d.ts"
     ]
   },
   "formatter": {
@@ -49,7 +49,7 @@
   },
   "overrides": [
     {
-      "includes": ["apps/gateway-ui/**/*.css"],
+      "includes": ["apps/web/**/*.css"],
       "css": {
         "parser": {
           "tailwindDirectives": true
