@@ -1251,7 +1251,7 @@
   /* A phone draws edge to edge: the status bar above and the home indicator below are kept
      clear by the safe areas, and the tab bar sits over the bottom one. */
   .app-shell {
-    --tab-bar: calc(3.5rem + env(safe-area-inset-bottom));
+    --tab-bar: calc(4rem + env(safe-area-inset-bottom));
   }
   .workspace {
     padding-top: env(safe-area-inset-top);
@@ -1262,8 +1262,10 @@
   .sidebar > .mobile-menu {
     top: calc(0.75rem + env(safe-area-inset-top));
   }
+  /* Beside the workspace, never in it: the workspace shrinks back as the menu opens, and a
+     transform makes it the box its fixed children are placed in, so the bar went with it. */
   .tab-bar {
-    @apply fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line;
+    @apply fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line;
     padding-bottom: env(safe-area-inset-bottom);
     background: color-mix(in srgb, var(--surface) 88%, transparent);
     backdrop-filter: blur(16px) saturate(1.4);
@@ -1271,11 +1273,7 @@
   }
   .tab-bar > a,
   .tab-bar > button {
-    @apply flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-muted transition-colors;
-  }
-  .tab-bar > a > span:last-child,
-  .tab-bar > button > span:last-child {
-    @apply max-w-full truncate px-1;
+    @apply flex h-16 min-w-0 items-center justify-center text-muted transition-colors;
   }
   .tab-bar > [aria-current="page"],
   .tab-bar > button[aria-expanded="true"] {
@@ -1342,7 +1340,10 @@
     @apply inline-flex;
   }
   .conversation-pane > header {
-    @apply px-3;
+    @apply px-3 py-3;
+  }
+  .conversation-pane > header h2 {
+    @apply text-base;
   }
 }
 

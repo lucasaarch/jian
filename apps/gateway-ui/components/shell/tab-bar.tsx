@@ -12,8 +12,9 @@ import { useAgentPath, useWorkingAgentId } from '@/lib/workspace';
 const TABS = ['', 'sessions', 'channels', 'schedules'];
 
 /**
- * A phone's navigation: four sections and the menu, along the bottom where a thumb reaches.
- * It stands in for the header, which a phone no longer shows.
+ * A phone's navigation: four sections and the menu, along the bottom where a thumb reaches,
+ * by their icons; each says its name to a screen reader. It stands in for the header, which a
+ * phone no longer shows.
  */
 export function TabBar({
   onOpenNavigation,
@@ -31,27 +32,32 @@ export function TabBar({
   const tabs = TABS.flatMap((path) => navigation.filter((item) => item.path === path));
 
   return (
-    <nav className="tab-bar" aria-label="Sections">
+    // Under the menu while it is open, and out of reach like the rest of the workspace.
+    <nav className="tab-bar" aria-label="Sections" inert={navigationOpen}>
       {tabs.map((item) => (
         <Link
           key={item.path}
           href={hrefOf(item.path)}
+          aria-label={
+            item.path === 'channels' && pending > 0
+              ? `${item.label}, ${pending} waiting for approval`
+              : item.label
+          }
           aria-current={active === item ? 'page' : undefined}
         >
           <span className="tab-bar-icon">
             <item.icon size={22} strokeWidth={1.7} aria-hidden="true" />
             {item.path === 'channels' && pending > 0 && (
-              <span className="tab-bar-count">
+              <span className="tab-bar-count" aria-hidden="true">
                 {pending}
-                <span className="sr-only"> waiting for approval</span>
               </span>
             )}
           </span>
-          <span>{item.label}</span>
         </Link>
       ))}
       <button
         type="button"
+        aria-label="Menu"
         aria-expanded={navigationOpen}
         aria-controls="main-navigation"
         onClick={onOpenNavigation}
@@ -59,7 +65,6 @@ export function TabBar({
         <span className="tab-bar-icon">
           <Menu size={22} strokeWidth={1.7} aria-hidden="true" />
         </span>
-        <span>Menu</span>
       </button>
     </nav>
   );

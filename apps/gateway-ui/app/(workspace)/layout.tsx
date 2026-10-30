@@ -116,8 +116,8 @@ function Shell({ children }: { children: ReactNode }) {
           <main id="main-content" tabIndex={-1} className={`main-content ${fill ? 'fill' : ''}`}>
             {children}
           </main>
-          <TabBar navigationOpen={mobile} onOpenNavigation={() => setMobile(true)} />
         </div>
+        <TabBar navigationOpen={mobile} onOpenNavigation={() => setMobile(true)} />
         {creating && (
           <NewProfileDialog
             api={panelApi()}
