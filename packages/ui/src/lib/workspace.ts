@@ -200,14 +200,14 @@ export function useDeleteProfile(): (profileId: string) => Promise<boolean> {
 }
 
 /** Adds a profile the owner just created and opens it. */
-export function useAdoptProfile(): (profile: Profile) => void {
+export function useAdoptProfile(): (profile: Profile, path?: string) => void {
   const client = useQueryClient();
   const router = useRouter();
 
   return useCallback(
-    (created) => {
+    (created, path = '') => {
       client.setQueryData(queries.profiles().queryKey, (profiles = []) => [...profiles, created]);
-      router.push(agentPath(created.id));
+      router.push(agentPath(created.id, path));
     },
     [client, router],
   );

@@ -23,6 +23,16 @@
   --merged: #c4a5f7;
   --merged-soft: #231a33;
   --shade: #000000;
+  /* Glass: a surface that lets what is behind it through, blurred. Its tint, its edge, the
+     light catching its top, and the shadow that lifts it; the blur is the same in both themes. */
+  --glass: color-mix(in srgb, #1a1a1a 58%, transparent);
+  --glass-strong: color-mix(in srgb, #141414 78%, transparent);
+  --glass-edge: color-mix(in srgb, #ffffff 9%, transparent);
+  --glass-light: color-mix(in srgb, #ffffff 7%, transparent);
+  --glass-shadow: 0 18px 48px -16px rgb(0 0 0 / 0.65), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+  --glass-hover: color-mix(in srgb, #ffffff 7%, transparent);
+  --glass-press: color-mix(in srgb, #ffffff 11%, transparent);
+  --glass-blur: 28px;
 }
 
 :root[data-theme="light"] {
@@ -46,6 +56,13 @@
   --merged: #7a45d1;
   --merged-soft: #f1eafd;
   --shade: #ffffff;
+  --glass: color-mix(in srgb, #ffffff 62%, transparent);
+  --glass-strong: color-mix(in srgb, #ffffff 82%, transparent);
+  --glass-edge: color-mix(in srgb, #000000 8%, transparent);
+  --glass-light: color-mix(in srgb, #ffffff 70%, transparent);
+  --glass-shadow: 0 18px 48px -16px rgb(0 0 0 / 0.18), 0 2px 8px -2px rgb(0 0 0 / 0.08);
+  --glass-hover: color-mix(in srgb, #000000 5%, transparent);
+  --glass-press: color-mix(in srgb, #000000 9%, transparent);
 }
 
 @theme inline {
@@ -65,6 +82,9 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
+  --color-glass-hover: var(--glass-hover);
+  --color-glass-press: var(--glass-press);
+  --color-glass-edge: var(--glass-edge);
   --font-sans: "IBM Plex Sans Variable", sans-serif;
   --font-display: "IBM Plex Sans Variable", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;

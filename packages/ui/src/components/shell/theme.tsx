@@ -34,6 +34,11 @@ const useTheme = create<{
   },
 }));
 
+/** The theme and how to change it, revealed from the point the change was asked at. */
+export function useThemeChoice() {
+  return useTheme();
+}
+
 /** Puts the saved theme on the page and keeps the page on the chosen one. Renders nothing. */
 export function ThemeSync() {
   const theme = useTheme((state) => state.theme);
