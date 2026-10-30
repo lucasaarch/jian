@@ -185,14 +185,14 @@ async function settled(done: () => boolean) {
 }
 
 async function openCard() {
-  await act(async () => element.querySelector<HTMLButtonElement>('.github-card')?.click());
+  await act(async () => element.querySelector<HTMLButtonElement>('.github-ref')?.click());
   await settled(() => Boolean(element.querySelector('.github-drawer-title')));
 }
 
 const button = (name: string) =>
   [...element.querySelectorAll('button')].find((item) => item.textContent?.trim() === name);
 
-it('shows a pull request link as a card, and one the App cannot see as the plain link', async () => {
+it('shows a pull request link as a reference, and one the App cannot see as the plain link', async () => {
   const api = fakeApi();
   const hidden = 'https://github.com/someone-else/private/pull/3';
 
@@ -200,12 +200,13 @@ it('shows a pull request link as a card, and one the App cannot see as the plain
 
   // Both links went in one request.
   expect(api.resolveGithubLinks).toHaveBeenCalledTimes(1);
-  const card = element.querySelector('.github-card');
-  expect(card?.querySelector('.github-card-where')?.textContent).toBe('octo-example/site');
-  expect(card?.querySelector('.github-card-number')?.textContent).toBe('#7');
-  expect(card?.textContent).toContain('Add the pricing page');
-  expect(card?.querySelector('.github-state')?.textContent).toBe('Open');
-  expect(card?.querySelector('.github-checks')?.getAttribute('data-state')).toBe('failing');
+  const reference = element.querySelector('.github-ref');
+  // In the text, its mark and number; where it is, what it is and how it stands, on hover.
+  expect(reference?.textContent).toBe('#7');
+  expect(reference?.getAttribute('data-state')).toBe('open');
+  expect(reference?.getAttribute('title')).toBe(
+    'octo-example/site #7 · Add the pricing page · Open',
+  );
   expect(element.querySelector(`a[href="${hidden}"]`)?.textContent).toBe(hidden);
 });
 
@@ -227,7 +228,7 @@ it('shows a card in what a person wrote too', async () => {
     fakeApi(),
   );
 
-  expect(element.querySelector('.github-card')?.textContent).toContain('#7');
+  expect(element.querySelector('.github-ref')?.textContent).toBe('#7');
   expect(element.textContent).toContain('Can you look at');
 });
 
@@ -263,6 +264,30 @@ it('opens the pull request in the drawer and merges with the chosen method and t
     expectedHeadSha: head,
     profileId: 'profile',
   });
+
+  // Merged in the drawer and in the text at once, though GitHub's reads here still say open.
+  expect(element.querySelector('.github-drawer .github-state')?.textContent).toBe('Merged');
+  expect(element.querySelector('.github-ref')?.getAttribute('data-state')).toBe('merged');
+  expect(button('Squash and merge')).toBeUndefined();
+});
+
+it('keeps the drawer’s shape while GitHub answers', async () => {
+  const api = fakeApi();
+  let answer!: () => void;
+  api.githubPull.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        answer = () => resolve(pull);
+      }),
+  );
+
+  await render(<Markdown text={pullUrl} />, api);
+  await act(async () => element.querySelector<HTMLButtonElement>('.github-ref')?.click());
+
+  expect(element.querySelector('.github-skeleton[role="status"]')).not.toBeNull();
+  await act(async () => answer());
+  await settled(() => Boolean(element.querySelector('.github-drawer-title')));
+  expect(element.querySelector('.github-skeleton')).toBeNull();
 });
 
 it('offers to fix conflicts, asking the agent in this conversation', async () => {
