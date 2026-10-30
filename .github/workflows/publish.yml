@@ -147,8 +147,8 @@ jobs:
           subject-digest: ${{ steps.inspect.outputs.digest }}
           push-to-registry: true
 
-  # Universal macOS computer-use helper (Swift). Source alone is not enough for Macs without
-  # Xcode CLT; Publish builds arm64+x86_64 and drops the binary into the npm tarball.
+  # Universal macOS computer-use helper, built from the Rust crate in packages/remote-core/native
+  # for arm64 and x86_64 and dropped into the npm tarball.
   # Ad-hoc codesign by default. When Apple Developer secrets are set, the same job can
   # Developer ID–sign (see docs/remote.md); do not paste certificates into chat or logs.
   computer-helper:
@@ -159,13 +159,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Install the Rust targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Build universal computer-helper
-        working-directory: packages/remote-core/helpers/macos
+        working-directory: packages/remote-core
         run: |
-          chmod +x build-helper.sh
-          ./build-helper.sh "$PWD/computer-helper"
-          test -x computer-helper
-          lipo -info computer-helper
+          native/build-macos.sh "$PWD/helpers/macos/computer-helper"
+          test -x helpers/macos/computer-helper
       - name: Optional Developer ID sign
         working-directory: packages/remote-core/helpers/macos
         env:

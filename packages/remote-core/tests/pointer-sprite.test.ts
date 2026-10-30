@@ -4,7 +4,8 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'helpers');
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const root = join(packageRoot, 'helpers');
 const pngPath = join(root, 'assets', 'jian-pointer.png');
 const read = (...parts: string[]) => readFileSync(join(root, ...parts), 'utf8');
 
@@ -27,17 +28,18 @@ test('the pointer sprite is kept once, for every platform, beside the helpers', 
 
 test('macOS, Linux and Windows all draw the shipped sprite, not a stand-in of their own', () => {
   const png = readFileSync(pngPath);
-  const swift = read('macos', 'computer-helper.swift');
+  const rust = readFileSync(join(packageRoot, 'native/src/platform/macos/pointer.rs'), 'utf8');
   const linux = read('linux', 'computer-helper.py');
   const windows = read('windows', 'computer-helper.ps1');
 
-  assert.deepEqual(embedded(swift, 'private let jianPointerPngBase64 = """\n', '\n"""'), png);
+  // The Rust helper embeds the file itself at build time.
+  assert.match(rust, /include_bytes!\("(?:\.\.\/)+helpers\/assets\/jian-pointer\.png"\)/);
   assert.deepEqual(embedded(linux, 'JIAN_POINTER_PNG_BASE64 = """\n', '\n"""'), png);
   assert.deepEqual(embedded(windows, "$script:PointerPngBase64 = @'\n", "\n'@"), png);
 
   // The same 60 pt canvas with the tip at (12, 12), so the click lands where the tip is drawn.
-  assert.match(swift, /pointerSize:\s*CGFloat\s*=\s*60/);
-  assert.match(swift, /hotspot\s*=\s*CGPoint\(x:\s*12,\s*y:\s*12\)/);
+  assert.match(rust, /const SIZE: f64 = 60\.0;/);
+  assert.match(rust, /const HOTSPOT: CGPoint = CGPoint \{ x: 12\.0, y: 12\.0 \};/);
   assert.match(linux, /^POINTER_SIZE = 60$/m);
   assert.match(linux, /^HOTSPOT = \(12, 12\)$/m);
   assert.match(windows, /\$script:PointerSize = 60/);
@@ -45,7 +47,6 @@ test('macOS, Linux and Windows all draw the shipped sprite, not a stand-in of th
   assert.match(windows, /\$script:HotspotY = 12/);
 
   // No geometric arrows drawn beside or instead of the bitmap.
-  assert.doesNotMatch(swift, /arrowPath/);
   assert.doesNotMatch(linux, /XFillPolygon|ARROW =/);
   assert.doesNotMatch(windows, /FillPolygon|TransparencyKey/);
 });
