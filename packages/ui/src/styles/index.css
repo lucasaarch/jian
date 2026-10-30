@@ -40,8 +40,30 @@
   ::-webkit-scrollbar-thumb:hover {
     background-color: color-mix(in srgb, var(--ink) 42%, transparent);
   }
+  /* An app, not a page: its chrome — the sidebar, bars, buttons, menus, pills, headings — is
+     not text to select. What is read and copied stays selectable: messages, Markdown, code,
+     fields, and anything marked .selectable. */
   body {
-    @apply m-0 bg-canvas font-sans text-sm leading-relaxed text-ink antialiased;
+    @apply m-0 bg-canvas font-sans text-sm leading-relaxed text-ink antialiased select-none;
+  }
+  :where(.chat-line, .markdown, pre, code, input, textarea, [contenteditable="true"], .selectable) {
+    @apply select-text;
+  }
+  /* A control is never text, even inside a message or Markdown that is: a select and its list,
+     a menu, a tab, a button. After the rule above, so it wins where both reach; a field typed
+     in — a select's search — stays selectable. */
+  :where(
+    button,
+    [role="combobox"]:not(input),
+    [role="listbox"],
+    [role="option"],
+    [role="menu"],
+    [role="menuitem"],
+    [role="menuitemradio"],
+    [role="menuitemcheckbox"],
+    [role="tab"]
+  ) {
+    @apply select-none;
   }
   button,
   input,
@@ -124,31 +146,41 @@
   }
 }
 
-::view-transition-old(root) {
-  animation: none;
-  mix-blend-mode: normal;
-  z-index: 1;
-}
-::view-transition-new(root) {
-  animation: theme-reveal 620ms cubic-bezier(0.33, 0, 0.15, 1) both;
-  mix-blend-mode: normal;
-  z-index: 2;
+/* A change of theme: its colours cross over, 360ms as FADE in theme-fade.ts. Only while
+   switching, and outside every layer, so it is the transition the layered utilities had set
+   until the class leaves. */
+.theme-fade,
+.theme-fade *,
+.theme-fade *::before,
+.theme-fade *::after {
+  transition:
+    background-color 360ms ease,
+    border-color 360ms ease,
+    color 360ms ease,
+    fill 360ms ease,
+    stroke 360ms ease,
+    box-shadow 360ms ease;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-new(root) {
-    animation: none;
-  }
+/* A reload of the app behind glass: it frosts over the page, the page loads again behind it,
+   and it thaws over the new one. The blur and the tint move together, so it reads as one pane
+   misting up and clearing; WebKit still needs the prefixed property. */
+.reload-curtain[data-phase="leaving"] {
+  animation: reload-frost 640ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
-
-@keyframes theme-reveal {
+.reload-curtain[data-phase="returning"] {
+  animation: reload-frost 900ms cubic-bezier(0.4, 0, 0.2, 1) 220ms reverse both;
+}
+@keyframes reload-frost {
   from {
-    clip-path: circle(0% at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%));
+    background-color: transparent;
+    -webkit-backdrop-filter: blur(0) saturate(1);
+    backdrop-filter: blur(0) saturate(1);
   }
   to {
-    clip-path: circle(
-      var(--theme-reveal-r, 100%) at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%)
-    );
+    background-color: color-mix(in srgb, var(--canvas) 55%, transparent);
+    -webkit-backdrop-filter: blur(28px) saturate(1.5);
+    backdrop-filter: blur(28px) saturate(1.5);
   }
 }
 
@@ -158,24 +190,5 @@
   }
   .small {
     @apply text-xs;
-  }
-  .badge {
-    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-sm bg-surface px-2 py-1 text-[11px] font-medium text-muted;
-  }
-  .badge-dot {
-    @apply h-1.5 w-1.5 rounded-full bg-current;
-  }
-  .badge.good {
-    @apply bg-good-soft text-good;
-  }
-  .badge.warn {
-    @apply bg-warn-soft text-warn;
-  }
-  .badge.bad {
-    @apply bg-bad-soft text-bad;
-  }
-  /* Something waiting on the owner, without introducing a second identity accent. */
-  .badge.accent {
-    @apply bg-accent-soft text-accent;
   }
 }

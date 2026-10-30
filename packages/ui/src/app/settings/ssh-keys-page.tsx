@@ -8,7 +8,10 @@ import {
   ConfirmDialog,
   Overlay,
   SettingsGroup,
+  SettingsPageSkeleton,
   SettingsRow,
+  SettingsRowSkeleton,
+  SettingsRowsSkeleton,
   StatusPill,
   TextField,
 } from '../../kit';
@@ -17,6 +20,21 @@ import { useCopy } from '../../lib/copy';
 import { date } from '../../lib/format';
 import { useActions } from '../../lib/workspace';
 import { CopyCommand } from './copy-command';
+
+/** A couple of keys' shape: a name and its kind, when it was made, Copy and Delete. */
+const KeyRowsWaiting = () => <SettingsRowsSkeleton count={2} pill description buttons={2} />;
+
+/** The keys page before it can read its list: the keys' shape, then the row that creates one. */
+export function SshKeysWaiting() {
+  return (
+    <SettingsPageSkeleton label="Loading keys…">
+      <SettingsGroup title="Keys">
+        <KeyRowsWaiting />
+        <SettingsRowSkeleton index={2} />
+      </SettingsGroup>
+    </SettingsPageSkeleton>
+  );
+}
 
 /**
  * The gateway's SSH keys, which every agent uses for Git and SSH: each a line whose public part
@@ -36,15 +54,14 @@ export function SshKeysPage() {
     <span role="alert" className="text-bad">
       {error}
     </span>
-  ) : loading ? (
-    'Loading…'
-  ) : keys.length === 0 ? (
+  ) : loading ? undefined : keys.length === 0 ? (
     'None yet'
   ) : undefined;
 
   return (
     <>
-      <SettingsGroup title="Keys" note={note}>
+      <SettingsGroup title="Keys" note={note} loading={loading && !error && 'Loading keys…'}>
+        {loading && !error && <KeyRowsWaiting />}
         {keys.map((key) => (
           <SettingsRow
             key={key.id}

@@ -2,7 +2,7 @@
 
 import { Dialog } from '@base-ui/react/dialog';
 import { X } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 
 /** On a phone a room or a page fills the screen, clear of the status bar and home indicator. */
 const fullScreen =
@@ -43,11 +43,16 @@ export function Overlay({
   size?: keyof typeof sizes;
   children: ReactNode;
 }) {
+  const popup = useRef<HTMLDivElement>(null);
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/25 backdrop-blur-[3px] transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0" />
         <Dialog.Popup
+          ref={popup}
+          // A page is read from its top: focus on its first link or its button at the end would
+          // open it scrolled down to it. A form and a room start on their first control.
+          {...(size === 'page' ? { initialFocus: popup } : {})}
           className={`glass-strong fixed top-1/2 left-1/2 z-50 ${sizes[size]} -translate-x-1/2 -translate-y-1/2 rounded-[1.375rem] text-ink outline-none transition-[opacity,scale] duration-200 data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0`}
         >
           <Dialog.Title className="sr-only">{title}</Dialog.Title>

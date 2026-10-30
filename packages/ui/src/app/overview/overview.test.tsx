@@ -29,24 +29,28 @@ async function render(ui: React.ReactNode) {
 const button = (host: HTMLElement, text: string) =>
   [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === text);
 
-it('shows nothing of the overview, nor reads the year, until the numbers arrive', async () => {
+it('holds the overview’s shape while the numbers are read, and says so until they arrive', async () => {
   let answer: (stats: ProfileStats) => void = () => {};
   const api = {
     stats: () => new Promise<ProfileStats>((resolve) => (answer = resolve)),
     activityCalendar: vi.fn(async () => []),
   } as unknown as GatewayApi;
   const host = await render(<OverviewContent api={api} />);
+  const status = () =>
+    [...host.querySelectorAll('[role="status"]')].map((item) => item.textContent);
 
-  expect(host.querySelector('[role="status"]')).not.toBeNull();
-  expect(host.querySelector('[aria-label="Usage"]')).toBeNull();
-  expect(api.activityCalendar).not.toHaveBeenCalled();
+  expect(status()).toContain('Loading overview…');
+  expect(host.querySelector('[aria-busy="true"] [aria-label="Usage"]')).not.toBeNull();
+  // The year is read beside the numbers, not after them.
+  expect(api.activityCalendar).toHaveBeenCalled();
 
   await act(async () => answer(statsFor(30) as ProfileStats));
   await settle();
 
-  expect(host.querySelector('[aria-label="Usage"]')).not.toBeNull();
+  expect(status()).not.toContain('Loading overview…');
+  expect(host.querySelector('[aria-busy="true"]')).toBeNull();
+  expect(host.textContent).toContain('1,583');
   expect(host.querySelector('[aria-label="Activity"]')).not.toBeNull();
-  expect(api.activityCalendar).toHaveBeenCalled();
 });
 
 it('offers to read again when the numbers could not be read', async () => {

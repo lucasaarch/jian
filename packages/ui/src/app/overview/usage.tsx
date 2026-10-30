@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { CountUp, ProviderLogo, TelegramLogo, WhatsAppLogo } from '../../components/ui';
-import { StatusPill } from '../../kit';
+import { Skeleton, StatusPill } from '../../kit';
 import type { ProfileStats } from '../../lib/api';
 import { LOCALE } from '../../lib/format';
 import { card, Part, Share, Tile, Tiles } from './figures';
@@ -24,33 +24,37 @@ const tokensOf = (mix: ProfileStats['period']['tokens']) => mix.input + mix.cach
 /** How many models show before the rest wait behind a button. */
 const FIRST_MODELS = 4;
 
-/** The period's headline numbers, where its tokens went, and what the cost leaves out. */
-export function UsageSummary({ stats }: { stats: ProfileStats }) {
-  const { period } = stats;
-  const input = period.tokens.input + period.tokens.cached;
+/**
+ * The period's headline numbers, where its tokens went, and what the cost leaves out. Before the
+ * numbers arrive it draws their shape: the models as if there were some, since there usually are,
+ * and the subscription windows not at all, since most agents have none.
+ */
+export function UsageSummary({ stats }: { stats?: ProfileStats }) {
+  const period = stats?.period;
 
   return (
     <>
       <Tiles>
         <Tile icon={<Sparkles size={16} />} label="Total tokens">
-          <CountUp value={tokensOf(period.tokens)} format={compact} />
+          {period && <CountUp value={tokensOf(period.tokens)} format={compact} />}
         </Tile>
         <Tile icon={<Coins size={16} />} label="Est. cost">
-          {period.cost === null ? '—' : <CountUp value={period.cost} format={money} />}
+          {period && (period.cost === null ? '—' : <CountUp value={period.cost} format={money} />)}
         </Tile>
         <Tile icon={<CalendarDays size={16} />} label="Active days">
-          <CountUp value={period.activeDays} />
+          {period && <CountUp value={period.activeDays} />}
         </Tile>
         <Tile icon={<Database size={16} />} label="Cache share">
-          {percent(period.tokens.cached, input)}
+          {period && percent(period.tokens.cached, period.tokens.input + period.tokens.cached)}
         </Tile>
       </Tiles>
-      <Mix stats={stats} />
-      {stats.models.length > 0 && <ModelCards stats={stats} />}
-      <SubscriptionLimits subscriptions={stats.subscriptions} />
+      <Mix tokens={period?.tokens} />
+      {!stats ? <ModelCardsWaiting /> : stats.models.length > 0 && <ModelCards stats={stats} />}
+      {stats && <SubscriptionLimits subscriptions={stats.subscriptions} />}
       <p className="px-1 text-xs leading-relaxed text-muted">
         Cost is estimated from list prices in the models.dev catalog, not from a provider's bill.
-        {period.unpricedTokens > 0 &&
+        {period &&
+          period.unpricedTokens > 0 &&
           ` ${compact(period.unpricedTokens)} tokens used a subscription or a model without a known price and are not in it.`}
       </p>
     </>
@@ -64,9 +68,8 @@ const mixParts = [
 ] as const;
 
 /** Where the tokens went: read fresh, read from the provider's cache, and written. */
-function Mix({ stats }: { stats: ProfileStats }) {
-  const { tokens } = stats.period;
-  const all = tokensOf(tokens);
+function Mix({ tokens }: { tokens?: ProfileStats['period']['tokens'] }) {
+  const all = tokens ? tokensOf(tokens) : 0;
 
   return (
     <section className={`${card} grid gap-3 p-4`} aria-label="Token mix">
@@ -76,15 +79,19 @@ function Mix({ stats }: { stats: ProfileStats }) {
           The context sent fresh, the part a provider served from its cache, and the answers.
         </p>
       </div>
-      <div className="flex h-2 overflow-hidden rounded-full bg-ink/10" aria-hidden="true">
-        {mixParts.map((part) => (
-          <span
-            key={part.key}
-            className={part.tone}
-            style={{ width: `${all ? (tokens[part.key] / all) * 100 : 0}%` }}
-          />
-        ))}
-      </div>
+      {tokens ? (
+        <div className="flex h-2 overflow-hidden rounded-full bg-ink/10" aria-hidden="true">
+          {mixParts.map((part) => (
+            <span
+              key={part.key}
+              className={part.tone}
+              style={{ width: `${all ? (tokens[part.key] / all) * 100 : 0}%` }}
+            />
+          ))}
+        </div>
+      ) : (
+        <Skeleton className="h-2 rounded-full" />
+      )}
       <dl className="grid grid-cols-3 gap-3">
         {mixParts.map((part) => (
           <div key={part.key} className="grid gap-0.5">
@@ -93,8 +100,14 @@ function Mix({ stats }: { stats: ProfileStats }) {
               {part.label}
             </dt>
             <dd className="m-0 flex items-baseline gap-1.5 text-sm font-medium text-ink tabular-nums">
-              <CountUp value={tokens[part.key]} format={compact} />
-              <small className="text-muted">{percent(tokens[part.key], all)}</small>
+              {tokens ? (
+                <>
+                  <CountUp value={tokens[part.key]} format={compact} />
+                  <small className="text-muted">{percent(tokens[part.key], all)}</small>
+                </>
+              ) : (
+                <Skeleton className="my-0.5 h-4 w-20" />
+              )}
             </dd>
           </div>
         ))}
@@ -177,6 +190,44 @@ export function ModelCards({ stats }: { stats: ProfileStats }) {
           {expanded ? 'Show fewer models' : `Show all ${stats.models.length} models`}
         </button>
       )}
+    </Part>
+  );
+}
+
+/**
+ * The models' part before the numbers arrive: one row of cards, the height of the cards to come,
+ * built from the same pieces so the row does not move when they land. A block standing for a
+ * line of text sits in a box one line of that text tall (`1lh`), so it takes the line's height.
+ */
+function ModelCardsWaiting() {
+  return (
+    <Part title="Models" action={<Skeleton className="h-5 w-16 rounded-full" />}>
+      <ul className="grid grid-cols-2 gap-2.5 phone:grid-cols-1">
+        {[0, 1].map((index) => (
+          <li key={index} className={`${card} grid gap-3 p-4 ${index ? 'phone:hidden' : ''}`}>
+            <header className="flex min-w-0 items-center gap-2">
+              <Skeleton className="size-4" />
+              <span className="flex h-[1lh] min-w-0 flex-1 items-center text-[13px]">
+                <Skeleton className="h-3.5 w-2/5" />
+              </span>
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </header>
+            <dl className="grid grid-cols-3 gap-2">
+              {['Tokens', 'Turns', 'Cost'].map((label) => (
+                <Figure key={label} label={label}>
+                  <Skeleton className="my-0.5 h-4 w-12" />
+                </Figure>
+              ))}
+            </dl>
+            <div className="grid gap-1.5">
+              <Skeleton className="h-1 rounded-full" />
+              <small className="flex h-[1lh] items-center">
+                <Skeleton className="h-3 w-24" />
+              </small>
+            </div>
+          </li>
+        ))}
+      </ul>
     </Part>
   );
 }

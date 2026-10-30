@@ -110,6 +110,13 @@ export const queries = {
       queryKey: keys.activities(profileId),
       queryFn: () => panelApi().activities(profileId),
     }),
+  /** Read again every two minutes: the windows move with work on any agent, even elsewhere. */
+  subscriptionUsage: () =>
+    queryOptions({
+      queryKey: keys.subscriptionUsage,
+      queryFn: () => panelApi().subscriptionUsage(),
+      refetchInterval: 120_000,
+    }),
   modelDefaults: () =>
     queryOptions({
       queryKey: keys.modelDefaults,

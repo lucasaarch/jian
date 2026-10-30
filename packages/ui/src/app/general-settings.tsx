@@ -14,8 +14,6 @@ export type AppHost = {
   version: string;
   openAtLogin?: { read: () => Promise<boolean>; write: (open: boolean) => void };
   checkForUpdates?: () => void;
-  /** The gateway's release notes, for a host that runs with that gateway's release. */
-  releaseNotes?: boolean;
   /** Ends the session, for a host whose panel signed in itself. */
   signOut?: () => void;
 };
@@ -67,7 +65,7 @@ export function GeneralSettings({
             </Action>
           )}
         </SettingsRow>
-        {host.releaseNotes && gateway && <ReleaseNotesRow />}
+        {gateway && <ReleaseNotesRow />}
         <SettingsRow title="Source code" description="Jian is open source, on GitHub.">
           <a
             href={REPOSITORY}

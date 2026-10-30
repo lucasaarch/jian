@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react';
-import { Mark } from '../../components/ui/mark';
 import { Action } from '../../kit';
 import { AgentHero } from '../../kit/agent-hero';
 import type { Profile } from '../../lib/api';
@@ -72,7 +71,7 @@ export function Welcome({
   return (
     <main
       aria-label="Welcome to Jian"
-      className="relative isolate flex h-(--app-height) min-h-0 flex-col overflow-hidden bg-canvas text-ink pt-[max(2.5rem,var(--chrome-top,0px))]"
+      className="relative isolate flex h-(--app-height) min-h-0 flex-col overflow-hidden bg-canvas text-ink select-none pt-[max(2.5rem,var(--chrome-top,0px))]"
     >
       <div
         aria-hidden="true"
@@ -81,17 +80,6 @@ export function Welcome({
         <div className="absolute -top-64 left-1/2 h-[42rem] w-[60rem] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,var(--glass-press),transparent_65%)]" />
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <header className="mx-auto flex w-full max-w-6xl shrink-0 items-center justify-between gap-4 px-6 py-6 md:px-12">
-          <span className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-            <span className="size-5 [&_svg]:size-full">
-              <Mark />
-            </span>{' '}
-            Jian
-          </span>
-          <span className="text-[11px] tracking-[0.15em] text-muted uppercase">
-            A space of your own
-          </span>
-        </header>
         {!ready || failure ? (
           <div
             className="grid flex-1 place-content-center gap-4 px-6 text-center"
@@ -119,7 +107,23 @@ export function Welcome({
             <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
               Step {current + 1} of {steps.length}. {titles[step]}
             </div>
-            <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-6 py-8 md:px-12 md:py-10">
+            <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-6 py-[clamp(1rem,4dvh,2.5rem)] md:px-12">
+              {/* The way back from a step, at its corner: the steps themselves carry no footer. */}
+              {(step === 'models' || step === 'identity') && (
+                <div className="absolute top-2 left-4 md:left-10">
+                  <Action
+                    tone="quiet"
+                    disabled={busy}
+                    onClick={() => {
+                      if (step === 'identity' && newAgent && profiles.data?.length)
+                        setNewAgent(false);
+                      else setStep(step === 'identity' && !connected ? 'models' : 'intro');
+                    }}
+                  >
+                    <ArrowLeft size={14} aria-hidden="true" /> Back
+                  </Action>
+                </div>
+              )}
               <AnimatePresence mode="wait" initial={false}>
                 <Scene key={step} step={step} still={still}>
                   {step === 'intro' && (
@@ -132,14 +136,14 @@ export function Welcome({
                     />
                   )}
                   {step === 'models' && (
-                    <div className="mx-auto grid w-full max-w-xl gap-6">
+                    <div className="mx-auto grid w-full max-w-2xl gap-[clamp(1rem,3dvh,1.5rem)]">
                       <p className="text-center text-sm leading-relaxed text-muted">
                         Connect a provider to bring your agent to life.
                         <br />
                         Your credentials stay on your gateway.
                       </p>
                       <Suspense fallback={<p role="status">Reading providers…</p>}>
-                        <ProviderConnections />
+                        <ProviderConnections tiles />
                       </Suspense>
                       <div className="flex items-center justify-end gap-3">
                         <Action
@@ -180,51 +184,6 @@ export function Welcome({
                 </Scene>
               </AnimatePresence>
             </div>
-            <footer className="sticky bottom-0 z-10 mx-auto flex w-full max-w-6xl shrink-0 flex-wrap items-center justify-between gap-5 border-t border-glass-edge bg-canvas/95 px-6 py-4 backdrop-blur-lg md:px-12">
-              <div className="min-w-16">
-                {(step === 'models' || step === 'identity') && (
-                  <Action
-                    tone="quiet"
-                    disabled={busy}
-                    onClick={() => {
-                      if (step === 'identity' && newAgent && profiles.data?.length)
-                        setNewAgent(false);
-                      else setStep(step === 'identity' && !connected ? 'models' : 'intro');
-                    }}
-                  >
-                    <ArrowLeft size={14} aria-hidden="true" /> Back
-                  </Action>
-                )}
-              </div>
-              <ol
-                aria-label="Welcome progress"
-                className="flex flex-wrap items-center gap-3 text-[11px] text-muted"
-              >
-                {steps.map((item, index) => (
-                  <li
-                    key={item}
-                    aria-current={item === step ? 'step' : undefined}
-                    className={`flex items-center gap-1.5 ${item === step ? 'text-ink' : ''}`}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`h-1.5 rounded-full transition-[width,background-color] duration-300 ${item === step ? 'w-5 bg-ink' : index < current ? 'w-1.5 bg-ink/50' : 'w-1.5 bg-ink/15'}`}
-                    />
-                    <span className={item === step ? '' : 'hidden sm:inline'}>
-                      {
-                        {
-                          intro: 'Welcome',
-                          models: 'Models',
-                          identity: 'Your agent',
-                          channels: 'Connect',
-                          arrival: 'Ready',
-                        }[item]
-                      }
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </footer>
           </>
         )}
       </div>
@@ -240,7 +199,7 @@ function Scene({ step, still, children }: { step: Step; still: boolean; children
   }, []);
   return (
     <motion.section
-      className="grid gap-8"
+      className="grid gap-[clamp(1.25rem,4dvh,2rem)]"
       initial={{ opacity: 0, y: still ? 0 : 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: still ? 0 : -12 }}

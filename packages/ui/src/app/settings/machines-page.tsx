@@ -3,7 +3,16 @@
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { type Machine, useRemoteMachines } from '../../components/remote/machines';
-import { Action, ConfirmDialog, SettingsGroup, SettingsRow, StatusPill } from '../../kit';
+import {
+  Action,
+  ConfirmDialog,
+  SettingsGroup,
+  SettingsPageSkeleton,
+  SettingsRow,
+  SettingsRowSkeleton,
+  SettingsRowsSkeleton,
+  StatusPill,
+} from '../../kit';
 import { useActions } from '../../lib/workspace';
 import { AddMachine, RevealCommand, RotateCredentials } from './remote-dialogs';
 import { MachineRow, type Sharing, SharingSwitch } from './remote-machine-row';
@@ -13,6 +22,21 @@ import { MachineRow, type Sharing, SharingSwitch } from './remote-machine-row';
  * registered it, and whether agents may use it. Given only by a host that is such an app.
  */
 export type ThisComputer = Sharing & { machineId: string | null };
+
+/** A couple of machines' shape: a name with how it stands, and Configure. */
+const MachineRowsWaiting = () => <SettingsRowsSkeleton count={2} pill />;
+
+/** The machines page before it can read its list: the machines' shape, then the row that adds. */
+export function MachinesWaiting() {
+  return (
+    <SettingsPageSkeleton label="Loading machines…">
+      <SettingsGroup title="Machines">
+        <MachineRowsWaiting />
+        <SettingsRowSkeleton index={2} />
+      </SettingsGroup>
+    </SettingsPageSkeleton>
+  );
+}
 
 /**
  * The computers connected to this gateway, which every agent can run commands on and use the
@@ -51,15 +75,18 @@ export function MachinesPage({ thisComputer }: { thisComputer?: ThisComputer | u
     <span role="alert" className="text-bad">
       {failure}
     </span>
-  ) : remote.loading ? (
-    'Loading…'
-  ) : remote.machines.length === 0 && !thisComputer ? (
+  ) : remote.loading ? undefined : remote.machines.length === 0 && !thisComputer ? (
     'None yet'
   ) : undefined;
 
   return (
     <>
-      <SettingsGroup title="Machines" note={note}>
+      <SettingsGroup
+        title="Machines"
+        note={note}
+        loading={remote.loading && !failure && 'Loading machines…'}
+      >
+        {remote.loading && !failure && <MachineRowsWaiting />}
         {thisComputer && !ours && (
           // Not on this gateway yet: the app registers it as soon as it can, or does not while off.
           <SettingsRow

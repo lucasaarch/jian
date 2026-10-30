@@ -25,6 +25,7 @@
     "@jian/sdk": "workspace:*",
     "@tanstack/react-query": "^5.105.0",
     "@tanstack/react-query-persist-client": "^5.105.0",
+    "canvas-confetti": "1.9.4",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.577.0",
     "motion": "^13.4.1",
@@ -38,6 +39,7 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@types/canvas-confetti": "1.9.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.14.5",

@@ -13,7 +13,7 @@ import { useModelDefaults } from '../../components/providers/use-model-defaults'
 import { modelEntries } from '../../components/sessions/model-entries';
 import { EffortMenu, ModelMenu } from '../../components/sessions/model-menu';
 import { Select } from '../../components/ui/select';
-import { SettingsGroup, SettingsRow } from '../../kit';
+import { SettingsGroup, SettingsPageSkeleton, SettingsRow, Skeleton } from '../../kit';
 import type { ModelCatalog, Provider, ReasoningEffort } from '../../lib/api';
 import { useActions } from '../../lib/workspace';
 
@@ -31,6 +31,31 @@ const said: Record<Exclude<Role, 'channel'>, string> = {
   speech: 'Spoken replies.',
 };
 
+/** The activities a default is chosen for: every one but channels, which follow conversations. */
+const shownRoles = roles.filter((role) => role.key !== 'channel');
+
+/**
+ * The defaults while the models are read: each activity is known already, named and said as it
+ * will be, and only its menu waits.
+ */
+export function ModelDefaultsWaiting() {
+  return (
+    <SettingsPageSkeleton label="Loading model defaults…">
+      <SettingsGroup title="Activities" note="A chat can still pick its own">
+        {shownRoles.map((role) => (
+          <SettingsRow
+            key={role.key}
+            title={role.label}
+            description={said[role.key as Exclude<Role, 'channel'>]}
+          >
+            <Skeleton className="h-8 w-36 rounded-lg" />
+          </SettingsRow>
+        ))}
+      </SettingsGroup>
+    </SettingsPageSkeleton>
+  );
+}
+
 /**
  * The model every agent uses for each activity, unless a conversation picks its own, a line
  * each with the same model and effort menus the composer has; optional activities can be
@@ -43,30 +68,28 @@ export function ModelDefaultsPage() {
 
   return (
     <SettingsGroup title="Activities" note="A chat can still pick its own">
-      {roles
-        .filter((role) => role.key !== 'channel')
-        .map((role) => (
-          <ActivityRow
-            key={role.key}
-            role={role}
-            value={values[role.key]}
-            catalog={catalog}
-            configured={configured}
-            busy={busy}
-            change={change}
-            note={
-              role.key === 'conversation' && separateChannel
-                ? 'A separate channel default is saved; changing this model replaces it.'
-                : role.key === 'image' &&
-                    !values.image.disabled &&
-                    !values.image.modelId &&
-                    !hasOpenAIKey
-                  ? // Only while nothing draws: once a Gemini or xAI model is chosen, no key is missing.
-                    'Needs an OpenAI API key, Gemini or xAI under Providers.'
-                  : undefined
-            }
-          />
-        ))}
+      {shownRoles.map((role) => (
+        <ActivityRow
+          key={role.key}
+          role={role}
+          value={values[role.key]}
+          catalog={catalog}
+          configured={configured}
+          busy={busy}
+          change={change}
+          note={
+            role.key === 'conversation' && separateChannel
+              ? 'A separate channel default is saved; changing this model replaces it.'
+              : role.key === 'image' &&
+                  !values.image.disabled &&
+                  !values.image.modelId &&
+                  !hasOpenAIKey
+                ? // Only while nothing draws: once a Gemini or xAI model is chosen, no key is missing.
+                  'Needs an OpenAI API key, Gemini or xAI under Providers.'
+                : undefined
+          }
+        />
+      ))}
     </SettingsGroup>
   );
 }

@@ -189,6 +189,14 @@
   .agent-toolbar {
     @apply px-6 pb-5 pt-2;
   }
+  .agent-toolbar-context {
+    @apply mx-auto mb-1.5 flex w-full min-w-0 justify-end px-1;
+    max-width: var(--chat-column);
+  }
+  /* No objective and nobody listening: no row at all over the box. */
+  .agent-toolbar-context:not(:has(.session-badges > *)) {
+    @apply hidden;
+  }
   .agent-toolbar-box {
     @apply mx-auto flex w-full min-w-0 items-center gap-2 rounded-2xl border border-line bg-surface p-2;
     max-width: var(--chat-column);
@@ -798,6 +806,15 @@
   }
   .chat-line.member .chat-text {
     @apply max-w-[80%];
+  }
+  /* A voice note someone sent is their message too: it takes the bubble's ground and corners,
+     as wide as the player, and stands alone when it came without words. */
+  .chat-line.mine .message-media .audio-player {
+    @apply rounded-2xl border-0 py-2.5;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+  }
+  .chat-line.mine > .message-media:first-child {
+    @apply mt-0;
   }
   /* In a group each person's run of messages opens with their face and name; the rest of the
      run lines up under it. */

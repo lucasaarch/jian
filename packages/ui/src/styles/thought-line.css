@@ -121,6 +121,10 @@
     @apply shrink-0 truncate text-xs;
     color: var(--bad);
   }
+  /* What went wrong waits under the pointer: the note says it can be read. */
+  .thought-note[data-detail] {
+    @apply cursor-help rounded-sm underline decoration-dotted underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ink;
+  }
 }
 
 @keyframes thought-shimmer {

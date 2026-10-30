@@ -27,6 +27,7 @@ import { AgentPicker } from './agent-picker';
 import { ChatSearch } from './chat-search';
 import { ChatSidebar } from './chat-sidebar';
 import { ChatsLoading } from './chats-loading';
+import { useAgentCommands } from './commands/agent-commands';
 import { ReadFailed } from './failed';
 import { PhoneBar } from './phone-bar';
 import { Welcome } from './welcome';
@@ -65,10 +66,23 @@ export function ChatsApp({ createAgent, header }: { createAgent: () => void; hea
     [adopt, onboarding.finish],
   );
 
+  const welcoming = Boolean(profiles) && (!onboarding.completed || onboarding.requested);
+  const setShowing = onboarding.setShowing;
+  useAgentCommands({
+    profiles: welcoming ? undefined : profiles,
+    current: profiles?.find((profile) => profile.id === profileId),
+    createAgent,
+  });
+  // A host hides its own chrome — title bar buttons, status bar — while the Welcome is up.
+  useEffect(() => {
+    setShowing(welcoming);
+    return () => setShowing(false);
+  }, [welcoming, setShowing]);
+
   return (
     <WelcomeHandoff
       welcome={
-        profiles && (!onboarding.completed || onboarding.requested) ? (
+        welcoming ? (
           <Welcome saved={welcomeAgent} onCreated={setWelcomeAgent} finish={finishWelcome} />
         ) : null
       }

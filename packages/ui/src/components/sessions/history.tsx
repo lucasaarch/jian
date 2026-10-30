@@ -17,6 +17,7 @@ import { subscribe } from '../../lib/events';
 import { useCrew } from '../../lib/stores/crew';
 import { plainText } from '../ui/markdown';
 import { CodeChanges } from './code-change';
+import { Confetti } from './confetti';
 import { ConversationMap } from './conversation-map';
 import { CrewCards, CrewDock, reportOf } from './crew';
 import { ApprovalCard, QuestionCard } from './decision-cards';
@@ -436,6 +437,9 @@ export function History({
 
   return (
     <div className="session-history">
+      <p role="status" className="sr-only">
+        {loading ? 'Loading conversation…' : ''}
+      </p>
       <section
         ref={scroller}
         className="message-history"
@@ -619,6 +623,8 @@ export function History({
         </div>
       </section>
       <ConversationMap scroller={scroller} entries={mapEntries} />
+      {/* A chat on WhatsApp or Telegram has no screen there to throw it on. */}
+      <Confetti runs={tools} off={Boolean(chat)} />
       {/* What sits just above the composer: errors, a question waiting, agents at work. It
           floats with the composer over the end of the conversation. */}
       <div className="history-tray">

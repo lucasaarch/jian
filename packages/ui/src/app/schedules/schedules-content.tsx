@@ -4,7 +4,15 @@ import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { choices } from '../../components/schedules/conversations';
 import { scheduleActions, useScheduleList } from '../../components/schedules/list';
-import { Action, ConfirmDialog, SettingsGroup, SettingsRow } from '../../kit';
+import {
+  Action,
+  ConfirmDialog,
+  SettingsGroup,
+  SettingsRow,
+  SettingsRowSkeleton,
+  SettingsRowsSkeleton,
+  SkeletonRegion,
+} from '../../kit';
 import type { Schedule } from '../../lib/api';
 import { agentPath } from '../../lib/navigation';
 import { useAgent, useAgents, useContacts, useSessions } from '../../lib/query/agent';
@@ -12,6 +20,24 @@ import { useActions } from '../../lib/workspace';
 import { useRouter } from '../../platform/navigation';
 import { ScheduleDialog } from './schedule-dialog';
 import { ScheduleRow } from './schedule-row';
+
+/** A few schedules' shape: a name with how it stands, its switch and Configure. */
+const ScheduleRowsWaiting = () => <SettingsRowsSkeleton count={2} pill toggle />;
+
+/**
+ * The schedules while the agent is read, as the list will stand while its schedules are: their
+ * rows' shape, then the row that adds one.
+ */
+export function SchedulesWaiting() {
+  return (
+    <SkeletonRegion label="Loading schedules…" className="grid grid-cols-1">
+      <SettingsGroup>
+        <ScheduleRowsWaiting />
+        <SettingsRowSkeleton index={2} />
+      </SettingsGroup>
+    </SkeletonRegion>
+  );
+}
 
 /**
  * What the agent does at a time — reminders, summaries, recurring checks — a line each, with its
@@ -44,17 +70,17 @@ export function SchedulesContent() {
     setFormOpen(true);
   };
 
+  const reading = !list && !error;
   const note = error ? (
     <span role="alert" className="text-bad">
       {error}
     </span>
-  ) : !list ? (
-    'Loading…'
   ) : undefined;
 
   return (
     <>
-      <SettingsGroup note={note}>
+      <SettingsGroup note={note} loading={reading && 'Loading schedules…'}>
+        {reading && <ScheduleRowsWaiting />}
         {[...repeating, ...single].map((item) => (
           <ScheduleRow
             key={item.id}

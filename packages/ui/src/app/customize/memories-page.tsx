@@ -6,12 +6,30 @@ import {
   matchingMemories,
   memoryActions,
 } from '../../components/memories/memory-actions';
-import { Action, ConfirmDialog, SettingsGroup, SettingsRow } from '../../kit';
+import {
+  Action,
+  ConfirmDialog,
+  SettingsGroup,
+  SettingsRow,
+  SettingsRowsSkeleton,
+  SkeletonRegion,
+} from '../../kit';
 import type { Memory } from '../../lib/api';
 import { useAgent, useMemories } from '../../lib/query/agent';
 import { useActions } from '../../lib/workspace';
 import { MemoryDialog } from './memory-dialog';
-import { ListSearch } from './skill-search';
+import { ListSearch, ListSearchWaiting } from './skill-search';
+
+/** The memories while they are read: a few lines of text, each with Configure, and the search. */
+export function MemoriesWaiting() {
+  return (
+    <SkeletonRegion label="Loading memories…" className="grid grid-cols-1">
+      <SettingsGroup title="Kept by the agent" note={<ListSearchWaiting />}>
+        <SettingsRowsSkeleton count={4} />
+      </SettingsGroup>
+    </SkeletonRegion>
+  );
+}
 
 /**
  * What the agent kept across its conversations, a line each — its text, cut to the line — with

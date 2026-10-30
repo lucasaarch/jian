@@ -9,6 +9,7 @@ export const keys = {
   providers: ['providers'] as const,
   providerModels: (providerId: string) => ['providers', providerId, 'models'] as const,
   modelDefaults: ['model-defaults'] as const,
+  subscriptionUsage: ['subscription-usage'] as const,
   sshKeys: ['ssh-keys'] as const,
   groups: ['groups'] as const,
   githubIntegration: ['integrations', 'github'] as const,

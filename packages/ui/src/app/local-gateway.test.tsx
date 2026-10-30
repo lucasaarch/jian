@@ -8,8 +8,14 @@ import { CustomizeView } from './agent-pages';
 import { AppSettings } from './app-settings';
 
 // What each page lists is its own test's; here only which pages a gateway has.
-vi.mock('./customize/skills-page', () => ({ SkillsPage: () => <p>Skills</p> }));
-vi.mock('./customize/channels-page', () => ({ ChannelsPage: () => <p>Channels</p> }));
+vi.mock('./customize/skills-page', () => ({
+  SkillsPage: () => <p>Skills</p>,
+  SkillsWaiting: () => null,
+}));
+vi.mock('./customize/channels-page', () => ({
+  ChannelsPage: () => <p>Channels</p>,
+  ChannelsWaiting: () => null,
+}));
 
 const roots: (() => void)[] = [];
 afterEach(() => {

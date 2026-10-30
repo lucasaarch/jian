@@ -29,7 +29,10 @@ export function usePairing(profileId: string, channel: Channel, api: GatewayApi)
     retry: false,
   });
   const qr = waiting ? qrQuery.data : undefined;
-  const unreadable = connectionQuery.error ?? qrQuery.error;
+  // Only the device's state can fail to be read. A code asked for just as the phone links, or
+  // between one code and the next, is refused because none is waiting: that is no error, and the
+  // dialog already says a new code is on its way.
+  const unreadable = connectionQuery.error;
 
   // The code's countdown, in seconds.
   useEffect(() => {

@@ -3,8 +3,16 @@
 export { toast } from 'sonner';
 export { type AppHost, AppSettings, type GatewaySettings } from './app/app-settings';
 export { ChatsApp } from './app/chats';
+export { useAppCommands } from './app/commands/app-commands';
+export {
+  type AppCommand,
+  CommandsProvider,
+  isMac,
+  useCommands,
+} from './app/commands/registry';
 export { CreateAgent } from './app/create-agent';
 export type { GatewayActions, GatewayInfo } from './app/gateway-connection';
+export { ReloadCurtain, reloadApp } from './app/reload';
 export type { ThisComputer } from './app/settings/machines-page';
 export {
   type History,
@@ -18,6 +26,9 @@ export {
  * host decides — how it navigates and how it reaches the gateway.
  */
 export { SignIn } from './app/sign-in';
+export { AgentsWorking } from './app/status/agents-working';
+export { ComputerInUse, type ComputerUse } from './app/status/computer-in-use';
+export { SubscriptionMeter } from './app/status/subscription-meter';
 export {
   type AppUpdate,
   openUpdates,
@@ -34,6 +45,7 @@ export * from './kit';
 export { agentSettingsPath, newChatPath } from './lib/navigation';
 export { useGatewayOnline } from './lib/query/online';
 export { forgetGatewayCache } from './lib/query/persist';
+export { useWelcomeShowing } from './lib/stores/onboarding';
 export { useProfileId } from './lib/workspace';
 export { connectGateway, type GatewayConnection } from './platform/gateway';
 export {

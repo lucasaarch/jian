@@ -89,6 +89,10 @@ function quoted(text: string) {
 }
 
 /** What a person wrote, with the message they answered above it or the reaction they left. */
+/** What a channel writes for a message that is only a file, which the file itself shows. */
+const STANDS_FOR_FILE =
+  /^\[(Voice message|Audio|Photo|Video|Sticker|Media attachment|File(: [^\]]*)?)\]$/;
+
 function PersonText({ text }: { text: string }) {
   const { reaction, whose, quote, body } = quoted(text);
 
@@ -142,13 +146,17 @@ export function ChatMessage({
   before?: React.ReactNode;
   children?: React.ReactNode;
 }) {
-  // Attachment markers and the gateway's notes about files are drawn as attachments below.
-  const clean = (text: string) =>
-    text
+  // Attachment markers and the gateway's notes about files are drawn as attachments below. A
+  // channel writes "[Voice message]" or "[Photo]" for a message that is only a file: with the
+  // file drawn, those words would only say it again.
+  const clean = (text: string) => {
+    const words = text
       .replace(/\[Attached media: [0-9a-f-]{36}\]/g, '')
       .replace(/^\[Voice call · [^\]]+\]\n/, '')
       .replace(/\n?\[File not (opened|kept)[^\]]*\]/g, '')
       .trim();
+    return /\[Attached media: /.test(text) && STANDS_FOR_FILE.test(words) ? '' : words;
+  };
 
   // In an agent conversation this profile started, it only carried the question: the other
   // agent is the one who works and answers, so it takes the agent's side, on the left.

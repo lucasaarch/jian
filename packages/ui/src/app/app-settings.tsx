@@ -1,13 +1,12 @@
 'use client';
 
 import { Cable, Cpu, KeyRound, Link2, Monitor, Palette, Plug, Settings2 } from 'lucide-react';
-import { type ReactNode, Suspense, useState } from 'react';
-import { Spinner } from '../components/ui';
+import { Suspense, useState } from 'react';
 import { Overlay, SettingsLayout, type SettingsPage } from '../kit';
 import { useOnboarding } from '../lib/stores/onboarding';
 import { Appearance } from './appearance';
 import { type GatewayActions, GatewayConnection, type GatewayInfo } from './gateway-connection';
-import { GatewayPage, type GatewayPageId } from './gateway-pages';
+import { GatewayPage, type GatewayPageId, GatewayPageWaiting } from './gateway-pages';
 import { type AppHost, GeneralSettings } from './general-settings';
 import type { ThisComputer } from './settings/machines-page';
 
@@ -112,14 +111,15 @@ function PageOf({
       <GatewayConnection key={gateway.info.id} gateway={gateway.info} host={gateway.actions} />
     );
   }
+  // A gateway's page reads it first; while it does, the page's place holds the page's shape.
   return (
-    <Reading>
+    <Suspense fallback={<GatewayPageWaiting page={page} />}>
       <GatewayPage
         key={`${gateway.info.id}-${page}`}
         page={page}
         thisComputer={gateway.thisComputer}
       />
-    </Reading>
+    </Suspense>
   );
 }
 
@@ -211,19 +211,4 @@ function gatewayPages({ info, actions }: GatewaySettings): SettingsPage[] {
         ]
       : []),
   ];
-}
-
-/** A gateway's page reads it first; while it does, the page's place says so. */
-function Reading({ children }: { children: ReactNode }) {
-  return (
-    <Suspense
-      fallback={
-        <div className="grid place-items-center py-16" aria-busy="true">
-          <Spinner size={22} />
-        </div>
-      }
-    >
-      {children}
-    </Suspense>
-  );
 }

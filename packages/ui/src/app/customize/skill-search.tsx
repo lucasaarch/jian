@@ -30,3 +30,19 @@ export function ListSearch({
     </label>
   );
 }
+
+/**
+ * The search's place while there is no list to search, the size of the field. A card's title
+ * line aligns on the field's baseline, which is its icon's lower edge, as the icon comes first and
+ * has no text: an empty block of the same size and place keeps that edge where it will be.
+ */
+export function ListSearchWaiting() {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-7 w-44 items-center rounded-md border border-transparent bg-ink/8 px-2 motion-safe:animate-pulse"
+    >
+      <span className="size-[13px] shrink-0" />
+    </span>
+  );
+}
