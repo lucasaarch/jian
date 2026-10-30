@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { agentPath } from '@/lib/navigation';
-import { pushOnHere } from '@/lib/push';
+import { enablePush, pushOnHere } from '@/lib/push';
 import { queries } from '@/lib/query/profile';
 import { unread } from '@/lib/unread';
 import { plainText } from '../ui/markdown';
@@ -21,6 +21,9 @@ export function ChatNotices({ profileId }: { profileId: string }) {
   const router = useRouter();
   // The last word known in each conversation; the first read of the list only learns them.
   const known = useRef<Map<string, string>>(undefined);
+
+  // Notifications are on unless the owner says no: asked with their first tap in the panel.
+  useEffect(() => enablePush(), []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Only a new list of conversations is news.
   useEffect(() => {

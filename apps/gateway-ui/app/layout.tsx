@@ -6,6 +6,8 @@ import { Notifications } from '../components/shell/notice';
 import { QueryProvider } from '../components/shell/query';
 import { ServiceWorker } from '../components/shell/service-worker';
 import { ThemeSync } from '../components/shell/theme';
+import { VersionMismatch } from '../components/shell/version-mismatch';
+import { versionMismatch } from '../lib/server/versions';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -28,11 +30,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   // The script policy carries a nonce minted per request (proxy.ts), and Next can only stamp
   // it on a page rendered for that request; a page prerendered at build time would be blocked.
   await connection();
+  const mismatch = await versionMismatch();
 
   return (
     <html lang="en">
       <body>
-        <QueryProvider>{children}</QueryProvider>
+        {mismatch ? <VersionMismatch {...mismatch} /> : <QueryProvider>{children}</QueryProvider>}
         <ThemeSync />
         <Notifications />
         <ServiceWorker />

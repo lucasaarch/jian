@@ -30,8 +30,10 @@ LABEL org.opencontainers.image.title="Jian Web" \
       org.opencontainers.image.revision="${JIAN_REVISION}"
 # JIAN_GATEWAY_URL is read on every request, so one image serves any topology; the default
 # is the service name compose.yaml gives the gateway.
+# JIAN_VERSION is this image's release, compared with the gateway's on every page: two
+# releases never run together.
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000 \
-    JIAN_GATEWAY_URL=http://gateway:4310
+    JIAN_GATEWAY_URL=http://gateway:4310 JIAN_VERSION=${JIAN_VERSION}
 WORKDIR /app
 # The standalone tree carries its own pruned node_modules, and the build placed the static
 # assets and public/ inside it (scripts/standalone.mjs).

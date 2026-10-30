@@ -447,9 +447,6 @@
       @apply hidden;
     }
   }
-  .chat-list-toggle {
-    @apply shrink-0;
-  }
   .conversation-list {
     @apply flex min-h-0 flex-col border-r border-line bg-surface;
   }
@@ -575,17 +572,24 @@
     @apply mx-auto w-full;
     max-width: var(--chat-column);
   }
-  .conversation-pane > header,
-  .conversation-column > header {
-    @apply flex items-center gap-3 border-b border-line px-6 py-4;
+  /* A conversation has no header: its one control floats round in the top corner, over the
+     conversation, and the badges of one with no bar at the bottom in the other. */
+  .conversation-pane,
+  .conversation-column {
+    @apply relative;
   }
-  .conversation-pane > header h2,
-  .conversation-column > header h2 {
-    @apply truncate text-xl;
+  .pane-corner {
+    @apply absolute left-3 top-3 z-10 flex gap-2;
   }
-  .conversation-pane > header small,
-  .conversation-column > header small {
-    @apply block truncate text-xs text-muted;
+  .pane-badges {
+    @apply absolute right-3 top-3 z-10;
+  }
+  .pane-round {
+    @apply grid h-9 w-9 place-items-center rounded-full border border-line bg-surface/70 text-muted shadow-sm backdrop-blur transition-colors;
+  }
+  .pane-round:hover,
+  .pane-round:focus-visible {
+    @apply bg-surface text-ink;
   }
   /* The objective and the listeners are badges at the end of the row where the chat runs; what
      each one holds opens from it. */
@@ -690,8 +694,9 @@
   .conversation-pane .session-history {
     @apply p-0;
   }
+  /* Room at the top for the corner control, so the first message is never under it. */
   .conversation-pane .message-history {
-    @apply px-6 py-4;
+    @apply px-6 pb-4 pt-14;
   }
   /* The composer floats over the end of the conversation (dock.tsx), which keeps scrolling
      beneath it: its last message gets room after it for the dock and the tray above it. */
@@ -1435,15 +1440,7 @@
     @apply hidden;
   }
   .conversation-pane .conversation-back {
-    @apply inline-flex;
-  }
-  .conversation-pane > header,
-  .conversation-column > header {
-    @apply px-3 py-3;
-  }
-  .conversation-pane > header h2,
-  .conversation-column > header h2 {
-    @apply text-base;
+    @apply grid;
   }
 }
 
@@ -1468,5 +1465,28 @@
   .sidebar,
   .workspace {
     transition: none;
+  }
+}
+
+/* The panel and the gateway on different releases: one notice in the middle of the screen,
+   in place of everything else, since nothing else would work as it should. */
+@layer components {
+  .version-mismatch {
+    @apply grid min-h-dvh place-items-center bg-canvas px-4 py-10;
+  }
+  .version-mismatch section {
+    @apply grid w-full max-w-lg gap-3 rounded-2xl border border-line bg-surface p-7 text-sm leading-relaxed text-muted;
+  }
+  .version-mismatch-mark {
+    @apply mb-1 grid h-11 w-11 place-items-center rounded-xl bg-warn-soft text-warn;
+  }
+  .version-mismatch h1 {
+    @apply text-xl font-semibold leading-snug text-ink;
+  }
+  .version-mismatch strong {
+    @apply font-semibold text-ink;
+  }
+  .version-mismatch code {
+    @apply whitespace-nowrap rounded-md bg-canvas px-1.5 py-0.5 font-mono text-[12.5px] text-ink;
   }
 }
