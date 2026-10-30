@@ -52,6 +52,22 @@ export function isPublicAddress(address: string): boolean {
   return parsed.range() === 'unicast';
 }
 
+/** 127.0.0.0/8 and ::1, as written or mapped into IPv6: this computer itself. */
+function isLoopbackAddress(address: string): boolean {
+  const parsed = parsedAddress(address);
+  if (!parsed) return false;
+  if (parsed instanceof ipaddr.IPv6 && parsed.isIPv4MappedAddress()) {
+    return isLoopbackAddress(parsed.toIPv4Address().toString());
+  }
+  return parsed.range() === 'loopback';
+}
+
+/** A host that names this computer: `localhost`, or a loopback address. */
+function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname;
+  return host.toLowerCase() === 'localhost' || (isIP(host) > 0 && isLoopbackAddress(host));
+}
+
 function isMetadataHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/\.$/, '');
 
@@ -129,9 +145,12 @@ function configuredOrigins(origins: readonly string[]): Set<string> {
 export function validateEndpoint(
   input: string | URL,
   allowPrivateOrigins: readonly string[] = [],
+  allowLoopback = false,
 ): URL {
   const url = parseEndpoint(input);
-  const allowed = configuredOrigins(allowPrivateOrigins).has(url.origin);
+  const allowed =
+    configuredOrigins(allowPrivateOrigins).has(url.origin) ||
+    (allowLoopback && isLoopbackHost(url.hostname));
 
   if (url.protocol !== 'https:' && !allowed) {
     throw new Error('HTTPS is required for outbound requests');
@@ -148,6 +167,12 @@ export function validateEndpoint(
 
 export interface SafeFetchOptions {
   allowPrivateOrigins?: string[];
+  /**
+   * Whether services on this computer itself may be reached, over plain HTTP too: a local model
+   * server or MCP server. For a gateway that runs on the owner's own computer, where they put
+   * those services; every other private address stays refused.
+   */
+  allowLoopback?: boolean;
   lookup?: (hostname: string) => Promise<readonly string[]>;
 }
 
@@ -230,8 +255,15 @@ export function createSafeFetch(options: SafeFetchOptions = {}): {
       throw new Error('Outbound client is closed');
     }
 
-    const url = validateEndpoint(input instanceof Request ? input.url : input, [...allowed]);
+    const url = validateEndpoint(
+      input instanceof Request ? input.url : input,
+      [...allowed],
+      options.allowLoopback,
+    );
     const allowPrivate = allowed.has(url.origin);
+    // Allowed to this computer alone: `localhost` must resolve to loopback, nowhere else.
+    const loopbackOnly =
+      !allowPrivate && options.allowLoopback === true && isLoopbackHost(url.hostname);
     let agent = agents.get(url.origin);
 
     if (!agent) {
@@ -249,7 +281,8 @@ export function createSafeFetch(options: SafeFetchOptions = {}): {
                   (address) =>
                     !parsedAddress(address) ||
                     isMetadataAddress(address) ||
-                    (!allowPrivate && !isPublicAddress(address)),
+                    (!allowPrivate &&
+                      !(loopbackOnly ? isLoopbackAddress(address) : isPublicAddress(address))),
                 )
               ) {
                 throw new Error('Outbound DNS address is not permitted');
