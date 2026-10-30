@@ -255,9 +255,3 @@
   border: 0;
   color: var(--ink);
 }
-
-@layer components {
-  .badge-dot {
-    @apply shrink-0;
-  }
-}

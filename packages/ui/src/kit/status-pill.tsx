@@ -11,6 +11,10 @@ const tones = {
 
 export type StatusTone = keyof typeof tones;
 
+/** The pill's look, for something that opens more as well as saying how it stands. */
+export const pillClass = (tone: StatusTone = 'quiet') =>
+  `inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full px-2 text-[11px] font-medium leading-none whitespace-nowrap ${tones[tone]}`;
+
 /** How something on a row stands, in a word or two: a tint, never an outline. */
 export function StatusPill({
   tone = 'quiet',
@@ -19,11 +23,5 @@ export function StatusPill({
   tone?: StatusTone;
   children: ReactNode;
 }) {
-  return (
-    <span
-      className={`inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] font-medium leading-none whitespace-nowrap ${tones[tone]}`}
-    >
-      {children}
-    </span>
-  );
+  return <span className={pillClass(tone)}>{children}</span>;
 }

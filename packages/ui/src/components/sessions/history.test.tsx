@@ -33,11 +33,12 @@ it('outlines the conversation while it is loading', async () => {
     await act(async () =>
       root.render(<History api={api} profileId="profile" sessionId="session" />),
     );
-    expect(
-      element.querySelector('[role="status"][aria-label="Loading conversation"]'),
-    ).not.toBeNull();
+    const status = () => element.querySelector('[role="status"]')?.textContent;
+    expect(status()).toBe('Loading conversation…');
+    expect(element.querySelector('[aria-busy="true"] [role="status"]')).toBeNull();
     expect(element.textContent).not.toContain('Loading the history');
     await act(async () => settle([]));
+    expect(status()).toBe('');
   } finally {
     await act(async () => root.unmount());
     element.remove();

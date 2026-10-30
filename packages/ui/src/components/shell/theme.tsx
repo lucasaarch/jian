@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { create } from 'zustand';
-import { revealTheme } from './theme-reveal';
+import { fadeTheme } from './theme-fade';
 
 type Theme = 'dark' | 'light';
 
@@ -16,24 +16,24 @@ const SAVED = 'jian-theme';
  */
 const useTheme = create<{
   theme: Theme;
-  setTheme: (theme: Theme, origin?: { x: number; y: number }) => void;
+  setTheme: (theme: Theme) => void;
 }>()((set, get) => ({
   theme: 'dark',
-  setTheme: (next, origin = { x: window.innerWidth / 2, y: 0 }) => {
+  setTheme: (next) => {
     if (next === get().theme) return;
     try {
       window.localStorage.setItem(SAVED, next);
     } catch {
       // Storage can be off; the theme still changes for this visit.
     }
-    revealTheme(origin, () => {
+    fadeTheme(() => {
       flushSync(() => set({ theme: next }));
       document.documentElement.dataset.theme = next;
     });
   },
 }));
 
-/** The theme and how to change it, revealed from the point the change was asked at. */
+/** The theme and how to change it, its colours crossing over as it changes. */
 export function useThemeChoice() {
   return useTheme();
 }

@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { type MouseEvent, useEffect, useRef, useState } from 'react';
+import { Skeleton } from '../../kit';
 import type { ActivityDay, GatewayApi, Profile } from '../../lib/api';
 import { keys } from '../../lib/query/keys';
 import { card, Part } from './figures';
@@ -72,13 +73,17 @@ function calendar(days: Map<string, ActivityDay>): Cell[] {
   });
 }
 
-/** The agent's runs per day over the last year, in this browser's calendar. */
+/**
+ * The agent's runs per day over the last year, in this browser's calendar. Until the days
+ * arrive the empty year is its own skeleton: the same grid, every square at rest, pulsing.
+ */
 export function ActivityHeatmap({ profile, api }: { profile: Profile; api: GatewayApi }) {
   const query = useQuery({
     queryKey: keys.activityCalendar(profile.id, zone()),
     queryFn: () => api.activityCalendar(profile.id, zone()),
   });
   const days = query.data;
+  const reading = !days && !query.error;
   const [hover, setHover] = useState<{ cell: Cell; x: number; y: number }>();
   const panel = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -127,12 +132,20 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
     <Part
       title="Activity"
       action={
-        <span className="text-xs text-muted">
-          {days ? `${total.toLocaleString('en')} runs in the last year` : 'Loading…'}
-        </span>
+        days ? (
+          <span className="text-xs text-muted">
+            {`${total.toLocaleString('en')} runs in the last year`}
+          </span>
+        ) : (
+          reading && <Skeleton className="h-3 w-36" />
+        )
       }
     >
-      <div ref={panel} className={`${card} relative grid gap-3 p-4`}>
+      {/* Outside the busy card, whose words a reader holds back until it is done. */}
+      <p role="status" className="sr-only">
+        {reading ? 'Loading activity…' : ''}
+      </p>
+      <div ref={panel} className={`${card} relative grid gap-3 p-4`} aria-busy={reading}>
         {query.error ? (
           <p role="alert" className="text-sm text-bad">
             {query.error instanceof Error ? query.error.message : 'Could not load.'}
@@ -153,7 +166,7 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
                   ))}
                 </div>
                 <table
-                  className="border-separate border-spacing-[3px] -m-[3px]"
+                  className={`border-separate border-spacing-[3px] -m-[3px] ${reading ? 'motion-safe:animate-pulse' : ''}`}
                   onMouseLeave={() => setHover(undefined)}
                   aria-label="Runs per day"
                 >

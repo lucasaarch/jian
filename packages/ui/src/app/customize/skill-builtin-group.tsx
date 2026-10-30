@@ -7,11 +7,29 @@ import {
   switchedMessage,
   useBuiltinSkills,
 } from '../../components/skills/built-in-skills';
-import { SettingsGroup, SettingsRow, StatusPill, SwitchControl } from '../../kit';
+import {
+  SettingsGroup,
+  SettingsRow,
+  SettingsRowsSkeleton,
+  StatusPill,
+  SwitchControl,
+} from '../../kit';
 import type { BuiltinSkill, Profile } from '../../lib/api';
 import { matchesQuery } from '../../lib/search';
 import { SkillReading } from './skill-reading';
-import { ListSearch } from './skill-search';
+import { ListSearch, ListSearchWaiting } from './skill-search';
+
+/** The gateway ships a long list; a screenful of switches stands for it. */
+const BuiltinRowsWaiting = () => <SettingsRowsSkeleton count={6} toggle buttons={0} />;
+
+/** The built-in skills while the agent is read, before the group can read its list. */
+export function SkillBuiltinWaiting() {
+  return (
+    <SettingsGroup title="Built in" note={<ListSearchWaiting />}>
+      <BuiltinRowsWaiting />
+    </SettingsGroup>
+  );
+}
 
 /**
  * The skills that ship with the gateway, a line each: its name, which opens it to read, and its
@@ -47,15 +65,19 @@ export function SkillBuiltinGroup({
     <span role="alert" className="text-bad">
       {error}
     </span>
-  ) : loading ? (
-    'Loading…'
   ) : (
+    // Already there while the list is read: what is typed filters it once it arrives.
     <ListSearch label="Search built-in skills" value={query} onChange={setQuery} />
   );
 
   return (
     <>
-      <SettingsGroup title="Built in" note={note}>
+      <SettingsGroup
+        title="Built in"
+        note={note}
+        loading={loading && !error && 'Loading built-in skills…'}
+      >
+        {loading && !error && <BuiltinRowsWaiting />}
         {shown.map((skill) => (
           <SettingsRow
             key={skill.name}

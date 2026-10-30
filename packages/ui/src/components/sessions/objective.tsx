@@ -1,14 +1,15 @@
 'use client';
 
 import { Popover } from '@base-ui/react/popover';
+import { pillClass, type StatusTone } from '../../kit';
 import type { Session } from '../../lib/api';
 
-const tone = {
+const tone: Record<'open' | 'blocked' | 'done' | 'cancelled', StatusTone> = {
   open: 'good',
   blocked: 'warn',
-  done: 'neutral',
-  cancelled: 'neutral',
-} as const;
+  done: 'quiet',
+  cancelled: 'quiet',
+};
 
 const label = {
   open: 'Objective open',
@@ -32,10 +33,10 @@ export function SessionObjective({
   return (
     <Popover.Root>
       <Popover.Trigger
-        className={`badge ${tone[objective.status]} session-badge-trigger`}
+        className={`${pillClass(tone[objective.status])} session-badge-trigger`}
         aria-label={`${label[objective.status]}: show the objective`}
       >
-        <span className="badge-dot" />
+        <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
         {label[objective.status]}
       </Popover.Trigger>
       <Popover.Portal>

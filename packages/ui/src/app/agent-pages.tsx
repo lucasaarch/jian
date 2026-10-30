@@ -1,17 +1,16 @@
 'use client';
 
 import { type ReactNode, Suspense, useEffect } from 'react';
-import { Spinner } from '../components/ui';
 import { Segmented } from '../kit';
 import { useGatewayMode } from '../lib/gateway-mode';
 import { agentPath } from '../lib/navigation';
 import { useRouter } from '../platform/navigation';
 import { AgentSettingsContent } from './agent-settings';
-import { ChannelsPage } from './customize/channels-page';
-import { MemoriesPage } from './customize/memories-page';
-import { SkillsPage } from './customize/skills-page';
-import { OverviewContent } from './overview/overview-content';
-import { SchedulesContent } from './schedules/schedules-content';
+import { ChannelsPage, ChannelsWaiting } from './customize/channels-page';
+import { MemoriesPage, MemoriesWaiting } from './customize/memories-page';
+import { SkillsPage, SkillsWaiting } from './customize/skills-page';
+import { OverviewContent, OverviewWaiting } from './overview/overview-content';
+import { SchedulesContent, SchedulesWaiting } from './schedules/schedules-content';
 
 /** What Customize holds for an agent, a tab each. */
 export const customizeTabs: string[] = ['skills', 'memories', 'channels'];
@@ -85,26 +84,16 @@ function Page({
   );
 }
 
-/** A page reads the agent first; while it does, its place says so. */
-function Reading({ children }: { children: ReactNode }) {
-  return (
-    <Suspense
-      fallback={
-        <div className="grid place-items-center py-16" aria-busy="true">
-          <Spinner size={22} />
-        </div>
-      }
-    >
-      {children}
-    </Suspense>
-  );
+/** A page reads the agent first; while it does, its place holds the page's shape. */
+function Reading({ waiting, children }: { waiting: ReactNode; children: ReactNode }) {
+  return <Suspense fallback={waiting}>{children}</Suspense>;
 }
 
 /** How the agent has been doing: what it did, what that cost, and when it was at work. */
 export function OverviewView() {
   return (
     <Page title="Overview" wide>
-      <Reading>
+      <Reading waiting={<OverviewWaiting />}>
         <OverviewContent />
       </Reading>
     </Page>
@@ -124,7 +113,7 @@ export function AgentSettingsView({ profileId }: { profileId: string }) {
 export function SchedulesView() {
   return (
     <Page title="Schedules">
-      <Reading>
+      <Reading waiting={<SchedulesWaiting />}>
         <SchedulesContent />
       </Reading>
     </Page>
@@ -153,15 +142,19 @@ export function CustomizeView({ profileId, tab }: { profileId: string; tab: Cust
           ...(server ? [{ value: 'channels' as const, label: 'Channels' }] : []),
         ]}
       />
-      <Reading key={shown}>
-        {shown === 'skills' ? (
+      {shown === 'skills' ? (
+        <Reading key={shown} waiting={<SkillsWaiting />}>
           <SkillsPage />
-        ) : shown === 'memories' ? (
+        </Reading>
+      ) : shown === 'memories' ? (
+        <Reading key={shown} waiting={<MemoriesWaiting />}>
           <MemoriesPage />
-        ) : (
+        </Reading>
+      ) : (
+        <Reading key={shown} waiting={<ChannelsWaiting />}>
           <ChannelsPage />
-        )}
-      </Reading>
+        </Reading>
+      )}
     </Page>
   );
 }

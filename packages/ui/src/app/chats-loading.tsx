@@ -1,6 +1,7 @@
 'use client';
 
 import { Mark } from '../components/ui';
+import { Skeleton } from '../kit';
 
 /** Widths of the stand-in rows, uneven as real titles are. */
 const rows = [
@@ -11,12 +12,12 @@ const rows = [
 /** The sidebar's sections while they load: their shape, breathing, where they will be. */
 export function SidebarSkeleton() {
   return (
-    <div className="flex animate-pulse flex-col gap-5 px-4 pt-1" aria-hidden="true">
+    <div className="flex flex-col gap-5 px-4 pt-1" aria-hidden="true">
       {rows.map((section, index) => (
         <div key={section.join()} className="flex flex-col gap-3.5">
-          <span className={`h-2 rounded-full bg-ink/10 ${index ? 'w-20' : 'w-14'}`} />
+          <Skeleton className={`h-2 rounded-full bg-ink/10 ${index ? 'w-20' : 'w-14'}`} />
           {section.map((width) => (
-            <span key={width} className={`h-2.5 rounded-full bg-ink/7 ${width}`} />
+            <Skeleton key={width} className={`h-2.5 rounded-full bg-ink/7 ${width}`} />
           ))}
         </div>
       ))}

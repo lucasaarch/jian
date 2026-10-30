@@ -1,11 +1,15 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { Skeleton } from '../../kit';
 
 /** A card of the Overview: flat inside the page, as a settings card is. */
 export const card = 'rounded-xl border border-glass-edge bg-glass-hover';
 
-/** A number with its label and a mark, as the tiles across the top of each part show it. */
+/**
+ * A number with its label and a mark, as the tiles across the top of each part show it. Without
+ * the number yet, a block holds its line: `h-5` and `my-1` make the 1.75rem the figure takes.
+ */
 export function Tile({
   icon,
   label,
@@ -13,7 +17,8 @@ export function Tile({
 }: {
   icon: ReactNode;
   label: string;
-  children: ReactNode;
+  /** Left out while the numbers are on their way. */
+  children?: ReactNode;
 }) {
   return (
     <div className={`${card} grid min-w-0 gap-2.5 p-4`}>
@@ -23,7 +28,7 @@ export function Tile({
       <span className="grid min-w-0 gap-0.5">
         <span className="truncate text-xs text-muted">{label}</span>
         <strong className="truncate text-xl font-semibold tracking-tight text-ink tabular-nums">
-          {children}
+          {children ?? <Skeleton className="my-1 h-5 w-16" />}
         </strong>
       </span>
     </div>

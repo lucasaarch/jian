@@ -70,6 +70,8 @@ export const resourceCalls = (client: Client) => ({
         params: { path: { profileId }, query: { days } },
       }),
     ),
+  /** How much of the Claude and Codex subscription windows is used, for every agent at once. */
+  subscriptionUsage: () => result(client.GET('/v1/subscription-usage')),
   subscriptions: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/subscriptions', { params: profile(profileId) })),
   /** Stops a listener; it stays in the agent's list, off, so it can be turned on again. */

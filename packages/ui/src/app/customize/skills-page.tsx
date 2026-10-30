@@ -4,12 +4,35 @@ import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { sourceOf } from '../../components/skills/origin';
 import { SKILL_LIMIT, type SkillEditing, useSkillList } from '../../components/skills/skill-list';
-import { Action, ConfirmDialog, SettingsGroup, SettingsRow, StatusPill } from '../../kit';
+import {
+  Action,
+  ConfirmDialog,
+  SettingsGroup,
+  SettingsRow,
+  SettingsRowsSkeleton,
+  SkeletonRegion,
+  StatusPill,
+} from '../../kit';
 import type { Skill } from '../../lib/api';
 import { useActions } from '../../lib/workspace';
-import { SkillBuiltinGroup } from './skill-builtin-group';
+import { SkillBuiltinGroup, SkillBuiltinWaiting } from './skill-builtin-group';
 import { SkillDialog } from './skill-dialog';
 import { SkillImportDialog } from './skill-import-dialog';
+
+/**
+ * The skills while the agent is read: a few of its own, the rows that write and import another,
+ * and the built-in list under them.
+ */
+export function SkillsWaiting() {
+  return (
+    <SkeletonRegion label="Loading skills…" className="grid grid-cols-1 gap-6">
+      <SettingsGroup title="Installed">
+        <SettingsRowsSkeleton count={4} />
+      </SettingsGroup>
+      <SkillBuiltinWaiting />
+    </SkeletonRegion>
+  );
+}
 
 /**
  * The agent's skills: its own — written here, imported, or written by itself — a line each with

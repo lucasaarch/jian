@@ -1,11 +1,16 @@
 'use client';
 
 import { Camera } from 'lucide-react';
+import { motion } from 'motion/react';
 import { useId, useState } from 'react';
 import { Action, TextArea, TextField } from '../../kit';
 import { AgentHero } from '../../kit/agent-hero';
+import { useAppearance } from '../../lib/appearance';
 import { AVATAR_TYPES, encodeAvatar } from '../../lib/avatar';
 import { AgentStarters } from '../agent-starters';
+
+const settle = [0.23, 1, 0.32, 1] as const;
+const blank = { name: 'Your agent', summary: 'A name. A purpose. A beginning.' };
 
 export type IdentityDraft = {
   name: string;
@@ -27,6 +32,14 @@ export function WelcomeIdentity({
   error: string;
   create: () => void;
 }) {
+  const { still } = useAppearance();
+  // The preview settles first and the form follows it in, so the eye lands on the agent. No
+  // filter here: one left on the form would cut the backdrop its glass blurs.
+  const arrive = (delay: number) => ({
+    initial: still ? false : { opacity: 0, y: 18 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: still ? 0 : 0.6, delay: still ? 0 : delay, ease: settle },
+  });
   const uploadId = useId();
   const [reading, setReading] = useState(false);
   const [imageError, setImageError] = useState('');
@@ -47,15 +60,14 @@ export function WelcomeIdentity({
 
   return (
     <div className="grid items-center gap-8 md:grid-cols-[0.9fr_1.1fr] md:gap-16">
-      <div className="grid min-w-0 justify-items-center gap-5 py-5 md:sticky md:top-8 md:self-start md:py-16">
-        <AgentHero
-          name={draft.name || 'Your agent'}
-          avatar={draft.avatar}
-          summary={draft.summary || 'A name. A purpose. A beginning.'}
-        />
+      <motion.div
+        {...arrive(0.08)}
+        className="grid min-w-0 justify-items-center gap-5 py-5 md:sticky md:top-8 md:self-start md:py-16"
+      >
+        <AgentHero name={draft.name} avatar={draft.avatar} summary={draft.summary} blank={blank} />
         <label
           htmlFor={uploadId}
-          className="relative inline-flex cursor-pointer items-center gap-2 rounded-full border border-glass-edge bg-glass-hover px-4 py-2 text-xs text-muted focus-within:ring-2 focus-within:ring-ink"
+          className="relative inline-flex cursor-pointer items-center gap-2 rounded-full bg-glass-hover px-4 py-2 text-xs text-muted transition-colors hover:bg-glass-press hover:text-ink has-focus-visible:ring-2 has-focus-visible:ring-ink"
         >
           <Camera size={14} aria-hidden="true" />
           {reading ? 'Preparing picture…' : 'Choose a picture'}
@@ -76,8 +88,9 @@ export function WelcomeIdentity({
             {imageError}
           </p>
         )}
-      </div>
-      <form
+      </motion.div>
+      <motion.form
+        {...arrive(0.2)}
         onSubmit={(event) => {
           event.preventDefault();
           create();
@@ -129,7 +142,7 @@ export function WelcomeIdentity({
         >
           Create agent
         </Action>
-      </form>
+      </motion.form>
     </div>
   );
 }

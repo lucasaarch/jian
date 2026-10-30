@@ -3,6 +3,7 @@
 import { Check, ChevronDown, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { OrbState } from 'thinking-orbs';
+import { HoverTip } from '../../kit/info-tip';
 import { Orb } from '../ui';
 
 /** One line of the trace. A step that went wrong stays in it, marked, with what went wrong. */
@@ -10,9 +11,14 @@ export type ThoughtStep = {
   key: string;
   text: string;
   status: 'running' | 'done' | 'failed';
-  /** Why it failed, shown beside it. */
+  /** How it ended badly, in a word or two beside it. */
   note?: string;
+  /** What went wrong, in full, as the tool or the server said it: under the pointer. */
+  detail?: string;
 };
+
+/** A tooltip holds a few lines; past these characters the rest is the agent's to read. */
+const DETAIL = 900;
 
 /** Seconds as the line reads them: tenths under a minute, then minutes and seconds. */
 const lasted = (seconds: number) =>
@@ -142,7 +148,7 @@ export function ThoughtLine({
         <div className="thought-trace" id={trace} inert={!open}>
           <ol>
             {steps.map((step) => (
-              <li key={step.key} data-status={step.status} title={step.note}>
+              <li key={step.key} data-status={step.status}>
                 <span className="thought-mark" aria-hidden="true">
                   {step.status === 'running' ? (
                     <i className="thought-pulse" />
@@ -153,7 +159,24 @@ export function ThoughtLine({
                   )}
                 </span>
                 <span className="thought-step">{step.text}</span>
-                {step.note && <span className="thought-note">{step.note}</span>}
+                {step.note &&
+                  (step.detail ? (
+                    <HoverTip
+                      wide
+                      tip={
+                        step.detail.length > DETAIL
+                          ? `${step.detail.slice(0, DETAIL)}…`
+                          : step.detail
+                      }
+                    >
+                      <button type="button" className="thought-note" data-detail>
+                        {step.note}
+                        <span className="sr-only">: {step.detail}</span>
+                      </button>
+                    </HoverTip>
+                  ) : (
+                    <span className="thought-note">{step.note}</span>
+                  ))}
               </li>
             ))}
           </ol>

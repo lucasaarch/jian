@@ -28,6 +28,25 @@ vi.mock('motion/react', () => ({
     span: ({ children, className }: { children: ReactNode; className: string }) => (
       <span className={className}>{children}</span>
     ),
+    h2: ({ children, className }: { children: ReactNode; className: string }) => (
+      <h2 className={className}>{children}</h2>
+    ),
+    p: ({ children, className }: { children: ReactNode; className: string }) => (
+      <p className={className}>{children}</p>
+    ),
+    form: ({
+      children,
+      className,
+      onSubmit,
+    }: {
+      children: ReactNode;
+      className: string;
+      onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+    }) => (
+      <form className={className} onSubmit={onSubmit}>
+        {children}
+      </form>
+    ),
   },
 }));
 vi.mock('../../components/sessions', () => ({ Sessions: () => <p>First conversation</p> }));

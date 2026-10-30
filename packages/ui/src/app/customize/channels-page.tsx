@@ -10,7 +10,14 @@ import {
 } from '../../components/channels/connect';
 import { waitingOn } from '../../components/channels/contacts';
 import { kinds } from '../../components/channels/kinds';
-import { Action, ConfirmDialog, SettingsGroup, SettingsRow } from '../../kit';
+import {
+  Action,
+  ConfirmDialog,
+  SettingsGroup,
+  SettingsRow,
+  SettingsRowSkeleton,
+  SkeletonRegion,
+} from '../../kit';
 import type { Channel, GatewayApi, NewChannel } from '../../lib/api';
 import { useAgent, useChannels, useContacts } from '../../lib/query/agent';
 import { useActions } from '../../lib/workspace';
@@ -19,6 +26,18 @@ import { ChannelDialog } from './channel-dialog';
 import { ChannelPairing } from './channel-pairing';
 import { ChannelSecretDialog } from './channel-secret-dialog';
 import { ChannelPills, ChannelTitle, useDevice } from './channel-title';
+
+/** The channels while they are read: one connected, with how it stands, and the row that adds. */
+export function ChannelsWaiting() {
+  return (
+    <SkeletonRegion label="Loading channels…" className="grid grid-cols-1">
+      <SettingsGroup>
+        <SettingsRowSkeleton pill />
+        <SettingsRowSkeleton index={1} />
+      </SettingsGroup>
+    </SkeletonRegion>
+  );
+}
 
 /**
  * The agent's channels, a line each — its app, how it stands, who waits on the owner — with

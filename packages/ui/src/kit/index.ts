@@ -5,7 +5,7 @@ export { ConfirmDialog } from './confirm-dialog';
 export { DateTimeField, TimeField } from './date-time-field';
 export { AgentFace } from './face';
 export { Fold, FoldChevron } from './fold';
-export { InfoTip } from './info-tip';
+export { HoverTip, InfoTip } from './info-tip';
 export { Overlay } from './overlay';
 export { Picker, PickerAction, PickerRow } from './picker';
 export { Progress } from './progress';
@@ -18,6 +18,12 @@ export {
   type SettingsPage,
   SettingsRow,
 } from './settings-layout';
-export { StatusPill, type StatusTone } from './status-pill';
+export {
+  SettingsPageSkeleton,
+  SettingsRowSkeleton,
+  SettingsRowsSkeleton,
+} from './settings-skeleton';
+export { Skeleton, SkeletonLine, SkeletonRegion } from './skeleton';
+export { pillClass, StatusPill, type StatusTone } from './status-pill';
 export { TextArea, TextField } from './text-field';
 export { SwitchControl, Toggle } from './toggle';

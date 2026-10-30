@@ -1,12 +1,21 @@
 'use client';
 
-import { IntegrationsPage } from './settings/integrations-page';
-import { MachinesPage, type ThisComputer } from './settings/machines-page';
-import { ModelDefaultsPage } from './settings/model-defaults-page';
-import { ProvidersPage } from './settings/providers-page';
-import { SshKeysPage } from './settings/ssh-keys-page';
+import { IntegrationsPage, IntegrationsWaiting } from './settings/integrations-page';
+import { MachinesPage, MachinesWaiting, type ThisComputer } from './settings/machines-page';
+import { ModelDefaultsPage, ModelDefaultsWaiting } from './settings/model-defaults-page';
+import { ProvidersPage, ProvidersWaiting } from './settings/providers-page';
+import { SshKeysPage, SshKeysWaiting } from './settings/ssh-keys-page';
 
 export type GatewayPageId = 'providers' | 'models' | 'integrations' | 'ssh-keys' | 'machines';
+
+/** Each page's shape while it is read, so the page lands where its skeleton stood. */
+export function GatewayPageWaiting({ page }: { page: GatewayPageId }) {
+  if (page === 'providers') return <ProvidersWaiting />;
+  if (page === 'models') return <ModelDefaultsWaiting />;
+  if (page === 'integrations') return <IntegrationsWaiting />;
+  if (page === 'ssh-keys') return <SshKeysWaiting />;
+  return <MachinesWaiting />;
+}
 
 /**
  * One of the gateway's own pages, read through the panel that is connected to it, so it shows

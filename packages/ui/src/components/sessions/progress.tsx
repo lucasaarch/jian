@@ -58,6 +58,7 @@ const toolLabels: Record<string, string> = {
   update_identity: 'adjusting its own identity',
   read_identity: 'rereading its own identity',
   create_profile: 'creating an agent',
+  throw_confetti: 'throwing confetti',
   spawn_subagent: 'handing work to an agent',
   ask_jev: 'asking Jev',
   ask_user: 'asking you',
@@ -127,7 +128,7 @@ export function traceOf(steps: ToolStep[]): ThoughtStep[] {
       key: step.toolCallId,
       text: `${label[0]?.toUpperCase()}${label.slice(1)}`,
       status: step.status === 'running' ? 'running' : failed ? 'failed' : 'done',
-      ...(failed ? { note: step.error ? `${failed}: ${step.error}` : failed } : {}),
+      ...(failed ? { note: failed, ...(step.error ? { detail: step.error } : {}) } : {}),
     };
   });
 }

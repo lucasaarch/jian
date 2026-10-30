@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ear, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { StatusPill, type StatusTone } from '../../kit';
+import { pillClass, StatusPill, type StatusTone } from '../../kit';
 import type { GatewayApi, Subscription } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
 import { keys } from '../../lib/query/keys';
@@ -98,7 +98,7 @@ export function SessionListeners({
   return (
     <Popover.Root>
       <Popover.Trigger
-        className="badge accent session-badge-trigger"
+        className={`${pillClass()} session-badge-trigger`}
         aria-label={`${label}: show the listeners`}
       >
         <Ear size={12} aria-hidden="true" />

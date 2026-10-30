@@ -1,8 +1,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Settings } from 'lucide-react';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { LogOut, Settings } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Mark } from '../components/ui';
 import { useGatewayMode } from '../lib/gateway-mode';
 import { agentPath } from '../lib/navigation';
@@ -12,13 +12,15 @@ import { useSignOut, useWorkingAgentId } from '../lib/workspace';
 import { NavigationAt, usePathname, useRouter, useSearchParams } from '../platform/navigation';
 import { AppSettings } from './app-settings';
 import { ChatsApp } from './chats';
+import { useAppCommands } from './commands/app-commands';
+import { type AppCommand, CommandsProvider, isMac, useCommands } from './commands/registry';
 import { CreateAgent } from './create-agent';
 import { ReleaseNotes } from './release-notes';
-import { barButton, SidebarBar, searchChats } from './sidebar-bar';
+import { ReloadCurtain } from './reload';
+import { barButton, SidebarBar } from './sidebar-bar';
 import { settingsOf } from './web-addresses';
 
 const noSubscription = () => () => {};
-const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform);
 
 /**
  * The web's panel: the app's chats with their pages and overlays, behind a signed-in session.
@@ -37,19 +39,27 @@ export function WebApp() {
 
   if (!profiles.data) {
     return (
-      <main
-        className="grid h-dvh place-items-center bg-canvas"
-        aria-busy="true"
-        aria-label="Checking the session"
-      >
-        <span className="size-11 animate-pulse text-ink/80 [&_svg]:size-full">
-          <Mark />
-        </span>
-      </main>
+      <>
+        <ReloadCurtain />
+        <main
+          className="grid h-dvh place-items-center bg-canvas"
+          aria-busy="true"
+          aria-label="Checking the session"
+        >
+          <span className="size-11 animate-pulse text-ink/80 [&_svg]:size-full">
+            <Mark />
+          </span>
+        </main>
+      </>
     );
   }
 
-  return <SignedIn />;
+  return (
+    <CommandsProvider browser>
+      <ReloadCurtain />
+      <SignedIn />
+    </CommandsProvider>
+  );
 }
 
 function SignedIn() {
@@ -82,17 +92,26 @@ function SignedIn() {
     () => '⌘K',
   );
 
-  // Search the chats from anywhere, as the app does: ⌘K, or Ctrl+K off a Mac.
-  useEffect(() => {
-    const keys = (event: KeyboardEvent) => {
-      const modifier = isMac() ? event.metaKey : event.ctrlKey;
-      if (!modifier || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'k') return;
-      event.preventDefault();
-      searchChats();
-    };
-    window.addEventListener('keydown', keys);
-    return () => window.removeEventListener('keydown', keys);
-  }, []);
+  const openSettings = useCallback(
+    (page?: string) => router.push(page ? `/settings/${page}` : '/settings'),
+    [router],
+  );
+  useAppCommands(openSettings);
+  useCommands(
+    'web',
+    useMemo<AppCommand[]>(
+      () => [
+        {
+          id: 'sign-out',
+          title: 'Sign out',
+          keywords: ['log out', 'leave', 'session'],
+          icon: <LogOut size={15} />,
+          run: () => void signOut(),
+        },
+      ],
+      [signOut],
+    ),
+  );
 
   return (
     // The bar over the sidebar's top keeps this much clear; a phone adds its status bar.
@@ -109,7 +128,7 @@ function SignedIn() {
                   <button
                     type="button"
                     className={barButton}
-                    onClick={() => router.push('/settings')}
+                    onClick={() => openSettings()}
                     aria-label="Settings"
                     title="Settings"
                   >
@@ -130,7 +149,6 @@ function SignedIn() {
         grouped={false}
         host={{
           version: gateway?.version ?? 'unknown',
-          releaseNotes: true,
           signOut: () => void signOut(),
         }}
         gateway={{

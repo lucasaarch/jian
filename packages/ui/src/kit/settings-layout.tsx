@@ -132,28 +132,44 @@ export function SettingsLayout({
 }
 
 /**
- * A card of settings on a page, under a quiet title. Its rows are parted by a line.
+ * A card of settings on a page, under a quiet title. Its rows are parted by a line. A card whose
+ * rows are still being read holds skeleton rows and says so through `loading`.
  */
 export function SettingsGroup({
   title,
   note,
+  loading,
   children,
 }: {
   title?: string;
   /** Said at the right of the title, about the whole card. */
   note?: ReactNode;
+  /**
+   * For a card read after the page: what it is waiting for while it waits ("Loading keys…"),
+   * false once it is not. The status stays in place between the two, so a screen reader hears
+   * the change, and stays out of the busy card, whose words a reader holds back.
+   */
+  loading?: string | false;
   children: ReactNode;
 }) {
   return (
     // One column that never outgrows the page: a long line is cut short in its row instead.
     <section className="grid grid-cols-1 gap-2">
+      {loading !== undefined && (
+        <p role="status" className="sr-only">
+          {loading || ''}
+        </p>
+      )}
       {(title || note) && (
         <header className="flex items-baseline justify-between gap-4 px-1">
           {title && <h3 className="text-xs font-medium text-muted">{title}</h3>}
           {note && <span className="text-xs text-muted">{note}</span>}
         </header>
       )}
-      <div className="divide-y divide-glass-edge rounded-xl border border-glass-edge bg-glass-hover">
+      <div
+        aria-busy={loading ? true : undefined}
+        className="divide-y divide-glass-edge rounded-xl border border-glass-edge bg-glass-hover"
+      >
         {children}
       </div>
     </section>

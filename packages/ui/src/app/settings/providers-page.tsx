@@ -3,7 +3,15 @@
 import { Fragment, useState } from 'react';
 import { providers } from '../../components/providers/catalog';
 import { connectionOf, type ProviderEntry, staleLine } from '../../components/providers/connection';
-import { Action, ConfirmDialog, SettingsGroup, SettingsRow, StatusPill } from '../../kit';
+import {
+  Action,
+  ConfirmDialog,
+  SettingsGroup,
+  SettingsPageSkeleton,
+  SettingsRow,
+  SettingsRowsSkeleton,
+  StatusPill,
+} from '../../kit';
 import type { Provider } from '../../lib/api';
 import { useProviderModels, useProviders } from '../../lib/query/agent';
 import { useActions } from '../../lib/workspace';
@@ -55,6 +63,23 @@ const anthropicAs = (credential: Credential, other: boolean): AnthropicAs =>
       };
 
 /**
+ * The providers page while the gateway's are read: a row for each the catalog lists — Anthropic
+ * twice, its key and Claude Code, and Codex beside OpenAI's key — then the two services.
+ */
+export function ProvidersWaiting() {
+  return (
+    <SettingsPageSkeleton label="Loading providers…">
+      <SettingsGroup title="Models" note="Every agent can use them">
+        <SettingsRowsSkeleton count={providers.length + 2} />
+      </SettingsGroup>
+      <SettingsGroup title="Services" note="For every agent">
+        <SettingsRowsSkeleton count={2} from={3} />
+      </SettingsGroup>
+    </SettingsPageSkeleton>
+  );
+}
+
+/**
  * The gateway's credentials: the model providers every agent can use, each a line saying whether
  * it is connected, everything else about it a click on Configure away; then the services the
  * installation reaches through a key of its own. Disconnecting asks to confirm by name.
@@ -70,7 +95,11 @@ export function ProvidersPage() {
 }
 
 /** Shared connection controls keep first-run and Settings on the same authentication flows. */
-export function ProviderConnections() {
+/**
+ * Every provider to connect. `tiles` lays them two to a line, for the Welcome, where the whole
+ * choice has to fit on one screen; settings keeps them as one list under its title.
+ */
+export function ProviderConnections({ tiles = false }: { tiles?: boolean }) {
   const actions = useActions();
   const { api, mutate, busy } = actions;
   const connected = useProviders();
@@ -91,52 +120,60 @@ export function ProviderConnections() {
     setOpen('entry' in next ? 'provider' : 'codex');
   };
 
+  const rows = providers.map((item) => {
+    const { configured } = connectionOf(connected, item.kind);
+    const stale = configured ? Boolean(staleLine(lists[configured.id])) : false;
+    const state = configured ? (stale ? 'unreachable' : 'connected') : undefined;
+    if (item.kind === 'anthropic') {
+      const held = configured ? credentialOf(configured) : undefined;
+      return (
+        <Fragment key={item.kind}>
+          {(['key', 'subscription'] as const).map((credential) => {
+            const shown = anthropicAs(credential, Boolean(held && held !== credential));
+            return (
+              <ProviderRow
+                key={credential}
+                kind="anthropic"
+                name={shown.name}
+                state={held === credential ? state : undefined}
+                onConfigure={() => configure({ entry: item, as: shown })}
+              />
+            );
+          })}
+        </Fragment>
+      );
+    }
+    return (
+      <Fragment key={item.kind}>
+        <ProviderRow
+          kind={item.kind}
+          name={item.name}
+          state={state}
+          onConfigure={() => configure({ entry: item })}
+        />
+        {item.kind === 'openai' && (
+          <ProviderRow
+            kind="openai"
+            name="Codex"
+            state={openai.codex ? 'connected' : undefined}
+            onConfigure={() => configure({ codex: true })}
+          />
+        )}
+      </Fragment>
+    );
+  });
+
   return (
     <>
-      <SettingsGroup title="Models" note="Every agent can use them">
-        {providers.map((item) => {
-          const { configured } = connectionOf(connected, item.kind);
-          const stale = configured ? Boolean(staleLine(lists[configured.id])) : false;
-          const state = configured ? (stale ? 'unreachable' : 'connected') : undefined;
-          if (item.kind === 'anthropic') {
-            const held = configured ? credentialOf(configured) : undefined;
-            return (
-              <Fragment key={item.kind}>
-                {(['key', 'subscription'] as const).map((credential) => {
-                  const shown = anthropicAs(credential, Boolean(held && held !== credential));
-                  return (
-                    <ProviderRow
-                      key={credential}
-                      kind="anthropic"
-                      name={shown.name}
-                      state={held === credential ? state : undefined}
-                      onConfigure={() => configure({ entry: item, as: shown })}
-                    />
-                  );
-                })}
-              </Fragment>
-            );
-          }
-          return (
-            <Fragment key={item.kind}>
-              <ProviderRow
-                kind={item.kind}
-                name={item.name}
-                state={state}
-                onConfigure={() => configure({ entry: item })}
-              />
-              {item.kind === 'openai' && (
-                <ProviderRow
-                  kind="openai"
-                  name="Codex"
-                  state={openai.codex ? 'connected' : undefined}
-                  onConfigure={() => configure({ codex: true })}
-                />
-              )}
-            </Fragment>
-          );
-        })}
-      </SettingsGroup>
+      {tiles ? (
+        <div className="grid gap-2 sm:grid-cols-2 sm:*:last:odd:col-span-2 *:rounded-xl *:border *:border-glass-edge *:bg-glass-hover">
+          {rows}
+        </div>
+      ) : (
+        <SettingsGroup title="Models" note="Every agent can use them">
+          {rows}
+        </SettingsGroup>
+      )}
       <ProviderDialog
         entry={entry}
         {...(as ? { as } : {})}

@@ -18,6 +18,7 @@ vi.mock('../components/sessions', () => ({
 }));
 vi.mock('./gateway-pages', () => ({
   GatewayPage: ({ page }: { page: string }) => <p>Gateway page {page}</p>,
+  GatewayPageWaiting: () => null,
 }));
 vi.mock('../components/notifications/chat-notices', () => ({ ChatNotices: () => null }));
 vi.mock('../lib/query/stream', () => ({ useEventStream: () => {} }));
