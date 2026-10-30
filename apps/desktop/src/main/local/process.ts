@@ -115,13 +115,14 @@ export function listening(line: string): string | undefined {
 }
 
 /**
- * Packaged, the gateway is compiled JavaScript with its dependencies in the app's resources. From
+ * Packaged, the gateway is one bundled file with its two native dependencies in the app's
+ * resources (scripts/stage-gateway.mjs). From
  * source, it is the repository's TypeScript, which tsx compiles as it loads (see the script).
  */
 function launch(): { entry: string; cwd: string; execArgv: string[] } {
   if (app.isPackaged) {
     const root = join(process.resourcesPath, 'gateway');
-    return { entry: join(root, 'dist', 'local.js'), cwd: root, execArgv: [] };
+    return { entry: join(root, 'dist', 'bundle', 'local.mjs'), cwd: root, execArgv: [] };
   }
   const root = join(import.meta.dirname, '../../../gateway');
   return { entry: join(root, 'scripts', 'local-from-source.mjs'), cwd: root, execArgv: [] };
