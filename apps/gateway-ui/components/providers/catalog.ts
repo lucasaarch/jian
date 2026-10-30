@@ -98,7 +98,7 @@ export const roles = [
   {
     key: 'image',
     label: 'Image generation',
-    hint: 'Generates images with an OpenAI API key or Gemini. Requires a selected model.',
+    hint: 'Generates images with an OpenAI API key, Gemini or xAI. Requires a selected model.',
     runtime: true,
     tools: false,
   },
@@ -119,7 +119,7 @@ export const roles = [
   {
     key: 'speech',
     label: 'Text to speech',
-    hint: 'Generates voice replies with OpenAI or Gemini. Select a model and voice to enable replies.',
+    hint: 'Generates voice replies with OpenAI, Gemini or xAI. Select a model and voice to enable replies.',
     runtime: true,
     tools: false,
   },

@@ -1,4 +1,39 @@
 import type { ModelConfig } from '@jian/contracts';
+import { XAI_BASE_URL } from '../providers/catalog.js';
+
+/** xAI is reached as an OpenAI-compatible server at its own address. */
+export const isXai = (config: ModelConfig) =>
+  config.provider === 'openai-compatible' && config.baseURL === XAI_BASE_URL;
+
+// https://docs.x.ai/developers/rest-api-reference/inference/voice (GET /v1/tts/voices)
+const xaiVoices = [
+  'eve',
+  'ara',
+  'leo',
+  'rex',
+  'sal',
+  'carina',
+  'zagan',
+  'helix',
+  'orion',
+  'luna',
+  'iris',
+  'altair',
+  'zenith',
+  'perseus',
+  'helios',
+  'lux',
+  'kepler',
+  'rigel',
+  'cosmo',
+  'celeste',
+  'ursa',
+  'sirius',
+  'lumen',
+  'castor',
+  'naksh',
+  'atlas',
+];
 
 // https://ai.google.dev/gemini-api/docs/speech-generation#voice-options
 const geminiVoices = [
@@ -84,7 +119,17 @@ export function speechVoices(config: ModelConfig) {
         .map((name) => ({ name })),
     };
   }
-  throw new Error('Speech requires a Gemini or OpenAI API model, not a subscription login');
+  if (isXai(config)) {
+    return {
+      provider: 'xAI',
+      model: config.modelId,
+      defaultVoice: 'eve',
+      // Speech tags such as [pause] or <whisper> go inside the text; there is no style field.
+      supportsInstructions: false,
+      voices: xaiVoices.map((name) => ({ name })),
+    };
+  }
+  throw new Error('Speech requires a Gemini, OpenAI or xAI API model, not a subscription login');
 }
 
 export function speechVoice(config: ModelConfig, requested?: string): string {

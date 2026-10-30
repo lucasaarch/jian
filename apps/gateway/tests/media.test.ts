@@ -63,6 +63,64 @@ describe('media providers', () => {
     expect(asked).toEqual([{ aspectRatio: '16:9' }, '1536x1024', '1792x1024']);
   });
 
+  it('draws an image with xAI in the shape asked for and reads it inline', async () => {
+    const client = new MediaProviders(async (url, options) => {
+      expect(String(url)).toBe('https://api.x.ai/v1/images/generations');
+      expect(new Headers(options?.headers).get('authorization')).toBe('Bearer xai_synthetic');
+      expect(JSON.parse(String(options?.body))).toEqual({
+        model: 'grok-imagine-image',
+        prompt: 'A lighthouse at dusk',
+        n: 1,
+        aspect_ratio: '9:16',
+        response_format: 'b64_json',
+      });
+      return Response.json({ data: [{ b64_json: png, mime_type: 'image/png' }] });
+    });
+    expect(
+      await client.generate(
+        'image',
+        {
+          provider: 'openai-compatible',
+          baseURL: 'https://api.x.ai/v1',
+          modelId: 'grok-imagine-image',
+        },
+        'xai_synthetic',
+        'A lighthouse at dusk',
+        undefined,
+        signal,
+        undefined,
+        undefined,
+        '9:16',
+      ),
+    ).toEqual({ mimeType: 'image/png', data: png });
+  });
+
+  it('speaks with an xAI voice and refuses one it does not have', async () => {
+    const audio = Buffer.from('synthetic mp3 bytes');
+    const client = new MediaProviders(async (url, options) => {
+      expect(String(url)).toBe('https://api.x.ai/v1/tts');
+      expect(JSON.parse(String(options?.body))).toEqual({
+        text: 'Your report is ready.',
+        voice_id: 'rex',
+        language: 'auto',
+        output_format: { codec: 'mp3' },
+      });
+      return new Response(audio, { headers: { 'content-type': 'audio/mpeg' } });
+    });
+    const xai = {
+      provider: 'openai-compatible',
+      baseURL: 'https://api.x.ai/v1',
+      modelId: 'grok-tts',
+    } as const;
+
+    expect(
+      await client.generate('speech', xai, 'xai_synthetic', 'Your report is ready.', 'Rex', signal),
+    ).toEqual({ mimeType: 'audio/mpeg', data: audio.toString('base64') });
+    await expect(
+      client.generate('speech', xai, 'xai_synthetic', 'Hello', 'nova', signal),
+    ).rejects.toThrow('Unsupported voice for xAI');
+  });
+
   it('wraps Gemini PCM speech in a playable WAV file', async () => {
     const client = new MediaProviders(async (_url, options) => {
       const body = JSON.parse(String(options?.body));

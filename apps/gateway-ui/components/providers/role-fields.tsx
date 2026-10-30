@@ -177,13 +177,45 @@ const geminiSpeechVoices = [
   'Zubenelgenubi',
 ];
 
+/** xAI's built-in voices, as GET /v1/tts/voices names them; Eve is its default. */
+const xaiSpeechVoices = [
+  'eve',
+  'ara',
+  'leo',
+  'rex',
+  'sal',
+  'atlas',
+  'altair',
+  'carina',
+  'castor',
+  'celeste',
+  'cosmo',
+  'helios',
+  'helix',
+  'iris',
+  'kepler',
+  'lumen',
+  'luna',
+  'lux',
+  'naksh',
+  'orion',
+  'perseus',
+  'rigel',
+  'sirius',
+  'ursa',
+  'zagan',
+  'zenith',
+];
+
 function voiceOptions(provider: string): SelectOption[] {
   const voices =
     provider === 'google'
       ? geminiSpeechVoices
       : provider === 'openai'
         ? ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer']
-        : [];
+        : provider === 'xai'
+          ? xaiSpeechVoices
+          : [];
   return [
     { value: '', label: 'Default voice' },
     ...voices.map((voice) => ({ value: voice, label: voice })),
@@ -274,7 +306,8 @@ export function RoleFields({
             ]}
           />
         </Field>
-        {role.key === 'image' && !value.disabled && !hasOpenAIKey && (
+        {/* Only while nothing draws: once a Gemini or xAI model is chosen, the key is not missing. */}
+        {role.key === 'image' && !value.disabled && !value.modelId && !hasOpenAIKey && (
           <p className="note">
             <Link href={settingsPath('providers')}>Configure an OpenAI API key in Providers.</Link>{' '}
             ChatGPT login does not authorize image generation.

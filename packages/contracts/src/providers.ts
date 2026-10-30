@@ -163,13 +163,19 @@ export type ModelRole = z.infer<typeof modelRoleSchema>;
 export type ModelSelection = z.infer<typeof modelSelectionSchema>;
 export type ReasoningEffort = z.infer<typeof reasoningEffortSchema>;
 
+/**
+ * xAI's text to speech takes no model, so the gateway lists this one for it: a choice in Model
+ * defaults like any other, standing for the endpoint itself.
+ */
+export const XAI_SPEECH_MODEL = 'grok-tts';
+
 /** Providers must implement the endpoint used by the activity, independent of the model. */
 export function supportsProviderRole(
   provider: Pick<ProviderRecord, 'kind' | 'authMode'>,
   role: ModelRole,
 ): boolean {
   if (['image', 'speech'].includes(role))
-    return provider.authMode !== 'codex' && ['openai', 'google'].includes(provider.kind);
+    return provider.authMode !== 'codex' && ['openai', 'google', 'xai'].includes(provider.kind);
   if (['transcription', 'audio'].includes(role))
     return (
       provider.authMode !== 'codex' &&
@@ -192,13 +198,15 @@ export function supportsModelRole(
       ((provider.kind === 'openai' && /^(gpt-image|dall-e)/.test(id)) ||
         (provider.kind === 'google' &&
           id.startsWith('gemini-') &&
-          (model.outputModalities?.includes('image') || id.includes('-image'))))
+          (model.outputModalities?.includes('image') || id.includes('-image'))) ||
+        (provider.kind === 'xai' && /^grok-.*image/.test(id)))
     );
   if (role === 'speech')
     return (
       provider.authMode !== 'codex' &&
       ((provider.kind === 'google' && id.includes('tts')) ||
-        (provider.kind === 'openai' && /(^tts-|tts)/.test(id)))
+        (provider.kind === 'openai' && /(^tts-|tts)/.test(id)) ||
+        (provider.kind === 'xai' && id === XAI_SPEECH_MODEL))
     );
   // The OpenAI transcription endpoint, at OpenAI, at Groq, or on a server the owner runs.
   if (

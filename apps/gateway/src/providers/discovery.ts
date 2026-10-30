@@ -1,8 +1,9 @@
-import type {
-  ModelCapabilities,
-  ProviderModel,
-  ProviderModelList,
-  ProviderRecord,
+import {
+  type ModelCapabilities,
+  type ProviderModel,
+  type ProviderModelList,
+  type ProviderRecord,
+  XAI_SPEECH_MODEL,
 } from '@jian/contracts';
 import { z } from 'zod';
 import { type Clock, nowIso } from '../core/clock.js';
@@ -147,7 +148,53 @@ function parse(
     });
   }
 
-  return [...unique.values()].sort((a, b) => a.id.localeCompare(b.id)).slice(0, 500);
+  if (kind === 'xai' && !unique.has(XAI_SPEECH_MODEL)) {
+    unique.set(XAI_SPEECH_MODEL, {
+      id: XAI_SPEECH_MODEL,
+      displayName: 'Grok text to speech',
+      ...modelCapabilities(kind, XAI_SPEECH_MODEL, undefined, undefined),
+    });
+  }
+
+  // Only Google names one model twice; elsewhere a shared name can be two models (a router's
+  // free and paid tiers), and both stay.
+  const models = [...unique.values()];
+  return (kind === 'google' ? withoutAliases(models) : models)
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .slice(0, 500);
+}
+
+/** What makes one of two same-named models the one to offer: catalogued, then not a preview. */
+const rank = (model: ProviderModel) =>
+  (model.known ? 0 : 2) + (/-preview(?:-|$)/.test(model.id) ? 1 : 0);
+
+/**
+ * One model per name. Gemini lists a model under its stable id and again under the preview id
+ * it shipped as ("Nano Banana Pro" twice), and an unknown alias beside it; offered side by side
+ * they read as two models. The catalogued, stable id stays, then the shorter. A saved choice of
+ * a dropped id still runs: selections are never checked against this list.
+ */
+export function withoutAliases(models: ProviderModel[]): ProviderModel[] {
+  const kept = new Map<string, ProviderModel>();
+  const unnamed: ProviderModel[] = [];
+
+  for (const model of models) {
+    const name = model.displayName?.trim().toLowerCase();
+    if (!name) {
+      unnamed.push(model);
+      continue;
+    }
+    const held = kept.get(name);
+    if (
+      !held ||
+      rank(model) < rank(held) ||
+      (rank(model) === rank(held) && model.id.length < held.id.length)
+    ) {
+      kept.set(name, model);
+    }
+  }
+
+  return [...kept.values(), ...unnamed];
 }
 
 type Entry = { list: ProviderModelList; expiresAt: number };

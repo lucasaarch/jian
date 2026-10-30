@@ -133,11 +133,14 @@ it('keeps a saved channel override visible until changing the shared default upd
   }
 });
 
-it('offers image generation only where it works, and explains the missing OpenAI API key', async () => {
+it('offers image generation only where it works, without asking for a key it does not need', async () => {
   const view = await modelMenu('Image generation', false);
   try {
     expect(view.options()).toEqual(['Disabled', 'gemini-3-pro-imageGemini']);
-    expect(view.element.textContent).toContain('ChatGPT login does not authorize image generation');
+    // Gemini draws: the ChatGPT login lacking an OpenAI API key is beside the point.
+    expect(view.element.textContent).not.toContain(
+      'ChatGPT login does not authorize image generation',
+    );
   } finally {
     await view.close();
   }

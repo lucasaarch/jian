@@ -223,8 +223,40 @@ it('lists xAI models with a Bearer key against the OpenAI-shaped endpoint', asyn
   const list = await models.list(provider.id);
 
   expect(called[0]).toBe('https://api.x.ai/v1/models');
-  expect(list.models.map((model) => model.id)).toEqual(['grok-3-mini', 'grok-4']);
+  // Text to speech takes no model at xAI; the listing names it so it can be chosen.
+  expect(list.models.map((model) => model.id)).toEqual(['grok-3-mini', 'grok-4', 'grok-tts']);
   expect(list.stale).toBe(false);
+});
+
+it('offers a Gemini model once when Google lists it under its preview id as well', async () => {
+  const services = await testServices();
+  const provider = await services.providers.createProvider({
+    name: 'Gemini',
+    kind: 'google',
+    secret: 'synthetic-gemini-key',
+  });
+  const models = new ProviderModels(
+    { providers: services.providers, vault: services.gatewayVault },
+    (async () =>
+      Response.json({
+        models: [
+          { name: 'models/gemini-3-pro-image-preview', displayName: 'Nano Banana Pro' },
+          { name: 'models/gemini-3-pro-image', displayName: 'Nano Banana Pro' },
+          { name: 'models/nano-banana-pro-preview', displayName: 'Nano Banana Pro' },
+          { name: 'models/gemini-2.5-flash-image', displayName: 'Nano Banana' },
+          { name: 'models/gemini-2.5-flash-preview-tts', displayName: 'Gemini 2.5 Flash TTS' },
+        ],
+      })) as unknown as typeof globalThis.fetch,
+  );
+
+  const list = await models.list(provider.id);
+
+  // The stable id stays; a preview with no stable twin is still offered.
+  expect(list.models.map((model) => model.id)).toEqual([
+    'gemini-2.5-flash-image',
+    'gemini-2.5-flash-preview-tts',
+    'gemini-3-pro-image',
+  ]);
 });
 
 it('takes the router listing as the whole truth about a model', async () => {
