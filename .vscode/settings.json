@@ -10,5 +10,6 @@
   "files.associations": {
     "*.css": "tailwindcss"
   },
-  "tailwindCSS.lint.suggestCanonicalClasses": "ignore"
+  "tailwindCSS.lint.suggestCanonicalClasses": "ignore",
+  "json.schemaDownload.enable": true
 }
