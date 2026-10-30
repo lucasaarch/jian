@@ -2,7 +2,7 @@
 
 import { Save } from 'lucide-react';
 import { useState } from 'react';
-import type { Schedule, ScheduleInput, Session } from '../../lib/api';
+import type { Schedule, ScheduleInput } from '../../lib/api';
 import {
   cronFor,
   isoToZonedLocal,
@@ -13,6 +13,8 @@ import {
 } from '../../lib/time';
 import { Button, DateTimePicker, Field, Modal, TimePicker } from '../ui';
 import { Select } from '../ui/select';
+import { ConversationPicker } from './conversation-picker';
+import type { Choice } from './conversations';
 
 const repeats: Array<{ value: Repeat; label: string }> = [
   { value: 'daily', label: 'Every day' },
@@ -28,16 +30,15 @@ const repeats: Array<{ value: Repeat; label: string }> = [
  */
 export function ScheduleEditor({
   schedule,
-  sessions,
-  defaultSession,
+  choices,
   zone,
   busy,
   close,
   save,
 }: {
   schedule?: Schedule | undefined;
-  sessions: Array<{ session: Session; name: string; where: string }>;
-  defaultSession: string;
+  /** The conversations it can run in, grouped and ordered as the picker lists them. */
+  choices: Choice[];
   zone: string;
   busy: boolean;
   close: () => void;
@@ -47,7 +48,8 @@ export function ScheduleEditor({
   const read = schedule?.cron ? readCron(schedule.cron) : undefined;
   const [name, setName] = useState(schedule?.name ?? '');
   const [instruction, setInstruction] = useState(schedule?.instruction ?? '');
-  const [sessionId, setSessionId] = useState(schedule?.sessionId ?? defaultSession);
+  // A new schedule runs in a new chat each time until another conversation is chosen.
+  const [sessionId, setSessionId] = useState<string | null>(schedule ? schedule.sessionId : null);
   const [kind, setKind] = useState<'once' | 'repeat'>(schedule?.cron ? 'repeat' : 'once');
   const [at, setAt] = useState(
     schedule?.at
@@ -131,18 +133,9 @@ export function ScheduleEditor({
         </Field>
         <Field
           label="Conversation"
-          hint="Where the agent answers. In a chat, the answer goes out on it."
+          hint="Where the agent answers. On WhatsApp or Telegram, the answer goes out there."
         >
-          <Select
-            value={sessionId}
-            onValueChange={setSessionId}
-            options={sessions.map((item) => ({
-              value: item.session.id,
-              label: item.name,
-              detail: item.where,
-            }))}
-            aria-label="Conversation"
-          />
+          <ConversationPicker value={sessionId} choices={choices} onChange={setSessionId} />
         </Field>
         <fieldset className="schedule-when">
           <legend>When</legend>

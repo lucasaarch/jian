@@ -4,6 +4,12 @@ import type { ScheduleInput, SchedulePatch } from './types';
 
 /** What the agent carries between runs: what it remembers and what it knows how to do. */
 export const resourceCalls = (client: Client) => ({
+  /** Notifications on this device: the key to subscribe with, and the subscription itself. */
+  pushKey: () => result(client.GET('/v1/push/key')),
+  subscribePush: (body: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    result(client.PUT('/v1/push/subscriptions', { body })),
+  unsubscribePush: (endpoint: string) =>
+    result(client.POST('/v1/push/subscriptions/remove', { body: { endpoint } })),
   sshKeys: () => result(client.GET('/v1/ssh-keys')),
   createSshKey: (body: { name: string }) => result(client.POST('/v1/ssh-keys', { body })),
   deleteSshKey: (keyId: string) =>

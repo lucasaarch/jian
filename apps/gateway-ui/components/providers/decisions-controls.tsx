@@ -37,6 +37,11 @@ const USES: Array<{ use: Use; title: string; what: string }> = [
     title: 'Chat replies',
     what: 'What a reply in WhatsApp or Telegram means for an approval or a question.',
   },
+  {
+    use: 'guardrail',
+    title: 'Guardrail',
+    what: 'In a conversation on Auto, whether an action is catastrophic enough to refuse.',
+  },
 ];
 
 export function DecisionsControls({

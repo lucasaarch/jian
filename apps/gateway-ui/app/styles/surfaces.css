@@ -537,8 +537,22 @@
   .orb-accent {
     flood-color: var(--accent);
   }
+  .conversation-meta {
+    @apply flex shrink-0 flex-col items-end gap-1.5 self-start pt-0.5;
+  }
   .conversation-item time {
-    @apply shrink-0 self-start pt-0.5 text-[11px] text-muted;
+    @apply text-[11px] text-muted;
+  }
+  /* A chat the agent wrote in since it was read: its name stands out and a dot says so. */
+  .conversation-item[data-unread] strong {
+    @apply font-semibold;
+  }
+  .conversation-item[data-unread] time {
+    @apply text-ink;
+  }
+  .conversation-unread {
+    @apply h-2.5 w-2.5 rounded-full;
+    background: var(--good);
   }
   .conversation-none {
     @apply px-3 py-6 text-center text-sm text-muted;

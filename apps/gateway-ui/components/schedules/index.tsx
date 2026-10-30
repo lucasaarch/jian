@@ -27,7 +27,7 @@ import {
   SectionHeading,
   Switch,
 } from '../ui';
-import { conversationName } from './conversations';
+import { choices, conversationName } from './conversations';
 import { ScheduleEditor } from './editor';
 import { ScheduleHistory } from './history';
 
@@ -65,12 +65,13 @@ export function Schedules({ api, mutate, busy }: SectionActions) {
     session,
     ...conversationName(session, contacts, profiles),
   }));
-  const where = (sessionId: string) =>
-    conversations.find((item) => item.session.id === sessionId) ?? {
-      name: 'A deleted conversation',
-      where: '',
-    };
-  const gateway = sessions.find((session) => session.channel === 'gateway');
+  const where = (sessionId: string | null) =>
+    sessionId === null
+      ? { name: 'A new chat each time', where: 'Chats' }
+      : (conversations.find((item) => item.session.id === sessionId) ?? {
+          name: 'A deleted conversation',
+          where: '',
+        });
   /** A single time that already ran: kept a week, faded, under the ones still to come. */
   const done = (item: Schedule) => !item.cron && !item.enabled && Boolean(item.lastRunAt);
   const repeating = (list ?? []).filter((item) => item.cron);
@@ -234,8 +235,7 @@ export function Schedules({ api, mutate, busy }: SectionActions) {
         <ScheduleEditor
           key={editing === 'new' ? 'new' : editing.id}
           schedule={editing === 'new' ? undefined : editing}
-          sessions={conversations}
-          defaultSession={gateway?.id ?? sessions[0]?.id ?? ''}
+          choices={choices(sessions, contacts, profiles)}
           zone={zone}
           busy={busy}
           close={() => setEditing(undefined)}

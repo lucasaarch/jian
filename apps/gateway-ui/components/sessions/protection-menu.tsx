@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Check, ShieldCheck, ShieldHalf, ShieldOff } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import type { GatewayApi, ProtectionMode, Session } from '@/lib/api';
@@ -17,6 +17,12 @@ const modes: Array<{
     label: 'Ask first',
     detail: 'Asks before acting',
     icon: ShieldCheck,
+  },
+  {
+    value: 'auto',
+    label: 'Auto',
+    detail: 'Acts, refusing only what could destroy or leak',
+    icon: ShieldHalf,
   },
   { value: 'full', label: 'Full access', detail: 'Acts without asking', icon: ShieldOff },
 ];
