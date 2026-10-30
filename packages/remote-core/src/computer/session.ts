@@ -19,6 +19,16 @@ type Coordinate = NonNullable<RemoteComputerParams['coordinate']>;
 /** A JPEG of the primary display, sized for the worker channel. */
 export type Screenshot = { base64: string; widthPx: number; heightPx: number };
 
+/** A screenshot taken by the native helper, which captures in-process and fits it to the channel. */
+export async function captureThroughHelper(channel: HelperChannel): Promise<Screenshot> {
+  const reply = await channel.call({ cmd: 'screenshot' }, 'Screenshot failed.');
+  const { base64, widthPx, heightPx } = reply;
+  if (typeof base64 !== 'string' || typeof widthPx !== 'number' || typeof heightPx !== 'number') {
+    throw new Error('Screenshot produced no image data.');
+  }
+  return { base64, widthPx, heightPx };
+}
+
 /** What a platform learns just before an action that changes how its outcome reads. */
 export type Preparation = {
   /** Said beside a screenshot that worked. */
@@ -30,7 +40,7 @@ export type Preparation = {
 export type ComputerPlatform = {
   /** Starts the native helper; the session speaks JSON lines to it on stdin and stdout. */
   launch(): Promise<ChildProcessWithoutNullStreams>;
-  /** A shell tool on most platforms; a helper that captures in-process is asked over `channel`. */
+  /** Usually `captureThroughHelper`; a platform could capture another way. */
   capture(channel: HelperChannel): Screenshot | Promise<Screenshot>;
   /** Runs before every action that touches the screen, and never prevents it. */
   prepare?(): Preparation;

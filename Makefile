@@ -15,7 +15,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog \
+.PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust \
         check test test-integration lint format build image image-push \
         release test-display image-test-display
 
@@ -73,8 +73,14 @@ db-reset: ## Delete the development database volume and start an empty one
 
 ##@ Quality
 
-check: ## Lint, panel dead code, typecheck, unit tests, build and contract drift
+check: ## Lint, panel dead code, typecheck, unit tests, build, contract drift, and the Rust helper
 	pnpm run check
+	$(MAKE) check-rust
+
+check-rust: ## Format, lint and test the Rust helper for this machine's OS
+	cargo fmt --check
+	cargo clippy --all-targets --locked -- -D warnings
+	cargo test --locked
 
 test: ## Unit tests, no Docker and no provider
 	pnpm run test

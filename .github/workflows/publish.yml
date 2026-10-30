@@ -164,10 +164,10 @@ jobs:
       - name: Build universal computer-helper
         working-directory: packages/remote-core
         run: |
-          native/build-macos.sh "$PWD/helpers/macos/computer-helper"
-          test -x helpers/macos/computer-helper
+          native/build-macos.sh
+          test -x native/bin/macos/computer-helper
       - name: Optional Developer ID sign
-        working-directory: packages/remote-core/helpers/macos
+        working-directory: packages/remote-core/native/bin/macos
         env:
           APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
           APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
@@ -218,7 +218,56 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: computer-helper
-          path: packages/remote-core/helpers/macos/computer-helper
+          path: packages/remote-core/native/bin/macos/computer-helper
+          if-no-files-found: error
+          retention-days: 1
+
+  # Linux computer-use helpers, x64 and arm64: static musl binaries that run on any distro.
+  computer-helper-linux:
+    needs: notes
+    if: ${{ !cancelled() && needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the Linux helpers
+        working-directory: packages/remote-core
+        run: |
+          native/build-linux.sh
+          test -x native/bin/linux/computer-helper-x64
+          test -x native/bin/linux/computer-helper-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: computer-helper-linux
+          path: packages/remote-core/native/bin/linux
+          if-no-files-found: error
+          retention-days: 1
+
+  # Windows computer-use helpers, x64 and arm64, built with MSVC and the C runtime linked in.
+  computer-helper-windows:
+    needs: notes
+    if: ${{ !cancelled() && needs.notes.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Rust targets
+        run: rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+      - name: Build the Windows helpers
+        working-directory: packages/remote-core
+        run: |
+          native/build-windows.sh
+          test -f native/bin/windows/computer-helper-x64.exe
+          test -f native/bin/windows/computer-helper-arm64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: computer-helper-windows
+          path: packages/remote-core/native/bin/windows
           if-no-files-found: error
           retention-days: 1
 
@@ -228,8 +277,8 @@ jobs:
   # Image + GitHub release still publish if this job fails — fix the secret and re-run the
   # job, or cut the next tag.
   npm:
-    needs: [notes, computer-helper]
-    if: ${{ !cancelled() && needs.notes.result == 'success' && needs.computer-helper.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    needs: [notes, computer-helper, computer-helper-linux, computer-helper-windows]
+    if: ${{ !cancelled() && needs.notes.result == 'success' && needs.computer-helper.result == 'success' && needs.computer-helper-linux.result == 'success' && needs.computer-helper-windows.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -258,16 +307,29 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: computer-helper
-          path: packages/remote-core/helpers/macos
+          path: packages/remote-core/native/bin/macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: computer-helper-linux
+          path: packages/remote-core/native/bin/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: computer-helper-windows
+          path: packages/remote-core/native/bin/windows
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile --filter @jian-ai/remote-control...
       # One bundled file stamped with the version above, the helpers beside it in dist/.
       - name: Build the worker with the prebuilt computer-helper
         working-directory: apps/remote-control
         run: |
-          chmod 755 ../../packages/remote-core/helpers/macos/computer-helper
+          chmod 755 ../../packages/remote-core/native/bin/macos/computer-helper
+          chmod 755 ../../packages/remote-core/native/bin/linux/computer-helper-*
           pnpm run build
           test -x dist/macos/computer-helper
+          test -x dist/linux/computer-helper-x64
+          test -x dist/linux/computer-helper-arm64
+          test -f dist/windows/computer-helper-x64.exe
+          test -f dist/windows/computer-helper-arm64.exe
           grep -F "export const PACKAGE_VERSION = '${GITHUB_REF_NAME#v}';" dist/jian-remote.mjs
           npm pack --dry-run 2>&1 | grep -F 'dist/macos/computer-helper'
       - name: Require NPM_TOKEN

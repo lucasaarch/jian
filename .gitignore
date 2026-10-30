@@ -21,7 +21,7 @@ apps/web/out/
 .claude/worktrees/
 
 # Prebuilt macOS computer-use helper (Publish CI ships it in the npm tarball; do not commit)
-# Built by packages/remote-core/native/build-macos.sh; Publish ships it in the npm package.
-packages/remote-core/helpers/macos/computer-helper
+# The helpers native/build-*.sh write; Publish ships them in the npm package.
+packages/remote-core/native/bin/
 # Cargo builds into the workspace root.
 /target/

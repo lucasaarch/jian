@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { chmod, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { MISSING_HELPER, readStamp, stampForBytes } from '../helper-files.ts';
+import { installHelperBinary, packagedBinary } from '../helper-files.ts';
 import { helpersRoot } from '../helpers.ts';
 
 const HELPER_NAME = 'computer-helper';
@@ -18,12 +18,9 @@ export function helperPaths(home = homedir()) {
   };
 }
 
-/**
- * The universal binary the package ships, built from packages/remote-core/native. A checkout
- * has it only after `native/build-macos.sh`.
- */
+/** The universal binary the package ships; a checkout has it after `native/build-macos.sh`. */
 export function packagedHelper(root = helpersRoot()): string {
-  return join(root, 'macos', HELPER_NAME);
+  return packagedBinary(root, 'darwin');
 }
 
 /** Drops the download quarantine, without which a helper from npm cannot run under launchd. */
@@ -31,31 +28,19 @@ function clearQuarantine(path: string): void {
   spawnSync('xattr', ['-d', 'com.apple.quarantine', path], { encoding: 'utf8' });
 }
 
-/**
- * The helper binary, ready to run: the packaged one, copied where it runs whenever its bytes
- * changed — the stamp beside it says which bytes are installed. A package that lost its copy
- * still runs the one installed before.
- */
-export async function ensureHelperBinary({
+export function ensureHelperBinary({
   packaged = packagedHelper(),
   paths = helperPaths(),
 }: {
   packaged?: string;
   paths?: ReturnType<typeof helperPaths>;
 } = {}): Promise<string> {
-  if (!existsSync(packaged)) {
-    if (existsSync(paths.binary)) return paths.binary;
-    throw new Error(MISSING_HELPER);
-  }
-  const hash = `bin:${stampForBytes(await readFile(packaged))}`;
-  if ((await readStamp(paths.stamp)) !== hash || !existsSync(paths.binary)) {
-    await mkdir(paths.support, { recursive: true, mode: 0o755 });
-    await copyFile(packaged, paths.binary);
-    await chmod(paths.binary, 0o755);
-    clearQuarantine(paths.binary);
-    await writeFile(paths.stamp, `${hash}\n`, { mode: 0o644 });
-  }
-  return paths.binary;
+  return installHelperBinary({
+    packaged,
+    installed: paths.binary,
+    stamp: paths.stamp,
+    prepare: clearQuarantine,
+  });
 }
 
 /**
