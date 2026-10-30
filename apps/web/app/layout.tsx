@@ -2,13 +2,11 @@ import type { Metadata, Viewport } from 'next';
 import { connection } from 'next/server';
 import '@fontsource-variable/ibm-plex-sans';
 import '@fontsource/ibm-plex-mono/400.css';
-import { Notifications } from '../components/shell/notice';
-import { QueryProvider } from '../components/shell/query';
-import { ServiceWorker } from '../components/shell/service-worker';
-import { ThemeSync } from '../components/shell/theme';
-import { VersionMismatch } from '../components/shell/version-mismatch';
+import { Notifications, QueryProvider, ThemeSync, VersionMismatch } from '@jian/ui';
 import { versionMismatch } from '../lib/server/versions';
 import './globals.css';
+import { NextNavigation } from './navigation';
+import { ServiceWorker } from './service-worker';
 
 export const metadata: Metadata = {
   title: 'Jian · Gateway',
@@ -35,7 +33,13 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="en">
       <body>
-        {mismatch ? <VersionMismatch {...mismatch} /> : <QueryProvider>{children}</QueryProvider>}
+        {mismatch ? (
+          <VersionMismatch {...mismatch} />
+        ) : (
+          <QueryProvider>
+            <NextNavigation>{children}</NextNavigation>
+          </QueryProvider>
+        )}
         <ThemeSync />
         <Notifications />
         <ServiceWorker />

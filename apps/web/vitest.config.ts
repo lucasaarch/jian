@@ -1,7 +1,4 @@
 import { defineConfig } from 'vitest/config';
 
-export default defineConfig({
-  // Imports use the `@/` alias from tsconfig.json, which Vite resolves natively.
-  resolve: { tsconfigPaths: true },
-  test: { environment: 'happy-dom', setupFiles: ['./test/setup.ts'] },
-});
+// Only what runs on this server is tested here; the panel's screens are tested in @jian/ui.
+export default defineConfig({ test: { environment: 'node' } });

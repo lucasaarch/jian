@@ -1,7 +1,7 @@
 'use client';
 
+import { SignIn } from '@jian/ui';
 import { useRouter } from 'next/navigation';
-import { SignIn } from '../../components/sign-in';
 
 export default function Page() {
   const router = useRouter();
