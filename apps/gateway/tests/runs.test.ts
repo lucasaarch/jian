@@ -310,6 +310,36 @@ it('marks expired leases interrupted without replaying uncertain work', async ()
   ).rejects.toMatchObject({ statusCode: 409 });
 });
 
+it('renews a lapsed lease whose owner still works here, and interrupts it once that owner is gone', async () => {
+  let now = Date.now();
+  const services = await testServices(() => now);
+  const profile = await services.profiles.createProfile(profileInput);
+  const session = await services.sessions.createSession(profile.id, {
+    title: 'Test',
+    channel: 'api',
+  });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Run the whole test suite',
+    requestKey: 'stall',
+  });
+  await services.lifecycle.claim(run.id, profile.id, 'one');
+
+  // The process stalled past the lease, but this turn is still its own.
+  now += 120_000;
+  await services.lifecycle.recover(new Set(['one']));
+  const kept = await services.runs.run(profile.id, run.id);
+  expect(kept.status).toBe('running');
+  expect(kept.leaseUntil).toBeGreaterThan(now);
+  await services.lifecycle.heartbeat(profile.id, run.id, 'one');
+
+  // Gone, as after a restart: nobody here holds it any more.
+  now += 120_000;
+  await services.lifecycle.recover(new Set(['another']));
+  const stopped = await services.runs.run(profile.id, run.id);
+  expect(stopped.status).toBe('interrupted');
+  expect(stopped.error).toContain('restarted or ran out of memory');
+});
+
 it('continues only reconciled stopped runs and preserves checkpoints without replaying tools', async () => {
   const { services, profile, session } = await setup();
 

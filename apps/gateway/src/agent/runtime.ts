@@ -26,6 +26,7 @@ import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../contex
 import { compactPrompt, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
 import { nowIso } from '../core/clock.js';
+import { GatewayError } from '../core/errors.js';
 import type { Learning } from '../learning/service.js';
 import type { McpServerReader } from '../mcp/port.js';
 import type { Media } from '../media/service.js';
@@ -130,6 +131,8 @@ const LEARNING_STEPS = 8;
 
 export class AgentRuntime {
   private controllers = new Map<string, AbortController>();
+  /** Each turn this process runs, by run, with the lease owner it claimed it as. */
+  private readonly owners = new Map<string, string>();
 
   constructor(
     private services: RuntimeServices,
@@ -262,6 +265,11 @@ export class AgentRuntime {
     this.controllers.get(runId)?.abort();
   }
 
+  /** The leases this process holds for turns it is still running. */
+  liveOwners(): ReadonlySet<string> {
+    return new Set(this.owners.values());
+  }
+
   stop() {
     for (const controller of this.controllers.values()) {
       controller.abort();
@@ -279,6 +287,7 @@ export class AgentRuntime {
     const controller = new AbortController();
 
     this.controllers.set(runId, controller);
+    this.owners.set(runId, owner);
 
     // No clock on the whole turn: a long conversation doing its work is never cut. What stops
     // a turn is the owner's Cancel, the step and token budgets, and this: a model call or a
@@ -323,10 +332,13 @@ export class AgentRuntime {
       this.services.lifecycle.progress(runId, owner, snapshot),
     );
 
+    // Renewed every ten seconds of a sixty-second lease. Only a lease lost to another owner stops
+    // the turn: a renewal that failed on its own — the database slow to answer — is tried again
+    // at the next beat, with five more before the lease could lapse.
     const pulse = setInterval(() => {
-      void this.services.lifecycle
-        .heartbeat(profileId, runId, owner)
-        .catch(() => controller.abort());
+      void this.services.lifecycle.heartbeat(profileId, runId, owner).catch((error: unknown) => {
+        if (error instanceof GatewayError && error.statusCode === 409) controller.abort();
+      });
     }, 10_000);
 
     pulse.unref();
@@ -1389,6 +1401,7 @@ export class AgentRuntime {
       clearInterval(pulse);
       clearInterval(watchdog);
       this.controllers.delete(runId);
+      this.owners.delete(runId);
       // Before the outbound client closes: the title's request goes out through it.
       await naming?.catch(() => {});
       await Promise.allSettled(clients.map((client) => client.close()));

@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
@@ -97,6 +98,17 @@ function clip(text: string, limit: number): string {
     : text;
 }
 
+/**
+ * On Linux, a command is the first the kernel kills when memory runs out, and what it starts
+ * inherits that: a test suite that fills a container's memory is ended (exit 137) instead of
+ * the gateway, with every turn it is running. Raising a process's own score needs no privilege;
+ * written as it starts, before the command forks, and harmless where it cannot be written.
+ */
+function surrenderFirst(pid: number | undefined): void {
+  if (process.platform !== 'linux' || !pid) return;
+  void writeFile(`/proc/${pid}/oom_score_adj`, '1000').catch(() => {});
+}
+
 export function shellTools(
   profileId: string,
   gitAccess: {
@@ -130,7 +142,7 @@ export function shellTools(
         const shell = await confined(home, '/bin/sh', ['-c', command], gitAccess);
 
         return new Promise((resolvePromise) => {
-          execFile(
+          const child = execFile(
             shell.file,
             shell.args,
             {
@@ -151,6 +163,7 @@ export function shellTools(
               });
             },
           );
+          surrenderFirst(child.pid);
         });
       },
     }),
