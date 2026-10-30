@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { chmod, copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-export const MISSING_HELPER =
+const MISSING_HELPER =
   'Computer-use helper is missing from this install. Reinstall or update @jian-ai/remote-control.';
 
 /**
@@ -66,12 +66,12 @@ export async function installHelperBinary({
 }
 
 /** A short content hash, written beside an installed helper to tell when it is stale. */
-export function stampForBytes(bytes: Uint8Array): string {
+function stampForBytes(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex').slice(0, 16);
 }
 
 /** The stamp an earlier install left, or '' when there is none. */
-export async function readStamp(path: string): Promise<string> {
+async function readStamp(path: string): Promise<string> {
   try {
     return (await readFile(path, 'utf8')).trim();
   } catch {

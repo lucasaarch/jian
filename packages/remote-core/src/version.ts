@@ -1,3 +1,5 @@
+import { hostWording } from './host.ts';
+
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
 
 /** A published release, read apart. */
@@ -41,7 +43,7 @@ export function isDevVersion(version: unknown): boolean {
 }
 
 /**
- * Rule: a released remote-control may talk to a released gateway only when major.minor match
+ * Rule: a released worker may talk to a released gateway only when major.minor match
  * (patch and prerelease may differ). A gateway with no version (local `make dev`) skips the
  * gate so developers are not blocked. A released gateway rejects a dev/unknown worker.
  */
@@ -62,7 +64,7 @@ export function versionsCompatible(
       local: localVersion ?? 'unknown',
       gateway: gateway.raw,
       required: `${gateway.major}.${gateway.minor}`,
-      message: `This remote-control build (${localVersion ?? 'unknown'}) is not a released package and cannot connect to gateway ${gateway.raw}. Install a matching release: jian-remote update --version ${gateway.raw}`,
+      message: `This ${hostWording().name} build (${localVersion ?? 'unknown'}) is not a released package and cannot connect to gateway ${gateway.raw}. To install a matching release, ${hostWording().update(gateway.raw)}`,
     };
   }
   const local = parseRelease(localVersion);
@@ -73,7 +75,7 @@ export function versionsCompatible(
       local: localVersion ?? 'unknown',
       gateway: gateway.raw,
       required: `${gateway.major}.${gateway.minor}`,
-      message: `This remote-control version (${localVersion ?? 'unknown'}) is not a valid release and cannot connect to gateway ${gateway.raw}.`,
+      message: `This ${hostWording().name} version (${localVersion ?? 'unknown'}) is not a valid release and cannot connect to gateway ${gateway.raw}.`,
     };
   }
   if (local.major === gateway.major && local.minor === gateway.minor) {
@@ -85,7 +87,7 @@ export function versionsCompatible(
     local: local.raw,
     gateway: gateway.raw,
     required: `${gateway.major}.${gateway.minor}`,
-    message: `This remote-control ${local.raw} is incompatible with gateway ${gateway.raw}. Jian requires the same major.minor (${gateway.major}.${gateway.minor}). Update it from the panel, or run: jian-remote update --version ${gateway.raw}`,
+    message: `This ${hostWording().name} ${local.raw} is incompatible with gateway ${gateway.raw}. Jian requires the same major.minor (${gateway.major}.${gateway.minor}). Update it from the panel, or ${hostWording().update(gateway.raw)}`,
   };
 }
 

@@ -1,8 +1,10 @@
 import type { RemoteResult, RemoteTask } from '@jian/contracts';
+import { hostWording } from './host.ts';
 import type { Logger } from './log.ts';
 import { postResult } from './result.ts';
 import { executeShellTask } from './shell.ts';
 import type { WorkerStateFile } from './state.ts';
+import { detectSystem } from './system.ts';
 import { describeTask } from './task.ts';
 import { compatibilityError, fetchGatewayVersion } from './version.ts';
 
@@ -24,33 +26,51 @@ export async function executeTask(task: RemoteTask): Promise<RemoteResult> {
   return executeShellTask(task);
 }
 
-/** The capabilities this machine offers beside the shell: Computer Use, when its helper works. */
+/**
+ * A shell task may carry a secret environment, which this worker keeps out of its log and masks
+ * in what it sends back (see shell.ts). The gateway hands one only to a worker that says so.
+ */
+export const SECRET_ENV_CAPABILITY = 'shell-secret-env-v1';
+
+/**
+ * What this machine offers: a shell that takes a secret environment, and Computer Use when its
+ * helper works.
+ */
 export async function detectCapabilities(): Promise<string[]> {
   try {
     const { probeComputerCapability, computerCapabilityName } = await import('./computer/index.ts');
     const name = computerCapabilityName();
-    return name && (await probeComputerCapability()) ? [name] : [];
+    return name && (await probeComputerCapability())
+      ? [SECRET_ENV_CAPABILITY, name]
+      : [SECRET_ENV_CAPABILITY];
   } catch {
     // Computer Use unavailable until its helper is ready; shell tasks still work.
-    return [];
+    return [SECRET_ENV_CAPABILITY];
   }
 }
 
-/** What the gateway is told on every request: who this worker is and what it can do. */
+/**
+ * What the gateway is told on every request: who this worker is, what it runs on and what it
+ * can do. `system` is the OS by name and version (`detectSystem`); without it the gateway keeps
+ * what it last heard.
+ */
 export function workerHeaders({
   token,
   version,
   capabilities,
   uiState,
+  system,
 }: {
   token: string;
   version: string;
   capabilities: string[];
   uiState: UiState;
+  system?: string;
 }): Record<string, string> {
   return {
     authorization: `Bearer ${token}`,
     'x-jian-platform': `${process.platform}-${process.arch}`,
+    ...(system ? { 'x-jian-system': system } : {}),
     'x-jian-remote-version': version,
     'x-jian-remote-ui-state': uiState(),
     ...(capabilities.length ? { 'x-jian-remote-capabilities': capabilities.join(',') } : {}),
@@ -88,7 +108,9 @@ export type Updater = (
  * backing off while the gateway is away. The host brings what is its own — the credentials, the
  * log and the state it keeps, and `update` when it can update itself — and stops it with
  * `signal`. A worker on another release than its gateway still connects: the gateway then hands
- * it nothing but its update.
+ * it nothing but its update. The OS it reports is read once here unless the host passes `system`.
+ * A token the gateway refuses (401) is retried forever unless the host passes `onUnauthorized`:
+ * then the worker stops and leaves it to the host, which can register again for a new one.
  */
 export async function runWorker({
   config,
@@ -99,6 +121,8 @@ export async function runWorker({
   uiState = () => 'unknown',
   execute = executeTask,
   update,
+  system,
+  onUnauthorized,
   signal,
 }: {
   config: WorkerConfig;
@@ -109,9 +133,13 @@ export async function runWorker({
   uiState?: UiState;
   execute?: (task: RemoteTask) => Promise<RemoteResult>;
   update?: Updater;
+  system?: string;
+  onUnauthorized?: () => void;
   signal?: AbortSignal;
 }): Promise<void> {
-  const headers = () => workerHeaders({ token: config.token, version, capabilities, uiState });
+  const os = system ?? (await detectSystem());
+  const headers = () =>
+    workerHeaders({ token: config.token, version, capabilities, uiState, system: os });
   const base = workerBase(config);
   const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   const gatewayVersion = await fetchGatewayVersion(config.gateway).catch(() => undefined);
@@ -121,6 +149,7 @@ export async function runWorker({
     worker: version,
     gatewayVersion,
     capabilities: capabilities.join(','),
+    system: os,
   });
   const mismatch = compatibilityError(version, gatewayVersion);
   if (mismatch) log.warn(`${mismatch} Until then agents cannot use this machine.`);
@@ -135,6 +164,11 @@ export async function runWorker({
       });
       if (response.status === 502 || response.status === 503) {
         throw new Error(`poll failed: HTTP ${response.status} (gateway temporarily unavailable)`);
+      }
+      if (response.status === 401 && onUnauthorized) {
+        log.warn('The gateway refused this worker token', { gateway: config.gateway });
+        onUnauthorized();
+        return;
       }
       if (!response.ok) throw new Error(`poll failed: HTTP ${response.status}`);
       if (failures > 0) log.info('Reconnected', { gateway: config.gateway });
@@ -193,7 +227,7 @@ async function runUpdate(
       taskId: task.id,
       exitCode: 1,
       stdout: '',
-      stderr: 'This Jian Remote cannot update itself; update it where it was installed.',
+      stderr: `This ${hostWording().name} cannot update itself; update it where it was installed.`,
     },
   };
 }

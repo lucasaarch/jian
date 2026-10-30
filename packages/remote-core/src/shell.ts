@@ -2,6 +2,7 @@ import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { RemoteResult, RemoteTask } from '@jian/contracts';
+import { hostWording } from './host.ts';
 
 /** How a child is started: `spawn`, or a test's stand-in. */
 type Spawn = (
@@ -122,11 +123,26 @@ export function formatShellSpawnError(
   if (code === 'ENOENT' || /\bENOENT\b/.test(message)) {
     const shellMissing = shell && !existsSync(shell);
     if (shellMissing) {
-      return `Could not find the shell executable ${shell}. Install a POSIX shell or reinstall Jian Remote.`;
+      return `Could not find the shell executable ${shell}. Install a POSIX shell or reinstall ${hostWording().name}.`;
     }
     return `Could not start the remote shell (${shell || '/bin/sh'}) with cwd ${cwd || '(unknown)'}: the working directory is missing or not usable (Node reports this as spawn ENOENT even when the shell exists).`;
   }
   return message;
+}
+
+/** A secret too short to tell apart from ordinary output is left alone, in characters. */
+const SECRET_MIN = 8;
+
+/**
+ * Output with every value of a task's secret environment masked: a command that echoes its
+ * credential must not send it to the gateway, which stores what it is sent.
+ */
+export function maskSecrets(text: string, env: Record<string, string> | undefined): string {
+  let output = text;
+  for (const value of Object.values(env ?? {})) {
+    if (value.length >= SECRET_MIN) output = output.replaceAll(value, '[secret]');
+  }
+  return output;
 }
 
 /**
@@ -149,9 +165,10 @@ export function executeShellTask(
         : ['-lc', command];
     const child = spawnImpl(shell, commandArgs, {
       cwd: resolved.cwd,
-      env: workerChildEnv(),
+      env: { ...workerChildEnv(), ...task.env },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    const masked = (text: string) => maskSecrets(text, task.env);
     let stdout = '';
     let stderr = resolved.note ? `${resolved.note}\n` : '';
     let stdoutSeen = 0;
@@ -182,11 +199,13 @@ export function executeShellTask(
       resolveResult({
         taskId: task.id,
         exitCode: null,
-        stdout,
-        stderr: cappedAppend(
-          stderr,
-          formatShellSpawnError(error, { shell, cwd: resolved.cwd }),
-          STDERR_CAP,
+        stdout: masked(stdout),
+        stderr: masked(
+          cappedAppend(
+            stderr,
+            formatShellSpawnError(error, { shell, cwd: resolved.cwd }),
+            STDERR_CAP,
+          ),
         ),
         timedOut,
       });
@@ -200,7 +219,13 @@ export function executeShellTask(
           STDERR_CAP,
         );
       }
-      resolveResult({ taskId: task.id, exitCode: code, stdout, stderr, timedOut });
+      resolveResult({
+        taskId: task.id,
+        exitCode: code,
+        stdout: masked(stdout),
+        stderr: masked(stderr),
+        timedOut,
+      });
     });
   });
 }
