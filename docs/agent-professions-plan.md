@@ -22,8 +22,8 @@ Fora da primeira entrega: catálogo comercial, promoções, CRM, editor/marketpl
 | Ferramentas | `apps/gateway/src/agent/tools.ts`: `profileTools`, `deferTools`, `offeredGroups` | Shell/files incondicionais. Loader não autoriza por profissão. Self-management inclui criar perfis. |
 | Skills | `apps/gateway/src/skills/builtin/index.ts` | `builtinSkills`, `availableSkills`, `findSkill`; SHELL sempre incluído; skill própria pode sobrepor built-in. |
 | Contexto | `apps/gateway/src/context/build.ts`, `service.ts` | Publica perfil/skills; precisa usar política efetiva do runtime. |
-| Criação UI | `apps/gateway-ui/components/profile/editor.tsx`: `NewProfileDialog` | Sem profissão. |
-| Navegação | `apps/gateway-ui/lib/navigation.ts`, `components/shell/sidebar.tsx` | Global/Agent existentes; áreas estáticas. |
+| Criação UI | `apps/web/components/profile/editor.tsx`: `NewProfileDialog` | Sem profissão. |
+| Navegação | `apps/web/lib/navigation.ts`, `components/shell/sidebar.tsx` | Global/Agent existentes; áreas estáticas. |
 | HTTP | `apps/gateway/src/http/security.ts` | Token host/cookie abre instalação. Profissão não é papel de usuário/RBAC. |
 | SDK | `packages/contracts/src/operations.ts`, `packages/sdk/scripts/generate.mjs` | Atualizar contrato e geração, não só rotas. |
 

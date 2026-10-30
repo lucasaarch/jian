@@ -11,7 +11,7 @@ secrets/
 
 # Gateway UI static export
 **/.next/
-apps/gateway-ui/out/
+apps/web/out/
 **/*.tsbuildinfo
 
 # Local design explorations are not part of the shipped gateway.

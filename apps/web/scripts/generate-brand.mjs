@@ -3,8 +3,8 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
-const web = `${root}/apps/gateway-ui/public/brand`;
-const app = `${root}/apps/gateway-ui/app`;
+const web = `${root}/apps/web/public/brand`;
+const app = `${root}/apps/web/app`;
 const wing =
   'M8 68C28 64 45 51 60 27c2 14-2 27-11 37 13-5 26-16 37-33-2 25-15 42-38 50-16 5-30 1-40-13Z';
 const body = 'M54 71c11-2 21-8 29-17l10-1-9 7c-7 14-21 24-41 25-8 0-16-2-22-5 13 1 24-2 33-9Z';

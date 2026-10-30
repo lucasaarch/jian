@@ -1,4 +1,4 @@
-![Jian — self-hosted agent gateway.](apps/gateway-ui/public/brand/readme-banner.png)
+![Jian — self-hosted agent gateway.](apps/web/public/brand/readme-banner.png)
 
 # Jian
 
@@ -43,7 +43,7 @@ other client would use.
 
 ```text
 apps/gateway/       HTTP API, runtime and workers
-apps/gateway-ui/    Web panel: its own Next.js server, in front of the gateway
+apps/web/    Web panel: its own Next.js server, in front of the gateway
 packages/contracts/ Zod schemas — the source of the HTTP contract
 packages/sdk/       Generated TypeScript client
 docs/               Architecture, security, channels, panel
@@ -91,7 +91,7 @@ workspace use separate volumes from `make up`.
 [Getting started](docs/getting-started.md) walks through creating the first profile and
 sending the first message. See also [architecture](docs/architecture.md),
 [deploying](docs/deploy.md), [security](docs/security.md), [channels](docs/channels.md),
-[the web panel](docs/gateway-ui.md) and [Jian Remote](docs/remote.md).
+[the web panel](docs/web.md) and [Jian Remote](docs/remote.md).
 
 ## Status
 

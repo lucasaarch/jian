@@ -1,10 +1,10 @@
 # Gateway panel
 
-`apps/gateway-ui` is a Next.js app, React and TypeScript, built with `output: 'standalone'` and run as its own container, `ghcr.io/lucasaarch/jian-web`, in front of the gateway. The panel uses the SDK generated from the OpenAPI document; validation, authorization and domain rules stay in the gateway.
+`apps/web` is a Next.js app, React and TypeScript, built with `output: 'standalone'` and run as its own container, `ghcr.io/lucasaarch/jian-web`, in front of the gateway. The panel uses the SDK generated from the OpenAPI document; validation, authorization and domain rules stay in the gateway.
 
 ## Build and hosting
 
-`pnpm build` compiles the contracts, the SDK, the gateway and the panel; `pnpm --filter @jian/gateway-ui build` writes `.next/standalone` with the static assets and `public/` placed inside, and `pnpm --filter @jian/gateway-ui start` runs it. `apps/gateway-ui/Dockerfile` ships that tree on `node:24-bookworm-slim`; like the gateway's `apps/gateway/Dockerfile`, it is built from the repository root (`make image`).
+`pnpm build` compiles the contracts, the SDK, the gateway and the panel; `pnpm --filter @jian/web build` writes `.next/standalone` with the static assets and `public/` placed inside, and `pnpm --filter @jian/web start` runs it. `apps/web/Dockerfile` ships that tree on `node:24-bookworm-slim`; like the gateway's `apps/gateway/Dockerfile`, it is built from the repository root (`make image`).
 
 The panel lives at the root of its own origin. Every screen belongs to an agent and carries it in the address — `/agents/:profileId/channels`, `/agents/:profileId/sessions/:sessionId` — so a link, a reload or the back button lands on the same agent and conversation; `/` opens the agent this browser had open last. The web server is also the installation's only public door: `app/v1/[...path]`, `app/health`, `app/openapi.json` and `app/jian-remote.mjs` pass those requests to `JIAN_GATEWAY_URL` through `lib/server/gateway.ts`, so the browser, channel webhooks, OAuth callbacks and remote workers keep one origin, and the panel cookie stays same-origin. The pass-through streams both ways, keeps redirects for the browser, drops per-hop headers, closes the gateway's side when the client leaves, and answers 502 when the gateway is down. It is a route handler rather than a Next rewrite: a rewrite to another server cuts responses at 30 seconds, which would end the event stream. `/web/health` is the web server's own liveness; `/health` is the gateway's.
 
@@ -24,11 +24,11 @@ Each shared component in `components/ui` has one semantic class, written with Ta
 
 Controls that stand side by side share one height, `control` (46px, what an input measures with its padding, line and border), declared in `app/styles/themes.css`. Buttons and selects take it; an icon button takes it with `size="control"`. Repeated markup becomes a component in `components/ui` (`SearchField`, `IconButton`); a link that looks like a button takes `buttonClass(variant)`.
 
-`pnpm --filter @jian/gateway-ui knip` runs in `pnpm check` and fails on an unused file, export or dependency.
+`pnpm --filter @jian/web knip` runs in `pnpm check` and fails on an unused file, export or dependency.
 
 ## Tests
 
-`pnpm --filter @jian/gateway-ui test` runs the panel's unit tests in happy-dom, with no gateway and no network. A section is rendered inside `<AgentCache profile={...} slices={...}>` from `test/agent.tsx`, which puts the agent's slices in a cache of its own and the agent in the URL; its actions are handed in as props, so a test injects the client calls it checks. `test/setup.ts` stands in for Next's router, and `test/fixtures.ts` holds the synthetic agent and usage the tests share.
+`pnpm --filter @jian/web test` runs the panel's unit tests in happy-dom, with no gateway and no network. A section is rendered inside `<AgentCache profile={...} slices={...}>` from `test/agent.tsx`, which puts the agent's slices in a cache of its own and the agent in the URL; its actions are handed in as props, so a test injects the client calls it checks. `test/setup.ts` stands in for Next's router, and `test/fixtures.ts` holds the synthetic agent and usage the tests share.
 
 ## Setting up a profile
 

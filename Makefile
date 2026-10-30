@@ -101,7 +101,7 @@ image: ## Build the gateway and web images for this machine's architecture
 		--build-arg JIAN_VERSION=$(VERSION) \
 		--build-arg JIAN_REVISION=$(REVISION) \
 		-t $(IMAGE):$(VERSION) .
-	docker build -f apps/gateway-ui/Dockerfile \
+	docker build -f apps/web/Dockerfile \
 		--build-arg JIAN_VERSION=$(VERSION) \
 		--build-arg JIAN_REVISION=$(REVISION) \
 		-t $(WEB_IMAGE):$(VERSION) .

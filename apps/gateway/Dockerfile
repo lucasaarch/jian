@@ -58,7 +58,7 @@ ENV HUSKY=0 CI=true
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY .husky/install.mjs .husky/install.mjs
 COPY apps/gateway/package.json apps/gateway/package.json
-COPY apps/gateway-ui/package.json apps/gateway-ui/package.json
+COPY apps/web/package.json apps/web/package.json
 COPY apps/remote-control/package.json apps/remote-control/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
@@ -70,7 +70,7 @@ COPY packages packages
 COPY docs/releases docs/releases
 # `deploy` writes a self-contained tree: the gateway's compiled output and production
 # dependencies with the workspace links resolved to real files. The panel is its own image,
-# apps/gateway-ui/Dockerfile; only its manifest is here, for the lockfile.
+# apps/web/Dockerfile; only its manifest is here, for the lockfile.
 RUN pnpm --filter @jian/gateway build && pnpm --filter @jian/gateway --prod deploy --legacy /runtime
 
 FROM node:24-bookworm-slim

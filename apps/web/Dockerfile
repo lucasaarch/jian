@@ -9,15 +9,15 @@ ENV HUSKY=0 CI=true NEXT_TELEMETRY_DISABLED=1
 # Only the panel and what it imports are installed: none of the gateway's runtime.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY .husky/install.mjs .husky/install.mjs
-COPY apps/gateway-ui/package.json apps/gateway-ui/package.json
+COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
-RUN pnpm install --frozen-lockfile --filter @jian/gateway-ui...
+RUN pnpm install --frozen-lockfile --filter @jian/web...
 COPY packages packages
-COPY apps/gateway-ui apps/gateway-ui
+COPY apps/web apps/web
 RUN pnpm --filter @jian/contracts build \
  && pnpm --filter @jian/sdk build \
- && pnpm --filter @jian/gateway-ui build
+ && pnpm --filter @jian/web build
 
 FROM node:24-bookworm-slim
 ARG JIAN_VERSION=0.0.0-dev
@@ -37,10 +37,10 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000 \
 WORKDIR /app
 # The standalone tree carries its own pruned node_modules, and the build placed the static
 # assets and public/ inside it (scripts/standalone.mjs).
-COPY --from=build --chown=node:node /app/apps/gateway-ui/.next/standalone ./
+COPY --from=build --chown=node:node /app/apps/web/.next/standalone ./
 USER node
 EXPOSE 3000
 # This server's own liveness: a gateway restart must not take the web container down with it.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/web/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
-CMD ["node", "apps/gateway-ui/server.js"]
+CMD ["node", "apps/web/server.js"]

@@ -4,7 +4,7 @@ import { cp, rm } from 'node:fs/promises';
 const root = new URL('../../../', import.meta.url);
 const run = (args) => execFileSync('pnpm', args, { cwd: root, stdio: 'inherit' });
 
-// The panel is its own server now (apps/gateway-ui); nothing of it is built into the gateway.
+// The panel is its own server now (apps/web); nothing of it is built into the gateway.
 run(['--filter', '@jian/contracts', 'build']);
 run(['--filter', '@jian/gateway', 'build:server']);
 
