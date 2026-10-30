@@ -826,15 +826,15 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                 <GitHubDrawer
                   api={api}
                   profileId={profile.id}
-                  send={
+                  fixConflicts={
                     isGateway(active)
-                      ? (text) => api.send(profile.id, active.id, text, [])
+                      ? async (pull) => {
+                          await api.fixGithubConflicts(profile.id, active.id, pull);
+                          setSent((value) => value + 1);
+                          void refresh();
+                        }
                       : undefined
                   }
-                  onSent={() => {
-                    setSent((value) => value + 1);
-                    void refresh();
-                  }}
                 />
               </div>
             </GitHubLinks>

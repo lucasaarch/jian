@@ -1,6 +1,7 @@
 'use client';
 
 import { Popover } from '@base-ui/react/popover';
+import { Tabs } from '@base-ui/react/tabs';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
@@ -14,12 +15,20 @@ import {
   GitPullRequestClosed,
   GitPullRequestDraft,
   type LucideIcon,
+  RefreshCw,
   Wrench,
   X,
 } from 'lucide-react';
-import { type CSSProperties, type ReactNode, useCallback, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
-import { Button, buttonClass, Face, GitHubLogo, Modal } from '@/components/ui';
+import { Button, buttonClass, GitHubLogo, Modal } from '@/components/ui';
 import { Markdown, MarkdownLinks } from '@/components/ui/markdown';
 import type {
   GatewayApi,
@@ -188,27 +197,23 @@ function checkState(check: GitHubPull['checks']['runs'][number]) {
   return ['success', 'neutral', 'skipped'].includes(check.conclusion ?? '') ? 'passing' : 'failing';
 }
 
-function Section({
-  title,
-  count,
-  children,
-}: {
-  title: string;
-  count?: number;
-  children: ReactNode;
-}) {
+/** A person on GitHub, by the name they go by there, linked to their profile. */
+function Person({ login }: { login?: string }) {
+  if (!login) return <span>Someone</span>;
+
   return (
-    <section className="github-section">
-      <h3>
-        {title}
-        {count !== undefined && <span>{count}</span>}
-      </h3>
-      {children}
-    </section>
+    <a
+      className="github-person"
+      href={`https://github.com/${login}`}
+      target="_blank"
+      rel="noreferrer"
+    >
+      {login}
+    </a>
   );
 }
 
-/** The title and what sits under it; the bar above it with the close button stays put. */
+/** The title and what sits under it; the bar above it with its buttons stays put. */
 function Header({ title, url, children }: { title: string; url: string; children?: ReactNode }) {
   return (
     <header>
@@ -225,10 +230,7 @@ function Header({ title, url, children }: { title: string; url: string; children
 function Author({ login, at }: { login?: string; at: string }) {
   return (
     <span className="github-author">
-      {login && <Face name={login} className="github-face" />}
-      <span>
-        {login ? <strong>{login}</strong> : 'Someone'} · {date(at)}
-      </span>
+      <Person login={login} /> · {date(at)}
     </span>
   );
 }
@@ -300,24 +302,102 @@ function MergeButton({
   );
 }
 
+type Pull = Pick<GitHubPull, 'owner' | 'repo' | 'number'>;
+
+/** The mark a check, or the checks together, shows: passed, failed, or still running. */
+function CheckMark({
+  state,
+  size = 14,
+}: {
+  state: 'passing' | 'failing' | 'pending';
+  size?: number;
+}) {
+  return state === 'failing' ? (
+    <X size={size} aria-hidden="true" />
+  ) : state === 'pending' ? (
+    <CircleDashed size={size} aria-hidden="true" />
+  ) : (
+    <Check size={size} aria-hidden="true" />
+  );
+}
+
+const reviewNames: Record<GitHubPull['reviews']['latest'][number]['state'], string> = {
+  approved: 'approved',
+  changes_requested: 'requested changes',
+  commented: 'reviewed',
+  dismissed: 'had a review dismissed',
+  pending: 'started a review',
+};
+
+/** Reviews and comments together, oldest first, as the pull request's conversation reads. */
+function Activity({ pull }: { pull: GitHubPull }) {
+  const entries = [
+    ...pull.reviews.latest.map((review) => ({
+      key: `review:${review.reviewer.login}`,
+      login: review.reviewer.login,
+      at: review.submittedAt,
+      what: reviewNames[review.state],
+      state: review.state as string,
+      body: review.body,
+    })),
+    ...pull.comments.map((comment, index) => ({
+      key: `comment:${index}`,
+      login: comment.author?.login,
+      at: comment.createdAt,
+      what: 'commented',
+      state: 'comment',
+      body: comment.body,
+    })),
+  ].sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''));
+
+  if (!entries.length) return <p className="github-none">No reviews or comments yet.</p>;
+
+  return (
+    <ol className="github-timeline">
+      {entries.map((entry) => (
+        <li key={entry.key} data-state={entry.state}>
+          <span className="github-timeline-dot" aria-hidden="true" />
+          <p className="github-timeline-head">
+            <Person login={entry.login} /> {entry.what}
+            {entry.at && <small>{date(entry.at)}</small>}
+          </p>
+          {entry.body?.trim() && (
+            <div className="markdown github-markdown">
+              <Markdown text={entry.body} />
+            </div>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function PullView({
   api,
   pull,
   profileId,
-  send,
-  onSent,
+  fixConflicts,
 }: {
   api: DrawerApi;
   pull: GitHubPull;
   profileId: string;
-  send?: (text: string) => Promise<unknown>;
-  onSent?: () => void;
+  /** Where the panel answers the chat: it merges, and asks the agent to settle conflicts. */
+  fixConflicts?: (pull: Pull) => Promise<unknown>;
 }) {
   const client = useQueryClient();
-  const close = useCrew((state) => state.close);
   const [confirming, setConfirming] = useState<GitHubMergeMethod>();
   const [busy, setBusy] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const open = pull.state === 'open';
+  const conflicts = open && pull.mergeable === 'conflicts';
+  const runs = pull.checks.runs;
+  const passed = runs.filter((check) => checkState(check) === 'passing').length;
+  const checks = runs.some((check) => checkState(check) === 'failing')
+    ? 'failing'
+    : runs.some((check) => checkState(check) === 'pending')
+      ? 'pending'
+      : 'passing';
+  const activity = pull.reviews.latest.length + pull.comments.length;
 
   const merge = async (method: GitHubMergeMethod) => {
     setBusy(true);
@@ -334,16 +414,6 @@ function PullView({
         keys.githubItem('pull', pull.owner, pull.repo, pull.number),
         (known) => (known ? { ...known, state: 'merged' } : known),
       );
-      client.setQueriesData<GitHubLinkSummary>(
-        { queryKey: ['integrations', 'github', 'links'] },
-        (known) =>
-          known?.reachable &&
-          known.owner.toLowerCase() === pull.owner.toLowerCase() &&
-          known.repo.toLowerCase() === pull.repo.toLowerCase() &&
-          known.number === pull.number
-            ? { ...known, state: 'merged' }
-            : known,
-      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'GitHub did not merge it.');
       // Refused: the head moved or a rule stood in the way, so read where it stands now.
@@ -357,16 +427,15 @@ function PullView({
   };
 
   const fix = async () => {
-    if (!send) return;
-    setBusy(true);
+    if (!fixConflicts) return;
+    setFixing(true);
     try {
-      await send(`Resolve the merge conflicts in ${pull.url} and push the fix.`);
-      onSent?.();
-      close();
+      await fixConflicts(pull);
+      toast.success('The agent is resolving the conflicts.');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'The message was not sent.');
+      toast.error(error instanceof Error ? error.message : 'The agent could not be asked.');
     } finally {
-      setBusy(false);
+      setFixing(false);
     }
   };
 
@@ -383,19 +452,19 @@ function PullView({
           <span className="sr-only">from</span>
           <code>{pull.head.ref}</code>
         </p>
-        <div className="github-actions">
-          {open && send && <MergeButton pull={pull} merge={setConfirming} />}
-          {open && send && pull.mergeable === 'conflicts' && (
-            <Button variant="secondary" busy={busy && !confirming} onClick={() => void fix()}>
-              <Wrench size={16} aria-hidden="true" />
-              Fix conflicts
-            </Button>
-          )}
-          <a className={buttonClass('secondary')} href={pull.url} target="_blank" rel="noreferrer">
-            <ExternalLink size={16} aria-hidden="true" />
-            Open on GitHub
-          </a>
-        </div>
+        {open && fixConflicts && (
+          <div className="github-actions">
+            {/* A branch in conflict cannot merge: what it needs instead takes the button's place. */}
+            {conflicts ? (
+              <Button busy={fixing} onClick={() => void fix()}>
+                <Wrench size={16} aria-hidden="true" />
+                Fix merge conflicts
+              </Button>
+            ) : (
+              <MergeButton pull={pull} merge={setConfirming} />
+            )}
+          </div>
+        )}
         {open && (
           <p className="github-mergeable" data-state={pull.mergeable}>
             {pull.draft
@@ -404,28 +473,48 @@ function PullView({
           </p>
         )}
       </Header>
-      <div className="crew-drawer-body github-body">
-        {pull.body.trim() && (
-          <div className="markdown github-markdown">
-            <Markdown text={pull.body} />
-          </div>
-        )}
-        <Section title="Checks" count={pull.checks.runs.length}>
-          {pull.checks.runs.length ? (
+      <Tabs.Root className="github-tabs" defaultValue="description">
+        <Tabs.List className="github-tab-list" aria-label="Pull request">
+          <Tabs.Tab className="github-tab" value="description">
+            Description
+          </Tabs.Tab>
+          <Tabs.Tab className="github-tab" value="checks">
+            {runs.length > 0 && (
+              <span className="github-tab-mark" data-state={checks}>
+                <CheckMark state={checks} size={13} />
+              </span>
+            )}
+            Checks
+            <span className="github-tab-count">{runs.length ? `${passed}/${runs.length}` : 0}</span>
+          </Tabs.Tab>
+          <Tabs.Tab className="github-tab" value="changes">
+            Changes
+            <span className="github-tab-count">{pull.changedFiles}</span>
+          </Tabs.Tab>
+          <Tabs.Tab className="github-tab" value="activity">
+            Activity
+            <span className="github-tab-count">{activity}</span>
+          </Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel className="crew-drawer-body github-body" value="description">
+          {pull.body.trim() ? (
+            <div className="markdown github-markdown">
+              <Markdown text={pull.body} />
+            </div>
+          ) : (
+            <p className="github-none">No description.</p>
+          )}
+        </Tabs.Panel>
+        <Tabs.Panel className="crew-drawer-body github-body" value="checks">
+          {runs.length ? (
             <ul className="github-check-list">
-              {pull.checks.runs.map((check) => {
+              {runs.map((check) => {
                 const state = checkState(check);
                 const took = duration(check.startedAt, check.completedAt);
 
                 return (
                   <li key={check.name} data-state={state}>
-                    {state === 'failing' ? (
-                      <X size={14} aria-hidden="true" />
-                    ) : state === 'pending' ? (
-                      <CircleDashed size={14} aria-hidden="true" />
-                    ) : (
-                      <Check size={14} aria-hidden="true" />
-                    )}
+                    <CheckMark state={state} />
                     {check.url ? (
                       <a href={check.url} target="_blank" rel="noreferrer">
                         {check.name}
@@ -446,23 +535,8 @@ function PullView({
           ) : (
             <p className="github-none">No checks reported for this commit.</p>
           )}
-        </Section>
-        <Section title="Reviews" count={pull.reviews.latest.length}>
-          {pull.reviews.latest.length ? (
-            <ul className="github-review-list">
-              {pull.reviews.latest.map((review) => (
-                <li key={review.reviewer.login} data-state={review.state}>
-                  <Face name={review.reviewer.login} className="github-face" />
-                  <strong>{review.reviewer.login}</strong>
-                  <small>{review.state.replace(/_/g, ' ')}</small>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="github-none">No reviews yet.</p>
-          )}
-        </Section>
-        <Section title="Files changed" count={pull.changedFiles}>
+        </Tabs.Panel>
+        <Tabs.Panel className="crew-drawer-body github-body" value="changes">
           <p className="github-counts code-change-counts">
             <span className="added">+{pull.additions}</span>
             <span className="removed">−{pull.deletions}</span>
@@ -482,8 +556,11 @@ function PullView({
           {pull.filesTruncated && (
             <p className="github-none">Only the first {pull.files.length} files are shown here.</p>
           )}
-        </Section>
-      </div>
+        </Tabs.Panel>
+        <Tabs.Panel className="crew-drawer-body github-body" value="activity">
+          <Activity pull={pull} />
+        </Tabs.Panel>
+      </Tabs.Root>
       {confirming && (
         <Modal
           title={`${methodNames[confirming].action} #${pull.number}?`}
@@ -529,32 +606,28 @@ function IssueView({ issue }: { issue: GitHubIssue }) {
             ))}
           </ul>
         )}
-        <div className="github-actions">
-          <a className={buttonClass('secondary')} href={issue.url} target="_blank" rel="noreferrer">
-            <ExternalLink size={16} aria-hidden="true" />
-            Open on GitHub
-          </a>
-        </div>
       </Header>
       <div className="crew-drawer-body github-body">
         {issue.assignees.length > 0 && (
-          <Section title="Assignees">
-            <ul className="github-review-list">
+          <section className="github-section">
+            <h3>Assignees</h3>
+            <p className="github-people">
               {issue.assignees.map((assignee) => (
-                <li key={assignee.login}>
-                  <Face name={assignee.login} className="github-face" />
-                  <strong>{assignee.login}</strong>
-                </li>
+                <Person key={assignee.login} login={assignee.login} />
               ))}
-            </ul>
-          </Section>
+            </p>
+          </section>
         )}
         {issue.body.trim() && (
           <div className="markdown github-markdown">
             <Markdown text={issue.body} />
           </div>
         )}
-        <Section title="Comments" count={issue.comments.length}>
+        <section className="github-section">
+          <h3>
+            Comments
+            <span>{issue.comments.length}</span>
+          </h3>
           {issue.comments.length ? (
             <ol className="github-comments">
               {issue.comments.map((comment, index) => (
@@ -570,7 +643,7 @@ function IssueView({ issue }: { issue: GitHubIssue }) {
           ) : (
             <p className="github-none">No comments.</p>
           )}
-        </Section>
+        </section>
       </div>
     </>
   );
@@ -612,21 +685,20 @@ function DrawerSkeleton() {
 }
 
 /**
- * A pull request or an issue followed beside the conversation, in the agents' drawer. Without
- * `send` the conversation is answered elsewhere, WhatsApp or Telegram, and the drawer only reads,
- * as its approvals do.
+ * A pull request or an issue followed beside the conversation, in the Inspector. Without
+ * `fixConflicts` the conversation is answered elsewhere, WhatsApp or Telegram, and the drawer
+ * only reads, as its approvals do.
  */
 export function GitHubDrawer({
   api,
   profileId,
-  send,
-  onSent,
+  fixConflicts,
 }: {
   api: DrawerApi;
   profileId: string;
-  send?: (text: string) => Promise<unknown>;
-  onSent?: () => void;
+  fixConflicts?: (pull: Pull) => Promise<unknown>;
 }) {
+  const client = useQueryClient();
   const item = useCrew((state) => state.item);
   const following = useCrew((state) => state.following);
   const close = useCrew((state) => state.close);
@@ -650,17 +722,67 @@ export function GitHubDrawer({
           : OPEN_PULL_MS,
   });
 
+  // What the drawer reads is the newest word on the pull request: every reference to it in the
+  // conversation shows the same, the moment it arrives.
+  useEffect(() => {
+    const read = pull.data;
+    if (!read) return;
+    client.setQueriesData<GitHubLinkSummary>(
+      { queryKey: ['integrations', 'github', 'links'] },
+      (known) =>
+        known?.reachable &&
+        known.owner.toLowerCase() === read.owner.toLowerCase() &&
+        known.repo.toLowerCase() === read.repo.toLowerCase() &&
+        known.number === read.number
+          ? {
+              ...known,
+              title: read.title,
+              state: read.state,
+              draft: read.draft,
+              checks: read.checks.summary,
+              mergeable: read.mergeable,
+            }
+          : known,
+    );
+  }, [client, pull.data]);
+
   useDrawerFocus(item ? following : undefined, closer);
 
   if (!item) return null;
   const current = isPull ? pull : issue;
   const where = `${item.owner}/${item.repo} #${item.number}`;
+  const url = isPull
+    ? `https://github.com/${item.owner}/${item.repo}/pull/${item.number}`
+    : `https://github.com/${item.owner}/${item.repo}/issues/${item.number}`;
 
   return (
     <aside className="crew-drawer github-drawer" aria-label={where}>
       <div className="github-drawer-bar">
         <GitHubLogo size={18} />
-        <span>{where}</span>
+        <span className="github-drawer-where">
+          <span>{where}</span>
+          <a
+            className="github-drawer-out"
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Open on GitHub"
+            title="Open on GitHub"
+          >
+            <ExternalLink size={14} aria-hidden="true" />
+          </a>
+        </span>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Refresh"
+          title="Refresh"
+          data-busy={current.isFetching || undefined}
+          disabled={current.isFetching}
+          onClick={() => void current.refetch()}
+        >
+          <RefreshCw size={16} aria-hidden="true" />
+        </button>
         <button
           ref={closer}
           type="button"
@@ -672,7 +794,7 @@ export function GitHubDrawer({
         </button>
       </div>
       {isPull && pull.data ? (
-        <PullView api={api} pull={pull.data} profileId={profileId} send={send} onSent={onSent} />
+        <PullView api={api} pull={pull.data} profileId={profileId} fixConflicts={fixConflicts} />
       ) : !isPull && issue.data ? (
         <IssueView issue={issue.data} />
       ) : current.error ? (

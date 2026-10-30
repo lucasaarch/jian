@@ -90,8 +90,106 @@
     @apply flex items-center gap-2 px-4 pt-3;
     color: var(--muted);
   }
-  .github-drawer-bar > span {
-    @apply min-w-0 flex-1 truncate font-mono text-xs;
+  /* Where the item lives, and beside it the way out to GitHub. */
+  .github-drawer-where {
+    @apply flex min-w-0 flex-1 items-center gap-1.5 font-mono text-xs;
+  }
+  .github-drawer-where > span {
+    @apply min-w-0 truncate;
+  }
+  .github-drawer-out {
+    @apply grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors;
+    color: var(--muted);
+  }
+  .github-drawer-out:hover {
+    background: var(--canvas);
+    color: var(--ink);
+  }
+  /* Refresh turns while it reads, and stays where it is. */
+  .github-drawer-bar [data-busy] svg {
+    animation: github-turn 0.9s linear infinite;
+  }
+  .github-person {
+    @apply font-medium hover:underline hover:underline-offset-2;
+    color: var(--ink);
+  }
+  .github-people {
+    @apply flex flex-wrap gap-x-3 gap-y-1 text-[13px];
+  }
+
+  /* The pull request's parts as tabs under its header, each with what it holds. */
+  .github-tabs {
+    @apply flex min-h-0 flex-1 flex-col;
+  }
+  .github-tab-list {
+    @apply flex shrink-0 gap-1 overflow-x-auto border-b px-3;
+    border-color: var(--line);
+    scrollbar-width: none;
+  }
+  .github-tab {
+    @apply -mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-2 py-2.5 text-[13px] font-medium transition-colors;
+    color: var(--muted);
+  }
+  .github-tab:hover {
+    color: var(--ink);
+  }
+  .github-tab[data-active],
+  .github-tab[aria-selected="true"] {
+    border-bottom-color: var(--ink);
+    color: var(--ink);
+  }
+  .github-tab:focus-visible {
+    @apply rounded-sm outline-2 outline-offset-[-2px];
+    outline-color: var(--ink);
+  }
+  .github-tab-count {
+    @apply rounded-full px-1.5 text-[11.5px] tabular-nums;
+    background: var(--accent-soft);
+    color: var(--muted);
+  }
+  .github-tab-mark {
+    @apply inline-grid;
+    color: var(--good);
+  }
+  .github-tab-mark[data-state="failing"] {
+    color: var(--bad);
+  }
+  .github-tab-mark[data-state="pending"] {
+    color: var(--warn);
+  }
+
+  /* Reviews and comments in the order they were written, on a thread down the left. */
+  .github-timeline {
+    @apply relative grid gap-4 pl-5;
+  }
+  .github-timeline::before {
+    @apply absolute bottom-1 left-[5px] top-1 w-px content-[''];
+    background: var(--line);
+  }
+  .github-timeline li {
+    @apply relative grid min-w-0 gap-1.5;
+  }
+  .github-timeline-dot {
+    @apply absolute -left-5 top-1.5 h-[11px] w-[11px] rounded-full border-2;
+    background: var(--surface);
+    border-color: var(--control);
+  }
+  .github-timeline li[data-state="approved"] .github-timeline-dot {
+    border-color: var(--good);
+  }
+  .github-timeline li[data-state="changes_requested"] .github-timeline-dot {
+    border-color: var(--bad);
+  }
+  .github-timeline-head {
+    @apply flex flex-wrap items-baseline gap-x-1.5 text-[13px];
+    color: var(--muted);
+  }
+  .github-timeline-head small {
+    @apply text-xs;
+  }
+  .github-timeline .github-markdown {
+    @apply rounded-lg border px-3 py-2.5;
+    border-color: var(--line);
   }
   .github-drawer > header {
     @apply border-t-0 pt-2;
@@ -109,13 +207,6 @@
   }
   .github-author {
     @apply inline-flex min-w-0 items-center gap-1.5;
-  }
-  .github-author strong {
-    @apply font-medium;
-    color: var(--ink);
-  }
-  .github-face {
-    @apply h-5 w-5 text-[9px];
   }
   .github-branches {
     @apply flex min-w-0 items-center gap-1.5 text-xs;
@@ -182,12 +273,10 @@
     @apply text-[13px];
     color: var(--muted);
   }
-  .github-check-list,
-  .github-review-list {
+  .github-check-list {
     @apply grid gap-0.5;
   }
-  .github-check-list li,
-  .github-review-list li {
+  .github-check-list li {
     @apply flex min-w-0 items-center gap-2 rounded-md px-1 py-1 text-[13px];
   }
   .github-check-list li > svg {
@@ -207,19 +296,9 @@
   .github-check-list a:hover {
     @apply underline underline-offset-2;
   }
-  .github-check-list small,
-  .github-review-list small {
+  .github-check-list small {
     @apply ml-auto shrink-0 text-xs capitalize;
     color: var(--muted);
-  }
-  .github-review-list strong {
-    @apply min-w-0 truncate font-medium;
-  }
-  .github-review-list li[data-state="approved"] small {
-    color: var(--good);
-  }
-  .github-review-list li[data-state="changes_requested"] small {
-    color: var(--bad);
   }
   .github-counts {
     @apply ml-0;
@@ -275,5 +354,11 @@
 @media (prefers-reduced-motion: reduce) {
   .skeleton {
     animation: none;
+  }
+}
+
+@keyframes github-turn {
+  to {
+    transform: rotate(360deg);
   }
 }
