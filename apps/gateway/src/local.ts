@@ -26,6 +26,11 @@ const config = z
     /** 0 lets the system choose a free port, which the line on stdout names. */
     PORT: z.coerce.number().int().min(0).max(65535).default(0),
     JIAN_ALLOW_PRIVATE_ORIGINS: z.string().default(''),
+    /**
+     * The loopback address the app keeps for this gateway, port included. GitHub and MCP sign-ins
+     * send the owner's browser back to it, so it has to stay the same from launch to launch.
+     */
+    JIAN_PUBLIC_URL: z.url().optional(),
   })
   .safeParse(process.env);
 
@@ -52,10 +57,14 @@ const gateway = await createGateway({
   role: 'all',
   executor: new LocalExecutor(),
   channels: 'none',
+  mode: 'local',
+  // The owner's own model servers and MCP servers on this computer, over plain HTTP too.
+  allowLoopback: true,
   allowPrivateOrigins: config.data.JIAN_ALLOW_PRIVATE_ORIGINS.split(',')
     .map((value) => value.trim())
     .filter(Boolean),
   trustedProxies: [],
+  ...(config.data.JIAN_PUBLIC_URL ? { publicUrl: config.data.JIAN_PUBLIC_URL } : {}),
   // Schedules read their hours in the owner's own zone, which is this computer's.
   timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 });

@@ -18011,6 +18011,13 @@
                     "version": {
                       "type": "string",
                       "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "server",
+                        "local"
+                      ]
                     }
                   },
                   "required": [

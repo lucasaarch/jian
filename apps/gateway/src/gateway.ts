@@ -51,6 +51,8 @@ export type GatewayOptions = {
    * lives on a computer that is not always on, so it serves the panel's chats alone.
    */
   channels: 'all' | 'none';
+  /** `local` for the gateway a desktop app runs on the owner's computer. */
+  mode: 'server' | 'local';
   allowPrivateOrigins: string[];
   /** Whether agents and providers may reach services on this computer itself. */
   allowLoopback?: boolean;
@@ -194,6 +196,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
           ...(mcpLogins ? { mcpLogins } : {}),
           fetcher: outbound.fetch,
           token: options.token,
+          mode: options.mode,
           trustedProxies: options.trustedProxies,
           onCancel: (id) => runtime.cancel(id),
         })
