@@ -29,7 +29,7 @@ const ACTIVE_ALPHA: f64 = 0.94;
 const IDLE_ALPHA: f64 = 0.18;
 
 /// The @3x master the Linux and Windows helpers embed too.
-static SPRITE_PNG: &[u8] = include_bytes!("../../../../helpers/assets/jian-pointer.png");
+static SPRITE_PNG: &[u8] = include_bytes!("../../../jian-pointer.png");
 
 struct Overlay {
     window: Retained<NSWindow>,

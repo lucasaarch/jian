@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Builds the universal (arm64 + x86_64) macOS computer-helper the npm package ships, into
-# helpers/macos/ by default. Needs rustup with both Apple targets; Publish CI runs it too.
+# native/bin/macos/ by default. Needs rustup with both Apple targets; Publish CI runs it too.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-OUT="${1:-$HERE/../helpers/macos/computer-helper}"
+OUT="${1:-$HERE/bin/macos/computer-helper}"
 # The oldest macOS the helper runs on; AppKit and CoreGraphics calls it makes exist since.
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
 

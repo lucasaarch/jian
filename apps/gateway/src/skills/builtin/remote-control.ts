@@ -69,7 +69,7 @@ signs in. Until then the machine stays offline in the panel.
 - Screenshot and file payloads travel as base64 on the worker channel (~300 KB binary).
   Screenshots are scaled/recompressed on the remote machine to fit.
 - macOS computer use needs **Screen Recording** and **Accessibility** for **Jian Remote** in
-  System Settings. Linux needs an X11 session with \`xdotool\` and \`ffmpeg\`. Windows needs an
+  System Settings. Linux needs an X11 session (XWayland reaches only XWayland apps). Windows needs an
   interactive desktop session. If a tool result says permissions or tools are missing, tell
   the owner — do not invent shell workarounds that bypass Jian’s app identity.
 - A **locked** Mac (post-login password lock) stays online. Jian attempts Computer Use after

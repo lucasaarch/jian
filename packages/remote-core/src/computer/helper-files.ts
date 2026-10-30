@@ -1,10 +1,69 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { chmod, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { chmod, copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 export const MISSING_HELPER =
   'Computer-use helper is missing from this install. Reinstall or update @jian-ai/remote-control.';
+
+/**
+ * The helper binary the package ships for this OS and CPU, under the helpers root: one
+ * universal file on macOS, one per CPU on Linux and Windows. native/build-*.sh write them.
+ */
+export function packagedBinary(
+  root: string,
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+): string {
+  if (platform === 'darwin') return join(root, 'macos', 'computer-helper');
+  if (platform === 'win32') return join(root, 'windows', `computer-helper-${arch}.exe`);
+  return join(root, 'linux', `computer-helper-${arch}`);
+}
+
+export type BinaryInstall = {
+  /** The binary as this package ships it. */
+  packaged: string;
+  /** Where the worker runs it from: outside the package, so an update replaces it in one place. */
+  installed: string;
+  stamp: string;
+  /** Runs on a freshly copied binary, before it is stamped: macOS drops its quarantine here. */
+  prepare?: (path: string) => void;
+};
+
+/**
+ * The helper binary, ready to run: the packaged one, copied where it runs whenever its bytes
+ * changed — the stamp beside it says which bytes are installed. A package that lost its copy
+ * still runs the one installed before.
+ */
+export async function installHelperBinary({
+  packaged,
+  installed,
+  stamp,
+  prepare,
+}: BinaryInstall): Promise<string> {
+  if (!existsSync(packaged)) {
+    if (existsSync(installed)) return installed;
+    throw new Error(MISSING_HELPER);
+  }
+  const hash = `bin:${stampForBytes(await readFile(packaged))}`;
+  if ((await readStamp(stamp)) !== hash || !existsSync(installed)) {
+    await mkdir(dirname(installed), { recursive: true, mode: 0o755 });
+    // Beside, then renamed into place. Windows refuses to replace an exe that is running, but
+    // lets it be renamed: the old one moves aside and is deleted once nothing runs it.
+    const temporary = `${installed}.${process.pid}.tmp`;
+    await copyFile(packaged, temporary);
+    await chmod(temporary, 0o755);
+    prepare?.(temporary);
+    if (process.platform === 'win32' && existsSync(installed)) {
+      const aside = `${installed}.${Date.now()}.old`;
+      await rename(installed, aside);
+      await rm(aside, { force: true }).catch(() => {});
+    }
+    await rename(temporary, installed);
+    await writeFile(stamp, `${hash}\n`, { mode: 0o644 });
+  }
+  return installed;
+}
 
 /** A short content hash, written beside an installed helper to tell when it is stale. */
 export function stampForBytes(bytes: Uint8Array): string {
@@ -17,60 +76,5 @@ export async function readStamp(path: string): Promise<string> {
     return (await readFile(path, 'utf8')).trim();
   } catch {
     return '';
-  }
-}
-
-export type ScriptInstall = {
-  /** The script as this package ships it. */
-  packaged: string;
-  /** Where the running worker executes it from: outside the package, so updates swap it. */
-  installed: string;
-  stamp: string;
-};
-
-/**
- * Puts the packaged helper script where it runs, rewriting it only when its content changed.
- * A package that lost its copy still runs the one installed before.
- */
-export async function installHelperScript({
-  packaged,
-  installed,
-  stamp,
-}: ScriptInstall): Promise<string> {
-  let source: string;
-  try {
-    source = await readFile(packaged, 'utf8');
-  } catch {
-    try {
-      source = await readFile(installed, 'utf8');
-    } catch {
-      throw new Error(MISSING_HELPER);
-    }
-  }
-  const hash = stampForBytes(Buffer.from(source, 'utf8'));
-  await mkdir(dirname(installed), { recursive: true, mode: 0o755 });
-  if ((await readStamp(stamp)) !== hash || !existsSync(installed)) {
-    await writeFile(installed, source, { mode: 0o755 });
-    await writeFile(stamp, `${hash}\n`, { mode: 0o644 });
-  }
-  await chmod(installed, 0o755);
-  return installed;
-}
-
-/**
- * Copies a packaged helper into each directory at install time. Best effort: a session that
- * still cannot find its helper says so then, with a clearer error than an installer could.
- */
-export async function copyHelperInto(packaged: string, directories: string[]): Promise<void> {
-  if (!existsSync(packaged)) return;
-  const name = basename(packaged);
-  try {
-    for (const directory of directories) {
-      await mkdir(directory, { recursive: true, mode: 0o755 });
-      await copyFile(packaged, join(directory, name));
-      await chmod(join(directory, name), 0o755);
-    }
-  } catch {
-    // Best effort, as above.
   }
 }

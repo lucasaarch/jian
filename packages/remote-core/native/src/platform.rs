@@ -13,8 +13,18 @@ mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::{Mac as Native, run};
 
-#[cfg(not(target_os = "macos"))]
-compile_error!("The Rust computer helper is a macOS prototype so far.");
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use linux::{Linux as Native, run};
+
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub use windows::{Windows as Native, run};
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+compile_error!("The computer helper runs on macOS, Linux (X11) and Windows.");
 
 /// The primary display: its size in points, which input uses, and in pixels, which a capture has.
 #[derive(Debug, Clone, Copy)]

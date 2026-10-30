@@ -26,3 +26,22 @@ objc2-core-graphics = { version = "0.3.2", features = ["CGColor"] }
 objc2-app-kit = { version = "0.3.2", features = ["NSApplication", "NSResponder", "NSWindow", "NSView", "NSScreen", "NSImage", "NSColor", "NSGraphics", "NSRunningApplication", "objc2-core-graphics", "objc2-quartz-core"] }
 objc2-foundation = { version = "0.3.2", features = ["NSData", "NSDate", "NSRunLoop", "NSGeometry", "NSString", "NSValue", "NSObjCRuntime"] }
 objc2-quartz-core = { version = "0.3.2", features = ["CALayer", "CAAnimation", "CAMediaTiming", "CATransaction", "CAMediaTimingFunction", "objc2-core-foundation", "objc2-core-graphics"] }
+
+# Pure Rust, no libxcb or libX11: the binary links statically against musl and runs on any distro.
+[target.'cfg(target_os = "linux")'.dependencies]
+png = "0.18.1"
+x11rb = { version = "0.14.0", features = ["dpms", "shape", "xfixes", "xtest"] }
+
+# Raw Win32 bindings, linked through raw-dylib: no import libraries and no COM wrappers to carry.
+[target.'cfg(windows)'.dependencies]
+png = "0.18.1"
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_LibraryLoader",
+  "Win32_System_StationsAndDesktops",
+  "Win32_System_Threading",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
