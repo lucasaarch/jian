@@ -4,6 +4,36 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.0.2 — 2026-10-30
+
+Pull requests read as references in the conversation and show a merge the moment it happens, the Inspector runs the full height of the pane, a failed turn is a quiet card with Retry above the composer, listeners join the objective as a badge you can stop from, and a new GitHub App no longer carries the installation's address in its name.
+
+### Pull requests
+
+* **References in the text:** a link to a pull request or an issue reads as GitHub writes one, its mark coloured by where it stands (open, draft, merged, closed) followed by its number. The repository, the title and the state are a hover away, and clicking still opens it in the Inspector.
+* **A merge shows at once:** GitHub can still answer open for a moment after a merge, and that answer was kept for half a minute. A pull request merged from the panel now reads as merged right away, in the Inspector and in every reference to it, and in other open tabs too. A pull request merged elsewhere, by the agent or on GitHub, shows as merged within about thirty seconds: open ones are read again every thirty seconds in the conversation and every fifteen in the Inspector.
+* **Loading:** while GitHub answers, the Inspector shows its own shape, the title, state, branches, actions and description, instead of a line of text.
+
+### Panel
+
+* **The Inspector runs the pane's height:** the panel beside a conversation, for a pull request or a subagent, starts at the top of the pane. The conversation's header covers only the conversation.
+* **Errors above the composer:** a turn that failed, was interrupted or was cancelled is a card above the composer with the reason the gateway kept and a button to close it. In the panel's own chats, **Retry** runs the failed turn again; the note that tells the agent to carry on stays out of the conversation and asks it to check what the failed turn already did before repeating anything. A history that cannot be loaded uses the same card, with **Try again**.
+* **Listeners as a badge:** a conversation's listeners left the header. They are a **Listening** badge beside the objective's, and its list shows what each one watches, how it stands, when it looks next and when it expires. The cross beside a listener stops it; it appears on hover, and always on a touch screen. A stopped listener stays in the agent's list, turned off.
+* **The objective's popover** keeps to a readable width instead of running across the screen.
+* **The history's spinner** sits in the middle of the conversation while it loads.
+
+### GitHub
+
+* **App name:** a GitHub App registered from now on is named `Jian - ` and a random eight-character hash. It used to include the installation's address, which GitHub shows on the App's public page. An App already registered keeps its name; rename it in its settings on GitHub if you like. The App's homepage link still points at the panel.
+
+### API
+
+* **Continuing a run:** the note `POST /v1/profiles/{profileId}/runs/{runId}/continue` writes is now marked as a resume note, like the one that resumes a pause. The agent reads it as before; message lists still return it, with `purpose: "resume"`, and the panel no longer shows it.
+
+### Upgrading
+
+No migrations and nothing to configure. Recreate the gateway and web containers with the 1.0.2 images, or follow the `latest` tags. Promote `@jian-ai/remote-control@1.0.2` on npm, or rely on the gateway's `/jian-remote.mjs` auto-update; it has no changes of its own.
+
 ## 1.0.1 — 2026-10-29
 
 A conversation reads in the order its turn happened, with each tool under the line that announced it, an open objective's automatic nudges no longer show as your messages, and the objective moves from the header to a badge beside where the chat runs.
