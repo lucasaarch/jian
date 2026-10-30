@@ -72,8 +72,11 @@ const scheduleFields = {
   name: z.string().trim().min(1).max(80),
   /** What the agent is asked to do when the time comes, as if the owner wrote it then. */
   instruction: z.string().trim().min(1).max(4_000),
-  /** The conversation the agent runs in and answers: a chat, a group, the gateway. */
-  sessionId: z.uuid(),
+  /**
+   * The conversation the agent runs in and answers: a chat of the panel, a contact or a group
+   * on a channel, an API conversation. Null: each run opens a new chat of the panel.
+   */
+  sessionId: z.uuid().nullable(),
   /** A single time; exclusive with `cron`. */
   at: scheduleAtSchema,
   /** A repeating time; exclusive with `at`. */
@@ -108,7 +111,8 @@ export const scheduleRecordSchema = z.strictObject({
   profileId: z.uuid(),
   name: z.string(),
   instruction: z.string(),
-  sessionId: z.uuid(),
+  /** Null: each run opens a new chat of the panel. */
+  sessionId: z.uuid().nullable(),
   at: z.string().optional(),
   cron: z.string().optional(),
   timeZone: z.string(),

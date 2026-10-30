@@ -9,6 +9,7 @@ export * from './peers.js';
 export * from './profile.js';
 export * from './projects.js';
 export * from './providers.js';
+export * from './push.js';
 export * from './records.js';
 export * from './releases.js';
 export * from './remote.js';

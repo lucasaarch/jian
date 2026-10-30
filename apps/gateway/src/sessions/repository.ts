@@ -40,6 +40,7 @@ export function toSession(row: SessionRow): Session {
     ...(row.model ? { model: row.model } : {}),
     ...(row.objective ? { objective: readObjective(row.objective) } : {}),
     protection: row.protection,
+    ...(row.readAt ? { readAt: row.readAt.toISOString() } : {}),
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -73,8 +74,22 @@ export async function insertSession(db: Queryable, session: Session): Promise<vo
     objective: session.objective ?? null,
     projectId: session.projectId ?? null,
     remoteMachineId: session.remoteMachineId ?? null,
+    readAt: session.readAt ? new Date(session.readAt) : null,
     createdAt: new Date(session.createdAt),
   });
+}
+
+/** The owner read it up to now; a later read never moves the mark back. */
+export async function markSessionRead(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  at: Date,
+) {
+  await db
+    .update(sessions)
+    .set({ readAt: sql`greatest(${sessions.readAt}, ${at})` })
+    .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)));
 }
 
 /** Ownership is part of the lookup, so another profile's session comes back as nothing at all. */

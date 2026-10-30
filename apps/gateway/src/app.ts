@@ -18,6 +18,7 @@ import { registerIntegrationRoutes } from './integrations/routes.js';
 import { registerMcpRoutes } from './mcp/routes.js';
 import { registerMediaRoutes } from './media/routes.js';
 import { registerMemoryRoutes } from './memories/routes.js';
+import { registerPushRoutes } from './notifications/routes.js';
 import { registerProfileRoutes } from './profiles/routes.js';
 import { registerProjectRoutes } from './projects/routes.js';
 import type { CodexLogin } from './providers/codex/login.js';
@@ -143,6 +144,7 @@ export function createApp(
     registerMetaRoutes(routes);
     registerSecurityRoutes(routes, options);
     registerSshRoutes(routes, options);
+    registerPushRoutes(routes, options);
     registerRemoteRoutes(routes, options);
     registerSkillRoutes(routes, options);
     registerMcpRoutes(routes, options);

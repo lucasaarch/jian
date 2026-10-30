@@ -349,7 +349,13 @@ export const sessionRenameSchema = z.strictObject({
  * someone else — until a person who may approve says yes; `full` lets them run. Reading,
  * searching and answering never ask.
  */
-export const protectionModeSchema = z.enum(['ask', 'full']);
+/**
+ * Whether the agent asks before it acts in a conversation: `ask` waits for a person, `full`
+ * acts, and `auto` acts unless a guardrail finds the action catastrophic — destroying data,
+ * infrastructure or backups beyond repair, or putting credentials where they leak — and then
+ * refuses it without waiting for anyone.
+ */
+export const protectionModeSchema = z.enum(['ask', 'auto', 'full']);
 
 export const sessionProtectionSchema = z.strictObject({ protection: protectionModeSchema });
 

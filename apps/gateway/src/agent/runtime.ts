@@ -72,6 +72,7 @@ import {
   protectionFor,
   requestText,
 } from './guard.js';
+import { guardrail } from './guardrail.js';
 import { availableNote, connectMcpTools, type McpEntry, unavailableNote } from './mcp.js';
 import { mcpOutcomeUncertain } from './mcp-errors.js';
 import { Narrator } from './narrator.js';
@@ -484,6 +485,22 @@ export class AgentRuntime {
       // so a mode changed mid-turn applies from the next one.
       const protection = await this.protection(run, session);
       const judge = this.services.decisions?.judge;
+      const lowEffort = cardOptions(config);
+      // On Auto an action runs unless the guardrail finds it catastrophic; nobody is waited for.
+      // Its own model is the run's, asked beside the turn and counted on it.
+      const guard =
+        protection.mode === 'guard'
+          ? guardrail({
+              ...(judge ? { judge } : {}),
+              model: {
+                model,
+                subscription,
+                ...(lowEffort ? { providerOptions: lowEffort } : {}),
+                account: (usage, text) => account(usage, 0, text, 0),
+              },
+              signal,
+            })
+          : undefined;
 
       const guarded: ToolSet = {};
       // Serializing tool execution prevents another effect from starting after one remote outcome is uncertain.
@@ -540,6 +557,24 @@ export class AgentRuntime {
                     reason: protection.reason,
                   });
                   return { declined: protection.reason };
+                } else if (guard) {
+                  const verdict = await guard({ toolName: name, kind, input });
+
+                  if (!verdict.allowed) {
+                    await this.services.lifecycle.checkpoint(profileId, runId, owner, {
+                      phase: 'tool-started',
+                      toolName: name,
+                      toolCallId: options.toolCallId,
+                      input: redactOutput(input, secrets),
+                    });
+                    await this.services.lifecycle.checkpoint(profileId, runId, owner, {
+                      phase: 'tool-refused',
+                      toolName: name,
+                      toolCallId: options.toolCallId,
+                      reason: verdict.reason,
+                    });
+                    return { declined: verdict.reason };
+                  }
                 } else {
                   pausedCall ??= { toolName: name, toolCallId: options.toolCallId, kind, input };
                   controller.abort();

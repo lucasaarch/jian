@@ -7,6 +7,7 @@ import { Learning } from './learning/service.js';
 import { McpServers } from './mcp/service.js';
 import { Media } from './media/service.js';
 import { Memories } from './memories/service.js';
+import { PushNotifications } from './notifications/push.js';
 import { Peers } from './peers/service.js';
 import { Profiles } from './profiles/service.js';
 import { Projects } from './projects/service.js';
@@ -61,6 +62,7 @@ export type Services = {
   sshKeys: SshKeys;
   mcp: McpServers;
   remote: Remote;
+  push: PushNotifications;
 };
 
 /** One wiring point: every area gets the same store, vault and clock. */
@@ -73,6 +75,7 @@ export function buildServices({
   fetcher,
   timeZone,
   github,
+  publicUrl,
 }: {
   store: Store;
   vault: Vault;
@@ -82,6 +85,8 @@ export function buildServices({
   fetcher?: typeof fetch;
   timeZone?: string;
   github?: Pick<GitHubIntegrations, 'repository'>;
+  /** Where the panel is served, which push services are given as the sender. */
+  publicUrl?: string;
 }): Services {
   const profiles = new Profiles(store, clock);
   const providers = new Providers(store, gatewayVault, clock, catalog);
@@ -104,6 +109,16 @@ export function buildServices({
     fetcher ?? createSafeFetch().fetch,
     clock,
   );
+
+  const push = new PushNotifications(
+    store,
+    gatewayVault,
+    sessions,
+    ...(publicUrl?.startsWith('https://') ? [publicUrl] : []),
+  );
+  const lifecycle = new RunLifecycle(store, runs, clock);
+  // What the agent says in a chat of the panel reaches the owner's devices as it settles.
+  lifecycle.useNotices(push);
 
   const services = {
     profiles,
@@ -146,7 +161,7 @@ export function buildServices({
       fetcher ?? createSafeFetch().fetch,
     ),
     settings,
-    lifecycle: new RunLifecycle(store, runs, clock),
+    lifecycle,
     contexts: new Contexts(store, runs, sessions, settings, decisions.judge),
     errands: new Errands(store, clock),
     work: new Work(store, sessions, runs, clock, decisions.judge),
@@ -156,6 +171,7 @@ export function buildServices({
     sshKeys: new SshKeys(store, gatewayVault),
     mcp: new McpServers(store, gatewayVault, clock),
     remote: new Remote(store, clock),
+    push,
   };
 
   return services;

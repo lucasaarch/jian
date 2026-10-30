@@ -73,6 +73,7 @@ import {
   providerModelListSchema,
   providerRecordSchema,
 } from './providers.js';
+import { pushEndpointSchema, pushKeySchema, pushSubscriptionInputSchema } from './push.js';
 import {
   activityDaySchema,
   activityQuerySchema,
@@ -971,6 +972,36 @@ export const operations: Operation[] = [
     operationId: 'setSessionProtection',
     access: 'admin',
     body: sessionProtectionSchema,
+    response: sessionRecordSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/push/key',
+    operationId: 'getPushKey',
+    access: 'admin',
+    response: pushKeySchema,
+  },
+  {
+    method: 'PUT',
+    path: '/v1/push/subscriptions',
+    operationId: 'subscribePush',
+    access: 'admin',
+    body: pushSubscriptionInputSchema,
+    response: pushEndpointSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/push/subscriptions/remove',
+    operationId: 'unsubscribePush',
+    access: 'admin',
+    body: pushEndpointSchema,
+    response: pushEndpointSchema,
+  },
+  {
+    method: 'POST',
+    path: `${session}/read`,
+    operationId: 'markSessionRead',
+    access: 'admin',
     response: sessionRecordSchema,
   },
   {

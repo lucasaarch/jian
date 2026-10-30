@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import {
+  LEARNING_SESSION_CHANNEL,
   type Run,
   SCHEDULE_LIMIT,
   type Schedule,
+  type Session,
   scheduleInputSchema,
   schedulePatchSchema,
+  TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
@@ -29,6 +32,11 @@ import { assertCron, nextRun } from './timing.js';
 
 type RunSubmitter = {
   submit(profileId: string, sessionId: string, input: unknown): Promise<Run>;
+};
+
+/** Where a schedule that names no conversation runs: a new chat of the panel each time. */
+type Chats = {
+  scheduledChat(profileId: string, id: string, title: string): Promise<Session>;
 };
 
 /** The way a run reaches a person when its conversation is a chat on a channel. */
@@ -59,7 +67,7 @@ export class Schedules {
   constructor(
     private readonly store: Store,
     private readonly profiles: ProfileReader,
-    private readonly sessions: SessionReader,
+    private readonly sessions: SessionReader & Chats,
     private readonly runs: RunSubmitter,
     private readonly clock: Clock = Date.now,
   ) {}
@@ -82,7 +90,7 @@ export class Schedules {
 
     return this.store.transaction(profileId, async (tx) => {
       await this.profiles.profile(profileId, tx);
-      await this.sessions.session(profileId, data.sessionId, tx);
+      if (data.sessionId) await this.assertConversation(profileId, data.sessionId, tx);
 
       if ((await listSchedules(tx, profileId)).length >= SCHEDULE_LIMIT) {
         throw new GatewayError(409, `A profile keeps at most ${SCHEDULE_LIMIT} schedules`);
@@ -119,7 +127,7 @@ export class Schedules {
     return this.store.transaction(profileId, async (tx) => {
       const current = assertFound(await findSchedule(tx, profileId, id), 'Schedule');
 
-      if (patch.sessionId) await this.sessions.session(profileId, patch.sessionId, tx);
+      if (patch.sessionId) await this.assertConversation(profileId, patch.sessionId, tx);
 
       // A new time replaces the old kind of timing: `at` and `cron` never live together.
       const timing = patch.at
@@ -135,7 +143,8 @@ export class Schedules {
         ...kept,
         ...(patch.name ? { name: patch.name } : {}),
         ...(patch.instruction ? { instruction: patch.instruction } : {}),
-        ...(patch.sessionId ? { sessionId: patch.sessionId } : {}),
+        // Null is a choice of its own: a new chat each time.
+        ...(patch.sessionId === undefined ? {} : { sessionId: patch.sessionId }),
         ...(patch.timeZone ? { timeZone: patch.timeZone } : {}),
         ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
         ...timing,
@@ -280,14 +289,39 @@ export class Schedules {
   }
 
   private async start(schedule: Schedule, requestKey: string) {
-    const run = await this.runs.submit(schedule.profileId, schedule.sessionId, {
+    // A new chat each time is keyed by the run's own key, so a retry or a second worker finds
+    // the chat this time already opened.
+    const sessionId =
+      schedule.sessionId ??
+      (await this.sessions.scheduledChat(schedule.profileId, stableUuid(requestKey), schedule.name))
+        .id;
+    const run = await this.runs.submit(schedule.profileId, sessionId, {
       text: scheduledText(schedule),
       requestKey,
     });
 
-    await this.deliveries?.deliverRun(schedule.profileId, schedule.sessionId, run.id);
+    // A chat of the panel is read there; only a channel's conversation sends the answer out.
+    if (schedule.sessionId) {
+      await this.deliveries?.deliverRun(schedule.profileId, schedule.sessionId, run.id);
+    }
 
     return run;
+  }
+
+  /** A schedule runs in a conversation someone has: not in a look back, nor a subagent's task. */
+  private async assertConversation(
+    profileId: string,
+    sessionId: string,
+    reader: Parameters<SessionReader['session']>[2],
+  ) {
+    const session = await this.sessions.session(profileId, sessionId, reader);
+
+    if (session.channel === LEARNING_SESSION_CHANNEL || session.channel === TASK_SESSION_CHANNEL) {
+      throw new GatewayError(
+        400,
+        'A schedule runs in a conversation, not in the agent’s own work.',
+      );
+    }
   }
 
   private validate(

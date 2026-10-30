@@ -34,6 +34,7 @@ import {
   listSessionMessages,
   listSessions,
   listUncompactedMessages,
+  markSessionRead,
   renameSession,
   setGatewaySessionTarget,
   setSessionModel,
@@ -83,6 +84,49 @@ export class Sessions {
       await insertSession(tx, session);
       await recordEvent(tx, this.clock, profileId, 'session.created', session);
       return session;
+    });
+  }
+
+  /**
+   * The chat a schedule opens for one of its runs, named after it. Its id comes from the run's
+   * key, so a second worker reaching the same time finds this chat instead of opening another.
+   * It starts on Auto: nobody is there to approve at the hour it runs, and a run left waiting
+   * until morning would do its work a day late.
+   */
+  async scheduledChat(profileId: string, id: string, title: string) {
+    return this.store.transaction(profileId, async (tx) => {
+      const found = await findSession(tx, profileId, id);
+      if (found) return found;
+
+      const session: Session = {
+        id,
+        profileId,
+        title,
+        channel: GATEWAY_SESSION_CHANNEL,
+        protection: 'auto',
+        createdAt: nowIso(this.clock),
+      };
+      await insertSession(tx, session);
+      await recordEvent(tx, this.clock, profileId, 'session.created', session);
+      return session;
+    });
+  }
+
+  /**
+   * The owner has read this conversation up to now: the panel stops marking it unread. The
+   * panel says so again now and then while the chat is on screen, which is also how the
+   * gateway knows not to notify about a chat the owner is looking at. Only a read that made
+   * something read is an event: the rest would only wake every other panel to read the list.
+   */
+  async markRead(profileId: string, sessionId: string) {
+    return this.store.transaction(profileId, async (tx) => {
+      const before = await this.session(profileId, sessionId, tx);
+      await markSessionRead(tx, profileId, sessionId, new Date(this.clock()));
+      const latest = (await lastMessages(tx, profileId)).get(sessionId)?.createdAt;
+      if (latest && (!before.readAt || Date.parse(before.readAt) < latest.getTime())) {
+        await recordEvent(tx, this.clock, profileId, 'session.read', { sessionId });
+      }
+      return this.session(profileId, sessionId, tx);
     });
   }
 
@@ -463,32 +507,40 @@ export class Sessions {
       lastMessages(this.store.db, profileId),
     ]);
 
-    return list
-      .map((session) => {
-        const message = last.get(session.id);
+    return (
+      list
+        // A look back and a subagent's task are the gateway's own work, not conversations.
+        .filter(
+          (session) =>
+            session.channel !== LEARNING_SESSION_CHANNEL &&
+            session.channel !== TASK_SESSION_CHANNEL,
+        )
+        .map((session) => {
+          const message = last.get(session.id);
 
-        return message
-          ? {
-              ...session,
-              lastMessage: {
-                role: message.role,
-                // One line of it: media ids and line breaks are not something to read in a list.
-                text: message.content
-                  .replace(/\[Attached media: [0-9a-f-]{36}\]/g, '📎')
-                  .replace(/\s+/g, ' ')
-                  .trim()
-                  .slice(0, 200),
-                at: message.createdAt.toISOString(),
-              },
-            }
-          : session;
-      })
-      .sort((a, b) =>
-        ('lastMessage' in a ? a.lastMessage.at : a.createdAt) <
-        ('lastMessage' in b ? b.lastMessage.at : b.createdAt)
-          ? 1
-          : -1,
-      );
+          return message
+            ? {
+                ...session,
+                lastMessage: {
+                  role: message.role,
+                  // One line of it: media ids and line breaks are not something to read in a list.
+                  text: message.content
+                    .replace(/\[Attached media: [0-9a-f-]{36}\]/g, '📎')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                    .slice(0, 200),
+                  at: message.createdAt.toISOString(),
+                },
+              }
+            : session;
+        })
+        .sort((a, b) =>
+          ('lastMessage' in a ? a.lastMessage.at : a.createdAt) <
+          ('lastMessage' in b ? b.lastMessage.at : b.createdAt)
+            ? 1
+            : -1,
+        )
+    );
   }
 
   /** The tools the agent used in each recent turn here, for the owner's timeline. */

@@ -1330,6 +1330,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/push/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["getPushKey"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/push/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Required permission: admin. */
+        put: operations["subscribePush"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/push/subscriptions/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["unsubscribePush"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/profiles/{profileId}/sessions/{sessionId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["markSessionRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/sessions/{sessionId}/github/fix-conflicts": {
         parameters: {
             query?: never;
@@ -5200,12 +5268,13 @@ export interface operations {
                             groups: boolean;
                             delegation: boolean;
                             replies: boolean;
+                            guardrail: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies";
+                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies" | "guardrail";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -5334,12 +5403,13 @@ export interface operations {
                             groups: boolean;
                             delegation: boolean;
                             replies: boolean;
+                            guardrail: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies";
+                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies" | "guardrail";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -5460,12 +5530,13 @@ export interface operations {
                             groups: boolean;
                             delegation: boolean;
                             replies: boolean;
+                            guardrail: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies";
+                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies" | "guardrail";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -5575,6 +5646,7 @@ export interface operations {
                         groups?: boolean;
                         delegation?: boolean;
                         replies?: boolean;
+                        guardrail?: boolean;
                     };
                 };
             };
@@ -5600,12 +5672,13 @@ export interface operations {
                             groups: boolean;
                             delegation: boolean;
                             replies: boolean;
+                            guardrail: boolean;
                         };
                         usage: {
                             /** Format: date */
                             day: string;
                             /** @enum {string} */
-                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies";
+                            use: "outside" | "turn" | "memories" | "learning" | "groups" | "delegation" | "replies" | "guardrail";
                             requests: number;
                             cached: number;
                             inputTokens: number;
@@ -14073,7 +14146,7 @@ export interface operations {
                          * @default ask
                          * @enum {string}
                          */
-                        protection: "ask" | "full";
+                        protection: "ask" | "auto" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -14084,6 +14157,8 @@ export interface operations {
                             continuations: number;
                             note?: string;
                         };
+                        /** Format: date-time */
+                        readAt?: string;
                         /** Format: date-time */
                         createdAt: string;
                         lastMessage?: {
@@ -14238,7 +14313,7 @@ export interface operations {
                          * @default ask
                          * @enum {string}
                          */
-                        protection: "ask" | "full";
+                        protection: "ask" | "auto" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -14249,6 +14324,8 @@ export interface operations {
                             continuations: number;
                             note?: string;
                         };
+                        /** Format: date-time */
+                        readAt?: string;
                         /** Format: date-time */
                         createdAt: string;
                     };
@@ -14635,7 +14712,7 @@ export interface operations {
                          * @default ask
                          * @enum {string}
                          */
-                        protection: "ask" | "full";
+                        protection: "ask" | "auto" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -14646,6 +14723,8 @@ export interface operations {
                             continuations: number;
                             note?: string;
                         };
+                        /** Format: date-time */
+                        readAt?: string;
                         /** Format: date-time */
                         createdAt: string;
                     };
@@ -14795,7 +14874,7 @@ export interface operations {
                          * @default ask
                          * @enum {string}
                          */
-                        protection: "ask" | "full";
+                        protection: "ask" | "auto" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -14806,6 +14885,8 @@ export interface operations {
                             continuations: number;
                             note?: string;
                         };
+                        /** Format: date-time */
+                        readAt?: string;
                         /** Format: date-time */
                         createdAt: string;
                     };
@@ -14946,7 +15027,7 @@ export interface operations {
                          * @default ask
                          * @enum {string}
                          */
-                        protection: "ask" | "full";
+                        protection: "ask" | "auto" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -14957,6 +15038,8 @@ export interface operations {
                             continuations: number;
                             note?: string;
                         };
+                        /** Format: date-time */
+                        readAt?: string;
                         /** Format: date-time */
                         createdAt: string;
                     };
@@ -15103,7 +15186,7 @@ export interface operations {
                          * @default ask
                          * @enum {string}
                          */
-                        protection: "ask" | "full";
+                        protection: "ask" | "auto" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -15114,6 +15197,8 @@ export interface operations {
                             continuations: number;
                             note?: string;
                         };
+                        /** Format: date-time */
+                        readAt?: string;
                         /** Format: date-time */
                         createdAt: string;
                     };
@@ -15268,7 +15353,7 @@ export interface operations {
                          * @default ask
                          * @enum {string}
                          */
-                        protection: "ask" | "full";
+                        protection: "ask" | "auto" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -15279,6 +15364,8 @@ export interface operations {
                             continuations: number;
                             note?: string;
                         };
+                        /** Format: date-time */
+                        readAt?: string;
                         /** Format: date-time */
                         createdAt: string;
                     };
@@ -15381,7 +15468,7 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    protection: "ask" | "full";
+                    protection: "ask" | "auto" | "full";
                 };
             };
         };
@@ -15426,7 +15513,7 @@ export interface operations {
                          * @default ask
                          * @enum {string}
                          */
-                        protection: "ask" | "full";
+                        protection: "ask" | "auto" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -15437,6 +15524,490 @@ export interface operations {
                             continuations: number;
                             note?: string;
                         };
+                        /** Format: date-time */
+                        readAt?: string;
+                        /** Format: date-time */
+                        createdAt: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPushKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        publicKey: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    subscribePush: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uri */
+                    endpoint: string;
+                    keys: {
+                        p256dh: string;
+                        auth: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        endpoint: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    unsubscribePush: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uri */
+                    endpoint: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        endpoint: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    markSessionRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        title: string | null;
+                        /** @default api */
+                        channel: string;
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        /** Format: uuid */
+                        projectId?: string;
+                        /** Format: uuid */
+                        remoteMachineId?: string;
+                        /** Format: uuid */
+                        peerProfileId?: string;
+                        /** @enum {string} */
+                        scope?: "direct" | "group";
+                        summary?: string;
+                        /** Format: date-time */
+                        summarizedUpTo?: string;
+                        /** Format: uuid */
+                        summarizedThroughId?: string;
+                        model?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                            voiceName?: string;
+                        };
+                        /**
+                         * @default ask
+                         * @enum {string}
+                         */
+                        protection: "ask" | "auto" | "full";
+                        objective?: {
+                            text: string;
+                            /** @enum {string} */
+                            status: "open" | "blocked" | "done" | "cancelled";
+                            /** Format: date-time */
+                            updatedAt: string;
+                            /** @default 0 */
+                            continuations: number;
+                            note?: string;
+                        };
+                        /** Format: date-time */
+                        readAt?: string;
                         /** Format: date-time */
                         createdAt: string;
                     };
@@ -15849,7 +16420,7 @@ export interface operations {
                          * @default ask
                          * @enum {string}
                          */
-                        protection: "ask" | "full";
+                        protection: "ask" | "auto" | "full";
                         objective?: {
                             text: string;
                             /** @enum {string} */
@@ -15860,6 +16431,8 @@ export interface operations {
                             continuations: number;
                             note?: string;
                         };
+                        /** Format: date-time */
+                        readAt?: string;
                         /** Format: date-time */
                         createdAt: string;
                     };
@@ -16903,7 +17476,7 @@ export interface operations {
                         name: string;
                         instruction: string;
                         /** Format: uuid */
-                        sessionId: string;
+                        sessionId: string | null;
                         at?: string;
                         cron?: string;
                         timeZone: string;
@@ -17018,7 +17591,7 @@ export interface operations {
                     name: string;
                     instruction: string;
                     /** Format: uuid */
-                    sessionId: string;
+                    sessionId: string | null;
                     /** Format: date-time */
                     at?: string;
                     cron?: string;
@@ -17043,7 +17616,7 @@ export interface operations {
                         name: string;
                         instruction: string;
                         /** Format: uuid */
-                        sessionId: string;
+                        sessionId: string | null;
                         at?: string;
                         cron?: string;
                         timeZone: string;
@@ -17169,7 +17742,7 @@ export interface operations {
                         name: string;
                         instruction: string;
                         /** Format: uuid */
-                        sessionId: string;
+                        sessionId: string | null;
                         at?: string;
                         cron?: string;
                         timeZone: string;
@@ -17285,7 +17858,7 @@ export interface operations {
                     name?: string;
                     instruction?: string;
                     /** Format: uuid */
-                    sessionId?: string;
+                    sessionId?: string | null;
                     /** Format: date-time */
                     at?: string;
                     cron?: string;
@@ -17309,7 +17882,7 @@ export interface operations {
                         name: string;
                         instruction: string;
                         /** Format: uuid */
-                        sessionId: string;
+                        sessionId: string | null;
                         at?: string;
                         cron?: string;
                         timeZone: string;

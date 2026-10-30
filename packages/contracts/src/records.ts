@@ -53,6 +53,11 @@ export const sessionRecordSchema = sessionSchema.extend({
    * While `open`, the gateway queues follow-up runs after a completed slice.
    */
   objective: sessionObjectiveSchema.optional(),
+  /**
+   * When the owner last read it in the panel. A chat of the panel the agent wrote in after this
+   * is unread; absent on one never opened since unread marks began.
+   */
+  readAt: timestamp.optional(),
   createdAt: timestamp,
 });
 

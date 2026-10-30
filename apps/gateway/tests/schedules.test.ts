@@ -166,6 +166,68 @@ describe('schedules', () => {
     expect(after).toMatchObject({ nextRunAt: '2026-09-25T11:00:00.000Z', lastRunId: run?.id });
   });
 
+  it('opens a new chat of the panel each time it runs when it names no conversation', async () => {
+    const f = await setup();
+    await f.services.schedules.create(
+      f.profile.id,
+      {
+        name: 'Morning summary',
+        instruction: 'Send me a summary of yesterday.',
+        sessionId: null,
+        cron: '0 8 * * *',
+        timeZone: zone,
+      },
+      'owner',
+    );
+
+    f.at('2026-09-24T08:00:10-03:00');
+    await f.services.schedules.fireDue();
+    // A second worker reaching the same time finds the chat the first one opened.
+    await f.services.schedules.fireDue();
+    f.at('2026-09-25T08:00:10-03:00');
+    await f.services.schedules.fireDue();
+
+    const runs = await f.scheduledRuns();
+    const chats = await Promise.all(
+      runs.map((run) => f.services.sessions.session(f.profile.id, run.sessionId)),
+    );
+
+    expect(runs).toHaveLength(2);
+    expect(new Set(chats.map((chat) => chat.id)).size).toBe(2);
+    expect(chats.every((chat) => chat.channel === 'gateway')).toBe(true);
+    // Nobody is there to approve at that hour: the guardrail stands in for them.
+    expect(chats.every((chat) => chat.protection === 'auto')).toBe(true);
+    expect(chats.map((chat) => chat.title)).toEqual(['Morning summary', 'Morning summary']);
+    // Read in the panel, never sent out on a channel.
+    const deliveries = await listDeliveries(f.services.store.db, f.profile.id);
+    expect(deliveries.filter((delivery) => runs.some((run) => run.id === delivery.runId))).toEqual(
+      [],
+    );
+  });
+
+  it('does not run in a look back of the agent’s own', async () => {
+    const f = await setup();
+    const learning = await f.services.sessions.learningSession(f.profile.id);
+
+    await expect(
+      f.services.schedules.create(
+        f.profile.id,
+        {
+          name: 'Reminder',
+          instruction: 'Check the deployment.',
+          sessionId: learning.id,
+          cron: '0 8 * * *',
+          timeZone: zone,
+        },
+        'owner',
+      ),
+    ).rejects.toThrow('not in the agent’s own work');
+    // Nor is the look back listed as a conversation.
+    expect(
+      (await f.services.sessions.overview(f.profile.id)).some((item) => item.id === learning.id),
+    ).toBe(false);
+  });
+
   it('runs a single time once and switches off, and catches up once after being down', async () => {
     const f = await setup();
 

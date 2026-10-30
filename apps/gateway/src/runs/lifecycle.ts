@@ -34,12 +34,32 @@ function assertOwned(run: Run, owner: string, clock: Clock): void {
   }
 }
 
+/** Told when a run stops where the owner may want to look: it answered, asks, or failed. */
+type Notices = { runSettled(run: Run): Promise<void> };
+
 export class RunLifecycle {
+  private notices?: Notices;
+
   constructor(
     private readonly store: Store,
     private readonly runs: RunReader,
     private readonly clock: Clock = Date.now,
   ) {}
+
+  useNotices(notices: Notices) {
+    this.notices = notices;
+  }
+
+  /**
+   * After the run's record is committed, never inside it: a push service that is slow or down
+   * must not hold the profile's lock, nor turn a finished run into a failed one.
+   */
+  private told(run: Run) {
+    void this.notices?.runSettled(run).catch((error: unknown) => {
+      console.error(`jian: run ${run.id} could not notify — ${String(error)}`);
+    });
+    return run;
+  }
 
   async claim(runId: string, profileId: string, owner: string) {
     return this.store.transaction(profileId, async (tx) => {
@@ -195,7 +215,7 @@ export class RunLifecycle {
    * channels; delivery treats `waiting` as the moment to send it and close that delivery.
    */
   async wait(profileId: string, runId: string, owner: string, question: RunQuestion) {
-    return this.store.transaction(profileId, async (tx) => {
+    const settled = await this.store.transaction(profileId, async (tx) => {
       const run = await this.runs.run(profileId, runId, tx);
 
       assertOwned(run, owner, this.clock);
@@ -228,6 +248,8 @@ export class RunLifecycle {
 
       return waiting;
     });
+
+    return this.told(settled);
   }
 
   /**
@@ -242,7 +264,7 @@ export class RunLifecycle {
     approval: RunApproval,
     action: RunAction,
   ) {
-    return this.store.transaction(profileId, async (tx) => {
+    const settled = await this.store.transaction(profileId, async (tx) => {
       const run = await this.runs.run(profileId, runId, tx);
 
       assertOwned(run, owner, this.clock);
@@ -276,6 +298,8 @@ export class RunLifecycle {
 
       return waiting;
     });
+
+    return this.told(settled);
   }
 
   async finish(
@@ -285,7 +309,7 @@ export class RunLifecycle {
     status: 'completed' | 'failed' | 'interrupted',
     content: string,
   ) {
-    return this.store.transaction(profileId, async (tx) => {
+    const settled = await this.store.transaction(profileId, async (tx) => {
       const run = await this.runs.run(profileId, runId, tx);
 
       assertOwned(run, owner, this.clock);
@@ -334,6 +358,8 @@ export class RunLifecycle {
 
       return final;
     });
+
+    return this.told(settled);
   }
 
   // Expired ownership interrupts a run: replaying it could repeat completed external effects.

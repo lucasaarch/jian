@@ -18,10 +18,11 @@ export const decisionProviderSchema = z.enum(['jev']);
  * - learning: whether finished work holds something worth keeping;
  * - groups: whether a group message is speaking to an agent;
  * - delegation: how much model a subagent's work needs, when the agent leaves it open;
- * - replies: what a chat reply to a pending approval or question means.
+ * - replies: what a chat reply to a pending approval or question means;
+ * - guardrail: in a conversation on Auto, whether an action is catastrophic enough to refuse.
  *
- * Whether an action may run is not among them: that is the conversation's protection mode,
- * the owner's own rule, and no judgment stands in for it.
+ * Whether an action may run is otherwise the conversation's protection mode, the owner's own
+ * rule: a judgment stands in only where the owner chose Auto.
  */
 export const decisionUseSchema = z.enum([
   'outside',
@@ -31,6 +32,7 @@ export const decisionUseSchema = z.enum([
   'groups',
   'delegation',
   'replies',
+  'guardrail',
 ]);
 
 export const decisionsInputSchema = z.strictObject({
@@ -46,6 +48,7 @@ export const decisionUsesSchema = z.strictObject({
   groups: z.boolean(),
   delegation: z.boolean(),
   replies: z.boolean(),
+  guardrail: z.boolean(),
 });
 
 /** Which decisions the owner wants to ask Jev about. */
