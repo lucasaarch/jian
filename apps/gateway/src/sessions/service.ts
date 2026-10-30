@@ -19,6 +19,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { sessionContext } from '../runs/context-usage.js';
 import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { projects, remoteMachines, runs } from '../storage/schema.js';
@@ -553,6 +554,17 @@ export class Sessions {
     await this.session(profileId, sessionId);
 
     return sessionTimeline(this.store.db, profileId, sessionId);
+  }
+
+  /** How full this conversation's context is and what its turns have cost, for the owner. */
+  async context(profileId: string, sessionId: string) {
+    await this.session(profileId, sessionId);
+    const profile = await this.profiles.profile(profileId);
+
+    return sessionContext(this.store.db, profileId, sessionId, {
+      policy: profile.contextPolicy,
+      model: profile.model,
+    });
   }
 
   /** Writes one turn of a conversation the gateway itself is keeping, such as a peer thread. */

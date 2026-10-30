@@ -7,7 +7,7 @@ import { blocksOf, fitPrompt, promptText, tokenCounter } from './budget.js';
  * this the history is carried as it was written; a prompt that only just fits would otherwise
  * be compacted on every turn for nothing.
  */
-const COMPACT_AT = 0.85;
+export const COMPACT_AT = 0.85;
 
 export const needsCompaction = (tokens: number, budget: number) => tokens > budget * COMPACT_AT;
 

@@ -96,6 +96,7 @@ import {
   runApprovalInputSchema,
   runRecordSchema,
   runTimelineSchema,
+  sessionContextSchema,
   sessionRecordSchema,
   sessionSummarySchema,
   statsQuerySchema,
@@ -1091,6 +1092,13 @@ export const operations: Operation[] = [
     operationId: 'listSessionTimeline',
     access: 'admin',
     response: z.array(runTimelineSchema),
+  },
+  {
+    method: 'GET',
+    path: `${session}/context`,
+    operationId: 'getSessionContext',
+    access: 'admin',
+    response: sessionContextSchema,
   },
   {
     method: 'GET',

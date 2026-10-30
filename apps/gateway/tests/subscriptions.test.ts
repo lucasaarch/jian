@@ -100,6 +100,10 @@ it('polls GitHub and wakes once when checks complete', async () => {
   expect(wakes[0]?.input).toContain('CI finished');
   expect(wakes[0]?.input).toContain('Check conclusion: success');
   expect(wakes[0]?.input).toContain('Changed: checks pending → success');
+  // The wake-up is the gateway's, not the owner's: the conversation does not show it as theirs.
+  const said = await services.sessions.messages(profile.id, session.id);
+  const wake = said.find((message) => message.runId === wakes[0]?.id && message.role === 'user');
+  expect(wake?.purpose).toBe('resume');
 
   const after = (await services.subscriptions.list(profile.id))[0];
   expect(after?.lastWakeAt).toBeDefined();
