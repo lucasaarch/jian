@@ -19,3 +19,10 @@ serde_json = "1.0.154"
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10.1"
 core-graphics = { version = "0.25.0", features = ["highsierra"] }
+dispatch2 = "0.3.1"
+objc2 = "0.6.5"
+objc2-core-foundation = { version = "0.3.2", features = ["CFCGTypes"] }
+objc2-core-graphics = { version = "0.3.2", features = ["CGColor"] }
+objc2-app-kit = { version = "0.3.2", features = ["NSApplication", "NSResponder", "NSWindow", "NSView", "NSScreen", "NSImage", "NSColor", "NSGraphics", "NSRunningApplication", "objc2-core-graphics", "objc2-quartz-core"] }
+objc2-foundation = { version = "0.3.2", features = ["NSData", "NSDate", "NSRunLoop", "NSGeometry", "NSString", "NSValue", "NSObjCRuntime"] }
+objc2-quartz-core = { version = "0.3.2", features = ["CALayer", "CAAnimation", "CAMediaTiming", "CATransaction", "CAMediaTimingFunction", "objc2-core-foundation", "objc2-core-graphics"] }
