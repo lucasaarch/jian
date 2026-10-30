@@ -250,7 +250,9 @@ export class GitHubIntegrations {
       state,
       action: `https://github.com/settings/apps/new?state=${encodeURIComponent(state)}`,
       manifest: {
-        name: `Jian - ${new URL(origin).host} - ${randomBytes(3).toString('hex')}`,
+        // App names are unique across GitHub and public on the App's page: a random suffix tells
+        // installations apart without naming the address this one is served at.
+        name: `Jian - ${randomBytes(4).toString('hex')}`,
         url: origin,
         redirect_url: callback,
         callback_urls: [new URL('/v1/integrations/github/callback', this.publicUrl).toString()],
