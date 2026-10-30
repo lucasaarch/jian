@@ -12,7 +12,12 @@ export type ToWorkers =
 /** What the machines process tells the main process. */
 export type FromWorkers =
   /** The gateway refused the worker's token; the worker has stopped. */
-  { type: 'refused'; gatewayId: string } | { type: 'stopped' };
+  | { type: 'refused'; gatewayId: string }
+  | { type: 'stopped' }
+  /** An agent on that gateway began using this computer: a command, or the screen. */
+  | { type: 'using'; gatewayId: string; kind: 'shell' | 'computer' }
+  /** What it was doing is over. */
+  | { type: 'done'; gatewayId: string };
 
 /** Handed to the machines process as it starts. */
 export type WorkersSetup = {

@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { BrowserWindow, shell } from 'electron';
 import { APP_ORIGIN } from '../shared/bridge';
+import { blockReloadKeys } from './app-menu';
 import { submitInBrowser } from './forms';
 import { resourcesDir } from './tray';
 import { keepWindowState, savedPlace } from './window-state';
@@ -39,6 +40,7 @@ export function createWindow(options: { quitting: () => boolean }): BrowserWindo
   });
 
   keepWindowState(window, saved);
+  blockReloadKeys(window);
   window.once('ready-to-show', () => window.show());
   window.on('close', (event) => {
     if (options.quitting()) return;

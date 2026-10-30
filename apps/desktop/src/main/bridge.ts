@@ -1,5 +1,5 @@
 import { app, type BrowserWindow, ipcMain } from 'electron';
-import type { AddGatewayResult, NewGateway, OpenTarget } from '../shared/bridge';
+import type { AddGatewayResult, MachineUse, NewGateway, OpenTarget } from '../shared/bridge';
 import type { GatewayMonitor } from './gateways/monitor';
 import { parseGatewayUrl } from './gateways/rules';
 import { type GatewayStore, VAULT_MISSING, vaultAvailable } from './gateways/store';
@@ -11,9 +11,18 @@ export function serveBridge(deps: {
   store: GatewayStore;
   monitor: GatewayMonitor;
   machines: ComputerSharing;
+  /** What agents are doing on this computer now. */
+  using: () => MachineUse[];
   window: () => BrowserWindow | undefined;
   showing: (gatewayId: string | null) => void;
-}): { changed(): void; machinesChanged(): void; open(target: OpenTarget): void } {
+  /** A gateway was added or removed: whatever lists them, besides the window, follows. */
+  listChanged: () => void;
+}): {
+  changed(): void;
+  machinesChanged(): void;
+  machinesUsing(uses: MachineUse[]): void;
+  open(target: OpenTarget): void;
+} {
   const { store, monitor, machines } = deps;
   const send = (channel: string, value: unknown) => deps.window()?.webContents.send(channel, value);
 
@@ -41,6 +50,7 @@ export function serveBridge(deps: {
     monitor.watch(gateway);
     const summary = monitor.summaries().find((item) => item.id === gateway.id);
     send('gateways:changed', monitor.summaries());
+    deps.listChanged();
     return summary
       ? { ok: true, gateway: summary }
       : { ok: false, error: 'The gateway was not saved.' };
@@ -52,6 +62,7 @@ export function serveBridge(deps: {
     await machines.forget(id);
     await store.remove(id);
     send('gateways:changed', monitor.summaries());
+    deps.listChanged();
   });
 
   ipcMain.handle('gateways:replaceToken', async (_event, id: string, token: string) => {
@@ -90,11 +101,13 @@ export function serveBridge(deps: {
   ipcMain.handle('machines:state', (_event, gatewayId: string) =>
     machines.state(String(gatewayId ?? '')),
   );
+  ipcMain.handle('machines:using', () => deps.using());
   ipcMain.handle('machines:setSharing', (_event, on: boolean) => machines.setSharing(on === true));
 
   return {
     changed: () => send('gateways:changed', monitor.summaries()),
     machinesChanged: () => send('machines:changed', null),
+    machinesUsing: (uses) => send('machines:using', uses),
     open: (target) => send('window:open', target),
   };
 }

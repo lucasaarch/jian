@@ -64,8 +64,13 @@ export class ComputerSharing {
     const local = this.deps.gateways().some((g) => g.gateway.id === gatewayId && g.gateway.local);
     return {
       machineId: local ? null : this.deps.registry.machineId(gatewayId),
-      sharing: this.deps.setting.sharing(),
+      sharing: this.sharing(),
     };
+  }
+
+  /** The computer-wide switch: whether agents may use this computer. */
+  sharing(): boolean {
+    return this.deps.setting.sharing();
   }
 
   async setSharing(on: boolean): Promise<void> {

@@ -5,10 +5,9 @@ import {
   openUpdates,
   type UpdatesHost,
 } from '@jian/ui';
-import type { GatewaySummary } from '../../shared/bridge';
+import { type GatewaySummary, STATUS_SAID } from '../../shared/bridge';
 import { desktop } from '../desktop';
 import { forget } from '../gateways/navigation';
-import { STATUS_SAID } from '../gateways/status';
 
 /** The app's own updates, done by the main process; the update sheet draws them. */
 export const updatesHost: UpdatesHost = {

@@ -10,6 +10,7 @@ import {
   createLogger,
   createWorkerState,
   detectCapabilities,
+  executeTask,
   type Logger,
   runWorker,
   sayGoodbye,
@@ -83,6 +84,15 @@ async function start(gatewayId: string, target: WorkerTarget): Promise<void> {
     state,
     capabilities: offered,
     uiState: () => uiState(),
+    // The window shows while an agent uses this computer: each task says when it starts and ends.
+    execute: async (task) => {
+      send({ type: 'using', gatewayId, kind: task.kind === 'computer' ? 'computer' : 'shell' });
+      try {
+        return await executeTask(task);
+      } finally {
+        send({ type: 'done', gatewayId });
+      }
+    },
     // The owner rotated its token or removed the machine: the main process registers again.
     onUnauthorized: () => void stop(gatewayId).then(() => send({ type: 'refused', gatewayId })),
     signal: controller.signal,

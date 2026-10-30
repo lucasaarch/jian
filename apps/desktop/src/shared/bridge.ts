@@ -15,6 +15,15 @@ export type GatewayStatus =
   /** It runs another major.minor than this app, so the panel would read shapes it does not know. */
   | 'incompatible';
 
+/** How a gateway stands, as the app says it: in the window and in the tray. */
+export const STATUS_SAID: Record<GatewayStatus, string> = {
+  online: 'Connected',
+  connecting: 'Connecting',
+  incompatible: 'Another release',
+  offline: 'Not answering',
+  unauthorized: 'Token refused',
+};
+
 export type GatewaySummary = {
   id: string;
   /** What it is called: this computer, or the host it answers at. */
@@ -34,8 +43,20 @@ export type NewGateway = { url: string; token: string };
 
 export type AddGatewayResult = { ok: true; gateway: GatewaySummary } | { ok: false; error: string };
 
-/** A place in a gateway's panel to open: where a notification leads. */
-export type OpenTarget = { gatewayId: string; path: string };
+/** Where the main process takes the window: from a notification, a jian:// link or the tray. */
+export type OpenTarget =
+  /** A place in a gateway's panel: a notification's chat, a link's page. */
+  | { gatewayId: string; path: string }
+  /**
+   * A gateway's panel where it was left, with a new chat or the chat search opened there on the
+   * agent it shows.
+   */
+  | { gatewayId: string; panel?: 'new-chat' | 'search-chats' }
+  /** One of the window's own sheets, over whichever gateway it shows. */
+  | { sheet: 'settings' | 'updates' };
+
+/** An agent using this computer as a machine right now: on which gateway, and how. */
+export type MachineUse = { gatewayId: string; kind: 'shell' | 'computer' };
 
 export interface DesktopBridge {
   /** This app's release; 0.0.0-dev when built from source. */
@@ -75,6 +96,9 @@ export interface DesktopBridge {
     state(gatewayId: string): Promise<{ machineId: string | null; sharing: boolean }>;
     setSharing(on: boolean): Promise<void>;
     onChanged(listener: () => void): () => void;
+    /** What agents are doing on this computer now; empty while nothing is. */
+    using(): Promise<MachineUse[]>;
+    onUsing(listener: (uses: MachineUse[]) => void): () => void;
   };
 }
 

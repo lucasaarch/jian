@@ -1,15 +1,18 @@
 import {
+  AgentsWorking,
   AppSettings,
   ChatsApp,
   CreateAgent,
   connectGateway,
   NavigationProvider,
   QueryProvider,
+  SubscriptionMeter,
   useGatewayOnline,
 } from '@jian/ui';
 import { useMemo, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { type GatewaySummary, gatewayOrigin } from '../../shared/bridge';
-import { useGatewayCommands } from '../commands/gateway-commands';
+import type { StatusSlots } from '../chrome/status-bar';
 import { desktop } from '../desktop';
 import { appHost, gatewaySettings } from '../settings/hosts';
 import { useThisComputer } from '../settings/this-computer';
@@ -24,10 +27,18 @@ import { Unreachable } from './states';
 export function GatewayPanel({
   gateway,
   settings,
+  slots,
 }: {
   gateway: GatewaySummary;
   /** The app's settings, opened from anywhere in the window and drawn here with this gateway's. */
-  settings: { open: boolean; onOpenChange: (open: boolean) => void };
+  settings: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    page: string;
+    onPageChange: (page: string) => void;
+  };
+  /** The status bar's places for what this gateway tells: its agent at work, its limits. */
+  slots: StatusSlots;
 }) {
   // Before the first query this panel makes: every request goes to the main process, which
   // signs it for this gateway. Web Push is off, since the app shows system notifications itself.
@@ -60,7 +71,7 @@ export function GatewayPanel({
       <>
         <Unreachable gateway={gateway} retry={() => memory.go('/')} />
         {/* Nothing of the gateway can be read here: only the app's own settings. */}
-        <AppSettings open={settings.open} onOpenChange={settings.onOpenChange} host={appHost} />
+        <AppSettings {...settings} host={appHost} />
       </>
     );
   }
@@ -71,21 +82,15 @@ export function GatewayPanel({
     <QueryProvider keep={{ key: gateway.id, release: desktop().version }}>
       <NavigationProvider navigation={navigation}>
         <ChatsApp createAgent={() => setCreating(true)} />
-        <GatewayCommands />
+        {slots.start && createPortal(<AgentsWorking />, slots.start)}
+        {slots.end && createPortal(<SubscriptionMeter />, slots.end)}
         <CreateAgent open={creating} onOpenChange={setCreating} />
         <AppSettings
-          open={settings.open}
-          onOpenChange={settings.onOpenChange}
+          {...settings}
           host={appHost}
           gateway={{ ...gatewaySettings(gateway), ...(thisComputer ? { thisComputer } : {}) }}
         />
       </NavigationProvider>
     </QueryProvider>
   );
-}
-
-/** The gateway's commands, offered from inside its panel, where its agent can be read. */
-function GatewayCommands() {
-  useGatewayCommands();
-  return null;
 }
