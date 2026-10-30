@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Menu } from 'lucide-react';
+import { useAvailable } from '../../lib/gateway-mode';
 import { currentSection, navigation } from '../../lib/navigation';
 import { queries } from '../../lib/query/profile';
 import { useAgentPath, useWorkingAgentId } from '../../lib/workspace';
@@ -28,7 +29,10 @@ export function TabBar({
   const contacts = useQuery({ ...queries.contacts(profileId ?? ''), enabled: Boolean(profileId) });
   // Requests waiting on the owner, as the menu counts them beside Channels.
   const pending = contacts.data?.filter((contact) => contact.status === 'pending').length ?? 0;
-  const tabs = TABS.flatMap((path) => navigation.filter((item) => item.path === path));
+  const available = useAvailable();
+  const tabs = TABS.flatMap((path) =>
+    navigation.filter((item) => item.path === path && available(item)),
+  );
 
   return (
     // Under the menu while it is open, and out of reach like the rest of the workspace.
