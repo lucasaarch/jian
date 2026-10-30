@@ -65,3 +65,24 @@ export function mcpOutcomeUncertain(error: unknown): boolean {
   if (mcpClientDisconnected(error)) return false;
   return matches(error, UNKNOWN_OUTCOME);
 }
+
+/** Said when a server reports an error with no words of its own: the agent still learns why not. */
+export const MCP_ERROR_UNSAID =
+  'The MCP server reported an error and gave no reason. Check the arguments against the tool’s schema, or read what the server offers before calling it again.';
+
+/**
+ * The words an MCP server put in a result it marked `isError`: its text parts, joined. Empty
+ * when it said nothing, which leaves the agent and the owner to be told so instead.
+ */
+export function mcpErrorText(output: unknown): string {
+  const content = (output as { content?: unknown }).content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .flatMap((part) =>
+      part && typeof part === 'object' && (part as { type?: unknown }).type === 'text'
+        ? [String((part as { text?: unknown }).text ?? '')]
+        : [],
+    )
+    .join('\n')
+    .trim();
+}

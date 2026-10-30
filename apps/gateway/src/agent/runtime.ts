@@ -76,7 +76,7 @@ import {
 } from './guard.js';
 import { guardrail } from './guardrail.js';
 import { availableNote, connectMcpTools, type McpEntry, unavailableNote } from './mcp.js';
-import { mcpOutcomeUncertain } from './mcp-errors.js';
+import { MCP_ERROR_UNSAID, mcpErrorText, mcpOutcomeUncertain } from './mcp-errors.js';
 import { Narrator } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
@@ -641,6 +641,7 @@ export class AgentRuntime {
                 // the request reached it and it said no. That is a fact the agent can act on,
                 // so it goes back as the tool's result. Only a call that never came back
                 // leaves an effect nobody can account for, and that is handled below.
+                let answered = output;
                 if (
                   mcpToolNames.includes(name) &&
                   output &&
@@ -648,16 +649,30 @@ export class AgentRuntime {
                   'isError' in output &&
                   output.isError === true
                 ) {
+                  // What the server said is the reason, on the owner's timeline as in the
+                  // agent's result; a server that said nothing is reported as having said nothing.
+                  const said = mcpErrorText(output);
+                  if (!said) {
+                    const content = (output as { content?: unknown }).content;
+                    answered = {
+                      ...output,
+                      content: [
+                        ...(Array.isArray(content) ? content : []),
+                        { type: 'text', text: MCP_ERROR_UNSAID },
+                      ],
+                    };
+                  }
                   await this.services.lifecycle.checkpoint(profileId, runId, owner, {
                     phase: 'tool-refused',
                     toolName: name,
                     toolCallId: options.toolCallId,
-                    result: await boundToolResult(output, name, run, secrets, this.options),
+                    reason: said ? reason(said, secrets, 600) : MCP_ERROR_UNSAID,
+                    result: await boundToolResult(answered, name, run, secrets, this.options),
                   });
                 }
 
                 const result = await boundToolResult(
-                  output,
+                  answered,
                   name,
                   run,
                   secrets,

@@ -496,6 +496,19 @@ it.each(['disconnect', 'isError', 'readOnlyError', 'validationError'])(
             }),
           ).toBe(true);
         }
+        if (failure === 'isError') {
+          // The owner's timeline says what the server said, not only that it refused.
+          expect(
+            (await services.lifecycle.checkpoints(profile.id, run.id)).some((checkpoint) => {
+              const data = checkpoint.data as { phase?: string; reason?: string };
+
+              return (
+                data.phase === 'tool-refused' &&
+                data.reason === 'Effect applied; verification failed.'
+              );
+            }),
+          ).toBe(true);
+        }
         if (failure === 'validationError') {
           expect(
             (await services.lifecycle.checkpoints(profile.id, run.id)).some((checkpoint) => {

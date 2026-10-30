@@ -11,6 +11,7 @@ import {
 import { type ToolSet, tool } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { isChatChannel } from '../channels/kinds.js';
 import { Coordination } from '../coordination/service.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { gatewayTimeZone } from '../core/time-zone.js';
@@ -148,6 +149,25 @@ export function profileTools(
           updatedAt: r.updatedAt,
           ...(r.question ? { question: r.question } : {}),
         })),
+    }),
+
+    // Nothing happens on the gateway: the panel showing this conversation sees the call arrive
+    // and throws the confetti itself. A WhatsApp or Telegram chat has no screen to throw it on.
+    throw_confetti: tool({
+      description:
+        'Throw confetti on the owner’s screen in Jian, for a real celebration (a launch, a milestone, a birthday) or when asked.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        if (run.subagent) return { thrown: false, reason: 'A subagent’s work is not on screen.' };
+        const { channel } = await services.sessions.session(run.profileId, run.sessionId);
+        if (isChatChannel(channel)) {
+          return {
+            thrown: false,
+            reason: `This conversation is on ${channel}, where confetti cannot be shown. Celebrate in words.`,
+          };
+        }
+        return { thrown: true };
+      },
     }),
 
     set_session_objective: tool({
