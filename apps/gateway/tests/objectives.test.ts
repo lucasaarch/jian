@@ -325,6 +325,18 @@ it('auto-continue does not reinject a stored terminal dump as the wake text', as
   expect(wake).not.toContain('node:internal');
   expect(wake.length).toBeLessThan(600);
 
+  // The nudge is the gateway's: kept for the agent, marked so no reader takes it for the owner's.
+  const nudge = (await services.sessions.messages(profile.id, session.id)).find(
+    (message) => message.runId === followUps[0]?.id && message.role === 'user',
+  );
+  expect(nudge?.purpose).toBe('resume');
+  const listed = (await services.sessions.overview(profile.id)).find(
+    (item) => item.id === session.id,
+  );
+  expect(listed && 'lastMessage' in listed ? listed.lastMessage?.text : undefined).toBe(
+    'Another slice.',
+  );
+
   const stored = await services.sessions.session(profile.id, session.id);
   expect(stored.objective?.text).not.toContain('Last login:');
   expect(stored.objective?.text.length).toBeLessThanOrEqual(MAX_OBJECTIVE_TEXT);

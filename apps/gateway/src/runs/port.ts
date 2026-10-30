@@ -2,6 +2,7 @@ import type {
   AgentCallOrigin,
   Checkpoint,
   GroupTurn,
+  Message,
   Run,
   RunApproval,
   RunProgress,
@@ -32,6 +33,11 @@ export type SubmitOptions = {
   approval?: { id: string; decision: 'approve' | 'reject'; note?: string };
   /** The answer a chat reply stands for, when it named a choice by number or in its own words. */
   answer?: string;
+  /**
+   * The gateway wrote this turn itself, not a person: the agent reads it, the conversation does
+   * not show it. The auto-continue of an open objective is a `resume`.
+   */
+  purpose?: Message['purpose'];
 };
 
 export interface RunReader {
