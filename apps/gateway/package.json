@@ -13,6 +13,7 @@
     "@ai-sdk/mcp": "^2.0.55",
     "@ai-sdk/openai": "^4.0.72",
     "@ai-sdk/openai-compatible": "^3.0.53",
+    "@electric-sql/pglite": "^0.5.8",
     "@fastify/helmet": "^13.1.1",
     "@fastify/rate-limit": "^11.2.0",
     "@jian/contracts": "workspace:*",
@@ -44,7 +45,6 @@
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "^13.1.0",
-    "@electric-sql/pglite": "^0.5.8",
     "@grammyjs/types": "^5.0.0",
     "@types/node": "^26.6.2",
     "@types/pg": "^8.23.1",

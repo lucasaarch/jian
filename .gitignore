@@ -28,3 +28,4 @@ packages/remote-core/native/bin/
 # The desktop app's build and packages.
 apps/desktop/out/
 apps/desktop/release/
+apps/desktop/.gateway/

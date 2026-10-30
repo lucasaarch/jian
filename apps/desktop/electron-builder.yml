@@ -14,16 +14,19 @@ extraResources:
     to: .
     filter: ['*.png']
 npmRebuild: false
+# The local gateway, compiled with its production dependencies (scripts/stage-gateway.mjs).
+afterPack: scripts/after-pack.mjs
 asar: true
 
 mac:
+  # macOS takes a single category; Linux lists it under developer tools as well.
   category: public.app-category.productivity
-  # One download for Apple silicon and Intel Macs alike.
+  # One download per CPU: the local gateway's native dependencies are built for one.
   target:
     - target: dmg
-      arch: universal
+      arch: [arm64, x64]
     - target: zip
-      arch: universal
+      arch: [arm64, x64]
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
@@ -40,7 +43,11 @@ nsis:
   perMachine: false
 
 linux:
-  category: Utility
+  # Menus list it with developer tools, and with utilities too.
+  category: Development
+  desktop:
+    entry:
+      Categories: Development;Utility;
   target:
     - target: AppImage
       arch: [x64, arm64]
