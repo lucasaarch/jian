@@ -6,6 +6,7 @@ import { subscribe } from '@/lib/events';
 import { useCrew } from '@/lib/stores/crew';
 import type {
   GatewayApi,
+  Message,
   Person,
   Run,
   RunApproval,
@@ -22,9 +23,48 @@ import { ApprovalCard, QuestionCard } from './decision-cards';
 import { useFollowBottom } from './follow-bottom';
 import { MessageMedia } from './media';
 import { authored, ChatMessage } from './message';
-import { LiveThought, LiveTurn, traceOf } from './progress';
+import { LiveTurn, placeSteps, traceOf } from './progress';
 import { running, statusLabels } from './status';
 import { ThoughtLine } from './thought-line';
+
+/**
+ * Who answers a message: the agent, or — on a question this profile carried to another agent —
+ * that agent, whose run is kept in its own profile.
+ */
+const answers = (message: Message) =>
+  message.call ? message.role === 'user' : message.role === 'assistant';
+const turnOf = (message: Message) => message.call?.runId ?? message.runId;
+/** When a stretch of tools ended: its last tool's end, so a settled line stops its clock there. */
+const endOf = (steps: ToolStep[]) =>
+  steps
+    .map((step) => step.finishedAt ?? step.startedAt)
+    .sort()
+    .at(-1);
+
+/** Tools a turn used between two things it said, settled, with the files they changed. */
+function Worked({
+  steps,
+  startedAt,
+  finishedAt = endOf(steps),
+  fresh,
+}: {
+  steps: ToolStep[];
+  startedAt?: string;
+  finishedAt?: string;
+  fresh: boolean;
+}) {
+  return (
+    <>
+      <ThoughtLine
+        working={false}
+        steps={traceOf(steps)}
+        startedAt={startedAt}
+        finishedAt={finishedAt}
+      />
+      <CodeChanges steps={steps} fresh={fresh} />
+    </>
+  );
+}
 
 export function History({
   api,
@@ -111,6 +151,34 @@ export function History({
   const isRunning = running(run);
   // The turn being read now: its file changes open whole, older ones only when short.
   const newest = messages.findLast((message) => message.runId)?.runId;
+  // Each turn's tools among the lines it said, so the work shows up as it was spoken.
+  const placed = useMemo(() => {
+    const said = new Map<string, { lines: Message[]; call: boolean }>();
+
+    for (const message of messages) {
+      const turn = turnOf(message);
+      if (!turn || !answers(message)) continue;
+      const known = said.get(turn) ?? { lines: [], call: Boolean(message.call) };
+      known.lines.push(message);
+      said.set(turn, known);
+    }
+
+    return new Map(
+      [...said].map(([turn, { lines, call }]) => [
+        turn,
+        placeSteps((call ? callTools : tools).get(turn) ?? [], lines),
+      ]),
+    );
+  }, [messages, tools, callTools]);
+  // A turn under way keeps the tools since its last line for its working line at the end.
+  const trailing = (live: Run, known: Map<string, ToolStep[]>) => {
+    const place = placed.get(live.id);
+
+    return place?.last
+      ? { steps: place.after.get(place.last.id) ?? [], startedAt: place.last.createdAt }
+      : { steps: known.get(live.id) ?? [], startedAt: live.createdAt };
+  };
+
   const { scroller, follow, onScroll, hold } = useFollowBottom();
 
   // Sending is a return to the end, wherever the reader had scrolled.
@@ -258,6 +326,12 @@ export function History({
     };
   }, [api, callKey]);
 
+  // The turns still at work: their last stretch of tools is drawn at the end, not in place.
+  const under = new Set([
+    ...(run && isRunning ? [run.id] : []),
+    ...(pendingCall && callRun && running(callRun) ? [callRun.id] : []),
+  ]);
+
   // Each press settles one thing, then the conversation reads again to show what came of it.
   const settle = (work: Promise<unknown> | undefined) => {
     if (!work) return;
@@ -325,21 +399,20 @@ export function History({
           ) : messages.length ? (
             messages.map((message, index) => {
               const previous = messages[index - 1];
-              // Who answers: the agent, or — on a question this profile carried to another
-              // agent — that agent, whose run is kept in its own profile.
-              const answers = (item: typeof message) =>
-                item.call ? item.role === 'user' : item.role === 'assistant';
-              const turn = (item: typeof message) => item.call?.runId ?? item.runId;
-              // The tools of a turn go above the first thing said in answer to it.
+              // The tools a turn used before saying anything go above the first thing it said.
               const opensAnswer =
                 answers(message) &&
                 !messages
                   .slice(0, index)
-                  .some((item) => answers(item) && turn(item) === turn(message));
-              const answering = turn(message);
-              const steps =
-                opensAnswer && answering
-                  ? (message.call ? callTools : tools).get(answering)
+                  .some((item) => answers(item) && turnOf(item) === turnOf(message));
+              const answering = turnOf(message);
+              const place = answering && answers(message) ? placed.get(answering) : undefined;
+              const steps = opensAnswer ? place?.head : undefined;
+              // The tools after this line, until the next: under it, where they happened. The
+              // last stretch of a turn still at work belongs to its working line at the end.
+              const later =
+                place && !(answering && under.has(answering) && place.last?.id === message.id)
+                  ? place.after.get(message.id)
                   : undefined;
               const unansweredSteps =
                 message.role === 'user' &&
@@ -358,7 +431,7 @@ export function History({
                 answers(item) ? 'agent' : (authored(item).id ?? authored(item).name ?? '');
               // A turn's time runs from the first message about it to the last one said in it.
               const span = (runId: string) => {
-                const about = messages.filter((item) => turn(item) === runId);
+                const about = messages.filter((item) => turnOf(item) === runId);
                 return { startedAt: about[0]?.createdAt, finishedAt: about.at(-1)?.createdAt };
               };
               const live = isRunning && run?.id === message.runId;
@@ -390,20 +463,14 @@ export function History({
               const pause =
                 message.purpose === 'resume' ||
                 (message.purpose === 'answer' && Boolean(asked?.question || asked?.approval));
-              // The turn under way heads what it has said with its working line; the live
-              // turn below then shows only what is being written.
               const thought =
-                live && opensAnswer && run ? (
-                  <LiveThought run={run} steps={tools.get(run.id) ?? []} />
-                ) : answering && (steps?.length || handedOff) ? (
-                  <>
-                    <ThoughtLine
-                      working={false}
-                      steps={traceOf(steps ?? [])}
-                      {...span(answering)}
-                    />
-                    <CodeChanges steps={steps ?? []} fresh={answering === newest} />
-                  </>
+                answering && (steps?.length || handedOff) ? (
+                  <Worked
+                    steps={steps ?? []}
+                    startedAt={span(answering).startedAt}
+                    {...(steps?.length ? {} : { finishedAt: span(answering).finishedAt })}
+                    fresh={answering === newest}
+                  />
                 ) : undefined;
 
               return (
@@ -454,6 +521,15 @@ export function History({
                       )}
                     </ChatMessage>
                   )}
+                  {later?.length ? (
+                    <div className="chat-line theirs">
+                      <Worked
+                        steps={later}
+                        startedAt={message.createdAt}
+                        fresh={answering === newest}
+                      />
+                    </div>
+                  ) : null}
                   {unansweredSteps && message.runId && (
                     <div className="chat-line theirs">
                       <ThoughtLine
@@ -476,16 +552,10 @@ export function History({
             !error && <Empty title="No messages in this session">{empty}</Empty>
           )}
           {!loading && pendingCall && callRun && running(callRun) && (
-            <LiveTurn run={callRun} steps={callTools.get(callRun.id) ?? []} />
+            <LiveTurn run={callRun} {...trailing(callRun, callTools)} />
           )}
           {!loading && run && isRunning && (
-            <LiveTurn
-              run={run}
-              steps={tools.get(run.id) ?? []}
-              lined={messages.some(
-                (item) => item.runId === run.id && item.role === 'assistant' && !item.call,
-              )}
-            >
+            <LiveTurn run={run} {...trailing(run, tools)}>
               <CrewCards agents={subagents.filter((child) => child.parentRunId === run.id)} />
             </LiveTurn>
           )}

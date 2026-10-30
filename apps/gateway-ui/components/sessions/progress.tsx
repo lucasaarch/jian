@@ -1,7 +1,7 @@
 'use client';
 
 import type { OrbState } from 'thinking-orbs';
-import type { Run, ToolStep } from '@/lib/api';
+import type { Message, Run, ToolStep } from '@/lib/api';
 import { Markdown } from '../ui/markdown';
 import { RefineFrame } from '../ui/refine-frame';
 import { CodeChanges } from './code-change';
@@ -132,13 +132,16 @@ export function traceOf(steps: ToolStep[]): ThoughtStep[] {
   });
 }
 
-/**
- * The agent at work, where its answer will appear: the Thought Line saying what it is on, with
- * the tools so far beneath it, then the answer as it is written. The panel is the only surface
- * that names tools; a chat channel gets the answer and nothing else.
- */
 /** The working Thought Line of a run and the files it has changed so far. */
-export function LiveThought({ run, steps }: { run: Run; steps: ToolStep[] }) {
+function LiveThought({
+  run,
+  steps,
+  startedAt,
+}: {
+  run: Run;
+  steps: ToolStep[];
+  startedAt: string;
+}) {
   const { label, state, tool } = statusOf(run);
   const writing = !tool && Boolean(run.progress?.text);
 
@@ -149,7 +152,7 @@ export function LiveThought({ run, steps }: { run: Run; steps: ToolStep[] }) {
         label={writing ? 'Writing' : label}
         orb={state}
         steps={traceOf(steps)}
-        startedAt={run.createdAt}
+        startedAt={startedAt}
       />
       <CodeChanges steps={steps} fresh />
       <ImageDrafts steps={steps} />
@@ -177,20 +180,46 @@ function ImageDrafts({ steps }: { steps: ToolStep[] }) {
   );
 }
 
+/**
+ * Where a turn's tools go among what it said: each under the last line said before it began,
+ * so the conversation reads in the order things happened. Tools from before the first line
+ * head the turn. Both sides are stamped by the gateway's clock, and a line is written before
+ * the tool it announces starts.
+ */
+export function placeSteps(steps: ToolStep[], said: Pick<Message, 'id' | 'createdAt'>[]) {
+  const head: ToolStep[] = [];
+  const after = new Map<string, ToolStep[]>();
+
+  for (const step of steps) {
+    const started = Date.parse(step.startedAt);
+    const anchor = said.findLast((line) => Date.parse(line.createdAt) <= started);
+
+    if (anchor) after.set(anchor.id, [...(after.get(anchor.id) ?? []), step]);
+    else head.push(step);
+  }
+
+  return { head, after, last: said.at(-1) };
+}
+
+/**
+ * The agent at work, at the end of the conversation: the Thought Line saying what it is on, with
+ * the tools of this stretch beneath it, then the words as they are written. The panel is the
+ * only surface that names tools; a chat channel gets the answer and nothing else.
+ */
 export function LiveTurn({
   run,
   steps,
-  lined = false,
+  startedAt = run.createdAt,
   children,
 }: {
   run: Run;
-  steps: ToolStep[];
   /**
-   * The turn has already said something, and its Thought Line heads that, where it will stay
-   * once the turn ends; here then is only what is being written. Drawn in both places, the
-   * line and every diff showed twice until the turn ended.
+   * Only the tools since the last thing the turn said: the earlier ones already sit under the
+   * words they followed, where they stay once the turn ends.
    */
-  lined?: boolean;
+  steps: ToolStep[];
+  /** When the stretch this line covers began: the turn's start, or the last thing it said. */
+  startedAt?: string;
   /** The agents this turn handed work to. */
   children?: React.ReactNode;
 }) {
@@ -202,7 +231,7 @@ export function LiveTurn({
 
   return (
     <article className="chat-line pending theirs" aria-live="polite">
-      {!lined && <LiveThought run={run} steps={steps} />}
+      <LiveThought run={run} steps={steps} startedAt={startedAt} />
       {children}
       {writing && (
         <div className="chat-text markdown streaming">
