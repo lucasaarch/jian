@@ -32,18 +32,21 @@ importers:
 
   apps/desktop:
     devDependencies:
-      '@base-ui/react':
-        specifier: ^1.8.0
-        version: 1.8.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@fontsource-variable/ibm-plex-sans':
         specifier: 5.3.0
         version: 5.3.0
       '@fontsource/ibm-plex-mono':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fontsource/playfair-display':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@jian/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@jian/remote-core':
+        specifier: workspace:*
+        version: link:../../packages/remote-core
       '@jian/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -237,6 +240,9 @@ importers:
       '@fontsource/ibm-plex-mono':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fontsource/playfair-display':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@jian/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -249,6 +255,9 @@ importers:
       react-dom:
         specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
+      undici:
+        specifier: 7.29.1
+        version: 7.29.1
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.3.3
@@ -333,6 +342,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.105.0
         version: 5.105.0(@types/react@19.3.0)(react@19.3.0)
+      '@tanstack/react-query-persist-client':
+        specifier: ^5.105.0
+        version: 5.105.0(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(react@19.3.0)
       lowlight:
         specifier: ^3.3.0
         version: 3.3.0
@@ -1058,6 +1070,9 @@ packages:
 
   '@fontsource/ibm-plex-mono@5.3.0':
     resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
+
+  '@fontsource/playfair-display@5.3.0':
+    resolution: {integrity: sha512-uJSABalvdWc10fEPppQjQocamT21LEyRfzzWfRfqbkPz+sRv+kKpYDKyluBUskvJREkJTos9epj1WjQROGu99Q==}
 
   '@grammyjs/types@5.0.0':
     resolution: {integrity: sha512-iq1Qrq1iPKkB8yAa0qSuIURMZOCuqTY5pWy5gHpCeL1oQ+GPadGhw/cDTVE8waJwuCzacUzuIjRv1sESvk7u7A==}
@@ -1982,6 +1997,19 @@ packages:
 
   '@tanstack/query-core@5.105.0':
     resolution: {integrity: sha512-7p56vRmT/z4UJ6sctGIdl5WRUQyUv53IUpUwEKi2g97zMbO7zh8ZsCLffGAvCPBR4xD72e3VXsDyLwXHhoNTMQ==}
+
+  '@tanstack/query-persist-client-core@5.105.0':
+    resolution: {integrity: sha512-bOy2lMzzEyacL6s9hIa0tKmaIr/TM24HZaK9a20ctZjPYlCs6NhGdgbxi20RcdJWZwWunkLqPDnxfClD7QIyKg==}
+
+  '@tanstack/react-query-persist-client@5.105.0':
+    resolution: {integrity: sha512-88XnwRDyGnlEGgnX2ePbUnEwGoQpQufLKR5bqCfs8CQbNoS2km3Ib/MNKWwrRTQDOdmJYhl6wBPJEdUBBMH5XA==}
+    peerDependencies:
+      '@tanstack/react-query': ^5.105.0
+      '@types/react': ^18 || ^19
+      react: ^18 || ^19
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
 
   '@tanstack/react-query@5.105.0':
     resolution: {integrity: sha512-y+hMuDERvgg6ay1da0V1a6ZC0ZONt7dELxSFkqRZuwm7p1TTZs0MoXrPlBRflIpRoYjvzQVYxycnLImpFLhWrw==}
@@ -5094,6 +5122,8 @@ snapshots:
 
   '@fontsource/ibm-plex-mono@5.3.0': {}
 
+  '@fontsource/playfair-display@5.3.0': {}
+
   '@grammyjs/types@5.0.0': {}
 
   '@hapi/boom@9.1.4':
@@ -5716,6 +5746,18 @@ snapshots:
       vite: 8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
 
   '@tanstack/query-core@5.105.0': {}
+
+  '@tanstack/query-persist-client-core@5.105.0':
+    dependencies:
+      '@tanstack/query-core': 5.105.0
+
+  '@tanstack/react-query-persist-client@5.105.0(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(react@19.3.0)':
+    dependencies:
+      '@tanstack/query-persist-client-core': 5.105.0
+      '@tanstack/react-query': 5.105.0(@types/react@19.3.0)(react@19.3.0)
+      react: 19.3.0
+    optionalDependencies:
+      '@types/react': 19.3.0
 
   '@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.0)':
     dependencies:

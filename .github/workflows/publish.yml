@@ -1,9 +1,12 @@
 name: Publish
-# A release publishes the gateway and web images and the remote-control npm package, and nothing else
-# does: a tag is the only commit anyone has said is worth running. `make release` pushes it,
-# after its note in docs/releases is written; this workflow builds both architectures, publishes
-# `@jian-ai/remote-control` at the same version, and publishes the GitHub release with that note.
-# `workflow_dispatch` stays for building an image by hand, and publishes no release or npm package.
+# A release publishes the gateway and web images, the remote-control npm package and the desktop
+# app, and nothing else does: a tag is the only commit anyone has said is worth running.
+# `make release` pushes it, after its note in docs/releases is written; this workflow builds both
+# architectures, publishes `@jian-ai/remote-control` at the same version, packages the desktop app
+# for macOS, Windows and Linux at that version too, and publishes the GitHub release with that note
+# and the app's installers and update files. The app and the gateway share a major.minor, so they
+# always release together. `workflow_dispatch` stays for building an image by hand, and publishes
+# no release, npm package or app.
 on:
   push:
     tags: ['v*.*.*']
@@ -346,16 +349,187 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  # The desktop app, on one native runner per OS and CPU: the local gateway inside it installs its
+  # native dependencies for the machine that packages it, so no CPU is cross-built. Each runner
+  # takes its OS's Computer Use helper from the jobs above and the version from the tag, and leaves
+  # its installers and update files for the release job, which uploads them to the tag's release.
+  # macOS must be signed and notarized: Squirrel.Mac installs nothing else. Windows is signed only
+  # when the optional WINDOWS_CSC_LINK secret is set.
+  desktop:
+    needs: [notes, computer-helper, computer-helper-linux, computer-helper-windows]
+    if: ${{ !cancelled() && needs.notes.result == 'success' && needs.computer-helper.result == 'success' && needs.computer-helper-linux.result == 'success' && needs.computer-helper-windows.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: mac, arch: arm64, runner: macos-15, helper: computer-helper, helpers: macos }
+          - { os: mac, arch: x64, runner: macos-15-intel, helper: computer-helper, helpers: macos }
+          - { os: win, arch: x64, runner: windows-2025, helper: computer-helper-windows, helpers: windows }
+          - { os: win, arch: arm64, runner: windows-11-arm, helper: computer-helper-windows, helpers: windows }
+          - { os: linux, arch: x64, runner: ubuntu-24.04, helper: computer-helper-linux, helpers: linux }
+          - { os: linux, arch: arm64, runner: ubuntu-24.04-arm, helper: computer-helper-linux, helpers: linux }
+    runs-on: ${{ matrix.runner }}
+    # Notarization waits on Apple, which is usually minutes and sometimes far more.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      # A runner of another CPU would package the local gateway's native code for the wrong one.
+      - name: Check the runner's CPU
+        run: test "$(node -p process.arch)" = '${{ matrix.arch }}'
+      - run: pnpm install --frozen-lockfile
+      - name: Stamp the version from the tag
+        working-directory: apps/desktop
+        run: |
+          node scripts/release-version.ts "$GITHUB_REF_NAME"
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          name: notes
+          path: ${{ runner.temp }}/notes
+      # electron-builder writes it into the update files, where the app reads what a release brings.
+      - name: Put the note in the update files
+        run: cp "$RUNNER_TEMP/notes/notes.md" apps/desktop/build/release-notes.md
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.helper }}
+          path: packages/remote-core/native/bin/${{ matrix.helpers }}
+      - name: Keep the helpers executable
+        if: matrix.os != 'win'
+        run: chmod 755 packages/remote-core/native/bin/${{ matrix.helpers }}/computer-helper*
+      - name: Require the Apple signing secrets
+        if: matrix.os == 'mac'
+        env:
+          APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          for name in APPLE_DEVELOPER_ID_P12 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_TEAM_ID \
+            APPLE_API_KEY_ID APPLE_API_ISSUER_ID APPLE_API_KEY_P8; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing repository secret $name: an unsigned or unnotarized Mac app cannot update."
+              exit 1
+            fi
+          done
+          # notarytool reads the App Store Connect key from a file.
+          printf '%s' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+      # The hook for a Windows code signing certificate: a base64 .pfx in WINDOWS_CSC_LINK and its
+      # password in WINDOWS_CSC_KEY_PASSWORD. Without it the installer is unsigned, and SmartScreen
+      # says "Windows protected your PC" with an unknown publisher until the owner runs it anyway.
+      - name: Optional Windows signing
+        if: matrix.os == 'win'
+        env:
+          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+        run: |
+          if [ -z "${WINDOWS_CSC_LINK:-}" ]; then
+            echo '::notice::No WINDOWS_CSC_LINK secret: the Windows installer is unsigned.'
+            exit 0
+          fi
+          printf '%s' "$WINDOWS_CSC_LINK" | base64 --decode > "$RUNNER_TEMP/windows-signing.pfx"
+          echo "WIN_CSC_LINK=$RUNNER_TEMP/windows-signing.pfx" >> "$GITHUB_ENV"
+      - name: Package
+        working-directory: apps/desktop
+        env:
+          # macOS: the Developer ID certificate, and the App Store Connect key that notarizes.
+          CSC_LINK: ${{ matrix.os == 'mac' && secrets.APPLE_DEVELOPER_ID_P12 || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD || '' }}
+          APPLE_API_KEY_ID: ${{ matrix.os == 'mac' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ matrix.os == 'mac' && secrets.APPLE_API_ISSUER_ID || '' }}
+          APPLE_TEAM_ID: ${{ matrix.os == 'mac' && secrets.APPLE_TEAM_ID || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ matrix.os == 'win' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
+        run: |
+          pnpm --filter @jian/contracts build
+          pnpm --filter @jian/sdk build
+          pnpm exec electron-vite build
+          node scripts/stage-gateway.mjs
+          pnpm exec electron-builder --publish never --${{ matrix.arch }}
+      - name: Check what was packaged
+        working-directory: apps/desktop/release
+        run: |
+          ls -la
+          case '${{ matrix.os }}' in
+            mac)
+              test -f "Jian-$VERSION-mac-${{ matrix.arch }}.zip"
+              test -f "Jian-$VERSION-mac-${{ matrix.arch }}.dmg"
+              app="$(find . -maxdepth 2 -name Jian.app -type d | head -n 1)"
+              codesign --verify --deep --strict --verbose=2 "$app"
+              spctl --assess --type execute --verbose=2 "$app"
+              xcrun stapler validate "$app"
+              meta=latest-mac.yml
+              ;;
+            win)
+              test -f "Jian-$VERSION-win-${{ matrix.arch }}.exe"
+              meta=latest.yml
+              ;;
+            linux)
+              ls "Jian-$VERSION-linux-"*.AppImage "Jian-$VERSION-linux-"*.deb
+              meta=latest-linux.yml
+              if [ '${{ matrix.arch }}' = arm64 ]; then meta=latest-linux-arm64.yml; fi
+              ;;
+          esac
+          grep -Fx "version: $VERSION" "$meta"
+          grep -q '^releaseNotes:' "$meta"
+      # Each CPU's update file is a part: the release job merges one OS's two into the file it serves.
+      - name: Collect the release files
+        working-directory: apps/desktop/release
+        run: |
+          out="$RUNNER_TEMP/desktop"
+          mkdir -p "$out"
+          cp "Jian-$VERSION-"* "$out/"
+          for meta in latest*.yml; do cp "$meta" "$out/$meta.${{ matrix.arch }}.part"; done
+          ls -la "$out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/desktop
+          if-no-files-found: error
+          retention-days: 1
+
+  # The images are out by now; the release waits for the desktop app too, so its files are there
+  # the moment installed apps can see it. A desktop build that failed leaves its OS without update
+  # files on this release (installed apps there stay where they are); re-running the failed jobs
+  # re-runs this one, which then adds them.
   release:
-    needs: [notes, index]
+    needs: [notes, index, desktop]
+    if: ${{ !cancelled() && needs.notes.result == 'success' && needs.index.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - uses: actions/download-artifact@v4
         with:
           name: notes
-      - name: Publish the release with its note
+      - uses: actions/download-artifact@v4
+        if: needs.desktop.result != 'skipped'
+        # A desktop build that failed entirely uploaded nothing; the merge says what is missing.
+        continue-on-error: true
+        with:
+          pattern: desktop-*
+          path: desktop
+          merge-multiple: true
+      - name: Merge the update files of each OS
+        run: |
+          mkdir -p desktop
+          node apps/desktop/scripts/update-metadata.ts desktop
+          ls -la desktop
+      - name: Publish the release with its note and the desktop app
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
@@ -363,5 +537,15 @@ jobs:
           flags=()
           if [[ "$TAG" == *-* ]]; then flags+=(--prerelease --latest=false); fi
           if [[ "$TAG" != *-* ]]; then flags+=(--latest); fi
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
-            --title "Jian ${TAG#v}" --notes-file notes.md "${flags[@]}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # A re-run: the note is written again, and files uploaded again replace their copies.
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
+          else
+            # A draft until every file is up: no installed app reads a release half uploaded.
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+              --title "Jian ${TAG#v}" --notes-file notes.md
+          fi
+          if compgen -G 'desktop/*' > /dev/null; then
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber desktop/*
+          fi
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false "${flags[@]}"
