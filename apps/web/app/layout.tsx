@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { connection } from 'next/server';
 import '@fontsource-variable/ibm-plex-sans';
 import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/playfair-display/900.css';
 import { Notifications, QueryProvider, ThemeSync, VersionMismatch } from '@jian/ui';
 import { versionMismatch } from '../lib/server/versions';
 import './globals.css';

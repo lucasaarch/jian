@@ -2,126 +2,13 @@
 @reference "tailwindcss";
 @reference "./themes.css";
 
-@layer components {
-  .login-layout {
-    @apply grid min-h-(--app-height) grid-cols-[1.1fr_1fr];
-  }
-  .login-story {
-    @apply relative flex flex-col overflow-hidden border-r border-line bg-surface px-14 py-10;
-  }
-  .login-copy {
-    @apply flex flex-1 flex-col justify-center py-10;
-  }
-  .login-copy h1 {
-    @apply relative font-display text-7xl font-semibold leading-[0.95] tracking-tight xl:text-8xl;
-  }
-  .login-copy > p {
-    @apply mt-6 max-w-sm text-sm leading-7;
-  }
-  .login-story > small {
-    @apply font-mono text-[10px] text-muted;
-  }
-  .login-emblem {
-    @apply mb-8 grid h-48 w-48 place-items-center border border-line bg-canvas text-accent;
-  }
-  .login-emblem .brand-mark {
-    @apply h-40 w-40;
-  }
-  .login-form-wrap {
-    @apply relative flex flex-col items-center justify-center px-10 py-24;
-  }
-  .login-form {
-    @apply w-full max-w-sm;
-  }
-  .login-lock {
-    @apply mb-5 flex text-accent;
-  }
-  .login-form h2 {
-    @apply text-4xl;
-  }
-  .login-form > p {
-    @apply mb-8 mt-3 text-sm;
-  }
-  .login-form > .button {
-    @apply w-full justify-between;
-  }
-  .login-form > .secure-note {
-    @apply mt-5 flex items-start gap-2 text-xs text-muted;
-  }
-  .secure-note svg {
-    @apply mt-0.5;
-  }
-  .login-help {
-    @apply mt-8 border-t border-line pt-5 text-xs text-muted;
-  }
-  .login-help summary {
-    @apply flex list-none items-center gap-2;
-  }
-  .login-help summary::-webkit-details-marker {
-    display: none;
-  }
-  .login-help p {
-    @apply mt-3 text-xs leading-7;
-  }
-}
-
 .spin {
   animation: spin 1s linear infinite;
 }
 .chat-line {
   animation: arrive 180ms ease-out;
 }
-.modal[open] {
-  animation: overlay-in 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-.modal[open]::backdrop {
-  animation: backdrop-in 300ms ease both;
-}
-.modal[open][data-closing="true"] {
-  animation: overlay-out 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-.modal[open][data-closing="true"]::backdrop {
-  animation: backdrop-out 300ms ease both;
-}
-@keyframes overlay-in {
-  from {
-    opacity: 0;
-    transform: scale(1.06);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-@keyframes overlay-out {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(1.06);
-  }
-}
-@keyframes backdrop-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes backdrop-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-.page-enter {
-  animation: arrive 160ms ease-out;
-}
+
 @keyframes viewer-in {
   from {
     opacity: 0;
@@ -139,12 +26,7 @@
     opacity: 0;
   }
 }
-@keyframes memory-found {
-  0%,
-  30% {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-  }
-}
+
 @keyframes mark-pop {
   from {
     scale: 0.4;
@@ -169,36 +51,6 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@media (max-width: 760px) {
-  .login-layout {
-    @apply block;
-  }
-  .login-story {
-    @apply border-b border-r-0 px-7 py-6;
-  }
-  .login-copy {
-    @apply py-8;
-  }
-  .login-copy h1 {
-    @apply text-6xl;
-  }
-  .login-copy > p {
-    @apply mt-4;
-  }
-  .login-emblem {
-    @apply absolute right-4 top-4 mb-0 h-24 w-24;
-  }
-  .login-emblem .brand-mark {
-    @apply h-20 w-20;
-  }
-  .login-form-wrap {
-    @apply px-7 pb-12 pt-24;
-  }
-  .login-form {
-    @apply max-w-none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

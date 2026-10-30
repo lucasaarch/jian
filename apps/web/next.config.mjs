@@ -18,9 +18,25 @@ const SECURITY_HEADERS = [
   },
 ];
 
-// Screens that moved out of the agent to the gateway's own settings. A bookmark of the old
-// address lands on the new one.
-const MOVED_TO_SETTINGS = ['providers', 'models', 'integrations', 'remote', 'ssh-keys'];
+/**
+ * Addresses of screens that moved, so a bookmark or an old notification lands where the screen
+ * is now. The query goes along: GitHub's outcome rides on `/settings/integrations/github`.
+ */
+const MOVED = [
+  // The gateway's screens left the agent for Settings, its integrations onto one page, and
+  // Remote became Machines.
+  ['/agents/:profileId/:page(providers|models|ssh-keys)/:rest*', '/settings/:page'],
+  ['/agents/:profileId/integrations/:rest*', '/settings/integrations'],
+  ['/agents/:profileId/remote/:rest*', '/settings/machines'],
+  ['/settings/integrations/:rest+', '/settings/integrations'],
+  ['/settings/remote', '/settings/machines'],
+  // An agent's skills, memories and channels are the tabs of its Customize; who it is, its
+  // settings over its chats.
+  ['/agents/:profileId/:tab(skills|memories|channels)', '/agents/:profileId/customize/:tab'],
+  ['/agents/:profileId/identity', '/agents/:profileId/settings'],
+  // Projects are created and chosen in the composer; their screen is gone.
+  ['/agents/:profileId/projects/:rest*', '/agents/:profileId/sessions'],
+];
 
 export default function configuration() {
   return {
@@ -37,19 +53,7 @@ export default function configuration() {
       return [{ source: '/:path*', headers: SECURITY_HEADERS }];
     },
     async redirects() {
-      return [
-        ...MOVED_TO_SETTINGS.map((section) => ({
-          source: `/agents/:profileId/${section}/:rest*`,
-          destination: `/settings/${section}/:rest*`,
-          permanent: false,
-        })),
-        // Projects are created and chosen in the composer; their screen is gone.
-        {
-          source: '/agents/:profileId/projects/:rest*',
-          destination: '/agents/:profileId/sessions',
-          permanent: false,
-        },
-      ];
+      return MOVED.map(([source, destination]) => ({ source, destination, permanent: false }));
     },
   };
 }

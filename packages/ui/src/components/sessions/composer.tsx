@@ -13,6 +13,7 @@ import {
 import { useRecorder } from '../../lib/recorder';
 import { AudioPlayer } from '../ui';
 import { Select, type SelectOption } from '../ui/select';
+import { ChatTarget } from './chat-target';
 import { size } from './media';
 import { VoicePill } from './voice-pill';
 
@@ -45,6 +46,7 @@ export function Composer({
   machines = [],
   remoteMachineId = null,
   onMachineChange,
+  targetFixed = false,
   projectControl,
   modelControl,
   status,
@@ -58,6 +60,11 @@ export function Composer({
   machines?: RemoteMachine[];
   remoteMachineId?: string | null;
   onMachineChange?: (value: string | null) => void;
+  /**
+   * The chat began: where it runs is shown, no longer chosen. Its project and machine are set
+   * before its first message, so every turn of it works in the same place.
+   */
+  targetFixed?: boolean;
   /** Which repository the chat works on; a gateway chat has one, a channel's does not. */
   projectControl?: ReactNode;
   modelControl?: ReactNode;
@@ -72,6 +79,15 @@ export function Composer({
   const picker = useRef<HTMLInputElement>(null);
   const recorder = useRecorder();
   const pastes = useRef(0);
+  // A chat that began keeps where it runs: the machine is shown, no longer chosen.
+  const machineShown = targetFixed
+    ? {
+        label: remoteMachineId
+          ? (machines.find((machine) => machine.id === remoteMachineId)?.name ??
+            'Unavailable machine')
+          : 'Local',
+      }
+    : undefined;
   const machineOptions: SelectOption[] = [
     {
       value: '',
@@ -265,18 +281,23 @@ export function Composer({
         </p>
       )}
       {/* Where the turn runs, above the box: what it works on and on which machine. */}
-      {(projectControl || onMachineChange || status) && (
+      {(projectControl || onMachineChange || machineShown || status) && (
         <div className="composer-context">
           {projectControl}
-          {onMachineChange && (
+          {onMachineChange ? (
             <Select
               aria-label="Execution machine"
               variant="ghost"
               popup="content"
+              side="top"
               value={remoteMachineId ?? ''}
               onValueChange={(value) => onMachineChange(value || null)}
               options={machineOptions}
             />
+          ) : (
+            machineShown && (
+              <ChatTarget icon={<LaptopMinimal size={14} />} label={machineShown.label} />
+            )
           )}
           {status}
         </div>
@@ -383,7 +404,7 @@ export function Composer({
               aria-label="Discard the recording"
               onClick={recorder.cancel}
             >
-              <Trash2 size={18} />
+              <Trash2 size={16} />
             </button>
           ) : (
             <>
@@ -393,7 +414,7 @@ export function Composer({
                 aria-label="Attach files"
                 onClick={() => picker.current?.click()}
               >
-                <Plus size={18} />
+                <Plus size={16} />
               </button>
               <input
                 ref={picker}
@@ -407,8 +428,7 @@ export function Composer({
               />
             </>
           )}
-          <span className="grow" />
-          {modelControl}
+          {/* Beside the other way to add to a message; recording, it grows to its left. */}
           <VoicePill
             listening={recorder.recording}
             stream={recorder.stream}
@@ -418,8 +438,10 @@ export function Composer({
               reason === 'cancel' || reason === 'escape' ? recorder.cancel() : void finish()
             }
           />
+          <span className="grow" />
+          {modelControl}
           <button type="submit" className="composer-send" aria-label="Send" disabled={!canSend}>
-            {sending ? <LoaderCircle size={18} className="spin" /> : <ArrowUp size={18} />}
+            {sending ? <LoaderCircle size={16} className="spin" /> : <ArrowUp size={16} />}
           </button>
         </div>
       </div>

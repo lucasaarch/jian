@@ -3,7 +3,7 @@ import type { Contact, Profile, Session } from '../../lib/api';
 /** Where a conversation happens, in the order the picker lists them. */
 export type Provider = 'chats' | 'whatsapp' | 'telegram' | 'api';
 
-export const providers: Array<{ provider: Provider; name: string }> = [
+const providers: Array<{ provider: Provider; name: string }> = [
   { provider: 'chats', name: 'Chats' },
   { provider: 'whatsapp', name: 'WhatsApp' },
   { provider: 'telegram', name: 'Telegram' },

@@ -8,9 +8,9 @@
    its left slides over instead of disappearing under it. */
 @layer components {
   .voice-pill {
-    /* Geometry, in px, from the 36px footprint the composer's tools share. */
-    --vp-size: 36px;
-    --vp-radius: 18px;
+    /* Geometry, in px, from the 32px footprint the composer's tools share. */
+    --vp-size: 32px;
+    --vp-radius: 16px;
     --vp-reach: 8px;
     --vp-clock-w: 37px;
     --vp-wave-w: 68px;
@@ -26,8 +26,8 @@
     --vp-icon: var(--muted);
     /* At rest the hover matches the composer's other tools; open, the capsule stands out from
        the composer around it. */
-    --vp-hover: var(--canvas);
-    --vp-bg: var(--line);
+    --vp-hover: var(--glass-hover);
+    --vp-bg: var(--glass-press);
 
     @apply relative isolate inline-grid shrink-0 cursor-pointer touch-none select-none place-items-center p-0;
     width: var(--vp-size);

@@ -199,9 +199,13 @@ async function settled(done: () => boolean) {
   }
 }
 
+/** The Inspector, named by the item it follows. */
+const drawer = () => element.querySelector('aside');
+const title = () => drawer()?.querySelector('h2');
+
 async function openCard() {
   await act(async () => element.querySelector<HTMLButtonElement>('.github-ref')?.click());
-  await settled(() => Boolean(element.querySelector('.github-drawer-title')));
+  await settled(() => Boolean(title()));
 }
 
 const button = (name: string) =>
@@ -247,10 +251,10 @@ it('shows a card in what a person wrote too', async () => {
   expect(element.textContent).toContain('Can you look at');
 });
 
-const section = (name: string) =>
-  [...element.querySelectorAll<HTMLDetailsElement>('.github-section')].find(
-    (item) => item.querySelector('.github-section-title')?.textContent === name,
-  );
+const section = (name: string) => element.querySelector(`section[aria-label="${name}"]`);
+const heading = (name: string) => section(name)?.querySelector('button[aria-expanded]');
+/** The merge confirmation, drawn over the page rather than inside the drawer. */
+const dialog = () => document.querySelector('[role="dialog"]');
 
 it('opens the pull request in folding sections, and merges with the chosen method and the head seen', async () => {
   const api = fakeApi();
@@ -258,20 +262,23 @@ it('opens the pull request in folding sections, and merges with the chosen metho
   await render(<Markdown text={pullUrl} />, api, { merges: true, fixConflicts: vi.fn() });
   await openCard();
 
-  const drawer = element.querySelector('.github-drawer');
-  expect(drawer?.querySelector('.github-drawer-title')?.textContent).toBe('Add the pricing page');
-  expect(drawer?.textContent).toContain('pricing-page');
-  // The author is a link to their profile, and the pull request opens on GitHub from the bar.
-  expect(drawer?.querySelector('a[href="https://github.com/river-example"]')?.textContent).toBe(
+  expect(drawer()?.getAttribute('aria-label')).toBe('octo-example/site #7');
+  expect(title()?.textContent).toBe('Add the pricing page');
+  expect(drawer()?.textContent).toContain('pricing-page');
+  // The author is a link to their profile, and the pull request opens on GitHub from the top.
+  expect(drawer()?.querySelector('a[href="https://github.com/river-example"]')?.textContent).toBe(
     'river-example',
   );
-  expect(drawer?.querySelector(`.github-drawer-bar a[href="${pullUrl}"]`)).not.toBeNull();
+  expect(drawer()?.querySelector(`a[href="${pullUrl}"]`)?.textContent).toBe('octo-example/site #7');
+  // Its close is at hand, and the keyboard is on it; reading again is among its options.
+  expect(document.activeElement?.getAttribute('aria-label')).toBe('Close');
+  expect(drawer()?.querySelector('[aria-label="Refresh"]')).toBeNull();
 
   // Every part in one view, each saying what it holds while folded.
   expect(section('Description')?.textContent).toContain('pricing page.');
-  expect(section('Checks')?.querySelector('summary')?.textContent).toBe('Checks1/2');
+  expect(heading('Checks')?.textContent).toBe('Checks1/2');
   expect(section('Checks')?.textContent).toContain('3m 12s');
-  expect(section('Changes')?.querySelector('summary')?.textContent).toBe('Changes1 file');
+  expect(heading('Changes')?.textContent).toBe('Changes1 file');
   expect(section('Changes')?.querySelector('.code-diff-path')?.textContent).toBe('app/pricing.tsx');
   // A review opens where it was written.
   const review = section('Reviews')?.querySelector('a');
@@ -279,17 +286,16 @@ it('opens the pull request in folding sections, and merges with the chosen metho
   expect(review?.textContent).toContain('sky-example');
   expect(review?.textContent).toContain('Approved');
 
-  const checks = section('Checks');
-  await act(async () => checks?.querySelector('summary')?.click());
-  expect(checks?.open).toBe(false);
+  await act(async () => (heading('Checks') as HTMLButtonElement | null)?.click());
+  expect(heading('Checks')?.getAttribute('aria-expanded')).toBe('false');
 
   // Mergeable, so merging is offered and fixing conflicts is not.
   expect(button('Fix merge conflicts')).toBeUndefined();
   await act(async () => button('Squash and merge')?.click());
-  expect(element.querySelector('dialog')?.textContent).toContain('pricing-page lands on main');
+  expect(dialog()?.textContent).toContain('pricing-page lands on main');
   expect(api.mergeGithubPull).not.toHaveBeenCalled();
 
-  const confirm = [...(element.querySelector('dialog')?.querySelectorAll('button') ?? [])].find(
+  const confirm = [...(dialog()?.querySelectorAll('button') ?? [])].find(
     (item) => item.textContent === 'Squash and merge',
   );
   await act(async () => confirm?.click());
@@ -301,7 +307,7 @@ it('opens the pull request in folding sections, and merges with the chosen metho
 
   // Merged in the drawer and in the text without reading GitHub again, whose reads here still
   // say open. The text follows the drawer's copy as the cache tells its readers.
-  expect(element.querySelector('.github-drawer .github-state')?.textContent).toBe('Merged');
+  expect(drawer()?.querySelector('header')?.textContent).toContain('Merged');
   await settled(
     () => element.querySelector('.github-ref')?.getAttribute('data-state') === 'merged',
   );
@@ -309,26 +315,28 @@ it('opens the pull request in folding sections, and merges with the chosen metho
   expect(api.githubPull).toHaveBeenCalledTimes(1);
 });
 
-it('reads the pull request again on refresh, and the reference in the text follows', async () => {
+it('says why GitHub could not be read, and reads it again on asking', async () => {
   const api = fakeApi();
+  api.githubPull.mockImplementationOnce(async () => {
+    throw new Error('GitHub did not answer in time.');
+  });
 
   await render(<Markdown text={pullUrl} />, api);
+  await act(async () => element.querySelector<HTMLButtonElement>('.github-ref')?.click());
+  await settled(() => Boolean(button('Try again')));
+  expect(drawer()?.textContent).toContain('GitHub did not answer in time.');
+
+  await act(async () => button('Try again')?.click());
+  await settled(() => Boolean(title()));
+  expect(title()?.textContent).toBe('Add the pricing page');
+});
+
+it('puts the drawer away on Escape', async () => {
+  await render(<Markdown text={pullUrl} />, fakeApi());
   await openCard();
-  expect(element.querySelector('.github-ref')?.getAttribute('data-state')).toBe('open');
 
-  api.githubPull.mockImplementation(async () => ({ ...pull, state: 'closed' as const }));
-  await act(async () =>
-    element.querySelector<HTMLButtonElement>('.github-drawer-bar [aria-label="Refresh"]')?.click(),
-  );
-  await settled(
-    () => element.querySelector('.github-drawer .github-state')?.textContent === 'Closed',
-  );
-
-  expect(element.querySelector('.github-drawer .github-state')?.textContent).toBe('Closed');
-  await settled(
-    () => element.querySelector('.github-ref')?.getAttribute('data-state') === 'closed',
-  );
-  expect(element.querySelector('.github-ref')?.getAttribute('data-state')).toBe('closed');
+  await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+  expect(drawer()).toBeNull();
 });
 
 it('keeps the drawer’s shape while GitHub answers', async () => {
@@ -344,10 +352,10 @@ it('keeps the drawer’s shape while GitHub answers', async () => {
   await render(<Markdown text={pullUrl} />, api);
   await act(async () => element.querySelector<HTMLButtonElement>('.github-ref')?.click());
 
-  expect(element.querySelector('.github-skeleton[role="status"]')).not.toBeNull();
+  expect(drawer()?.querySelector('[role="status"]')).not.toBeNull();
   await act(async () => answer());
-  await settled(() => Boolean(element.querySelector('.github-drawer-title')));
-  expect(element.querySelector('.github-skeleton')).toBeNull();
+  await settled(() => Boolean(title()));
+  expect(drawer()?.querySelector('[role="status"]')).toBeNull();
 });
 
 it('offers to fix conflicts in the place of merging and of the line about them', async () => {
@@ -366,7 +374,7 @@ it('offers to fix conflicts in the place of merging and of the line about them',
     expect.objectContaining({ owner: 'octo-example', repo: 'site', number: 7 }),
   );
   // The drawer stays open on the pull request while the agent works.
-  expect(element.querySelector('.github-drawer')).not.toBeNull();
+  expect(drawer()).not.toBeNull();
 });
 
 it('fixes conflicts in a conversation answered in a messaging app', async () => {
@@ -390,9 +398,35 @@ it('opens an issue with its labels, assignees and comments', async () => {
   await render(<Markdown text={issueUrl} />, fakeApi(), { fixConflicts: vi.fn(async () => ({})) });
   await openCard();
 
-  const drawer = element.querySelector('.github-drawer');
-  expect(drawer?.querySelector('.github-labels')?.textContent).toBe('bug');
-  expect(drawer?.textContent).toContain('river-example');
-  expect(drawer?.querySelector('.github-comments')?.textContent).toContain('Seen on 18.2 too.');
+  expect(drawer()?.querySelector('[aria-label="Labels"]')?.textContent).toBe('bug');
+  expect(drawer()?.textContent).toContain('river-example');
+  expect(drawer()?.querySelector('[aria-label="Comments"]')?.textContent).toContain(
+    'Seen on 18.2 too.',
+  );
   expect(button('Squash and merge')).toBeUndefined();
+});
+
+it('folds every part and diff at once from its options, and opens them again', async () => {
+  await render(<Markdown text={pullUrl} />, fakeApi());
+  await openCard();
+  const expanded = () =>
+    [...(drawer()?.querySelectorAll('section button[aria-expanded]') ?? [])].map((item) =>
+      item.getAttribute('aria-expanded'),
+    );
+  const entry = (name: string) =>
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (item) => item.textContent?.trim() === name,
+    );
+
+  await act(async () =>
+    drawer()?.querySelector<HTMLButtonElement>('[aria-label="Options"]')?.click(),
+  );
+  await act(async () => entry('Collapse all')?.click());
+  expect(expanded().every((state) => state === 'false')).toBe(true);
+
+  await act(async () =>
+    drawer()?.querySelector<HTMLButtonElement>('[aria-label="Options"]')?.click(),
+  );
+  await act(async () => entry('Expand all')?.click());
+  expect(expanded().every((state) => state === 'true')).toBe(true);
 });

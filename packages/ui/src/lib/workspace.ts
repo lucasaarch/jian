@@ -1,6 +1,6 @@
 'use client';
 
-import { useIsFetching, useIsMutating, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import type { SectionActions } from '../components/props';
@@ -44,23 +44,8 @@ export function useWorkingAgentId(): string | undefined {
   return (profiles.find((profile) => profile.id === last) ?? profiles[0])?.id;
 }
 
-/**
- * Links to a section of the agent being worked with. With none there is no section to go to;
- * the root offers to create one.
- */
-export function useAgentPath(): (path: string) => string {
-  const profileId = useWorkingAgentId();
-
-  return useCallback((path) => (profileId ? agentPath(profileId, path) : '/'), [profileId]);
-}
-
-/** Whether anything is on its way to or from the gateway, for the mark in the sidebar. */
-export function useLoading(): boolean {
-  return useIsFetching() > 0;
-}
-
 /** True while an action runs; a section disables its controls instead of queueing a second. */
-export function useBusy(): boolean {
+function useBusy(): boolean {
   return useIsMutating() > 0;
 }
 
@@ -161,44 +146,6 @@ export function useDeleteConversation(): (sessionId: string) => Promise<boolean>
   );
 }
 
-/**
- * Deletes an agent, then opens whichever one remains. Its cached data is dropped rather than
- * refreshed: a refresh would still be pointed at the agent that no longer exists.
- */
-export function useDeleteProfile(): (profileId: string) => Promise<boolean> {
-  const client = useQueryClient();
-  const router = useRouter();
-  const forget = useLastProfile((state) => state.forget);
-  const { mutateAsync } = useMutation({
-    mutationFn: (profileId: string) => panelApi().deleteProfile(profileId),
-  });
-
-  return useCallback(
-    async (profileId) => {
-      try {
-        await mutateAsync(profileId);
-      } catch (error) {
-        notifyError(error, 'The agent could not be deleted.');
-
-        return false;
-      }
-
-      const remaining = (client.getQueryData(queries.profiles().queryKey) ?? []).filter(
-        (item) => item.id !== profileId,
-      );
-
-      forget(profileId);
-      client.setQueryData(queries.profiles().queryKey, remaining);
-      router.replace(remaining[0] ? agentPath(remaining[0].id) : '/');
-      client.removeQueries({ queryKey: keys.profile(profileId) });
-      toast.success('Agent deleted.');
-
-      return true;
-    },
-    [client, forget, mutateAsync, router],
-  );
-}
-
 /** Adds a profile the owner just created and opens it. */
 export function useAdoptProfile(): (profile: Profile, path?: string) => void {
   const client = useQueryClient();
@@ -206,7 +153,10 @@ export function useAdoptProfile(): (profile: Profile, path?: string) => void {
 
   return useCallback(
     (created, path = '') => {
-      client.setQueryData(queries.profiles().queryKey, (profiles = []) => [...profiles, created]);
+      client.setQueryData(queries.profiles().queryKey, (profiles = []) => [
+        ...profiles.filter((item) => item.id !== created.id),
+        created,
+      ]);
       router.push(agentPath(created.id, path));
     },
     [client, router],

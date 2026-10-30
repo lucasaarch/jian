@@ -2,9 +2,9 @@
 @reference "tailwindcss";
 @reference "./themes.css";
 
-/* What a turn's file writes changed, as a review tool shows it: an editor surface, dark in the
-   dark theme and white in the light one, each with its own syntax colours. Long lines scroll
-   inside the card, never the page. */
+/* What a turn's file writes changed, as a review tool shows it: a card of the glass kit, a step
+   off the page in either theme, with each theme's own syntax colours. Long lines scroll inside
+   the card, never the page. */
 @layer components {
   .code-changes {
     @apply mb-3 grid w-full min-w-0 gap-3;
@@ -32,9 +32,9 @@
   .code-diff {
     --diff-ink: #e6edf3;
     --diff-dim: #8b949e;
-    --diff-rule: #262626;
-    @apply min-w-0 overflow-hidden rounded-lg border;
-    background: #101010;
+    --diff-rule: color-mix(in srgb, var(--ink) 9%, transparent);
+    @apply min-w-0 overflow-hidden rounded-xl border;
+    background: color-mix(in srgb, var(--ink) 4%, transparent);
     border-color: var(--diff-rule);
     color: var(--diff-ink);
   }
@@ -70,7 +70,7 @@
   }
   .code-diff-hunk {
     @apply whitespace-pre px-3 py-1;
-    background: #161616;
+    background: color-mix(in srgb, var(--ink) 4%, transparent);
     color: var(--diff-dim);
   }
   .code-diff-line {
@@ -87,6 +87,14 @@
   }
   .code-diff-line code {
     @apply whitespace-pre pr-4;
+  }
+  /* Word wrap, where a place asks for it: long lines fold under themselves, no sideways scroll. */
+  [data-wrap] .code-diff-lines {
+    @apply min-w-0;
+  }
+  [data-wrap] .code-diff-line code {
+    @apply whitespace-pre-wrap;
+    overflow-wrap: anywhere;
   }
   /* Added lines sit on a lighter band; removed ones fade, so the new code reads first. */
   .code-diff-line[data-kind="add"] {
@@ -110,12 +118,7 @@
   :root[data-theme="light"] .code-diff {
     --diff-ink: #1f2328;
     --diff-dim: #656d76;
-    --diff-rule: var(--line);
-    background: #ffffff;
 
-    & .code-diff-hunk {
-      background: #f6f8fa;
-    }
     & .code-diff-number {
       color: #8c959f;
     }
@@ -130,14 +133,14 @@
     }
   }
 
-  /* A fenced code block in a message: the diff's editor surface, with its language and a copy
+  /* A fenced code block in a message: the diff's card, with its language and a copy
      button above, and line numbers drawn beside the code so a hand copy takes only the code. */
   .code-block {
     --diff-ink: #e6edf3;
     --diff-dim: #8b949e;
-    --diff-rule: #262626;
-    @apply my-3 min-w-0 overflow-hidden rounded-lg border;
-    background: #101010;
+    --diff-rule: color-mix(in srgb, var(--ink) 9%, transparent);
+    @apply my-3 min-w-0 overflow-hidden rounded-xl border;
+    background: color-mix(in srgb, var(--ink) 4%, transparent);
     border-color: var(--diff-rule);
     color: var(--diff-ink);
   }
@@ -147,7 +150,7 @@
     color: var(--diff-dim);
   }
   .code-block-head button {
-    @apply inline-flex items-center gap-1.5 rounded px-1.5 py-1 font-sans transition-colors;
+    @apply inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 font-sans transition-colors;
     color: var(--diff-dim);
   }
   .code-block-head button:hover {
@@ -171,8 +174,6 @@
   :root[data-theme="light"] .code-block {
     --diff-ink: #1f2328;
     --diff-dim: #656d76;
-    --diff-rule: var(--line);
-    background: #ffffff;
 
     & .code-block-line::before {
       color: #8c959f;

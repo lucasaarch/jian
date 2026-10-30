@@ -1,184 +1,141 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { IdCard, Trash2 } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
-import {
-  Action,
-  AgentFace,
-  Overlay,
-  SettingsGroup,
-  SettingsLayout,
-  TextArea,
-  TextField,
-} from '../kit';
+import { RotateCcw, Trash2 } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
+import { toast } from 'sonner';
+import { Action, ConfirmDialog, SettingsGroup, SettingsRow } from '../kit';
 import type { Profile } from '../lib/api';
 import { panelApi } from '../lib/query/client';
 import { queries, useProfiles } from '../lib/query/profile';
+import { useLastProfile } from '../lib/stores/last-profile';
+import { useRefresh } from '../lib/workspace';
 import { useRouter } from '../platform/navigation';
+import { AgentAvatar } from './agent-avatar';
+import { AgentIdentity } from './agent-identity';
 
-type Page = 'identity' | 'delete';
-
-/** One agent's settings, opened from its gear in the status bar. */
-export function AgentSettings({
-  profileId,
-  onOpenChange,
-}: {
-  /** The agent to show; undefined closes the overlay. */
-  profileId: string | undefined;
-  onOpenChange: (open: boolean) => void;
-}) {
+/**
+ * One agent's settings, in the conversation's place: who it is, saved as it is typed, and what
+ * cannot be taken back — forgetting everything it was told, or deleting it.
+ */
+export function AgentSettingsContent({ profileId }: { profileId: string }) {
   const profile = useProfiles().data?.find((item) => item.id === profileId);
-  const [page, setPage] = useState<Page>('identity');
+  if (!profile) return null;
 
   return (
-    <Overlay
-      open={Boolean(profile)}
-      onOpenChange={onOpenChange}
-      title={`${profile?.name ?? 'Agent'} settings`}
-    >
-      {profile && (
-        <SettingsLayout
-          heading={
-            <span className="flex items-center gap-2.5">
-              <AgentFace name={profile.name} avatar={profile.avatar} size={1.75} />
-              <span className="truncate">{profile.name}</span>
-            </span>
-          }
-          pages={[
-            { id: 'identity', label: 'Identity', icon: <IdCard size={16} />, group: 'Agent' },
-            { id: 'delete', label: 'Delete', icon: <Trash2 size={16} />, group: 'Agent' },
-          ]}
-          current={page}
-          onSelect={(id) => setPage(id as Page)}
-        >
-          {page === 'identity' ? (
-            <Identity key={profile.id} profile={profile} />
-          ) : (
-            <Delete profile={profile} done={() => onOpenChange(false)} />
-          )}
-        </SettingsLayout>
-      )}
-    </Overlay>
+    <>
+      <header className="flex items-center gap-3.5">
+        <AgentAvatar profile={profile} size={3} />
+        <div className="grid min-w-0">
+          <h2 className="truncate font-sans text-base font-semibold tracking-tight">
+            {profile.name}
+          </h2>
+          {profile.summary && <p className="truncate text-[13px] text-muted">{profile.summary}</p>}
+        </div>
+      </header>
+      <AgentIdentity key={profile.id} profile={profile} />
+      <DangerZone profile={profile} />
+    </>
   );
 }
 
-function Identity({ profile }: { profile: Profile }) {
+function DangerZone({ profile }: { profile: Profile }) {
   const client = useQueryClient();
-  const [busy, setBusy] = useState(false);
-  const [said, setSaid] = useState<{ ok: boolean; text: string }>();
+  const router = useRouter();
+  const refresh = useRefresh();
+  const forget = useLastProfile((state) => state.forget);
+  const [working, setWorking] = useState<'reset' | 'delete'>();
+  const [asking, setAsking] = useState<'reset' | 'delete'>();
 
-  const save = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy(true);
-    setSaid(undefined);
+  const reset = async () => {
+    setWorking('reset');
     try {
-      const saved = await panelApi().updateProfile(profile.id, {
-        expectedVersion: profile.version,
-        name: String(form.get('name') ?? ''),
-        summary: String(form.get('summary') ?? ''),
-        instructions: String(form.get('instructions') ?? ''),
-      });
-      client.setQueryData(queries.profiles().queryKey, (profiles = []) =>
-        profiles.map((item) => (item.id === saved.id ? saved : item)),
+      const { sessions, memories } = await panelApi().resetProfile(profile.id);
+      toast.success(
+        `${profile.name} forgot ${sessions === 1 ? '1 conversation' : `${sessions} conversations`} and ${
+          memories === 1 ? '1 memory' : `${memories} memories`
+        }.`,
       );
-      setSaid({ ok: true, text: 'Saved.' });
+      // Its conversations are gone; so is what was kept of them.
+      client.removeQueries({ queryKey: ['history', profile.id] });
+      await refresh();
+      setAsking(undefined);
     } catch (failure) {
-      setSaid({ ok: false, text: failure instanceof Error ? failure.message : 'Not saved.' });
+      toast.error(failure instanceof Error ? failure.message : 'The agent could not be reset.');
     } finally {
-      setBusy(false);
+      setWorking(undefined);
     }
   };
 
-  return (
-    <form onSubmit={save}>
-      <SettingsGroup
-        title="Who it is"
-        description="How it is named and described, in the app and to the people it talks with."
-      >
-        <TextField
-          label="Name"
-          name="name"
-          defaultValue={profile.name}
-          required
-          maxLength={100}
-          autoComplete="off"
-        />
-        <TextField
-          label="Summary"
-          name="summary"
-          defaultValue={profile.summary}
-          placeholder="One line on what it does"
-          autoComplete="off"
-        />
-      </SettingsGroup>
-      <SettingsGroup
-        title="Instructions"
-        description="What it is for and how it works; it reads them before every turn."
-      >
-        <TextArea
-          label="Instructions"
-          name="instructions"
-          defaultValue={profile.instructions}
-          required
-          maxLength={8000}
-          rows={10}
-        />
-      </SettingsGroup>
-      <div className="flex items-center justify-end gap-3">
-        {said && (
-          <span role="status" className={`text-sm ${said.ok ? 'text-muted' : 'text-bad'}`}>
-            {said.text}
-          </span>
-        )}
-        <Action tone="primary" type="submit" busy={busy}>
-          Save
-        </Action>
-      </div>
-    </form>
-  );
-}
-
-function Delete({ profile, done }: { profile: Profile; done: () => void }) {
-  const client = useQueryClient();
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
   const remove = async () => {
-    setBusy(true);
-    setError('');
+    setWorking('delete');
     try {
       await panelApi().deleteProfile(profile.id);
       client.setQueryData(queries.profiles().queryKey, (profiles = []) =>
         profiles.filter((item) => item.id !== profile.id),
       );
-      done();
-      // The chats screen opens another agent, or offers to create one.
+      client.removeQueries({ queryKey: ['history', profile.id] });
+      toast.success(`${profile.name} was deleted.`);
+      forget(profile.id);
+      // The chats screen opens the next agent's chats, or offers to create one.
       router.replace('/');
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'The agent could not be deleted.');
-      setBusy(false);
+      toast.error(failure instanceof Error ? failure.message : 'The agent could not be deleted.');
+      setWorking(undefined);
     }
   };
 
-  return (
-    <SettingsGroup
-      title={`Delete ${profile.name}`}
-      description="Its conversations, memories, schedules and channels go with it. This cannot be undone."
+  const button = (which: 'reset' | 'delete', icon: ReactNode, label: string) => (
+    <Action
+      tone="danger"
+      size="small"
+      className="border border-bad/40"
+      onClick={() => setAsking(which)}
     >
-      {error && (
-        <p role="alert" className="text-sm text-bad">
-          {error}
-        </p>
-      )}
-      <div>
-        <Action tone="danger" onClick={remove} busy={busy} className="border border-bad/40">
-          <Trash2 size={15} />
-          Delete this agent
-        </Action>
-      </div>
-    </SettingsGroup>
+      {icon}
+      {label}
+    </Action>
+  );
+
+  return (
+    <>
+      <SettingsGroup title="Danger zone">
+        <SettingsRow
+          title="Reset"
+          description="Forgets its conversations, memories and activity. Who it is, its channels and contacts stay."
+        >
+          {button('reset', <RotateCcw size={13} />, 'Reset')}
+        </SettingsRow>
+        <SettingsRow
+          title="Delete"
+          description="It goes with everything it has: conversations, memories, schedules and channels."
+        >
+          {button('delete', <Trash2 size={13} />, 'Delete')}
+        </SettingsRow>
+      </SettingsGroup>
+      <ConfirmDialog
+        open={asking === 'reset'}
+        onOpenChange={(open) => !open && setAsking(undefined)}
+        title={`Reset ${profile.name}?`}
+        phrase={profile.name}
+        action="Reset agent"
+        run={() => void reset()}
+        busy={working === 'reset'}
+      >
+        It forgets every conversation, memory and bit of activity. Who it is, its channels and its
+        contacts stay. This cannot be undone.
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={asking === 'delete'}
+        onOpenChange={(open) => !open && setAsking(undefined)}
+        title={`Delete ${profile.name}?`}
+        phrase={profile.name}
+        action="Delete agent"
+        run={() => void remove()}
+        busy={working === 'delete'}
+      >
+        It goes with its conversations, memories, schedules and channels. This cannot be undone.
+      </ConfirmDialog>
+    </>
   );
 }

@@ -2,7 +2,6 @@
 
 import { ChevronLeft, ChevronRight, CodeXml, Download, Eye, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buttonClass } from '../ui';
 import { kindNames, type LoadedMedia, nameOf, readsAsText, size } from './media';
 import { Code, HtmlPage, languageOf, MarkdownPage, textOf } from './preview';
 import { ZoomableImage } from './zoom';
@@ -166,7 +165,11 @@ export function MediaViewer({
               {kindNames[media.mimeType] ?? media.mimeType} · {size(media.bytes)}
             </span>
             <p>No preview for this format.</p>
-            <a className={buttonClass('primary')} href={media.url} download={nameOf(media)}>
+            <a
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-accent px-4 text-sm font-medium text-on-accent shadow-sm transition-colors hover:bg-accent-hover"
+              href={media.url}
+              download={nameOf(media)}
+            >
               <Download size={16} />
               Download
             </a>

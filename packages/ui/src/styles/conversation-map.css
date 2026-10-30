@@ -1,6 +1,7 @@
 /* biome-ignore-all lint/style/noDescendingSpecificity: The map's parts are styled per state and do not overlap. */
 @reference "tailwindcss";
 @reference "./themes.css";
+@reference "./kit.css";
 
 /* The conversation's minimap, against the left edge of the pane. It is measured on the chat
    itself: it shows only when the pane is wider than the 52rem reading column with room to
@@ -60,9 +61,7 @@
     background: var(--ink);
   }
   .conversation-map-tip {
-    @apply pointer-events-none invisible absolute left-9 top-1/2 z-10 grid w-72 -translate-y-1/2 gap-1 rounded-xl border px-3.5 py-2.5 text-left text-[13px] leading-snug opacity-0 shadow-xl transition-opacity;
-    background: var(--surface);
-    border-color: var(--line);
+    @apply glass pointer-events-none invisible absolute left-9 top-1/2 z-10 grid w-72 -translate-y-1/2 gap-1 rounded-xl px-3.5 py-2.5 text-left text-[13px] leading-snug opacity-0 transition-opacity;
     color: var(--ink);
   }
   .conversation-map-tip > span {

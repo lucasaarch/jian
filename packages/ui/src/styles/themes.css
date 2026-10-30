@@ -9,6 +9,8 @@
   --line: #292929;
   --control: #555552;
   --surface: #101010;
+  /* The chat sidebar beside the conversation, a step off the canvas. */
+  --sidebar: #0b0b0b;
   --accent: #f5f5f3;
   --accent-hover: #dededb;
   --accent-soft: #202020;
@@ -43,6 +45,7 @@
   --line: #deded9;
   --control: #aaa9a1;
   --surface: #ffffff;
+  --sidebar: #efefec;
   --accent: #171716;
   --accent-hover: #3d3d39;
   --accent-soft: #ecece8;
@@ -72,12 +75,14 @@
   --color-line: var(--line);
   --color-control: var(--control);
   --color-surface: var(--surface);
+  --color-sidebar: var(--sidebar);
   --color-good: var(--good);
   --color-good-soft: var(--good-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
+  --color-merged: var(--merged);
   --color-on-accent: var(--on-accent);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
@@ -88,6 +93,8 @@
   --font-sans: "IBM Plex Sans Variable", sans-serif;
   --font-display: "IBM Plex Sans Variable", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
+  /* An agent's name, large, where a new chat opens: a heavy display serif, set apart from the UI. */
+  --font-hero: "Playfair Display", serif;
   /* The height every control shares: what an input measures with its padding, line and border.
      A button, select or icon button beside a field takes it and lines up without a fix. */
   --spacing-control: 2.875rem;

@@ -1,4 +1,4 @@
-/** The layout draws the screen; with no conversation in the URL it opens the latest one. */
+/** Drawn by the layout, which reads this address. */
 export default function Page() {
   return null;
 }

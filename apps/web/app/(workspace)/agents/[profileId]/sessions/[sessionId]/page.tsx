@@ -1,4 +1,4 @@
-/** The layout draws the screen and reads the conversation to open from the URL. */
+/** Drawn by the layout, which reads this address. */
 export default function Page() {
   return null;
 }

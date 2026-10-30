@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { Fragment, useId, useState } from 'react';
 import type { CodeDiff, ToolStep } from '../../lib/api';
 import { highlightLines, type Segment } from '../ui/highlight';
+import { useFoldAll } from './fold-all';
 
 /** A diff shorter than this opens by itself even in an older turn: it costs a glance. */
 const SHORT = 40;
@@ -45,6 +46,7 @@ const sign = { add: '+', del: '-', context: '' } as const;
 export function FileDiff({ diff, open: initiallyOpen }: { diff: CodeDiff; open: boolean }) {
   const [open, setOpen] = useState(initiallyOpen);
   const body = useId();
+  useFoldAll(setOpen);
 
   return (
     <div className="code-diff">

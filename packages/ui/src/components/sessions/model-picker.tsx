@@ -6,14 +6,9 @@ import { toast } from 'sonner';
 import type { GatewayApi, Session } from '../../lib/api';
 import { useModelCatalog } from '../../lib/query/agent';
 import { usableProviders } from '../providers/catalog';
-import {
-  choiceOf,
-  modelChoices,
-  preferredModelSelection,
-  withDefaultEffort,
-} from '../providers/role-fields';
-import { ProviderLogo } from '../ui';
-import { EffortMenu, type MenuAlign, type ModelEntry, ModelMenu } from './model-menu';
+import { preferredModelSelection, withDefaultEffort } from '../providers/role-choices';
+import { modelEntries } from './model-entries';
+import { EffortMenu, type MenuAlign, ModelMenu } from './model-menu';
 
 /**
  * The model one conversation runs on, over the profile's defaults, and its reasoning effort.
@@ -55,16 +50,6 @@ export function SessionModel({
     session ? (savedModel ?? session.model ?? fallback) : (draftModel ?? fallback),
     catalog,
   );
-  const choices = modelChoices('conversation', catalog, providers).map((choice) => {
-    const providerId = choice.value.slice(0, choice.value.indexOf(':'));
-    const provider = providers.find((item) => item.id === providerId);
-    return {
-      ...choice,
-      detail: undefined,
-      ...(provider ? { icon: <ProviderLogo kind={provider.kind} size={16} /> } : {}),
-    };
-  });
-  const current = model ? choiceOf(model.providerId, model.modelId) : '';
   useEffect(() => {
     if (!session || session.channel !== GATEWAY_SESSION_CHANNEL || !model || initialSave.current) {
       return;
@@ -108,42 +93,7 @@ export function SessionModel({
     }
   };
 
-  // Every model the conversation can run on, with what each offers; the one it still names but
-  // no provider offers any more stays listed, marked, so the menu never hides the current choice.
-  const entries: ModelEntry[] = [
-    ...choices.map((choice) => {
-      const split = choice.value.indexOf(':');
-      const providerId = choice.value.slice(0, split);
-      const modelId = choice.value.slice(split + 1);
-      const offered = catalog.providerModels[providerId]?.models.find(
-        (item) => item.id === modelId,
-      );
-      const provider = providers.find((item) => item.id === providerId);
-
-      return {
-        providerId,
-        modelId,
-        name: choice.label,
-        provider: provider ? (provider.name ?? provider.kind) : '',
-        ...(choice.icon ? { icon: choice.icon } : {}),
-        efforts: offered?.reasoningEfforts ?? [],
-        fast: Boolean(offered?.fast),
-      };
-    }),
-    ...(model && current && !choices.some((choice) => choice.value === current)
-      ? [
-          {
-            providerId: model.providerId,
-            modelId: model.modelId,
-            name: model.modelId,
-            provider: '',
-            efforts: [],
-            fast: false,
-            gone: true,
-          },
-        ]
-      : []),
-  ];
+  const entries = modelEntries('conversation', catalog, providers, model);
 
   return (
     <div className={`session-model ${className ?? ''}`}>

@@ -93,13 +93,13 @@ async function render({
   };
 }
 
-it('lists every connected repository by its slug, with its visibility', async () => {
+it('lists every connected repository by its slug', async () => {
   const view = await render();
 
   expect(view.options().map((option) => option.textContent)).toEqual([
     'No project',
-    'octo-example/sitePublic',
-    'octo-example/notesPrivate',
+    'octo-example/site',
+    'octo-example/notes',
   ]);
 });
 

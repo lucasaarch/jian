@@ -24,6 +24,7 @@
     "@jian/contracts": "workspace:*",
     "@jian/sdk": "workspace:*",
     "@tanstack/react-query": "^5.105.0",
+    "@tanstack/react-query-persist-client": "^5.105.0",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.577.0",
     "motion": "^13.4.1",

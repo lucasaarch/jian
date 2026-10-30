@@ -1,6 +1,7 @@
 /* biome-ignore-all lint/style/noDescendingSpecificity: Cards, dock and drawer are separate surfaces. */
 @reference "tailwindcss";
 @reference "./themes.css";
+@reference "./kit.css";
 
 /* The agents a turn handed work to: cards inside the turn, a dock above the composer while they
    work, and a drawer beside the conversation to follow one. Colors are the runtime tokens. */
@@ -34,17 +35,17 @@
   }
   .crew-card {
     @apply grid min-w-0 gap-2 rounded-xl border px-3.5 py-3 text-left transition-colors;
-    background: var(--surface);
-    border-color: var(--line);
+    background: color-mix(in srgb, var(--ink) 4%, transparent);
+    border-color: color-mix(in srgb, var(--ink) 9%, transparent);
     animation: thought-rise 260ms cubic-bezier(0.23, 1, 0.32, 1);
   }
   .crew-card:hover {
-    border-color: var(--control);
+    border-color: color-mix(in srgb, var(--ink) 18%, transparent);
   }
   /* The card being followed: a step up from hover, not a frame around it. */
   .crew-card[aria-pressed="true"] {
-    background: color-mix(in srgb, var(--ink) 5%, var(--surface));
-    border-color: var(--control);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    border-color: color-mix(in srgb, var(--ink) 18%, transparent);
   }
   .crew-card-top {
     @apply flex min-w-0 items-center gap-2;
@@ -62,7 +63,7 @@
   /* No percentage exists: a working agent's bar sweeps, a finished one is full. */
   .crew-bar {
     @apply relative h-0.5 overflow-hidden rounded-full;
-    background: var(--line);
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
   }
   .crew-bar::after {
     @apply absolute inset-y-0 left-0 rounded-full;
@@ -87,10 +88,9 @@
   .crew-time {
     @apply ml-auto shrink-0 font-mono tabular-nums;
   }
-  .tier-chip,
-  .crew-chip {
+  .tier-chip {
     @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-px text-[11.5px];
-    border-color: var(--line);
+    border-color: color-mix(in srgb, var(--ink) 12%, transparent);
     color: var(--ink);
   }
   .tier-chip i {
@@ -98,16 +98,14 @@
     background: var(--tier);
   }
 
-  /* Above the composer, on the conversation's column. */
+  /* Above the composer, on the conversation's column: glass, as everything that floats is. */
   .crew-dock {
-    @apply mx-auto mb-2 flex items-center gap-2.5 rounded-full border py-1.5 pl-3 pr-2 text-[13px] transition-colors;
+    @apply glass mx-auto mb-2 flex items-center gap-2.5 rounded-full py-1.5 pl-3 pr-2 text-[13px] transition-colors;
     width: min(var(--chat-column, 52rem), calc(100% - 3rem));
-    background: var(--surface);
-    border-color: var(--line);
     animation: thought-rise 220ms cubic-bezier(0.23, 1, 0.32, 1);
   }
   .crew-dock:hover {
-    border-color: var(--control);
+    background: var(--glass-strong);
   }
   .crew-dock-orbs {
     @apply flex;
@@ -139,37 +137,12 @@
   .conversation-chat {
     @apply flex min-h-0 min-w-0 flex-1 flex-col;
   }
+  /* Beside the conversation as the chat sidebar is beside it: the same ground and edge. */
   .crew-drawer {
     @apply flex min-h-0 flex-col border-l;
-    background: var(--surface);
+    background: var(--sidebar);
     border-color: var(--line);
     animation: crew-in 320ms cubic-bezier(0.23, 1, 0.32, 1);
-  }
-  .crew-drawer > header {
-    @apply grid gap-2 border-b px-4 py-3.5;
-    border-color: var(--line);
-  }
-  .crew-drawer-title {
-    @apply flex items-center gap-2;
-  }
-  .crew-drawer-title h2 {
-    @apply min-w-0 flex-1 truncate text-base font-semibold;
-  }
-  .crew-drawer-chips {
-    @apply flex flex-wrap gap-1.5;
-  }
-  .crew-why {
-    @apply text-[12.5px];
-    color: var(--muted);
-  }
-  .crew-drawer-body {
-    @apply grid min-h-0 flex-1 content-start gap-3 overflow-y-auto overscroll-contain px-4 py-4;
-  }
-  .crew-drawer-body .chat-line {
-    @apply mb-0;
-  }
-  .crew-output {
-    @apply whitespace-pre-wrap text-sm;
   }
 }
 

@@ -32,6 +32,8 @@ type CommonProps = {
    * screen.
    */
   popup?: 'anchor' | 'content';
+  /** Where the list opens: under the trigger, or above it where the trigger sits low. */
+  side?: 'top' | 'bottom';
   disabled?: boolean;
   id?: string;
   'aria-label'?: string;
@@ -181,6 +183,7 @@ export function Select(props: Props) {
           <Combobox.Portal container={container ?? undefined}>
             <Combobox.Positioner
               className="select-positioner"
+              side={props.side ?? 'bottom'}
               sideOffset={6}
               align="start"
               positionMethod="fixed"
@@ -193,7 +196,7 @@ export function Select(props: Props) {
                 aria-label={aria['aria-label'] ?? 'Options'}
               >
                 <div className="select-search">
-                  <Search size={15} />
+                  <Search size={14} aria-hidden="true" />
                   <Combobox.Input aria-label="Search options" placeholder="Search…" />
                 </div>
                 <Combobox.Empty className="select-empty">No result.</Combobox.Empty>
@@ -236,6 +239,7 @@ export function Select(props: Props) {
         <Combobox.Portal container={container ?? undefined}>
           <Combobox.Positioner
             className="select-positioner"
+            side={props.side ?? 'bottom'}
             sideOffset={6}
             align="start"
             positionMethod="fixed"
@@ -290,6 +294,7 @@ export function Select(props: Props) {
         <BaseSelect.Portal container={container ?? undefined}>
           <BaseSelect.Positioner
             className="select-positioner"
+            side={props.side ?? 'bottom'}
             sideOffset={6}
             align="start"
             alignItemWithTrigger={false}
@@ -335,6 +340,7 @@ export function Select(props: Props) {
       <BaseSelect.Portal container={container ?? undefined}>
         <BaseSelect.Positioner
           className="select-positioner"
+          side={props.side ?? 'bottom'}
           sideOffset={6}
           align="start"
           alignItemWithTrigger={false}

@@ -2,8 +2,8 @@
 
 import { Check, ChevronRight } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { Action } from '../../kit';
 import type { RunApproval, RunQuestion } from '../../lib/api';
-import { Button } from '../ui';
 import { highlightLines } from '../ui/highlight';
 
 function Card({
@@ -81,8 +81,8 @@ function Request({ json }: { json: string }) {
 /**
  * An action the agent asked to take, in the conversation where it asked. Pending, the owner
  * decides it here, unless the conversation is a channel's chat, where only a contact allowed
- * to approve decides it, in the chat; then this card only says what is waiting. Decided, it
- * says how and by whom.
+ * to approve decides it, in the chat; then this card only says what is waiting. Decided, its
+ * chip says how; who decided it goes unsaid, the chat it sits in already tells.
  */
 export function ApprovalCard({
   approval,
@@ -97,9 +97,6 @@ export function ApprovalCard({
   onDecide?: (decision: 'approve' | 'reject') => void;
 }) {
   const decided = approval.decision;
-  // Only who else decided is worth a line: a decision with no line was the owner's own.
-  const where = approval.decidedBy === 'contact' && chat ? ` in ${chat}` : '';
-
   const chip = !decided ? 'Needs approval' : decided === 'approved' ? 'Approved' : 'Rejected';
   const tone = !decided ? 'neutral' : decided === 'approved' ? 'good' : 'bad';
 
@@ -111,25 +108,19 @@ export function ApprovalCard({
       footer={
         !decided && !chat && onDecide ? (
           <>
-            <Button variant="secondary" disabled={busy} onClick={() => onDecide('reject')}>
+            <Action tone="outline" size="small" disabled={busy} onClick={() => onDecide('reject')}>
               Reject
-            </Button>
-            <Button disabled={busy} onClick={() => onDecide('approve')}>
+            </Action>
+            <Action tone="primary" size="small" disabled={busy} onClick={() => onDecide('approve')}>
               {approval.confirmLabel}
-            </Button>
+            </Action>
           </>
         ) : undefined
       }
     >
       <Request json={approval.request} />
       {!decided && chat && <p className="decision-state">Waiting for an answer in {chat}.</p>}
-      {decided && (where || approval.note) && (
-        <p className="decision-state">
-          {where && `${decided === 'approved' ? 'Approved' : 'Declined'}${where}`}
-          {where && approval.note && ': '}
-          {approval.note}
-        </p>
-      )}
+      {decided && approval.note && <p className="decision-state">{approval.note}</p>}
     </Card>
   );
 }
@@ -155,8 +146,6 @@ export function QuestionCard({
   const answered = question.answer !== undefined;
   const picked = answered ? choices.find((choice) => choice === question.answer) : undefined;
   const answering = !answered && !chat && Boolean(onAnswer);
-  // As on an approval: only an answer given elsewhere says where it came from.
-  const where = question.answeredBy === 'contact' && chat ? ` in ${chat}` : '';
 
   return (
     <Card chip="Question" tone={answered ? 'good' : 'neutral'} title={question.prompt}>
@@ -202,13 +191,7 @@ export function QuestionCard({
           })}
         </ul>
       )}
-      {answered && !picked && (
-        <p className="decision-answer">
-          {where && <span>Answered{where}</span>}
-          {question.answer}
-        </p>
-      )}
-      {answered && picked && where && <p className="decision-state">Answered{where}.</p>}
+      {answered && !picked && <p className="decision-answer">{question.answer}</p>}
       {!answered && chat && <p className="decision-state">Waiting for an answer in {chat}.</p>}
       {!answered && !chat && !choices.length && (
         <p className="decision-state">Answer below to continue.</p>

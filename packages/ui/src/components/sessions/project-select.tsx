@@ -5,12 +5,11 @@ import { FolderKanban } from 'lucide-react';
 import { useState } from 'react';
 import type { GatewayApi, Project } from '../../lib/api';
 import { repositorySlug } from '../../lib/format';
-import { settingsPath } from '../../lib/navigation';
 import { keys } from '../../lib/query/keys';
 import { queries } from '../../lib/query/profile';
 import { notifyError } from '../../lib/workspace';
 import { Link } from '../../platform/navigation';
-import { Badge, GitHubLogo } from '../ui';
+import { GitHubLogo } from '../ui';
 import { Select, type SelectOption } from '../ui/select';
 
 /** A project the repository list does not hold: an older one, or a repository no longer granted. */
@@ -66,7 +65,6 @@ export function ProjectSelect({
       value: String(repository.id),
       label: repository.fullName,
       icon: <GitHubLogo size={16} />,
-      badge: <Badge dot={false}>{repository.private ? 'Private' : 'Public'}</Badge>,
     })),
   ];
 
@@ -97,16 +95,17 @@ export function ProjectSelect({
       aria-label="Project"
       variant="ghost"
       popup="content"
+      side="top"
       value={value}
       disabled={opening}
       onValueChange={(choice) => void choose(choice)}
       options={options}
-      renderValue={(option) => (option?.value ? option.label : 'Project')}
+      renderValue={(option) => (option?.value ? option.label : 'No project')}
       {...(connected
         ? {}
         : {
             footer: (close: () => void) => (
-              <Link href={settingsPath('integrations')} onClick={close}>
+              <Link href="/settings/integrations" onClick={close}>
                 <GitHubLogo size={16} />
                 Connect GitHub to work on a repository
               </Link>

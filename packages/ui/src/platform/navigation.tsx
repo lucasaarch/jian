@@ -125,6 +125,23 @@ function useNavigation(): Navigation {
   return given ?? memory;
 }
 
+/**
+ * The panel under another address than the host's, for what an overlay with an address of its
+ * own is drawn over: the screens below read `href`, while moving still moves the host.
+ */
+export function NavigationAt({ href, children }: { href: string; children: ReactNode }) {
+  const navigation = useNavigation();
+  const at = useMemo<Navigation>(
+    () => ({
+      ...navigation,
+      pathname: href.split('?')[0] ?? '/',
+      search: href.split('?')[1] ?? '',
+    }),
+    [navigation, href],
+  );
+  return <NavigationProvider navigation={at}>{children}</NavigationProvider>;
+}
+
 export const usePathname = () => useNavigation().pathname;
 
 /** The query of the address the panel is at, from the host's router or the browser's. */

@@ -1,7 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { Button } from '../ui';
+import { Action } from '../../kit';
 
 /**
  * Something that went wrong, said once above the composer: what happened, what the gateway knows
@@ -35,9 +35,15 @@ export function TroubleCard({
         </button>
       )}
       {action && onAction && (
-        <Button variant="secondary" className="trouble-action" busy={busy} onClick={onAction}>
+        <Action
+          tone="outline"
+          size="small"
+          className="trouble-action"
+          busy={busy}
+          onClick={onAction}
+        >
           {action}
-        </Button>
+        </Action>
       )}
     </section>
   );

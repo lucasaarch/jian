@@ -5,10 +5,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ear, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { StatusPill, type StatusTone } from '../../kit';
 import type { GatewayApi, Subscription } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
 import { keys } from '../../lib/query/keys';
-import { Badge } from '../ui';
 
 function observationLabel(item: Subscription): string {
   const seen = item.lastObservation;
@@ -22,10 +22,10 @@ function observationLabel(item: Subscription): string {
   return 'Watching';
 }
 
-function observationTone(item: Subscription): 'good' | 'warn' | 'bad' | 'neutral' {
+function observationTone(item: Subscription): StatusTone {
   const seen = item.lastObservation;
-  if (!seen) return 'neutral';
-  if (seen.pullState === 'closed') return seen.merged ? 'good' : 'neutral';
+  if (!seen) return 'quiet';
+  if (seen.pullState === 'closed') return seen.merged ? 'good' : 'quiet';
   if (seen.checksCompleted) {
     if (seen.checkConclusion === 'success') return 'good';
     if (seen.checkConclusion === 'failure' || seen.checkConclusion === 'timed_out') return 'bad';
@@ -124,9 +124,7 @@ export function SessionListeners({
                     </span>
                     <span className="session-listener-target">{watchedLabel(item)}</span>
                     <span className="session-listener-meta">
-                      <Badge tone={observationTone(item)} dot={false}>
-                        {observationLabel(item)}
-                      </Badge>
+                      <StatusPill tone={observationTone(item)}>{observationLabel(item)}</StatusPill>
                       {item.nextPollAt ? (
                         <span title={date(item.nextPollAt)}>
                           Next poll {shortWhen(item.nextPollAt)}

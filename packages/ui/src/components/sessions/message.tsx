@@ -1,6 +1,6 @@
 'use client';
 
-import { AlarmClock, GraduationCap } from 'lucide-react';
+import { AlarmClock, GraduationCap, Reply } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Message, Person } from '../../lib/api';
 import { Face } from '../ui';
@@ -107,9 +107,12 @@ function PersonText({ text }: { text: string }) {
   return (
     <div className="chat-text">
       {whose && (
-        <blockquote className="chat-quote">
+        // One quiet line over the reply: whose message it answers and how that began; the
+        // whole of it under the pointer.
+        <blockquote className="chat-quote" title={quote}>
+          <Reply size={13} aria-hidden="true" />
           <strong>{whose === 'your message' ? 'Agent' : whose.replace(/'s message$/, '')}</strong>
-          {quote ?? 'A message'}
+          <span>{quote ?? 'A message'}</span>
         </blockquote>
       )}
       {withGitHubLinks(body)}
@@ -119,9 +122,9 @@ function PersonText({ text }: { text: string }) {
 
 /**
  * One message, as an AI chat shows it, in every conversation alike: whoever wrote to the agent
- * in a pill on the right, the agent that answers as plain text on the left with its tools above. In a group
- * the right side is several people, so each run of messages from one of them opens with their
- * face and name.
+ * in a card across the column, the agent that answers as plain text under it with its tools
+ * above. In a group the writers are several people, on the right, so each run of messages from
+ * one of them opens with their face and name.
  */
 export function ChatMessage({
   message,

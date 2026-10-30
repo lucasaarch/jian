@@ -98,7 +98,9 @@ it('shows a decided approval without buttons, saying how it went', async () => {
   );
 
   expect(element.textContent).toContain('Rejected');
-  expect(element.textContent).toContain('Declined in WhatsApp: not today');
+  expect(element.textContent).toContain('not today');
+  // The chat already says where it was decided.
+  expect(element.textContent).not.toContain('in WhatsApp');
   expect(button('Reject')).toBeUndefined();
   expect(button('Delete 12 projects')).toBeUndefined();
 });

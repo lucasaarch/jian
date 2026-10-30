@@ -8,14 +8,7 @@ import { profile } from '../../test/fixtures';
 import { goTo } from '../../test/route';
 import { Sessions } from '.';
 
-const { deleteConversation } = vi.hoisted(() => ({
-  deleteConversation: vi.fn(async () => true),
-}));
-
-vi.mock('../../lib/workspace', () => ({
-  useRefresh: () => vi.fn(),
-  useDeleteConversation: () => deleteConversation,
-}));
+vi.mock('../../lib/workspace', () => ({ useRefresh: () => vi.fn() }));
 
 vi.mock('./history', () => ({ History: () => <div>History</div> }));
 vi.mock('./listeners', () => ({ SessionListeners: () => null }));
@@ -195,7 +188,7 @@ for (const status of ['pending', 'blocked'] as const) {
 
 it('disables while busy and leaves the flag unchanged on authorization/save errors', async () => {
   const busy = await render({ busy: true });
-  expect(busy.control?.disabled).toBe(true);
+  expect(busy.control?.getAttribute('aria-disabled')).toBe('true');
   await act(async () => busy.control?.click());
   expect(busy.updateContact).not.toHaveBeenCalled();
   const failed = await render({ fail: true });
@@ -217,40 +210,12 @@ it('offers AI replies on every messaging channel, and nowhere else', async () =>
   ).toBeNull();
 });
 
-it('opens the channel selector and filters the conversation list', async () => {
-  const gateway = {
-    id: 'gateway-chat',
-    profileId: profile.id,
-    title: null,
-    channel: 'gateway',
-    createdAt: '2026-10-23T12:00:00Z',
-  } as Session;
-  const result = await render({ sessions: [gateway, session] });
-
-  const trigger = result.element.querySelector<HTMLButtonElement>('[aria-label="Channel"]');
-  await act(async () => trigger?.click());
-  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-    (item) => item.textContent === 'WhatsApp Business (Meta)',
-  );
-  expect(option).toBeDefined();
-  await act(async () => option?.click());
-
-  expect(trigger?.textContent).toContain('WhatsApp Business (Meta)');
-  expect(
-    [...result.element.querySelectorAll('.conversation-item strong')].map(
-      (item) => item.textContent,
-    ),
-  ).toEqual(['Customer']);
-});
-
-it('creates and titles a chat only when the first message is sent', async () => {
+it('creates and titles a chat only when the first message is sent, then opens it', async () => {
   const result = await render();
-  const create = result.element.querySelector<HTMLButtonElement>('[aria-label="New chat"]');
-  await act(async () => create?.click());
+  await act(async () => goTo(`/agents/${profile.id}/sessions`));
 
   expect(result.createGatewaySession).not.toHaveBeenCalled();
-  expect(result.element.querySelector('.draft-empty')).not.toBeNull();
-  expect(result.element.querySelector('textarea')).not.toBeNull();
+  expect(result.element.querySelector('section[aria-label="New chat"]')).not.toBeNull();
   const input = result.element.querySelector<HTMLTextAreaElement>('textarea');
   if (!input) throw new Error('Draft composer missing');
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
@@ -275,92 +240,36 @@ it('creates and titles a chat only when the first message is sent', async () => 
     [],
   );
   expect(result.mutate).not.toHaveBeenCalled();
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions/new-gateway-chat`);
 });
 
-it('deletes from the row context menu and omits conversation avatars', async () => {
-  deleteConversation.mockClear();
-  const result = await render();
-  const row = result.element.querySelector('.conversation-item');
-  if (!row) throw new Error('Conversation row missing');
-
-  await act(async () => {
-    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 120, clientY: 100 }));
-  });
-  expect(result.element.querySelector('.conversation-avatar')).toBeNull();
-  const remove = result.element.querySelector<HTMLButtonElement>('[role="menuitem"]');
-  expect(remove?.textContent).toBe('Delete conversation');
-  result.element
-    .querySelector('[role="menu"]')
-    ?.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
-  expect(result.element.querySelector('[role="menuitem"]')).not.toBeNull();
-  await act(async () => remove?.click());
-
-  expect(deleteConversation).toHaveBeenCalledWith(session.id);
-  expect(result.notices).toEqual([]);
-});
-
-it('renames a chat from its context menu', async () => {
-  const result = await render({
-    sessions: [{ ...session, id: 'gateway-chat', channel: 'gateway', title: 'Old title' }],
-  });
-  const row = result.element.querySelector('.conversation-item');
-  if (!row) throw new Error('Conversation row missing');
-  await act(async () => {
-    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 120, clientY: 100 }));
-  });
-  const rename = [...result.element.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (button) => button.textContent === 'Rename conversation',
-  );
-  await act(async () => rename?.click());
-
-  const input = result.element.querySelector<HTMLInputElement>('#rename-conversation-form input');
-  if (!input) throw new Error('Rename field missing');
-  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-  await act(async () => {
-    valueSetter?.call(input, 'New title');
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  const form = result.element.querySelector<HTMLFormElement>('#rename-conversation-form');
-  await act(async () =>
-    form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-  );
-
-  expect(result.renameSession).toHaveBeenCalledWith(profile.id, 'gateway-chat', 'New title');
-  expect(result.mutate).toHaveBeenCalled();
-});
-
-it('lists the chat spoken in last first, marks one written in since it was read, and reads the open one', async () => {
-  const chat = (id: string, title: string, at: string, readAt: string) => ({
-    ...session,
-    id,
-    channel: 'gateway',
-    title,
-    readAt,
-    lastMessage: { role: 'assistant' as const, text: 'Done.', at },
-  });
+it('reads the open chat as it shows', async () => {
   const result = await render({
     sessions: [
-      chat('older-chat', 'Release notes', '2026-10-30T10:00:00.000Z', '2026-10-30T09:00:00.000Z'),
-      chat('newer-chat', 'Deploy', '2026-10-30T11:00:00.000Z', '2026-10-30T11:30:00.000Z'),
+      {
+        ...session,
+        channel: 'gateway',
+        title: 'Deploy',
+        readAt: '2026-10-30T09:00:00.000Z',
+        lastMessage: { role: 'assistant' as const, text: 'Done.', at: '2026-10-30T10:00:00.000Z' },
+      },
     ],
   });
-  const rows = [...result.element.querySelectorAll('.conversation-item')];
 
-  expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual([
-    'Deploy',
-    'Release notes',
-  ]);
-  // The agent wrote in the older chat after it was last read.
-  expect(rows[1]?.hasAttribute('data-unread')).toBe(true);
-  expect(rows[1]?.querySelector('[aria-label="Unread"]')).not.toBeNull();
-  expect(rows[0]?.hasAttribute('data-unread')).toBe(false);
-  // The chat on screen is the one spoken in last, and it is read as it shows.
-  expect(result.markSessionRead).toHaveBeenCalledWith(profile.id, 'newer-chat');
+  expect(result.markSessionRead).toHaveBeenCalledWith(profile.id, session.id);
 });
 
-it('starts a new chat when the address asks for one, and drops the request from it', async () => {
+it('keeps a new chat asked for by the address there while it is written', async () => {
   const { element } = await render();
   await act(async () => goTo(`/agents/${profile.id}/sessions?new`));
+
   expect(element.querySelector('section[aria-label="New chat"]')).not.toBeNull();
-  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions`);
+  // A phone shows the draft rather than the list while the request is in the address.
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new`);
+});
+
+it('says so when the conversation in the address is not there', async () => {
+  const { element } = await render({ sessions: [] });
+
+  expect(element.textContent).toContain('This conversation is not here');
 });

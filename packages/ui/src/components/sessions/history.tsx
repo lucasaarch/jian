@@ -1,6 +1,7 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { onlineManager } from '@tanstack/react-query';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type {
   GatewayApi,
@@ -14,13 +15,14 @@ import type {
 } from '../../lib/api';
 import { subscribe } from '../../lib/events';
 import { useCrew } from '../../lib/stores/crew';
-import { Empty, Spinner } from '../ui';
 import { plainText } from '../ui/markdown';
 import { CodeChanges } from './code-change';
 import { ConversationMap } from './conversation-map';
 import { CrewCards, CrewDock, reportOf } from './crew';
 import { ApprovalCard, QuestionCard } from './decision-cards';
 import { useFollowBottom } from './follow-bottom';
+import { HistorySkeleton } from './history-skeleton';
+import { useKeptHistory } from './kept-history';
 import { MessageMedia } from './media';
 import { authored, ChatMessage } from './message';
 import { LiveTurn, placeSteps, traceOf } from './progress';
@@ -121,17 +123,25 @@ export function History({
   /** Runs a turn that failed again, where the conversation can be answered from the panel. */
   retryRun?: (run: Run) => Promise<unknown>;
 }) {
-  const [messages, setMessages] = useState<Awaited<ReturnType<GatewayApi['messages']>>>([]);
-  const [people, setPeople] = useState(new Map<string, Person>());
-  const [tools, setTools] = useState(new Map<string, ToolStep[]>());
+  // Read before: shown at once, and read again behind it.
+  const { kept, keep } = useKeptHistory(profileId, sessionId);
+  const [messages, setMessages] = useState<Awaited<ReturnType<GatewayApi['messages']>>>(
+    kept?.messages ?? [],
+  );
+  const [people, setPeople] = useState(
+    new Map<string, Person>(kept?.people.map((person) => [person.id, person])),
+  );
+  const [tools, setTools] = useState(new Map<string, ToolStep[]>(kept?.tools));
   // What each run asked the owner to decide or answer, from the timeline.
   const [asks, setAsks] = useState(
-    new Map<string, { approval?: RunApproval; question?: RunQuestion }>(),
+    new Map<string, { approval?: RunApproval; question?: RunQuestion }>(kept?.asks),
   );
   // In an agent conversation this profile started, the other agent's runs and their tools.
-  const [callTools, setCallTools] = useState(new Map<string, ToolStep[]>());
+  const [callTools, setCallTools] = useState(new Map<string, ToolStep[]>(kept?.callTools));
   const [callRun, setCallRun] = useState<Run>();
-  const [subagents, setSubagents] = useState<Subagent[]>([]);
+  const [subagents, setSubagents] = useState<Subagent[]>(kept?.subagents ?? []);
+  // Something is on screen: a failed read leaves it there rather than covering it with an error.
+  const shown = useRef(Boolean(kept));
   // Bumped by an event about this conversation, so it reads again the moment something happens.
   const [heard, setHeard] = useState(0);
   const [deciding, setDeciding] = useState(false);
@@ -162,8 +172,8 @@ export function History({
       clearTimeout(timer);
     };
   }, [sessionId]);
-  const [run, setRun] = useState(initialRun);
-  const [loading, setLoading] = useState(true);
+  const [run, setRun] = useState(initialRun ?? kept?.run);
+  const [loading, setLoading] = useState(!kept);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const isRunning = running(run);
@@ -235,33 +245,49 @@ export function History({
               )
             : [];
         if (stopped) return;
-        if (worked.every((item) => item !== undefined)) {
-          setCallTools(new Map(worked.flat().map((item) => [item.runId, item.steps])));
-        }
-        if (timeline) {
-          setTools(new Map(timeline.map((item) => [item.runId, item.steps])));
-          setAsks(
-            new Map(
-              timeline.flatMap((item) =>
-                item.approval || item.question
-                  ? [[item.runId, { approval: item.approval, question: item.question }] as const]
-                  : [],
-              ),
-            ),
-          );
-        }
+        // What a part that could not be read leaves as it was.
+        const nextCallTools = worked.every((item) => item !== undefined)
+          ? worked.flat().map((item): [string, ToolStep[]] => [item.runId, item.steps])
+          : [...callTools];
+        const nextTools = timeline
+          ? timeline.map((item): [string, ToolStep[]] => [item.runId, item.steps])
+          : [...tools];
+        const nextAsks = timeline
+          ? timeline.flatMap((item) =>
+              item.approval || item.question
+                ? [
+                    [item.runId, { approval: item.approval, question: item.question }] as [
+                      string,
+                      { approval?: RunApproval; question?: RunQuestion },
+                    ],
+                  ]
+                : [],
+            )
+          : [...asks];
+        const lastRun = activities
+          .filter((activity) => activity.sessionId === sessionId)
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+          .at(-1);
+        setCallTools(new Map(nextCallTools));
+        setTools(new Map(nextTools));
+        setAsks(new Map(nextAsks));
         setMessages(history);
         setSubagents(children);
         setPeople(new Map(members.map((person) => [person.id, person])));
-        setRun(
-          activities
-            .filter((activity) => activity.sessionId === sessionId)
-            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-            .at(-1),
-        );
+        setRun(lastRun);
         setError('');
+        shown.current = true;
+        keep({
+          messages: history,
+          tools: nextTools,
+          asks: nextAsks,
+          callTools: nextCallTools,
+          subagents: children,
+          people: members,
+          ...(lastRun ? { run: lastRun } : {}),
+        });
       } catch (failure) {
-        if (!stopped)
+        if (!stopped && !shown.current)
           setError(failure instanceof Error ? failure.message : 'The history could not be loaded.');
       } finally {
         if (!stopped) setLoading(false);
@@ -272,6 +298,16 @@ export function History({
       stopped = true;
     };
   }, [api, profileId, sessionId, retry, revision, group, heard]);
+
+  // The gateway back in reach: what was said meanwhile, read at once. Nothing was heard while
+  // the stream was down to ask for it.
+  useEffect(
+    () =>
+      onlineManager.subscribe((online) => {
+        if (online) setRetry((count) => count + 1);
+      }),
+    [],
+  );
 
   // The drawer beside the conversation follows these agents from outside the history.
   useEffect(() => {
@@ -402,7 +438,7 @@ export function History({
     <div className="session-history">
       <section
         ref={scroller}
-        className={`message-history ${loading ? 'loading' : ''}`}
+        className="message-history"
         aria-label="Session history"
         aria-busy={loading}
         onScroll={(event) => {
@@ -411,9 +447,7 @@ export function History({
       >
         <div className="message-list">
           {loading ? (
-            <div className="history-loading" role="status" aria-label="Loading conversation">
-              <Spinner size={32} />
-            </div>
+            <HistorySkeleton />
           ) : messages.length ? (
             messages.map((message, index) => {
               const previous = messages[index - 1];
@@ -567,7 +601,12 @@ export function History({
               );
             })
           ) : (
-            !error && <Empty title="No messages in this session">{empty}</Empty>
+            !error && (
+              <div className="grid justify-items-center gap-1 py-16 text-center">
+                <h3 className="text-sm font-semibold text-ink">No messages in this session</h3>
+                <p className="text-sm">{empty}</p>
+              </div>
+            )
           )}
           {!loading && pendingCall && callRun && running(callRun) && (
             <LiveTurn run={callRun} {...trailing(callRun, callTools)} />
