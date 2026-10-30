@@ -118,7 +118,7 @@
   .workspace {
     @apply ml-60;
   }
-  .topbar {
+  .tab-bar {
     @apply hidden;
   }
   .main-content {
@@ -606,6 +606,25 @@
   }
   .agent-toolbar-switch {
     @apply flex h-9 shrink-0 items-center gap-2.5 px-2 text-sm text-ink;
+  }
+  .agent-toolbar {
+    container: toolbar / inline-size;
+  }
+  /* On a phone the switch takes a row of its own, so the model keeps its name: the spacer
+     becomes the line break, and the shield says the protection without its word. */
+  @container toolbar (max-width: 30rem) {
+    .agent-toolbar-box {
+      @apply flex-wrap gap-x-1 gap-y-1;
+    }
+    .agent-toolbar-box > .grow {
+      @apply h-0 basis-full;
+    }
+    .agent-toolbar-box > .agent-toolbar-switch {
+      @apply ml-auto;
+    }
+    .agent-toolbar-box .protection-trigger .model-trigger-name {
+      @apply sr-only;
+    }
   }
   /* In the pane the history runs edge to edge; only the messages keep the inner margin. */
   .conversation-pane .session-history {
@@ -1229,17 +1248,56 @@
   .app-shell:has(.sidebar.open) .workspace {
     transform: scale(0.94);
   }
-  .topbar {
-    @apply flex min-h-14 items-center justify-between gap-2 border-b border-line px-4;
+  /* A phone draws edge to edge: the status bar above and the home indicator below are kept
+     clear by the safe areas, and the tab bar sits over the bottom one. */
+  .app-shell {
+    --tab-bar: calc(3.5rem + env(safe-area-inset-bottom));
   }
-  .topbar .brand-mark {
-    transform: translateY(-5px);
+  .workspace {
+    padding-top: env(safe-area-inset-top);
+  }
+  .sidebar {
+    padding-top: env(safe-area-inset-top);
+  }
+  .sidebar > .mobile-menu {
+    top: calc(0.75rem + env(safe-area-inset-top));
+  }
+  .tab-bar {
+    @apply fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  }
+  .tab-bar > a,
+  .tab-bar > button {
+    @apply flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-muted transition-colors;
+  }
+  .tab-bar > a > span:last-child,
+  .tab-bar > button > span:last-child {
+    @apply max-w-full truncate px-1;
+  }
+  .tab-bar > [aria-current="page"],
+  .tab-bar > button[aria-expanded="true"] {
+    @apply text-ink;
+  }
+  .tab-bar-icon {
+    @apply relative inline-flex;
+  }
+  .tab-bar-count {
+    @apply absolute -right-2.5 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 text-[10px] font-semibold text-canvas;
+  }
+  /* Inside a conversation the tab bar steps aside: the composer takes the bottom, as in any
+     messaging app, and the back arrow leads out. */
+  .app-shell:has(.messenger[data-reading="true"]) .tab-bar {
+    @apply hidden;
   }
   .icon-button.mobile-menu {
     @apply inline-flex;
   }
   .main-content {
     @apply px-5 pt-6;
+    padding-bottom: calc(var(--tab-bar) + 2rem);
   }
   .resource-row {
     @apply gap-3 p-4;
@@ -1256,13 +1314,11 @@
   .chat-list-toggle {
     @apply hidden;
   }
-  .composer {
-    @apply px-3 pb-3;
-  }
-  /* Under 16px, iOS zooms the page in on focus. */
-  .composer-box textarea,
-  .composer-box textarea:focus {
-    @apply text-base;
+  /* Clear of the home indicator and the rounded corners. */
+  .composer,
+  .agent-toolbar {
+    @apply px-3;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   }
   .attachment.audio .audio-player {
     @apply w-64;
@@ -1270,7 +1326,10 @@
   /* A phone shows the list or the conversation, never both. */
   .main-content.fill {
     @apply max-w-none p-0;
-    height: calc(100dvh - 3.5rem);
+    height: calc(100dvh - env(safe-area-inset-top) - var(--tab-bar));
+  }
+  .app-shell:has(.messenger[data-reading="true"]) .main-content.fill {
+    height: calc(100dvh - env(safe-area-inset-top));
   }
   .messenger {
     @apply grid-cols-1;
@@ -1285,8 +1344,15 @@
   .conversation-pane > header {
     @apply px-3;
   }
-  .agent-toolbar {
-    @apply px-3 pb-3;
+}
+
+/* Under 16px, iOS zooms the page in on a field's focus. Outside any layer, so no component's
+   smaller size can win over it on a phone. */
+@media (max-width: 760px) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  textarea,
+  select {
+    font-size: 16px;
   }
 }
 

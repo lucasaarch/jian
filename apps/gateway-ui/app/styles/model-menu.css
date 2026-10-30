@@ -116,8 +116,24 @@
 }
 
 /* A narrow composer keeps the shield and drops the words beside it; the menu still names them. */
+/* A phone's row keeps the model's name readable: the shield alone says the protection, and the
+   chevrons go, as every trigger in the row opens a menu anyway. */
 @container composer (max-width: 32rem) {
   .composer-actions .protection-trigger .model-trigger-name {
     @apply sr-only;
+  }
+  .composer-actions .model-trigger {
+    @apply px-2;
+  }
+  .composer-actions .model-trigger > svg:last-child {
+    @apply hidden;
+  }
+}
+@container toolbar (max-width: 30rem) {
+  .agent-toolbar-box .model-trigger {
+    @apply px-2;
+  }
+  .agent-toolbar-box .model-trigger > svg:last-child {
+    @apply hidden;
   }
 }

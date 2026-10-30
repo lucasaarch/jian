@@ -5,7 +5,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { NewProfileDialog } from '@/components/profile/editor';
 import { ReleaseNotes } from '@/components/releases/dialog';
 import { Sidebar } from '@/components/shell/sidebar';
-import { Topbar } from '@/components/shell/topbar';
+import { TabBar } from '@/components/shell/tab-bar';
 import { Spinner } from '@/components/ui';
 import { currentSection } from '@/lib/navigation';
 import { panelApi } from '@/lib/query/client';
@@ -113,10 +113,10 @@ function Shell({ children }: { children: ReactNode }) {
           }}
         />
         <div className="workspace" inert={mobile}>
-          <Topbar navigationOpen={mobile} onOpenNavigation={() => setMobile(true)} />
           <main id="main-content" tabIndex={-1} className={`main-content ${fill ? 'fill' : ''}`}>
             {children}
           </main>
+          <TabBar navigationOpen={mobile} onOpenNavigation={() => setMobile(true)} />
         </div>
         {creating && (
           <NewProfileDialog
