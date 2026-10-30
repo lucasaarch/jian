@@ -1,0 +1,43 @@
+{
+  "name": "@jian/desktop",
+  "productName": "Jian",
+  "version": "0.0.0-dev",
+  "private": true,
+  "description": "Jian for the desktop: the whole panel, for every gateway you run",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "package": "electron-vite build && electron-builder --publish never",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run",
+    "icons": "node scripts/generate-icons.mjs"
+  },
+  "devDependencies": {
+    "@base-ui/react": "^1.8.0",
+    "@fontsource-variable/ibm-plex-sans": "5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@jian/contracts": "workspace:*",
+    "@jian/sdk": "workspace:*",
+    "@jian/ui": "workspace:*",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0",
+    "electron-updater": "^6.8.11",
+    "electron-vite": "^6.0.0",
+    "lucide-react": "^0.577.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "sharp": "^0.35.5",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.0",
+    "vitest": "5.0.1"
+  }
+}

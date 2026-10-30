@@ -1,0 +1,6 @@
+// The editor's entry: it finds which project owns each file through these references. The main
+// process and its preload are Node; the window is the browser.
+{
+  "files": [],
+  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }]
+}
