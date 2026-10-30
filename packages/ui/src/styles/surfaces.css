@@ -1,302 +1,22 @@
 /* biome-ignore-all lint/style/noDescendingSpecificity: Component descendants are grouped by surface and do not overlap. */
 @reference "tailwindcss";
 @reference "./themes.css";
+@reference "./kit.css";
 
 /* Shared component surfaces, expressed in the same Tailwind semantic tokens as page layouts. */
 @layer components {
-  .app-shell {
-    @apply min-h-(--app-height);
-  }
-  /* The brand and the profile on top and the footer below stay put; only the sections scroll
-     between them, so Sign out stays in reach. */
-  .sidebar {
-    @apply fixed inset-y-0 left-0 z-30 flex w-60 flex-col overflow-hidden border-r border-line bg-surface pt-6;
-  }
-  .sidebar > .brand,
-  .sidebar > .profile-selector,
-  .sidebar-footer {
-    @apply shrink-0;
-  }
-  /* Scrolls edge to edge, so the focus ring of a link is never clipped by it. */
-  .sidebar-nav {
-    @apply min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-6;
-  }
-  .brand {
-    @apply flex items-center gap-3 text-accent;
-  }
-  .brand > span:last-child {
-    @apply font-display text-3xl font-semibold leading-none tracking-tight text-ink;
-  }
   .brand-mark {
     @apply block h-12 w-12 shrink-0 text-accent;
   }
   .brand-mark.small {
     @apply h-9 w-9;
   }
-  .sidebar .brand {
-    @apply mb-0 min-h-20 px-5 pb-5;
-  }
-  .brand > .brand-mark {
-    transform: translateY(-5px);
-  }
-  .profile-selector {
-    @apply border-b border-line px-4 py-4;
-  }
-  .mini-avatar {
-    @apply grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-sm bg-accent-soft text-xs font-semibold text-accent;
-  }
-  .nav-group {
-    @apply mb-6;
-  }
-  .nav-label {
-    @apply mb-2 block px-3 text-xs text-muted;
-  }
-  .nav-group a {
-    @apply relative my-0.5 flex items-center gap-3 rounded-sm px-3 py-2.5 text-[13px] text-muted transition-colors hover:bg-surface hover:text-ink;
-  }
-  .nav-group a.active {
-    @apply bg-accent-soft font-medium text-ink;
-  }
-  .nav-count {
-    @apply ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-on-accent;
-  }
-  .nav-group a.active::before {
-    @apply absolute inset-y-0 left-0 w-0.5 bg-accent;
-    content: "";
-  }
-  .nav-group a small {
-    @apply ml-auto font-mono text-[10px];
-  }
-  .sidebar-footer {
-    @apply border-t border-line bg-surface px-5 py-4 text-xs text-muted;
-  }
-  .sidebar-footer > div {
-    @apply flex items-center gap-2;
-  }
-  .sidebar-footer button,
-  .sidebar-github {
-    @apply mt-3 flex items-center gap-2 py-1 hover:text-accent;
-  }
-  .sidebar-footer button.release-update {
-    @apply w-full text-warn;
-    animation: release-update-pulse 2s ease-in-out infinite;
-  }
-  .release-update-count {
-    @apply ml-auto grid min-h-5 min-w-5 place-items-center rounded-full bg-warn px-1.5 text-[11px] font-semibold text-on-accent;
-    animation: release-count-glow 1.8s ease-in-out infinite;
-  }
-  @keyframes release-update-pulse {
-    0%,
-    100% {
-      text-shadow: 0 0 0 color-mix(in srgb, var(--color-warn) 0%, transparent);
-    }
-    50% {
-      text-shadow: 0 0 0.75rem color-mix(in srgb, var(--color-warn) 80%, transparent);
-    }
-  }
-  @keyframes release-count-glow {
-    0%,
-    100% {
-      box-shadow: 0 0 0.35rem color-mix(in srgb, var(--color-warn) 45%, transparent);
-    }
-    50% {
-      box-shadow: 0 0 0.9rem color-mix(in srgb, var(--color-warn) 95%, transparent);
-    }
-  }
-  .sidebar-footer .theme-switcher {
-    @apply m-0 flex w-full gap-1 border-0 bg-transparent p-0;
-  }
-  .sidebar-footer .theme-switcher button {
-    @apply m-0 min-h-8 flex-1 justify-center rounded-sm px-2 py-1;
-  }
-  .sidebar-footer > .sidebar-github:first-child {
-    @apply mt-0;
-  }
-  .sidebar-stars {
-    @apply ml-auto flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] tabular-nums;
-  }
-  .workspace {
-    @apply ml-60;
-  }
-  .tab-bar {
-    @apply hidden;
-  }
-  .main-content {
-    @apply mx-auto max-w-[1200px] px-10 pb-16 pt-10;
-  }
-  .icon-button.mobile-menu {
-    @apply hidden;
-  }
-  .settings-fields {
-    @apply max-w-3xl;
-  }
-  .integration-card-icon {
-    @apply grid h-11 w-11 shrink-0 place-items-center rounded-sm border border-line bg-canvas;
-  }
-  .integration-tabs {
-    @apply mb-6 flex gap-1 border-b border-line;
-  }
-  .integration-tabs a {
-    @apply -mb-px border-b-2 border-transparent px-4 py-2.5 text-sm text-muted transition-colors;
-  }
-  .integration-tabs a[aria-selected="true"] {
-    @apply border-ink text-ink;
-  }
-  .integration-app-card {
-    @apply flex min-h-24 items-center gap-4 rounded-sm border border-line bg-surface p-5 text-ink transition-colors hover:border-control hover:bg-canvas;
-  }
-  .integration-app-card-copy {
-    @apply flex min-w-0 flex-1 flex-col gap-1;
-  }
-  .integration-app-card-copy strong {
-    @apply truncate text-base font-semibold;
-  }
-  .integration-app-card-copy span {
-    @apply truncate text-sm text-muted;
-  }
-  .integration-app-card-action {
-    @apply text-sm text-muted;
-  }
-  .integration-public-url-note {
-    @apply mt-3 text-sm text-muted;
-  }
-  .integration-mcp-note {
-    @apply mb-4 text-sm text-muted;
-  }
-  .integration-back-link {
-    @apply mb-4 inline-flex items-center gap-2 text-sm text-muted hover:text-ink;
-  }
-  .github-app-details-card {
-    @apply mb-6 flex items-center gap-4 rounded-sm border border-line bg-surface p-5;
-  }
-  .github-app-details-copy {
-    @apply flex min-w-0 flex-1 flex-col gap-1;
-  }
-  .github-app-details-copy strong {
-    @apply truncate text-sm font-semibold;
-  }
-  .github-app-details-copy span {
-    @apply truncate text-xs text-muted;
-  }
-  .integration-external-link {
-    @apply inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink;
-  }
-  .integration-permission-notice {
-    @apply mb-6 flex flex-wrap items-start justify-between gap-4 rounded-sm border border-warn/30 bg-warn-soft p-4 text-sm;
-  }
-  .integration-permission-notice p {
-    @apply mt-2 max-w-3xl text-muted;
-  }
-  .integration-permission-notice .github-missing-permissions {
-    @apply font-mono text-xs;
-  }
-  .github-installations {
-    @apply mt-8;
-  }
-  .github-installations > .section-heading {
-    @apply mb-4;
-  }
-  .field {
-    @apply mb-5 flex min-w-0 flex-col gap-2;
-  }
-  .field > label {
-    @apply text-xs font-medium;
-  }
-  .field > small {
-    @apply text-xs leading-relaxed text-muted;
-  }
-  .avatar-field {
-    @apply mb-6 flex items-start gap-5;
-  }
-  .avatar-actions {
-    @apply flex flex-wrap items-center gap-2 pt-1.5;
-  }
-  .avatar-actions small {
-    @apply basis-full text-xs text-muted;
-  }
-  .avatar-actions .form-error {
-    @apply basis-full;
-  }
-  .profile-avatar {
-    @apply grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-sm border border-line bg-accent-soft font-display text-3xl text-accent;
-  }
-  .profile-avatar img,
-  .mini-avatar img {
-    @apply h-full w-full object-cover;
-  }
-  .pairing-stage {
-    @apply my-4 flex min-h-72 flex-col items-center justify-center gap-4 text-center text-muted;
-  }
-  .qr-frame {
-    @apply rounded-sm border border-line bg-canvas p-4;
-  }
-  .qr-frame svg {
-    @apply block h-auto max-w-full;
-  }
-  .success-orbit {
-    @apply grid h-20 w-20 place-items-center rounded-full bg-good-soft text-good;
-  }
-  .danger-zone {
-    @apply mt-16 flex flex-wrap items-center gap-5 rounded-lg border border-bad/40 bg-bad-soft px-6 py-5;
-  }
-  .danger-zone h2 {
-    @apply text-lg text-bad;
-  }
-  /* Forgetting is recoverable in spirit — the agent is still there — so it is not red. */
-  .danger-zone.reset {
-    @apply border-line bg-surface;
-  }
-  .danger-zone.reset h2 {
-    @apply text-ink;
-  }
-  .danger-zone.reset + .danger-zone {
-    @apply mt-4;
-  }
-  .danger-zone p {
-    @apply mt-1 max-w-prose text-sm text-ink;
-  }
-  /*
-   * Override the UA dialog { overflow: auto } so Selects/pickers that portal into the dialog
-   * can paint past the footer. Scrolling stays on .modal-body.
-   */
-  .modal {
-    @apply m-auto w-[min(600px,calc(100vw-32px))] max-h-[calc(var(--app-height)-48px)] overflow-visible rounded-sm border border-line bg-canvas p-0 text-ink;
-  }
-  .modal[open] {
-    @apply flex flex-col;
-  }
-  .modal.wide {
-    @apply w-[min(780px,calc(100vw-32px))];
-  }
-  .modal::backdrop {
-    background: color-mix(in srgb, var(--shade) 44%, transparent);
-    backdrop-filter: blur(4px);
-  }
-  .modal > header {
-    @apply flex shrink-0 items-start justify-between gap-5 rounded-t-sm border-b border-line px-7 pb-5 pt-7;
-  }
-  .modal header h2 {
-    @apply text-3xl;
-  }
-  .modal header p {
-    @apply mt-2 text-sm;
-  }
-  .modal-body {
-    @apply min-h-0 flex-1 overflow-y-auto overscroll-contain px-7 py-6;
-  }
+
   /* An open dialog holds the page still: the wheel scrolls its content, or nothing. */
   html:has(dialog[open]) {
     @apply overflow-hidden;
   }
-  /* Outside the scrolling body, so it never moves with the content. */
-  .modal-footer {
-    @apply flex shrink-0 justify-end gap-3 rounded-b-sm border-t border-line bg-canvas px-7 pb-6 pt-5;
-  }
-  /* A dialog that is only a question and its answers has no content: the actions sit right
-     under the header, without a second rule. */
-  .modal > header + .modal-footer {
-    @apply border-t-0;
-  }
+
   .text-link {
     @apply text-accent underline-offset-2 hover:underline;
   }
@@ -342,81 +62,7 @@
   .release-notes code {
     @apply rounded-sm bg-surface px-1 font-mono text-xs;
   }
-  .secret-value {
-    @apply font-mono text-xs;
-  }
-  /* Remote Control: one-time token / install copy blocks. */
-  .remote-access-actions {
-    @apply mt-4 flex flex-wrap justify-end gap-2;
-  }
-  .remote-created {
-    @apply flex flex-col gap-4;
-  }
-  .copy-block {
-    @apply min-w-0;
-  }
-  .copy-block-head {
-    @apply mb-2 flex items-center justify-between gap-3 text-xs font-medium;
-  }
-  .copy-block .secret-value {
-    @apply w-full resize-y rounded-sm border border-control bg-surface px-3 py-2.5 text-ink;
-  }
-  /* The ChatGPT sign-in code: read off the screen and typed elsewhere, so it is the dialog. */
-  .device-code {
-    @apply flex items-center justify-center gap-3 rounded-sm border border-control bg-surface px-5 py-6;
-  }
-  .device-code output {
-    @apply select-all font-mono text-3xl font-semibold tracking-[0.2em] text-ink;
-  }
-  .device-code-state {
-    @apply mt-4 flex items-center justify-center gap-2 text-sm text-muted;
-  }
-  .notice {
-    @apply mb-6 flex items-start gap-3 rounded-sm border border-control bg-surface px-5 py-4 text-sm text-ink;
-  }
-  .notice p {
-    @apply text-inherit;
-  }
-  .notice > svg {
-    @apply mt-0.5;
-  }
-  .form-error {
-    @apply border border-bad bg-bad-soft text-bad;
-  }
-  .form-error {
-    @apply border border-bad bg-bad-soft text-bad;
-  }
-  .form-error {
-    @apply my-3 rounded-sm px-4 py-3 text-sm;
-  }
-  .note {
-    @apply my-4 text-xs leading-relaxed;
-  }
-  /* Open, with no card around it: an empty screen reads the same in a chat and on a page. */
-  .empty {
-    @apply px-6 py-14 text-center;
-  }
-  .empty-orbit {
-    @apply mx-auto mb-5 grid h-16 w-16 place-items-center bg-accent-soft;
-    clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
-  }
-  .empty h3 {
-    @apply mb-2 font-display text-3xl;
-  }
-  .empty p {
-    @apply mx-auto max-w-md text-sm leading-7;
-  }
-  .empty .button {
-    @apply mt-6;
-  }
-  /* The middle of the screen, less the page's own top and bottom padding. */
-  .loading-state {
-    @apply flex min-h-[calc(var(--app-height)-6rem)] flex-col items-center justify-center gap-4 text-sm text-muted;
-    animation: viewer-fade 300ms ease-out;
-  }
-  .main-content.fill .loading-state {
-    @apply h-full min-h-0;
-  }
+
   .session-history {
     @apply flex min-h-0 min-w-0 flex-1 flex-col px-6 pb-4 pt-3;
   }
@@ -427,103 +73,11 @@
     overflow-anchor: none;
   }
 
-  /* Chats: the whole area beside the app's sidebar, like a messaging app. */
-  .main-content.fill {
-    @apply h-(--app-height) max-w-none overflow-hidden p-0;
-  }
-  .main-content.fill > .page-enter {
-    @apply h-full;
-  }
+  /* The conversation, the whole area beside the sidebar, which lists the chats. */
   .messenger {
-    @apply grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)];
+    @apply grid h-full min-h-0 grid-cols-1;
   }
-  /* The list put away: the conversation takes the whole area. A phone shows one or the other
-     already, so the choice applies only beside a wider screen. */
-  @media (min-width: 761px) {
-    .messenger[data-list="collapsed"] {
-      @apply grid-cols-1;
-    }
-    .messenger[data-list="collapsed"] .conversation-list {
-      @apply hidden;
-    }
-  }
-  .conversation-list {
-    @apply flex min-h-0 flex-col border-r border-line bg-surface;
-  }
-  .conversation-list > header {
-    @apply grid gap-3 border-b border-line px-4 pb-4 pt-4;
-  }
-  .chat-channel-bar {
-    @apply flex items-center gap-2;
-  }
-  .chat-channel-select {
-    @apply min-w-0 flex-1;
-  }
-  .conversation-context-menu {
-    @apply z-50 min-w-48 overflow-hidden rounded-sm border border-line bg-surface p-1.5 text-sm text-ink shadow-xl;
-  }
-  .conversation-context-menu button {
-    @apply flex min-h-10 w-full items-center rounded px-3 py-2 text-left outline-none hover:bg-accent-soft hover:text-accent focus-visible:bg-accent-soft focus-visible:text-accent;
-  }
-  .conversation-context-menu {
-    @apply fixed;
-  }
-  .conversation-context-menu button[data-danger="true"] {
-    @apply text-bad;
-  }
-  /* The same side padding as the header above, so a row's edges line up with the search and
-     the channel select. */
-  .conversation-scroll {
-    @apply min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3;
-  }
-  .conversation-scroll h2 {
-    @apply flex items-center gap-1.5 px-3 pb-1 pt-3 font-sans text-[11px] font-semibold uppercase tracking-wider text-muted;
-  }
-  .conversation-scroll h2 > span {
-    @apply ml-auto;
-  }
-  .conversation-scroll section + section {
-    @apply mt-3;
-  }
-  .conversation-item {
-    @apply flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-canvas;
-  }
-  /* Mixed from the accent rather than its soft tint, which some accents leave too close to
-     the list's own grey. */
-  .conversation-item[aria-current="true"] {
-    background: color-mix(in srgb, var(--accent) 16%, var(--surface));
-  }
-  .conversation-item[aria-current="true"] strong {
-    @apply font-semibold;
-  }
-  .conversation-avatar,
-  .face.conversation-avatar {
-    @apply grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-accent-soft object-cover text-sm font-semibold text-accent;
-  }
-  .conversation-avatar.symbol {
-    @apply bg-canvas text-muted;
-  }
-  .conversation-text {
-    @apply min-w-0 flex-1;
-  }
-  .conversation-text strong {
-    @apply block truncate text-sm font-medium text-ink;
-  }
-  .conversation-text small {
-    @apply block truncate text-xs text-muted;
-  }
-  .conversation-text .conversation-preview {
-    @apply flex min-w-0 items-center gap-1 text-xs text-muted;
-  }
-  .conversation-text .conversation-preview > span {
-    @apply truncate;
-  }
-  .conversation-text .conversation-preview > svg {
-    @apply shrink-0 text-accent;
-  }
-  .conversation-text .conversation-preview.working {
-    @apply gap-1.5 font-medium text-accent;
-  }
+
   .orb {
     @apply -my-0.5 inline-flex h-5 w-5 shrink-0;
   }
@@ -534,31 +88,9 @@
   .orb-accent {
     flood-color: var(--accent);
   }
-  .conversation-meta {
-    @apply flex shrink-0 flex-col items-end gap-1.5 self-start pt-0.5;
-  }
-  .conversation-item time {
-    @apply text-[11px] text-muted;
-  }
-  /* A chat the agent wrote in since it was read: its name stands out and a dot says so. */
-  .conversation-item[data-unread] strong {
-    @apply font-semibold;
-  }
-  .conversation-item[data-unread] time {
-    @apply text-ink;
-  }
-  .conversation-unread {
-    @apply h-2.5 w-2.5 rounded-full;
-    background: var(--good);
-  }
-  .conversation-none {
-    @apply px-3 py-6 text-center text-sm text-muted;
-  }
+
   .draft-empty {
     @apply flex min-h-0 flex-1 items-center justify-center px-6;
-  }
-  .draft-empty .empty {
-    @apply w-full max-w-3xl;
   }
   /* The conversation reads in one column, centred, however wide the screen: the history
      scrolls edge to edge, so its scrollbar stays at the edge, but what it holds keeps to the
@@ -578,18 +110,10 @@
   .conversation-column {
     @apply relative;
   }
-  .pane-corner {
-    @apply absolute left-3 top-3 z-10 flex gap-2;
-  }
   .pane-badges {
-    @apply absolute right-3 top-3 z-10;
-  }
-  .pane-round {
-    @apply grid h-9 w-9 place-items-center rounded-full border border-line bg-surface/70 text-muted shadow-sm backdrop-blur transition-colors;
-  }
-  .pane-round:hover,
-  .pane-round:focus-visible {
-    @apply bg-surface text-ink;
+    @apply absolute top-3 z-10;
+    /* Clear of the window's own buttons where a host draws them over the top right. */
+    right: calc(var(--window-controls, 0px) + 0.75rem);
   }
   /* The objective and the listeners are badges at the end of the row where the chat runs; what
      each one holds opens from it. */
@@ -626,7 +150,7 @@
   }
   .session-listeners > li:hover,
   .session-listeners > li:focus-within {
-    background: var(--canvas);
+    background: var(--glass-press);
   }
   .session-listener-text {
     @apply grid min-w-0 flex-1 gap-1;
@@ -650,7 +174,6 @@
     @apply opacity-100;
   }
   .session-listener-stop:hover {
-    background: var(--surface);
     color: var(--bad);
   }
   .session-listener-stop:disabled {
@@ -740,11 +263,10 @@
   }
   /* Above the composer, in its column: the title, what went wrong, a way to close it and a way
      on. Quiet, as a notice is, so the conversation above it still leads. */
+  /* Floats over the end of the conversation, so it is glass, as everything that floats is. */
   .trouble-card {
-    @apply mx-auto mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-xl border px-4 py-3 text-sm shadow-lg;
+    @apply glass-strong mx-auto mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-2xl px-4 py-3 text-sm;
     width: min(var(--chat-column), calc(100% - 3rem));
-    background: var(--surface);
-    border-color: var(--line);
   }
   .trouble-text {
     @apply grid min-w-0 gap-0.5;
@@ -762,11 +284,10 @@
     color: var(--muted);
   }
   .trouble-close:hover {
-    background: var(--canvas);
     color: var(--ink);
   }
   .trouble-card .trouble-action {
-    @apply col-span-2 h-8 min-h-8 justify-self-end rounded-full px-3.5 text-[13px];
+    @apply col-span-2 justify-self-end;
   }
   /* The composer as AI chats draw it: one rounded box holding the files, the text and the
      buttons, floating over the end of the conversation. */
@@ -774,12 +295,18 @@
     @apply grid gap-2 px-6 pb-5 pt-2;
   }
   /* Its column never grows past the screen for something wide inside it. */
+  /* A card of the glass kit, opaque: the conversation passes behind it as it scrolls. */
   .composer-box {
-    @apply grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-2xl border border-line bg-surface p-3 transition-colors;
+    @apply grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-2xl border p-3 transition-colors;
     container: composer / inline-size;
+    background: color-mix(in srgb, var(--ink) 6%, var(--canvas));
+    border-color: color-mix(in srgb, var(--ink) 10%, transparent);
+  }
+  .composer-box:focus-within {
+    border-color: color-mix(in srgb, var(--ink) 18%, transparent);
   }
   .composer-box[data-dragging="true"] {
-    @apply border-dashed border-accent bg-accent-soft;
+    @apply border-dashed border-accent;
   }
   /* The box draws the border and the focus; the field inside is only text. */
   .composer-box textarea,
@@ -788,7 +315,7 @@
     box-shadow: none;
     field-sizing: content;
   }
-  /* One height and one gap for everything in the row: every control is a 36px target, the
+  /* One height and one gap for everything in the row: every control is a 32px target, the
      size of send, and the same 8px sits between any two of them. */
   .composer-actions {
     @apply flex items-center gap-2;
@@ -823,16 +350,17 @@
     }
   }
   .composer-hint kbd {
-    @apply mx-0.5 rounded border border-line px-1.5 py-0.5 font-mono text-[11px];
+    @apply mx-0.5 rounded-md border border-glass-edge px-1.5 py-0.5 font-mono text-[11px];
   }
+  /* Every control in the row is the same 32px: the menus, the tools and send. */
   .composer-tool {
-    @apply grid h-9 w-9 place-items-center rounded-full text-muted transition-colors hover:bg-canvas hover:text-ink;
+    @apply grid size-8 place-items-center rounded-full text-muted transition-colors hover:bg-glass-hover hover:text-ink;
   }
   .composer-tool.recording {
     @apply bg-bad text-white hover:bg-bad hover:text-white;
   }
   .composer-send {
-    @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-on-accent transition-opacity disabled:opacity-40;
+    @apply grid size-8 shrink-0 place-items-center rounded-full bg-accent text-on-accent transition-opacity disabled:opacity-40;
   }
   .composer-error {
     @apply text-sm text-bad;
@@ -852,16 +380,16 @@
   }
   /* Every attachment is one tile tall, whatever it carries, so the row reads as one row. */
   .attachment.image img {
-    @apply h-14 w-14 rounded-xl border border-line bg-canvas object-cover;
+    @apply h-14 w-14 rounded-xl border border-glass-edge bg-glass-hover object-cover;
   }
   .attachment.audio .audio-player {
-    @apply h-14 w-72 bg-canvas py-0;
+    @apply h-14 w-72 bg-glass-hover py-0;
   }
   .attachment[data-state="failed"] {
     @apply rounded-xl ring-1 ring-bad;
   }
   .attachment-file {
-    @apply flex h-14 w-56 items-center gap-3 rounded-xl border border-line bg-canvas px-3;
+    @apply flex h-14 w-56 items-center gap-3 rounded-xl border border-glass-edge bg-glass-hover px-3;
   }
   .attachment-busy {
     @apply absolute inset-0 grid place-items-center rounded-xl bg-surface/70 text-accent;
@@ -871,10 +399,10 @@
   }
   /* A document, in the composer and in the conversation alike. */
   .file-card {
-    @apply flex w-72 max-w-full items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 text-ink transition-colors hover:bg-canvas;
+    @apply flex w-72 max-w-full items-center gap-3 rounded-xl border border-glass-edge bg-glass-hover px-3 py-2.5 text-ink transition-colors hover:bg-glass-press;
   }
   .file-icon {
-    @apply grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent;
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-glass-press text-ink;
   }
   .file-text {
     @apply grid min-w-0 flex-1;
@@ -889,7 +417,7 @@
   .message-media {
     @apply mt-2 flex max-w-full flex-col items-start gap-2;
   }
-  .chat-line.mine .message-media {
+  .chat-line.member .message-media {
     @apply items-end;
   }
   .file-card {
@@ -1005,9 +533,6 @@
   .viewer-file span,
   .viewer-file p {
     @apply text-sm text-muted;
-  }
-  .viewer-file .button.primary {
-    @apply mt-3;
   }
   .viewer-html {
     @apply flex h-full w-full max-w-5xl flex-col gap-2;
@@ -1136,7 +661,7 @@
   }
   /* A voice note: the round button, the waveform that fills in as it plays, time and speed. */
   .audio-player {
-    @apply flex w-80 max-w-full items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2;
+    @apply flex w-80 max-w-full items-center gap-3 rounded-xl border border-glass-edge bg-glass-hover px-3 py-2;
   }
   .audio-toggle {
     @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-on-accent;
@@ -1168,33 +693,27 @@
     @apply w-9 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted;
   }
   .audio-speed {
-    @apply h-6 shrink-0 rounded-full bg-canvas px-2 text-[11px] font-semibold text-muted hover:text-ink;
+    @apply h-6 shrink-0 rounded-full bg-glass-press px-2 text-[11px] font-semibold text-muted hover:text-ink;
   }
-  /* Only a phone has a list to go back to. */
-  .conversation-pane .conversation-back {
-    @apply hidden;
-  }
-  /* A chat as AI chats lay it out: the reader's side in a pill on the right, the other side
-     as plain text across the column. The column keeps lines short enough to read. */
+
+  /* A chat as AI chats lay it out: what the reader asked in a card across the column, the
+     answer as plain text under it. The column keeps lines short enough to read. In a group,
+     where several people write, the reader's side stays on the right. */
   .chat-line {
     @apply mb-6 flex w-full flex-col;
-  }
-  .chat-line.mine {
-    @apply items-end;
   }
   .chat-text {
     @apply whitespace-pre-wrap break-words text-[15px] leading-7 text-ink;
   }
   /* The message a reply answers, inside the reply, as messengers draw it: four lines at most. */
   .chat-quote {
-    @apply mb-1.5 overflow-hidden rounded-lg border-l-2 border-accent py-1 pl-2.5 pr-2 text-[13px] leading-5 text-muted;
-    display: -webkit-box;
-    -webkit-line-clamp: 5;
-    -webkit-box-orient: vertical;
-    background: color-mix(in srgb, var(--ink) 5%, transparent);
+    @apply mb-1 flex min-w-0 items-center gap-1.5 text-xs leading-5 text-muted;
   }
   .chat-quote strong {
-    @apply block text-xs font-semibold text-accent;
+    @apply shrink-0 font-medium text-ink/75;
+  }
+  .chat-quote span {
+    @apply min-w-0 truncate;
   }
   /* A reaction is a mark on a message, not a message: small, and without a bubble. */
   .chat-reaction {
@@ -1241,10 +760,13 @@
     @apply border-l-2 border-line pl-3 text-muted;
   }
   .markdown code {
-    @apply rounded-sm bg-surface px-1 py-0.5 font-mono text-[13px];
+    @apply rounded-md px-1.5 py-0.5 font-mono text-[13px];
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
   }
   .markdown pre:not(.code-block-lines) {
-    @apply overflow-x-auto rounded-lg border border-line bg-surface p-3 font-mono text-[13px] leading-6;
+    @apply overflow-x-auto rounded-xl border p-3 font-mono text-[13px] leading-6;
+    background: color-mix(in srgb, var(--ink) 4%, transparent);
+    border-color: color-mix(in srgb, var(--ink) 9%, transparent);
   }
   .markdown pre code {
     @apply bg-transparent p-0;
@@ -1268,10 +790,14 @@
   .markdown tr:last-child td {
     @apply border-b-0;
   }
-  /* Mixed from the ink so the pill stays a step off the page. */
+  /* Mixed from the ink so the card stays a step off the page; its text starts where the
+     answer's does. */
   .chat-line.mine .chat-text {
-    @apply max-w-[80%] rounded-2xl px-4 py-2.5;
+    @apply rounded-2xl px-4 py-2.5 text-left;
     background: color-mix(in srgb, var(--ink) 7%, transparent);
+  }
+  .chat-line.member .chat-text {
+    @apply max-w-[80%];
   }
   /* In a group each person's run of messages opens with their face and name; the rest of the
      run lines up under it. */
@@ -1280,7 +806,7 @@
     @apply items-center;
   }
   .scheduled-label {
-    @apply mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-medium text-accent;
+    @apply mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-glass-press px-2.5 py-0.5 text-[11px] font-medium text-muted;
   }
   .chat-line.scheduled .chat-text {
     @apply max-w-[80%] text-center text-sm text-muted;
@@ -1310,97 +836,11 @@
 }
 
 @media (max-width: 760px) {
-  .sidebar-footer {
-    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
-  }
-  .sidebar {
-    @apply invisible inset-0 w-full border-0 opacity-0;
-    transform: scale(1.06);
-    transform-origin: center;
-    pointer-events: none;
-    transition:
-      transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1),
-      opacity 300ms ease,
-      visibility 300ms;
-  }
-  .sidebar.open {
-    @apply visible opacity-100;
-    transform: scale(1);
-    pointer-events: auto;
-  }
-  .workspace {
-    @apply ml-0;
-    transform-origin: center top;
-    transition: transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-  .app-shell:has(.sidebar.open) .workspace {
-    transform: scale(0.94);
-  }
-  /* A phone draws edge to edge: the status bar above and the home indicator below are kept
-     clear by the safe areas, and the tab bar sits over the bottom one. */
-  .app-shell {
-    --tab-bar: calc(4rem + env(safe-area-inset-bottom));
-    --shell-top: env(safe-area-inset-top);
-  }
-  .workspace {
-    padding-top: var(--shell-top);
-  }
-  .sidebar {
-    padding-top: var(--shell-top);
-  }
-  .sidebar > .mobile-menu {
-    top: calc(0.75rem + var(--shell-top));
-  }
-  /* Beside the workspace, never in it: the workspace shrinks back as the menu opens, and a
-     transform makes it the box its fixed children are placed in, so the bar went with it. */
-  .tab-bar {
-    @apply fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line;
-    padding-bottom: env(safe-area-inset-bottom);
-    background: color-mix(in srgb, var(--surface) 88%, transparent);
-    backdrop-filter: blur(16px) saturate(1.4);
-    -webkit-backdrop-filter: blur(16px) saturate(1.4);
-  }
-  .tab-bar > a,
-  .tab-bar > button {
-    @apply flex h-16 min-w-0 items-center justify-center text-muted transition-colors;
-  }
-  .tab-bar > [aria-current="page"],
-  .tab-bar > button[aria-expanded="true"] {
-    @apply text-ink;
-  }
-  .tab-bar-icon {
-    @apply relative inline-flex;
-  }
-  .tab-bar-count {
-    @apply absolute -right-2.5 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 text-[10px] font-semibold text-canvas;
-  }
-  /* Inside a conversation the tab bar steps aside: the composer takes the bottom, as in any
-     messaging app, and the back arrow leads out. A keyboard covers it anyway. */
-  .app-shell:has(.messenger[data-reading="true"]) .tab-bar,
-  :root[data-keyboard] .tab-bar {
-    @apply hidden;
-  }
-  .icon-button.mobile-menu {
-    @apply inline-flex;
-  }
-  .main-content {
-    @apply px-5 pt-6;
-    padding-bottom: calc(var(--tab-bar) + 2rem);
-  }
-  .resource-row {
-    @apply gap-3 p-4;
-  }
-  .resource-row > .small {
-    @apply hidden;
-  }
   .conversation-pane .message-history {
     @apply px-3;
   }
   .trouble-card {
     width: min(var(--chat-column), calc(100% - 1.5rem));
-  }
-  .chat-list-toggle {
-    @apply hidden;
   }
   /* Clear of the home indicator and the rounded corners, which are the margin themselves; on
      the keyboard there is neither. */
@@ -1415,39 +855,12 @@
   .attachment.audio .audio-player {
     @apply w-64;
   }
-  /* A phone shows the list or the conversation, never both. */
-  .main-content.fill {
-    @apply max-w-none p-0;
-    height: calc(var(--app-height) - var(--shell-top) - var(--tab-bar));
-  }
-  .app-shell:has(.messenger[data-reading="true"]) .main-content.fill {
-    height: calc(var(--app-height) - var(--shell-top));
-  }
+
   /* What a new chat says before its first message steps aside for the keyboard, and never
      spills over the header in the room left. */
   .draft-empty {
     @apply overflow-hidden;
     align-items: safe center;
-  }
-  :root[data-keyboard] .draft-empty > .empty {
-    @apply hidden;
-  }
-  .messenger {
-    @apply grid-cols-1;
-  }
-  .messenger[data-reading="true"] .conversation-list,
-  .messenger[data-reading="false"] .conversation-pane {
-    @apply hidden;
-  }
-  .conversation-pane .conversation-back {
-    @apply grid;
-  }
-}
-
-/* An installed app draws its own blur under the status bar, a little past the safe area. */
-@media (max-width: 760px) and (display-mode: standalone) {
-  .app-shell {
-    --shell-top: calc(env(safe-area-inset-top) + 0.75rem);
   }
 }
 
@@ -1458,13 +871,6 @@
   textarea,
   select {
     font-size: 16px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sidebar,
-  .workspace {
-    transition: none;
   }
 }
 

@@ -8,6 +8,17 @@
  * cross.
  */
 
+import { Agent } from 'undici';
+
+/**
+ * How long the gateway may take before its first byte, in ms. fetch gives up after five minutes
+ * by default, and the gateway may hold an OpenAI-style chat completion for ten while the agent
+ * works: eleven leaves it room to answer, even when that answer is that it is still working.
+ * The version matches the undici Node carries, so its fetch takes this dispatcher as its own.
+ */
+const HEADERS_TIMEOUT_MS = 11 * 60_000;
+const dispatcher = new Agent({ headersTimeout: HEADERS_TIMEOUT_MS });
+
 /** Where the gateway listens, seen from this server. Compose names the service `gateway`. */
 export function gatewayUrl(): string {
   return process.env.JIAN_GATEWAY_URL ?? 'http://127.0.0.1:4310';
@@ -94,6 +105,7 @@ export async function forward(
       // A closed tab must close the gateway's side too, or each event stream it held stays
       // counted against the gateway's limit.
       signal: request.signal,
+      dispatcher,
       ...(body ? { duplex: 'half' } : {}),
     } as RequestInit);
   } catch (error) {

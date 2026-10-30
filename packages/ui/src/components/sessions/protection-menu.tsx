@@ -21,7 +21,7 @@ const modes: Array<{
   {
     value: 'auto',
     label: 'Auto',
-    detail: 'Acts, refusing only what could destroy or leak',
+    detail: 'Blocks only what could destroy or leak',
     icon: ShieldHalf,
   },
   { value: 'full', label: 'Full access', detail: 'Acts without asking', icon: ShieldOff },
@@ -90,8 +90,7 @@ export function SessionProtection({
         </span>
       }
     >
-      <fieldset>
-        <legend>Protection</legend>
+      <fieldset aria-label="Protection">
         {modes.map((mode) => (
           <button
             key={mode.value}

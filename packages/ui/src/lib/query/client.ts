@@ -19,16 +19,20 @@ export function panelApi(): GatewayApi {
 
 /**
  * The gateway's event stream is what keeps the panel current: it invalidates exactly what an
- * event touched. Refetching on focus or reconnect would only repeat that work, and would ask
- * every provider for its models again.
+ * event touched. Refetching on focus would only repeat that work, and would ask every provider
+ * for its models again. A kept cache is the exception on reconnecting: no stream was open while
+ * the gateway was out of reach, so what is on screen is read again once it answers. It also
+ * holds everything it ever read while the window is open, since what it dropped would be gone
+ * the next time the gateway cannot be reached.
  */
-export function createQueryClient() {
+export function createQueryClient({ kept = false }: { kept?: boolean } = {}) {
   return new QueryClient({
     defaultOptions: {
       queries: {
         staleTime: 30_000,
         refetchOnWindowFocus: false,
-        refetchOnReconnect: false,
+        refetchOnReconnect: kept,
+        ...(kept ? { gcTime: Number.POSITIVE_INFINITY } : {}),
         // A failure the gateway explained (401, 409, a validation) will not change on a retry.
         retry: 1,
       },

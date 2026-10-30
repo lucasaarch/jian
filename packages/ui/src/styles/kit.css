@@ -21,9 +21,30 @@
   backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(170%);
 }
 
+/* A rounded surface that scrolls: its scrollbar starts and ends clear of the corners, where it
+   would otherwise run off the curve. */
+@utility scroll-inset {
+  &::-webkit-scrollbar-track {
+    margin-block: 1.125rem;
+  }
+}
+
 /* A bar flat against the window's edge: the blur and the edge line, without the lift. */
 @utility glass-bar {
   background: var(--glass);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(165%);
   backdrop-filter: blur(var(--glass-blur)) saturate(165%);
 }
+
+/* The chat sidebar's width, which the bar above it matches. */
+:root {
+  --sidebar-width: 16rem;
+}
+
+/* Something above the chat sidebar that lines up with it, only while a sidebar is on screen:
+   the host's title bar holds the sidebar's own bar, and draws it as the sidebar's top. */
+@custom-variant over-sidebar (:root:has([data-chat-sidebar]) &);
+
+/* A phone's width, where the sidebar and what it opens take turns and an overlay fills the
+   screen. The same width `usePhone` answers to. */
+@custom-variant phone (@media (max-width: 760px));

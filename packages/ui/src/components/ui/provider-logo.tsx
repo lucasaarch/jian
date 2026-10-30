@@ -102,12 +102,6 @@ const logos: Record<string, { mono: boolean; markup: string }> = {
 
 export const hasLogo = (kind: string) => kind in logos;
 
-const models = ['anthropic', 'openai', 'openrouter', 'google', 'groq', 'xai', 'tavily'];
-
-/** The service an MCP server fronts, read from its address or name, when its mark is known. */
-export const serviceOf = (address: string) =>
-  Object.keys(logos).find((kind) => !models.includes(kind) && address.includes(kind));
-
 export function ProviderLogo({ kind, size = 24 }: { kind: string; size?: number }) {
   // Gradients refer to themselves by id; two logos on one page must not share one.
   const scope = useId().replace(/:/g, '');

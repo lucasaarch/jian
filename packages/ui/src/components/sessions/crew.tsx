@@ -1,20 +1,16 @@
 'use client';
 
-import { X } from 'lucide-react';
-import { createContext, type RefObject, useContext, useEffect, useRef, useState } from 'react';
-import type { GatewayApi, Message, ModelSelection, Subagent, ToolStep } from '../../lib/api';
+import { createContext, type RefObject, useContext, useEffect, useRef } from 'react';
+import type { Message, ModelSelection, Subagent } from '../../lib/api';
 import { useCrew } from '../../lib/stores/crew';
 import { Orb } from '../ui';
-import { CodeChanges } from './code-change';
-import { MessageMedia } from './media';
-import { ChatMessage } from './message';
-import { statusOf, traceOf } from './progress';
+import { statusOf } from './progress';
 import { statusLabels } from './status';
-import { ThoughtLine, WorkMark } from './thought-line';
+import { WorkMark } from './thought-line';
 
-const tierNames = { light: 'Light', standard: 'Standard', deep: 'Deep' } as const;
+export const tierNames = { light: 'Light', standard: 'Standard', deep: 'Deep' } as const;
 
-const active = (agent: Subagent) => agent.status === 'queued' || agent.status === 'running';
+export const active = (agent: Subagent) => agent.status === 'queued' || agent.status === 'running';
 
 /** A model id read as a name when the provider gave none: `claude-opus-5-5` as Claude Opus 5.5. */
 export function prettyModel(id: string) {
@@ -41,28 +37,36 @@ export const ModelNames = createContext<(selection: ModelSelection) => string>((
   prettyModel(selection.modelId),
 );
 
+/** Minutes and seconds from one moment to another, in ms since the epoch: 3:07. */
+const between = (from: number, to: number) => {
+  const seconds = Math.max(0, Math.floor((to - from) / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+};
+
 /** Minutes and seconds since the agent started, running while it works. */
-function Elapsed({ agent }: { agent: Subagent }) {
+export function Elapsed({
+  agent,
+  className = 'crew-time',
+}: {
+  agent: Subagent;
+  className?: string;
+}) {
   const element = useRef<HTMLSpanElement>(null);
   const start = Date.parse(agent.createdAt);
-  const format = (to: number) => {
-    const seconds = Math.max(0, Math.floor((to - start) / 1000));
-    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-  };
   const working = active(agent);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: format reads only `start`.
+  // Written straight into the text each second, so the card does not render for a clock.
   useEffect(() => {
     if (!working) return;
     const id = setInterval(() => {
-      if (element.current) element.current.textContent = format(Date.now());
+      if (element.current) element.current.textContent = between(start, Date.now());
     }, 1000);
     return () => clearInterval(id);
   }, [working, start]);
 
   return (
-    <span ref={element} className="crew-time">
-      {format(working ? Date.now() : Date.parse(agent.updatedAt))}
+    <span ref={element} className={className}>
+      {between(start, working ? Date.now() : Date.parse(agent.updatedAt))}
     </span>
   );
 }
@@ -71,14 +75,14 @@ function Elapsed({ agent }: { agent: Subagent }) {
  * What the agent is on, or what stopped it, in one line. A finished agent has none: its check
  * says it is done, and its report is a click away in the drawer.
  */
-function nowOf(agent: Subagent) {
+export function nowOf(agent: Subagent) {
   if (agent.status === 'queued') return 'Waiting to start';
   if (agent.status === 'running') return statusOf(agent).label;
   if (agent.status === 'completed') return undefined;
   return agent.error ?? statusLabels[agent.status];
 }
 
-function TierChip({ tier }: { tier?: Subagent['tier'] }) {
+export function TierChip({ tier }: { tier?: Subagent['tier'] }) {
   if (!tier) return null;
   return (
     <span className="tier-chip" data-tier={tier}>
@@ -195,10 +199,7 @@ export function CrewDock({ agents }: { agents: Subagent[] }) {
  * In on open, and back to what opened it on close, so the keyboard does not lose its place.
  * Escape closes. `shown` is what the drawer shows, undefined while it shows nothing.
  */
-export function useDrawerFocus(
-  shown: string | undefined,
-  closer: RefObject<HTMLButtonElement | null>,
-) {
+export function useDrawerFocus(shown: string | undefined, closer: RefObject<HTMLElement | null>) {
   const close = useCrew((state) => state.close);
 
   useEffect(() => {
@@ -214,127 +215,4 @@ export function useDrawerFocus(
       useCrew.getState().opener?.focus({ preventScroll: true });
     };
   }, [shown, close, closer]);
-}
-
-const reasons = {
-  agent: (tier: string) => `Chosen by the agent: ${tier}`,
-  jev: (tier: string) => `Jev picked ${tier}`,
-  default: (tier: string) => `${tier} by default`,
-};
-
-/**
- * One agent followed beside the conversation: what it is on, what it said and why it got its
- * model. The chat and the composer stay usable beside it; on a phone it is a sheet from below.
- */
-export function CrewDrawer({
-  api,
-  profileId,
-}: {
-  api: Pick<GatewayApi, 'messages'> & Partial<Pick<GatewayApi, 'media' | 'timeline'>>;
-  profileId: string;
-}) {
-  const following = useCrew((state) => state.following);
-  const agent = useCrew((state) => state.agents.find((item) => item.runId === state.following));
-  const close = useCrew((state) => state.close);
-  const modelName = useContext(ModelNames);
-  const [messages, setMessages] = useState<Message[]>();
-  const [steps, setSteps] = useState<ToolStep[]>([]);
-  const [error, setError] = useState('');
-  const closer = useRef<HTMLButtonElement>(null);
-  const working = agent ? active(agent) : false;
-  const runId = agent?.runId;
-  const place = agent?.sessionId;
-
-  useDrawerFocus(agent ? following : undefined, closer);
-
-  useEffect(() => {
-    if (!runId || !place) return;
-    let stopped = false;
-    const read = async () => {
-      try {
-        const [history, timeline] = await Promise.all([
-          api.messages(profileId, place),
-          api.timeline?.(profileId, place).catch(() => []) ?? [],
-        ]);
-        if (stopped) return;
-        setMessages(history);
-        setSteps(timeline.find((item) => item.runId === runId)?.steps ?? []);
-        setError('');
-      } catch (failure) {
-        if (!stopped) {
-          setError(failure instanceof Error ? failure.message : 'Could not load this agent.');
-        }
-      }
-    };
-    void read();
-    const timer = working ? setInterval(() => void read(), 1500) : undefined;
-
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
-  }, [api, profileId, runId, place, working]);
-
-  if (!agent) return null;
-  const tier = agent.tier ? tierNames[agent.tier] : undefined;
-  const said = messages?.filter((message) => message.role === 'assistant') ?? [];
-
-  return (
-    <aside className="crew-drawer" aria-label={agent.name}>
-      <header>
-        <div className="crew-drawer-title">
-          <WorkMark
-            working={working}
-            failed={agent.status !== 'completed'}
-            orb={statusOf(agent).state}
-          />
-          <h2>{agent.name}</h2>
-          <button
-            ref={closer}
-            type="button"
-            className="icon-button"
-            aria-label="Close"
-            onClick={close}
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <div className="crew-drawer-chips">
-          <TierChip tier={agent.tier} />
-          {agent.modelSelection && (
-            <span className="crew-chip">{modelName(agent.modelSelection)}</span>
-          )}
-          <span className="crew-chip">{agent.role === 'review' ? 'Review' : 'Execute'}</span>
-        </div>
-        {tier && agent.tierBy && <p className="crew-why">{reasons[agent.tierBy](tier)}</p>}
-      </header>
-      <div className="crew-drawer-body">
-        <ThoughtLine
-          working={working}
-          label={nowOf(agent)}
-          doneLabel={agent.status === 'completed' ? 'Finished in' : 'Stopped after'}
-          failed={!working && agent.status !== 'completed'}
-          orb={statusOf(agent).state}
-          steps={traceOf(steps)}
-          startedAt={agent.createdAt}
-          finishedAt={working ? undefined : agent.updatedAt}
-        />
-        <CodeChanges steps={steps} fresh />
-        {error && <p className="text-bad">{error}</p>}
-        {said.map((message) => (
-          <ChatMessage key={message.id} message={message} group={false} people={new Map()} opensRun>
-            {api.media && (
-              <MessageMedia
-                api={{ media: api.media }}
-                profileId={profileId}
-                content={message.content}
-              />
-            )}
-          </ChatMessage>
-        ))}
-        {!said.length && agent.output && <p className="crew-output">{agent.output}</p>}
-        {agent.error && <p className="text-bad">{agent.error}</p>}
-      </div>
-    </aside>
-  );
 }

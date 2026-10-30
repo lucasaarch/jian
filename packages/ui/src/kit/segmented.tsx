@@ -20,14 +20,15 @@ export function Segmented<T extends string>({
     <ToggleGroup
       aria-label={label}
       value={[value]}
-      className="inline-flex gap-1 rounded-full border border-glass-edge bg-glass-hover p-1"
+      // As wide as its choices, wherever it stands: a row of tabs does not stretch across a page.
+      className="inline-flex w-fit gap-0.5 rounded-lg border border-glass-edge bg-glass-hover p-0.5"
     >
       {options.map((option) => (
         <Toggle
           key={option.value}
           value={option.value}
           onClick={(event) => onChange(option.value, { x: event.clientX, y: event.clientY })}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-sm text-muted transition-colors hover:text-ink data-pressed:bg-accent data-pressed:text-on-accent"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted transition-colors hover:text-ink data-pressed:bg-glass-press data-pressed:text-ink"
         >
           {option.icon}
           {option.label}

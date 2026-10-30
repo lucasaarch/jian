@@ -1,18 +1,19 @@
 /* biome-ignore-all lint/style/noDescendingSpecificity: The menu's parts are styled per state and do not overlap. */
 @reference "tailwindcss";
 @reference "./themes.css";
+@reference "./kit.css";
 
 /* The model menu: a compact trigger reading "Claude Opus 5.5 Low", and a popup with the
    searchable list on the left and what the model under the pointer offers on the right. Colors
    are the runtime tokens; the Tailwind `--color-*` names do not exist at runtime. */
 @layer components {
   .model-trigger {
-    @apply inline-flex h-9 min-w-0 items-center gap-1.5 rounded-full px-3 text-sm transition-colors;
+    @apply inline-flex h-8 min-w-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] transition-colors;
     color: var(--muted);
   }
   .model-trigger:hover:not(:disabled),
   .model-trigger[data-popup-open] {
-    background: var(--canvas);
+    background: var(--glass-hover);
     color: var(--ink);
   }
   .model-trigger:disabled {
@@ -21,9 +22,6 @@
   .model-trigger-name {
     @apply min-w-0 truncate;
     color: var(--ink);
-  }
-  .model-trigger-detail {
-    @apply shrink-0;
   }
   .model-trigger > svg {
     @apply shrink-0;
@@ -43,12 +41,11 @@
     color: var(--muted);
   }
 
-  /* As wide as what it lists, within the screen, and opening above the composer. */
+  /* As wide as what it lists, within the screen, and opening above the composer: glass, as
+     every list that opens over the app. */
   .model-menu {
-    @apply flex max-h-[min(28rem,70dvh)] w-max min-w-44 flex-col overflow-hidden rounded-xl border text-sm shadow-xl;
+    @apply glass flex max-h-[min(28rem,70dvh)] w-max min-w-44 flex-col overflow-hidden rounded-xl text-[13px];
     max-width: calc(100vw - 2rem);
-    background: var(--surface);
-    border-color: var(--line);
     transform-origin: var(--transform-origin);
     transition:
       opacity 150ms ease,
@@ -62,14 +59,15 @@
   .model-menu > ul {
     @apply m-0 min-h-0 list-none overflow-y-auto overscroll-contain p-1.5;
   }
+  /* The same search as every list that opens over the app: one height, one size of text. */
   .model-menu-search {
-    @apply flex items-center gap-2 border-b px-3 py-2.5;
-    border-color: var(--line);
+    @apply flex h-10 shrink-0 items-center gap-2 border-b px-3;
+    border-color: var(--glass-edge);
     color: var(--muted);
   }
   .model-menu-search input,
   .model-menu-search input:focus {
-    @apply w-full border-0 bg-transparent p-0 text-sm outline-none;
+    @apply h-full min-h-0 w-full border-0 bg-transparent p-0 text-[13px] outline-none;
     box-shadow: none;
     color: var(--ink);
   }
@@ -82,19 +80,41 @@
   }
   .model-menu > fieldset + fieldset {
     @apply border-t;
-    border-color: var(--line);
+    border-color: var(--glass-edge);
   }
+  /* A list's title, as the choosers write theirs. A legend sits on the fieldset's edge unless it
+     floats; floated, it takes the padding the rows do. */
   .model-menu legend {
-    @apply px-2.5 pb-1 pt-1.5 text-xs;
+    @apply float-left w-full px-2.5 pb-1 pt-1.5 text-[11px] font-medium tracking-wide uppercase;
     color: var(--muted);
   }
+  .model-menu legend + * {
+    @apply clear-left;
+  }
+  /* A switch beside a list, such as Fast beside the efforts: one line, under a rule. */
+  .model-menu-switch {
+    @apply flex items-center gap-2.5 border-t px-4 py-2.5;
+    border-color: var(--glass-edge);
+    color: var(--ink);
+  }
+  .model-menu-switch > svg {
+    @apply shrink-0;
+    color: var(--muted);
+  }
+  .model-menu-switch-name {
+    @apply text-[13px];
+  }
+  /* Its switch keeps to the line's end, after the name and the note on it. */
+  .model-menu-switch > [role="switch"] {
+    @apply ml-auto;
+  }
   .model-option {
-    @apply flex w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 py-2 text-left outline-none transition-colors;
+    @apply flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors;
     color: var(--ink);
   }
   button.model-option:hover,
   button.model-option:focus-visible {
-    background: var(--accent-soft);
+    background: var(--glass-press);
   }
   .model-option[aria-pressed="true"] .model-option-name {
     @apply font-medium;
@@ -102,16 +122,14 @@
   .model-option-name {
     @apply min-w-0 flex-1 truncate;
   }
+  /* One line under each choice: the menu grows to hold it rather than wrap it. */
   .model-option-name small {
-    @apply block max-w-48 whitespace-normal text-xs leading-snug;
+    @apply block whitespace-nowrap text-xs leading-snug;
     color: var(--muted);
   }
   .model-option-detail {
     @apply shrink-0;
     color: var(--muted);
-  }
-  .model-option.static {
-    @apply cursor-default;
   }
 }
 

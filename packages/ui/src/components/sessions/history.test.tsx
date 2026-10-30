@@ -2,7 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import type { GatewayApi, Run } from '../../lib/api';
-import { CrewDrawer } from './crew';
+import { CrewDrawer } from './crew-drawer';
 import { History } from './history';
 
 let hear: ((event: { type: string }) => void) | undefined;
@@ -15,7 +15,7 @@ vi.mock('../../lib/events', () => ({
   },
 }));
 
-it('centers a spinner while a conversation is loading', async () => {
+it('outlines the conversation while it is loading', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   let settle!: (messages: Awaited<ReturnType<GatewayApi['messages']>>) => void;
   const api = {
@@ -33,7 +33,9 @@ it('centers a spinner while a conversation is loading', async () => {
     await act(async () =>
       root.render(<History api={api} profileId="profile" sessionId="session" />),
     );
-    expect(element.querySelector('.message-history.loading .history-loading .spin')).not.toBeNull();
+    expect(
+      element.querySelector('[role="status"][aria-label="Loading conversation"]'),
+    ).not.toBeNull();
     expect(element.textContent).not.toContain('Loading the history');
     await act(async () => settle([]));
   } finally {

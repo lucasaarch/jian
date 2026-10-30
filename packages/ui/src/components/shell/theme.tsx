@@ -1,6 +1,5 @@
 'use client';
 
-import { Moon, Sun } from 'lucide-react';
 import { useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { create } from 'zustand';
@@ -57,30 +56,4 @@ export function ThemeSync() {
   }, [theme]);
 
   return null;
-}
-
-export function ThemeSwitcher() {
-  const { theme, setTheme } = useTheme();
-
-  return (
-    <fieldset className="theme-switcher">
-      <legend className="sr-only">Theme</legend>
-      <button
-        type="button"
-        className={theme === 'dark' ? 'active' : ''}
-        onClick={(event) => setTheme('dark', { x: event.clientX, y: event.clientY })}
-        aria-pressed={theme === 'dark'}
-      >
-        <Moon size={15} /> Dark
-      </button>
-      <button
-        type="button"
-        className={theme === 'light' ? 'active' : ''}
-        onClick={(event) => setTheme('light', { x: event.clientX, y: event.clientY })}
-        aria-pressed={theme === 'light'}
-      >
-        <Sun size={15} /> Light
-      </button>
-    </fieldset>
-  );
 }

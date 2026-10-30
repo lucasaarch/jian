@@ -1,20 +1,22 @@
-/* biome-ignore-all lint/style/noDescendingSpecificity: A card's and a drawer's parts are styled per state and do not overlap. */
 @reference "tailwindcss";
 @reference "./themes.css";
 
-/* Pull requests and issues the conversation links to: a card in the text, and the drawer the
-   agents use when one is followed. Colours are the runtime tokens; the Tailwind `--color-*`
-   names do not exist at runtime. */
+/* Pull requests and issues the conversation links to: a reference in the text, and what GitHub
+   wrote, as the Inspector shows it. Colours are the runtime tokens; the Tailwind `--color-*`
+   names do not exist at runtime. The Inspector's own parts are drawn with the kit. */
 @layer components {
   /* A reference in the text, as GitHub writes one: the mark coloured by where the item stands,
      and its number in the link colour. */
   .github-ref {
-    @apply mx-0.5 inline-flex items-baseline gap-1 rounded-sm px-0.5 align-baseline font-medium transition-colors;
+    @apply mx-0.5 inline-flex items-baseline gap-1 rounded-md px-0.5 align-baseline font-medium transition-colors;
     color: var(--accent);
   }
   .github-ref > svg {
     @apply shrink-0 self-center;
     color: var(--good);
+  }
+  .github-ref[data-state="draft"] > svg {
+    color: var(--muted);
   }
   .github-ref[data-state="merged"] > svg,
   .github-ref[data-kind="issue"][data-state="closed"] > svg {
@@ -23,330 +25,23 @@
   .github-ref[data-kind="pull"][data-state="closed"] > svg {
     color: var(--bad);
   }
-  .github-ref[data-state="draft"] > svg {
-    color: var(--muted);
-  }
   .github-ref:hover,
   .github-ref[aria-pressed="true"] {
     @apply underline underline-offset-2;
-  }
-  .github-ref[aria-pressed="true"] {
-    background: var(--accent-soft);
   }
   .github-ref:focus-visible {
     @apply outline-2 outline-offset-2;
     outline-color: var(--ink);
   }
 
-  .github-state {
-    @apply inline-flex shrink-0 items-center rounded-full px-2 py-px text-[11.5px] font-medium leading-5;
-    background: var(--good-soft);
-    color: var(--good);
-  }
-  .github-state[data-state="draft"] {
-    background: var(--accent-soft);
-    color: var(--muted);
-  }
-  .github-state[data-state="merged"] {
-    background: var(--merged-soft);
-    color: var(--merged);
-  }
-  .github-state[data-state="closed"] {
-    background: var(--bad-soft);
-    color: var(--bad);
-  }
-
-  /* While GitHub answers: the drawer's own shape, breathing, where its parts will be. */
-  .github-skeleton {
-    @apply flex min-h-0 flex-1 flex-col;
-  }
-  .github-skeleton-head {
-    @apply grid gap-2.5 border-b px-4 pb-4 pt-3;
-    border-color: var(--line);
-  }
-  .github-skeleton-row {
-    @apply flex items-center gap-2;
-  }
-  .github-skeleton-body {
-    @apply grid content-start gap-2.5 px-4 py-4;
-  }
-  .github-skeleton-gap {
-    @apply h-2;
-  }
-  .skeleton {
-    @apply block rounded-md;
-    background: linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--ink) 6%, transparent) 0%,
-      color-mix(in srgb, var(--ink) 11%, transparent) 50%,
-      color-mix(in srgb, var(--ink) 6%, transparent) 100%
-    );
-    background-size: 200% 100%;
-    animation: skeleton-sweep 1.4s ease-in-out infinite;
-  }
-
-  /* The drawer: a bar that holds its place while the item loads, then the item. */
-  .github-drawer-bar {
-    @apply flex items-center gap-2 px-4 pt-3;
-    color: var(--muted);
-  }
-  /* Where the item lives, and beside it the way out to GitHub. */
-  .github-drawer-where {
-    @apply flex min-w-0 flex-1 items-center gap-1.5 font-mono text-xs;
-  }
-  .github-drawer-where > span {
-    @apply min-w-0 truncate;
-  }
-  .github-drawer-out {
-    @apply grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors;
-    color: var(--muted);
-  }
-  .github-drawer-out:hover {
-    background: var(--canvas);
-    color: var(--ink);
-  }
-  /* Refresh turns while it reads, and stays where it is. */
-  .github-drawer-bar [data-busy] svg {
-    animation: github-turn 0.9s linear infinite;
-  }
-  .github-person {
-    @apply font-medium hover:underline hover:underline-offset-2;
-    color: var(--ink);
-  }
-  .github-people {
-    @apply flex flex-wrap gap-x-3 gap-y-1 text-[13px];
-  }
-
-  .github-drawer > header {
-    @apply border-t-0 pt-2;
-  }
-  .github-drawer-title {
-    @apply text-base font-semibold leading-snug;
-    color: var(--ink);
-  }
-  .github-drawer-title a:hover {
-    @apply underline underline-offset-2;
-  }
-  .github-meta {
-    @apply flex flex-wrap items-center gap-2 text-[12.5px];
-    color: var(--muted);
-  }
-  .github-author {
-    @apply inline-flex min-w-0 items-center gap-1.5;
-  }
-  .github-branches {
-    @apply flex min-w-0 items-center gap-1.5 text-xs;
-    color: var(--muted);
-  }
-  .github-branches code {
-    @apply min-w-0 truncate rounded-md px-1.5 py-0.5 font-mono;
-    background: var(--canvas);
-    color: var(--ink);
-  }
-  .github-actions {
-    @apply flex flex-wrap items-center gap-2 pt-1;
-  }
-  .github-actions .button {
-    @apply h-9 min-h-9 px-3 text-[13px];
-  }
-  /* The method menu hangs off the merge button as one split control. */
-  .github-merge {
-    @apply inline-flex;
-  }
-  .github-merge > .button:first-child:not(:last-child) {
-    @apply rounded-r-none;
-  }
-  .github-actions .github-merge-more {
-    @apply w-9 rounded-l-none border-l px-0;
-    border-left-color: color-mix(in srgb, var(--on-accent) 25%, transparent);
-  }
-  .github-mergeable {
-    @apply text-[12.5px];
-    color: var(--good);
-  }
-  .github-mergeable[data-state="conflicts"] {
-    color: var(--bad);
-  }
-  .github-mergeable:is([data-state="blocked"], [data-state="behind"], [data-state="unknown"]) {
-    color: var(--warn);
-  }
-
-  .github-body {
-    @apply gap-5;
-  }
+  /* Text written on GitHub, in the Inspector: inline code breaks between words like the text
+     around it; only a long path breaks inside. */
   .github-markdown {
     @apply min-w-0 text-sm;
     overflow-wrap: break-word;
   }
-  /* Inline code breaks between words like the text around it; only a long path breaks inside. */
   .github-markdown :not(pre) > code {
     word-break: normal;
     overflow-wrap: anywhere;
-  }
-  /* The parts of an item, one after another, each under a heading that folds it. A rule between
-     them keeps one part from running into the next. */
-  .github-section {
-    @apply min-w-0 border-b pb-4;
-    border-color: var(--line);
-  }
-  .github-section:last-child {
-    @apply border-b-0 pb-0;
-  }
-  .github-section > summary {
-    @apply flex cursor-pointer list-none items-center gap-2 rounded-md py-1 text-[13px] font-semibold;
-    color: var(--ink);
-  }
-  .github-section > summary::-webkit-details-marker {
-    display: none;
-  }
-  .github-section > summary:focus-visible {
-    @apply outline-2 outline-offset-2;
-    outline-color: var(--ink);
-  }
-  .github-section-chevron {
-    @apply shrink-0 -rotate-90 transition-transform;
-    color: var(--muted);
-  }
-  .github-section[open] .github-section-chevron {
-    @apply rotate-0;
-  }
-  .github-section-count {
-    @apply inline-flex items-center gap-1 rounded-full px-1.5 text-[11.5px] font-medium tabular-nums;
-    background: var(--accent-soft);
-    color: var(--muted);
-  }
-  .github-section-count[data-state="passing"] > svg {
-    color: var(--good);
-  }
-  .github-section-count[data-state="failing"] > svg {
-    color: var(--bad);
-  }
-  .github-section-count[data-state="pending"] > svg {
-    color: var(--warn);
-  }
-  .github-section-body {
-    @apply grid min-w-0 gap-2 pt-2;
-  }
-  .github-none {
-    @apply text-[13px];
-    color: var(--muted);
-  }
-  .github-check-list,
-  .github-review-list {
-    @apply grid gap-0.5;
-  }
-  /* A review is a row that opens it on GitHub: who, their verdict, when. */
-  .github-review-list :is(a, span) {
-    @apply flex min-w-0 items-center gap-2 rounded-md px-1 py-1 text-[13px];
-  }
-  .github-review-list a:hover {
-    background: var(--canvas);
-  }
-  .github-review-list strong {
-    @apply min-w-0 truncate font-medium;
-    color: var(--ink);
-  }
-  .github-review-list small {
-    @apply shrink-0 text-xs;
-    color: var(--muted);
-  }
-  .github-review-list li[data-state="approved"] small {
-    color: var(--good);
-  }
-  .github-review-list li[data-state="changes_requested"] small {
-    color: var(--bad);
-  }
-  .github-review-list time {
-    @apply ml-auto shrink-0 text-xs;
-    color: var(--muted);
-  }
-  .github-review-list svg {
-    @apply shrink-0;
-    color: var(--muted);
-  }
-  .github-check-list li {
-    @apply flex min-w-0 items-center gap-2 rounded-md px-1 py-1 text-[13px];
-  }
-  .github-check-list li > svg {
-    @apply shrink-0;
-    color: var(--good);
-  }
-  .github-check-list li[data-state="failing"] > svg {
-    color: var(--bad);
-  }
-  .github-check-list li[data-state="pending"] > svg {
-    color: var(--warn);
-  }
-  .github-check-list :is(a, span) {
-    @apply min-w-0 truncate;
-    color: var(--ink);
-  }
-  .github-check-list a:hover {
-    @apply underline underline-offset-2;
-  }
-  .github-check-list small {
-    @apply ml-auto shrink-0 text-xs capitalize;
-    color: var(--muted);
-  }
-  .github-counts {
-    @apply ml-0;
-  }
-  .github-body .code-changes {
-    @apply mb-0;
-  }
-  .github-file-plain {
-    @apply flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 font-mono text-[12.5px];
-    border-color: var(--line);
-  }
-  .github-file-plain span {
-    @apply min-w-0 truncate;
-  }
-  .github-file-plain small {
-    @apply ml-auto shrink-0 font-sans text-xs;
-    color: var(--muted);
-  }
-
-  /* A label in its own colour, mixed toward the surface so any colour GitHub allows reads. */
-  .github-labels {
-    @apply flex flex-wrap gap-1.5;
-  }
-  .github-labels li {
-    --label: var(--muted);
-    @apply rounded-full border px-2 py-px text-xs font-medium;
-    background: color-mix(in srgb, var(--label) 18%, var(--surface));
-    border-color: color-mix(in srgb, var(--label) 45%, var(--surface));
-    color: color-mix(in srgb, var(--label) 55%, var(--ink));
-  }
-  .github-comments {
-    @apply grid gap-3;
-  }
-  .github-comments li {
-    @apply grid gap-1.5 rounded-lg border px-3 py-2.5;
-    border-color: var(--line);
-  }
-  .github-comments .github-author {
-    @apply text-xs;
-    color: var(--muted);
-  }
-}
-
-@keyframes skeleton-sweep {
-  from {
-    background-position: 100% 0;
-  }
-  to {
-    background-position: -100% 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .skeleton {
-    animation: none;
-  }
-}
-
-@keyframes github-turn {
-  to {
-    transform: rotate(360deg);
   }
 }

@@ -1,12 +1,12 @@
 'use client';
 
 import { Popover } from '@base-ui/react/popover';
-import { Check, ChevronDown, Search } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { Check, ChevronDown, Search, Zap } from 'lucide-react';
+import { type ReactNode, useId, useState } from 'react';
+import { InfoTip, SwitchControl } from '../../kit';
 import type { ModelSelection, ReasoningEffort } from '../../lib/api';
 import { matchesQuery } from '../../lib/search';
 import { efforts } from '../providers/catalog';
-import { Switch } from '../ui';
 
 /** One model the conversation can run on, as the menu shows it. */
 export type ModelEntry = {
@@ -26,8 +26,10 @@ const same = (entry: ModelEntry, selection?: ModelSelection) =>
 
 /** Which edge of its trigger a menu lines up with: the end on the right of a bar, the start on its left. */
 export type MenuAlign = 'start' | 'end';
+/** Where a menu opens: above, as the composer sits at the bottom of the screen; or below. */
+type MenuSide = 'top' | 'bottom';
 
-/** A popup that opens above its trigger, as the composer sits at the bottom of the screen. */
+/** A popup that opens beside its trigger, above it unless told otherwise. */
 export function Menu({
   label,
   trigger,
@@ -35,11 +37,13 @@ export function Menu({
   open,
   onOpenChange,
   align = 'end',
+  side = 'top',
   children,
 }: {
   label: string;
   trigger: ReactNode;
   align?: MenuAlign;
+  side?: MenuSide;
   disabled?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -54,7 +58,7 @@ export function Menu({
       <Popover.Portal>
         <Popover.Positioner
           className="select-positioner"
-          side="top"
+          side={side}
           align={align}
           sideOffset={8}
           positionMethod="fixed"
@@ -79,6 +83,8 @@ export function ModelMenu({
   value,
   disabled,
   align,
+  side,
+  off,
   onChange,
 }: {
   label: string;
@@ -86,6 +92,9 @@ export function ModelMenu({
   value?: ModelSelection;
   disabled?: boolean;
   align?: MenuAlign;
+  side?: MenuSide;
+  /** For what may also run on no model at all: that choice, first in the list. */
+  off?: { label: string; chosen: boolean; choose: () => void };
   onChange: (next: ModelSelection) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -98,12 +107,17 @@ export function ModelMenu({
       label={label}
       disabled={disabled}
       align={align}
+      {...(side ? { side } : {})}
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
         if (!next) setQuery('');
       }}
-      trigger={<span className="model-trigger-name">{current?.name ?? 'No model available'}</span>}
+      trigger={
+        <span className="model-trigger-name">
+          {off?.chosen ? off.label : (current?.name ?? 'No model available')}
+        </span>
+      }
     >
       <label className="model-menu-search">
         <Search size={14} aria-hidden="true" />
@@ -115,8 +129,24 @@ export function ModelMenu({
         />
       </label>
       <ul aria-label="Models">
+        {off && !query && (
+          <li>
+            <button
+              type="button"
+              className="model-option"
+              aria-pressed={off.chosen}
+              onClick={() => {
+                off.choose();
+                setOpen(false);
+              }}
+            >
+              <span className="model-option-name">{off.label}</span>
+              {off.chosen && <Check size={14} aria-hidden="true" />}
+            </button>
+          </li>
+        )}
         {listed.map((entry) => {
-          const chosen = same(entry, value);
+          const chosen = !off?.chosen && same(entry, value);
 
           return (
             <li key={`${entry.providerId}:${entry.modelId}`}>
@@ -161,15 +191,18 @@ export function EffortMenu({
   value,
   disabled,
   align,
+  side,
   onChange,
 }: {
   model?: ModelEntry;
   value?: ModelSelection;
   disabled?: boolean;
   align?: MenuAlign;
+  side?: MenuSide;
   onChange: (next: ModelSelection) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const fastId = useId();
 
   if (!model || !value || (!model.efforts.length && !model.fast)) return null;
 
@@ -183,13 +216,13 @@ export function EffortMenu({
       label={`Effort for ${model.name}`}
       disabled={disabled}
       align={align}
+      {...(side ? { side } : {})}
       open={open}
       onOpenChange={setOpen}
       trigger={<span className="model-trigger-name">{summary || 'Effort'}</span>}
     >
       {offered.length > 0 && (
-        <fieldset>
-          <legend>Effort</legend>
+        <fieldset aria-label="Effort">
           {offered.map((item) => {
             const active = value.reasoningEffort === item.value;
 
@@ -212,23 +245,22 @@ export function EffortMenu({
         </fieldset>
       )}
       {model.fast && (
-        <fieldset>
-          <legend>Options</legend>
-          <div className="model-option static">
-            <span className="model-option-name">
-              Fast
-              <small>Faster answers, at the provider's higher price</small>
-            </span>
-            <Switch
-              label={`Fast mode for ${model.name}`}
-              checked={fast}
-              onChange={(next) => {
-                const { fast: _off, ...rest } = value;
-                onChange(next ? { ...rest, fast: true } : rest);
-              }}
-            />
-          </div>
-        </fieldset>
+        // Not a choice among the efforts but a switch beside them: one line, apart from the list.
+        <div className="model-menu-switch">
+          <Zap size={14} aria-hidden="true" />
+          <span className="model-menu-switch-name" id={`${fastId}-label`}>
+            Fast
+          </span>
+          <InfoTip label="About Fast">Quicker replies, at the provider's higher price.</InfoTip>
+          <SwitchControl
+            labelledBy={`${fastId}-label`}
+            checked={fast}
+            onCheckedChange={(next) => {
+              const { fast: _off, ...rest } = value;
+              onChange(next ? { ...rest, fast: true } : rest);
+            }}
+          />
+        </div>
       )}
     </Menu>
   );

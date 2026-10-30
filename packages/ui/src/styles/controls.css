@@ -1,6 +1,7 @@
 /* biome-ignore-all lint/style/noDescendingSpecificity: Related states stay next to their component. */
 @reference "tailwindcss";
 @reference "./themes.css";
+@reference "./kit.css";
 
 @layer components {
   .select-trigger {
@@ -16,12 +17,12 @@
     box-shadow: none;
   }
   .select-trigger.ghost {
-    @apply h-9 min-h-9 w-auto max-w-40 shrink-0 gap-1 rounded-md border-transparent bg-transparent px-2 py-1 text-xs text-muted;
+    @apply h-8 min-h-8 w-auto max-w-40 shrink-0 gap-1 rounded-lg border-transparent bg-transparent px-2.5 py-1 text-xs text-muted;
   }
   .select-trigger.ghost:hover:not(:disabled),
   .select-trigger.ghost:focus-visible,
   .select-trigger.ghost[data-popup-open] {
-    @apply border-transparent bg-canvas text-ink;
+    @apply border-transparent bg-glass-hover text-ink;
   }
   .select-trigger.ghost .select-value {
     @apply gap-1.5;
@@ -50,9 +51,6 @@
   .select-value-stack-item + .select-value-stack-item {
     margin-left: -0.4rem;
   }
-  .select-value-stack-item .mini-avatar {
-    @apply ring-2 ring-surface;
-  }
   .select-chevron {
     @apply text-muted transition-transform;
   }
@@ -63,8 +61,9 @@
   .select-positioner {
     @apply z-[60] max-w-[calc(100vw-32px)];
   }
+  /* Glass, as every list that opens over the app. */
   .select-popup {
-    @apply min-w-52 overflow-hidden rounded-sm border border-line bg-surface text-sm text-ink;
+    @apply glass min-w-52 overflow-hidden rounded-xl text-[13px] text-ink;
     width: var(--anchor-width);
     max-width: calc(100vw - 32px);
     transform-origin: var(--transform-origin);
@@ -101,13 +100,13 @@
     max-height: min(320px, var(--available-height, 320px) - 108px);
   }
   .select-option {
-    @apply flex min-h-10 cursor-pointer items-center gap-3 rounded px-3 py-2.5 outline-none;
+    @apply flex min-h-9 cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 outline-none;
   }
   .select-option[data-highlighted] {
-    @apply bg-accent-soft text-accent;
+    @apply bg-glass-press text-ink;
   }
   .select-option[data-selected] {
-    @apply font-medium text-accent;
+    @apply font-medium text-ink;
   }
   .select-option[data-disabled] {
     @apply cursor-not-allowed text-muted;
@@ -122,13 +121,14 @@
     @apply mt-0.5 block text-xs font-normal text-muted;
   }
   .select-check {
-    @apply ml-auto text-accent;
+    @apply ml-auto text-ink;
   }
+  /* The same search as every list that opens over the app: one height, one size of text. */
   .select-search {
-    @apply flex items-center gap-2 border-b border-line px-3 py-2 text-muted;
+    @apply flex h-10 shrink-0 items-center gap-2 border-b border-glass-edge px-3 text-muted;
   }
   .select-search input {
-    @apply min-h-9 border-0 bg-transparent px-1 py-1.5;
+    @apply h-full min-h-0 border-0 bg-transparent p-0 text-[13px];
     border-radius: 0;
   }
   .select-search input:focus {
@@ -148,122 +148,21 @@
   .select-footer a {
     @apply flex w-full items-center gap-3 rounded px-3 py-3 text-xs text-accent hover:bg-accent-soft;
   }
-  .profile-trigger-copy {
-    @apply min-w-0;
-  }
-  .profile-trigger-copy small {
-    @apply block text-[10px] font-normal text-muted;
-  }
-  .profile-trigger-copy strong {
-    @apply block truncate text-sm font-medium;
-  }
-  .identity-form {
-    @apply w-full;
-  }
-  .identity-form .field {
-    @apply mb-7;
-  }
-  .identity-form .avatar-field {
-    @apply mb-8 border-b border-line pb-8;
-  }
 
-  .provider-symbol {
-    @apply font-display text-3xl font-medium;
-  }
-  /* One vendor per row: the name carries its state, and the form opens under the whole row. */
-  .provider-row h3 {
-    @apply flex flex-wrap items-center gap-2;
-  }
-  .provider-row .connection-form {
-    @apply max-w-xl border-t border-line pt-5;
-  }
-  .connection-disclosure:not([hidden]) {
-    @apply mt-5;
-    animation: arrive 150ms ease-out;
-  }
-  /* A tool of an MCP server: on, it reads as a tag; switched off, it fades and is struck out. */
-  .mcp-tool {
-    @apply inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 font-mono text-xs text-ink transition-colors hover:border-accent disabled:opacity-60;
-  }
-  .mcp-tool[aria-pressed="true"] svg {
-    @apply text-good;
-  }
-  .mcp-tool[aria-pressed="false"] {
-    @apply border-dashed text-muted line-through;
-  }
-  .mcp-hint {
-    @apply mt-1 text-xs text-muted;
-  }
-  /* Memories: the search, rows whose text is cut at three lines, and the
-     memories each one is recalled with as chips that lead to them. */
-  .memory-toolbar {
-    @apply mb-4 flex flex-wrap items-center gap-4;
-  }
-  .memory-toolbar .search-field {
-    @apply min-w-64 flex-1;
-  }
-  .memory-row .resource-row > .grow > p {
-    @apply line-clamp-3 whitespace-pre-line;
-  }
-  .memory-row[data-focused="true"] .resource-row {
-    animation: memory-found 1.6s ease-out;
-  }
   .memory-links {
     @apply mt-3 flex flex-wrap gap-1.5;
   }
   .memory-links button {
     @apply inline-flex items-center gap-1 rounded-full border border-line bg-surface px-2.5 py-1 font-mono text-[11px] text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-60;
   }
-  .memory-editor-links {
-    @apply grid gap-2 border-t border-line pt-5;
-  }
-  .memory-editor-links h3 {
-    @apply text-sm font-semibold;
-  }
-  .memory-editor-links > p {
-    @apply -mt-1 text-xs text-muted;
-  }
-  /* Pickers: a field-like trigger, and a popup with a month calendar and time columns. */
-  .picker-trigger {
-    @apply flex w-full items-center justify-between gap-3 border border-control bg-surface/40 px-3.5 py-3 text-left text-sm text-ink transition-colors hover:border-accent;
-    border-radius: 3px 10px 3px 3px;
-  }
-  .picker-trigger[data-popup-open] {
-    @apply border-accent bg-canvas;
-  }
-  .picker-trigger svg {
-    @apply shrink-0 text-muted;
-  }
-  .picker-popup {
-    @apply flex overflow-hidden rounded-lg border border-line bg-canvas text-sm text-ink shadow-xl;
-    transform-origin: var(--transform-origin);
-    transition:
-      opacity 140ms,
-      transform 140ms;
-  }
-  .picker-popup[data-starting-style],
-  .picker-popup[data-ending-style] {
-    opacity: 0;
-    transform: translateY(-4px) scale(0.98);
-  }
+
   .time-columns {
     @apply flex h-64;
   }
-  .time-column {
-    @apply relative w-16 overflow-y-auto p-1.5;
-  }
-  .time-column + .time-column {
-    @apply border-l border-line;
-  }
-  .time-column fieldset {
-    @apply m-0 grid gap-0.5 rounded-none border-0 p-0;
-  }
-  .time-columns button,
-  .calendar-grid button {
+  .time-columns button {
     @apply rounded-md py-1.5 text-center font-mono text-sm tabular-nums transition-colors hover:bg-surface;
   }
-  .time-columns button[aria-pressed="true"],
-  .calendar-grid button[aria-pressed="true"] {
+  .time-columns button[aria-pressed="true"] {
     @apply bg-accent text-on-accent hover:bg-accent;
   }
   .calendar {
@@ -278,68 +177,11 @@
   .calendar header button {
     @apply grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-surface hover:text-ink;
   }
-  .calendar-grid {
-    @apply grid grid-cols-7 gap-0.5;
-  }
-  .calendar-grid button {
-    @apply font-sans;
-  }
-  .calendar-grid button:disabled {
-    @apply cursor-default text-muted/40 hover:bg-transparent;
-  }
-  .calendar-weekday {
-    @apply py-1 text-center text-[11px] font-semibold text-muted;
-  }
-  .calendar-popup .time-columns {
-    @apply h-auto max-h-[304px];
-  }
   /* Schedules: a single time that already ran fades under the ones still to come. */
   .schedule-row[data-done="true"] {
     @apply opacity-55 transition-opacity hover:opacity-100;
   }
-  .schedule-history {
-    @apply grid;
-  }
-  .schedule-history li {
-    @apply relative flex gap-3 pb-4;
-    animation: arrive 220ms ease-out both;
-    animation-delay: calc(min(var(--i), 12) * 30ms);
-  }
-  /* The thread from one mark down to the next, stopping at the oldest. */
-  .schedule-history li:not(:last-child)::before {
-    @apply absolute bottom-0 left-[9px] top-6 w-px bg-line;
-    content: "";
-  }
-  .history-mark {
-    @apply relative z-[1] mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-line bg-surface text-muted;
-  }
-  .schedule-history li[data-outcome="done"] .history-mark {
-    @apply border-accent bg-accent text-on-accent;
-  }
-  .schedule-history li[data-outcome="failed"] .history-mark {
-    @apply border-bad bg-bad-soft text-bad;
-  }
-  .history-body {
-    @apply grid min-w-0 flex-1 gap-1;
-  }
-  .history-head {
-    @apply flex flex-wrap items-center gap-2;
-  }
-  .history-head strong {
-    @apply text-sm font-medium;
-  }
-  .history-status {
-    @apply text-xs text-muted;
-  }
-  .schedule-history li[data-outcome="failed"] .history-status {
-    @apply text-bad;
-  }
-  .schedule-history .run-error {
-    @apply text-xs text-bad;
-  }
-  .schedule-history a {
-    @apply inline-flex w-fit items-center gap-1 text-xs text-accent;
-  }
+
   .schedule-when {
     @apply m-0 grid gap-4 border-0 p-0;
   }
@@ -355,204 +197,35 @@
   .segmented button[aria-pressed="true"] {
     @apply bg-canvas font-medium text-ink shadow-sm;
   }
-  .schedule-repeat {
-    @apply grid gap-4 sm:grid-cols-3;
-  }
-  .switch {
-    @apply relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-control bg-surface transition-colors disabled:opacity-50;
-  }
-  .switch[aria-checked="true"] {
-    @apply border-accent bg-accent;
-  }
-  .switch-knob {
-    @apply absolute left-0.5 h-[18px] w-[18px] rounded-full bg-ink/60 shadow-sm transition-all;
-    transition-timing-function: cubic-bezier(0.3, 1.3, 0.5, 1);
-  }
-  .switch[aria-checked="true"] .switch-knob {
-    @apply left-[calc(100%-20px)] bg-on-accent;
-  }
-  /* Rows grouped under a small heading, as Providers, Skills and MCP list what they hold. */
-  .row-group + .row-group {
-    @apply mt-10;
-  }
-  .row-group > h2 {
-    @apply mb-2 font-sans text-xs font-semibold uppercase tracking-wider text-muted;
-  }
-  .row-group > p {
-    @apply -mt-1 mb-2 text-sm text-muted;
-  }
-  /* A mark or a logo on a quiet tile, so a brand's own colours are not fighting the accent. */
-  .resource-icon.tile {
-    @apply border border-line bg-surface text-ink;
-  }
-  .expandable-row h3 {
-    @apply flex flex-wrap items-center gap-2;
-  }
-  .row-facts {
-    @apply mt-2 flex flex-wrap gap-x-1.5 gap-y-1 text-xs text-muted;
-  }
-  /* What went wrong with a row, where it cannot be missed. */
-  .row-error {
-    @apply mt-2.5 flex w-fit items-start gap-2 rounded-md bg-bad-soft px-2.5 py-1.5 text-xs font-medium text-bad;
-  }
-  .row-error svg {
-    @apply mt-px shrink-0;
-  }
-  /* The separator in the text's own colour, so it reads as one line of facts, not two. */
-  .row-facts > span + span::before {
-    @apply mr-1.5 font-bold text-muted;
-    content: "·";
-  }
-  .provider-alternative {
-    @apply mt-2 grid gap-3 border-t border-line pt-5 text-sm text-muted;
-  }
-  /* One card per activity, with its choices visible in place. */
-  .model-grid {
-    @apply grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 min-[640px]:grid-cols-3;
-  }
-  .model-card {
-    @apply flex flex-col rounded-sm border border-line bg-surface p-5;
-  }
-  .model-card h2 {
-    @apply text-lg;
-  }
-  .model-card-hint {
-    @apply mt-1 line-clamp-2 text-xs text-muted;
-  }
-  .model-card .settings-fields {
-    @apply mt-4 grid content-start gap-4;
-  }
-  .model-card .field {
-    @apply mb-0;
-  }
-  .model-card .settings-fields > .note {
-    @apply my-0;
-  }
-  .channel-conversations {
-    @apply mt-6 grid gap-6 border-t border-line pt-6;
-  }
-  .channel-conversations h3 {
-    @apply mb-2 text-xs font-semibold uppercase tracking-wider text-muted;
-  }
-  .conversation-row {
-    @apply flex items-center gap-3 border-b border-line py-3 text-ink last:border-b-0;
-  }
-  .conversation-row > svg {
-    @apply text-muted;
-  }
-  .conversation-row strong {
-    @apply block text-sm font-medium;
-  }
-  .conversation-row small {
-    @apply block truncate text-xs text-muted;
-  }
+
   .face {
     @apply grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-accent-soft object-cover text-xs font-semibold text-accent;
   }
-  /* A channel's wording for approvals and questions: folded until the owner wants to edit it. */
-  .channel-messages {
-    @apply border-t border-line pt-4;
-  }
-  .channel-messages-toggle {
-    @apply flex w-full items-start gap-2 text-left;
-  }
-  .channel-messages-toggle > svg {
-    @apply mt-0.5 shrink-0 text-muted transition-transform;
-  }
-  .channel-messages[data-open] .channel-messages-toggle > svg {
-    @apply rotate-90;
-  }
-  .channel-messages-toggle strong {
-    @apply block text-sm font-medium text-ink;
-  }
-  .channel-messages-toggle small {
-    @apply block text-xs text-muted;
-  }
-  .channel-messages-form {
-    @apply mt-4 grid gap-4 pl-6;
-  }
-  .channel-messages-actions {
-    @apply flex flex-wrap justify-end gap-2;
-  }
-  .contact-approver {
-    @apply flex shrink-0 items-center gap-3 text-right;
-  }
-  .contact-approver small {
-    @apply max-w-56 whitespace-normal;
-  }
-  .conversation-row[data-status="blocked"] .face {
-    @apply opacity-50 grayscale;
-  }
-  .request-card {
-    @apply my-3 overflow-hidden border border-line bg-surface;
-  }
-  .request-card > header {
-    @apply flex items-start gap-3 px-5 pt-4;
-  }
-  .request-card h4 {
-    @apply flex flex-wrap items-center gap-2 text-sm font-semibold text-ink;
-  }
-  .request-card header small {
-    @apply mt-0.5 block text-xs text-muted;
-  }
-  .request-card time {
-    @apply shrink-0 pt-0.5 text-xs text-muted;
-  }
-  .request-quote {
-    @apply mx-5 mt-4 mb-0 whitespace-pre-wrap break-words border border-line bg-canvas px-4 py-3 text-sm leading-relaxed text-ink;
-  }
-  .request-note {
-    @apply mx-5 mt-3 text-sm text-muted;
-  }
-  .request-card > footer {
-    @apply mt-4 flex flex-wrap items-center gap-2 border-t border-line bg-surface px-5 py-3;
-  }
-  .request-card > footer p {
-    @apply mr-auto text-xs text-muted;
-  }
-  .conversation-row[data-status="blocked"] strong {
-    @apply text-muted;
-  }
-  .connection-disclosure input {
-    @apply bg-canvas;
-  }
-  .connection-disclosure form > div:last-child {
-    @apply items-start;
-  }
-  .connection-disclosure form > div:last-child > span {
-    @apply basis-full;
-  }
-  .connection-form .field {
-    @apply mb-4;
-  }
-
-  .overview-profile {
-    @apply flex flex-wrap items-center justify-between gap-5 border border-line bg-surface px-6 py-5;
-  }
-  .overview-profile h2 {
-    @apply truncate text-2xl;
-  }
-  .overview-profile .profile-avatar {
-    @apply h-12 w-12 rounded-sm border border-line;
-  }
 }
 
+/* A notice floats over the app, so it is glass, as everything that floats is: the blur and the
+   edge of the kit, its mark in the ink, and red only for what went wrong. Sonner draws its own
+   close button; its hover filled the button with the page's ink and hid the cross. */
 [data-sonner-toaster] [data-sonner-toast].jian-toast {
-  --normal-bg: var(--canvas);
-  --normal-border: var(--line);
+  --normal-bg: var(--glass);
+  --normal-border: var(--glass-edge);
   --normal-text: var(--ink);
-  padding: 18px 40px 18px 18px;
-  border-radius: 12px;
-  border-left: 3px solid var(--accent);
+  padding: 14px 40px 14px 14px;
+  border-radius: 14px;
   font-family: inherit;
-  box-shadow: 0 8px 32px color-mix(in srgb, var(--shade) 10%, transparent);
-  gap: 12px;
+  font-size: 13px;
+  gap: 10px;
+  box-shadow:
+    inset 0 1px 0 var(--glass-light),
+    var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(165%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(165%);
 }
 [data-sonner-toaster] [data-sonner-toast].jian-toast [data-icon] {
-  color: var(--accent);
+  color: var(--muted);
 }
-[data-sonner-toaster] [data-sonner-toast].jian-toast[data-type="error"] {
-  border-left-color: var(--bad);
+[data-sonner-toaster] [data-sonner-toast].jian-toast[data-type="success"] [data-icon] {
+  color: var(--ink);
 }
 [data-sonner-toaster] [data-sonner-toast].jian-toast[data-type="error"] [data-icon] {
   color: var(--bad);
@@ -561,156 +234,30 @@
   left: auto;
   right: 10px;
   top: 50%;
+  width: 24px;
+  height: 24px;
   transform: translateY(-50%);
   border: 0;
+  border-radius: 8px;
   box-shadow: none;
   background: transparent;
+  color: var(--muted);
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
 }
-@media (max-width: 760px) {
-  .overview-profile h2 {
-    @apply text-2xl;
-  }
-  /* A phone puts who may approve on a line of its own under the contact. */
-  .conversation-row {
-    @apply flex-wrap;
-  }
-  .contact-approver {
-    @apply order-last basis-full justify-between text-left;
-  }
-  .channel-messages-form {
-    @apply pl-0;
-  }
+/* As specific as Sonner's own hover and one step more, since its sheet is injected after this. */
+[data-sonner-toaster] [data-sonner-toast].jian-toast[data-styled="true"] [data-close-button]:hover,
+[data-sonner-toaster]
+  [data-sonner-toast].jian-toast[data-styled="true"]
+  [data-close-button]:focus-visible {
+  background: var(--glass-hover);
+  border: 0;
+  color: var(--ink);
 }
 
 @layer components {
-  .resource-list {
-    @apply overflow-hidden border border-line bg-surface;
-  }
-  .memory-row:not(:last-child) {
-    @apply border-b border-line;
-  }
-  .resource-row {
-    @apply flex flex-wrap items-center gap-4 border-b border-line px-5 py-5 last:border-b-0;
-  }
-  .resource-row p {
-    @apply mt-1 text-xs;
-  }
-  .resource-row small {
-    @apply text-muted;
-  }
-  .resource-row .grow {
-    @apply min-w-32;
-  }
-  .resource-icon {
-    @apply grid h-10 w-10 shrink-0 place-items-center rounded-sm border border-line bg-canvas text-accent;
-  }
-}
-
-@layer components {
-  .identity-form .settings-fields {
-    @apply max-w-none;
-  }
   .badge-dot {
     @apply shrink-0;
-  }
-  .search-field {
-    @apply relative min-w-0;
-  }
-  .search-field > svg {
-    @apply pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted;
-  }
-  .search-field input {
-    @apply pl-10;
-  }
-  .message-history.loading {
-    @apply grid place-items-center;
-  }
-  /* The spinner is inline, inside the chat column: on its own it hugs the column's left edge. */
-  .history-loading {
-    @apply grid place-items-center;
-  }
-  .skill-import {
-    @apply mb-6 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 gap-y-2;
-  }
-  .skill-import .field {
-    @apply m-0;
-  }
-  .skill-import-hint {
-    @apply col-span-full text-xs text-muted;
-  }
-  /* A section's title on the left and its search on the right, wrapping on a narrow screen. */
-  .skills-heading {
-    @apply mb-4 flex flex-wrap items-end justify-between gap-4;
-  }
-  .skills-heading .search-field {
-    @apply w-full sm:w-64;
-  }
-  .skill-grid {
-    @apply grid gap-3 sm:grid-cols-2 min-[1300px]:grid-cols-3;
-  }
-  .skill-grid-empty {
-    @apply py-10 text-center text-sm text-muted;
-  }
-  .skill-card {
-    @apply flex min-w-0 flex-col rounded-md bg-surface/70 p-4;
-  }
-  .skill-card h3 {
-    @apply break-words font-mono text-xs;
-  }
-  .skill-card p {
-    @apply mt-3 text-xs;
-  }
-  .skill-card footer {
-    @apply mt-auto flex items-center justify-between gap-2 pt-4;
-  }
-  .skill-card-source {
-    @apply inline-flex items-center gap-1.5 text-[11px] text-muted;
-  }
-  .skill-card-actions {
-    @apply flex items-center gap-1;
-  }
-}
-
-/* Where a schedule runs: a field that opens every conversation it can run in, searchable and
-   grouped by where each one happens, each beside its provider's mark. */
-@layer components {
-  .conversation-picker {
-    @apply flex min-h-control w-full min-w-0 items-center gap-3 rounded-sm border border-control bg-surface px-3.5 py-2.5 text-left text-sm text-ink transition-colors;
-  }
-  .conversation-picker > svg:last-child {
-    @apply ml-auto shrink-0 text-muted;
-  }
-  .conversation-option-mark {
-    @apply grid h-7 w-7 shrink-0 place-items-center rounded-md bg-canvas text-muted;
-  }
-  .conversation-option-name {
-    @apply grid min-w-0 flex-1 truncate;
-  }
-  .conversation-option-name small {
-    @apply truncate text-xs text-muted;
-  }
-  .model-menu.conversation-picker-popup {
-    width: var(--anchor-width);
-    max-width: calc(100vw - 2rem);
-  }
-  .conversation-picker-popup [role="listbox"] {
-    @apply min-h-0 overflow-y-auto overscroll-contain p-1.5;
-    max-height: min(22rem, 60dvh);
-  }
-  .conversation-group + .conversation-group {
-    @apply mt-1.5 border-t border-line pt-1.5;
-  }
-  .conversation-group h3 {
-    @apply px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted;
-  }
-  .conversation-option {
-    @apply flex w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-ink outline-none transition-colors;
-  }
-  .conversation-option:hover,
-  .conversation-option:focus-visible {
-    @apply bg-accent-soft;
-  }
-  .conversation-option > svg:last-child {
-    @apply shrink-0 text-muted;
   }
 }
