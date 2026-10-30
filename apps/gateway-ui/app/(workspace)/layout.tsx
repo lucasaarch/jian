@@ -6,6 +6,7 @@ import { NewProfileDialog } from '@/components/profile/editor';
 import { ReleaseNotes } from '@/components/releases/dialog';
 import { Sidebar } from '@/components/shell/sidebar';
 import { TabBar } from '@/components/shell/tab-bar';
+import { ViewportProbe } from '@/components/shell/viewport-probe';
 import { Spinner } from '@/components/ui';
 import { currentSection } from '@/lib/navigation';
 import { panelApi } from '@/lib/query/client';
@@ -132,6 +133,7 @@ function Shell({ children }: { children: ReactNode }) {
         )}
       </div>
       <ReleaseNotes />
+      <ViewportProbe />
     </>
   );
 }
