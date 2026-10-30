@@ -3,6 +3,10 @@ packages:
   - 'packages/*'
 allowBuilds:
   baileys: false
+  # Downloads the Electron binary the desktop app runs on.
+  electron: true
+  # Squirrel.Windows installers; electron-builder makes NSIS ones instead.
+  electron-winstaller: false
   esbuild: true
   fsevents: false
   # An optional peer of Vitest that stays in the lockfile; its install script is not needed.

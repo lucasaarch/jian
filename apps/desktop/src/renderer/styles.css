@@ -1,0 +1,12 @@
+@import "tailwindcss";
+@import "@jian/ui/styles.css";
+/* The panel's markup lives in @jian/ui and the app's own here; Tailwind reads both. */
+@source "../../../../packages/ui/src";
+@source ".";
+
+:root {
+  /* The app's title bar above the panel and its gateway bar under it; the panel fills the rest. */
+  --title-bar: 2.5rem;
+  --gateway-bar: 2rem;
+  --app-height: calc(100dvh - var(--title-bar) - var(--gateway-bar));
+}
