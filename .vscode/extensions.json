@@ -1,3 +1,10 @@
 {
-  "recommendations": ["biomejs.biome"]
+  "recommendations": [
+    "biomejs.biome",
+    "bradlc.vscode-tailwindcss",
+    "TypeScriptTeam.native-preview",
+    "anysphere.remote-containers",
+    "rust-lang.rust-analyzer",
+    "tamasfe.even-better-toml"
+  ]
 }
