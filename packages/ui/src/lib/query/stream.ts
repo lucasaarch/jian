@@ -14,9 +14,10 @@ function affected(event: GatewayEvent, profileId: string): QueryKey[] {
   const { type } = event;
 
   if (type.startsWith('contact.') || type.startsWith('channel.')) return [keys.profile(profileId)];
-  if (type === 'run.progress') return [keys.activities(profileId)];
+  // A step taken, a turn ended, a context compacted: each moves how full the context is.
+  if (type === 'run.progress') return [keys.activities(profileId), keys.contexts(profileId)];
   if (type.startsWith('run.') || type.startsWith('session.')) {
-    return [keys.activities(profileId), keys.sessions(profileId)];
+    return [keys.activities(profileId), keys.sessions(profileId), keys.contexts(profileId)];
   }
   if (type.startsWith('profile.')) return [keys.profiles];
   if (type.startsWith('memory.')) return [keys.memories(profileId)];

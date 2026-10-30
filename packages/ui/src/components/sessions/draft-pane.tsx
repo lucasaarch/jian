@@ -14,6 +14,7 @@ import { useAppearance } from '../../lib/appearance';
 import { useSearchParams } from '../../platform/navigation';
 import { AgentHero } from './agent-hero';
 import { Composer } from './composer';
+import { ContextRing } from './context-ring';
 import { SessionModel } from './model-picker';
 import { ProjectSelect } from './project-select';
 import { SessionProtection } from './protection-menu';
@@ -103,6 +104,7 @@ export function DraftPane({
           onMachineChange={setMachineId}
           modelControl={
             <>
+              <ContextRing profileId={profile.id} />
               <SessionProtection
                 api={api}
                 profileId={profile.id}

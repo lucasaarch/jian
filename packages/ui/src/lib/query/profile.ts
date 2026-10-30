@@ -105,6 +105,11 @@ export const queries = {
       queryKey: keys.memories(profileId),
       queryFn: () => panelApi().memories(profileId),
     }),
+  sessionContext: (profileId: string, sessionId: string) =>
+    queryOptions({
+      queryKey: keys.sessionContext(profileId, sessionId),
+      queryFn: () => panelApi().context(profileId, sessionId),
+    }),
   activities: (profileId: string) =>
     queryOptions({
       queryKey: keys.activities(profileId),

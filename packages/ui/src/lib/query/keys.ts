@@ -31,6 +31,10 @@ export const keys = {
   contacts: (profileId: string) => ['profile', profileId, 'contacts'] as const,
   memories: (profileId: string) => ['profile', profileId, 'memories'] as const,
   activities: (profileId: string) => ['profile', profileId, 'activities'] as const,
+  /** Every conversation's context at once, which a turn anywhere in the profile makes stale. */
+  contexts: (profileId: string) => ['profile', profileId, 'context'] as const,
+  sessionContext: (profileId: string, sessionId: string) =>
+    ['profile', profileId, 'context', sessionId] as const,
   schedules: (profileId: string) => ['profile', profileId, 'schedules'] as const,
   scheduleHistory: (profileId: string, scheduleId: string) =>
     ['profile', profileId, 'schedules', scheduleId, 'history'] as const,

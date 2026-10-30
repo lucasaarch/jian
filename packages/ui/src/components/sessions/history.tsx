@@ -15,6 +15,7 @@ import type {
 } from '../../lib/api';
 import { subscribe } from '../../lib/events';
 import { useCrew } from '../../lib/stores/crew';
+import { forgetLanded, landed, useOutbox } from '../../lib/stores/outbox';
 import { plainText } from '../ui/markdown';
 import { CodeChanges } from './code-change';
 import { Confetti } from './confetti';
@@ -26,6 +27,7 @@ import { HistorySkeleton } from './history-skeleton';
 import { useKeptHistory } from './kept-history';
 import { MessageMedia } from './media';
 import { authored, ChatMessage } from './message';
+import { OutgoingMessage } from './outgoing';
 import { LiveTurn, placeSteps, traceOf } from './progress';
 import { running } from './status';
 import { ThoughtLine } from './thought-line';
@@ -133,6 +135,20 @@ export function History({
     new Map<string, Person>(kept?.people.map((person) => [person.id, person])),
   );
   const [tools, setTools] = useState(new Map<string, ToolStep[]>(kept?.tools));
+  // What the owner sent here that the conversation does not hold yet, drawn after it; a sent
+  // one leaves as soon as the history brings the stored message back.
+  const outbox = useOutbox((state) => state.items);
+  const outgoing = useMemo(
+    () => outbox.filter((item) => item.sessionId === sessionId && !landed(item, messages)),
+    [outbox, sessionId, messages],
+  );
+  useEffect(() => {
+    forgetLanded(
+      outbox
+        .filter((item) => item.sessionId === sessionId && landed(item, messages))
+        .map((item) => item.key),
+    );
+  }, [outbox, sessionId, messages]);
   // What each run asked the owner to decide or answer, from the timeline.
   const [asks, setAsks] = useState(
     new Map<string, { approval?: RunApproval; question?: RunQuestion }>(kept?.asks),
@@ -578,7 +594,7 @@ export function History({
                     </ChatMessage>
                   )}
                   {later?.length ? (
-                    <div className="chat-line theirs">
+                    <div className="chat-line theirs work">
                       <Worked
                         steps={later}
                         startedAt={message.createdAt}
@@ -587,7 +603,7 @@ export function History({
                     </div>
                   ) : null}
                   {unansweredSteps && message.runId && (
-                    <div className="chat-line theirs">
+                    <div className="chat-line theirs work">
                       <ThoughtLine
                         working={false}
                         steps={traceOf(unansweredSteps)}
@@ -612,6 +628,16 @@ export function History({
               </div>
             )
           )}
+          {!loading &&
+            outgoing.map((item) => (
+              <OutgoingMessage
+                key={item.key}
+                item={item}
+                profileId={profileId}
+                people={people}
+                api={api}
+              />
+            ))}
           {!loading && pendingCall && callRun && running(callRun) && (
             <LiveTurn run={callRun} {...trailing(callRun, callTools)} />
           )}

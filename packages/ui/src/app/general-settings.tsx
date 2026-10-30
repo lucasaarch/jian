@@ -13,6 +13,8 @@ export type AppHost = {
   /** The release in use: the app's own, or on the web the gateway's, which it is served with. */
   version: string;
   openAtLogin?: { read: () => Promise<boolean>; write: (open: boolean) => void };
+  /** System notifications the host shows itself, which the owner may turn off. */
+  notifications?: { read: () => Promise<boolean>; write: (on: boolean) => void };
   checkForUpdates?: () => void;
   /** Ends the session, for a host whose panel signed in itself. */
   signOut?: () => void;
@@ -41,6 +43,11 @@ export function GeneralSettings({
   useEffect(() => {
     void login?.read().then(setOpenAtLogin);
   }, [login]);
+  const [notifying, setNotifying] = useState(false);
+  const notifications = host.notifications;
+  useEffect(() => {
+    void notifications?.read().then(setNotifying);
+  }, [notifications]);
 
   return (
     <>
@@ -53,6 +60,19 @@ export function GeneralSettings({
             onCheckedChange={(checked) => {
               setOpenAtLogin(checked);
               login.write(checked);
+            }}
+          />
+        </SettingsGroup>
+      )}
+      {notifications && (
+        <SettingsGroup title="Notifications">
+          <Toggle
+            label="Show notifications"
+            detail="When an agent replies or needs you, or someone writes to it, in a chat you are not reading."
+            checked={notifying}
+            onCheckedChange={(checked) => {
+              setNotifying(checked);
+              notifications.write(checked);
             }}
           />
         </SettingsGroup>

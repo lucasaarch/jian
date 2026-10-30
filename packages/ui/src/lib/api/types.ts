@@ -25,6 +25,7 @@ export type Contact = JsonResponse<'listContacts', 200>[number];
 export type Group = JsonResponse<'listGroups', 200>[number];
 export type Memory = JsonResponse<'listMemories', 200>[number];
 export type ProfileStats = JsonResponse<'getProfileStats', 200>;
+export type SessionContext = JsonResponse<'getSessionContext', 200>;
 export type SubscriptionUsage = JsonResponse<'listSubscriptionUsage', 200>[number];
 export type BuiltinSkill = JsonResponse<'listBuiltinSkills', 200>[number];
 export type McpStatus = JsonResponse<'checkMcpServer', 200>;

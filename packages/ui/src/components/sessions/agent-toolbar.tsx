@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { StatusPill, SwitchControl } from '../../kit';
 import type { Channel, Contact, Session } from '../../lib/api';
 import type { SectionActions } from '../props';
+import { ContextRing } from './context-ring';
 import { SessionModel } from './model-picker';
 import { SessionProtection } from './protection-menu';
 
@@ -43,6 +44,9 @@ export function AgentToolbar({
       {/* Above the box at its right, as over the composer: the objective and the listeners. */}
       {badges && <div className="agent-toolbar-context">{badges}</div>}
       <div className="agent-toolbar-box">
+        {/* No Compact here: what is written in a channel's conversation can reach its contact,
+            and the gateway compacts on its own anyway. */}
+        <ContextRing profileId={profileId} sessionId={session.id} />
         <SessionProtection
           api={api}
           profileId={profileId}
