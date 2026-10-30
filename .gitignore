@@ -24,4 +24,5 @@ apps/web/out/
 packages/remote-core/helpers/macos/computer-helper
 packages/remote-core/helpers/macos/computer-helper-arm64
 packages/remote-core/helpers/macos/computer-helper-x86_64
-
+# Cargo builds into the workspace root.
+/target/

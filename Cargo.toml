@@ -1,0 +1,12 @@
+# The Rust side of the repository: the native Computer Use helper so far. Node owns everything
+# else; pnpm and the Makefile never read this file.
+[workspace]
+resolver = "3"
+members = ["packages/remote-core/native"]
+
+# The helper ships as one small binary per platform.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
