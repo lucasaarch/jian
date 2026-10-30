@@ -12,6 +12,7 @@ import { panelApi } from '@/lib/query/client';
 import { useProfiles } from '@/lib/query/profile';
 import { useSavedLayout } from '@/lib/stores/layout';
 import { useShell } from '@/lib/stores/shell';
+import { useVisibleViewport } from '@/lib/viewport';
 import { useAdoptProfile } from '@/lib/workspace';
 
 /** The chrome every section shares, and the one place the session is checked. */
@@ -45,6 +46,7 @@ function Shell({ children }: { children: ReactNode }) {
   const { creating, setCreating } = useShell();
   const [mobile, setMobile] = useState(false);
   useSavedLayout();
+  useVisibleViewport();
 
   useEffect(() => {
     if (!mobile) {
