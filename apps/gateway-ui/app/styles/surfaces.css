@@ -571,14 +571,20 @@
   .conversation-pane > header small {
     @apply block truncate text-xs text-muted;
   }
-  .session-objective {
-    @apply mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted;
+  /* The objective is a badge at the end of the row where the chat runs; its goal opens from it. */
+  .session-objective-trigger {
+    @apply ml-auto shrink-0 cursor-pointer transition-opacity hover:opacity-80;
   }
-  .session-objective > span {
-    @apply min-w-0 truncate text-ink;
+  .session-objective-popup {
+    @apply w-auto max-w-[min(26rem,calc(100vw-2rem))] gap-2 p-4 leading-relaxed;
+    color: var(--ink);
+  }
+  .session-objective-title {
+    @apply text-xs font-medium;
+    color: var(--muted);
   }
   .session-objective-note {
-    @apply w-full truncate text-muted;
+    color: var(--warn);
   }
   .session-listeners {
     @apply mt-1.5 flex list-none flex-col gap-1 p-0 text-xs text-muted;

@@ -60,23 +60,10 @@ import { GitHubDrawer, GitHubLinks } from './github';
 import { History } from './history';
 import { SessionListeners } from './listeners';
 import { SessionModel } from './model-picker';
+import { SessionObjective } from './objective';
 import { statusOf } from './progress';
 import { ProjectSelect } from './project-select';
 import { SessionProtection } from './protection-menu';
-
-const objectiveTone = {
-  open: 'good',
-  blocked: 'warn',
-  done: 'neutral',
-  cancelled: 'neutral',
-} as const;
-
-const objectiveLabel = {
-  open: 'Objective open',
-  blocked: 'Objective blocked',
-  done: 'Objective done',
-  cancelled: 'Objective cancelled',
-} as const;
 
 /**
  * The kinds of conversation a profile has, besides chats started in Jian and the one where it
@@ -108,6 +95,9 @@ const isGateway = (session: Session) => session.channel === GATEWAY_SESSION_CHAN
 const chatName = (session: Session) => (session.channel === 'telegram' ? 'Telegram' : 'WhatsApp');
 const isMessaging = (session: Session) =>
   ['whatsapp', 'whatsapp-business', 'telegram'].includes(session.channel);
+/** A conversation with a bar under it: a chat's composer, or a channel's settings. */
+const docked = (session: Session) =>
+  isGateway(session) || isMessaging(session) || kindOf(session) === 'agent';
 
 const openingTitle = (text: string, hasMedia: boolean) => {
   const opening = text.trim().replace(/\s+/g, ' ');
@@ -642,25 +632,12 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                     : ''}
                 </small>
               )}
-              {active.objective && (
-                <p className="session-objective">
-                  <Badge tone={objectiveTone[active.objective.status]} dot={false}>
-                    {objectiveLabel[active.objective.status]}
-                  </Badge>
-                  <span title={active.objective.text}>
-                    {active.objective.text.length > 120
-                      ? `${active.objective.text.slice(0, 117)}…`
-                      : active.objective.text}
-                  </span>
-                  {active.objective.status === 'blocked' && active.objective.note ? (
-                    <span className="session-objective-note" title={active.objective.note}>
-                      {active.objective.note}
-                    </span>
-                  ) : null}
-                </p>
-              )}
               <SessionListeners api={api} profileId={profile.id} sessionId={active.id} />
             </div>
+            {/* A conversation without a bar at the bottom keeps its objective up here. */}
+            {active.objective && !docked(active) && (
+              <SessionObjective objective={active.objective} side="bottom" />
+            )}
           </header>
           <ModelNames.Provider value={modelName}>
             <GitHubLinks api={api}>
@@ -688,7 +665,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                       void refresh();
                     }}
                   />
-                  {(isGateway(active) || isMessaging(active) || kindOf(active) === 'agent') && (
+                  {docked(active) && (
                     <ConversationDock key={`dock-${active.id}`}>
                       {isGateway(active) && (
                         <Composer
@@ -742,6 +719,9 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                               />
                             </>
                           }
+                          objective={
+                            active.objective && <SessionObjective objective={active.objective} />
+                          }
                           placeholder={(() => {
                             const waits = activities.find(
                               (run) => run.sessionId === active.id && run.status === 'waiting',
@@ -785,6 +765,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                               saved={() => void refresh()}
                             />
                             <span className="grow" />
+                            {active.objective && <SessionObjective objective={active.objective} />}
                             {isMessaging(active) &&
                               activeContact &&
                               channels.some(
