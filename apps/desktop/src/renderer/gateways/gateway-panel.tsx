@@ -23,8 +23,10 @@ export function GatewayPanel({ gateway }: { gateway: GatewaySummary }) {
     }),
   );
   const memory = navigationFor(gateway.id);
-  const pathname = useSyncExternalStore(memory.subscribe, memory.current);
-  const navigation = useMemo(() => memory.navigation(pathname), [memory, pathname]);
+  // The whole address, query included: the panel reads the query, the screens the path.
+  const href = useSyncExternalStore(memory.subscribe, memory.current);
+  const navigation = useMemo(() => memory.navigation(href), [memory, href]);
+  const { pathname } = navigation;
 
   // The app's own gateway takes a moment after launch; the panel waits for it, not for a login.
   if (gateway.local && gateway.status !== 'online') return <Starting />;

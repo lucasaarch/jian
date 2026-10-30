@@ -1,5 +1,6 @@
 import { join } from 'node:path';
-import { app, type UtilityProcess, utilityProcess } from 'electron';
+import { app, Notification, type UtilityProcess, utilityProcess } from 'electron';
+import { stablePort } from './address';
 import type { LocalCredentials } from './credentials';
 
 /** How long a crashed gateway waits before it is started again, growing to a minute. */
@@ -9,8 +10,8 @@ type Listener = (url: string | undefined) => void;
 
 /**
  * The gateway this computer runs for its owner, in a Node process of the app's own: started
- * with the app, started again if it ends, stopped when the app quits. Its address changes from
- * launch to launch, as the system picks a free port; `listener` hears each one.
+ * with the app, started again if it ends, stopped when the app quits, on the same port every
+ * time; `listener` hears when it listens and when it ended.
  */
 export class LocalGateway {
   private child?: UtilityProcess;
@@ -23,8 +24,10 @@ export class LocalGateway {
     private readonly listener: Listener,
   ) {}
 
-  start(): void {
+  async start(): Promise<void> {
     this.stopping = false;
+    const { port, moved } = await stablePort();
+    if (moved) announceMove();
     const { entry, cwd, execArgv } = launch();
     const child = utilityProcess.fork(entry, [], {
       cwd,
@@ -36,7 +39,9 @@ export class LocalGateway {
         JIAN_LOCAL_DIR: join(app.getPath('userData'), 'gateway'),
         JIAN_API_TOKEN: this.credentials.token,
         JIAN_MASTER_KEY: this.credentials.masterKey,
-        PORT: '0',
+        PORT: String(port),
+        // Where the owner's browser comes back to after a GitHub or MCP sign-in.
+        JIAN_PUBLIC_URL: `http://127.0.0.1:${port}`,
         JIAN_VERSION: app.isPackaged ? app.getVersion() : '',
       },
     });
@@ -63,7 +68,7 @@ export class LocalGateway {
       if (this.stopping) return;
       const wait = RETRY_MS[Math.min(this.failures, RETRY_MS.length - 1)] ?? 60_000;
       this.failures += 1;
-      this.timer = setTimeout(() => this.start(), wait);
+      this.timer = setTimeout(() => void this.start(), wait);
     });
   }
 
@@ -85,6 +90,18 @@ export class LocalGateway {
       child.postMessage({ stop: true });
     });
   }
+}
+
+/**
+ * Something else took the port GitHub and MCP servers know the gateway by, so they would send
+ * the owner back to the wrong place: the owner connects them again.
+ */
+function announceMove(): void {
+  if (!Notification.isSupported()) return;
+  new Notification({
+    title: 'Jian moved its local gateway',
+    body: 'Another app took its address. Connect GitHub and MCP sign-ins again in Settings.',
+  }).show();
 }
 
 /** The address in the gateway's one line of its own on stdout, among Fastify's log lines. */

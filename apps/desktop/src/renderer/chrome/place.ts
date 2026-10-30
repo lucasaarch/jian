@@ -20,7 +20,8 @@ const SETTINGS: Record<string, string> = {
 };
 
 /** Where the panel is, in a word or two: what the title bar shows beside the gateway's name. */
-export function placeName(pathname: string): string {
+export function placeName(href: string): string {
+  const pathname = href.split('?')[0] ?? '/';
   const agent = /^\/agents\/[^/]+\/?([^/]*)/.exec(pathname);
   if (agent) return AGENT[agent[1] ?? ''] ?? 'Overview';
   const settings = /^\/settings\/?(.*)$/.exec(pathname);

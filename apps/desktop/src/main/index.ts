@@ -4,6 +4,8 @@ import { LOCAL_GATEWAY_ID, type OpenTarget } from '../shared/bridge';
 import { serveBridge } from './bridge';
 import { GatewayMonitor } from './gateways/monitor';
 import { GatewayStore } from './gateways/store';
+import { linkIn, linkTarget } from './link-target';
+import { claimLinks } from './links';
 import { localCredentials } from './local/credentials';
 import { LocalGateway } from './local/process';
 import { Notifier } from './notify';
@@ -53,7 +55,19 @@ function open(target?: OpenTarget): void {
   }
 }
 
-app.on('second-instance', () => open());
+// A second launch brings this one forward, at the place a jian:// link asked for if one did.
+app.on('second-instance', (_event, argv) => {
+  const link = linkIn(argv);
+  open(link ? linkTarget(link) : undefined);
+});
+// macOS hands links to the running app, or to the app it launches for them, through this.
+app.on('open-url', (event, link) => {
+  event.preventDefault();
+  const target = linkTarget(link);
+  if (window) open(target);
+  else pending = target;
+});
+claimLinks();
 // Closing the window keeps the app in the tray; only Quit ends it.
 app.on('window-all-closed', () => {});
 let local: LocalGateway | undefined;
@@ -81,7 +95,7 @@ void app.whenReady().then(async () => {
     if (gateway) monitor.watch(gateway);
     bridge.changed();
   });
-  local.start();
+  void local.start();
   handleScheme(store, {
     dir: join(import.meta.dirname, '../renderer'),
     devServer: app.isPackaged ? undefined : process.env.ELECTRON_RENDERER_URL,
@@ -94,6 +108,9 @@ void app.whenReady().then(async () => {
   if (process.platform === 'darwin' && !app.isPackaged) {
     app.dock?.setIcon(join(resourcesDir(), 'icon.png'));
   }
+  // Windows and Linux start the app with the link as an argument.
+  const launchLink = linkIn(process.argv);
+  if (launchLink) pending = linkTarget(launchLink);
   window = createWindow({ quitting: () => quitting });
   window.webContents.on('did-finish-load', () => {
     if (pending) bridge.open(pending);
