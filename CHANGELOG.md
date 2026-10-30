@@ -14,6 +14,7 @@ Messages appear the moment they are sent, and one that fails stays to be sent ag
 * **Listener wake-ups stay in the background:** when a GitHub listener fires, or a subagent finishes, the agent reads the gateway's note and acts on it; the conversation no longer shows that note as if the owner had written it.
 * **How full the context is:** a ring beside the protection fills as the conversation's context does, amber past 60% and red where the gateway compacts on its own. Opened, it says the last call's input against the room the model leaves, the tokens the conversation's turns have taken (cached input apart), how many turns, and the last compaction: when, and from how many tokens to how many.
 * **Compact now, or `/compact`:** the ring's button, or `/compact` written alone, compacts the conversation's context at once, the same way the gateway does when it fills; the agent only says what it came to. A WhatsApp or Telegram conversation keeps compacting on its own, without the button.
+* **Errors can be copied:** what went wrong — an interrupted turn's card, a message not sent, an alert or a toast — selects as text again, to search, report or paste to the agent.
 * **Work between answers sits closer:** a stretch of work after something the agent said is as near to what it says next as the first stretch is to its answer.
 
 ### The desktop app
