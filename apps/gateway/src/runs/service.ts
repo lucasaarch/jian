@@ -451,6 +451,8 @@ export class Runs {
         continuationOf: runId,
         ...(parent.call ? { call: parent.call } : {}),
         ...(parent.group ? { group: parent.group } : {}),
+        // Written for the agent, reconciliation and all: the conversation shows what it does next.
+        purpose: 'resume',
       },
     );
   }
