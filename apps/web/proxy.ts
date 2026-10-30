@@ -59,7 +59,7 @@ export const config = {
       // Pages only. The gateway's paths, this server's own health check, Next's assets and
       // the files in public/ need no policy.
       source:
-        '/((?!v1/|health$|openapi\\.json$|jian-remote\\.mjs$|web/health$|_next/|robots\\.txt$|sw\\.js$|manifest\\.webmanifest$|brand/|favicon\\.ico$|icon\\.png$|apple-icon\\.png$).*)',
+        '/((?!v1/|health$|openapi\\.json$|web/health$|_next/|robots\\.txt$|sw\\.js$|manifest\\.webmanifest$|brand/|favicon\\.ico$|icon\\.png$|apple-icon\\.png$).*)',
       missing: [
         { type: 'header', key: 'next-router-prefetch' },
         { type: 'header', key: 'purpose', value: 'prefetch' },

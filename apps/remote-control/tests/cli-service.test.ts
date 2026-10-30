@@ -16,7 +16,6 @@ import {
 } from '../src/linux-service.ts';
 import { isPidAlive, readWorkerLockPid } from '../src/lock.ts';
 import { serviceKindForPlatform } from '../src/service.ts';
-import { isStaleInstalledWorker } from '../src/worker-script.ts';
 
 const scriptPath = fileURLToPath(new URL('../dist/jian-remote.mjs', import.meta.url));
 
@@ -59,14 +58,6 @@ test('help text documents version and stop/start/restart', () => {
   assert.match(result.stdout, /stop \| start \| restart/);
   assert.match(result.stdout, /install \[--system\]/);
   assert.match(result.stdout, /enable-linger|--system/);
-});
-
-test('isStaleInstalledWorker detects a surviving process after disk was updated', () => {
-  const disk = "export const PACKAGE_VERSION = '0.8.2'\n";
-  assert.equal(isStaleInstalledWorker('0.8.1', disk), true);
-  assert.equal(isStaleInstalledWorker('0.8.2', disk), false);
-  assert.equal(isStaleInstalledWorker('0.0.0-dev', disk), false);
-  assert.equal(isStaleInstalledWorker('0.8.1', ''), false);
 });
 
 test('isPidAlive is true for this process and false for a dead pid', () => {

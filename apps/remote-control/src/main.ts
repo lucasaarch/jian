@@ -2,7 +2,7 @@ import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { args, parseCliInvocation } from './args.ts';
-import { configure, install } from './install.ts';
+import { configure, install, reinstall } from './install.ts';
 import { logs } from './logs.ts';
 import { ANSI, paint, shouldColorize } from './output.ts';
 import { run } from './run.ts';
@@ -32,6 +32,7 @@ export async function main(): Promise<void> {
     else if (invocation.command === 'install') await install();
     else if (invocation.command === 'configure') await configure();
     else if (invocation.command === 'update') await update();
+    else if (invocation.command === 'reinstall') await reinstall();
     else if (invocation.command === 'stop') await cliStop();
     else if (invocation.command === 'start') await cliStart();
     else if (invocation.command === 'restart') await cliRestart();
@@ -47,6 +48,7 @@ export async function main(): Promise<void> {
   status [--json]
   logs [--lines N] [--level debug|info|warn|error] [--follow]
   update [--version X.Y.Z|latest]
+  reinstall [--no-restart]
   stop | start | restart
   version
 
@@ -56,7 +58,8 @@ Install:  run the command the panel shows when you add a machine or rotate its
           (Linux headless/root VPS: add --system, or use a normal user + loginctl enable-linger)
 Status:   jian-remote status   (connection, machine, versions, ping, actions run)
 Logs:     jian-remote logs --follow
-Update:   jian-remote update   (the worker also keeps itself on the gateway's version)`);
+Update:   jian-remote update   (installs the gateway's release with npm and restarts on it;
+          the panel and agents can ask the worker for the same)`);
     }
   } catch (error) {
     const color = shouldColorize({ isTTY: process.stderr.isTTY });

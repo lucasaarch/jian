@@ -168,7 +168,7 @@ const coordinateSchema = z.tuple([z.number().int(), z.number().int()]);
  */
 export function remoteTools(
   run: Run,
-  remote: Pick<Remote, 'list' | 'execute' | 'executeComputer'>,
+  remote: Pick<Remote, 'list' | 'execute' | 'executeComputer' | 'update'>,
   store: Store,
   targetMachineId?: string,
 ): ToolSet {
@@ -314,6 +314,15 @@ export function remoteTools(
           machineName: machine.name,
           hint: 'Aim clicks in this image’s pixel space (widthPx × heightPx). Send with send_file using mediaId when the owner should see it.',
         };
+      },
+    }),
+    update_remote_machine: tool({
+      description:
+        "Update Jian Remote on a connected computer to this gateway's release. Needed when list_remote_machines shows it outdated: no other remote tool works on it until then. Only machines with updatable: true can do it themselves; the worker restarts on the new release once it reports back. Takes up to a few minutes.",
+      inputSchema: z.object({ machineId: z.uuid() }),
+      execute: async ({ machineId }, { abortSignal }) => {
+        requireTarget(machineId);
+        return remote.update(run.profileId, machineId, abortSignal);
       },
     }),
     pull_remote_file: tool({

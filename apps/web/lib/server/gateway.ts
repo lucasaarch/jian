@@ -1,7 +1,7 @@
 /**
  * The one door from this server to the gateway. The browser, webhook senders and remote
- * workers reach `/v1/*`, `/health`, `/openapi.json` and `/jian-remote.mjs` here, and the request is passed on byte for byte:
- * validation, authorization and rate limits stay in the gateway.
+ * workers reach `/v1/*`, `/health` and `/openapi.json` here, and the request is passed on
+ * byte for byte: validation, authorization and rate limits stay in the gateway.
  *
  * Next's own external rewrite is not used on purpose: it cuts every proxied response at 30
  * seconds, which would end the panel's event stream, and it gives no say over which headers

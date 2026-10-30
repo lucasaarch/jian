@@ -47,7 +47,7 @@ test('compatibilityError returns English guidance for a major.minor mismatch', (
   const message = compatibilityError('0.5.2', '0.6.0') ?? '';
   assert.match(message, /incompatible with gateway 0\.6\.0/);
   assert.match(message, /same major\.minor \(0\.6\)/);
-  assert.match(message, /self-update to the gateway version automatically/);
+  assert.match(message, /Update it from the panel/);
   assert.match(message, /jian-remote update --version 0\.6\.0/);
   assert.equal(compatibilityError('0.6.2', '0.6.0'), null);
 });

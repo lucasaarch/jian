@@ -14,14 +14,17 @@ npm install -g @jian-ai/remote-control && jian-remote install \
 
 ## Update
 
-The worker keeps itself on the gateway's version. To update by hand:
+The worker does not update itself on its own. Update it from the panel (**Update** on the
+machine), ask an agent to (`update_remote_machine`), or run on the computer:
 
 ```sh
 jian-remote update [--version 0.6.0]
 ```
 
-Reads `~/.config/jian-remote` (no token, machine id, or gateway flags), installs a compatible
-build, and restarts the worker service.
+It installs the gateway's release (or the one named) with `npm install -g`, then the new
+release copies itself into `~/.config/jian-remote` and restarts the worker service
+(`jian-remote reinstall`). The credentials stay as they are. Only a worker installed with npm
+can be updated from the panel or by an agent.
 
 ## Version and service control
 
@@ -46,13 +49,14 @@ jian-remote configure --gateway https://gateway.example --token WORKER_TOKEN
 
 ## Compatibility
 
-Connected workers self-update to the gateway’s release (gateway `/update` script, npm
-fallback) including major.minor skew, then restart the OS service. Manual `install` /
-`update` still gate on `/health`.
+A worker must share its gateway's major.minor to serve agents. One on another release still
+connects, shows **Update needed** in the panel, and takes no task but its update. `install`
+refuses a mismatched release up front.
 
 Requires Node.js 24+. Computer Use works on macOS, Linux (X11 + `xdotool`/`ffmpeg`), and
 Windows. Published builds include a prebuilt macOS `computer-helper` (no Xcode on the worker
-Mac) plus Linux/Windows helper scripts. From source on a Mac, run `macos/build-helper.sh`, or
+Mac) plus Linux/Windows helper scripts. From source on a Mac, run
+`packages/remote-core/helpers/macos/build-helper.sh`, or
 let the worker compile with `swiftc` when Command Line Tools are installed.
 
 On macOS the LaunchAgent uses `ProcessType=Interactive` and an idle `caffeinate` so the worker

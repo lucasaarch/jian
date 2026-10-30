@@ -110,6 +110,8 @@ export const remoteMachines = pgTable('remote_machines', {
     .$type<'unlocked' | 'locked' | 'display_asleep' | 'unknown'>()
     .notNull()
     .default('unknown'),
+  /** From x-jian-remote-version on poll: the release the worker runs. */
+  version: text('version'),
   createdAt,
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
 });
@@ -121,13 +123,12 @@ export const remoteTasks = pgTable(
     machineId: uuid('machine_id')
       .notNull()
       .references(() => remoteMachines.id, { onDelete: 'cascade' }),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => profiles.id, { onDelete: 'cascade' }),
-    kind: text('kind').$type<'shell' | 'computer'>().notNull().default('shell'),
+    /** The agent's profile; none when the owner asked from the panel. */
+    profileId: uuid('profile_id').references(() => profiles.id, { onDelete: 'cascade' }),
+    kind: text('kind').$type<'shell' | 'computer' | 'update'>().notNull().default('shell'),
     command: text('command').notNull().default(''),
     cwd: text('cwd'),
-    /** Computer-use params when kind is computer. */
+    /** Computer-use params when kind is computer; the target release when kind is update. */
     payload: jsonb('payload').$type<Record<string, unknown>>(),
     timeoutMs: integer('timeout_ms').notNull(),
     status: text('status').$type<'queued' | 'running' | 'completed' | 'failed'>().notNull(),

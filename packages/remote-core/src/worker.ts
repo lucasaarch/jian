@@ -4,6 +4,7 @@ import { postResult } from './result.ts';
 import { executeShellTask } from './shell.ts';
 import type { WorkerStateFile } from './state.ts';
 import { describeTask } from './task.ts';
+import { compatibilityError, fetchGatewayVersion } from './version.ts';
 
 /** What a worker needs to reach its gateway as one machine. */
 export type WorkerConfig = { gateway: string; machineId: string; token: string };
@@ -74,10 +75,20 @@ export async function sayGoodbye(config: WorkerConfig, headers: Record<string, s
 }
 
 /**
+ * How a host updates its worker when the gateway asks: the CLI reinstalls its npm package, a
+ * native app would run its own updater. It answers with the result to post, and `restart`,
+ * run once the gateway has it, to start over on the new release.
+ */
+export type Updater = (
+  task: RemoteTask,
+) => Promise<{ result: RemoteResult; restart?: () => Promise<void> }>;
+
+/**
  * A worker connected to its gateway: it polls for tasks, runs each, and posts what came of it,
  * backing off while the gateway is away. The host brings what is its own — the credentials, the
- * log and the state it keeps, and `reconcile`, which the CLI uses to stay on the gateway's
- * release — and stops it with `signal`.
+ * log and the state it keeps, and `update` when it can update itself — and stops it with
+ * `signal`. A worker on another release than its gateway still connects: the gateway then hands
+ * it nothing but its update.
  */
 export async function runWorker({
   config,
@@ -87,8 +98,7 @@ export async function runWorker({
   capabilities,
   uiState = () => 'unknown',
   execute = executeTask,
-  reconcile = async () => undefined,
-  reconcileEveryMs = 5 * 60_000,
+  update,
   signal,
 }: {
   config: WorkerConfig;
@@ -98,16 +108,13 @@ export async function runWorker({
   capabilities: string[];
   uiState?: UiState;
   execute?: (task: RemoteTask) => Promise<RemoteResult>;
-  /** Brings the worker onto the gateway's release; resolves to that release, if it has one. */
-  reconcile?: (headers: Record<string, string>) => Promise<string | undefined>;
-  reconcileEveryMs?: number;
+  update?: Updater;
   signal?: AbortSignal;
 }): Promise<void> {
   const headers = () => workerHeaders({ token: config.token, version, capabilities, uiState });
   const base = workerBase(config);
   const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-  // Before the first poll, so a worker on another release updates instead of being refused.
-  const gatewayVersion = await reconcile(headers());
+  const gatewayVersion = await fetchGatewayVersion(config.gateway).catch(() => undefined);
   state.update({ gatewayVersion, capabilities });
   log.info('Connected', {
     gateway: config.gateway,
@@ -115,15 +122,12 @@ export async function runWorker({
     gatewayVersion,
     capabilities: capabilities.join(','),
   });
+  const mismatch = compatibilityError(version, gatewayVersion);
+  if (mismatch) log.warn(`${mismatch} Until then agents cannot use this machine.`);
   let failures = 0;
-  let nextReconcile = Date.now() + reconcileEveryMs;
 
   while (!signal?.aborted) {
     try {
-      if (Date.now() >= nextReconcile) {
-        await reconcile(headers());
-        nextReconcile = Date.now() + reconcileEveryMs;
-      }
       const response = await fetch(`${base}/tasks/next`, {
         headers: headers(),
         redirect: 'error',
@@ -144,7 +148,8 @@ export async function runWorker({
       const action = describeTask(task);
       log.info('Task started', { task: task.id, ...action });
       const startedAt = Date.now();
-      const result = await execute(task);
+      const { result, restart } =
+        task.kind === 'update' ? await runUpdate(task, update) : { result: await execute(task) };
       const durationMs = Date.now() - startedAt;
       const ok = action.kind === 'computer' ? result.computer?.ok !== false : result.exitCode === 0;
       state.ran(action.kind, ok, durationMs);
@@ -159,6 +164,12 @@ export async function runWorker({
       });
       // Retry the result rather than rerunning the command after a transient network error.
       await postResult(base, headers(), result, log);
+      // Only once the gateway knows how the update went: the new release takes over from here.
+      if (restart) {
+        log.info('Restarting on the new release');
+        await restart();
+        return;
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       state.lost(message);
@@ -169,4 +180,20 @@ export async function runWorker({
       await pause(wait);
     }
   }
+}
+
+/** An update task, on a host that has no way to update itself, fails with what to do instead. */
+async function runUpdate(
+  task: RemoteTask,
+  update: Updater | undefined,
+): Promise<{ result: RemoteResult; restart?: () => Promise<void> }> {
+  if (update) return update(task);
+  return {
+    result: {
+      taskId: task.id,
+      exitCode: 1,
+      stdout: '',
+      stderr: 'This Jian Remote cannot update itself; update it where it was installed.',
+    },
+  };
 }

@@ -15,7 +15,6 @@
     "@ai-sdk/openai-compatible": "^3.0.53",
     "@fastify/helmet": "^13.1.1",
     "@fastify/rate-limit": "^11.2.0",
-    "@jian-ai/remote-control": "workspace:*",
     "@jian/contracts": "workspace:*",
     "ai": "^7.0.108",
     "baileys": "7.0.0-rc14",

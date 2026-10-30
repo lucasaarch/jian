@@ -222,6 +222,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/remote/machines/{machineId}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["updateRemoteMachine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/remote/machines/{machineId}": {
         parameters: {
             query?: never;
@@ -3273,6 +3290,12 @@ export interface operations {
                          * @enum {string}
                          */
                         uiState: "unlocked" | "locked" | "display_asleep" | "unknown";
+                        /** @default null */
+                        version: string | null;
+                        /** @default false */
+                        outdated: boolean;
+                        /** @default false */
+                        updatable: boolean;
                     }[];
                 };
             };
@@ -3395,6 +3418,12 @@ export interface operations {
                          * @enum {string}
                          */
                         uiState: "unlocked" | "locked" | "display_asleep" | "unknown";
+                        /** @default null */
+                        version: string | null;
+                        /** @default false */
+                        outdated: boolean;
+                        /** @default false */
+                        updatable: boolean;
                         token: string;
                     };
                 };
@@ -3514,7 +3543,121 @@ export interface operations {
                          * @enum {string}
                          */
                         uiState: "unlocked" | "locked" | "display_asleep" | "unknown";
+                        /** @default null */
+                        version: string | null;
+                        /** @default false */
+                        outdated: boolean;
+                        /** @default false */
+                        updatable: boolean;
                         token: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateRemoteMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                machineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        ok: boolean;
+                        from: string | null;
+                        to: string | null;
+                        message: string;
                     };
                 };
             };
@@ -3732,7 +3875,7 @@ export interface operations {
                              * @default shell
                              * @enum {string}
                              */
-                            kind: "shell" | "computer";
+                            kind: "shell" | "computer" | "update";
                             command: string | null;
                             cwd: string | null;
                             timeoutMs: number;
@@ -3753,6 +3896,9 @@ export interface operations {
                                 scrollDirection?: "up" | "down" | "left" | "right";
                                 scrollAmount?: number;
                                 duration?: number;
+                            };
+                            update?: {
+                                version: string;
                             };
                         } | null;
                     };
@@ -3976,6 +4122,10 @@ export interface operations {
                             imageToPointY: number;
                         };
                         error?: string;
+                    };
+                    update?: {
+                        from: string;
+                        to: string;
                     };
                 };
             };

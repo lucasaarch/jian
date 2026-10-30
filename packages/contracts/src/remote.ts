@@ -16,6 +16,15 @@ export const remoteMachineSchema = z.strictObject({
    * locked means Computer Use needs an unlock (shell may still work).
    */
   uiState: remoteUiStateSchema.default('unknown'),
+  /** The Jian Remote release the worker last reported; null until it has polled. */
+  version: z.string().nullable().default(null),
+  /**
+   * Its major.minor differs from this gateway's release: agents cannot use it until it is
+   * updated, and an update is the only task it is given.
+   */
+  outdated: z.boolean().default(false),
+  /** It can update itself on request: its worker was installed with npm (`update-npm`). */
+  updatable: z.boolean().default(false),
 });
 
 /** Every agent may use every machine; a machine is only a name and a worker token. */
@@ -73,7 +82,13 @@ export const remoteComputerCommandSchema = z.strictObject({
   timeoutMs: z.number().int().min(1000).max(120000).default(30000),
 });
 
-export const remoteTaskKindSchema = z.enum(['shell', 'computer']);
+/** Bring the machine's worker to a release; what it installs with is the worker's own. */
+export const remoteUpdateParamsSchema = z.strictObject({
+  /** A release such as 1.2.3, or `latest`. */
+  version: z.string().regex(/^(latest|\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?)$/),
+});
+
+export const remoteTaskKindSchema = z.enum(['shell', 'computer', 'update']);
 
 export const remoteTaskSchema = z.strictObject({
   id: z.uuid(),
@@ -82,6 +97,7 @@ export const remoteTaskSchema = z.strictObject({
   cwd: z.string().nullable(),
   timeoutMs: z.number().int(),
   computer: remoteComputerParamsSchema.optional(),
+  update: remoteUpdateParamsSchema.optional(),
 });
 
 export const remoteComputerResultSchema = z.strictObject({
@@ -105,6 +121,16 @@ export const remoteResultSchema = z.strictObject({
   stderr: z.string().max(50_000),
   timedOut: z.boolean().default(false),
   computer: remoteComputerResultSchema.optional(),
+  /** The releases an update task went from and to; the worker restarts after posting it. */
+  update: z.strictObject({ from: z.string(), to: z.string() }).optional(),
+});
+
+/** What updating a machine came to, for the owner in the panel and for an agent. */
+export const remoteMachineUpdateSchema = z.strictObject({
+  ok: z.boolean(),
+  from: z.string().nullable(),
+  to: z.string().nullable(),
+  message: z.string(),
 });
 
 export const remoteWorkerPollSchema = z.strictObject({ task: remoteTaskSchema.nullable() });
@@ -119,3 +145,5 @@ export type RemoteTask = z.infer<typeof remoteTaskSchema>;
 /** What a worker posts back, before the gateway fills its defaults in. */
 export type RemoteResult = z.input<typeof remoteResultSchema>;
 export type RemoteComputerResult = z.input<typeof remoteComputerResultSchema>;
+export type RemoteUpdateParams = z.infer<typeof remoteUpdateParamsSchema>;
+export type RemoteMachineUpdate = z.infer<typeof remoteMachineUpdateSchema>;

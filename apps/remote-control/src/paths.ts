@@ -6,7 +6,6 @@ export const configPath = join(configDir, 'config.json');
 export const installedScript = join(configDir, 'jian-remote.mjs');
 /** Exclusive run lock — prevents KeepAlive / CLI races from leaving two pollers alive. */
 export const workerLockPath = join(configDir, 'worker.pid');
-export const updateStatePath = join(configDir, 'update-state.json');
 /** The worker's own log: what it did and when, the same on every OS whatever its service keeps. */
 export const logPath = join(configDir, 'worker.log');
 /** Where the running worker says how it stands, for `status`; rewritten as that changes. */

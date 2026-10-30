@@ -43,7 +43,7 @@ export function createWorkerState({
     version,
     startedAt: now().toISOString(),
     connected: false,
-    tasks: { total: 0, failed: 0, shell: 0, computer: 0 },
+    tasks: { total: 0, failed: 0, shell: 0, computer: 0, update: 0 },
   };
   let savedAt = 0;
   const save = (force: boolean) => {

@@ -8,11 +8,14 @@ import {
   readTokenOption,
   writeConfigFile,
 } from './config.ts';
+import { npmInstaller } from './npm.ts';
 import { type Fact, printInfo, printSuccess } from './output.ts';
 import { configPath, installedScript } from './paths.ts';
 import { startOrRestartService } from './service.ts';
 import { assertCompatibleWithGateway } from './update.ts';
+import { PACKAGE_VERSION } from './version.ts';
 import { materializeWorkerScript } from './worker-script.ts';
+
 export async function install(): Promise<void> {
   const gateway = option('--gateway');
   const machineId = option('--machine');
@@ -26,12 +29,14 @@ export async function install(): Promise<void> {
     );
   }
   const gatewayVersion = await assertCompatibleWithGateway(gatewayBase);
-  const config = {
+  // Run from the user's own shell, where npm is on PATH: the service later may not see it.
+  const installer = npmInstaller();
+  await writeConfigFile({
     gateway: gatewayBase,
     machineId,
     token: token.trim(),
-  };
-  await writeConfigFile(config);
+    ...(installer ? { installer } : {}),
+  });
   const script = await materializeWorkerScript();
   const started = await startOrRestartService(script);
   const facts: Fact[] = [
@@ -83,6 +88,7 @@ export async function configure(): Promise<void> {
     gateway: gatewayBase ?? existing.gateway,
     machineId,
     token: token.trim(),
+    ...(existing.installer ? { installer: existing.installer } : {}),
   };
   if (typeof config.gateway !== 'string' || !config.gateway.startsWith('https://')) {
     throw new Error(`Invalid gateway in ${configPath}; re-run install from the panel.`);
@@ -114,4 +120,23 @@ export async function configure(): Promise<void> {
     facts.push(['Gateway', `${gatewayVersion} (major.minor ${release?.major}.${release?.minor})`]);
   }
   printSuccess('Configured Jian Remote', facts);
+}
+
+/**
+ * Puts this release where the service runs it — the worker into ~/.config/jian-remote, its
+ * helpers beside it — and restarts the service on it, keeping the credentials. What `update`
+ * hands over to once npm installed a release; `--no-restart` leaves the restart to a worker
+ * that still has to report how its update went.
+ */
+export async function reinstall(): Promise<void> {
+  const config = await loadConfig();
+  const installer = npmInstaller() ?? config.installer;
+  await writeConfigFile({ ...config, ...(installer ? { installer } : {}) });
+  const script = await materializeWorkerScript();
+  const facts: Fact[] = [['Version', PACKAGE_VERSION]];
+  if (!args.includes('--no-restart')) {
+    const started = await startOrRestartService(script);
+    facts.push(['Service', `${started.service} restarted`]);
+  }
+  printSuccess('Reinstalled Jian Remote', facts);
 }

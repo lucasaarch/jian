@@ -1,4 +1,7 @@
+import type { Run } from '@jian/contracts';
+import type { Tool } from 'ai';
 import { expect, it } from 'vitest';
+import { remoteTools } from '../src/agent/remote-tools.js';
 import { createApp } from '../src/app.js';
 import { testServices } from './helpers/services.js';
 
@@ -66,74 +69,206 @@ it('shows a worker offline as soon as it says it is stopping', async () => {
   expect((await services.remote.list())[0]?.online).toBe(true);
 });
 
-it('serves the worker script without authentication so install one-liners can download it', async () => {
-  const services = await testServices();
-  const app = createApp({
-    ...services,
-    token: 'host-admin-token-for-test-1234567890-verysecret',
-    logger: false,
-  });
-  try {
-    const response = await app.inject({ url: '/jian-remote.mjs' });
-    expect(response.statusCode).toBe(200);
-    expect(response.headers['content-type']).toMatch(/javascript/);
-    expect(response.body).toContain('Jian Remote worker');
-    expect(response.body).toContain('--token');
-    expect(response.body).toContain('configure [--gateway');
-    expect(response.body).toContain('update [--version');
-  } finally {
-    await app.close();
-  }
-});
-
-it('stamps the served worker PACKAGE_VERSION to JIAN_VERSION for major.minor compatibility', async () => {
+/** Runs `body` on a gateway stamped with `version`, as its image would be. */
+async function onRelease<T>(version: string, body: () => Promise<T>): Promise<T> {
   const previous = process.env.JIAN_VERSION;
-  process.env.JIAN_VERSION = '0.6.0';
-  const services = await testServices();
-  const app = createApp({
-    ...services,
-    token: 'host-admin-token-for-test-1234567890-verysecret',
-    logger: false,
-  });
+  process.env.JIAN_VERSION = version;
   try {
-    const health = await app.inject({ url: '/health' });
-    expect(health.json()).toMatchObject({ status: 'ok', service: 'jian', version: '0.6.0' });
-    const response = await app.inject({ url: '/jian-remote.mjs' });
-    expect(response.statusCode).toBe(200);
-    expect(response.body).toContain("export const PACKAGE_VERSION = '0.6.0'");
+    return await body();
   } finally {
-    await app.close();
     if (previous === undefined) delete process.env.JIAN_VERSION;
     else process.env.JIAN_VERSION = previous;
   }
+}
+
+/** Polls as the worker until it is handed a task. */
+async function nextTask(
+  remote: Awaited<ReturnType<typeof testServices>>['remote'],
+  machine: { id: string; token: string },
+  capabilities: string,
+  version: string,
+) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const polled = await remote.poll(
+      machine.id,
+      `Bearer ${machine.token}`,
+      'darwin-arm64',
+      capabilities,
+      'unlocked',
+      version,
+    );
+    if (polled.task) return polled.task;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error('The worker was handed no task');
+}
+
+it('refuses agents a worker on another release, and hands that worker only its update', async () => {
+  await onRelease('1.2.0', async () => {
+    const services = await testServices();
+    const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+    const machine = await services.remote.create({ name: 'MacBook' });
+    const capabilities = 'computer-macos-v1,update-npm';
+
+    await services.remote.poll(
+      machine.id,
+      `Bearer ${machine.token}`,
+      'darwin-arm64',
+      capabilities,
+      'unlocked',
+      '1.1.4',
+    );
+    expect((await services.remote.list())[0]).toMatchObject({
+      version: '1.1.4',
+      outdated: true,
+      updatable: true,
+    });
+    await expect(
+      services.remote.execute(owner.id, machine.id, { command: 'whoami' }),
+    ).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('Update') });
+    await expect(
+      services.remote.executeComputer(owner.id, machine.id, { action: 'screenshot' }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    const updating = services.remote.update(owner.id, machine.id);
+    const task = await nextTask(services.remote, machine, capabilities, '1.1.4');
+    expect(task).toMatchObject({ kind: 'update', update: { version: '1.2.0' } });
+    await services.remote.complete(machine.id, task.id, `Bearer ${machine.token}`, {
+      taskId: task.id,
+      exitCode: 0,
+      stdout: 'Updated Jian Remote from 1.1.4 to 1.2.0.',
+      stderr: '',
+      update: { from: '1.1.4', to: '1.2.0' },
+    });
+    await expect(updating).resolves.toEqual({
+      ok: true,
+      from: '1.1.4',
+      to: '1.2.0',
+      message: 'Updated Jian Remote from 1.1.4 to 1.2.0.',
+    });
+
+    // Back on the gateway's release, it serves agents again.
+    await services.remote.poll(
+      machine.id,
+      `Bearer ${machine.token}`,
+      'darwin-arm64',
+      capabilities,
+      'unlocked',
+      '1.2.7',
+    );
+    expect((await services.remote.list())[0]?.outdated).toBe(false);
+    const pending = services.remote.execute(owner.id, machine.id, { command: 'whoami' });
+    const shell = await nextTask(services.remote, machine, capabilities, '1.2.7');
+    expect(shell).toMatchObject({ kind: 'shell', command: 'whoami' });
+    await services.remote.complete(machine.id, shell.id, `Bearer ${machine.token}`, {
+      taskId: shell.id,
+      exitCode: 0,
+      stdout: 'maya',
+      stderr: '',
+    });
+    await expect(pending).resolves.toMatchObject({ exitCode: 0, stdout: 'maya' });
+  });
 });
 
-it('serves automatic worker updates only to the matching authenticated machine', async () => {
-  const services = await testServices();
-  const created = await services.remote.create({ name: 'Updater' });
-  const app = createApp({
-    ...services,
-    token: 'host-admin-token-for-test-1234567890-verysecret',
-    logger: false,
+it('updates only a machine whose worker can update itself, and only while it is online', async () => {
+  await onRelease('1.2.0', async () => {
+    const services = await testServices();
+    const machine = await services.remote.create({ name: 'Linux box' });
+
+    await expect(services.remote.update(null, machine.id)).rejects.toMatchObject({
+      statusCode: 503,
+    });
+    // Installed some other way: it does not offer update-npm.
+    await services.remote.poll(
+      machine.id,
+      `Bearer ${machine.token}`,
+      'linux-x64',
+      '',
+      'unknown',
+      '1.1.0',
+    );
+    expect((await services.remote.list())[0]?.updatable).toBe(false);
+    await expect(services.remote.update(null, machine.id)).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining('jian-remote update'),
+    });
   });
-  try {
-    const denied = await app.inject({ url: `/v1/remote/worker/${created.id}/update` });
-    expect(denied.statusCode).toBe(401);
-    const accepted = await app.inject({
-      url: `/v1/remote/worker/${created.id}/update`,
-      headers: { authorization: `Bearer ${created.token}` },
-    });
-    expect(accepted.statusCode).toBe(200);
-    expect(accepted.headers.etag).toMatch(/^"[a-f0-9]{64}"$/);
-    expect(accepted.body).toContain('updateIfNeeded');
-    const unchanged = await app.inject({
-      url: `/v1/remote/worker/${created.id}/update`,
-      headers: { authorization: `Bearer ${created.token}`, 'if-none-match': accepted.headers.etag },
-    });
-    expect(unchanged.statusCode).toBe(304);
-  } finally {
-    await app.close();
-  }
+});
+
+it('lets only the owner update a machine from the panel, as a task of no agent', async () => {
+  await onRelease('1.2.0', async () => {
+    const services = await testServices();
+    const machine = await services.remote.create({ name: 'MacBook' });
+    const token = 'host-admin-token-for-test-1234567890-verysecret';
+    const app = createApp({ ...services, token, logger: false });
+    try {
+      await services.remote.poll(
+        machine.id,
+        `Bearer ${machine.token}`,
+        'darwin-arm64',
+        'update-npm',
+        'unlocked',
+        '1.1.0',
+      );
+      const url = `/v1/remote/machines/${machine.id}/update`;
+      expect((await app.inject({ method: 'POST', url })).statusCode).toBe(401);
+      // The machine's own worker token is not the owner's.
+      const asWorker = await app.inject({
+        method: 'POST',
+        url,
+        headers: { authorization: `Bearer ${machine.token}` },
+      });
+      expect(asWorker.statusCode).toBe(401);
+
+      const response = app.inject({
+        method: 'POST',
+        url,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const task = await nextTask(services.remote, machine, 'update-npm', '1.1.0');
+      await services.remote.complete(machine.id, task.id, `Bearer ${machine.token}`, {
+        taskId: task.id,
+        exitCode: 1,
+        stdout: '',
+        stderr: 'npm ERR! network unreachable',
+      });
+      const answered = await response;
+      expect(answered.statusCode).toBe(200);
+      expect(answered.json()).toEqual({
+        ok: false,
+        from: '1.1.0',
+        to: null,
+        message: 'npm ERR! network unreachable',
+      });
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+it('keeps a conversation bound to one machine from updating another', async () => {
+  const services = await testServices();
+  const updated: string[] = [];
+  const remote = {
+    list: async () => [],
+    execute: async () => ({ exitCode: 0, stdout: '', stderr: '', timedOut: false }),
+    executeComputer: async () => ({ exitCode: 0, stdout: '', stderr: '', timedOut: false }),
+    update: async (_profile: string | null, machineId: string) => {
+      updated.push(machineId);
+      return { ok: true, from: '1.1.0', to: '1.2.0', message: 'Updated.' };
+    },
+  };
+  const bound = '11111111-1111-4111-8111-111111111111';
+  const other = '22222222-2222-4222-8222-222222222222';
+  const run = { id: 'run', profileId: 'profile', sessionId: 'session' } as unknown as Run;
+  const tools = remoteTools(run, remote as never, services.store, bound);
+  const update = tools.update_remote_machine as Tool<{ machineId: string }>;
+  const call = (machineId: string) =>
+    update.execute?.({ machineId }, { toolCallId: 'call', messages: [], context: {} });
+
+  await expect(call(other)).rejects.toMatchObject({ statusCode: 403 });
+  await expect(call(bound)).resolves.toMatchObject({ ok: true });
+  expect(updated).toEqual([bound]);
 });
 
 it('rotates the worker token and rejects the previous one', async () => {

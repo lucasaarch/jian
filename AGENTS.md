@@ -10,6 +10,7 @@ apps/gateway/         HTTP API, runtime, workers, tests
 apps/web/             Next.js host of the panel, standalone server in front of the gateway (`jian-web` image)
 apps/remote-control/  Published npm worker (`@jian-ai/remote-control`), the CLI around remote-core
 packages/remote-core/ The worker itself: polling, shell, Computer Use and their native helpers
+packages/remote-core/native/  Rust Computer Use helper, one crate for every OS (macOS prototype); `cargo` at the root
 packages/ui/          The panel's screens, components, styles and client, for every host
 packages/contracts/   Zod schemas — the source of the HTTP contract
 packages/sdk/         Generated TypeScript client
@@ -67,13 +68,9 @@ Published migrations are immutable; a later change gets a new version.
 ## Traps
 
 - The gateway no longer serves the panel: `:4310/ui/` is a notice that it moved. The panel
-  is `:3000`, which passes `/v1`, `/health`, `/openapi.json` and `/jian-remote.mjs` to the
-  gateway. A new gateway route outside `/v1` needs a matching route handler there.
+  is `:3000`, which passes `/v1`, `/health` and `/openapi.json` to the gateway. A new gateway
+  route outside `/v1` needs a matching route handler there.
 - PostgreSQL applies `POSTGRES_PASSWORD` only when the volume is first created. A
   recreated `.env` then fails with `28P01`; `ALTER USER` fixes it without losing data.
 - Unit tests need no Docker and no provider. Persistence tests need `TEST_DATABASE_URL`.
-- The worker ships as one bundled file, `apps/remote-control/dist/jian-remote.mjs`, with the
-  helpers beside it; the gateway serves that file as `/jian-remote.mjs`. `make dev` and the test
-  run build it; a gateway started otherwise answers 404 there until it is built. Every
-  installed worker reads the line `export const PACKAGE_VERSION = '…'` from it; the build keeps it.
 - Configuring CI is not running it. Never report verification that did not happen.
