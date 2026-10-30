@@ -505,6 +505,11 @@ jobs:
             echo "::warning::Apple's ticket could not be stapled (attempt $attempt): packaging again."
             sleep 30
           done
+      # The app's own gateway, started as the app starts it, from the package just made: one that
+      # cannot start on a system leaves the app loading for ever there, as 1.1.2 did on Windows.
+      - name: Start the packaged gateway
+        working-directory: apps/desktop
+        run: node scripts/smoke-gateway.mjs release
       - name: Check what was packaged
         working-directory: apps/desktop/release
         run: |
