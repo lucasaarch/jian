@@ -43,7 +43,7 @@ const pull: GitHubPull = {
         reviewer: { login: 'sky-example' },
         state: 'approved',
         submittedAt: '2026-10-29T11:00:00.000Z',
-        body: 'Ship it.',
+        url: `${pullUrl}#pullrequestreview-81`,
       },
     ],
   },
@@ -83,13 +83,6 @@ const pull: GitHubPull = {
           },
         ],
       },
-    },
-  ],
-  comments: [
-    {
-      author: { login: 'lee-example' },
-      body: 'Prices land next.',
-      createdAt: '2026-10-29T10:00:00.000Z',
     },
   ],
 };
@@ -173,7 +166,10 @@ function fakeApi(overrides: Partial<GitHubPull> = {}) {
 async function render(
   children: ReactNode,
   api: ReturnType<typeof fakeApi>,
-  fixConflicts?: (pull: { owner: string; repo: string; number: number }) => Promise<unknown>,
+  options: {
+    merges?: boolean;
+    fixConflicts?: (pull: { owner: string; repo: string; number: number }) => Promise<unknown>;
+  } = {},
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -185,7 +181,8 @@ async function render(
           <GitHubDrawer
             api={api as unknown as GatewayApi}
             profileId="profile"
-            fixConflicts={fixConflicts}
+            merges={options.merges}
+            fixConflicts={options.fixConflicts}
           />
         </GitHubLinks>
       </QueryClientProvider>,
@@ -250,19 +247,15 @@ it('shows a card in what a person wrote too', async () => {
   expect(element.textContent).toContain('Can you look at');
 });
 
-const tab = (name: string) =>
-  [...element.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((item) =>
-    item.textContent?.startsWith(name),
+const section = (name: string) =>
+  [...element.querySelectorAll<HTMLDetailsElement>('.github-section')].find(
+    (item) => item.querySelector('.github-section-title')?.textContent === name,
   );
 
-it('opens the pull request in tabs, and merges with the chosen method and the head seen', async () => {
+it('opens the pull request in folding sections, and merges with the chosen method and the head seen', async () => {
   const api = fakeApi();
 
-  await render(
-    <Markdown text={pullUrl} />,
-    api,
-    vi.fn(async () => ({})),
-  );
+  await render(<Markdown text={pullUrl} />, api, { merges: true, fixConflicts: vi.fn() });
   await openCard();
 
   const drawer = element.querySelector('.github-drawer');
@@ -273,23 +266,25 @@ it('opens the pull request in tabs, and merges with the chosen method and the he
     'river-example',
   );
   expect(drawer?.querySelector(`.github-drawer-bar a[href="${pullUrl}"]`)).not.toBeNull();
-  // The tabs say what each holds: one of two checks passed, one file changed, two in the talk.
-  expect(tab('Checks')?.textContent).toBe('Checks1/2');
-  expect(tab('Changes')?.textContent).toBe('Changes1');
-  expect(tab('Activity')?.textContent).toBe('Activity2');
-  expect(drawer?.textContent).toContain('pricing page.');
 
-  await act(async () => tab('Checks')?.click());
-  expect(drawer?.textContent).toContain('3m 12s');
-  await act(async () => tab('Changes')?.click());
-  expect(drawer?.querySelector('.code-diff-path')?.textContent).toBe('app/pricing.tsx');
-  await act(async () => tab('Activity')?.click());
-  const timeline = drawer?.querySelector('.github-timeline')?.textContent ?? '';
-  // Oldest first: the comment came before the approval.
-  expect(timeline.indexOf('Prices land next.')).toBeLessThan(timeline.indexOf('Ship it.'));
+  // Every part in one view, each saying what it holds while folded.
+  expect(section('Description')?.textContent).toContain('pricing page.');
+  expect(section('Checks')?.querySelector('summary')?.textContent).toBe('Checks1/2');
+  expect(section('Checks')?.textContent).toContain('3m 12s');
+  expect(section('Changes')?.querySelector('summary')?.textContent).toBe('Changes1 file');
+  expect(section('Changes')?.querySelector('.code-diff-path')?.textContent).toBe('app/pricing.tsx');
+  // A review opens where it was written.
+  const review = section('Reviews')?.querySelector('a');
+  expect(review?.getAttribute('href')).toBe(`${pullUrl}#pullrequestreview-81`);
+  expect(review?.textContent).toContain('sky-example');
+  expect(review?.textContent).toContain('Approved');
+
+  const checks = section('Checks');
+  await act(async () => checks?.querySelector('summary')?.click());
+  expect(checks?.open).toBe(false);
+
   // Mergeable, so merging is offered and fixing conflicts is not.
   expect(button('Fix merge conflicts')).toBeUndefined();
-
   await act(async () => button('Squash and merge')?.click());
   expect(element.querySelector('dialog')?.textContent).toContain('pricing-page lands on main');
   expect(api.mergeGithubPull).not.toHaveBeenCalled();
@@ -312,7 +307,6 @@ it('opens the pull request in tabs, and merges with the chosen method and the he
   );
   expect(element.querySelector('.github-ref')?.getAttribute('data-state')).toBe('merged');
   expect(api.githubPull).toHaveBeenCalledTimes(1);
-  expect(button('Squash and merge')).toBeUndefined();
 });
 
 it('reads the pull request again on refresh, and the reference in the text follows', async () => {
@@ -356,13 +350,16 @@ it('keeps the drawer’s shape while GitHub answers', async () => {
   expect(element.querySelector('.github-skeleton')).toBeNull();
 });
 
-it('offers to fix conflicts in the merge button’s place, asking the agent in the background', async () => {
+it('offers to fix conflicts in the place of merging and of the line about them', async () => {
   const fixConflicts = vi.fn(async () => ({}));
 
-  await render(<Markdown text={pullUrl} />, fakeApi({ mergeable: 'conflicts' }), fixConflicts);
+  await render(<Markdown text={pullUrl} />, fakeApi({ mergeable: 'conflicts' }), {
+    merges: true,
+    fixConflicts,
+  });
   await openCard();
 
-  expect(element.textContent).toContain('This branch has conflicts');
+  expect(element.textContent).not.toContain('This branch has conflicts');
   expect(button('Squash and merge')).toBeUndefined();
   await act(async () => button('Fix merge conflicts')?.click());
   expect(fixConflicts).toHaveBeenCalledWith(
@@ -372,22 +369,25 @@ it('offers to fix conflicts in the merge button’s place, asking the agent in t
   expect(element.querySelector('.github-drawer')).not.toBeNull();
 });
 
-it('only reads in a conversation answered in a messaging app', async () => {
-  await render(<Markdown text={pullUrl} />, fakeApi({ mergeable: 'conflicts' }));
+it('fixes conflicts in a conversation answered in a messaging app', async () => {
+  await render(<Markdown text={pullUrl} />, fakeApi({ mergeable: 'conflicts' }), {
+    fixConflicts: vi.fn(async () => ({})),
+  });
   await openCard();
 
-  expect(element.querySelector('.github-drawer-title')?.textContent).toBe('Add the pricing page');
+  expect(button('Fix merge conflicts')).not.toBeUndefined();
+});
+
+it('does not merge in a conversation answered in a messaging app', async () => {
+  await render(<Markdown text={pullUrl} />, fakeApi(), { fixConflicts: vi.fn(async () => ({})) });
+  await openCard();
+
   expect(button('Squash and merge')).toBeUndefined();
-  expect(button('Fix merge conflicts')).toBeUndefined();
-  expect(element.querySelector(`.github-drawer a[href="${pullUrl}"]`)).not.toBeNull();
+  expect(element.textContent).toContain('Ready to merge.');
 });
 
 it('opens an issue with its labels, assignees and comments', async () => {
-  await render(
-    <Markdown text={issueUrl} />,
-    fakeApi(),
-    vi.fn(async () => ({})),
-  );
+  await render(<Markdown text={issueUrl} />, fakeApi(), { fixConflicts: vi.fn(async () => ({})) });
   await openCard();
 
   const drawer = element.querySelector('.github-drawer');

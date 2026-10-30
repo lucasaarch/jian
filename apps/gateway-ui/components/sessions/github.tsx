@@ -1,7 +1,6 @@
 'use client';
 
 import { Popover } from '@base-ui/react/popover';
-import { Tabs } from '@base-ui/react/tabs';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
@@ -16,7 +15,7 @@ import {
   GitPullRequestDraft,
   type LucideIcon,
   RefreshCw,
-  Wrench,
+  Sparkles,
   X,
 } from 'lucide-react';
 import {
@@ -322,53 +321,35 @@ function CheckMark({
 }
 
 const reviewNames: Record<GitHubPull['reviews']['latest'][number]['state'], string> = {
-  approved: 'approved',
-  changes_requested: 'requested changes',
-  commented: 'reviewed',
-  dismissed: 'had a review dismissed',
-  pending: 'started a review',
+  approved: 'Approved',
+  changes_requested: 'Changes requested',
+  commented: 'Commented',
+  dismissed: 'Dismissed',
+  pending: 'Pending',
 };
 
-/** Reviews and comments together, oldest first, as the pull request's conversation reads. */
-function Activity({ pull }: { pull: GitHubPull }) {
-  const entries = [
-    ...pull.reviews.latest.map((review) => ({
-      key: `review:${review.reviewer.login}`,
-      login: review.reviewer.login,
-      at: review.submittedAt,
-      what: reviewNames[review.state],
-      state: review.state as string,
-      body: review.body,
-    })),
-    ...pull.comments.map((comment, index) => ({
-      key: `comment:${index}`,
-      login: comment.author?.login,
-      at: comment.createdAt,
-      what: 'commented',
-      state: 'comment',
-      body: comment.body,
-    })),
-  ].sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''));
-
-  if (!entries.length) return <p className="github-none">No reviews or comments yet.</p>;
-
+/**
+ * One part of the pull request, under a heading that folds it away: what it holds is counted
+ * beside its name, so a folded part still says how it stands.
+ */
+function Section({
+  title,
+  summary,
+  children,
+}: {
+  title: string;
+  summary?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <ol className="github-timeline">
-      {entries.map((entry) => (
-        <li key={entry.key} data-state={entry.state}>
-          <span className="github-timeline-dot" aria-hidden="true" />
-          <p className="github-timeline-head">
-            <Person login={entry.login} /> {entry.what}
-            {entry.at && <small>{date(entry.at)}</small>}
-          </p>
-          {entry.body?.trim() && (
-            <div className="markdown github-markdown">
-              <Markdown text={entry.body} />
-            </div>
-          )}
-        </li>
-      ))}
-    </ol>
+    <details className="github-section" open>
+      <summary>
+        <ChevronDown size={14} className="github-section-chevron" aria-hidden="true" />
+        <span className="github-section-title">{title}</span>
+        {summary}
+      </summary>
+      <div className="github-section-body">{children}</div>
+    </details>
   );
 }
 
@@ -376,12 +357,14 @@ function PullView({
   api,
   pull,
   profileId,
+  merges,
   fixConflicts,
 }: {
   api: DrawerApi;
   pull: GitHubPull;
   profileId: string;
-  /** Where the panel answers the chat: it merges, and asks the agent to settle conflicts. */
+  /** The panel answers this chat itself, so it merges from here. */
+  merges: boolean;
   fixConflicts?: (pull: Pull) => Promise<unknown>;
 }) {
   const client = useQueryClient();
@@ -389,7 +372,9 @@ function PullView({
   const [busy, setBusy] = useState(false);
   const [fixing, setFixing] = useState(false);
   const open = pull.state === 'open';
-  const conflicts = open && pull.mergeable === 'conflicts';
+  // A branch in conflict cannot merge: the way to settle it takes the place of the merge and of
+  // the line saying so.
+  const fixable = open && pull.mergeable === 'conflicts' && Boolean(fixConflicts);
   const runs = pull.checks.runs;
   const passed = runs.filter((check) => checkState(check) === 'passing').length;
   const checks = runs.some((check) => checkState(check) === 'failing')
@@ -397,7 +382,6 @@ function PullView({
     : runs.some((check) => checkState(check) === 'pending')
       ? 'pending'
       : 'passing';
-  const activity = pull.reviews.latest.length + pull.comments.length;
 
   const merge = async (method: GitHubMergeMethod) => {
     setBusy(true);
@@ -452,20 +436,23 @@ function PullView({
           <span className="sr-only">from</span>
           <code>{pull.head.ref}</code>
         </p>
-        {open && fixConflicts && (
+        {fixable ? (
           <div className="github-actions">
-            {/* A branch in conflict cannot merge: what it needs instead takes the button's place. */}
-            {conflicts ? (
-              <Button busy={fixing} onClick={() => void fix()}>
-                <Wrench size={16} aria-hidden="true" />
-                Fix merge conflicts
-              </Button>
-            ) : (
-              <MergeButton pull={pull} merge={setConfirming} />
-            )}
+            <Button busy={fixing} onClick={() => void fix()}>
+              <Sparkles size={16} aria-hidden="true" />
+              Fix merge conflicts
+            </Button>
           </div>
+        ) : (
+          open &&
+          merges &&
+          pull.mergeable !== 'conflicts' && (
+            <div className="github-actions">
+              <MergeButton pull={pull} merge={setConfirming} />
+            </div>
+          )
         )}
-        {open && (
+        {open && !fixable && (
           <p className="github-mergeable" data-state={pull.mergeable}>
             {pull.draft
               ? 'A draft does not merge until it is marked ready.'
@@ -473,30 +460,8 @@ function PullView({
           </p>
         )}
       </Header>
-      <Tabs.Root className="github-tabs" defaultValue="description">
-        <Tabs.List className="github-tab-list" aria-label="Pull request">
-          <Tabs.Tab className="github-tab" value="description">
-            Description
-          </Tabs.Tab>
-          <Tabs.Tab className="github-tab" value="checks">
-            {runs.length > 0 && (
-              <span className="github-tab-mark" data-state={checks}>
-                <CheckMark state={checks} size={13} />
-              </span>
-            )}
-            Checks
-            <span className="github-tab-count">{runs.length ? `${passed}/${runs.length}` : 0}</span>
-          </Tabs.Tab>
-          <Tabs.Tab className="github-tab" value="changes">
-            Changes
-            <span className="github-tab-count">{pull.changedFiles}</span>
-          </Tabs.Tab>
-          <Tabs.Tab className="github-tab" value="activity">
-            Activity
-            <span className="github-tab-count">{activity}</span>
-          </Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel className="crew-drawer-body github-body" value="description">
+      <div className="crew-drawer-body github-body">
+        <Section title="Description">
           {pull.body.trim() ? (
             <div className="markdown github-markdown">
               <Markdown text={pull.body} />
@@ -504,8 +469,18 @@ function PullView({
           ) : (
             <p className="github-none">No description.</p>
           )}
-        </Tabs.Panel>
-        <Tabs.Panel className="crew-drawer-body github-body" value="checks">
+        </Section>
+        <Section
+          title="Checks"
+          summary={
+            runs.length > 0 && (
+              <span className="github-section-count" data-state={checks}>
+                <CheckMark state={checks} size={13} />
+                {passed}/{runs.length}
+              </span>
+            )
+          }
+        >
           {runs.length ? (
             <ul className="github-check-list">
               {runs.map((check) => {
@@ -535,8 +510,15 @@ function PullView({
           ) : (
             <p className="github-none">No checks reported for this commit.</p>
           )}
-        </Tabs.Panel>
-        <Tabs.Panel className="crew-drawer-body github-body" value="changes">
+        </Section>
+        <Section
+          title="Changes"
+          summary={
+            <span className="github-section-count">
+              {pull.changedFiles} {pull.changedFiles === 1 ? 'file' : 'files'}
+            </span>
+          }
+        >
           <p className="github-counts code-change-counts">
             <span className="added">+{pull.additions}</span>
             <span className="removed">−{pull.deletions}</span>
@@ -556,11 +538,42 @@ function PullView({
           {pull.filesTruncated && (
             <p className="github-none">Only the first {pull.files.length} files are shown here.</p>
           )}
-        </Tabs.Panel>
-        <Tabs.Panel className="crew-drawer-body github-body" value="activity">
-          <Activity pull={pull} />
-        </Tabs.Panel>
-      </Tabs.Root>
+        </Section>
+        <Section
+          title="Reviews"
+          summary={<span className="github-section-count">{pull.reviews.latest.length}</span>}
+        >
+          {pull.reviews.latest.length ? (
+            <ul className="github-review-list">
+              {pull.reviews.latest.map((review) => {
+                const row = (
+                  <>
+                    <strong>{review.reviewer.login}</strong>
+                    <small>{reviewNames[review.state]}</small>
+                    {review.submittedAt && <time>{date(review.submittedAt)}</time>}
+                    {review.url && <ExternalLink size={13} aria-hidden="true" />}
+                  </>
+                );
+
+                return (
+                  <li key={review.reviewer.login} data-state={review.state}>
+                    {/* Each review opens where it was written, with everything said in it. */}
+                    {review.url ? (
+                      <a href={review.url} target="_blank" rel="noreferrer">
+                        {row}
+                      </a>
+                    ) : (
+                      <span>{row}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="github-none">No reviews yet.</p>
+          )}
+        </Section>
+      </div>
       {confirming && (
         <Modal
           title={`${methodNames[confirming].action} #${pull.number}?`}
@@ -608,26 +621,31 @@ function IssueView({ issue }: { issue: GitHubIssue }) {
         )}
       </Header>
       <div className="crew-drawer-body github-body">
+        <Section title="Description">
+          {issue.body.trim() ? (
+            <div className="markdown github-markdown">
+              <Markdown text={issue.body} />
+            </div>
+          ) : (
+            <p className="github-none">No description.</p>
+          )}
+        </Section>
         {issue.assignees.length > 0 && (
-          <section className="github-section">
-            <h3>Assignees</h3>
+          <Section
+            title="Assignees"
+            summary={<span className="github-section-count">{issue.assignees.length}</span>}
+          >
             <p className="github-people">
               {issue.assignees.map((assignee) => (
                 <Person key={assignee.login} login={assignee.login} />
               ))}
             </p>
-          </section>
+          </Section>
         )}
-        {issue.body.trim() && (
-          <div className="markdown github-markdown">
-            <Markdown text={issue.body} />
-          </div>
-        )}
-        <section className="github-section">
-          <h3>
-            Comments
-            <span>{issue.comments.length}</span>
-          </h3>
+        <Section
+          title="Comments"
+          summary={<span className="github-section-count">{issue.comments.length}</span>}
+        >
           {issue.comments.length ? (
             <ol className="github-comments">
               {issue.comments.map((comment, index) => (
@@ -643,7 +661,7 @@ function IssueView({ issue }: { issue: GitHubIssue }) {
           ) : (
             <p className="github-none">No comments.</p>
           )}
-        </section>
+        </Section>
       </div>
     </>
   );
@@ -685,17 +703,19 @@ function DrawerSkeleton() {
 }
 
 /**
- * A pull request or an issue followed beside the conversation, in the Inspector. Without
- * `fixConflicts` the conversation is answered elsewhere, WhatsApp or Telegram, and the drawer
- * only reads, as its approvals do.
+ * A pull request or an issue followed beside the conversation, in the Inspector. Any
+ * conversation can have its agent settle a pull request's conflicts; only one the panel answers
+ * itself merges from here, as a chat on WhatsApp or Telegram decides its approvals there.
  */
 export function GitHubDrawer({
   api,
   profileId,
+  merges = false,
   fixConflicts,
 }: {
   api: DrawerApi;
   profileId: string;
+  merges?: boolean;
   fixConflicts?: (pull: Pull) => Promise<unknown>;
 }) {
   const client = useQueryClient();
@@ -794,7 +814,13 @@ export function GitHubDrawer({
         </button>
       </div>
       {isPull && pull.data ? (
-        <PullView api={api} pull={pull.data} profileId={profileId} fixConflicts={fixConflicts} />
+        <PullView
+          api={api}
+          pull={pull.data}
+          profileId={profileId}
+          merges={merges}
+          fixConflicts={fixConflicts}
+        />
       ) : !isPull && issue.data ? (
         <IssueView issue={issue.data} />
       ) : current.error ? (
