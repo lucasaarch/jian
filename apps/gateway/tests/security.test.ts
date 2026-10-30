@@ -76,6 +76,38 @@ describe('access tokens', () => {
   });
 });
 
+describe('services on this computer, for a gateway that runs on it', () => {
+  it('reaches loopback over plain HTTP only when allowed', () => {
+    expect(() => validateEndpoint('http://127.0.0.1:11434/api')).toThrow();
+    expect(() => validateEndpoint('http://localhost:11434/api')).toThrow();
+    expect(validateEndpoint('http://127.0.0.1:11434/api', [], true).port).toBe('11434');
+    expect(validateEndpoint('http://localhost:1234/v1', [], true).hostname).toBe('localhost');
+    expect(validateEndpoint('http://[::1]:8080/', [], true).port).toBe('8080');
+  });
+
+  it('fetches from a server on this computer when allowed, and not otherwise', async () => {
+    const server = createServer((_request, response) => response.end('local model'));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    const allowed = createSafeFetch({ allowLoopback: true });
+    const refused = createSafeFetch();
+    try {
+      const answer = await allowed.fetch(`http://localhost:${port}/`);
+      expect(await answer.text()).toBe('local model');
+      await expect(refused.fetch(`http://localhost:${port}/`)).rejects.toThrow();
+    } finally {
+      await Promise.all([allowed.close(), refused.close()]);
+      server.close();
+    }
+  });
+
+  it('still refuses the rest of the private network and cloud metadata', () => {
+    expect(() => validateEndpoint('http://192.168.1.10:11434/', [], true)).toThrow();
+    expect(() => validateEndpoint('http://10.0.0.5/', [], true)).toThrow();
+    expect(() => validateEndpoint('http://169.254.169.254/', [], true)).toThrow();
+  });
+});
+
 describe('outbound policy', () => {
   const clients: ReturnType<typeof createSafeFetch>[] = [];
 

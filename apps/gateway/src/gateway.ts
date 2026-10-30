@@ -52,6 +52,8 @@ export type GatewayOptions = {
    */
   channels: 'all' | 'none';
   allowPrivateOrigins: string[];
+  /** Whether agents and providers may reach services on this computer itself. */
+  allowLoopback?: boolean;
   trustedProxies: string[];
   publicUrl?: string;
   timeZone?: string;
@@ -72,7 +74,10 @@ export type Gateway = {
  */
 export async function createGateway(options: GatewayOptions): Promise<Gateway> {
   const { store, box } = options;
-  const outbound = createSafeFetch({ allowPrivateOrigins: options.allowPrivateOrigins });
+  const outbound = createSafeFetch({
+    allowPrivateOrigins: options.allowPrivateOrigins,
+    ...(options.allowLoopback ? { allowLoopback: true } : {}),
+  });
 
   // What each model can do is read from a catalog maintained outside this repository, so a model
   // released today works today. It goes out through the same guarded client as every other
