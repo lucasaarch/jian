@@ -165,7 +165,7 @@ const https = (value: string | null | undefined) =>
  * GitHub's two answers to "can this merge" made into one. `mergeable` is null while GitHub is
  * still computing it after a push; `mergeable_state` names the reason when it can't merge.
  */
-export function mergeableOf(
+function mergeableOf(
   mergeable: boolean | null | undefined,
   state: string | null | undefined,
 ): GitHubMergeable {
@@ -192,7 +192,7 @@ function summarize(checks: GitHubCheck[]) {
 }
 
 /** A link to a pull request or an issue on github.com, or undefined for any other link. */
-export function githubLink(url: string): (Ref & { kind: 'pull' | 'issue' }) | undefined {
+function githubLink(url: string): (Ref & { kind: 'pull' | 'issue' }) | undefined {
   const match = LINK.exec(url);
 
   if (!match) return undefined;

@@ -112,6 +112,8 @@ export const remoteMachines = pgTable('remote_machines', {
     .default('unknown'),
   /** From x-jian-remote-version on poll: the release the worker runs. */
   version: text('version'),
+  /** From x-jian-system on poll, or from create: the OS by name and version. */
+  system: text('system'),
   createdAt,
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
 });

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { inlineMediaSchema } from './media.js';
+import { protectionModeSchema } from './profile.js';
+import { reasoningEffortSchema } from './providers.js';
 import { secretSchema } from './security.js';
 
 /** One channel of each type per profile: the panel connects a type, it does not name a binding. */
@@ -78,6 +80,12 @@ export const DEFAULT_CHANNEL_MESSAGES: z.infer<typeof channelMessagesSchema> = {
   approveWords: ['yes', 'y', 'approve', 'ok', 'sim', 's'],
   rejectWords: ['no', 'n', 'reject', 'não', 'nao'],
 };
+
+/** What an API channel's caller names to go back to the gateway's Model defaults. */
+export const API_DEFAULT_MODEL = 'default';
+
+/** A model as an API channel's caller names it: an id its providers list, as `gpt-6-luna`. */
+const apiModelIdSchema = z.string().trim().min(1).max(160);
 
 export const channelPatchSchema = z.union([
   z.strictObject({ enabled: z.boolean() }),
@@ -163,6 +171,15 @@ export const ingressSchema = z.strictObject({
   reaction: z.boolean().optional(),
   // The protocol's id of the message a reaction or a reply points to.
   target: z.string().min(1).max(200).optional(),
+  // API channels only. Kept by the conversation from this message on, until one asks otherwise.
+  // Absent, a new conversation runs on Auto and on the gateway's Model defaults.
+  protection: protectionModeSchema
+    .optional()
+    .describe('`ask` or `auto`; `full` is refused on an API channel.'),
+  model: apiModelIdSchema
+    .optional()
+    .describe('A model id the providers list, or `default` for the gateway Model defaults.'),
+  effort: reasoningEffortSchema.optional().describe('Refused when the model does not offer it.'),
 });
 
 const telegramEntitiesSchema = z

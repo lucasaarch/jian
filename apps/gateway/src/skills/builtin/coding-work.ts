@@ -48,6 +48,8 @@ it changed since you read it. That is protecting someone else's change: read it 
   already uses.
 - Never force-push, rewrite published history, delete branches or reset away work unless
   the person asked for exactly that.
+- Clone, fetch, pull and push of GitHub repositories go through \`github_git\` when the owner
+  connected GitHub (\`github\` skill); everything local stays with \`git\`.
 - Issues, pull requests, reviews and runs go through GitHub's MCP server: the one the GitHub
   integration attaches when the owner connected an account (\`github\` skill), or one the
   owner configured under Gateway → Integrations → MCPs. Search and load its tools first, and load

@@ -596,7 +596,7 @@ export function profileTools(
     }),
   });
 
-  // Workspace-confined shell and files are always available, and so is every Remote Control
+  // Workspace-confined shell and files are always available, and so is every connected
   // machine; a conversation aimed at one machine works there instead of locally.
   if (!remoteTarget) Object.assign(tools, shellTools(run.profileId, gitAccess));
   if (services.remote) {
@@ -725,7 +725,7 @@ export const TOOL_GROUPS = {
   },
   remote: {
     summary:
-      'list Remote Control machines, run commands there, drive the Mac screen (remote_computer), pull or push files, and update their Jian Remote',
+      'list the connected machines, run commands there, drive the Mac screen (remote_computer), pull or push files, and update their Jian Remote',
     tools: [
       'list_remote_machines',
       'run_remote_command',
@@ -773,7 +773,7 @@ export const TOOL_GROUPS = {
   },
 } as const;
 
-export type ToolGroup = keyof typeof TOOL_GROUPS;
+type ToolGroup = keyof typeof TOOL_GROUPS;
 
 const deferred = new Map<string, ToolGroup>(
   Object.entries(TOOL_GROUPS).flatMap(([group, entry]) =>
@@ -782,7 +782,7 @@ const deferred = new Map<string, ToolGroup>(
 );
 
 /** The groups this run can actually offer: a group whose tools are all absent is not one. */
-export function offeredGroups(tools: ToolSet): ToolGroup[] {
+function offeredGroups(tools: ToolSet): ToolGroup[] {
   return (Object.keys(TOOL_GROUPS) as ToolGroup[]).filter((group) =>
     TOOL_GROUPS[group].tools.some((name) => name in tools),
   );

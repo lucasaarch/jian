@@ -14,7 +14,7 @@ import { channels, contacts, errands } from '../storage/schema.js';
  * How long a question stays open. Past it, a message from that contact is a new conversation
  * rather than a late answer — mistaking the two is worse than losing a slow reply.
  */
-export const ERRAND_WINDOW_MS = 48 * 60 * 60 * 1000;
+const ERRAND_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 export type Errand = typeof errands.$inferSelect;
 

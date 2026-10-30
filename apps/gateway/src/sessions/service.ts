@@ -23,6 +23,7 @@ import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { projects, remoteMachines, runs } from '../storage/schema.js';
 import { objectiveAt, sanitizeObjectiveText } from './objective.js';
+import type { SessionStart } from './port.js';
 import {
   deleteSession as deleteSessionRecord,
   findOwnSession,
@@ -187,12 +188,16 @@ export class Sessions {
   }
 
   /** A caller already inside a profile transaction passes it in: this store never nests locks. */
-  /** `scope` is the gateway's to set, for a channel conversation; the public input has none. */
+  /**
+   * `scope` and `start` are the gateway's to set, for a channel conversation; the public input
+   * has neither.
+   */
   async createSession(
     profileId: string,
     input: unknown,
     transaction?: Queryable,
     scope?: 'direct' | 'group',
+    start?: SessionStart,
   ) {
     const data = sessionSchema.parse(input);
 
@@ -205,7 +210,7 @@ export class Sessions {
         id: randomUUID(),
         profileId,
         ...(scope ? { scope } : {}),
-        protection: 'ask',
+        protection: start?.protection ?? 'ask',
         createdAt: nowIso(this.clock),
       };
 

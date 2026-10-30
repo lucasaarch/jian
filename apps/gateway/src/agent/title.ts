@@ -25,7 +25,7 @@ export function plainTitle(opening: string): string {
 }
 
 /** The first line of what the model answered, without the dressing models add to titles. */
-export function cleanTitle(text: string): string {
+function cleanTitle(text: string): string {
   const line =
     text
       .split('\n')

@@ -9,7 +9,7 @@ import type { ProviderCredential } from '@jian/contracts';
  */
 const OAUTH_PREFIX = 'sk-ant-oat';
 
-export const isSubscriptionToken = (secret: string | undefined): boolean =>
+const isSubscriptionToken = (secret: string | undefined): boolean =>
   typeof secret === 'string' && secret.startsWith(OAUTH_PREFIX);
 
 const KEY_PREFIX = 'sk-ant-api';
@@ -86,9 +86,13 @@ export const subscriptionHeaders = (): Record<string, string> => ({
  * answers 200, the same text with the profile's instructions appended to that one block
  * answers 429, and identity plus instructions as two blocks answers 200. The SDK sends one
  * block, so the split happens here.
+ *
+ * `observe` is handed every answer's headers, which carry how much of the subscription's
+ * windows is used.
  */
 export async function subscriptionFetch(
   fetcher: typeof globalThis.fetch,
+  observe?: (headers: Headers) => void,
 ): Promise<typeof globalThis.fetch> {
   // The product token is `claude-code`, not `claude-cli`: the other one is refused outright.
   const agent = `claude-code/${await claudeCodeVersion()} (external, cli)`;
@@ -98,7 +102,9 @@ export async function subscriptionFetch(
 
     headers.set('user-agent', agent);
 
-    return fetcher(input, { ...init, headers, body: splitSystem(init?.body) });
+    const response = await fetcher(input, { ...init, headers, body: splitSystem(init?.body) });
+    observe?.(response.headers);
+    return response;
   };
 }
 

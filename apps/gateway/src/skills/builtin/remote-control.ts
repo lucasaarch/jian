@@ -4,10 +4,10 @@ import type { Skill } from '@jian/contracts';
 export const remoteControl: Skill = {
   name: 'remote-control',
   description:
-    'Use when asked to control a computer the owner connected under Remote Control: run commands there, drive the screen (click, type, scroll), take a screenshot, or copy files to or from that machine.',
-  instructions: `# Remote Control
+    'Use when asked to control a computer the owner connected under Machines: run commands there, drive the screen (click, type, scroll), take a screenshot, or copy files to or from that machine.',
+  instructions: `# Machines
 
-The owner connects computers in the panel under **Remote Control**. Each machine has a worker
+The owner connects computers in the panel under **Machines**. Each machine has a worker
 that polls this gateway over HTTPS. Every agent may use every connected machine, for shell
 and computer use alike. Commands and GUI actions run as the
 logged-in local user — full local privileges, not a sandbox.
@@ -16,14 +16,16 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
 
 ## The tools
 
-- \`list_remote_machines\` — the connected machines: id, name, platform, online, uiState,
-  capabilities, version, outdated, updatable.
+- \`list_remote_machines\` — the connected machines: id, name, system (the OS and its version),
+  platform (OS and architecture), online, uiState, capabilities, version, outdated, updatable.
 - \`update_remote_machine\` — bring a machine's Jian Remote to this gateway's release. It
   restarts on the new one when done. Only machines with \`updatable: true\` (installed with
   npm) can; for the others, tell the owner to run \`jian-remote update\` on that computer.
 - \`run_remote_command\` — shell on that computer (PowerShell on Windows, \`/bin/sh\` on
   macOS/Linux). Open apps, install software, Git, builds, scripts — anything a local user
   would type. Prefer \`remote_computer\` for GUI and screenshots, and pull/push for files.
+  In a conversation that targets the machine, clone, fetch, pull and push GitHub repositories
+  there with \`github_git\` (\`github\` skill), which lends the GitHub App's access to it.
 - \`remote_computer\` — Anthropic-style desktop control on **macOS, Linux (X11), and Windows**
   (primary display): \`screenshot\`, \`left_click\`, \`right_click\`, \`double_click\`,
   \`mouse_move\`, \`type\`, \`key\`, \`scroll\`, \`left_click_drag\`, \`wait\`, \`end_session\`.

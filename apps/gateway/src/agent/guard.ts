@@ -9,7 +9,7 @@ import { isChatChannel } from '../channels/kinds.js';
 export type ActionKind = 'machine' | 'service' | 'message';
 
 /** The gateway's own tools that act outside the conversation, by where they land. */
-export const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
+const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
   run_command: 'machine',
   run_remote_command: 'machine',
   remote_computer: 'machine',
@@ -49,7 +49,7 @@ export type Protection =
   | { mode: 'decline'; reason: string };
 
 export const NO_APPROVER =
-  'Not run: nobody in this conversation may approve actions. Say what you would do and that the owner has to allow it, either by letting someone here approve or by giving this conversation full access.';
+  'Not run: this conversation asks before acting, and nobody in it may approve. This is a protection setting, not a missing key or permission: say what you would do, and that the owner can let it act by setting this conversation to Auto, or by allowing this contact to approve in Jian.';
 
 export const SUBAGENT_ASKS =
   'Not run: this conversation asks before acting, and only the agent that sent you can ask. Report what you would do, with the exact command, file or message, so it can ask for approval.';
@@ -167,7 +167,47 @@ const PLAIN: Record<
     detail: field(input, 'text'),
     confirm: 'Ask',
   }),
+  github_git: (input) => {
+    const repository = field(input, 'repository') ?? 'a GitHub repository';
+    const branch = field(input, 'branch');
+    const detail = field(input, 'path');
+    const force = (input as { force?: unknown } | null)?.force === true;
+
+    switch (field(input, 'action')) {
+      case 'push':
+        return force
+          ? { title: `Force-push branch ${branch} to ${repository}`, detail, confirm: 'Force-push' }
+          : { title: `Push branch ${branch} to ${repository}`, detail, confirm: 'Push' };
+      case 'clone':
+        return {
+          title: `Clone ${repository}${branch ? ` at branch ${branch}` : ''}`,
+          detail,
+          confirm: 'Clone',
+        };
+      case 'pull':
+        return {
+          title: `Pull ${branch ? `branch ${branch} of ` : ''}${repository} into its checkout`,
+          detail,
+          confirm: 'Pull',
+        };
+      default:
+        return {
+          title: `Fetch ${branch ? `branch ${branch} of ` : ''}${repository}`,
+          detail,
+          confirm: 'Fetch',
+        };
+    }
+  },
 };
+
+/**
+ * Where a call to one of the gateway's own tools lands. GitHub git changes the machine when it
+ * brings commits in, and GitHub itself when it pushes them out.
+ */
+export function actionKind(toolName: string, input: unknown): ActionKind | undefined {
+  if (toolName === 'github_git') return field(input, 'action') === 'push' ? 'service' : 'machine';
+  return ACTION_KINDS[toolName];
+}
 
 const KINDS: Record<ActionKind, string> = {
   machine: 'Change the machine',

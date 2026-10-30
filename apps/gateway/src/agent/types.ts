@@ -35,8 +35,11 @@ export interface RuntimeOptions {
   gatewayVault?: Pick<GatewayVault, 'read'>;
   /** Hands one MCP server its stored sign-in, so the SDK can refresh and use it. */
   mcpOAuth?: McpOAuthProviders;
-  /** Issues project-repository-scoped GitHub App tokens for the official MCP server. */
-  github?: Pick<GitHubIntegrations, 'mcpAccess'>;
+  /**
+   * Issues GitHub App tokens: for the official MCP server, and for one repository's git command
+   * (`github_git`), each scoped to what the conversation reaches.
+   */
+  github?: Pick<GitHubIntegrations, 'mcpAccess' | 'gitAccess'>;
   codexLogin?: Pick<CodexLogin, 'accessToken'>;
   outbound?: ReturnType<typeof createSafeFetch>;
   storeArtifact?: (

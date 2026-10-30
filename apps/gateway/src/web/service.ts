@@ -32,7 +32,7 @@ const ENTITIES: Record<string, string> = {
  * A page as the text a person reads: scripts, styles and markup gone, block elements kept as
  * line breaks. Not a browser — a page that builds itself in JavaScript reads as nearly empty.
  */
-export function pageText(html: string): { title?: string; text: string } {
+function pageText(html: string): { title?: string; text: string } {
   const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1];
   const decode = (value: string) =>
     value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (entity, code: string) => {

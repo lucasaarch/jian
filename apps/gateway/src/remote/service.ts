@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
+  REMOTE_SYSTEM_MAX_LENGTH,
   type RemoteComputerParams,
   type RemoteMachineUpdate,
   type RemoteUpdateParams,
@@ -7,12 +8,14 @@ import {
   remoteComputerCommandSchema,
   remoteComputerParamsSchema,
   remoteMachineCreateSchema,
+  remotePlatformSchema,
   remoteResultSchema,
   remoteUpdateParamsSchema,
 } from '@jian/contracts';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { GatewayError } from '../core/errors.js';
 import { gatewayRelease, workerOutdated } from '../core/release.js';
+import type { GatewayVault } from '../security/gateway-vault.js';
 import type { Store } from '../storage/database.js';
 import { remoteMachines, remoteTasks } from '../storage/schema.js';
 
@@ -40,6 +43,12 @@ const UPDATE_CAPABILITIES = new Set(['update-npm']);
 function machineCanUpdate(machine: { capabilities: string[] | null }): boolean {
   return (machine.capabilities ?? []).some((cap) => UPDATE_CAPABILITIES.has(cap));
 }
+
+/** A worker that runs a shell task with a secret environment it neither logs nor echoes. */
+const SECRET_ENV_CAPABILITY = 'shell-secret-env-v1';
+
+/** Where a task's secret environment waits, encrypted, until its worker claims it. */
+const secretEnvKey = (taskId: string) => `remote-task-env:${taskId}`;
 
 /** npm and the handover to the new worker can take minutes on a slow link, in ms. */
 const UPDATE_TIMEOUT_MS = 5 * 60_000;
@@ -82,6 +91,20 @@ function parseVersion(header: string | undefined): string | null {
   return value && /^[0-9A-Za-z.+-]{1,40}$/.test(value) ? value : null;
 }
 
+/**
+ * A system header is the worker's word, shown to the owner and to agents: control characters
+ * and runs of spaces go, and it is cut to the stored length. Blank means it did not say.
+ */
+function parseSystem(header: string | undefined): string | null {
+  const value = header
+    ?.replace(/\p{Cc}/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, REMOTE_SYSTEM_MAX_LENGTH)
+    .trim();
+  return value || null;
+}
+
 function publicMachine(
   machine: Machine,
   now: number,
@@ -90,6 +113,7 @@ function publicMachine(
   id: string;
   name: string;
   platform: string;
+  system: string | null;
   online: boolean;
   createdAt: string;
   capabilities: string[];
@@ -102,6 +126,7 @@ function publicMachine(
     id: machine.id,
     name: machine.name,
     platform: machine.platform,
+    system: machine.system,
     online: present(machine.lastSeenAt, now),
     createdAt: machine.createdAt.toISOString(),
     capabilities: machine.capabilities ?? [],
@@ -117,6 +142,8 @@ export class Remote {
     private store: Store,
     private clock: () => number = Date.now,
     private release: () => string | undefined = () => gatewayRelease(),
+    /** Holds a task's secret environment; without it, no task can carry one. */
+    private vault?: Pick<GatewayVault, 'put' | 'read' | 'discard'>,
   ) {}
 
   async list() {
@@ -134,11 +161,13 @@ export class Remote {
     const id = randomUUID();
     const token = randomBytes(32).toString('base64url');
     const createdAt = new Date(this.clock());
-    const platform = 'unknown';
+    const platform = data.platform ?? 'unknown';
+    const system = data.system ?? null;
     await this.store.db.insert(remoteMachines).values({
       id,
       name: data.name,
       platform,
+      system,
       tokenHash: tokenHash(token),
       capabilities: [],
       createdAt,
@@ -147,6 +176,7 @@ export class Remote {
       id,
       name: data.name,
       platform,
+      system,
       online: false,
       createdAt: createdAt.toISOString(),
       capabilities: [] as string[],
@@ -179,21 +209,55 @@ export class Remote {
     return machine;
   }
 
-  async execute(profileId: string, machineId: string, input: unknown, signal?: AbortSignal) {
+  /**
+   * Runs a shell command on a machine. `secretEnv` is added to that command's environment
+   * alone: a credential the command needs, which must not be in the command itself, since
+   * the task row and the worker's log both keep that. The values live encrypted in the gateway
+   * vault until the worker claims the task, and are gone once the task ends; the row names
+   * the variables, never their values.
+   */
+  async execute(
+    profileId: string,
+    machineId: string,
+    input: unknown,
+    signal?: AbortSignal,
+    secretEnv?: Record<string, string>,
+  ) {
     const data = remoteCommandSchema.parse(input);
-    this.requireCurrent(await this.machine(machineId));
-    return this.waitForTask(
-      profileId,
-      machineId,
-      {
-        kind: 'shell',
-        command: data.command,
-        cwd: data.cwd ?? null,
-        payload: null,
-        timeoutMs: data.timeoutMs,
-      },
-      signal,
-    );
+    const machine = await this.machine(machineId);
+    this.requireCurrent(machine);
+    const task = {
+      kind: 'shell' as const,
+      command: data.command,
+      cwd: data.cwd ?? null,
+      payload: secretEnv ? { env: Object.keys(secretEnv) } : null,
+      timeoutMs: data.timeoutMs,
+    };
+    if (!secretEnv) return this.waitForTask(profileId, machineId, task, signal);
+
+    const vault = this.requireSecretEnv(machine);
+    const taskId = randomUUID();
+    await vault.put(secretEnvKey(taskId), JSON.stringify(secretEnv));
+    try {
+      return await this.waitForTask(profileId, machineId, task, signal, taskId);
+    } finally {
+      await vault.discard(secretEnvKey(taskId)).catch(() => {});
+    }
+  }
+
+  /** Only a present worker that keeps a secret environment to itself is handed one. */
+  private requireSecretEnv(machine: Machine) {
+    if (!this.vault) throw new GatewayError(500, 'This gateway cannot hand a machine credentials.');
+    if (!present(machine.lastSeenAt, this.clock())) {
+      throw new GatewayError(503, `${machine.name} is offline`);
+    }
+    if (!(machine.capabilities ?? []).includes(SECRET_ENV_CAPABILITY)) {
+      throw new GatewayError(
+        409,
+        `${machine.name} runs a Jian Remote that cannot take credentials for a command. Update it first: update_remote_machine, or Update under Machines in the panel's settings.`,
+      );
+    }
+    return this.vault;
   }
 
   async executeComputer(
@@ -284,7 +348,7 @@ export class Remote {
     if (!workerOutdated(machine.version, release)) return;
     throw new GatewayError(
       409,
-      `${machine.name} runs Jian Remote ${machine.version}, which does not match this gateway (${release}). Update the machine first: update_remote_machine, or Update in the panel's Remote Control settings.`,
+      `${machine.name} runs Jian Remote ${machine.version}, which does not match this gateway (${release}). Update the machine first: update_remote_machine, or Update under Machines in the panel's settings.`,
     );
   }
 
@@ -299,8 +363,8 @@ export class Remote {
       timeoutMs: number;
     },
     signal?: AbortSignal,
+    taskId: string = randomUUID(),
   ): Promise<TaskResult> {
-    const taskId = randomUUID();
     const now = new Date(this.clock());
     await this.store.db.insert(remoteTasks).values({
       id: taskId,
@@ -392,15 +456,15 @@ export class Remote {
     capabilitiesHeader?: string | undefined,
     uiStateHeader?: string | undefined,
     versionHeader?: string | undefined,
+    systemHeader?: string | undefined,
   ) {
     const machine = await this.authenticate(machineId, authorization);
-    const platform =
-      reportedPlatform && /^(darwin|linux|win32)-(arm64|x64)$/.test(reportedPlatform)
-        ? reportedPlatform
-        : machine.platform;
+    const platform = remotePlatformSchema.safeParse(reportedPlatform).data ?? machine.platform;
     const capabilities = parseCapabilities(capabilitiesHeader);
     const uiState = parseUiState(uiStateHeader);
     const version = parseVersion(versionHeader) ?? machine.version;
+    // A worker from before it reported its system, or one that could not tell, keeps the last.
+    const system = parseSystem(systemHeader) ?? machine.system;
     await this.store.db
       .update(remoteMachines)
       .set({
@@ -409,6 +473,7 @@ export class Remote {
         capabilities,
         uiState,
         version,
+        system,
       })
       .where(eq(remoteMachines.id, machineId));
     // A worker on another major.minor is handed nothing but its update.
@@ -467,6 +532,11 @@ export class Remote {
         },
       };
     }
+    const env = await this.claimSecretEnv(claimed.id, claimed.payload);
+    if (env === null) {
+      await this.failClaimed(claimed.id, 'The credentials of this command are gone; run it again.');
+      return { task: null };
+    }
     return {
       task: {
         id: claimed.id,
@@ -474,8 +544,31 @@ export class Remote {
         command: claimed.command,
         cwd: claimed.cwd,
         timeoutMs: claimed.timeoutMs,
+        ...(env ? { env } : {}),
       },
     };
+  }
+
+  /**
+   * The secret environment of a claimed shell task, taken out of the vault as it is handed
+   * over, so it exists only in the worker from then on. Undefined when the task has none; null
+   * when it should and it is gone.
+   */
+  private async claimSecretEnv(
+    taskId: string,
+    payload: Record<string, unknown> | null,
+  ): Promise<Record<string, string> | null | undefined> {
+    const names = payload?.env;
+    if (!Array.isArray(names) || !names.length) return undefined;
+    const stored = await this.vault?.read(secretEnvKey(taskId));
+    await this.vault?.discard(secretEnvKey(taskId));
+    if (!stored) return null;
+    const values = JSON.parse(stored) as Record<string, unknown>;
+    const env: Record<string, string> = {};
+    for (const name of names) {
+      if (typeof name === 'string' && typeof values[name] === 'string') env[name] = values[name];
+    }
+    return env;
   }
 
   /** The worker is stopping: offline now, rather than when its last poll grows old. */
@@ -546,10 +639,3 @@ export class Remote {
     return machine;
   }
 }
-
-export const REMOTE_CAPABILITY_COMPUTER_MACOS = 'computer-macos-v1';
-export const REMOTE_COMPUTER_CAPABILITIES = [
-  'computer-macos-v1',
-  'computer-linux-v1',
-  'computer-windows-v1',
-] as const;

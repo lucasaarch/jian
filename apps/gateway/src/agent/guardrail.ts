@@ -18,6 +18,15 @@ export type Guardrail = (action: {
   input: unknown;
 }) => Promise<Verdict>;
 
+const FORCE_PUSH =
+  "it force-pushes over a repository's default branch, which rewrites history others build on";
+
+/**
+ * The branches a forced push may not overwrite unattended. GitHub's own default branch is not
+ * known before the call runs, so the usual names stand for it; the judge reads the rest.
+ */
+const DEFAULT_BRANCHES = new Set(['main', 'master', 'trunk']);
+
 /** Tools that run what they are given; what they write elsewhere is code, not an action. */
 const EXECUTING = new Set(['run_command', 'run_remote_command', 'remote_computer']);
 
@@ -78,6 +87,12 @@ const RULES: Array<{ pattern: RegExp; why: string }> = [
     pattern: /\becho\s+[^\n]*\$\{?\w*(?:KEY|TOKEN|SECRET|PASSWORD|PASS)\w*\}?/i,
     why: 'it prints a credential into the conversation',
   },
+  {
+    // `git push` with a force flag or a `+` refspec, aimed at a usual default branch.
+    pattern:
+      /\bgit\s+push\b(?=[^\n;&|]*\s(?:-f\b|--force\b|--force-with-lease\b|--force-with-lease=|\+))(?=[^\n;&|]*\s\+?(?:[^\s:]*:)?(?:refs\/heads\/)?(?:main|master|trunk)(?=\s|$|;|&|\|))/,
+    why: FORCE_PUSH,
+  },
 ];
 
 /** What a rule reads: the command of a tool that runs one, every field of a service's call. */
@@ -92,6 +107,17 @@ function readable(toolName: string, kind: ActionKind, input: unknown): string | 
 }
 
 export function ruleVerdict(toolName: string, kind: ActionKind, input: unknown): Verdict {
+  if (toolName === 'github_git') {
+    const call = (input ?? {}) as { action?: unknown; force?: unknown; branch?: unknown };
+    if (
+      call.action === 'push' &&
+      call.force === true &&
+      typeof call.branch === 'string' &&
+      DEFAULT_BRANCHES.has(call.branch.trim().toLowerCase())
+    ) {
+      return { allowed: false, reason: refusal(FORCE_PUSH) };
+    }
+  }
   const text = readable(toolName, kind, input);
   if (text === undefined) return { allowed: true };
 
@@ -104,7 +130,7 @@ export function ruleVerdict(toolName: string, kind: ActionKind, input: unknown):
 const refusal = (why: string) =>
   `Not run: this conversation is on Auto, and its guardrail refused the action because ${why}. Nothing was changed. Do it another way that can be undone, scoped to what the task needs, or tell the owner what you would do so they can do it themselves.`;
 
-const INSTRUCTIONS = `You are the guardrail of an autonomous agent that acts with nobody watching. Block an action only when its harm is catastrophic and cannot be undone or contained: destroying production data, databases, infrastructure or backups wholesale; deleting or overwriting whole systems, disks or home directories; changing or deleting every row of a table; or putting passwords, tokens or private keys where they leak — printed into the conversation, sent to someone, or published. Everything else is allowed, even when it changes things: editing, writing or deleting specific files, writing code or migrations that contain such statements, running tests and builds, installing packages, committing, pushing a branch, opening pull requests, deploying, restarting services, sending ordinary messages. When unsure, allow.`;
+const INSTRUCTIONS = `You are the guardrail of an autonomous agent that acts with nobody watching. Block an action only when its harm is catastrophic and cannot be undone or contained: destroying production data, databases, infrastructure or backups wholesale; deleting or overwriting whole systems, disks or home directories; changing or deleting every row of a table; force-pushing over a repository's default branch; or putting passwords, tokens or private keys where they leak — printed into the conversation, sent to someone, or published. Everything else is allowed, even when it changes things: editing, writing or deleting specific files, writing code or migrations that contain such statements, running tests and builds, installing packages, committing, pushing a branch, opening pull requests, deploying, restarting services, sending ordinary messages. When unsure, allow.`;
 
 const ASK = `${INSTRUCTIONS}\n\nAnswer on one line: ALLOW, or BLOCK followed by a short reason in English.`;
 

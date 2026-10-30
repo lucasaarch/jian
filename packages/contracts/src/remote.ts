@@ -3,10 +3,22 @@ import { z } from 'zod';
 /** macOS session posture from the worker (lock ≠ offline). */
 export const remoteUiStateSchema = z.enum(['unlocked', 'locked', 'display_asleep', 'unknown']);
 
+/** The OS and architecture a worker runs on, as Node names them: `darwin-arm64`, `win32-x64`. */
+export const remotePlatformSchema = z.string().regex(/^(darwin|linux|win32)-(arm64|x64)$/);
+
+/** Longest system description kept, in characters; a longer report is cut to it. */
+export const REMOTE_SYSTEM_MAX_LENGTH = 100;
+
+/** The OS by name and version as a person reads it: `macOS 27.2`, `Windows 11 (26100)`. */
+export const remoteSystemSchema = z.string().trim().min(1).max(REMOTE_SYSTEM_MAX_LENGTH);
+
 export const remoteMachineSchema = z.strictObject({
   id: z.uuid(),
   name: z.string(),
+  /** `darwin-arm64`, `win32-x64`, ...; `unknown` until the worker or its creator says. */
   platform: z.string(),
+  /** The OS by name and version, as the worker last reported it; null until known. */
+  system: z.string().nullable().default(null),
   online: z.boolean(),
   createdAt: z.iso.datetime(),
   /** Worker advertised capabilities (e.g. computer-macos-v1 / linux / windows). */
@@ -27,9 +39,15 @@ export const remoteMachineSchema = z.strictObject({
   updatable: z.boolean().default(false),
 });
 
-/** Every agent may use every machine; a machine is only a name and a worker token. */
+/**
+ * Every agent may use every machine; a machine is only a name and a worker token. A creator
+ * that runs on the machine itself, such as the desktop app, can say what it is at once, so the
+ * record shows it before the worker's first poll; that poll then keeps it current.
+ */
 export const remoteMachineCreateSchema = z.strictObject({
   name: z.string().trim().min(1).max(80),
+  platform: remotePlatformSchema.optional(),
+  system: remoteSystemSchema.optional(),
 });
 
 export const remoteMachineCreatedSchema = remoteMachineSchema.extend({ token: z.string().min(32) });
@@ -44,7 +62,7 @@ export const remoteCommandSchema = z.strictObject({
 
 const coordinateSchema = z.tuple([z.number().int(), z.number().int()]);
 
-/** Anthropic-style computer actions for Remote Control (desktop computer use). */
+/** Anthropic-style computer actions on a machine (desktop computer use). */
 export const remoteComputerActionSchema = z.enum([
   'screenshot',
   'left_click',
@@ -98,6 +116,12 @@ export const remoteTaskSchema = z.strictObject({
   timeoutMs: z.number().int(),
   computer: remoteComputerParamsSchema.optional(),
   update: remoteUpdateParamsSchema.optional(),
+  /**
+   * A shell task's secret environment, such as a credential the command needs: added to that
+   * command alone. A worker that advertises `shell-secret-env-v1` never logs it and masks its
+   * values in what it sends back.
+   */
+  env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string().max(8192)).optional(),
 });
 
 export const remoteComputerResultSchema = z.strictObject({

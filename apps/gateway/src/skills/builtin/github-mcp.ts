@@ -14,6 +14,10 @@ Use a connected GitHub MCP server for issues and pull requests. Find tools
 with \`search_mcp_tools\` ("create issue", "create pull request", "update issue") and load them
 with \`load_mcp_tools\` before calling.
 
+This skill is about the server's API. To clone, fetch, pull or push a repository of the GitHub
+App the owner connected under Integrations, use \`github_git\` (the \`github\` skill), not the
+server and not raw \`git\`.
+
 ## Auth modes the owner may have configured
 
 - **HTTP + OAuth** (\`https://api.githubcopilot.com/mcp/\`) — the owner creates a GitHub OAuth App

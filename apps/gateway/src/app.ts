@@ -2,6 +2,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { operationSchema, operations } from '@jian/contracts';
 import Fastify, { LogController } from 'fastify';
+import { registerOpenAiRoutes } from './channels/openai/routes.js';
 import { registerChannelRoutes } from './channels/routes.js';
 import type { Channels } from './channels/service.js';
 import type { WhatsAppConnections } from './channels/whatsapp/connections.js';
@@ -164,6 +165,7 @@ export function createApp(
     registerRunRoutes(routes, options);
     registerCoordinationRoutes(routes, { coordination });
     registerChannelRoutes(routes, options);
+    registerOpenAiRoutes(routes, options);
     registerWebRoutes(routes, options);
     registerReleaseRoutes(routes, options);
     registerDecisionRoutes(routes, options);

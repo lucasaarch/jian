@@ -40,7 +40,7 @@ type DeliveryRow = typeof deliveries.$inferSelect;
  * unset field out entirely; the parse is the boundary. What the owner never sees — the webhook
  * token hash and the address this connection speaks as — rides beside the parsed document.
  */
-export function toChannel(row: ChannelRow & { metaConfigured?: boolean }): ChannelRecord {
+function toChannel(row: ChannelRow & { metaConfigured?: boolean }): ChannelRecord {
   return {
     ...channelSchema.parse({
       id: row.id,
@@ -406,7 +406,7 @@ export async function updateContact(db: Queryable, contact: ContactRecord): Prom
   await db.update(contacts).set(row).where(eq(contacts.id, contact.id));
 }
 
-export function toDelivery(row: DeliveryRow): DeliveryRecord {
+function toDelivery(row: DeliveryRow): DeliveryRecord {
   return {
     ...deliverySchema.parse({
       id: row.id,

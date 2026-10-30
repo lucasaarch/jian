@@ -6,7 +6,7 @@ import { GatewayError } from '../core/errors.js';
 import type { Channel, DeliveryContext, DeliveryOutcome, OutgoingMessage } from './channel.js';
 
 export type MetaCredentials = z.infer<typeof whatsappBusinessInputSchema>;
-export const META_GRAPH = 'https://graph.facebook.com/v25.0';
+const META_GRAPH = 'https://graph.facebook.com/v25.0';
 export const META_MEDIA_LIMIT = 16 * 1024 * 1024;
 export const META_WINDOW_MS = 24 * 60 * 60 * 1000;
 const digits = z.string().regex(/^\d{1,40}$/);
@@ -30,7 +30,6 @@ const messageSchema = z.object({
   // Do not silently turn a Groups API event into an individual conversation.
   group_id: z.unknown().optional(),
 });
-export type MetaMessage = z.infer<typeof messageSchema>;
 export const metaWebhookSchema = z.object({
   object: z.literal('whatsapp_business_account'),
   entry: z
@@ -82,7 +81,7 @@ export function metaSignature(raw: Buffer, signature: unknown, secret: string): 
   );
 }
 
-export function metaCredentials(value: string | undefined): MetaCredentials {
+function metaCredentials(value: string | undefined): MetaCredentials {
   if (!value) throw new Error('Meta credentials are unavailable');
   return whatsappBusinessInputSchema.parse(JSON.parse(value));
 }
@@ -93,7 +92,7 @@ export function windowOpen(lastInbound: Date | undefined, now = Date.now()): boo
   );
 }
 
-export async function graph(
+async function graph(
   fetcher: typeof fetch,
   credentials: MetaCredentials,
   path: string,

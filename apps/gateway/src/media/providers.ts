@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { XAI_BASE_URL } from '../providers/catalog.js';
 import { isXai, speechVoice, speechVoices } from './voices.js';
 
-export type MediaUsage = { inputTokens: number; outputTokens: number; cachedInputTokens: number };
+type MediaUsage = { inputTokens: number; outputTokens: number; cachedInputTokens: number };
 export type MediaMeter = (usage: MediaUsage) => Promise<void>;
 const usageSchema = z.object({
   inputTokens: z.number().int().nonnegative(),
@@ -404,7 +404,7 @@ export class MediaProviders {
  * OpenAI draws a few sizes only: the one nearest the shape asked for, by orientation. DALL·E 2
  * is square alone.
  */
-export function openaiImageSize(modelId: string, aspectRatio: ImageAspect): string {
+function openaiImageSize(modelId: string, aspectRatio: ImageAspect): string {
   const [width = 1, height = 1] = aspectRatio.split(':').map(Number);
   if (modelId === 'dall-e-2' || width === height) return '1024x1024';
   if (modelId === 'dall-e-3') return width > height ? '1792x1024' : '1024x1792';

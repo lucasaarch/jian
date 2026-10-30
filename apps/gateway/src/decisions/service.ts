@@ -92,7 +92,7 @@ const storedSettingsSchema = z
 type StoredSettings = { uses: DecisionUses };
 
 /** `use` says what the question is for: the owner can switch each use off, and it is billed to it. */
-export type JudgeOptions = { use: DecisionUse; timeoutMs?: number; signal?: AbortSignal };
+type JudgeOptions = { use: DecisionUse; timeoutMs?: number; signal?: AbortSignal };
 
 /**
  * Several questions over one state, in one request: they are answered in parallel and none

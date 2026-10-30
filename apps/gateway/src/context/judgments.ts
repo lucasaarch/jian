@@ -2,7 +2,7 @@ import type { Memory } from '@jian/contracts';
 import { type Judge, noul, type Question } from '../decisions/service.js';
 
 /** How many of the memories the words matched are read again for meaning, best first. */
-export const JUDGED_MEMORIES = 15;
+const JUDGED_MEMORIES = 15;
 /** What each judged memory shows of itself; its start says what it is about. */
 const MEMORY_CHARS = 600;
 const REQUEST_CHARS = 4000;

@@ -46,6 +46,12 @@ import {
 } from './integrations.js';
 import { inlineMediaSchema, mediaContentSchema, mediaRecordSchema } from './media.js';
 import {
+  chatCompletionRequestSchema,
+  chatCompletionSchema,
+  openAiErrorSchema,
+  openAiModelListSchema,
+} from './openai.js';
+import {
   builtinSkillSchema,
   gatewaySessionInputSchema,
   gatewaySessionTargetSchema,
@@ -144,6 +150,11 @@ export type Operation = {
   status?: number;
   stream?: boolean;
   responseContentType?: 'text/plain';
+  /**
+   * The body of every refusal, for an operation that speaks another API's dialect. Absent,
+   * refusals share the gateway's own error body.
+   */
+  failure?: z.ZodType;
 };
 
 const profile = '/v1/profiles/:profileId';
@@ -645,6 +656,23 @@ export const operations: Operation[] = [
     body: ingressSchema,
     response: ingressResultSchema,
     status: 202,
+  },
+  {
+    method: 'GET',
+    path: '/v1/channels/:channelId/openai/models',
+    operationId: 'listChannelModels',
+    access: 'webhook',
+    response: openAiModelListSchema,
+    failure: openAiErrorSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/channels/:channelId/openai/chat/completions',
+    operationId: 'createChannelChatCompletion',
+    access: 'webhook',
+    body: chatCompletionRequestSchema,
+    response: chatCompletionSchema,
+    failure: openAiErrorSchema,
   },
   {
     method: 'GET',
@@ -1333,6 +1361,8 @@ export function operationSchema(operation: Operation) {
       ? z.strictObject(Object.fromEntries(names.map((name) => [name, z.uuid()])))
       : undefined);
 
+  const failure = operation.failure ? jsonSchema(operation.failure, 'output') : errorSchema;
+
   return {
     operationId: operation.operationId,
     ...(operation.body ? { body: jsonSchema(operation.body) } : {}),
@@ -1341,7 +1371,7 @@ export function operationSchema(operation: Operation) {
     response: {
       [operation.status ?? 200]: jsonSchema(operation.response, 'output'),
       ...Object.fromEntries(
-        [400, 401, 403, 404, 409, 413, 429, 500, 503].map((code) => [code, errorSchema]),
+        [400, 401, 403, 404, 409, 413, 429, 500, 503].map((code) => [code, failure]),
       ),
     },
   };
@@ -1355,6 +1385,12 @@ function securityRequirements(operation: Operation) {
   }
 
   if (operation.access === 'webhook') {
+    // An OpenAI client sends the channel token as its API key, a bearer; the channel's own
+    // header is taken as well.
+    if (operation.failure === openAiErrorSchema) {
+      return [{ channelBearer: [] }, { channelWebhook: [] }];
+    }
+
     const scheme =
       operation.operationId === 'telegramIngress'
         ? 'telegramWebhook'
@@ -1400,14 +1436,18 @@ function openAPIResponses(operation: Operation, schema: RouteSchema) {
             ? (operation.responseContentType ?? 'application/json')
             : 'application/json';
 
-      // Every failure has the same body: one shared schema, not a copy in each response.
+      // Every failure has the same body: one shared schema, not a copy in each response. An
+      // operation in another dialect has its own, already inline.
       return [
         code,
         {
           description: Number(code) < 400 ? 'Success' : 'Error',
           content: {
             [contentType]: {
-              schema: Number(code) < 400 ? value : { $ref: '#/components/schemas/Error' },
+              schema:
+                Number(code) < 400 || operation.failure
+                  ? value
+                  : { $ref: '#/components/schemas/Error' },
             },
           },
         },
@@ -1457,6 +1497,11 @@ export function createOpenAPI() {
         bearerAuth: { type: 'http', scheme: 'bearer' },
         telegramWebhook: { type: 'apiKey', in: 'header', name: 'X-Telegram-Bot-Api-Secret-Token' },
         channelWebhook: { type: 'apiKey', in: 'header', name: 'X-Jian-Channel-Token' },
+        channelBearer: {
+          type: 'http',
+          scheme: 'bearer',
+          description: 'The API channel token, sent as an OpenAI client sends its API key.',
+        },
         metaSignature: {
           type: 'apiKey',
           in: 'header',

@@ -23,12 +23,6 @@ export interface ConnectionRecord {
   qrExpiresAt?: number;
 }
 
-export interface DeviceAuthRecord {
-  id: string;
-  profileId: string;
-  chunks: EncryptedSecret[];
-}
-
 export interface InboxRecord {
   id: string;
   profileId: string;

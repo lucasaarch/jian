@@ -4,12 +4,12 @@ import type { Skill } from '@jian/contracts';
 export const github: Skill = {
   name: 'github',
   description:
-    'Use when a task involves GitHub — repositories, files, branches, issues, pull requests, reviews, Actions, releases or security alerts — through the account the owner connected under Integrations.',
+    'Use when a task involves GitHub — cloning, fetching, pulling or pushing a repository, or its files, branches, issues, pull requests, reviews, Actions, releases or security alerts — through the account the owner connected under Integrations.',
   instructions: `# GitHub
 
 The owner connected GitHub under Integrations, so Jian attaches GitHub's official MCP server to
-this conversation, signed in as the Jian GitHub App. There is nothing to configure and no sign-in
-to ask for.
+this conversation, signed in as the Jian GitHub App, and lends the same App to git through
+\`github_git\`. There is nothing to configure and no sign-in to ask for.
 
 ## What you reach
 
@@ -43,12 +43,24 @@ load the ones you will call with \`load_mcp_tools\`. Searches that work:
 | Releases, tags, commits | "list releases", "list tags", "get commit" |
 | Discussions, security advisories | "discussions", "security advisories" |
 
-## What it is not
+## Clone, fetch, pull and push: \`github_git\`
 
-- **Not a checkout.** For work on files with tests and builds, clone the repository in your
-  workspace with the shell and work there; the App's token never reaches the shell, which uses
-  the installation's SSH keys. Use the server for what lives on GitHub:
-  issues, reviews, pull requests, runs, alerts, and small file edits.
+For work on files with tests and builds, check the repository out and work there. \`github_git\`
+clones, fetches, pulls and pushes with the App's access, where this conversation works: your
+workspace, or the machine it targets. It reaches the same repositories as the server.
+
+- Always use it for those four on GitHub, also when origin is an SSH URL. Plain \`git clone\` or
+  \`git push\` in the shell has only the installation's SSH keys, and fails without one.
+- Everything local stays with \`git\` in the shell: status, branch, commit, diff, merge, rebase.
+- \`push\` needs \`branch\`. \`force: true\` pushes with a lease, and only when the owner asked.
+- A pull fast-forwards; pass \`rebase: true\` when the branches diverged.
+- Its errors say what to do: the App was not granted the repository, the token was refused,
+  the push was not a fast-forward, the machine is offline.
+
+## What the server is not
+
+- **Not a checkout.** Use the server for what lives on GitHub: issues, reviews, pull requests,
+  runs, alerts, and small file edits.
 - **Not a wait.** To be told when checks finish or a pull request closes, use
   \`create_subscription\` instead of asking again and again.
 

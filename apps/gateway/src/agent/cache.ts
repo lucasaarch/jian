@@ -3,7 +3,7 @@ import type { JSONValue, ModelMessage, SystemModelMessage } from 'ai';
 import { CLAUDE_CODE_IDENTITY } from '../providers/claude-subscription.js';
 
 /** OpenAI uses this key to keep unrelated profiles from sharing a prompt-cache partition. */
-export function openAiPromptCacheOptions(
+function openAiPromptCacheOptions(
   profileId: string,
   provider: string,
   modelId: string,

@@ -7,7 +7,7 @@ const origin = {
   importedAt: '2026-09-29T00:00:00.000Z',
 };
 
-export const ponytail: Skill = {
+const ponytail: Skill = {
   name: 'ponytail',
   description:
     'Automatically active for coding work. Choose the simplest complete solution without cutting safety.',
@@ -30,7 +30,7 @@ Default mode is full. The owner can send /ponytail lite, /ponytail full, /ponyta
 Do not apply these coding rules to unrelated conversation.`,
 };
 
-export const ponytailReview: Skill = {
+const ponytailReview: Skill = {
   name: 'ponytail-review',
   description:
     'Use for a read-only review of a code diff focused on unnecessary complexity and what can be removed.',
@@ -38,7 +38,7 @@ export const ponytailReview: Skill = {
   instructions: `Review the diff for over-engineering only. Read the code and its callers before judging. Report one finding per line with file and line, what to cut and the simpler replacement. Look for reinvented standard-library or platform features, unnecessary dependencies, dead flexibility and single-use abstractions. Do not apply fixes. Do not call safety checks, error handling or regression tests bloat. If nothing can be cut, say "Lean already. Ship." Do not invent a savings number.`,
 };
 
-export const ponytailAudit: Skill = {
+const ponytailAudit: Skill = {
   name: 'ponytail-audit',
   description:
     'Use for a read-only whole-repository audit of over-engineering, ranked by the largest useful simplifications.',
@@ -46,7 +46,7 @@ export const ponytailAudit: Skill = {
   instructions: `Scan the repository for unnecessary complexity. Rank findings by useful reduction: dead code, speculative configuration, one-implementation abstractions, wrappers that only delegate, dependencies replaced by the standard library or native platform, and duplicated logic. Give the location, what to remove and what replaces it. Do not edit. Preserve security, validation, error handling, accessibility and tests. Say "Lean already. Ship." if nothing is worth cutting. Do not claim measured savings without a baseline.`,
 };
 
-export const ponytailDebt: Skill = {
+const ponytailDebt: Skill = {
   name: 'ponytail-debt',
   description:
     'Use to list deliberate ponytail: shortcuts in a codebase, with each ceiling and the trigger to revisit it.',
@@ -54,7 +54,7 @@ export const ponytailDebt: Skill = {
   instructions: `Use search_files or run_command to find comment markers matching (#|//) ?ponytail:, excluding dependencies and build output. Report each marker by file and line, its simplification, ceiling and upgrade trigger. Mark entries without a trigger as "no-trigger". End with the marker count and no-trigger count. This is read-only; write a ledger only if the owner asks.`,
 };
 
-export const ponytailGain: Skill = {
+const ponytailGain: Skill = {
   name: 'ponytail-gain',
   description:
     'Use when asked about Ponytail benchmark results; distinguish published measurements from this repository.',
@@ -62,7 +62,7 @@ export const ponytailGain: Skill = {
   instructions: `Report only the published Ponytail benchmark, never a made-up saving for this repository. The Ponytail 4.10.0 README reports an agentic evaluation across 12 feature tasks (Haiku 4.5, n=4): mean 54% less code, 22% fewer tokens, 20% lower cost and 27% less time versus its no-skill baseline. These numbers are not guaranteed for Jian or this repository. Cite the upstream benchmark at https://github.com/DietrichGebert/ponytail/tree/e3ba2aa6f1e6f0bc4d69eb09c9f0d0a93af56156/benchmarks and mention its limited sample and model. Do not claim actual local savings without a paired measurement.`,
 };
 
-export const ponytailHelp: Skill = {
+const ponytailHelp: Skill = {
   name: 'ponytail-help',
   description:
     'Use when asked which Ponytail skills are available in Jian and how to enable or disable them.',

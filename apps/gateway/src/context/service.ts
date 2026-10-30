@@ -5,7 +5,7 @@ import {
   type Run,
 } from '@jian/contracts';
 import { and, eq } from 'drizzle-orm';
-import { workspaceOf } from '../agent/workspace.js';
+import { projectCheckout, workspaceOf } from '../agent/workspace.js';
 import { listConversations } from '../channels/repository.js';
 import type { Judge } from '../decisions/service.js';
 import { findMemories, searchMemories, withLinks } from '../memories/repository.js';
@@ -151,13 +151,21 @@ export class Contexts {
         'Your final response is a factual report to the principal agent, not a message to the owner.',
       ].join('\n\n');
     }
+    // A project bound to a GitHub repository is cloned, fetched, pulled and pushed with the
+    // App's token through github_git; any other repository with git and the SSH keys.
+    const github = project?.githubRepositoryId
+      ? /github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/.exec(project.repositoryUrl)?.[1]
+      : undefined;
+    const gitWay = github
+      ? ` Clone, fetch, pull and push it with github_git (repository ${github}), not git in the shell, which reaches GitHub only with SSH keys; use git in the shell for everything local.`
+      : '';
     const result = {
       ...built,
       ...(project
         ? {
             system: session.remoteMachineId
-              ? `${built.system}\n\nThis conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}. This conversation targets a Remote Control machine; clone the repository there into a dedicated checkout before changing files, and keep all project work on that machine.`
-              : `${built.system}\n\nThis conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}. Use this conversation's checkout directory: ${JSON.stringify(`${await workspaceOf(run.profileId)}/projects/${project.id}/sessions/${session.id}`)}. If it is not checked out yet, create its parent directory with mkdir -p and clone this repository into that path before changing files. Keep this conversation's work in that checkout and report commands and verification performed.`,
+              ? `${built.system}\n\nThis conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}.${gitWay} This conversation targets one of the owner's machines; clone the repository there into a dedicated checkout before changing files, and keep all project work on that machine.`
+              : `${built.system}\n\nThis conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}.${gitWay} Use this conversation's checkout directory: ${JSON.stringify(await projectCheckout(run.profileId, project.id, session.id))}. ${github ? 'If it is not checked out yet, clone it with github_git, which clones into that path by default,' : 'If it is not checked out yet, create its parent directory with mkdir -p and clone this repository into that path'} before changing files. Keep this conversation's work in that checkout and report commands and verification performed.`,
           }
         : {}),
       ...(workerGuidance ? { system: `${built.system}\n\n${workerGuidance}` } : {}),

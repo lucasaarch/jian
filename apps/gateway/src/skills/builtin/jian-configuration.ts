@@ -18,7 +18,7 @@ do not imply you can change an owner-only setting yourself.
   connected providers; Disabled turns off that activity where offered.
 - Channels: WhatsApp, Telegram, contact approvals and groups.
 - Chats: conversation history and per-chat model and effort selection.
-- Remote Control: connect computers, which every agent can use, and install the per-user worker that
+- Machines: connect computers, which every agent can use, and install the per-user worker that
   starts again on login after a reboot.
 - Schedules, Memories and Skills: each agent's own resources.
 - Integrations (under Gateway): the GitHub App and the MCP servers, shared by every agent. MCPs

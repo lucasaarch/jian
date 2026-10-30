@@ -38,6 +38,8 @@ import {
   metaInbox,
   runs,
 } from '../storage/schema.js';
+import { ApiConversations } from './api-conversation.js';
+import type { ApiModels } from './api-models.js';
 import {
   type ChannelRequest,
   type ChannelType,
@@ -147,7 +149,7 @@ const QUOTE_CHARS = 300;
  * The message a reply answers or a reaction is on, put where the agent reads it: a reply gets
  * the quote above its text, and a reaction becomes a line saying what it was on.
  */
-export function withQuote(data: IncomingMessage, mine: boolean) {
+function withQuote(data: IncomingMessage, mine: boolean) {
   const words = data.quoted?.text.replace(/\s+/g, ' ').trim();
   const quote = words
     ? `: "${words.length > QUOTE_CHARS ? `${words.slice(0, QUOTE_CHARS)}…` : words}"`
@@ -218,6 +220,7 @@ export class Channels {
   private metaPending: Promise<void> = Promise.resolve();
   private readonly abort = new AbortController();
   private readonly meta: MetaInbox;
+  private readonly conversations: ApiConversations;
 
   constructor(
     private readonly services: ChannelServices,
@@ -228,6 +231,12 @@ export class Channels {
     private readonly rooms = new Groups(services.profiles, services.decisions?.ask),
   ) {
     this.meta = new MetaInbox(services.store, services.vault, fetcher, this.abort.signal);
+    this.conversations = new ApiConversations(services);
+  }
+
+  /** How an API channel's callers name models. Absent, they can name none. */
+  useModels(models: ApiModels) {
+    this.conversations.useModels(models);
   }
 
   metaChallenge(id: string, query: unknown) {
@@ -964,6 +973,36 @@ export class Channels {
     return accepted;
   }
 
+  /**
+   * An API channel as its OpenAI-compatible door finds it: by its id, then by its own token.
+   * The door is the channel's alone, so another type of channel is not found there at all.
+   */
+  async apiChannel(id: string, token: unknown): Promise<ChannelRecord> {
+    const channel = await findChannel(this.services.store.db, id);
+
+    if (!channel || channel.revokedAt || channel.type !== 'api') {
+      throw new GatewayError(404, 'Channel not found');
+    }
+
+    if (typeof token !== 'string' || token.length > 512 || !verifyToken(token, channel.tokenHash)) {
+      throw new GatewayError(401, 'Unauthorized');
+    }
+
+    if (!channel.enabled) throw new GatewayError(403, 'This channel is paused in Jian');
+
+    return channel;
+  }
+
+  /** A message that came through the OpenAI-compatible door, taken in as ingress takes it. */
+  converse(channel: ChannelRecord, data: IncomingMessage) {
+    return this.accept(channel, data);
+  }
+
+  /** The models an API channel's caller may name, in the order an id is resolved. */
+  apiModels() {
+    return this.conversations.available();
+  }
+
   /** Called only by the worker that owns an authenticated linked-device connection. */
   async receiveLinked(id: string, input: unknown, generation: number) {
     const channel = assertFound(await findChannel(this.services.store.db, id), 'Channel');
@@ -1036,6 +1075,10 @@ export class Channels {
     if (data.reaction) {
       return this.noteReaction(channel, data);
     }
+
+    // Resolved before the transaction for the same reason as the verdict below: which models
+    // exist is the providers' answer. A refusal here leaves nothing taken in.
+    const change = channel.type === 'api' ? await this.conversations.change(data) : undefined;
 
     // Asked before the transaction: an answer from outside must not hold the profile's lock.
     const verdict =
@@ -1187,6 +1230,14 @@ export class Channels {
 
     if (intake.decision && !intake.decision.speak) {
       return { accepted: false, contact: 'approved' as const, silence: intake.decision.reason };
+    }
+
+    if (change) {
+      await this.conversations.apply(
+        channel.profileId,
+        assertFound(intake.contact.sessionId ?? null, 'Session'),
+        change,
+      );
     }
 
     // The answer to a question the agent put to this contact belongs to the conversation that

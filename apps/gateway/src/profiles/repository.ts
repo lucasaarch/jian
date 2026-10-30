@@ -1,13 +1,13 @@
 import type { Profile } from '@jian/contracts';
 import { profileRecordSchema } from '@jian/contracts';
-import { and, desc, eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { profileRevisions, profiles } from '../storage/schema.js';
 
 type Row = typeof profiles.$inferSelect;
 
 /** Columns come back as dates and the contract speaks ISO strings; the parse is the boundary. */
-export function toProfile(row: Row): Profile {
+function toProfile(row: Row): Profile {
   return profileRecordSchema.parse({
     ...row,
     avatar: row.avatar ?? null,
@@ -16,7 +16,7 @@ export function toProfile(row: Row): Profile {
   });
 }
 
-export function toRow(profile: Profile): typeof profiles.$inferInsert {
+function toRow(profile: Profile): typeof profiles.$inferInsert {
   return {
     ...profile,
     createdAt: new Date(profile.createdAt),
@@ -57,20 +57,6 @@ export async function insertRevision(db: Queryable, profile: Profile): Promise<v
     document: profile,
     createdAt: new Date(profile.updatedAt),
   });
-}
-
-export async function findRevision(
-  db: Queryable,
-  profileId: string,
-  version: number,
-): Promise<Profile | null> {
-  const [row] = await db
-    .select()
-    .from(profileRevisions)
-    .where(and(eq(profileRevisions.profileId, profileId), eq(profileRevisions.version, version)))
-    .limit(1);
-
-  return row ? profileRecordSchema.parse(row.document) : null;
 }
 
 export async function listRevisions(db: Queryable, profileId: string) {

@@ -24,6 +24,7 @@ Keys created here are used automatically for \`git\` (IdentityFile / \`GIT_SSH_C
 GitHub’s published host keys are already in \`~/.ssh/known_hosts\` — do not disable host-key
 checking or invent one-off \`ssh\` wrappers. Use SSH remotes (\`git@github.com:…\`) for Git.
 After creating a key, give the owner the public key to add at the host; then \`git push\` from
-your workspace.
+your workspace. When the owner connected GitHub under Integrations, \`github_git\` needs no key
+for GitHub repositories (\`github\` skill).
 `,
 };

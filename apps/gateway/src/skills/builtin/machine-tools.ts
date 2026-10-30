@@ -82,8 +82,9 @@ the image. Install what the task needs, not what might be handy, and say what yo
 
 ## Logins and keys
 
-- \`git push\` to a private repository uses the installation's SSH keys; there is no other GitHub
-  login in the workspace.
+- The shell's \`git\` reaches private repositories with the installation's SSH keys only. For
+  GitHub, when the owner connected it, clone, fetch, pull and push with \`github_git\`
+  (\`github\` skill), which lends the GitHub App's access to that one command.
 - SSH keys: create them with the SSH key tools (\`ssh-keys\` skill), not \`ssh-keygen\`. The
   gateway points \`git\` at those identities and seeds GitHub’s host keys in
   \`~/.ssh/known_hosts\`.

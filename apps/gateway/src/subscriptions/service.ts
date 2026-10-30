@@ -60,7 +60,7 @@ type Deliveries = {
   deliverRun(profileId: string, sessionId: string, runId: string): Promise<void>;
 };
 
-export const subscriptionSecret = (id: string) => `subscription:${id}`;
+const subscriptionSecret = (id: string) => `subscription:${id}`;
 
 function hashSecret(secret: string): string {
   return createHmac('sha256', 'jian-subscription-webhook').update(secret).digest('hex');

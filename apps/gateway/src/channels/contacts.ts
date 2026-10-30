@@ -9,6 +9,7 @@ import type { ProfileReader } from '../profiles/port.js';
 import type { SessionWriter } from '../sessions/port.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { mediaAssets } from '../storage/schema.js';
+import { API_SESSION_START } from './api-conversation.js';
 import type { ChannelType, IncomingMessage } from './channel.js';
 import {
   findChannel,
@@ -90,6 +91,7 @@ export class Contacts {
       { title: this.title(contact), channel: contact.type },
       tx,
       contact.scope,
+      contact.type === 'api' ? API_SESSION_START : undefined,
     );
 
     return session.id;

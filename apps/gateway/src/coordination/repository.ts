@@ -12,7 +12,7 @@ type MailRow = typeof mail.$inferSelect;
 /** An id from a client is any string, and a uuid column rejects the rest as a type error. */
 const uuid = z.uuid();
 
-export function toArtifact(row: ArtifactRow): ArtifactRecord {
+function toArtifact(row: ArtifactRow): ArtifactRecord {
   return {
     id: row.id,
     profileId: row.profileId,
@@ -51,11 +51,11 @@ export async function findArtifact(
  * The lease is keyed by profile and resource. The contract still carries an id, so it is
  * derived from that same pair instead of being stored and kept in step with it.
  */
-export function leaseId(profileId: string, resource: string): string {
+function leaseId(profileId: string, resource: string): string {
   return `${profileId}:${createHash('sha256').update(resource).digest('hex')}`;
 }
 
-export function toLease(row: LeaseRow): LeaseRecord {
+function toLease(row: LeaseRow): LeaseRecord {
   return {
     id: leaseId(row.profileId, row.resource),
     profileId: row.profileId,
@@ -117,7 +117,7 @@ export async function expireLease(
     .where(and(eq(leases.profileId, profileId), eq(leases.resource, resource)));
 }
 
-export function toMail(row: MailRow): MailRecord {
+function toMail(row: MailRow): MailRecord {
   return {
     id: row.id,
     profileId: row.profileId,

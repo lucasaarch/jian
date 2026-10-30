@@ -6,6 +6,7 @@ import type { ModelConfig } from '@jian/contracts';
 import type { LanguageModel } from 'ai';
 import { createSafeFetch } from '../security/outbound.js';
 import { providerEnvironment } from './catalog.js';
+import { limitsKey, recordClaudeLimits } from './claude-limits.js';
 import {
   anthropicCredential,
   subscriptionFetch,
@@ -68,7 +69,12 @@ export async function resolveModel(
       return createAnthropic({
         ...(subscription ? { authToken: apiKey, headers: subscriptionHeaders() } : { apiKey }),
         baseURL: !subscription && !config.baseURL && proxy ? `${proxy}/w/jian/v1` : config.baseURL,
-        fetch: subscription ? await subscriptionFetch(fetcher) : fetcher,
+        // Each answer says how much of the subscription's windows is used; kept for the Overview.
+        fetch: subscription
+          ? await subscriptionFetch(fetcher, (headers) =>
+              recordClaudeLimits(limitsKey(config.providerId), headers),
+            )
+          : fetcher,
       })(config.modelId);
     }
     case 'google':

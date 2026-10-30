@@ -31,7 +31,7 @@ export function modelTier(model: { id: string; displayName?: string }): Subagent
  * token — is paid for already, so work goes there before it spends API credit; Grok comes next,
  * then every other key.
  */
-export function providerRank(provider: Pick<ProviderRecord, 'kind' | 'authMode' | 'credential'>) {
+function providerRank(provider: Pick<ProviderRecord, 'kind' | 'authMode' | 'credential'>) {
   if (provider.kind === 'openai' && provider.authMode === 'codex') return 0;
   if (provider.kind === 'anthropic' && provider.credential === 'subscription') return 0;
   if (provider.kind === 'xai') return 1;

@@ -19,7 +19,7 @@ function fold(text: string): string {
 }
 
 /** Puts the values in a channel's wording, and drops the gaps a value left empty. */
-export function fill(template: string, values: Record<string, string>): string {
+function fill(template: string, values: Record<string, string>): string {
   return template
     .replace(/\{(\w+)\}/g, (whole, key: string) => values[key] ?? whole)
     .replace(/\n{3,}/g, '\n\n')
@@ -55,7 +55,7 @@ export function questionMessage(wording: ChannelMessages, question: RunQuestion)
  * The decision a reply states in so many words: one of the channel's yes or no words, or the
  * approve button's own label. Anything longer is not read here.
  */
-export function statedDecision(
+function statedDecision(
   wording: ChannelMessages,
   approval: Pick<RunApproval, 'confirmLabel'>,
   reply: string,

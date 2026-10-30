@@ -78,7 +78,7 @@ export async function metaCausalInbound(
   return Boolean(row);
 }
 
-export const metaEventKey = (id: string) => `meta:${createHash('sha256').update(id).digest('hex')}`;
+const metaEventKey = (id: string) => `meta:${createHash('sha256').update(id).digest('hex')}`;
 
 /** Uses the same PostgreSQL store and dispatcher as channel deliveries, not an in-memory webhook queue. */
 export class MetaInbox {

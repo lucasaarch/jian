@@ -56,7 +56,7 @@ export type GitHubAppConfig = {
   ownerType?: 'User' | 'Organization';
 };
 
-export type GitHubInstallation = GitHubIntegrationAccount & {
+type GitHubInstallation = GitHubIntegrationAccount & {
   installationId: number;
 };
 
@@ -155,6 +155,16 @@ function accountOf(row: typeof githubInstallations.$inferSelect): GitHubInstalla
 /** What one attached GitHub MCP server reaches: an account's installation, or one repository. */
 export type GitHubMcpAccess = { login: string; token: string; repository?: string };
 
+/** What one git command against one repository borrows: a token for that repository alone. */
+export type GitHubGitAccess = {
+  /** `owner/name` as GitHub spells it. */
+  repository: string;
+  /** Where git reaches it over HTTPS, with no credential in it. */
+  url: string;
+  token: string;
+  defaultBranch?: string;
+};
+
 /**
  * Global GitHub App installations, and the tokens that hand them to an agent's conversation:
  * scoped to the repository in a project bound to one, to the whole installation elsewhere.
@@ -166,6 +176,8 @@ export class GitHubIntegrations {
     private readonly publicUrl: string | undefined,
     private readonly fetcher: typeof fetch = fetch,
     private readonly clock: () => number = Date.now,
+    /** Where git clones from; a test points it at a local server. */
+    private readonly gitOrigin = 'https://github.com',
   ) {}
 
   /** Keyed by installation and repository; `*` is a token for the whole installation. */
@@ -523,6 +535,88 @@ export class GitHubIntegrations {
         token: await this.installationToken(account.installationId),
       })),
     );
+  }
+
+  /**
+   * A token git may use for one repository, under the reach `mcpAccess` gives the same
+   * conversation: the project's repository alone in a project bound to one, any repository the
+   * App was granted on a connected account elsewhere. The token covers that repository only,
+   * whatever the installation reaches. Every refusal says what the owner can do about it.
+   */
+  async gitAccess(
+    profileId: string,
+    projectId: string | null | undefined,
+    fullName: string,
+  ): Promise<GitHubGitAccess> {
+    if (!(await this.config())) {
+      throw new GatewayError(
+        503,
+        'No GitHub App is connected to Jian. The owner can register one and connect an account under Integrations → GitHub; until then git reaches GitHub only with the SSH keys.',
+      );
+    }
+    const wanted = fullName.toLowerCase();
+    const bound = projectId ? await this.projectRepository(profileId, projectId) : undefined;
+
+    if (bound) {
+      if (bound.repository.fullName.toLowerCase() !== wanted) {
+        throw new GatewayError(
+          403,
+          `This conversation belongs to a project bound to ${bound.repository.fullName}, and ${fullName} is outside it. Work on ${fullName} from a conversation outside the project.`,
+        );
+      }
+      return this.lend(bound.installationId, bound.repository);
+    }
+
+    const accounts = await this.accounts();
+    if (!accounts.length) {
+      throw new GatewayError(
+        503,
+        'The GitHub App is registered, but no GitHub account is connected. The owner can connect one under Integrations → GitHub.',
+      );
+    }
+    const owner = wanted.split('/')[0];
+    const account = accounts.find((item) => item.login.toLowerCase() === owner);
+    if (!account) {
+      throw new GatewayError(
+        404,
+        `The Jian GitHub App is not installed on ${fullName.split('/')[0]}, so it cannot reach ${fullName}. The owner can install it on that account from Integrations → GitHub and grant it the repository.`,
+      );
+    }
+    const repository = (await this.repositories(account.id)).find(
+      (item) => item.fullName.toLowerCase() === wanted,
+    );
+    if (!repository) {
+      throw new GatewayError(
+        404,
+        `The Jian GitHub App cannot reach ${fullName}: the repository does not exist, or the App was not granted it. The owner can grant it on GitHub, in the App's repository access for ${account.login}.`,
+      );
+    }
+    return this.lend(account.installationId, repository);
+  }
+
+  private async lend(installationId: number, repository: GitHubRepository) {
+    return {
+      repository: repository.fullName,
+      url: `${this.gitOrigin}/${repository.fullName}.git`,
+      token: await this.installationToken(installationId, repository.id),
+      ...(repository.defaultBranch ? { defaultBranch: repository.defaultBranch } : {}),
+    };
+  }
+
+  /** The repository a project is bound to, with the installation it comes through. */
+  private async projectRepository(profileId: string, projectId: string) {
+    const [project] = await this.store.db
+      .select({ accountId: projects.githubAccountId, repositoryId: projects.githubRepositoryId })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.profileId, profileId)))
+      .limit(1);
+
+    if (!project?.accountId || !project.repositoryId) return undefined;
+    const account = await this.account(project.accountId);
+    return {
+      installationId: account.installationId,
+      repository: await this.repository(project.accountId, project.repositoryId),
+    };
   }
 
   /**
