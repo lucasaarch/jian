@@ -34,7 +34,6 @@ import { unread } from '@/lib/unread';
 import { useDeleteConversation, useRefresh } from '@/lib/workspace';
 import type { ProtectionMode, Run, Session } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
-import { PushToggle } from '../notifications/push-toggle';
 import type { SectionActions } from '../props';
 import {
   Badge,
@@ -162,21 +161,38 @@ function preview(text: string) {
   );
 }
 
-/** Puts the chat list away or brings it back. A phone shows one or the other already. */
-function ListToggle() {
+/**
+ * The one control a conversation keeps in its corner, floating over it since the pane has no
+ * header: on a wide screen it puts the chat list away or brings it back; on a phone, where the
+ * list and the conversation take turns, it goes back to the list.
+ */
+function PaneCorner({ back }: { back?: () => void }) {
   const collapsed = useLayout((state) => state.chatList);
   const toggle = useLayout((state) => state.toggle);
 
   return (
-    <IconButton
-      className="chat-list-toggle"
-      aria-label={collapsed ? 'Show the chat list' : 'Hide the chat list'}
-      aria-expanded={!collapsed}
-      aria-controls="chat-list"
-      onClick={() => toggle('chatList')}
-    >
-      {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-    </IconButton>
+    <div className="pane-corner">
+      <button
+        type="button"
+        className="pane-round chat-list-toggle"
+        aria-label={collapsed ? 'Show the chat list' : 'Hide the chat list'}
+        aria-expanded={!collapsed}
+        aria-controls="chat-list"
+        onClick={() => toggle('chatList')}
+      >
+        {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+      </button>
+      {back && (
+        <button
+          type="button"
+          className="pane-round conversation-back"
+          aria-label="Back to the conversations"
+          onClick={back}
+        >
+          <ArrowLeft size={17} />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -499,7 +515,6 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                 }}
               />
             </div>
-            <PushToggle />
             <IconButton
               size="control"
               variant="primary"
@@ -557,22 +572,12 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       </aside>
       {draft && (
         <section className="conversation-pane" aria-label="New chat">
-          <header>
-            <ListToggle />
-            <IconButton
-              className="conversation-back"
-              aria-label="Back to the conversations"
-              onClick={() => {
-                setDraft(false);
-                draftSession.current = null;
-              }}
-            >
-              <ArrowLeft size={18} />
-            </IconButton>
-            <div className="grow">
-              <h2>New chat</h2>
-            </div>
-          </header>
+          <PaneCorner
+            back={() => {
+              setDraft(false);
+              draftSession.current = null;
+            }}
+          />
           <div className="draft-empty">
             <Empty title="Start a conversation">Send a message to create your chat.</Empty>
           </div>
@@ -644,38 +649,13 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
         <section className="conversation-pane" aria-label={nameOf(active)}>
           <ModelNames.Provider value={modelName}>
             <GitHubLinks api={api}>
-              {/* The Inspector beside the conversation runs from the top of the pane: the
-                  conversation's header belongs to its column, not across both. */}
+              {/* The Inspector beside the conversation runs from the top of the pane; the corner
+                  controls float over the conversation's own column. */}
               <div className="conversation-main" data-following={following ? true : undefined}>
                 <div className="conversation-column">
-                  <header>
-                    <ListToggle />
-                    <IconButton
-                      className="conversation-back"
-                      aria-label="Back to the conversations"
-                      onClick={() => open(undefined)}
-                    >
-                      <ArrowLeft size={18} />
-                    </IconButton>
-                    <div className="grow">
-                      <h2>{nameOf(active)}</h2>
-                      {/* A channel's conversation says where it comes from and with whom; a chat of the
-                        panel's own needs no line saying so. */}
-                      {!isGateway(active) && (
-                        <small>
-                          {kinds.find((item) => item.kind === kindOf(active))?.name}
-                          {active.scope === 'group' || activeContact?.scope === 'group'
-                            ? ' · Group'
-                            : ''}
-                          {activeContact && activeContact.displayName !== activeContact.actorId
-                            ? ` · ${activeContact.actorId}`
-                            : ''}
-                        </small>
-                      )}
-                    </div>
-                    {/* A conversation without a bar at the bottom keeps its badges up here. */}
-                    {!docked(active) && badges(active, 'bottom')}
-                  </header>
+                  <PaneCorner back={() => open(undefined)} />
+                  {/* A conversation without a bar at the bottom keeps its badges in the other corner. */}
+                  {!docked(active) && <div className="pane-badges">{badges(active, 'bottom')}</div>}
                   <div className="conversation-chat">
                     <History
                       key={active.id}
@@ -864,11 +844,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       )}
       {!active && !draft && (
         <section className="conversation-pane">
-          {listCollapsed && (
-            <header>
-              <ListToggle />
-            </header>
-          )}
+          {listCollapsed && <PaneCorner />}
           <div className="draft-empty">
             <Empty title="No conversations here">Choose a conversation or create a new chat.</Empty>
           </div>

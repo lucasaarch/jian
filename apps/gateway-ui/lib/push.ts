@@ -3,14 +3,11 @@ import { panelApi } from './query/client';
 /**
  * Notifications on this device, through its browser's push service. The service worker shows
  * them; the gateway sends one when the agent answers or asks in a chat the owner is not looking
- * at. Which devices are on is the gateway's to know; this flag only spares this one a second,
- * in-panel notice of what its system already shows.
+ * at. This flag only spares a device whose system shows them a second, in-panel notice.
  */
 const FLAG = 'jian.push';
 
-export type PushState = 'unsupported' | 'blocked' | 'off' | 'on';
-
-const pushSupported = () =>
+const supported = () =>
   typeof window !== 'undefined' &&
   'serviceWorker' in navigator &&
   'PushManager' in window &&
@@ -41,27 +38,14 @@ function bytes(key: string) {
   return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
 }
 
-async function registration() {
+/**
+ * With permission given, this device subscribed and the gateway told so. Said again on every
+ * visit: the gateway forgets a device its push service refused once, and a new one is made here.
+ */
+async function subscribe() {
   await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-  return navigator.serviceWorker.ready;
-}
-
-export async function pushState(): Promise<PushState> {
-  if (!pushSupported()) return 'unsupported';
-  if (Notification.permission === 'denied') return 'blocked';
-  const existing = await (await navigator.serviceWorker.getRegistration('/'))?.pushManager
-    .getSubscription()
-    .catch(() => null);
-  remember(Boolean(existing));
-  return existing ? 'on' : 'off';
-}
-
-/** Asks this device for permission, then subscribes it. Called from a press: iOS insists. */
-export async function turnPushOn(): Promise<PushState> {
-  if (!pushSupported()) return 'unsupported';
-  if ((await Notification.requestPermission()) !== 'granted') return 'blocked';
+  const worker = await navigator.serviceWorker.ready;
   const { publicKey } = await panelApi().pushKey();
-  const worker = await registration();
   const subscription =
     (await worker.pushManager.getSubscription()) ??
     (await worker.pushManager.subscribe({
@@ -69,20 +53,39 @@ export async function turnPushOn(): Promise<PushState> {
       applicationServerKey: bytes(publicKey),
     }));
   const { endpoint, keys } = subscription.toJSON();
-  if (!endpoint || !keys?.p256dh || !keys.auth) throw new Error('This browser did not subscribe.');
+  if (!endpoint || !keys?.p256dh || !keys.auth) return;
   await panelApi().subscribePush({ endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } });
   remember(true);
-  return 'on';
 }
 
-export async function turnPushOff(): Promise<PushState> {
-  const subscription = await (
-    await navigator.serviceWorker.getRegistration('/')
-  )?.pushManager.getSubscription();
-  if (subscription) {
-    await panelApi().unsubscribePush(subscription.endpoint);
-    await subscription.unsubscribe();
+/**
+ * Notifications on by default. A browser asks the owner only from something they did — iOS
+ * shows nothing otherwise, and Chrome hides a request made on its own — so the question comes
+ * with their first tap or key in the panel; once allowed, every visit keeps the device on.
+ * Refused, nothing is asked again: only the browser's settings can allow it then.
+ */
+export function enablePush(): () => void {
+  if (!supported()) return () => {};
+  const keep = () => void subscribe().catch(() => remember(false));
+
+  if (Notification.permission === 'granted') {
+    keep();
+    return () => {};
   }
   remember(false);
-  return 'off';
+  if (Notification.permission === 'denied') return () => {};
+
+  const ask = () => {
+    stop();
+    void Notification.requestPermission().then((answer) => {
+      if (answer === 'granted') keep();
+    });
+  };
+  const stop = () => {
+    window.removeEventListener('pointerdown', ask, true);
+    window.removeEventListener('keydown', ask, true);
+  };
+  window.addEventListener('pointerdown', ask, true);
+  window.addEventListener('keydown', ask, true);
+  return stop;
 }

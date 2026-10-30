@@ -32,7 +32,7 @@ make up
 
 `compose.yaml` publishes the web server on `127.0.0.1:4310`, the port the gateway itself used before the panel became its own container, so the panel opens at `http://127.0.0.1:4310/` and every address handed out earlier keeps working. To reach it beyond localhost, put an HTTPS proxy in front and change the address with `JIAN_BIND_ADDRESS` and `JIAN_BIND_PORT`. Neither the gateway nor PostgreSQL publishes a port: each is reached only from the service in front of it, over the Compose network.
 
-`JIAN_VERSION` pins the version of both images; without it, Compose uses `latest`. To run your own builds instead of the published images, uncomment both `build:` blocks in `compose.yaml` and use `docker compose up -d --build`.
+`JIAN_VERSION` pins the version of both images; without it, Compose uses `latest`. The two images must be the same release: when the panel finds the gateway behind it on another version, every page shows only a notice naming both versions, until they match. Builds from source carry no version and are never compared. To run your own builds instead of the published images, uncomment both `build:` blocks in `compose.yaml` and use `docker compose up -d --build`.
 
 `compose.dev.yaml` is a different thing: it brings up PostgreSQL alone, on `127.0.0.1:5432`, so `pnpm dev` can run on the machine. It has its own project name and volume, so the development database and the production one share nothing, even on the same host.
 
