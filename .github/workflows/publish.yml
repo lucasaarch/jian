@@ -545,7 +545,11 @@ jobs:
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
               --title "Jian ${TAG#v}" --notes-file notes.md
           fi
-          if compgen -G 'desktop/*' > /dev/null; then
-            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber desktop/*
+          if ! compgen -G 'desktop/*' > /dev/null; then
+            # Published without the app, it would be the release installed apps look for, with
+            # nothing for them to update to. It stays a draft; re-running the failed jobs ends it.
+            echo "::warning::No desktop build reached the release: $TAG stays a draft."
+            exit 0
           fi
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber desktop/*
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false "${flags[@]}"
