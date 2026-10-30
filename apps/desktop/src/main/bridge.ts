@@ -1,10 +1,18 @@
-import { app, type BrowserWindow, ipcMain } from 'electron';
-import type { AddGatewayResult, MachineUse, NewGateway, OpenTarget } from '../shared/bridge';
+import { app, type BrowserWindow, ipcMain, shell } from 'electron';
+import type {
+  AddGatewayResult,
+  MachineUse,
+  NewGateway,
+  OpenTarget,
+  Showing,
+} from '../shared/bridge';
 import type { GatewayMonitor } from './gateways/monitor';
 import { parseGatewayUrl } from './gateways/rules';
 import { type GatewayStore, VAULT_MISSING, vaultAvailable } from './gateways/store';
 import { verify } from './gateways/verify';
+import { localLogPath } from './local/log';
 import type { ComputerSharing } from './machines/sharing';
+import { notificationsOn, setNotifications } from './preferences';
 
 /** The calls the window may make; each one checks what it is given, as from any other caller. */
 export function serveBridge(deps: {
@@ -14,9 +22,13 @@ export function serveBridge(deps: {
   /** What agents are doing on this computer now. */
   using: () => MachineUse[];
   window: () => BrowserWindow | undefined;
-  showing: (gatewayId: string | null) => void;
+  showing: (place: Showing | null) => void;
+  /** The owner turned notifications on or off in the settings. */
+  notificationsChanged: (on: boolean) => void;
   /** A gateway was added or removed: whatever lists them, besides the window, follows. */
   listChanged: () => void;
+  /** Starts the app's own gateway again now, after it could not start. */
+  retryLocal: () => void;
 }): {
   changed(): void;
   machinesChanged(): void;
@@ -31,6 +43,9 @@ export function serveBridge(deps: {
     event.returnValue = app.getVersion();
   });
   ipcMain.handle('gateways:list', () => monitor.summaries());
+  ipcMain.on('local:retry', () => deps.retryLocal());
+  // The folder, with the file chosen in it: the owner can open it, or send it on.
+  ipcMain.on('local:openLog', () => shell.showItemInFolder(localLogPath()));
 
   ipcMain.handle('gateways:add', async (_event, input: NewGateway): Promise<AddGatewayResult> => {
     if (!(await vaultAvailable())) return { ok: false, error: VAULT_MISSING };
@@ -79,9 +94,13 @@ export function serveBridge(deps: {
     return { ok: true };
   });
 
-  ipcMain.on('gateways:showing', (_event, id: string | null) => {
-    deps.showing(typeof id === 'string' && store.get(id) ? id : null);
-    if (id) monitor.refresh(id);
+  let shown: string | undefined;
+  ipcMain.on('gateways:showing', (_event, place: unknown) => {
+    const read = showingFrom(place);
+    deps.showing(read && store.get(read.gatewayId) ? read : null);
+    // Turning to a gateway reads it at once; moving between its chats asks nothing of it.
+    if (read && read.gatewayId !== shown) monitor.refresh(read.gatewayId);
+    shown = read?.gatewayId;
   });
 
   ipcMain.on('window:minimize', () => deps.window()?.minimize());
@@ -97,6 +116,11 @@ export function serveBridge(deps: {
   ipcMain.handle('settings:setOpenAtLogin', (_event, open: boolean) => {
     app.setLoginItemSettings({ openAtLogin: open === true });
   });
+  ipcMain.handle('settings:notifications', () => notificationsOn());
+  ipcMain.handle('settings:setNotifications', async (_event, on: boolean) => {
+    await setNotifications(on === true);
+    deps.notificationsChanged(on === true);
+  });
 
   ipcMain.handle('machines:state', (_event, gatewayId: string) =>
     machines.state(String(gatewayId ?? '')),
@@ -110,4 +134,15 @@ export function serveBridge(deps: {
     machinesUsing: (uses) => send('machines:using', uses),
     open: (target) => send('window:open', target),
   };
+}
+
+/** Where the window says it is, taken only in the shape the bridge defines. */
+function showingFrom(value: unknown): Showing | null {
+  if (!value || typeof value !== 'object') return null;
+  const { gatewayId, chat } = value as { gatewayId?: unknown; chat?: unknown };
+  if (typeof gatewayId !== 'string') return null;
+  const { profileId, sessionId } = (chat ?? {}) as { profileId?: unknown; sessionId?: unknown };
+  return typeof profileId === 'string' && typeof sessionId === 'string'
+    ? { gatewayId, chat: { profileId, sessionId } }
+    : { gatewayId };
 }

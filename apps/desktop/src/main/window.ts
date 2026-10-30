@@ -1,8 +1,9 @@
 import { join } from 'node:path';
-import { BrowserWindow, shell } from 'electron';
+import { BrowserWindow, Notification, shell } from 'electron';
 import { APP_ORIGIN } from '../shared/bridge';
 import { blockReloadKeys } from './app-menu';
 import { submitInBrowser } from './forms';
+import { explainedTray, trayExplained } from './preferences';
 import { resourcesDir } from './tray';
 import { keepWindowState, savedPlace } from './window-state';
 
@@ -46,6 +47,7 @@ export function createWindow(options: { quitting: () => boolean }): BrowserWindo
     if (options.quitting()) return;
     event.preventDefault();
     window.hide();
+    explainTray();
   });
 
   // Links to the outside world open in the owner's browser, never inside the app; a form posted
@@ -74,4 +76,18 @@ export function reveal(window: BrowserWindow): void {
   if (window.isMinimized()) window.restore();
   window.show();
   window.focus();
+}
+
+/**
+ * On Windows and Linux a closed window looks like a closed app, and an app still running looks
+ * stuck: the first time it hides, the owner is told where Jian went and how to quit it. macOS
+ * keeps it in the Dock and the menu bar, where it is plain.
+ */
+function explainTray(): void {
+  if (process.platform === 'darwin' || trayExplained() || !Notification.isSupported()) return;
+  new Notification({
+    title: 'Jian is still running',
+    body: 'It keeps answering from the notification area. To quit, right-click its icon there and choose Quit Jian.',
+  }).show();
+  void explainedTray();
 }

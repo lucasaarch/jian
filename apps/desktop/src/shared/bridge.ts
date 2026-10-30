@@ -35,6 +35,8 @@ export type GatewaySummary = {
   status: GatewayStatus;
   /** The gateway's release, once it answered; absent on a development build. */
   version?: string;
+  /** Why the app's own gateway could not start, in its last words, while it cannot. */
+  failure?: string;
   /** Chats of the panel the agent wrote in since the owner last read them, across its agents. */
   unread: number;
 };
@@ -55,6 +57,12 @@ export type OpenTarget =
   /** One of the window's own sheets, over whichever gateway it shows. */
   | { sheet: 'settings' | 'updates' };
 
+/**
+ * Where the window is: the gateway it shows and, when one is open, the conversation. The main
+ * process announces what arrives anywhere else, so it needs the chat and not only the gateway.
+ */
+export type Showing = { gatewayId: string; chat?: { profileId: string; sessionId: string } };
+
 /** An agent using this computer as a machine right now: on which gateway, and how. */
 export type MachineUse = { gatewayId: string; kind: 'shell' | 'computer' };
 
@@ -70,12 +78,17 @@ export interface DesktopBridge {
   replaceToken(id: string, token: string): Promise<{ ok: true } | { ok: false; error: string }>;
   onGatewaysChanged(listener: (gateways: GatewaySummary[]) => void): () => void;
   onOpen(listener: (target: OpenTarget) => void): () => void;
+  /** The app's own gateway: start it again now, or show the folder with its log. */
+  local: { retry(): void; openLog(): void };
   /**
-   * The gateway the window shows, or null. A reply there is the panel's to announce while the
-   * window has focus; the main process notifies only for what the owner cannot see.
+   * Where the window is, or null with no gateway shown. The main process notifies for every
+   * conversation but the one open in a focused window.
    */
-  showing(gatewayId: string | null): void;
+  showing(place: Showing | null): void;
   openAtLogin(): Promise<boolean>;
+  /** Whether the app shows system notifications for replies, messages and what waits on the owner. */
+  notifications(): Promise<boolean>;
+  setNotifications(on: boolean): Promise<void>;
   /** The app's own releases: checked on start and every few hours, downloaded in the background. */
   updates: UpdatesBridge;
   /** The window's own buttons, which the title bar draws on Windows and Linux. */

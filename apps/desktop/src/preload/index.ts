@@ -18,8 +18,14 @@ const bridge: DesktopBridge = {
   replaceToken: (id, token) => ipcRenderer.invoke('gateways:replaceToken', id, token),
   onGatewaysChanged: (listener) => listen<GatewaySummary[]>('gateways:changed', listener),
   onOpen: (listener) => listen<OpenTarget>('window:open', listener),
-  showing: (gatewayId) => ipcRenderer.send('gateways:showing', gatewayId),
+  local: {
+    retry: () => ipcRenderer.send('local:retry'),
+    openLog: () => ipcRenderer.send('local:openLog'),
+  },
+  showing: (place) => ipcRenderer.send('gateways:showing', place),
   openAtLogin: () => ipcRenderer.invoke('settings:openAtLogin'),
+  notifications: () => ipcRenderer.invoke('settings:notifications'),
+  setNotifications: (on) => ipcRenderer.invoke('settings:setNotifications', on),
   updates: {
     state: () => ipcRenderer.invoke('updates:state'),
     check: () => ipcRenderer.invoke('updates:check'),

@@ -49,6 +49,36 @@ export function Incompatible({ gateway }: { gateway: GatewaySummary }) {
   );
 }
 
+/**
+ * The app's own gateway ended before it ever listened: its last words, which the owner can act
+ * on or send on, the log they came from, and a way to start it again now. It keeps trying on its
+ * own meanwhile.
+ */
+export function LocalFailed({ failure }: { failure: string }) {
+  return (
+    <Notice icon={<TriangleAlert size={22} />} title="This computer’s gateway could not start">
+      <p className="text-sm text-muted">
+        Jian runs a gateway of its own on this computer, and it stopped before it was ready. This is
+        what it said last:
+      </p>
+      <pre className="selectable max-h-48 w-full overflow-auto rounded-lg border border-glass-edge bg-glass-hover p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-ink">
+        {failure}
+      </pre>
+      <p className="text-sm text-muted">
+        It tries again on its own. The full log is local-gateway.log, in the app’s log folder.
+      </p>
+      <div className="flex gap-2">
+        <Action tone="primary" onClick={() => desktop().local.retry()}>
+          Try again now
+        </Action>
+        <Action tone="outline" onClick={() => desktop().local.openLog()}>
+          Show the log
+        </Action>
+      </div>
+    </Notice>
+  );
+}
+
 /** The gateway does not answer, or refuses the token this computer keeps for it. */
 export function Unreachable({ gateway, retry }: { gateway: GatewaySummary; retry: () => void }) {
   if (gateway.status === 'unauthorized') return <ReplaceToken gateway={gateway} done={retry} />;

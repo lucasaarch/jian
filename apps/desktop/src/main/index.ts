@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { app, type BrowserWindow, powerMonitor } from 'electron';
-import { LOCAL_GATEWAY_ID, type MachineUse, type OpenTarget } from '../shared/bridge';
+import { LOCAL_GATEWAY_ID, type MachineUse, type OpenTarget, type Showing } from '../shared/bridge';
 import { setAppMenu } from './app-menu';
 import { serveBridge } from './bridge';
 import { timedFetch } from './gateways/fetch';
@@ -11,12 +11,14 @@ import { linkIn, linkTarget } from './link-target';
 import { claimLinks } from './links';
 import { localCredentials } from './local/credentials';
 import { LocalGateway } from './local/process';
+import { looksAt } from './looking';
 import { MachineFile } from './machines/entries';
 import { logMachines, UtilityWorkerHost } from './machines/host';
 import { thisComputer } from './machines/identity';
 import { MachineRegistry } from './machines/registry';
 import { ComputerSharing } from './machines/sharing';
 import { Notifier } from './notify';
+import { notificationsOn } from './preferences';
 import { handleScheme, registerScheme } from './protocol';
 import { createTray, resourcesDir } from './tray';
 import { type TrayState, trayMenu } from './tray-menu';
@@ -49,11 +51,14 @@ function holdsLock(): boolean {
 }
 
 registerScheme();
+// Windows shows notifications only for the app id its Start menu shortcut carries, which the
+// installer sets to the bundle's id; Electron's own default id matches no shortcut.
+if (process.platform === 'win32' && app.isPackaged) app.setAppUserModelId('com.jian.desktop');
 
 let window: BrowserWindow | undefined;
 let quitting = false;
-/** The gateway the window shows; replies there are the panel's to announce while it has focus. */
-let showing: string | null = null;
+/** Where the window is: what arrives anywhere else is announced, even while it has focus. */
+let showing: Showing | null = null;
 /** Where a notification asked to go before the window could take it. */
 let pending: OpenTarget | undefined;
 /** Created once the app is ready; told whenever what its menu shows changes. */
@@ -67,14 +72,30 @@ const monitor = new GatewayMonitor(store, app.getVersion(), {
     machines.sync();
     tray?.update();
   },
-  replied: (reply) => {
-    const seen = window?.isVisible() && window.isFocused() && showing === reply.gatewayId;
-    if (seen) return;
-    const gateway = store.get(reply.gatewayId);
+  noticed: (notice) => {
+    if (!notificationsOn() || looksAt(windowView(), showing, notice)) return;
+    const gateway = store.get(notice.gatewayId);
     const name = gateway ? gatewayName(gateway) : '';
-    notifier.reply(reply, name, store.list().length > 1);
+    notifier.show(notice, name, store.list().length > 1);
   },
 });
+
+function windowView() {
+  if (!window || window.isDestroyed()) return undefined;
+  return {
+    visible: window.isVisible(),
+    minimized: window.isMinimized(),
+    focused: window.isFocused(),
+  };
+}
+
+/** The chat open in a focused window is read: a notification about it has nothing left to say. */
+function readShowing(): void {
+  const chat = showing?.chat;
+  if (!showing || !chat) return;
+  const place = { gatewayId: showing.gatewayId, ...chat };
+  if (looksAt(windowView(), showing, place)) notifier.dismiss(place);
+}
 // This computer as a machine on every server gateway the app knows, while it answers. Read
 // once the app is ready, beside the rest of its start rather than before it: the window and the
 // local gateway never wait on the vault for a machine's token.
@@ -117,14 +138,20 @@ const machines: ComputerSharing = new ComputerSharing({
   loaded: machinesLoaded,
 });
 const bridge = serveBridge({
+  retryLocal: () => local?.retry(),
   using: usingNow,
   store,
   monitor,
   machines,
   window: () => window,
-  showing: (id) => {
-    showing = id;
-    tray?.update();
+  showing: (place) => {
+    const moved = place?.gatewayId !== showing?.gatewayId;
+    showing = place;
+    readShowing();
+    if (moved) tray?.update();
+  },
+  notificationsChanged: (on) => {
+    if (!on) notifier.dismissAll();
   },
   listChanged: () => tray?.update(),
 });
@@ -149,7 +176,7 @@ function trayState(): TrayState {
   const server = store.list().some((gateway) => !gateway.local);
   return {
     gateways: monitor.summaries(),
-    showing,
+    showing: showing?.gatewayId ?? null,
     sharing: server ? machines.sharing() : undefined,
   };
 }
@@ -194,12 +221,16 @@ void app.whenReady().then(async () => {
   await store.load();
   const credentials = await localCredentials();
   store.setLocal(undefined, credentials.token);
-  local = new LocalGateway(credentials, (url) => {
-    store.setLocal(url, credentials.token);
-    const gateway = store.get(LOCAL_GATEWAY_ID);
-    if (gateway) monitor.watch(gateway);
-    bridge.changed();
-  });
+  local = new LocalGateway(
+    credentials,
+    (url) => {
+      store.setLocal(url, credentials.token);
+      const gateway = store.get(LOCAL_GATEWAY_ID);
+      if (gateway) monitor.watch(gateway);
+      bridge.changed();
+    },
+    (reason) => monitor.failed(LOCAL_GATEWAY_ID, reason),
+  );
   void local.start();
   handleScheme(store, {
     dir: join(import.meta.dirname, '../renderer'),
@@ -231,6 +262,7 @@ void app.whenReady().then(async () => {
   });
   setAppMenu();
   window = createWindow({ quitting: () => quitting });
+  window.on('focus', readShowing);
   window.webContents.on('did-finish-load', () => {
     if (pending) bridge.open(pending);
     pending = undefined;

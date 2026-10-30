@@ -32,6 +32,17 @@ export function openNewChat(gatewayId: string): void {
   if (agent) openIn(gatewayId, newChatPath(decodeURIComponent(agent)));
 }
 
+/** The conversation an address opens, as the panel writes it: `/agents/:agent/sessions/:chat`. */
+export function chatAt(href: string): { profileId: string; sessionId: string } | undefined {
+  const match = /^\/agents\/([^/?#]+)\/sessions\/([^/?#]+)/.exec(href);
+  if (!match?.[1] || !match[2]) return undefined;
+  try {
+    return { profileId: decodeURIComponent(match[1]), sessionId: decodeURIComponent(match[2]) };
+  } catch {
+    return undefined;
+  }
+}
+
 export function forget(gatewayId: string): void {
   places.delete(gatewayId);
 }
