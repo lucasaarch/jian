@@ -63,6 +63,9 @@ nsis:
   perMachine: false
 
 linux:
+  # The command it installs as. Without it, the name comes from package.json's, @jian/desktop,
+  # whose @ and / no file name may hold: the AppImage and the .deb refuse to build.
+  executableName: jian
   # Menus list it with developer tools, and with utilities too.
   category: Development
   desktop:
