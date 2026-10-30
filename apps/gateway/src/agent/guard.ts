@@ -38,9 +38,14 @@ export function mcpActionKind(tool: unknown): ActionKind | undefined {
 /**
  * What a run does with an action, settled once when it starts. `pause` parks the run until a
  * person who may approve decides; `decline` answers the agent at once, because nobody who
- * could approve is reachable from where it is; `run` lets actions through.
+ * could approve is reachable from where it is; `guard` runs it unless the guardrail finds it
+ * catastrophic; `run` lets actions through.
  */
-export type Protection = { mode: 'run' } | { mode: 'pause' } | { mode: 'decline'; reason: string };
+export type Protection =
+  | { mode: 'run' }
+  | { mode: 'pause' }
+  | { mode: 'guard' }
+  | { mode: 'decline'; reason: string };
 
 export const NO_APPROVER =
   'Not run: nobody in this conversation may approve actions. Say what you would do and that the owner has to allow it, either by letting someone here approve or by giving this conversation full access.';
@@ -62,6 +67,8 @@ export function protectionFor(input: {
   contactCanApprove: boolean;
 }): Protection {
   if (input.mode === 'full') return { mode: 'run' };
+  // Auto waits for nobody, so a subagent and a channel's contact act under it as the chat does.
+  if (input.mode === 'auto') return { mode: 'guard' };
   if (input.subagent) return { mode: 'decline', reason: SUBAGENT_ASKS };
   if (isChatChannel(input.channel) && !input.contactCanApprove) {
     return { mode: 'decline', reason: NO_APPROVER };

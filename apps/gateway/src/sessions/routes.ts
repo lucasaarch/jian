@@ -22,6 +22,7 @@ type SessionRouteServices = {
       | 'setObjective'
       | 'overview'
       | 'timeline'
+      | 'markRead'
     >;
   runs: RunWriter;
   // History spans every message of a profile or a session, so it comes from coordination.
@@ -83,6 +84,11 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
     '/v1/profiles/:profileId/sessions/:sessionId/objective',
     async (request) =>
       deps.sessions.setObjective(request.params.profileId, request.params.sessionId, request.body),
+  );
+
+  app.post<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/read',
+    (request) => deps.sessions.markRead(request.params.profileId, request.params.sessionId),
   );
 
   // Pressed in the Inspector of any conversation: the agent starts on it at once, and the

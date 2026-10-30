@@ -31,6 +31,7 @@
     "playwright": "1.63.0",
     "sharp": "0.35.5",
     "undici": "^8.10.2",
+    "web-push": "3.6.7",
     "zod": "^4.6.5"
   },
   "scripts": {
@@ -48,6 +49,7 @@
     "@grammyjs/types": "^5.0.0",
     "@types/node": "^26.6.2",
     "@types/pg": "^8.23.1",
+    "@types/web-push": "3.6.4",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

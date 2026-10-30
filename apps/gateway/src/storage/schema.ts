@@ -312,6 +312,8 @@ export const sessions = pgTable(
     objective: jsonb('objective').$type<SessionObjective>(),
     // Whether the agent asks before it acts here. Every conversation starts asking.
     protection: text('protection').$type<ProtectionMode>().notNull().default('ask'),
+    // When the owner last read it in the panel; a chat the agent wrote in since is unread.
+    readAt: timestamp('read_at', { withTimezone: true }),
     createdAt,
   },
   (table) => [
@@ -458,6 +460,14 @@ export const memories = pgTable(
   ],
 );
 
+/** A browser or installed app the owner allowed to show notifications, as its push service names it. */
+export const pushSubscriptions = pgTable('push_subscriptions', {
+  endpoint: text('endpoint').primaryKey(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  createdAt,
+});
+
 /**
  * Something the agent does at a time: once (`at`) or on a repetition (`cron`), in a time zone,
  * in one conversation. `next_run_at` is what the scheduler looks at; it is absent once a
@@ -470,9 +480,8 @@ export const schedules = pgTable(
     profileId: uuid('profile_id')
       .notNull()
       .references(() => profiles.id, { onDelete: 'cascade' }),
-    sessionId: uuid('session_id')
-      .notNull()
-      .references(() => sessions.id, { onDelete: 'cascade' }),
+    // Null: each run opens a new chat of the panel.
+    sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     instruction: text('instruction').notNull(),
     at: timestamp('at', { withTimezone: true }),

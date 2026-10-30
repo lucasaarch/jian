@@ -49,6 +49,7 @@ const ALL_ON: DecisionUses = {
   groups: true,
   delegation: true,
   replies: true,
+  guardrail: true,
 };
 
 /** The three kinds of question Jev answers. The id a question is filed under is never sent. */

@@ -135,6 +135,7 @@ const services = {
     catalog,
     fetcher: outbound.fetch,
     github,
+    ...(config.data.JIAN_PUBLIC_URL ? { publicUrl: config.data.JIAN_PUBLIC_URL } : {}),
     ...(config.data.JIAN_TIME_ZONE ? { timeZone: config.data.JIAN_TIME_ZONE } : {}),
   }),
   store,
