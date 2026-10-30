@@ -4,6 +4,46 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.0.5 — 2026-10-30
+
+Conversations on Auto act unattended behind a guardrail that refuses only the catastrophic, schedules can open a new chat each time they run and pick any conversation from a searchable list, chats rise to the top with an unread mark, and the agent's answers reach the panel and the owner's devices as notifications.
+
+### Protection
+
+* **Auto:** a third protection mode, beside Ask first and Full access. An action runs without waiting for anyone, unless the guardrail finds it catastrophic: destroying data, databases, infrastructure or backups wholesale, deleting or overwriting whole systems or home directories, changing or deleting every row of a table, or putting passwords, tokens and keys where they leak. Fixed rules catch the plainest cases (`rm -rf /`, `DROP DATABASE`, a `DELETE` or `UPDATE` without `WHERE`, `terraform destroy`, deleting volumes or backups, printing `.env` files, private keys or the environment); they read the commands an agent runs and what it hands a service, not the code it writes into files. Then Jev judges, where it is set up, under a new **Guardrail** use; without Jev, the conversation's own model does, at its lowest effort. A refused action goes back to the agent as a refusal and the run carries on. When no judge can answer, only the fixed rules apply. Subagents and a channel's contacts act under Auto as the conversation does.
+
+### Schedules
+
+* **A new chat each time:** a schedule can name no conversation. Each time it runs it opens a chat in Chats, named after the schedule and set to Auto, since nobody is there to approve at the hour it runs; the answer stays in the panel. It is the first choice, and the default for a new schedule.
+* **Any conversation:** the conversation picker lists every chat, WhatsApp and Telegram contact and group, and API conversation, grouped in that order with each provider's mark, alphabetical within each group, and searchable. Chats are listed by their titles; they used to all read "Gateway".
+* **Learning is not a conversation:** the agent's look back at its work runs in the background and is no longer listed among conversations or offered to schedules. Neither are a subagent's tasks or conversations between agents.
+
+### Chats
+
+* **The latest first:** a conversation rises to the top of its list when something is said in it, and in Chats so does the group, General or a repository, it belongs to.
+* **Unread:** a chat the agent wrote in since you last read it shows a dot and its name in bold, on every device: the gateway keeps when each chat was read. The chat on screen is read as it arrives.
+* **Notices in the panel:** when the agent writes in a chat you are not reading, a notice says so wherever you are in the panel, with a button that opens the chat.
+
+### Notifications
+
+* **On your devices:** the bell beside the new chat button turns on notifications for the device, through its browser's push service. When the agent answers, asks something, or fails in a chat, the device shows it, and tapping it opens the chat. Nothing is sent about a chat you are reading at that moment. On an iPhone, add Jian to the Home Screen first; push needs the panel served over HTTPS. A device with notifications on gets them from its system instead of the in-panel notice.
+
+### API
+
+* **Schedules:** `sessionId` may be `null`, for a new chat each run. A schedule into a look back or a subagent's task is refused with `400`.
+* **Sessions:** a session carries `readAt`, and `POST /v1/profiles/{profileId}/sessions/{sessionId}/read` marks it read. `GET /v1/profiles/{profileId}/sessions` no longer lists learning or task sessions.
+* **Protection:** `protection` takes `auto`.
+* **Push:** `GET /v1/push/key`, `PUT /v1/push/subscriptions` and `POST /v1/push/subscriptions/remove`.
+* **Decisions:** the uses carry `guardrail`.
+
+Regenerate clients from `/openapi.json`.
+
+### Upgrading
+
+* **Migration 0078 runs at startup.** It lets a schedule name no conversation, adds when each chat was read (every existing conversation counts as read), adds the table of subscribed devices, and accepts `auto` as a protection mode.
+* The gateway makes its push keys on first use and keeps them in the installation's vault. With `JIAN_PUBLIC_URL` set to an `https://` address, push services are given it as the sender.
+* Recreate the gateway and web containers with the 1.0.5 images, or follow the `latest` tags. Promote `@jian-ai/remote-control@1.0.5` on npm, or rely on the gateway's `/jian-remote.mjs` auto-update; it has no changes of its own.
+
 ## 1.0.4 — 2026-10-30
 
 The Inspector reads a pull request in one view of folding sections instead of tabs, each review opens on GitHub where it was written, and Fix merge conflicts is offered in every conversation, in place of both Merge and the line about the conflict.
