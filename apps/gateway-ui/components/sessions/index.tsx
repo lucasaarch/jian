@@ -797,7 +797,9 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                             )}
                             {isMessaging(active) && activeContact && (
                               <div className="agent-toolbar-switch">
-                                <span>AI replies</span>
+                                <span aria-hidden="true">
+                                  AI<span className="agent-toolbar-switch-word"> replies</span>
+                                </span>
                                 <Switch
                                   label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
                                   checked={activeContact.aiEnabled ?? true}

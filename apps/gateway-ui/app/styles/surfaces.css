@@ -610,20 +610,18 @@
   .agent-toolbar {
     container: toolbar / inline-size;
   }
-  /* On a phone the switch takes a row of its own, so the model keeps its name: the spacer
-     becomes the line break, and the shield says the protection without its word. */
+  /* On a phone everything stays on one row: the shield says the protection without its word,
+     and the switch says "AI", its own label naming it in full. */
   @container toolbar (max-width: 30rem) {
     .agent-toolbar-box {
-      @apply flex-wrap gap-x-1 gap-y-1;
+      @apply gap-1;
     }
-    .agent-toolbar-box > .grow {
-      @apply h-0 basis-full;
-    }
-    .agent-toolbar-box > .agent-toolbar-switch {
-      @apply ml-auto;
-    }
-    .agent-toolbar-box .protection-trigger .model-trigger-name {
+    .agent-toolbar-box .protection-trigger .model-trigger-name,
+    .agent-toolbar-switch-word {
       @apply sr-only;
+    }
+    .agent-toolbar-switch {
+      @apply gap-2 px-1;
     }
   }
   /* In the pane the history runs edge to edge; only the messages keep the inner margin. */
@@ -1252,15 +1250,16 @@
      clear by the safe areas, and the tab bar sits over the bottom one. */
   .app-shell {
     --tab-bar: calc(4rem + env(safe-area-inset-bottom));
+    --shell-top: env(safe-area-inset-top);
   }
   .workspace {
-    padding-top: env(safe-area-inset-top);
+    padding-top: var(--shell-top);
   }
   .sidebar {
-    padding-top: env(safe-area-inset-top);
+    padding-top: var(--shell-top);
   }
   .sidebar > .mobile-menu {
-    top: calc(0.75rem + env(safe-area-inset-top));
+    top: calc(0.75rem + var(--shell-top));
   }
   /* Beside the workspace, never in it: the workspace shrinks back as the menu opens, and a
      transform makes it the box its fixed children are placed in, so the bar went with it. */
@@ -1286,8 +1285,9 @@
     @apply absolute -right-2.5 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 text-[10px] font-semibold text-canvas;
   }
   /* Inside a conversation the tab bar steps aside: the composer takes the bottom, as in any
-     messaging app, and the back arrow leads out. */
-  .app-shell:has(.messenger[data-reading="true"]) .tab-bar {
+     messaging app, and the back arrow leads out. A keyboard covers it anyway. */
+  .app-shell:has(.messenger[data-reading="true"]) .tab-bar,
+  :root[data-keyboard] .tab-bar {
     @apply hidden;
   }
   .icon-button.mobile-menu {
@@ -1312,22 +1312,30 @@
   .chat-list-toggle {
     @apply hidden;
   }
-  /* Clear of the home indicator and the rounded corners. */
+  /* Clear of the home indicator and the rounded corners, which are the margin themselves; on
+     the keyboard there is neither. */
   .composer,
   .agent-toolbar {
     @apply px-3;
-    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+  :root[data-keyboard] :is(.composer, .agent-toolbar) {
+    @apply pb-2;
   }
   .attachment.audio .audio-player {
     @apply w-64;
   }
   /* A phone shows the list or the conversation, never both. */
+  /* Placed on what is visible rather than on the page (see lib/viewport.ts): the keyboard
+     shortens it, and it is back at the bottom when the keyboard goes. */
   .main-content.fill {
-    @apply max-w-none p-0;
-    height: calc(100dvh - env(safe-area-inset-top) - var(--tab-bar));
+    @apply fixed inset-x-0 max-w-none p-0;
+    top: calc(var(--viewport-top, 0px) + var(--shell-top));
+    height: calc(var(--viewport-height, 100dvh) - var(--shell-top) - var(--tab-bar));
   }
-  .app-shell:has(.messenger[data-reading="true"]) .main-content.fill {
-    height: calc(100dvh - env(safe-area-inset-top));
+  .app-shell:has(.messenger[data-reading="true"]) .main-content.fill,
+  :root[data-keyboard] .main-content.fill {
+    height: calc(var(--viewport-height, 100dvh) - var(--shell-top));
   }
   .messenger {
     @apply grid-cols-1;
@@ -1344,6 +1352,13 @@
   }
   .conversation-pane > header h2 {
     @apply text-base;
+  }
+}
+
+/* An installed app draws its own blur under the status bar, a little past the safe area. */
+@media (max-width: 760px) and (display-mode: standalone) {
+  .app-shell {
+    --shell-top: calc(env(safe-area-inset-top) + 0.75rem);
   }
 }
 
