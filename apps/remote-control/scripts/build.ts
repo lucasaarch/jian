@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { chmod, cp, readFile, rm, writeFile } from 'node:fs/promises';
 import { helpersRoot } from '@jian/remote-core';
 import { build } from 'esbuild';
@@ -39,6 +40,11 @@ if (stamped.length > 1_000_000 || legacy.some((needle) => !stamped.includes(need
 await writeFile(bundle, stamped);
 await chmod(bundle, 0o755);
 
-// The helpers' build script and sources ship as they are; the prebuilt macOS binary, when a
-// release built one into the helpers, ships with them.
-await cp(helpersRoot(), dist.pathname, { recursive: true });
+// The native helpers ship beside the bundle, as packages/remote-core/native/build-*.sh left them.
+// A checkout that never built them still gets a worker, one without Computer Use; Publish
+// builds all of them first and checks they are in the package.
+if (existsSync(helpersRoot())) {
+  await cp(helpersRoot(), dist.pathname, { recursive: true });
+} else {
+  console.warn(`No native helpers at ${helpersRoot()}: this build has no Computer Use.`);
+}
