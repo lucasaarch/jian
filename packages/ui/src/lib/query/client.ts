@@ -1,16 +1,20 @@
 import { QueryClient } from '@tanstack/react-query';
+import { type GatewayConnection, gatewayConnection } from '../../platform/gateway';
 import { type GatewayApi, gatewayApi } from '../api';
 
-let api: GatewayApi | undefined;
+let made: { api: GatewayApi; for: GatewayConnection } | undefined;
 
 /**
- * The one client every query and every section shares. Created on first use, because it reads
- * the panel's origin from `window`, which a server render does not have.
+ * The one client every query and every section shares, for the gateway the panel is connected
+ * to. Created on first use, because it reads the panel's origin from `window`, which a server
+ * render does not have; made again when a host connects the panel to another gateway, so no
+ * request of the new gateway's panel goes to the one it left.
  */
 export function panelApi(): GatewayApi {
-  api ??= gatewayApi();
+  const connection = gatewayConnection();
+  if (made?.for !== connection) made = { api: gatewayApi(), for: connection };
 
-  return api;
+  return made.api;
 }
 
 /**

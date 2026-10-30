@@ -33,14 +33,14 @@ export function connectGateway(next: GatewayConnection) {
   connection = next;
 }
 
+/** The host's connection, or the web's: made once, so a client built for it is kept. */
 export function gatewayConnection(): GatewayConnection {
-  return (
-    connection ?? {
-      origin: window.location.origin,
-      headers: { 'x-jian-panel': '1' },
-      credentials: 'same-origin',
-    }
-  );
+  connection ??= {
+    origin: window.location.origin,
+    headers: { 'x-jian-panel': '1' },
+    credentials: 'same-origin',
+  };
+  return connection;
 }
 
 /** Where the gateway answers, as channels, webhooks and remote workers are told to reach it. */
