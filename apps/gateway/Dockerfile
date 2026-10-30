@@ -62,6 +62,8 @@ COPY apps/web/package.json apps/web/package.json
 COPY apps/remote-control/package.json apps/remote-control/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
+COPY packages/ui/package.json packages/ui/package.json
+COPY packages/remote-core/package.json packages/remote-core/package.json
 RUN pnpm install --frozen-lockfile
 COPY apps/gateway apps/gateway
 COPY apps/remote-control apps/remote-control

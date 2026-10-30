@@ -1,0 +1,24 @@
+{
+  "name": "@jian/remote-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./computer": "./src/computer/index.ts",
+    "./computer/macos": "./src/computer/macos.ts"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@jian/contracts": "workspace:*",
+    "@types/node": "^26.6.2",
+    "typescript": "^5.9.3"
+  }
+}

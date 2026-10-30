@@ -21,7 +21,7 @@ apps/web/out/
 .claude/worktrees/
 
 # Prebuilt macOS computer-use helper (Publish CI ships it in the npm tarball; do not commit)
-apps/remote-control/macos/computer-helper
-apps/remote-control/macos/computer-helper-arm64
-apps/remote-control/macos/computer-helper-x86_64
+packages/remote-core/helpers/macos/computer-helper
+packages/remote-core/helpers/macos/computer-helper-arm64
+packages/remote-core/helpers/macos/computer-helper-x86_64
 
