@@ -1,3 +1,0 @@
-# Prefer .npmignore over .gitignore so Publish can ship macos/computer-helper
-# even though that Mach-O is gitignored in the repo.
-tests/

@@ -1,21 +1,17 @@
 {
   "name": "@jian-ai/remote-control",
   "version": "0.0.0-dev",
-  "description": "Jian Remote Control worker — connect a computer to a Jian gateway over HTTPS",
+  "description": "Jian Remote Control worker \u2014 connect a computer to a Jian gateway over HTTPS",
   "type": "module",
   "bin": {
-    "jian-remote": "./bin/jian-remote.mjs"
+    "jian-remote": "./dist/jian-remote.mjs"
   },
   "exports": {
-    ".": "./bin/jian-remote.mjs",
-    "./bin/jian-remote.mjs": "./bin/jian-remote.mjs"
+    ".": "./dist/jian-remote.mjs",
+    "./dist/jian-remote.mjs": "./dist/jian-remote.mjs"
   },
   "files": [
-    "bin",
-    "assets",
-    "macos",
-    "linux",
-    "windows",
+    "dist",
     "README.md"
   ],
   "engines": {
@@ -25,7 +21,16 @@
     "access": "public"
   },
   "scripts": {
-    "test": "node --test tests/*.test.mjs"
+    "build": "node scripts/build.ts",
+    "test": "node scripts/build.ts && node --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@jian/contracts": "workspace:*",
+    "@jian/remote-core": "workspace:*",
+    "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3"
   },
   "license": "Apache-2.0",
   "repository": {

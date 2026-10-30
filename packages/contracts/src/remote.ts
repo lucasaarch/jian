@@ -114,3 +114,8 @@ export type RemoteMachine = z.infer<typeof remoteMachineSchema>;
 export type RemoteCommand = z.infer<typeof remoteCommandSchema>;
 export type RemoteComputerParams = z.infer<typeof remoteComputerParamsSchema>;
 export type RemoteComputerCommand = z.infer<typeof remoteComputerCommandSchema>;
+/** A task as the gateway hands it to a worker. */
+export type RemoteTask = z.infer<typeof remoteTaskSchema>;
+/** What a worker posts back, before the gateway fills its defaults in. */
+export type RemoteResult = z.input<typeof remoteResultSchema>;
+export type RemoteComputerResult = z.input<typeof remoteComputerResultSchema>;

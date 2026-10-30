@@ -160,14 +160,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build universal computer-helper
-        working-directory: apps/remote-control/macos
+        working-directory: packages/remote-core/helpers/macos
         run: |
           chmod +x build-helper.sh
           ./build-helper.sh "$PWD/computer-helper"
           test -x computer-helper
           lipo -info computer-helper
       - name: Optional Developer ID sign
-        working-directory: apps/remote-control/macos
+        working-directory: packages/remote-core/helpers/macos
         env:
           APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
           APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
@@ -218,7 +218,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: computer-helper
-          path: apps/remote-control/macos/computer-helper
+          path: packages/remote-core/helpers/macos/computer-helper
           if-no-files-found: error
           retention-days: 1
 
@@ -253,27 +253,23 @@ jobs:
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
             pkg.version = version;
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-            const bin = 'bin/jian-remote.mjs';
-            const source = fs.readFileSync(bin, 'utf8');
-            const stamped = source.replace(
-              /export const PACKAGE_VERSION = '[^']*'/,
-              \"export const PACKAGE_VERSION = '\" + version + \"'\",
-            );
-            if (stamped === source) throw new Error('PACKAGE_VERSION stamp target not found');
-            fs.writeFileSync(bin, stamped);
           " "$version"
           node -e "console.log('Staging @jian-ai/remote-control@' + require('./package.json').version)"
       - uses: actions/download-artifact@v4
         with:
           name: computer-helper
-          path: apps/remote-control/macos
-      - name: Require prebuilt computer-helper in the package
+          path: packages/remote-core/helpers/macos
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile --filter @jian-ai/remote-control...
+      # One bundled file stamped with the version above, the helpers beside it in dist/.
+      - name: Build the worker with the prebuilt computer-helper
         working-directory: apps/remote-control
         run: |
-          test -f macos/computer-helper
-          chmod 755 macos/computer-helper
-          # Prove the Mach-O ships in the tarball (npm uses .npmignore, not repo .gitignore).
-          npm pack --dry-run 2>&1 | grep -F 'macos/computer-helper'
+          chmod 755 ../../packages/remote-core/helpers/macos/computer-helper
+          pnpm run build
+          test -x dist/macos/computer-helper
+          grep -F "export const PACKAGE_VERSION = '${GITHUB_REF_NAME#v}';" dist/jian-remote.mjs
+          npm pack --dry-run 2>&1 | grep -F 'dist/macos/computer-helper'
       - name: Require NPM_TOKEN
         run: |
           if [ -z "${{ secrets.NPM_TOKEN }}" ]; then

@@ -11,9 +11,9 @@ const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
  */
 export const workerScriptPath = (() => {
   try {
-    return require.resolve('@jian-ai/remote-control/bin/jian-remote.mjs');
+    return require.resolve('@jian-ai/remote-control/dist/jian-remote.mjs');
   } catch {
-    return fileURLToPath(new URL('../../../remote-control/bin/jian-remote.mjs', import.meta.url));
+    return fileURLToPath(new URL('../../../remote-control/dist/jian-remote.mjs', import.meta.url));
   }
 })();
 

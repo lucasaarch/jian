@@ -7,6 +7,8 @@ const run = (args) => execFileSync('pnpm', args, { cwd: root, stdio: 'inherit' }
 // The panel is its own server now (apps/web); nothing of it is built into the gateway.
 run(['--filter', '@jian/contracts', 'build']);
 run(['--filter', '@jian/gateway', 'build:server']);
+// The gateway serves the published worker, `/jian-remote.mjs`, from that package's build.
+run(['--filter', '@jian-ai/remote-control', 'build']);
 
 // A tree built before the split still holds the export; the gateway no longer reads it.
 await rm(new URL('../dist/ui/', import.meta.url), { recursive: true, force: true });
