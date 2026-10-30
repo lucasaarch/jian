@@ -20,9 +20,9 @@
     "ai": "^7.0.108",
     "baileys": "7.0.0-rc14",
     "cron-parser": "5.10.1",
-    "diff": "8.0.2",
+    "diff": "8.0.3",
     "drizzle-orm": "^0.45.2",
-    "fastify": "^5.12.5",
+    "fastify": "^5.12.6",
     "fflate": "^0.8.3",
     "ipaddr.js": "^2.5.0",
     "js-tiktoken": "^1.0.21",
@@ -30,9 +30,9 @@
     "pg-boss": "^12.33.4",
     "playwright": "1.63.0",
     "sharp": "0.35.5",
-    "undici": "^8.10.2",
+    "undici": "^8.12.2",
     "web-push": "3.6.7",
-    "zod": "^4.6.5"
+    "zod": "^4.6.6"
   },
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",
@@ -52,7 +52,7 @@
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.3"
   },
   "files": [
     "dist",
