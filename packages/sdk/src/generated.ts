@@ -2639,7 +2639,8 @@ export interface operations {
                                 state: "approved" | "changes_requested" | "commented" | "dismissed" | "pending";
                                 /** Format: date-time */
                                 submittedAt?: string;
-                                body?: string;
+                                /** Format: uri */
+                                url?: string;
                             }[];
                         };
                         checks: {
@@ -2690,16 +2691,6 @@ export interface operations {
                             };
                         }[];
                         filesTruncated?: boolean;
-                        comments: {
-                            author?: {
-                                login: string;
-                                /** Format: uri */
-                                avatarUrl?: string;
-                            };
-                            body: string;
-                            /** Format: date-time */
-                            createdAt: string;
-                        }[];
                     };
                 };
             };

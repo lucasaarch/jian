@@ -51,8 +51,8 @@ export const githubReviewSchema = z.strictObject({
   reviewer: githubUserSchema,
   state: z.enum(['approved', 'changes_requested', 'commented', 'dismissed', 'pending']),
   submittedAt: z.iso.datetime().optional(),
-  /** What the reviewer wrote with it, Markdown; absent when they only chose a verdict. */
-  body: z.string().max(10_000).optional(),
+  /** The review itself on GitHub, where what the reviewer wrote is read. */
+  url: z.url().max(1000).optional(),
 });
 
 /** A comment in an issue's or a pull request's conversation. */
@@ -106,8 +106,6 @@ export const githubPullSchema = z.strictObject({
   files: z.array(githubPullFileSchema).max(100),
   /** The pull request changes more files than are listed. */
   filesTruncated: z.boolean().optional(),
-  /** The last comments of its conversation, oldest first. */
-  comments: z.array(githubCommentSchema).max(30),
 });
 
 export const githubIssueSchema = z.strictObject({
@@ -161,8 +159,8 @@ export const githubMergeInputSchema = z.strictObject({
 });
 
 /**
- * The pull request whose conflicts the agent of a chat should resolve. The gateway writes the
- * brief itself, as a note the agent reads and the conversation does not show.
+ * The pull request whose conflicts the agent of a conversation should resolve. The gateway
+ * writes the brief itself, as a note the agent reads and the conversation does not show.
  */
 export const githubFixConflictsInputSchema = z.strictObject({
   owner: githubOwnerSchema,

@@ -85,9 +85,10 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
       deps.sessions.setObjective(request.params.profileId, request.params.sessionId, request.body),
   );
 
-  // Pressed in the drawer of a chat the panel answers: the agent starts on it at once, and the
-  // conversation shows its work, not the brief. A channel's conversation would carry the work to
-  // the contact, so it is not one of them.
+  // Pressed in the Inspector of any conversation: the agent starts on it at once, and the
+  // panel shows its work, not the brief. A run asked for here is never delivered on a channel,
+  // so a contact does not receive it; but a run already answering a contact would read the
+  // brief between its steps and carry the work to them, so that has to finish first.
   app.post<{ Params: SessionParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId/github/fix-conflicts',
     async (request, reply) => {
@@ -96,7 +97,16 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
       const session = await deps.sessions.session(profileId, sessionId);
 
       if (session.channel !== GATEWAY_SESSION_CHANNEL) {
-        throw new GatewayError(409, 'Conflicts are fixed from a chat of the panel.');
+        const answering = (await deps.runs.activities(profileId)).some(
+          (run) =>
+            run.sessionId === sessionId && ['queued', 'running', 'waiting'].includes(run.status),
+        );
+        if (answering) {
+          throw new GatewayError(
+            409,
+            'The agent is answering this conversation. Ask again once it has finished.',
+          );
+        }
       }
       return reply
         .code(202)

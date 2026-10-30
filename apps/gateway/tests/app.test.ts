@@ -533,7 +533,7 @@ describe('request limit', () => {
   });
 });
 
-describe('fixing a pull request’s conflicts from a chat', () => {
+describe('fixing a pull request’s conflicts from the Inspector', () => {
   it('starts the agent on it with a brief the conversation does not show', async () => {
     const { app, services } = await setup();
     const profile = await services.profiles.createProfile(input);
@@ -558,11 +558,34 @@ describe('fixing a pull request’s conflicts from a chat', () => {
     expect(brief?.content).toContain('https://github.com/octo-example/site/pull/7');
     expect(brief?.purpose).toBe('resume');
 
-    // A channel's conversation would carry the agent's work to the contact.
-    const refused = await fix(channel.id);
+    // A channel's conversation takes it too, as a run of its own.
+    const onChannel = await fix(channel.id);
+    expect(onChannel.statusCode).toBe(202);
+    expect(onChannel.json().sessionId).toBe(channel.id);
+  });
+
+  it('waits while the agent is answering a channel’s contact, who would receive the work', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const channel = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const answering = await services.runs.submit(profile.id, channel.id, {
+      text: 'Where is my order?',
+      requestKey: 'contact',
+    });
+
+    const refused = await app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profile.id}/sessions/${channel.id}/github/fix-conflicts`,
+      headers,
+      payload: { owner: 'octo-example', repo: 'site', number: 7 },
+    });
+
     expect(refused.statusCode).toBe(409);
+    // The brief did not join the contact's turn.
     expect(
-      (await services.runs.activities(profile.id)).filter((run) => run.sessionId === channel.id),
-    ).toEqual([]);
+      (await services.sessions.messages(profile.id, channel.id)).filter(
+        (message) => message.runId === answering.id,
+      ),
+    ).toHaveLength(1);
   });
 });
