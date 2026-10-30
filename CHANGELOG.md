@@ -4,6 +4,81 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.1.0 — 2026-10-30
+
+Jian is a desktop app for macOS, Windows and Linux, with a gateway of its own that works the moment it is installed, and the web panel is the same app in a browser. Computers are Machines, and the app's computer joins every gateway it connects to. API channels speak OpenAI, and the Overview shows Claude's limits.
+
+### The desktop app
+
+* **Jian on your computer:** an app for macOS, Windows and Linux, with no sign-in. It runs a gateway of its own, so it works as soon as it is installed. Its gateway is for chats: it has no channels, since the computer is not always on.
+* **Your gateways too:** connect one that runs on a server by its address and host token. Switch between them from the status bar; a gateway that is away shows what was kept of it and catches up once it answers.
+* **It keeps going in the background:** closing the window keeps the app in the tray, and it can open at login. A reply in a chat you are not reading arrives as a system notification, which opens that chat.
+* **Its own title bar:** the chats run up to the window's top, with back and forward beside the sidebar's buttons. ⌘⇧P opens the command palette, ⌘K searches the chats, ⌘N starts one and ⌘, opens the settings.
+* **It updates itself:** new releases download in the background and install when you quit, or at once with Restart to update. A sheet says what is new, shows the download and names what went wrong when something does. On Linux the AppImage updates itself; a `.deb` offers the download.
+
+### The panel
+
+* **A Welcome:** the first run opens on an animated introduction that connects a model provider and shapes the first agent, in the app and on the web, and picks up where it was left.
+* **One app, in the browser and on the desktop:** the web panel is the desktop app's chats, sidebar and settings. A phone opens on the list of chats, and a chat, a page or the settings fill the screen over it.
+* **The sidebar:** New chat, then the agent's Overview, Schedules and Customize, then its projects, conversations and each channel's chats. The agent picker sits at its foot.
+* **Pages in the chat's place:** Overview, Schedules, Customize (Skills, Memories and Channels) and the agent's settings open where the conversation was. Escape goes back to the chat you were in. A count on Customize says how many contacts are waiting for approval.
+* **Settings in one place:** providers, model defaults, integrations, SSH keys and machines, each a line with Configure for the rest, and the app's own general and appearance settings.
+* **Old addresses still work:** links to the former pages, and the ones push notifications open, lead to their new places.
+* **Boundaries:** an agent's identity has rules it keeps whatever it is asked, one to a line.
+* **Schedules:** dates and times are picked from a calendar and lists of hours and minutes, and the conversation a schedule answers in is searched.
+
+### Conversations
+
+* **The Inspector runs to the window's top:** a pull request or an issue keeps its heading in place while its description, checks, changes and reviews scroll. Its options wrap the diffs' lines, fold everything at once, read it again, open it on GitHub or copy its link.
+* **A subagent's Inspector** shows its kind and how long it has worked, then what it did and said.
+* **A conversation has no header:** its controls float in its corners.
+
+### GitHub
+
+* **Clone and push with the App:** a new `github_git` tool clones, fetches, pulls and pushes GitHub repositories with the Jian GitHub App's token, in the gateway's workspace or on the machine a conversation targets. A private repository no longer needs an SSH key registered on GitHub. The token is lent to that one git command: it never lands in `.git/config` or the remote's address, and it is masked in what the agent reads. A checkout whose origin is an SSH address goes through it too.
+* **The same reach as the API tools:** a project's conversation reaches its repository alone; any other conversation reaches every repository the owner granted the App. A repository outside that is refused, saying why.
+* **Under the conversation's protection:** cloning, fetching and pulling act on the machine; pushing acts on GitHub, so on Ask first it waits for approval. The guardrail refuses force-pushing over `main`, `master` or `trunk`, through the tool or the shell.
+* SSH keys under Settings keep working for git as before.
+
+### Machines
+
+* **Remote control is Machines:** the same computers, under a plainer name, in the panel and in what agents read.
+* **The app's computer joins in:** on every server gateway it connects to, the desktop app registers its computer as a machine, named as the computer is and with its system and architecture, without asking. A switch in Machines stops agents from using it; the record stays.
+* **What each machine is:** a machine shows its system with its version, such as macOS 27.2, and its architecture.
+* **Updates on request:** a worker no longer updates itself. Update in Machines, an agent (`update_remote_machine`) or `jian-remote update` on the computer asks for it. A worker on another release than its gateway still connects, and takes only its update until it matches.
+* **One install command:** adding a machine and rotating its credentials show the same command, which installs or updates `jian-remote` and connects it. `jian-remote status` and `jian-remote logs` say how the worker stands and what it did.
+* **One Computer Use helper for every system:** macOS, Linux (X11) and Windows share one Rust helper that draws the same Jian pointer. The worker no longer needs ffmpeg, xdotool, Python or PowerShell.
+
+### API channels
+
+* **OpenAI-compatible:** each API channel answers at `/v1/channels/{channelId}/openai`, so a client built for OpenAI's API, a chat UI or an automation tool, talks to the agent by pointing its base URL there and using the channel's token as its API key. `GET /models` lists `default` and every model the gateway's providers offer; `POST /chat/completions` answers as OpenAI does, whole or streamed. Fields such a client sends that Jian has no use for, like `temperature` or `tools`, are accepted and left aside; only text is read from messages.
+* **One conversation per chat:** `metadata.chat_id` names the conversation a request belongs to. Without it, the conversation is told apart by its opening system and user messages, so a client that sends the whole history each turn stays in one conversation. Only the newest user message reaches the agent, which keeps the history itself. A request sent again returns the same answer instead of asking twice.
+* **Protection, model and effort:** ingress and chat completions take `protection` (`ask` or `auto`), `model` (an id the providers list, or `default`) and `effort`, and the conversation keeps them for the turns after. A conversation an API caller opens starts on Auto; `full` is refused. Without a model, it follows Model defaults, as `default` brings it back to.
+* **Waiting:** an answer that waits on an approval or a question says so in its text, and the approval is decided in Jian. A completion that is not streamed waits up to ten minutes for the agent; past that, the run goes on and the request is told it is still working.
+
+### Overview
+
+* **Claude's limits:** the five-hour and weekly windows of a Claude subscription show beside Codex's. Anthropic's usage endpoint refuses a `claude setup-token` credential, so they are read from the answers Claude's runs get, and show after the first run since the gateway started.
+* **When nobody may approve:** a chat whose contact cannot approve tells the agent it is a protection setting, not a missing key, and that Auto or letting the contact approve would let it act.
+
+### API
+
+* **Machines:** a machine carries `system`; a remote shell task can carry environment variables the worker masks in its output, offered to workers that advertise `shell-secret-env-v1`; `POST /v1/remote/machines` takes `platform` and `system`; `POST /v1/remote/machines/{machineId}/update` updates its worker; workers report `x-jian-system` and `x-jian-remote-version`.
+* **Ingress:** `POST /v1/ingress/{channelId}` takes `protection`, `model` and `effort`.
+* **OpenAI:** `GET /v1/channels/{channelId}/openai/models` and `POST /v1/channels/{channelId}/openai/chat/completions`, authorized by the channel's token as `Authorization: Bearer` or as `x-jian-channel-token`. Errors take OpenAI's shape.
+* **Health:** `/health` says `mode`: `server`, or `local` for a desktop app's own gateway.
+* **Removed:** `/jian-remote.mjs` and `/v1/remote/worker/{machineId}/update`. Workers are installed and updated with npm.
+
+Regenerate clients from `/openapi.json`.
+
+### Upgrading
+
+* **Migrations 0079 and 0080 run at startup.** They record each worker's release and whether it updates on request, and each machine's system.
+* **Update each machine's worker once, by hand.** A 1.0 worker updated itself from the gateway, which no longer serves it. Rotate the machine's credentials under Machines and run the command it shows on that computer: it installs the 1.1.0 worker and connects it again. From then on, Update in Machines does it. `github_git` needs a 1.1.0 worker on a machine.
+* **API conversations start on Auto from now on,** where they started on Ask first. Ones that already exist keep the protection they have.
+* **The web host waits longer:** up to eleven minutes for the gateway's first byte, where it gave up after five, so a long chat completion reaches the client through it.
+* Recreate the gateway and web containers with the 1.1.0 images, or follow the `latest` tags. The desktop app is on the release's page, for macOS (Apple silicon and Intel), Windows (x64 and ARM) and Linux (x64 and ARM, AppImage and `.deb`). Windows builds are not signed yet: Windows warns before the first run.
+
 ## 1.0.5 — 2026-10-30
 
 Conversations on Auto act unattended behind a guardrail that refuses only the catastrophic, schedules can open a new chat each time they run and pick any conversation from a searchable list, chats rise to the top with an unread mark, and the agent's answers reach the panel and the owner's devices as notifications.
