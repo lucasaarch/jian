@@ -532,3 +532,37 @@ describe('request limit', () => {
     expect(refused).toBe(10);
   });
 });
+
+describe('fixing a pull request’s conflicts from a chat', () => {
+  it('starts the agent on it with a brief the conversation does not show', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const chat = await services.sessions.createGatewaySession(profile.id, {});
+    const channel = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const pull = { owner: 'octo-example', repo: 'site', number: 7 };
+    const fix = (sessionId: string) =>
+      app.inject({
+        method: 'POST',
+        url: `/v1/profiles/${profile.id}/sessions/${sessionId}/github/fix-conflicts`,
+        headers,
+        payload: pull,
+      });
+
+    const started = await fix(chat.id);
+    expect(started.statusCode).toBe(202);
+    expect(started.json().status).toBe('queued');
+
+    const brief = (await services.sessions.messages(profile.id, chat.id)).find(
+      (message) => message.runId === started.json().id,
+    );
+    expect(brief?.content).toContain('https://github.com/octo-example/site/pull/7');
+    expect(brief?.purpose).toBe('resume');
+
+    // A channel's conversation would carry the agent's work to the contact.
+    const refused = await fix(channel.id);
+    expect(refused.statusCode).toBe(409);
+    expect(
+      (await services.runs.activities(profile.id)).filter((run) => run.sessionId === channel.id),
+    ).toEqual([]);
+  });
+});
