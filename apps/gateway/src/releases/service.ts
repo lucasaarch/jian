@@ -40,8 +40,13 @@ export function compareVersions(a: string, b: string): number {
   return (left[4] ?? '').localeCompare(right[4] ?? '', 'en', { numeric: true });
 }
 
-/** One note file: `date` and an optional `summary` in the front matter, Markdown after it. */
-function parseNote(file: string, text: string): ReleaseNote {
+/**
+ * One note file: `date` and an optional `summary` in the front matter, Markdown after it. Read
+ * with either line ending: a checkout on Windows can turn each into CRLF, and the front matter
+ * then never matched — the app's own gateway failed to start there, on its first note.
+ */
+function parseNote(file: string, raw: string): ReleaseNote {
+  const text = raw.replace(/\r\n?/g, '\n');
   const version = file.replace(/\.md$/, '');
   const match = VERSION.exec(version);
   const front = /^---\n([\s\S]*?)\n---\n/.exec(text);
@@ -73,16 +78,25 @@ function parseNote(file: string, text: string): ReleaseNote {
   };
 }
 
-function readNotes(directory?: URL): ReleaseNote[] {
+export function readNotes(directory?: URL): ReleaseNote[] {
   const location = directory ?? LOCATIONS.find((item) => existsSync(fileURLToPath(item)));
 
   if (!location) {
     return [];
   }
 
+  // A note that cannot be read is left out, said in the log: release notes are worth a line in
+  // the panel, never the gateway's start.
   return readdirSync(location)
     .filter((file) => file.endsWith('.md'))
-    .map((file) => parseNote(file, readFileSync(new URL(file, location), 'utf8')))
+    .flatMap((file) => {
+      try {
+        return [parseNote(file, readFileSync(new URL(file, location), 'utf8'))];
+      } catch (error) {
+        console.error(`jian: release note left out — ${(error as Error).message}`);
+        return [];
+      }
+    })
     .sort((a, b) => compareVersions(b.version, a.version));
 }
 
