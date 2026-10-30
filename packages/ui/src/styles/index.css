@@ -232,7 +232,7 @@
     @apply mb-4 flex flex-wrap items-center justify-between gap-3;
   }
   .boot {
-    @apply grid min-h-dvh place-items-center text-accent;
+    @apply grid min-h-(--app-height) place-items-center text-accent;
   }
   .skip-link {
     @apply fixed -top-24 left-4 z-50 bg-accent px-5 py-3 text-on-accent focus:top-4;

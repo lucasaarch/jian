@@ -9,6 +9,8 @@ export { VersionMismatch } from './components/shell/version-mismatch';
  * host decides — how it navigates and how it reaches the gateway.
  */
 export { SignIn } from './components/sign-in';
+/** The panel's own controls, for what a host draws around it in the same look. */
+export { Button, Field, Mark } from './components/ui';
 export { settingsPath } from './lib/navigation';
 export { connectGateway, type GatewayConnection } from './platform/gateway';
 export {

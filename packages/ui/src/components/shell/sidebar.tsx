@@ -11,6 +11,7 @@ import {
 } from '../../lib/navigation';
 import { queries } from '../../lib/query/profile';
 import { useAgentPath, useLoading, useSignOut, useWorkingAgentId } from '../../lib/workspace';
+import { gatewayConnection } from '../../platform/gateway';
 import { Link, usePathname } from '../../platform/navigation';
 import { useReleaseNotes } from '../releases/dialog';
 import { GitHubLogo, IconButton, Mark } from '../ui';
@@ -105,10 +106,12 @@ export function Sidebar({
             </span>
           )}
         </button>
-        <button type="button" onClick={() => void signOut()}>
-          <LogOut size={16} />
-          Sign out
-        </button>
+        {gatewayConnection().credential !== 'host' && (
+          <button type="button" onClick={() => void signOut()}>
+            <LogOut size={16} />
+            Sign out
+          </button>
+        )}
       </div>
     </aside>
   );
