@@ -2,30 +2,40 @@ import { join } from 'node:path';
 import { app, Notification, type UtilityProcess, utilityProcess } from 'electron';
 import { stablePort } from './address';
 import type { LocalCredentials } from './credentials';
+import { LocalLog } from './log';
 
 /** How long a crashed gateway waits before it is started again, growing to a minute. */
 const RETRY_MS = [1_000, 5_000, 15_000, 60_000];
 
 type Listener = (url: string | undefined) => void;
+/** Why the gateway could not start, in its last words; undefined once it listens again. */
+type Failed = (reason: string | undefined) => void;
 
 /**
  * The gateway this computer runs for its owner, in a Node process of the app's own: started
  * with the app, started again if it ends, stopped when the app quits, on the same port every
- * time; `listener` hears when it listens and when it ended.
+ * time; `listener` hears when it listens and when it ended, `failed` why it ended before it
+ * ever listened. Everything it writes goes to local-gateway.log in the app's log folder.
  */
 export class LocalGateway {
   private child?: UtilityProcess;
   private failures = 0;
   private stopping = false;
   private timer?: NodeJS.Timeout;
+  private readonly log = new LocalLog();
+  private logOpen?: Promise<void>;
 
   constructor(
     private readonly credentials: LocalCredentials,
     private readonly listener: Listener,
+    private readonly failed: Failed = () => {},
   ) {}
 
   async start(): Promise<void> {
     this.stopping = false;
+    this.logOpen ??= this.log.open().catch(() => {});
+    await this.logOpen;
+    this.log.started(app.isPackaged ? app.getVersion() : 'from source');
     const { port, moved } = await stablePort();
     if (moved) announceMove();
     const { entry, cwd, execArgv } = launch();
@@ -48,28 +58,44 @@ export class LocalGateway {
     this.child = child;
 
     let buffer = '';
+    let listened = false;
     child.stdout?.on('data', (chunk: Buffer) => {
+      this.log.write(chunk.toString('utf8'));
       buffer += chunk.toString('utf8');
       for (let end = buffer.indexOf('\n'); end >= 0; end = buffer.indexOf('\n')) {
         const line = buffer.slice(0, end);
         buffer = buffer.slice(end + 1);
         const url = listening(line);
         if (url) {
+          listened = true;
           this.failures = 0;
+          this.failed(undefined);
           this.listener(url);
         }
       }
     });
-    child.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk));
-    child.on('exit', () => {
+    child.stderr?.on('data', (chunk: Buffer) => {
+      this.log.write(chunk.toString('utf8'));
+      process.stderr.write(chunk);
+    });
+    child.on('exit', (code) => {
       if (this.child !== child) return;
       this.child = undefined;
       this.listener(undefined);
       if (this.stopping) return;
+      if (!listened) this.failed(this.log.reason(code));
       const wait = RETRY_MS[Math.min(this.failures, RETRY_MS.length - 1)] ?? 60_000;
       this.failures += 1;
       this.timer = setTimeout(() => void this.start(), wait);
     });
+  }
+
+  /** Starts it again now, as the owner asked, rather than when the next attempt is due. */
+  retry(): void {
+    if (this.child || this.stopping) return;
+    clearTimeout(this.timer);
+    this.failures = 0;
+    void this.start();
   }
 
   /** Lets the gateway finish what it is writing; it is killed if it has not ended in time. */

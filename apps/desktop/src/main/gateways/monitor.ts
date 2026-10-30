@@ -1,7 +1,7 @@
-import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { createJianClient } from '@jian/sdk';
 import type { GatewayStatus, GatewaySummary } from '../../shared/bridge';
 import { timedFetch } from './fetch';
+import { type AgentKnown, type ListedSession, type News, type OpenRun, readNews } from './news';
 import { compatible, gatewayName } from './rules';
 import type { GatewayStore, StoredGateway } from './store';
 
@@ -14,53 +14,39 @@ const EVERY_MS = 15_000;
 const OFFLINE_EVERY_MS = 20_000;
 const TIMEOUT_MS = 8_000;
 
-type Session = {
-  id: string;
-  title?: string | null;
-  channel: string;
-  readAt?: string;
-  lastMessage?: { role: 'user' | 'assistant'; text: string; at: string };
-};
-
-/** A reply the owner has not read yet, which the app may announce. */
-export type Reply = {
+/** Something new in a conversation the app may announce: a reply, a message, or a request. */
+export type Notice = News & {
   gatewayId: string;
   profileId: string;
   profileName: string;
-  sessionId: string;
-  title: string;
-  text: string;
 };
-
-/** The panel's own rule: a chat of the panel the agent wrote in since the owner last read it. */
-function unread(session: Session): boolean {
-  return (
-    session.channel === GATEWAY_SESSION_CHANNEL &&
-    session.lastMessage?.role === 'assistant' &&
-    (!session.readAt || Date.parse(session.lastMessage.at) > Date.parse(session.readAt))
-  );
-}
 
 type Watch = {
   status: GatewayStatus;
   version?: string;
   unread: number;
-  /** The last word known in each chat; undefined until the first look, which only learns them. */
-  known?: Map<string, string>;
+  /** What each agent's conversations held at the last look; an agent not in it was never read. */
+  known: Map<string, AgentKnown>;
   timer?: NodeJS.Timeout;
+  /** A look is under way; `again` asks for another as soon as it ends. */
+  looking?: boolean;
+  again?: boolean;
 };
 
 /**
  * Keeps every gateway's standing in the main process, window or not: whether it answers, its
- * release, its unread chats, and each new reply, which the app may turn into a notification.
+ * release, its unread chats, and what is new in its conversations — a reply, a message, a
+ * question or an approval waiting — which the app may turn into a notification.
  */
 export class GatewayMonitor {
   private readonly watches = new Map<string, Watch>();
+  /** Why a gateway this app runs could not start, said where it is shown. */
+  private readonly failures = new Map<string, string>();
 
   constructor(
     private readonly store: GatewayStore,
     private readonly appVersion: string,
-    private readonly events: { changed(): void; replied(reply: Reply): void },
+    private readonly events: { changed(): void; noticed(notice: Notice): void },
   ) {}
 
   summaries(): GatewaySummary[] {
@@ -73,14 +59,22 @@ export class GatewayMonitor {
         url: gateway.url,
         status: watch?.status ?? 'connecting',
         ...(watch?.version ? { version: watch.version } : {}),
+        ...(this.failures.has(gateway.id) ? { failure: this.failures.get(gateway.id) } : {}),
         unread: watch?.unread ?? 0,
       };
     });
   }
 
+  /** The app's own gateway could not start, and why; undefined once it does. */
+  failed(id: string, reason: string | undefined): void {
+    if (reason === undefined) this.failures.delete(id);
+    else this.failures.set(id, reason);
+    this.events.changed();
+  }
+
   watch(gateway: StoredGateway): void {
     this.forget(gateway.id);
-    this.watches.set(gateway.id, { status: 'connecting', unread: 0 });
+    this.watches.set(gateway.id, { status: 'connecting', unread: 0, known: new Map() });
     void this.look(gateway.id);
   }
 
@@ -89,10 +83,18 @@ export class GatewayMonitor {
     this.watches.delete(id);
   }
 
-  /** Asked again now: the owner just read a chat, or the computer woke up. */
+  /** Asked again now: the window turned to the gateway, or the computer woke up. */
   refresh(id?: string): void {
     for (const gatewayId of id ? [id] : [...this.watches.keys()]) {
-      clearTimeout(this.watches.get(gatewayId)?.timer);
+      const watch = this.watches.get(gatewayId);
+      if (!watch) continue;
+      // One look at a time: two would each tell the same news, and the slower one would put
+      // back what the faster had already moved past, to be told once more.
+      if (watch.looking) {
+        watch.again = true;
+        continue;
+      }
+      clearTimeout(watch.timer);
       void this.look(gatewayId);
     }
   }
@@ -104,13 +106,21 @@ export class GatewayMonitor {
     // The app's own gateway between launches of its process: it says when it listens again.
     if (!gateway.url) return;
     const before = `${watch.status}:${watch.version}:${watch.unread}`;
+    watch.looking = true;
     try {
       await this.read(gateway, watch);
     } catch {
       watch.status = 'offline';
+    } finally {
+      watch.looking = false;
     }
     if (this.watches.get(id) !== watch) return;
     if (`${watch.status}:${watch.version}:${watch.unread}` !== before) this.events.changed();
+    if (watch.again) {
+      watch.again = false;
+      void this.look(id);
+      return;
+    }
     const every =
       watch.status === 'online' || watch.status === 'incompatible' ? EVERY_MS : OFFLINE_EVERY_MS;
     watch.timer = setTimeout(() => void this.look(id), every);
@@ -139,44 +149,55 @@ export class GatewayMonitor {
     if (!profiles.data) throw new Error('unreachable');
     watch.status = 'online';
 
-    // It answers: that is settled. Counting unread chats reads every agent's list, and one slow
-    // or failed list only leaves the count as it was; it never makes the gateway look away.
+    // It answers: that is settled. Reading the conversations reads every agent's lists, and
+    // one slow or failed list only leaves what was known of that agent; it never makes the
+    // gateway look away.
     await this.count(gateway, client, profiles.data, watch).catch(() => undefined);
   }
 
+  /**
+   * Each agent's conversations and open runs: the unread count, and what is new since the last
+   * look. An agent's first look only learns, so a list that failed before is not taken, once it
+   * reads, for a burst of news.
+   */
   private async count(
     gateway: StoredGateway,
     client: ReturnType<typeof createJianClient>,
     profiles: { id: string; name: string }[],
     watch: Watch,
   ): Promise<void> {
-    const first = !watch.known;
-    const known = watch.known ?? new Map<string, string>();
-    let count = 0;
+    const known = new Map<string, AgentKnown>();
+    const notices: Notice[] = [];
     for (const profile of profiles) {
-      const sessions = await client.GET('/v1/profiles/{profileId}/sessions', {
-        params: { path: { profileId: profile.id } },
-      });
-      for (const session of (sessions.data ?? []) as Session[]) {
-        const at = session.lastMessage?.at;
-        if (!at) continue;
-        const isUnread = unread(session);
-        if (isUnread) count += 1;
-        const key = `${profile.id}/${session.id}`;
-        const seen = known.get(key);
-        known.set(key, at);
-        if (first || seen === at || !isUnread || !session.lastMessage) continue;
-        this.events.replied({
+      const before = watch.known.get(profile.id);
+      const params = { params: { path: { profileId: profile.id } } };
+      const [sessions, runs] = await Promise.all([
+        client.GET('/v1/profiles/{profileId}/sessions', params).catch(() => undefined),
+        client.GET('/v1/profiles/{profileId}/activities', params).catch(() => undefined),
+      ]);
+      if (!sessions?.data) {
+        if (before) known.set(profile.id, before);
+        continue;
+      }
+      const read = readNews(
+        before,
+        sessions.data as ListedSession[],
+        runs?.data as OpenRun[] | undefined,
+      );
+      known.set(profile.id, read.known);
+      for (const news of read.news) {
+        notices.push({
+          ...news,
           gatewayId: gateway.id,
           profileId: profile.id,
           profileName: profile.name,
-          sessionId: session.id,
-          title: session.title ?? 'New chat',
-          text: session.lastMessage.text,
         });
       }
     }
+    // Forgotten or watched afresh meanwhile: what this look found belongs to no one now.
+    if (this.watches.get(gateway.id) !== watch) return;
     watch.known = known;
-    watch.unread = count;
+    watch.unread = [...known.values()].reduce((sum, agent) => sum + agent.unread, 0);
+    for (const notice of notices) this.events.noticed(notice);
   }
 }

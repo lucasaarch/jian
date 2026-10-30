@@ -17,7 +17,7 @@ import { desktop } from '../desktop';
 import { appHost, gatewaySettings } from '../settings/hosts';
 import { useThisComputer } from '../settings/this-computer';
 import { navigationFor } from './navigation';
-import { Unreachable } from './states';
+import { LocalFailed, Unreachable } from './states';
 
 /**
  * One gateway, as the window shows it: its agents' chats, the agent chooser at the sidebar's
@@ -64,6 +64,16 @@ export function GatewayPanel({
   useGatewayOnline(
     gateway.status !== 'offline' && !(gateway.status === 'connecting' && !gateway.url),
   );
+  // The app's own gateway that cannot start would leave the panel loading for ever: what it
+  // said instead, with the app's settings still within reach.
+  if (gateway.local && gateway.failure && gateway.status !== 'online') {
+    return (
+      <>
+        <LocalFailed failure={gateway.failure} />
+        <AppSettings {...settings} host={appHost} />
+      </>
+    );
+  }
   // The panel goes to sign in when it cannot read the gateway; here there is nothing to type,
   // only a gateway that does not answer or no longer takes the token.
   if (navigation.pathname === '/sign-in') {

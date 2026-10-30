@@ -24,6 +24,10 @@ export const appHost: AppHost = {
     read: () => desktop().openAtLogin(),
     write: (open) => void desktop().setOpenAtLogin(open),
   },
+  notifications: {
+    read: () => desktop().notifications(),
+    write: (on) => void desktop().setNotifications(on),
+  },
   checkForUpdates: () => openUpdates({ check: true }),
 };
 

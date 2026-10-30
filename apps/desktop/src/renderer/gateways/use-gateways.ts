@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
 import { desktop } from '../desktop';
+import { chatAt, navigationFor } from './navigation';
 
 /** The gateways in the app and how each stands, as the main process keeps them. */
 export function useGateways(): { gateways: GatewaySummary[]; loaded: boolean } {
@@ -48,10 +49,25 @@ export function useSelectedGateway(gateways: GatewaySummary[]) {
     }
   }, []);
 
-  // The main process notifies only for what the window does not show.
+  // The main process notifies for every conversation but the one the window shows: it hears of
+  // each move between chats, not only between gateways.
+  const shown = current?.id;
   useEffect(() => {
-    desktop().showing(current?.id ?? null);
-  }, [current?.id]);
+    if (!shown) {
+      desktop().showing(null);
+      return;
+    }
+    const navigation = navigationFor(shown);
+    const tell = () => {
+      const chat = chatAt(navigation.current());
+      desktop().showing(chat ? { gatewayId: shown, chat } : { gatewayId: shown });
+    };
+    tell();
+    const stop = navigation.subscribe(tell);
+    return () => {
+      stop();
+    };
+  }, [shown]);
 
   return { current, select };
 }
