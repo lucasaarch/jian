@@ -47,6 +47,7 @@ export function Composer({
   onMachineChange,
   projectControl,
   modelControl,
+  objective,
 }: {
   name: string;
   upload: (file: MediaUpload) => Promise<{ id: string }>;
@@ -60,6 +61,8 @@ export function Composer({
   /** Which repository the chat works on; a gateway chat has one, a channel's does not. */
   projectControl?: ReactNode;
   modelControl?: ReactNode;
+  /** Where the conversation's objective stands, at the end of the row above the box. */
+  objective?: ReactNode;
 }) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -262,7 +265,7 @@ export function Composer({
         </p>
       )}
       {/* Where the turn runs, above the box: what it works on and on which machine. */}
-      {(projectControl || onMachineChange) && (
+      {(projectControl || onMachineChange || objective) && (
         <div className="composer-context">
           {projectControl}
           {onMachineChange && (
@@ -275,6 +278,7 @@ export function Composer({
               options={machineOptions}
             />
           )}
+          {objective}
         </div>
       )}
       <div className="composer-box" data-dragging={dragging}>
