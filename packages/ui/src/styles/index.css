@@ -49,6 +49,11 @@
   :where(.chat-line, .markdown, pre, code, input, textarea, [contenteditable="true"], .selectable) {
     @apply select-text;
   }
+  /* An error is copied to be searched, reported or pasted to the agent: what went wrong is always
+     text, in a card, an alert or a toast. Its buttons stay controls, by the rule below. */
+  :where(.trouble-text, [role="alert"], [data-sonner-toast] [data-content]) {
+    @apply select-text;
+  }
   /* A control is never text, even inside a message or Markdown that is: a select and its list,
      a menu, a tab, a button. After the rule above, so it wins where both reach; a field typed
      in — a select's search — stays selectable. */
