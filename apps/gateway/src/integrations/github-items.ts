@@ -199,8 +199,16 @@ export function githubLink(url: string): (Ref & { kind: 'pull' | 'issue' }) | un
   };
 }
 
+const keyOf = (ref: Ref) => `${ref.owner}/${ref.repo}#${ref.number}`.toLowerCase();
+
 export class GitHubItems {
   private readonly summaries = new Map<string, { at: number; value: CachedSummary }>();
+  /**
+   * Pull requests this gateway merged. GitHub's reads lag its writes: just after a merge it can
+   * still answer open, and that answer would then be cached as the card's for half a minute.
+   * A merge never comes undone, so what this gateway did wins over a read that has not caught up.
+   */
+  private readonly merged = new Set<string>();
 
   constructor(
     private readonly github: Pick<GitHubIntegrations, 'repoRequest'>,
@@ -235,7 +243,7 @@ export class GitHubItems {
       ...ref,
       url: pull.html_url,
       title: clip(pull.title, 1000),
-      state: pull.merged ? 'merged' : pull.state,
+      state: pull.merged || this.merged.has(keyOf(ref)) ? 'merged' : pull.state,
       draft: pull.draft ?? false,
       ...(person(pull.user) ? { author: person(pull.user) } : {}),
       base: { ref: clip(pull.base.ref, 255), sha: pull.base.sha },
@@ -344,7 +352,7 @@ export class GitHubItems {
 
     const merged = mergeResponse.parse(await response.json());
 
-    this.forget(ref);
+    this.remember(ref);
     if (input.profileId) {
       const profileId = input.profileId;
 
@@ -368,7 +376,7 @@ export class GitHubItems {
   }
 
   private async summary(ref: Ref & { kind: 'pull' | 'issue' }): Promise<CachedSummary> {
-    const key = `${ref.owner}/${ref.repo}#${ref.number}`.toLowerCase();
+    const key = keyOf(ref);
     const cached = this.summaries.get(key);
     const now = this.clock();
 
@@ -378,6 +386,7 @@ export class GitHubItems {
 
     try {
       value = await this.lookup(ref);
+      if (value.reachable && this.merged.has(key)) value = { ...value, state: 'merged' };
     } catch (error) {
       // Not found and not granted read the same and are kept; a passing failure is asked again.
       if (!(error instanceof GatewayError && error.statusCode === 404)) {
@@ -431,8 +440,16 @@ export class GitHubItems {
     };
   }
 
-  private forget(ref: Ref) {
-    this.summaries.delete(`${ref.owner}/${ref.repo}#${ref.number}`.toLowerCase());
+  /** A merge this gateway made: the next read of the card asks again and reads it as merged. */
+  private remember(ref: Ref) {
+    const key = keyOf(ref);
+
+    this.summaries.delete(key);
+    this.merged.add(key);
+    if (this.merged.size > LINK_CACHE) {
+      const oldest = this.merged.values().next().value;
+      if (oldest !== undefined) this.merged.delete(oldest);
+    }
   }
 
   /** Check runs and commit statuses of one commit, as one list: CI reports through either. */
