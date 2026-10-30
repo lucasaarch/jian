@@ -400,6 +400,14 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       groups[0]?.sessions[0]);
   const activeContact = active && contactOf(active);
 
+  // Where the conversation's objective stands and what it listens for, beside where it runs.
+  const badges = (session: Session, side: 'top' | 'bottom' = 'top') => (
+    <span className="session-badges">
+      {session.objective && <SessionObjective objective={session.objective} side={side} />}
+      <SessionListeners api={api} profileId={profile.id} sessionId={session.id} side={side} />
+    </span>
+  );
+
   const row = (session: Session) => (
     <button
       type="button"
@@ -610,200 +618,207 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       )}
       {active && (
         <section className="conversation-pane" aria-label={nameOf(active)}>
-          <header>
-            <ListToggle />
-            <IconButton
-              className="conversation-back"
-              aria-label="Back to the conversations"
-              onClick={() => open(undefined)}
-            >
-              <ArrowLeft size={18} />
-            </IconButton>
-            <div className="grow">
-              <h2>{nameOf(active)}</h2>
-              {/* A channel's conversation says where it comes from and with whom; a chat of the
-                  panel's own needs no line saying so. */}
-              {!isGateway(active) && (
-                <small>
-                  {kinds.find((item) => item.kind === kindOf(active))?.name}
-                  {active.scope === 'group' || activeContact?.scope === 'group' ? ' · Group' : ''}
-                  {activeContact && activeContact.displayName !== activeContact.actorId
-                    ? ` · ${activeContact.actorId}`
-                    : ''}
-                </small>
-              )}
-              <SessionListeners api={api} profileId={profile.id} sessionId={active.id} />
-            </div>
-            {/* A conversation without a bar at the bottom keeps its objective up here. */}
-            {active.objective && !docked(active) && (
-              <SessionObjective objective={active.objective} side="bottom" />
-            )}
-          </header>
           <ModelNames.Provider value={modelName}>
             <GitHubLinks api={api}>
+              {/* The Inspector beside the conversation runs from the top of the pane: the
+                  conversation's header belongs to its column, not across both. */}
               <div className="conversation-main" data-following={following ? true : undefined}>
-                <div className="conversation-chat">
-                  <History
-                    key={active.id}
-                    api={api}
-                    profileId={profile.id}
-                    sessionId={active.id}
-                    revision={sent}
-                    group={active.scope === 'group' || activeContact?.scope === 'group'}
-                    chat={isMessaging(active) ? chatName(active) : undefined}
-                    empty={
-                      isGateway(active)
-                        ? `Write to ${profile.name} below.`
-                        : 'Messages arriving through the channel show up here.'
-                    }
-                    initialRun={activities
-                      .filter((run) => run.sessionId === active.id)
-                      .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
-                      .at(-1)}
-                    onAnswered={() => {
-                      setSent((value) => value + 1);
-                      void refresh();
-                    }}
-                  />
-                  {docked(active) && (
-                    <ConversationDock key={`dock-${active.id}`}>
-                      {isGateway(active) && (
-                        <Composer
-                          key={`composer-${active.id}`}
-                          name={profile.name}
-                          machines={machines}
-                          remoteMachineId={active.remoteMachineId ?? null}
-                          projectControl={
-                            <ProjectSelect
-                              api={api}
-                              profileId={profile.id}
-                              projects={projects}
-                              projectId={active.projectId ?? null}
-                              onChange={(projectId) => moveToProject(active, projectId)}
-                            />
-                          }
-                          onMachineChange={(machineId) =>
-                            void api
-                              .setGatewaySessionTarget(
-                                profile.id,
-                                active.id,
-                                active.projectId ?? null,
-                                machineId,
-                              )
-                              .then(() => refresh())
-                              .catch((error: unknown) =>
-                                toast.error(
-                                  error instanceof Error
-                                    ? error.message
-                                    : 'The machine could not be changed.',
-                                ),
-                              )
-                          }
-                          modelControl={
-                            <>
+                <div className="conversation-column">
+                  <header>
+                    <ListToggle />
+                    <IconButton
+                      className="conversation-back"
+                      aria-label="Back to the conversations"
+                      onClick={() => open(undefined)}
+                    >
+                      <ArrowLeft size={18} />
+                    </IconButton>
+                    <div className="grow">
+                      <h2>{nameOf(active)}</h2>
+                      {/* A channel's conversation says where it comes from and with whom; a chat of the
+                        panel's own needs no line saying so. */}
+                      {!isGateway(active) && (
+                        <small>
+                          {kinds.find((item) => item.kind === kindOf(active))?.name}
+                          {active.scope === 'group' || activeContact?.scope === 'group'
+                            ? ' · Group'
+                            : ''}
+                          {activeContact && activeContact.displayName !== activeContact.actorId
+                            ? ` · ${activeContact.actorId}`
+                            : ''}
+                        </small>
+                      )}
+                    </div>
+                    {/* A conversation without a bar at the bottom keeps its badges up here. */}
+                    {!docked(active) && badges(active, 'bottom')}
+                  </header>
+                  <div className="conversation-chat">
+                    <History
+                      key={active.id}
+                      api={api}
+                      profileId={profile.id}
+                      sessionId={active.id}
+                      revision={sent}
+                      group={active.scope === 'group' || activeContact?.scope === 'group'}
+                      chat={isMessaging(active) ? chatName(active) : undefined}
+                      empty={
+                        isGateway(active)
+                          ? `Write to ${profile.name} below.`
+                          : 'Messages arriving through the channel show up here.'
+                      }
+                      initialRun={activities
+                        .filter((run) => run.sessionId === active.id)
+                        .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
+                        .at(-1)}
+                      // A failed turn is retried where the panel answers the conversation itself.
+                      retryRun={
+                        isGateway(active) ? (run) => api.retryRun(profile.id, run.id) : undefined
+                      }
+                      onAnswered={() => {
+                        setSent((value) => value + 1);
+                        void refresh();
+                      }}
+                    />
+                    {docked(active) && (
+                      <ConversationDock key={`dock-${active.id}`}>
+                        {isGateway(active) && (
+                          <Composer
+                            key={`composer-${active.id}`}
+                            name={profile.name}
+                            machines={machines}
+                            remoteMachineId={active.remoteMachineId ?? null}
+                            projectControl={
+                              <ProjectSelect
+                                api={api}
+                                profileId={profile.id}
+                                projects={projects}
+                                projectId={active.projectId ?? null}
+                                onChange={(projectId) => moveToProject(active, projectId)}
+                              />
+                            }
+                            onMachineChange={(machineId) =>
+                              void api
+                                .setGatewaySessionTarget(
+                                  profile.id,
+                                  active.id,
+                                  active.projectId ?? null,
+                                  machineId,
+                                )
+                                .then(() => refresh())
+                                .catch((error: unknown) =>
+                                  toast.error(
+                                    error instanceof Error
+                                      ? error.message
+                                      : 'The machine could not be changed.',
+                                  ),
+                                )
+                            }
+                            modelControl={
+                              <>
+                                <SessionProtection
+                                  key={`composer-protection-${active.id}`}
+                                  api={api}
+                                  profileId={profile.id}
+                                  session={active}
+                                  saved={() => void refresh()}
+                                />
+                                <SessionModel
+                                  key={`composer-model-${active.id}`}
+                                  api={api}
+                                  profileId={profile.id}
+                                  session={active}
+                                  channel={false}
+                                  className="composer-model-control"
+                                  saved={() => void refresh()}
+                                />
+                              </>
+                            }
+                            status={badges(active)}
+                            placeholder={(() => {
+                              const waits = activities.find(
+                                (run) => run.sessionId === active.id && run.status === 'waiting',
+                              );
+                              // Writing instead of deciding declines, and the words reach the agent.
+                              if (waits?.approval) return 'Write to decline and say why…';
+                              return waits ? 'Answer to continue…' : undefined;
+                            })()}
+                            upload={(file) => api.upload(profile.id, active.id, file)}
+                            send={(text, mediaIds) =>
+                              api.send(profile.id, active.id, text, mediaIds)
+                            }
+                            onSent={() => {
+                              setSent((value) => value + 1);
+                              void refresh();
+                            }}
+                          />
+                        )}
+                        {(isMessaging(active) || kindOf(active) === 'agent') && (
+                          // Where a chat has its composer, a channel's conversation has its settings:
+                          // whether the agent answers this contact, and on which model.
+                          <section
+                            className="agent-toolbar"
+                            aria-label="Agent settings for this conversation"
+                          >
+                            <div className="agent-toolbar-box">
                               <SessionProtection
-                                key={`composer-protection-${active.id}`}
+                                key={`toolbar-protection-${active.id}`}
                                 api={api}
                                 profileId={profile.id}
                                 session={active}
+                                align="start"
                                 saved={() => void refresh()}
                               />
                               <SessionModel
-                                key={`composer-model-${active.id}`}
+                                key={`toolbar-model-${active.id}`}
                                 api={api}
                                 profileId={profile.id}
                                 session={active}
-                                channel={false}
+                                channel={isMessaging(active)}
                                 className="composer-model-control"
+                                menuAlign="start"
                                 saved={() => void refresh()}
                               />
-                            </>
-                          }
-                          objective={
-                            active.objective && <SessionObjective objective={active.objective} />
-                          }
-                          placeholder={(() => {
-                            const waits = activities.find(
-                              (run) => run.sessionId === active.id && run.status === 'waiting',
-                            );
-                            // Writing instead of deciding declines, and the words reach the agent.
-                            if (waits?.approval) return 'Write to decline and say why…';
-                            return waits ? 'Answer to continue…' : undefined;
-                          })()}
-                          upload={(file) => api.upload(profile.id, active.id, file)}
-                          send={(text, mediaIds) => api.send(profile.id, active.id, text, mediaIds)}
-                          onSent={() => {
-                            setSent((value) => value + 1);
-                            void refresh();
-                          }}
-                        />
-                      )}
-                      {(isMessaging(active) || kindOf(active) === 'agent') && (
-                        // Where a chat has its composer, a channel's conversation has its settings:
-                        // whether the agent answers this contact, and on which model.
-                        <section
-                          className="agent-toolbar"
-                          aria-label="Agent settings for this conversation"
-                        >
-                          <div className="agent-toolbar-box">
-                            <SessionProtection
-                              key={`toolbar-protection-${active.id}`}
-                              api={api}
-                              profileId={profile.id}
-                              session={active}
-                              align="start"
-                              saved={() => void refresh()}
-                            />
-                            <SessionModel
-                              key={`toolbar-model-${active.id}`}
-                              api={api}
-                              profileId={profile.id}
-                              session={active}
-                              channel={isMessaging(active)}
-                              className="composer-model-control"
-                              menuAlign="start"
-                              saved={() => void refresh()}
-                            />
-                            <span className="grow" />
-                            {active.objective && <SessionObjective objective={active.objective} />}
-                            {isMessaging(active) &&
-                              activeContact &&
-                              channels.some(
-                                (channel) =>
-                                  channel.id === activeContact.channelId &&
-                                  channel.enabled === false,
-                              ) && <Badge tone="warn">Channel paused</Badge>}
-                            {activeContact && activeContact.status !== 'approved' && (
-                              <Badge>Contact {activeContact.status}</Badge>
-                            )}
-                            {isMessaging(active) && activeContact && (
-                              <div className="agent-toolbar-switch">
-                                <span aria-hidden="true">
-                                  AI<span className="agent-toolbar-switch-word"> replies</span>
-                                </span>
-                                <Switch
-                                  label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
-                                  checked={activeContact.aiEnabled ?? true}
-                                  disabled={busy}
-                                  onChange={(aiEnabled) =>
-                                    void mutate(
-                                      () =>
-                                        api.updateContact(profile.id, activeContact.id, {
-                                          aiEnabled,
-                                        }),
-                                      aiEnabled
-                                        ? 'AI replies are on for this contact. Messages paused before are not replayed.'
-                                        : 'AI replies are off for this contact, queued replies included.',
-                                    )
-                                  }
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </section>
-                      )}
-                    </ConversationDock>
-                  )}
+                              <span className="grow" />
+                              {badges(active)}
+                              {isMessaging(active) &&
+                                activeContact &&
+                                channels.some(
+                                  (channel) =>
+                                    channel.id === activeContact.channelId &&
+                                    channel.enabled === false,
+                                ) && <Badge tone="warn">Channel paused</Badge>}
+                              {activeContact && activeContact.status !== 'approved' && (
+                                <Badge>Contact {activeContact.status}</Badge>
+                              )}
+                              {isMessaging(active) && activeContact && (
+                                <div className="agent-toolbar-switch">
+                                  <span aria-hidden="true">
+                                    AI<span className="agent-toolbar-switch-word"> replies</span>
+                                  </span>
+                                  <Switch
+                                    label={`AI replies for ${activeContact.displayName ?? activeContact.actorId}`}
+                                    checked={activeContact.aiEnabled ?? true}
+                                    disabled={busy}
+                                    onChange={(aiEnabled) =>
+                                      void mutate(
+                                        () =>
+                                          api.updateContact(profile.id, activeContact.id, {
+                                            aiEnabled,
+                                          }),
+                                        aiEnabled
+                                          ? 'AI replies are on for this contact. Messages paused before are not replayed.'
+                                          : 'AI replies are off for this contact, queued replies included.',
+                                      )
+                                    }
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </section>
+                        )}
+                      </ConversationDock>
+                    )}
+                  </div>
                 </div>
                 <CrewDrawer api={api} profileId={profile.id} />
                 {/* Merging and asking for a fix belong to the panel's own chat; a channel's

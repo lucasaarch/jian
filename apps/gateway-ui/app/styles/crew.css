@@ -131,8 +131,13 @@
   .conversation-main[data-following] {
     grid-template-columns: minmax(0, 1fr) 25rem;
   }
-  .conversation-chat {
+  /* The conversation's header and the chat under it, one column; the Inspector beside it runs
+     the pane's full height. */
+  .conversation-column {
     @apply flex min-h-0 min-w-0 flex-col;
+  }
+  .conversation-chat {
+    @apply flex min-h-0 min-w-0 flex-1 flex-col;
   }
   .crew-drawer {
     @apply flex min-h-0 flex-col border-l;

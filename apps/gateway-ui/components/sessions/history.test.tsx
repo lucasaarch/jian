@@ -254,7 +254,9 @@ it('shows a new run failure when the open session was previously completed', asy
     });
 
     expect(element.textContent).toContain('Found it.');
-    expect(element.textContent).toContain('Failed');
+    expect(element.querySelector('.trouble-card')?.textContent).toContain(
+      'Agent encountered an error',
+    );
     expect(element.textContent).toContain('The provider ended without a final response.');
     expect(element.textContent).not.toContain('Completed');
   } finally {
@@ -441,6 +443,72 @@ it('lays a turn out in the order it happened, its working line at the end', asyn
     expect(follows(said('Now running the suite.'), live)).toBe(true);
     expect(live?.textContent).toContain('Running a command');
     expect(live?.textContent).not.toContain('Editing a file');
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+
+it('offers to retry a failed turn above the composer, and closes when dismissed', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const failed: Run = {
+    id: 'failed-run',
+    profileId: 'profile',
+    sessionId: 'session',
+    requestKey: 'failed',
+    input: 'Ship it',
+    status: 'failed',
+    error: 'The provider ended without a final response.',
+    createdAt: '2026-10-30T00:00:00Z',
+    updatedAt: '2026-10-30T00:01:00Z',
+  };
+  const api = {
+    messages: async () => [
+      {
+        id: 'asked',
+        profileId: 'profile',
+        sessionId: 'session',
+        runId: failed.id,
+        role: 'user' as const,
+        content: 'Ship it',
+        createdAt: failed.createdAt,
+      },
+    ],
+    activities: async () => [failed],
+  };
+  const retried: string[] = [];
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+
+  try {
+    await act(async () =>
+      root.render(
+        <History
+          api={api}
+          profileId="profile"
+          sessionId="session"
+          initialRun={failed}
+          retryRun={async (run) => {
+            retried.push(run.id);
+          }}
+        />,
+      ),
+    );
+    const card = element.querySelector('.trouble-card');
+    expect(card?.textContent).toContain('Agent encountered an error');
+    expect(card?.textContent).toContain('The provider ended without a final response.');
+
+    const retry = [...(card?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent === 'Retry',
+    );
+    await act(async () => retry?.click());
+    expect(retried).toEqual([failed.id]);
+
+    await act(async () =>
+      element.querySelector<HTMLButtonElement>('.trouble-card [aria-label="Dismiss"]')?.click(),
+    );
+    expect(element.querySelector('.trouble-card')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     element.remove();

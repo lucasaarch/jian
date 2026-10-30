@@ -60,6 +60,14 @@ export const resourceCalls = (client: Client) => ({
     ),
   subscriptions: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/subscriptions', { params: profile(profileId) })),
+  /** Stops a listener; it stays in the agent's list, off, so it can be turned on again. */
+  stopSubscription: (profileId: string, subscriptionId: string) =>
+    result(
+      client.PATCH('/v1/profiles/{profileId}/subscriptions/{subscriptionId}', {
+        params: { path: { profileId, subscriptionId } },
+        body: { enabled: false },
+      }),
+    ),
   schedules: (profileId: string) =>
     result(client.GET('/v1/profiles/{profileId}/schedules', { params: profile(profileId) })),
   createSchedule: (profileId: string, body: ScheduleInput) =>
