@@ -127,8 +127,8 @@ changelog: ## Regenerate CHANGELOG.md from docs/releases
 	node scripts/changelog.mjs
 
 # Releasing needs a note and its generated changelog; .github/workflows/publish.yml builds both
-# architectures, publishes @jian-ai/remote-control at the same version, and publishes the GitHub
-# release with the note in it. The script refuses to tag a dirty tree, a main that is not on
+# architectures, publishes @jian-ai/remote-control at the same version, packages the desktop app
+# at that version for every OS, and publishes the GitHub release with the note and the app in it. The script refuses to tag a dirty tree, a main that is not on
 # origin, or a tag that already exists.
 release: ## Cut a release: write the note, run `make changelog`, then `make release VERSION=1.2.3`
 	@test "$(origin VERSION)" = "command line" || { echo "usage: make release VERSION=1.2.3"; exit 1; }
