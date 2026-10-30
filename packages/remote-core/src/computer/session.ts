@@ -30,7 +30,8 @@ export type Preparation = {
 export type ComputerPlatform = {
   /** Starts the native helper; the session speaks JSON lines to it on stdin and stdout. */
   launch(): Promise<ChildProcessWithoutNullStreams>;
-  capture(): Screenshot;
+  /** A shell tool on most platforms; a helper that captures in-process is asked over `channel`. */
+  capture(channel: HelperChannel): Screenshot | Promise<Screenshot>;
   /** Runs before every action that touches the screen, and never prevents it. */
   prepare?(): Preparation;
   /** Called on every action while the helper runs, so it must be idempotent. */
@@ -72,7 +73,7 @@ export class ComputerSession {
     const preparation = this.platform.prepare?.() ?? plain;
     try {
       const channel = await this.ensure();
-      if (computer.action === 'screenshot') return this.screenshot(preparation.note);
+      if (computer.action === 'screenshot') return await this.screenshot(channel, preparation.note);
       await this.input(channel, computer);
       this.bumpIdle();
       return succeeded();
@@ -128,9 +129,9 @@ export class ComputerSession {
     }
   }
 
-  private screenshot(note: string): ActionOutcome {
+  private async screenshot(channel: HelperChannel, note: string): Promise<ActionOutcome> {
     if (!this.display) throw new Error('Display geometry unavailable.');
-    const shot = this.platform.capture();
+    const shot = await this.platform.capture(channel);
     this.shot = { ...this.display, widthPx: shot.widthPx, heightPx: shot.heightPx };
     this.bumpIdle();
     return succeeded(
