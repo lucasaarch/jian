@@ -17,9 +17,18 @@ const target = fileURLToPath(new URL('../.gateway/', import.meta.url));
 const native = ['sharp', '@electric-sql/pglite'];
 /** Kept out and not installed: only a server's store and queue import them. */
 const unreached = ['pg', 'pg-boss'];
+/**
+ * On Windows pnpm and npm are .cmd scripts, which Node runs only through a shell. The arguments
+ * here are all fixed, so the shell sees nothing it could read otherwise.
+ */
+const shell = process.platform === 'win32';
 
 rmSync(target, { recursive: true, force: true });
-execFileSync('pnpm', ['--filter', '@jian/contracts', 'build'], { cwd: root, stdio: 'inherit' });
+execFileSync('pnpm', ['--filter', '@jian/contracts', 'build'], {
+  cwd: root,
+  stdio: 'inherit',
+  shell,
+});
 
 // One level under dist, as the compiled modules are: the gateway finds its migrations at
 // ../../migrations and its release notes at ../release-notes from there.
@@ -53,4 +62,5 @@ writeFileSync(
 execFileSync('npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--no-package-lock'], {
   cwd: target,
   stdio: 'inherit',
+  shell,
 });

@@ -4,6 +4,21 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.1.1 — 2026-10-30
+
+The desktop app for Windows and Linux, which 1.1.0's packaging could not build, and with it the 1.1.0 release page and its installers for every system.
+
+### The desktop app
+
+* **Windows and Linux builds:** the app packages on Windows, where the local gateway's build now runs pnpm and npm as Windows expects, and on Linux, where it installs as `jian`. With every build done, the release carries the installers for macOS, Windows and Linux, and installed apps update from it.
+
+Everything 1.1.0 brought is in this release; its note says what changed and what upgrading needs, the one manual update of each machine's worker included.
+
+### Upgrading
+
+* From 1.0, read the 1.1.0 note first: migrations 0079 and 0080 run at startup, and each machine's worker needs one update by hand.
+* From 1.1.0, recreate the gateway and web containers with the 1.1.1 images, or follow the `latest` tags. `@jian-ai/remote-control@1.1.1` brings nothing new to a worker; 1.1.0 workers keep working.
+
 ## 1.1.0 — 2026-10-30
 
 Jian is a desktop app for macOS, Windows and Linux, with a gateway of its own that works the moment it is installed, and the web panel is the same app in a browser. Computers are Machines, and the app's computer joins every gateway it connects to. API channels speak OpenAI, and the Overview shows Claude's limits.
