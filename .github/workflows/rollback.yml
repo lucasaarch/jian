@@ -1,0 +1,130 @@
+# Withdraws a published release: `make rollback VERSION=1.2.3`, or Run workflow here.
+#
+# What a release made public is pointed back at an earlier one: the GitHub release becomes a
+# draft again (or is deleted with its tag), the earlier release is the latest one installed apps
+# read, the images' `latest` (and `X.Y`, within the same line) name the earlier images, and npm's
+# `latest` names the earlier worker while the withdrawn one is deprecated. Nothing is rebuilt.
+#
+# A version is never published twice: the fix ships as the next one. Installed apps already on
+# the withdrawn version stay on it until a newer release reaches them; they never downgrade.
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to withdraw, such as 1.2.3
+        required: true
+      restore:
+        description: The version that becomes the latest again; empty for the last release before it
+        required: false
+      confirm:
+        description: The version to withdraw, typed again
+        required: true
+      delete:
+        description: Delete the GitHub release and its tag instead of keeping a draft
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ inputs.version }}
+      RESTORE: ${{ inputs.restore }}
+      CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - name: Check what is asked
+        id: plan
+        run: |
+          semver='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+          [[ "$VERSION" =~ $semver ]] || { echo "::error::'$VERSION' is not a version."; exit 1; }
+          [[ "$CONFIRM" == "$VERSION" ]] || { echo "::error::The confirmation does not match $VERSION."; exit 1; }
+          gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" > /dev/null \
+            || { echo "::error::There is no release v$VERSION."; exit 1; }
+          if [[ -z "$RESTORE" ]]; then
+            # The newest published, final release other than the one withdrawn.
+            RESTORE=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=50" --jq \
+              "[.[] | select(.draft == false and .prerelease == false and .tag_name != \"v$VERSION\")] | .[0].tag_name" \
+              | sed 's/^v//')
+          fi
+          [[ "$RESTORE" =~ $semver ]] || { echo "::error::No release to restore was found."; exit 1; }
+          [[ "$RESTORE" != "$VERSION" ]] || { echo "::error::Restore a version other than the one withdrawn."; exit 1; }
+          gh release view "v$RESTORE" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' \
+            | grep -qx false || { echo "::error::v$RESTORE is not a published release."; exit 1; }
+          echo "restore=$RESTORE" >> "$GITHUB_OUTPUT"
+          # The X.Y image tag moves back only within the same line; another line keeps its own.
+          [[ "${VERSION%.*}" == "${RESTORE%.*}" ]] && echo "line=${VERSION%.*}" >> "$GITHUB_OUTPUT"
+          echo "Withdrawing v$VERSION, restoring v$RESTORE."
+
+      # First, so no installed app keeps reading the withdrawn release while the rest moves.
+      - name: Point installed apps back at the earlier release
+        env:
+          RESTORE: ${{ steps.plan.outputs.restore }}
+          DELETE: ${{ inputs.delete }}
+        run: |
+          gh release edit "v$RESTORE" --repo "$GITHUB_REPOSITORY" --latest
+          if [[ "$DELETE" == "true" ]]; then
+            gh release delete "v$VERSION" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+            echo "Deleted the release and the tag v$VERSION."
+          else
+            gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=true
+            echo "v$VERSION is a draft again."
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Point the images' tags back
+        env:
+          RESTORE: ${{ steps.plan.outputs.restore }}
+          LINE: ${{ steps.plan.outputs.line }}
+        run: |
+          for image in gateway web; do
+            ref="ghcr.io/lucasaarch/jian-$image"
+            tags=(-t "$ref:latest")
+            [[ -n "$LINE" ]] && tags+=(-t "$ref:$LINE")
+            docker buildx imagetools create "${tags[@]}" "$ref:$RESTORE"
+            echo "$ref: ${tags[*]//-t /} now name $RESTORE."
+          done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          scope: '@jian-ai'
+      # A token that may only stage publishes cannot move dist-tags: then the commands to run with
+      # an owner's login are printed instead, and the rest of the rollback still stands.
+      - name: Point npm back
+        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          RESTORE: ${{ steps.plan.outputs.restore }}
+        run: |
+          package=@jian-ai/remote-control
+          message="Withdrawn: use $RESTORE or a later release."
+          commands=("npm dist-tag add $package@$RESTORE latest")
+          # A release whose worker never reached npm has nothing there to deprecate.
+          if npm view "$package@$VERSION" version > /dev/null 2>&1; then
+            commands+=("npm deprecate $package@$VERSION '$message'")
+          fi
+          if npm dist-tag add "$package@$RESTORE" latest &&
+            { ! npm view "$package@$VERSION" version > /dev/null 2>&1 ||
+              npm deprecate "$package@$VERSION" "$message"; }; then
+            echo "npm: latest is $RESTORE."
+          else
+            echo "::warning::npm could not be changed with this token. Run, logged in as an owner:"
+            for command in "${commands[@]}"; do echo "::warning::$command"; done
+            exit 1
+          fi

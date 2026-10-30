@@ -17,7 +17,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust \
         check test test-integration lint format build image image-push \
-        release test-display image-test-display
+        release rollback test-display image-test-display
 
 ##@ General
 
@@ -130,6 +130,11 @@ changelog: ## Regenerate CHANGELOG.md from docs/releases
 # architectures, publishes @jian-ai/remote-control at the same version, packages the desktop app
 # at that version for every OS, and publishes the GitHub release with the note and the app in it. The script refuses to tag a dirty tree, a main that is not on
 # origin, or a tag that already exists.
+rollback: ## Withdraw a release: `make rollback VERSION=1.2.3` (TO=1.2.2 to choose, DELETE=1 to delete its tag)
+	@test "$(origin VERSION)" = "command line" || { echo "usage: make rollback VERSION=1.2.3 [TO=1.2.2] [DELETE=1]"; exit 1; }
+	gh workflow run rollback.yml -f version=$(VERSION) -f confirm=$(VERSION) -f restore=$(TO) -f delete=$(if $(DELETE),true,false)
+	@echo "Rollback of $(VERSION) started: gh run watch \$$(gh run list --workflow rollback.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+
 release: ## Cut a release: write the note, run `make changelog`, then `make release VERSION=1.2.3`
 	@test "$(origin VERSION)" = "command line" || { echo "usage: make release VERSION=1.2.3"; exit 1; }
 	node scripts/release.mjs $(VERSION)
