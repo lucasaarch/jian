@@ -4,6 +4,7 @@ import type { GatewayMonitor } from './gateways/monitor';
 import { parseGatewayUrl } from './gateways/rules';
 import { type GatewayStore, VAULT_MISSING, vaultAvailable } from './gateways/store';
 import { verify } from './gateways/verify';
+import { checkNow } from './updates';
 
 /** The calls the window may make; each one checks what it is given, as from any other caller. */
 export function serveBridge(deps: {
@@ -93,6 +94,7 @@ export function serveBridge(deps: {
   // Closing hides the window into the tray, as the system's own close button would.
   ipcMain.on('window:close', () => deps.window()?.close());
 
+  ipcMain.handle('updates:check', () => checkNow());
   ipcMain.handle('settings:openAtLogin', () => app.getLoginItemSettings().openAtLogin);
   ipcMain.handle('settings:setOpenAtLogin', (_event, open: boolean) => {
     app.setLoginItemSettings({ openAtLogin: open === true });

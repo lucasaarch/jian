@@ -17,7 +17,7 @@ export function StatusBar({
 }) {
   const shortcut = desktop().platform === 'darwin' ? '⌘,' : 'Ctrl+,';
   return (
-    <footer className="glass-bar flex h-(--status-bar) shrink-0 items-center gap-1 border-t border-glass-edge px-2">
+    <footer className="flex h-(--status-bar) shrink-0 items-center gap-1 border-t border-line bg-canvas px-2">
       {gateway}
       {agent && <span className="h-3.5 w-px bg-glass-edge" aria-hidden="true" />}
       {agent}

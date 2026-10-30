@@ -32,6 +32,15 @@ export type NewGateway = { name: string; url: string; token: string };
 
 export type AddGatewayResult = { ok: true; gateway: GatewaySummary } | { ok: false; error: string };
 
+/** What a check for a new release of the app found. */
+export type UpdateCheck =
+  /** A build from source has no releases to compare with. */
+  | { state: 'unavailable' }
+  | { state: 'latest'; version: string }
+  /** Downloading; it installs on the next quit. */
+  | { state: 'available'; version: string }
+  | { state: 'failed'; reason: string };
+
 /** A place in a gateway's panel to open: where a notification leads. */
 export type OpenTarget = { gatewayId: string; path: string };
 
@@ -54,6 +63,7 @@ export interface DesktopBridge {
    */
   showing(gatewayId: string | null): void;
   openAtLogin(): Promise<boolean>;
+  checkForUpdates(): Promise<UpdateCheck>;
   /** The window's own buttons, which the title bar draws on Windows and Linux. */
   windowControls: {
     minimize(): void;

@@ -1,7 +1,9 @@
-import { ThemeSync } from '@jian/ui';
-import { useEffect, useState } from 'react';
+import { Notifications, ThemeSync } from '@jian/ui';
+import { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from './chrome/status-bar';
 import { TitleBar } from './chrome/title-bar';
+import { CommandsProvider } from './commands/registry';
+import { useWindowCommands } from './commands/window-commands';
 import { desktop } from './desktop';
 import { AddGateway } from './gateways/add-gateway';
 import { GatewayPanel } from './gateways/gateway-panel';
@@ -17,6 +19,14 @@ import { AppSettings } from './settings/app-settings';
  * them, and every setting in overlays above. It opens on the app's own gateway, ready to use.
  */
 export function App() {
+  return (
+    <CommandsProvider>
+      <Window />
+    </CommandsProvider>
+  );
+}
+
+function Window() {
   const { gateways, loaded } = useGateways();
   const { current, select } = useSelectedGateway(gateways);
   const [settings, setSettings] = useState(false);
@@ -33,17 +43,8 @@ export function App() {
     [select],
   );
 
-  // ⌘, on macOS and Ctrl+, elsewhere, as every app opens its settings.
-  useEffect(() => {
-    const mac = desktop().platform === 'darwin';
-    const keys = (event: KeyboardEvent) => {
-      if (event.key !== ',' || !(mac ? event.metaKey : event.ctrlKey)) return;
-      event.preventDefault();
-      setSettings(true);
-    };
-    window.addEventListener('keydown', keys);
-    return () => window.removeEventListener('keydown', keys);
-  }, []);
+  const openSettings = useCallback(() => setSettings(true), []);
+  useWindowCommands(openSettings);
 
   if (!loaded) return null;
 
@@ -64,7 +65,7 @@ export function App() {
   );
 
   return (
-    <div className="app-window flex h-dvh flex-col">
+    <div className="flex h-dvh flex-col bg-canvas">
       <TitleBar gateway={current} />
       {/* Layout containment makes this area the box the panel's fixed pieces are placed in. */}
       <div className="flex min-h-0 flex-1 flex-col [contain:layout]">
@@ -90,6 +91,7 @@ export function App() {
         added={(gateway) => select(gateway.id)}
       />
       <ThemeSync />
+      <Notifications />
     </div>
   );
 }

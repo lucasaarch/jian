@@ -8,7 +8,7 @@ export { ChatsApp } from './app/chats';
 export { CreateAgent } from './app/create-agent';
 export { Notifications } from './components/shell/notice';
 export { QueryProvider } from './components/shell/query';
-export { ThemeSync } from './components/shell/theme';
+export { ThemeSync, useThemeChoice } from './components/shell/theme';
 export { VersionMismatch } from './components/shell/version-mismatch';
 /**
  * The panel, for a host to draw: its screens, the providers they run in, and the two things a
@@ -25,6 +25,7 @@ export {
   type LinkProps,
   type Navigation,
   NavigationProvider,
+  useRouter,
 } from './platform/navigation';
 export { AgentArea } from './screens/agent';
 export { Failed } from './screens/failed';
@@ -33,3 +34,8 @@ export * from './screens/sections';
 export { SessionsScreen } from './screens/sessions';
 export { SettingsArea } from './screens/settings';
 export { WorkspaceLayout } from './screens/workspace';
+/** Where a new chat of an agent opens: its chats, asked to start one. */
+export const newChatPath = (profileId: string) =>
+  `/agents/${encodeURIComponent(profileId)}/sessions?new`;
+export { toast } from 'sonner';
+export { useProfileId } from './lib/workspace';

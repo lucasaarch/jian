@@ -1,5 +1,6 @@
 /** The glass kit: the pieces the app is drawn with, and the web as it moves to them. */
 export { Action, type ActionTone } from './action';
+export { type Command, CommandPalette } from './command-palette';
 export { AgentFace } from './face';
 export { Overlay } from './overlay';
 export { Picker, PickerAction, PickerRow } from './picker';

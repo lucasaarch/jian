@@ -20,6 +20,7 @@ const bridge: DesktopBridge = {
   onOpen: (listener) => listen<OpenTarget>('window:open', listener),
   showing: (gatewayId) => ipcRenderer.send('gateways:showing', gatewayId),
   openAtLogin: () => ipcRenderer.invoke('settings:openAtLogin'),
+  checkForUpdates: () => ipcRenderer.invoke('updates:check'),
   setOpenAtLogin: (open) => ipcRenderer.invoke('settings:setOpenAtLogin', open),
   windowControls: {
     minimize: () => ipcRenderer.send('window:minimize'),

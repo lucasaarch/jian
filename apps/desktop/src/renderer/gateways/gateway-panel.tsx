@@ -5,11 +5,11 @@ import {
   CreateAgent,
   connectGateway,
   NavigationProvider,
-  Notifications,
   QueryProvider,
 } from '@jian/ui';
 import { type ReactNode, useMemo, useState, useSyncExternalStore } from 'react';
 import { type GatewaySummary, gatewayOrigin } from '../../shared/bridge';
+import { useGatewayCommands } from '../commands/gateway-commands';
 import { navigationFor } from './navigation';
 import { Starting, Unreachable } from './states';
 
@@ -69,6 +69,7 @@ export function GatewayPanel({
     <QueryProvider>
       <NavigationProvider navigation={navigation}>
         <ChatsApp createAgent={() => setCreating(true)} />
+        <GatewayCommands />
         {statusBar(
           <AgentPicker openSettings={setAgentSettings} createAgent={() => setCreating(true)} />,
         )}
@@ -77,8 +78,13 @@ export function GatewayPanel({
           profileId={agentSettings}
           onOpenChange={(open) => !open && setAgentSettings(undefined)}
         />
-        <Notifications />
       </NavigationProvider>
     </QueryProvider>
   );
+}
+
+/** The gateway's commands, offered from inside its panel, where its agent can be read. */
+function GatewayCommands() {
+  useGatewayCommands();
+  return null;
 }
