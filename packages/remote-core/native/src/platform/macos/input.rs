@@ -21,8 +21,8 @@ use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use core_graphics::geometry::{CGPoint, CGRect, CGSize};
 use core_graphics::image::CGImage;
 
-use super::{Geometry, Platform, SessionStatus};
 use crate::keys::{Chord, Key, Named};
+use crate::platform::{Geometry, Platform, SessionStatus};
 use crate::protocol::{Button, Direction, Point};
 use crate::screenshot::Frame;
 
@@ -94,6 +94,11 @@ impl Platform for Mac {
         })
     }
 
+    fn cursor(&self) -> Result<Point, String> {
+        let at = user_cursor()?;
+        Ok(Point { x: at.x, y: at.y })
+    }
+
     fn click_at(&self, at: Point, button: Button, count: u8) -> Result<(), String> {
         let at = cg(at);
         let (down, up, cg_button) = match button {
@@ -121,25 +126,25 @@ impl Platform for Mac {
         })
     }
 
-    fn drag(&self, from: Point, to: Point) -> Result<(), String> {
-        let (from, to) = (cg(from), cg(to));
+    fn drag(&self, from: Point, path: &[Point], step: &mut dyn FnMut(Point)) -> Result<(), String> {
+        let to = cg(*path.last().unwrap_or(&from));
         with_user_cursor_kept(|| {
-            post_mouse(CGEventType::MouseMoved, from, CGMouseButton::Left, None)?;
+            post_mouse(CGEventType::MouseMoved, cg(from), CGMouseButton::Left, None)?;
             sleep(Duration::from_millis(12));
-            post_mouse(CGEventType::LeftMouseDown, from, CGMouseButton::Left, None)?;
-            // Apps track a drag by its intermediate events; one jump reads as a click elsewhere.
-            let distance = (to.x - from.x).hypot(to.y - from.y);
-            let steps = ((distance / 40.0) as u32 + 6).clamp(6, 14);
-            for step in 1..=steps {
-                let t = ease_out_cubic(f64::from(step) / f64::from(steps));
-                let point =
-                    CGPoint::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
+            post_mouse(
+                CGEventType::LeftMouseDown,
+                cg(from),
+                CGMouseButton::Left,
+                None,
+            )?;
+            for &point in path {
                 post_mouse(
                     CGEventType::LeftMouseDragged,
-                    point,
+                    cg(point),
                     CGMouseButton::Left,
                     None,
                 )?;
+                step(point);
                 sleep(Duration::from_millis(6));
             }
             post_mouse(CGEventType::LeftMouseUp, to, CGMouseButton::Left, None)
@@ -215,12 +220,14 @@ fn screen_locked() -> bool {
         .is_some_and(|n| n != 0)
 }
 
-fn cg(point: Point) -> CGPoint {
-    CGPoint::new(point.x, point.y)
+fn user_cursor() -> Result<CGPoint, String> {
+    Ok(CGEvent::new(source()?)
+        .map_err(|_| "could not read the cursor")?
+        .location())
 }
 
-fn ease_out_cubic(t: f64) -> f64 {
-    1.0 - (1.0 - t.clamp(0.0, 1.0)).powi(3)
+fn cg(point: Point) -> CGPoint {
+    CGPoint::new(point.x, point.y)
 }
 
 fn source() -> Result<CGEventSource, String> {
@@ -246,9 +253,7 @@ fn post_mouse(
 /// macOS delivers a click where the cursor is, so the cursor goes there: hidden, and put back
 /// right after, so the user's mouse is not left where the agent clicked.
 fn with_user_cursor_kept(act: impl FnOnce() -> Result<(), String>) -> Result<(), String> {
-    let saved = CGEvent::new(source()?)
-        .map_err(|_| "could not read the cursor")?
-        .location();
+    let saved = user_cursor()?;
     let display = CGDisplay::main();
     let _ = display.hide_cursor();
     let acted = act();
