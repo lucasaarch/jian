@@ -16,7 +16,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export const viewport: Viewport = { themeColor: '#050505', colorScheme: 'dark light' };
+// Edge to edge on a phone, as an installed app draws under the status bar anyway: the shell
+// pads itself by the safe areas instead of leaving the corners to cut into it.
+export const viewport: Viewport = {
+  themeColor: '#050505',
+  colorScheme: 'dark light',
+  viewportFit: 'cover',
+};
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   // The script policy carries a nonce minted per request (proxy.ts), and Next can only stamp
