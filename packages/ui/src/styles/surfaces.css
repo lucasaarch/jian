@@ -5,7 +5,7 @@
 /* Shared component surfaces, expressed in the same Tailwind semantic tokens as page layouts. */
 @layer components {
   .app-shell {
-    @apply min-h-dvh;
+    @apply min-h-(--app-height);
   }
   /* The brand and the profile on top and the footer below stay put; only the sections scroll
      between them, so Sign out stays in reach. */
@@ -260,7 +260,7 @@
    * can paint past the footer. Scrolling stays on .modal-body.
    */
   .modal {
-    @apply m-auto w-[min(600px,calc(100vw-32px))] max-h-[calc(100dvh-48px)] overflow-visible rounded-sm border border-line bg-canvas p-0 text-ink;
+    @apply m-auto w-[min(600px,calc(100vw-32px))] max-h-[calc(var(--app-height)-48px)] overflow-visible rounded-sm border border-line bg-canvas p-0 text-ink;
   }
   .modal[open] {
     @apply flex flex-col;
@@ -411,7 +411,7 @@
   }
   /* The middle of the screen, less the page's own top and bottom padding. */
   .loading-state {
-    @apply flex min-h-[calc(100dvh-6rem)] flex-col items-center justify-center gap-4 text-sm text-muted;
+    @apply flex min-h-[calc(var(--app-height)-6rem)] flex-col items-center justify-center gap-4 text-sm text-muted;
     animation: viewer-fade 300ms ease-out;
   }
   .main-content.fill .loading-state {
@@ -429,7 +429,7 @@
 
   /* Chats: the whole area beside the app's sidebar, like a messaging app. */
   .main-content.fill {
-    @apply h-dvh max-w-none overflow-hidden p-0;
+    @apply h-(--app-height) max-w-none overflow-hidden p-0;
   }
   .main-content.fill > .page-enter {
     @apply h-full;
@@ -933,7 +933,7 @@
   }
   /* The viewer takes the whole screen so photos have a quiet backdrop. */
   .viewer {
-    @apply m-0 h-dvh max-h-none w-screen max-w-none bg-transparent p-0 text-white;
+    @apply m-0 h-(--app-height) max-h-none w-screen max-w-none bg-transparent p-0 text-white;
   }
   .viewer[open] {
     @apply flex flex-col;
@@ -1418,10 +1418,10 @@
   /* A phone shows the list or the conversation, never both. */
   .main-content.fill {
     @apply max-w-none p-0;
-    height: calc(100dvh - var(--shell-top) - var(--tab-bar));
+    height: calc(var(--app-height) - var(--shell-top) - var(--tab-bar));
   }
   .app-shell:has(.messenger[data-reading="true"]) .main-content.fill {
-    height: calc(100dvh - var(--shell-top));
+    height: calc(var(--app-height) - var(--shell-top));
   }
   /* What a new chat says before its first message steps aside for the keyboard, and never
      spills over the header in the room left. */
@@ -1472,7 +1472,7 @@
    in place of everything else, since nothing else would work as it should. */
 @layer components {
   .version-mismatch {
-    @apply grid min-h-dvh place-items-center bg-canvas px-4 py-10;
+    @apply grid min-h-(--app-height) place-items-center bg-canvas px-4 py-10;
   }
   .version-mismatch section {
     @apply grid w-full max-w-lg gap-3 rounded-2xl border border-line bg-surface p-7 text-sm leading-relaxed text-muted;

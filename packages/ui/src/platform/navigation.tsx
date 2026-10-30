@@ -30,20 +30,31 @@ export type Navigation = {
 };
 
 /**
- * A router that is only a path in memory: what a host without one of its own uses, and what a
- * test renders at. `go` moves it from outside React.
+ * A router that is only a path in memory, with a history the way a browser keeps one: going back
+ * and then somewhere new drops what was ahead. What a host without a router of its own uses, and
+ * what a test renders at. `go` moves it from outside React and starts its history over.
  */
 export function createMemoryNavigation(initial = '/') {
   let history = [initial];
+  let index = 0;
   const listeners = new Set<() => void>();
-  const set = (next: string[]) => {
+  const set = (next: string[], at: number) => {
     history = next;
+    index = at;
     for (const listener of listeners) listener();
   };
-  const current = () => history[history.length - 1] ?? '/';
-  const push = (href: string) => set([...history, href]);
-  const replace = (href: string) => set([...history.slice(0, -1), href]);
-  const back = () => set(history.length > 1 ? history.slice(0, -1) : history);
+  const current = () => history[index] ?? '/';
+  const push = (href: string) => {
+    if (href === current()) return;
+    set([...history.slice(0, index + 1), href], index + 1);
+  };
+  const replace = (href: string) => set(history.with(index, href), index);
+  const back = () => {
+    if (index > 0) set(history, index - 1);
+  };
+  const forward = () => {
+    if (index < history.length - 1) set(history, index + 1);
+  };
 
   function MemoryLink({ href, replace: replacing, onClick, ...props }: LinkProps) {
     return (
@@ -61,12 +72,16 @@ export function createMemoryNavigation(initial = '/') {
   }
 
   return {
-    go: (href: string) => set([href]),
+    go: (href: string) => set([href], 0),
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     current,
+    back,
+    forward,
+    canGoBack: () => index > 0,
+    canGoForward: () => index < history.length - 1,
     navigation: (pathname: string): Navigation => ({
       pathname,
       push,

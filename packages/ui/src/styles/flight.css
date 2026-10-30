@@ -4,7 +4,7 @@
 
 @layer components {
   .login-layout {
-    @apply grid min-h-dvh grid-cols-[1.1fr_1fr];
+    @apply grid min-h-(--app-height) grid-cols-[1.1fr_1fr];
   }
   .login-story {
     @apply relative flex flex-col overflow-hidden border-r border-line bg-surface px-14 py-10;

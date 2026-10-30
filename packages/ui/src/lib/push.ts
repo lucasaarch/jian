@@ -1,3 +1,4 @@
+import { gatewayConnection } from '../platform/gateway';
 import { panelApi } from './query/client';
 
 /**
@@ -9,6 +10,7 @@ const FLAG = 'jian.push';
 
 const supported = () =>
   typeof window !== 'undefined' &&
+  gatewayConnection().push !== false &&
   'serviceWorker' in navigator &&
   'PushManager' in window &&
   'Notification' in window;
