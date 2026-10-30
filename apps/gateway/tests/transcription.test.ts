@@ -142,6 +142,11 @@ it('adds xAI with a key and routes Grok through the OpenAI API at xAI', async ()
 
   expect(supportsModelRole(xai, model('grok-4'), 'conversation')).toBe(true);
   expect(supportsModelRole(xai, model('grok-4'), 'audio')).toBe(false);
+  // Images from its image models, speech from its one text-to-speech endpoint.
+  expect(supportsModelRole(xai, model('grok-imagine-image'), 'image')).toBe(true);
+  expect(supportsModelRole(xai, model('grok-4'), 'image')).toBe(false);
+  expect(supportsModelRole(xai, model('grok-tts'), 'speech')).toBe(true);
+  expect(supportsModelRole(xai, model('grok-4'), 'speech')).toBe(false);
 });
 
 it('says what the provider refused, with its key masked', async () => {

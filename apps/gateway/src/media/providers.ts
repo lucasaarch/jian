@@ -6,7 +6,8 @@ import {
   type ModelConfig,
 } from '@jian/contracts';
 import { z } from 'zod';
-import { speechVoice, speechVoices } from './voices.js';
+import { XAI_BASE_URL } from '../providers/catalog.js';
+import { isXai, speechVoice, speechVoices } from './voices.js';
 
 export type MediaUsage = { inputTokens: number; outputTokens: number; cachedInputTokens: number };
 export type MediaMeter = (usage: MediaUsage) => Promise<void>;
@@ -300,8 +301,10 @@ export class MediaProviders {
       }
       return inlineMediaSchema.parse({ ...result, ...(kind === 'speech' ? { voice: true } : {}) });
     }
+    if (isXai(config))
+      return this.xai(kind, config, key, prompt, selectedVoice, signal, account, aspectRatio);
     if (config.provider !== 'openai')
-      throw new Error('Select an OpenAI API or Gemini model for media generation');
+      throw new Error('Select an OpenAI API, Gemini or xAI model for media generation');
     const response = await this.request(
       `https://api.openai.com/v1/${kind === 'image' ? 'images/generations' : 'audio/speech'}`,
       {
@@ -336,6 +339,64 @@ export class MediaProviders {
       .object({ data: z.array(z.object({ b64_json: z.string().min(1) })).min(1) })
       .parse(body);
     return { mimeType: 'image/png', data: parsed.data[0]?.b64_json ?? '' };
+  }
+
+  /**
+   * xAI's own endpoints: images take the shape as asked and come back inline; speech is the
+   * audio itself, asked for as MP3 and made a voice note like any other.
+   * https://docs.x.ai/developers/rest-api-reference/inference/images
+   * https://docs.x.ai/developers/rest-api-reference/inference/voice
+   */
+  private async xai(
+    kind: 'image' | 'speech',
+    config: ModelConfig,
+    key: string,
+    prompt: string,
+    voice: string | undefined,
+    signal: AbortSignal,
+    account: MediaMeter | undefined,
+    aspectRatio: ImageAspect,
+  ): Promise<InlineMedia> {
+    const response = await this.request(
+      `${XAI_BASE_URL}/${kind === 'image' ? 'images/generations' : 'tts'}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        signal,
+        body: JSON.stringify(
+          kind === 'image'
+            ? {
+                model: config.modelId,
+                prompt,
+                n: 1,
+                aspect_ratio: aspectRatio,
+                response_format: 'b64_json',
+              }
+            : {
+                text: prompt,
+                voice_id: voice,
+                // Whatever language the reply is in; the voices speak them all.
+                language: 'auto',
+                output_format: { codec: 'mp3' },
+              },
+        ),
+      },
+    );
+    const data = await readMediaBody(response);
+    if (kind === 'speech') return { mimeType: 'audio/mpeg', data: data.toString('base64') };
+    const body: unknown = JSON.parse(data.toString());
+    await meter(body, false, account);
+    const image = z
+      .object({
+        data: z
+          .array(z.object({ b64_json: z.string().min(1), mime_type: z.string().nullish() }))
+          .min(1),
+      })
+      .parse(body).data[0];
+    return inlineMediaSchema.parse({
+      mimeType: image?.mime_type ?? 'image/jpeg',
+      data: image?.b64_json ?? '',
+    });
   }
 }
 
