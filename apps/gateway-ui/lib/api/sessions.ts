@@ -147,6 +147,18 @@ export const sessionCalls = (client: Client) => ({
         },
       }),
     ),
+  /** Starts the chat's agent on a pull request's conflicts, from a brief the chat does not show. */
+  fixGithubConflicts: (
+    profileId: string,
+    sessionId: string,
+    body: { owner: string; repo: string; number: number },
+  ) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/github/fix-conflicts', {
+        params: { path: { profileId, sessionId } },
+        body,
+      }),
+    ),
   answerRun: (profileId: string, runId: string, text: string) =>
     result(
       client.POST('/v1/profiles/{profileId}/runs/{runId}/answer', {
