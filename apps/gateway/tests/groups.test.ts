@@ -17,7 +17,7 @@ const room = '120363000000000000@g.us';
 const token = 'synthetic-groups-admin-token-32-characters';
 const admin = { authorization: `Bearer ${token}` };
 
-const owner = { address: '5511900000000@c.us', name: 'Lucas' };
+const owner = { address: '5511900000000@c.us', name: 'Theo' };
 const guest = { address: '5511911111111@c.us', name: 'Marina' };
 
 /**
@@ -127,7 +127,7 @@ async function setup(jev?: (state: { message: string }) => number) {
         text,
         requestKey,
         displayName: author.name,
-        groupName: 'Equipe',
+        groupName: 'Team',
         scope: 'group',
         mentions: options.mentions ?? [],
         ...(options.replyTo ? { replyTo: options.replyTo } : {}),
@@ -183,21 +183,21 @@ describe('group conversations', () => {
       const ada = await f.join('Ada', '5511800000001@c.us');
       const bia = await f.join('Bia', '5511800000002@c.us');
 
-      await f.say(owner, 'bom dia');
+      await f.say(owner, 'good morning');
       await f.approve(ada.profileId);
       await f.approve(bia.profileId);
 
-      await f.say(owner, 'alguem pode olhar o relatorio?');
+      await f.say(owner, 'can someone look at the report?');
 
       expect(await f.runs(ada.profileId)).toEqual([]);
       expect(await f.runs(bia.profileId)).toEqual([]);
 
-      await f.say(owner, 'Ada, você consegue olhar o relatório?', { mentions: [ada.address] });
+      await f.say(owner, 'Ada, can you look at the report?', { mentions: [ada.address] });
 
       const answering = await f.runs(ada.profileId);
 
       expect(answering).toHaveLength(1);
-      expect(answering[0]?.input).toBe('Lucas: Ada, você consegue olhar o relatório?');
+      expect(answering[0]?.input).toBe('Theo: Ada, can you look at the report?');
       expect(answering[0]?.group).toMatchObject({ chatId: room, fromAgent: false, turns: 1 });
       expect(await f.runs(bia.profileId)).toEqual([]);
     } finally {
@@ -212,7 +212,7 @@ describe('group conversations', () => {
       const ada = await f.join('Ada', '5511800000001@c.us');
       const bia = await f.join('Bia', '5511800000002@c.us');
 
-      await f.say(owner, 'Ada, começou sem aprovação');
+      await f.say(owner, 'Ada, this started without approval');
 
       expect(await f.runs(ada.profileId)).toEqual([]);
       expect(await f.channels.deliveries(ada.profileId)).toEqual([]);
@@ -229,7 +229,7 @@ describe('group conversations', () => {
       }
 
       await f.approve(ada.profileId);
-      await f.say(owner, 'e agora?', { mentions: [ada.address] });
+      await f.say(owner, 'what now?', { mentions: [ada.address] });
 
       expect(await f.runs(ada.profileId)).toHaveLength(1);
       expect(await f.runs(bia.profileId)).toEqual([]);
@@ -244,19 +244,19 @@ describe('group conversations', () => {
     try {
       const ada = await f.join('Ada', '5511800000001@c.us');
 
-      await f.say(owner, 'oi');
+      await f.say(owner, 'hi');
       await f.approve(ada.profileId);
 
-      await f.say(owner, 'o fornecedor atrasou a entrega para sexta');
-      await f.say(guest, 'a Ada sabe disso?');
+      await f.say(owner, 'the supplier pushed the delivery to Friday');
+      await f.say(guest, 'does Ada know about this?');
       // A redelivery of something only heard is still heard once.
-      await f.say(guest, 'vou avisar o cliente', { requestKey: 'wa-heard' });
-      await f.say(guest, 'vou avisar o cliente', { requestKey: 'wa-heard' });
+      await f.say(guest, 'I will tell the client', { requestKey: 'wa-heard' });
+      await f.say(guest, 'I will tell the client', { requestKey: 'wa-heard' });
 
       // Being talked about is not being called.
       expect(await f.runs(ada.profileId)).toEqual([]);
 
-      await f.say(owner, 'o que você acha?', { mentions: [ada.address] });
+      await f.say(owner, 'what do you think?', { mentions: [ada.address] });
 
       const [run] = await f.services.runs.activities(ada.profileId);
 
@@ -277,15 +277,15 @@ describe('group conversations', () => {
       expect(messageRecordSchema.array().parse(history.json())).toHaveLength(4);
       expect(transcript).toBe(
         [
-          'Lucas: o fornecedor atrasou a entrega para sexta',
-          'Marina: a Ada sabe disso?',
-          'Marina: vou avisar o cliente',
-          'Lucas: o que você acha?',
+          'Theo: the supplier pushed the delivery to Friday',
+          'Marina: does Ada know about this?',
+          'Marina: I will tell the client',
+          'Theo: what do you think?',
         ].join('\n\n'),
       );
 
-      await f.reply(ada.profileId, 'Sexta, então.');
-      await f.say(guest, 'pode ser sábado?', { replyTo: ada.address });
+      await f.reply(ada.profileId, 'Friday, then.');
+      await f.say(guest, 'could it be Saturday?', { replyTo: ada.address });
 
       expect(await f.runs(ada.profileId)).toHaveLength(2);
     } finally {
@@ -299,7 +299,7 @@ describe('group conversations', () => {
     try {
       const ada = await f.join('Ada', '5511800000001@c.us');
 
-      await f.say(owner, 'oi');
+      await f.say(owner, 'hi');
       await f.approve(ada.profileId);
       await f.say(guest, '[File: prices.csv]', {
         media: [
@@ -340,25 +340,25 @@ describe('group conversations', () => {
     try {
       const ada = await f.join('Ada', '5511800000001@c.us');
 
-      await f.say(owner, 'oi');
+      await f.say(owner, 'hi');
       await f.approve(ada.profileId);
-      await f.say(guest, 'o fornecedor atrasou');
-      await f.say(owner, 'Ada, e agora?', {
+      await f.say(guest, 'the supplier is late');
+      await f.say(owner, 'Ada, what now?', {
         mentions: [ada.address],
         replyTo: guest.address,
-        quoted: { text: 'o fornecedor atrasou' },
+        quoted: { text: 'the supplier is late' },
       });
 
       const [run] = await f.services.runs.activities(ada.profileId);
 
       expect(run?.input).toBe(
-        'Lucas: [Replying to Marina\'s message: "o fornecedor atrasou"]\nAda, e agora?',
+        'Theo: [Replying to Marina\'s message: "the supplier is late"]\nAda, what now?',
       );
 
       // The conversation itself says it is a group, so it stays one without its contact.
       const room = await f.services.sessions.session(ada.profileId, run?.sessionId as string);
 
-      expect(room).toMatchObject({ scope: 'group', title: 'WhatsApp · Equipe' });
+      expect(room).toMatchObject({ scope: 'group', title: 'WhatsApp · Team' });
     } finally {
       await f.close();
     }
@@ -370,28 +370,28 @@ describe('group conversations', () => {
     try {
       const ada = await f.join('Ada', '5511800000001@c.us');
 
-      await f.say(owner, 'Ada, está aí?');
+      await f.say(owner, 'Ada, are you there?');
 
       // An unapproved room's messages never leave the gateway.
       expect(f.asked).toEqual([]);
 
       await f.approve(ada.profileId);
-      await f.say(guest, 'a Ada sabe disso?');
+      await f.say(guest, 'does Ada know about this?');
 
       expect(await f.runs(ada.profileId)).toEqual([]);
 
-      await f.say(guest, 'Ada, pode confirmar a entrega?');
+      await f.say(guest, 'Ada, can you confirm the delivery?');
 
       const runs = await f.runs(ada.profileId);
 
       expect(runs).toHaveLength(1);
-      expect(runs[0]?.input).toContain('Marina: Ada, pode confirmar a entrega?');
+      expect(runs[0]?.input).toContain('Marina: Ada, can you confirm the delivery?');
       expect(f.asked.at(-1)).toMatchObject({ agent: 'Ada', from: 'Marina' });
 
       // A message without the name is not worth a question.
       const before = f.asked.length;
 
-      await f.say(guest, 'obrigada');
+      await f.say(guest, 'thanks');
 
       expect(f.asked).toHaveLength(before);
     } finally {
@@ -400,21 +400,21 @@ describe('group conversations', () => {
   });
 
   it('keeps an agent quiet when another agent only talks about it', async () => {
-    const f = await setup((state) => (state.message.includes('como a Bia disse') ? 0 : 1));
+    const f = await setup((state) => (state.message.includes('as Bia said') ? 0 : 1));
 
     try {
       const ada = await f.join('Ada', '5511800000001@c.us');
       const bia = await f.join('Bia', '5511800000002@c.us');
 
-      await f.say(owner, 'oi');
+      await f.say(owner, 'hi');
       await f.approve(ada.profileId);
       await f.approve(bia.profileId);
 
-      await f.say(ada, 'como a Bia disse, a entrega fica para sexta');
+      await f.say(ada, 'as Bia said, the delivery moves to Friday');
 
       expect(await f.services.runs.activities(bia.profileId)).toEqual([]);
 
-      await f.say(ada, 'Bia, você confirma?');
+      await f.say(ada, 'Bia, can you confirm?');
 
       expect(await f.services.runs.activities(bia.profileId)).toHaveLength(1);
     } finally {
@@ -428,18 +428,18 @@ describe('group conversations', () => {
     try {
       const ada = await f.join('Ada', '5511800000001@c.us');
 
-      await f.say(owner, 'primeiro');
-      await f.say(guest, 'segundo');
+      await f.say(owner, 'first');
+      await f.say(guest, 'second');
 
       expect(await f.channels.contacts(ada.profileId)).toHaveLength(1);
 
       await f.approve(ada.profileId);
-      await f.say(guest, 'terceiro', { mentions: [ada.address] });
+      await f.say(guest, 'third', { mentions: [ada.address] });
 
       const runs = await f.runs(ada.profileId);
 
       expect(runs).toHaveLength(1);
-      expect(runs[0]?.input).toBe('Marina: terceiro');
+      expect(runs[0]?.input).toBe('Marina: third');
     } finally {
       await f.close();
     }
@@ -452,14 +452,14 @@ describe('group conversations', () => {
       const ada = await f.join('Ada', '5511800000001@c.us');
       const bia = await f.join('Bia', '5511800000002@c.us');
 
-      await f.say(owner, 'oi');
+      await f.say(owner, 'hi');
       await f.approve(ada.profileId);
       await f.approve(bia.profileId);
 
-      await f.say(owner, 'Ada, combine o prazo com a equipe', { mentions: [ada.address] });
+      await f.say(owner, 'Ada, settle the deadline with the team', { mentions: [ada.address] });
 
       expect(await f.services.runs.activities(bia.profileId)).toEqual([]);
-      await f.reply(ada.profileId, 'Bia, qual prazo consegue?');
+      await f.reply(ada.profileId, 'Bia, what deadline can you make?');
 
       // Agents cannot mention or quote, so between them the name in the text is the call.
       const spoken = ['Ada'];
@@ -469,7 +469,7 @@ describe('group conversations', () => {
         { from: bia, to: ada },
         { from: ada, to: bia },
       ]) {
-        await f.say(turn.from, `${turn.to.name}, e você?`);
+        await f.say(turn.from, `${turn.to.name}, and you?`);
 
         const [queued] = await f.services.runs.activities(turn.to.profileId);
 
@@ -488,7 +488,7 @@ describe('group conversations', () => {
       expect(await f.services.runs.activities(bia.profileId)).toEqual([]);
 
       // A person writing returns the budget to the room.
-      await f.say(owner, 'Ada, resume para mim', { mentions: [ada.address] });
+      await f.say(owner, 'Ada, sum it up for me', { mentions: [ada.address] });
 
       const resumed = await f.services.runs.activities(ada.profileId);
 
@@ -506,13 +506,13 @@ describe('group conversations', () => {
       const ada = await f.join('Ada', '5511800000001@c.us');
       await f.join('Bia', '5511800000002@c.us');
 
-      await f.say(owner, 'oi');
+      await f.say(owner, 'hi');
       await f.approve(ada.profileId);
 
       const call = { requestKey: 'wa-repeated', mentions: [ada.address] };
 
-      await f.say(owner, 'Ada, confirma?', call);
-      await f.say(owner, 'Ada, confirma?', call);
+      await f.say(owner, 'Ada, confirm?', call);
+      await f.say(owner, 'Ada, confirm?', call);
 
       const runs = await f.runs(ada.profileId);
 
@@ -522,7 +522,7 @@ describe('group conversations', () => {
 
       if (!run) throw new Error('Run missing');
 
-      await f.reply(ada.profileId, 'Confirmo');
+      await f.reply(ada.profileId, 'Confirmed');
       await f.channels.dispatch();
       await f.channels.dispatch();
 
@@ -569,7 +569,7 @@ describe('group conversations', () => {
       const ada = await f.join('Ada', '5511800000001@c.us');
       const bia = await f.join('Bia', '5511800000002@c.us');
 
-      await f.say(owner, 'oi');
+      await f.say(owner, 'hi');
       await f.approve(ada.profileId);
 
       expect((await f.app.inject({ url: '/v1/groups' })).statusCode).toBe(401);
@@ -580,7 +580,7 @@ describe('group conversations', () => {
 
       const [group] = response.json();
 
-      expect(group).toMatchObject({ type: 'whatsapp', chatId: room, name: 'Equipe' });
+      expect(group).toMatchObject({ type: 'whatsapp', chatId: room, name: 'Team' });
       expect(group.profiles).toEqual([
         {
           profileId: ada.profileId,

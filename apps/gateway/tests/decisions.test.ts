@@ -7,7 +7,7 @@ import { testServices } from './helpers/services.js';
 const token = 'synthetic-decisions-admin-token-32-chars';
 const admin = { authorization: `Bearer ${token}` };
 const question = {
-  state: { message: 'Ada, pode confirmar?' },
+  state: { message: 'Ada, can you confirm?' },
   instructions: 'Is this message speaking to Ada?',
   yes: 'It is.',
   no: 'It is not.',
@@ -74,14 +74,14 @@ describe('asking Jev', () => {
 
   it('leaves the decision to the caller when Jev fails, without logging what it answered', async () => {
     const { decisions, reports } = await setup(
-      () => new Response('{"detail":"Ada, pode confirmar?"}', { status: 529 }),
+      () => new Response('{"detail":"Ada, can you confirm?"}', { status: 529 }),
     );
 
     await decisions.configure({ provider: 'jev', apiKey: 'jev-synthetic' });
 
     expect(await decisions.ask(question, { use: 'groups' })).toBeUndefined();
     expect(reports.join('\n')).toContain('529');
-    expect(reports.join('\n')).not.toContain('pode confirmar');
+    expect(reports.join('\n')).not.toContain('can you confirm');
   });
 
   it('stops waiting when Jev is slow', async () => {
@@ -124,7 +124,7 @@ describe('spending on Jev', () => {
         outputTokens: 40,
       }),
     ]);
-    expect(status.body).not.toContain('pode confirmar');
+    expect(status.body).not.toContain('can you confirm');
   });
 
   it('does not pay twice for the same question over the same state', async () => {

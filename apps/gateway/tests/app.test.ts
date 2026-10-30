@@ -318,7 +318,7 @@ it('streams an agent at work as it goes, without moving the cursor a client resu
   const profile = await services.profiles.createProfile(input);
   const session = await services.sessions.createSession(profile.id, { channel: 'api' });
   const run = await services.runs.submit(profile.id, session.id, {
-    text: 'Oi',
+    text: 'Hi',
     requestKey: 'live',
   });
   const url = await app.listen({ host: '127.0.0.1', port: 0 });
@@ -349,7 +349,7 @@ it('streams an agent at work as it goes, without moving the cursor a client resu
 
     await services.lifecycle.progress(run.id, 'worker', {
       phase: 'writing',
-      text: 'Oi',
+      text: 'Hi',
       steps: 1,
       updatedAt: new Date(Date.now() + 1000).toISOString(),
     });

@@ -450,7 +450,7 @@ describe('PostgreSQL durability', () => {
   it('answers concurrent agent calls with one run of the called profile', async () => {
     const model = mockModel({
       doGenerate: async () => ({
-        content: [{ type: 'text', text: 'Feito.' }],
+        content: [{ type: 'text', text: 'Done.' }],
         finishReason: { unified: 'stop', raw: 'stop' },
         warnings: [],
         usage: {
@@ -481,11 +481,11 @@ describe('PostgreSQL durability', () => {
       await queue.start();
 
       const call = () =>
-        peers.ask(asking, { toProfileId: callee.id, text: 'Faça', requestKey: 'peer-same' });
+        peers.ask(asking, { toProfileId: callee.id, text: 'Do it', requestKey: 'peer-same' });
 
       expect((await Promise.all([call(), call()])).map((answer) => answer.text)).toEqual([
-        'Feito.',
-        'Feito.',
+        'Done.',
+        'Done.',
       ]);
 
       const answered = await runRows(store, callee.id);
@@ -531,11 +531,11 @@ describe('PostgreSQL durability', () => {
         payload: {
           actorId: 'person-1',
           chatId: room,
-          text: 'Ada, tudo certo?',
+          text: 'Ada, all good?',
           requestKey,
-          displayName: 'Lucas',
+          displayName: 'Theo',
           scope: 'group',
-          groupName: 'Equipe',
+          groupName: 'Team',
           mentions: [channelId],
         },
       });
@@ -571,7 +571,7 @@ describe('PostgreSQL durability', () => {
 
     const room_ = (await channels.groups()).find((group) => group.chatId === room);
 
-    expect(room_?.name).toBe('Equipe');
+    expect(room_?.name).toBe('Team');
     expect(room_?.profiles.map((item) => [item.name, item.status])).toEqual([
       ['Ada', 'approved'],
       ['Bia', 'pending'],

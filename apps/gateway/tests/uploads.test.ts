@@ -36,7 +36,7 @@ describe('attaching files to a message', () => {
 
     try {
       // Past the 256 KB every other route accepts: a real document is bigger than a request.
-      const notes = `Decisões da release\n${'linha de nota\n'.repeat(25_000)}`;
+      const notes = `Release decisions\n${'note line\n'.repeat(25_000)}`;
       const uploaded = await f.upload(f.profile.id, f.gateway.id, {
         mimeType: 'text/plain',
         name: 'Pasted Content.txt',
@@ -63,7 +63,7 @@ describe('attaching files to a message', () => {
       const parts = messages[0]?.content as Array<{ type: string; text?: string }>;
       const document = parts.find((part) => part.text?.includes('Pasted Content.txt'));
 
-      expect(document?.text).toContain('Decisões da release');
+      expect(document?.text).toContain('Release decisions');
       expect(document?.text).toContain('[Cut here');
     } finally {
       await f.app.close();
@@ -87,7 +87,7 @@ describe('attaching files to a message', () => {
 
       await expect(
         f.services.runs.submit(f.other.id, theirs.id, {
-          text: 'olha',
+          text: 'look',
           mediaIds: [media.id],
           requestKey: 'foreign',
         }),
@@ -110,7 +110,7 @@ describe('attaching files to a message', () => {
       for (let index = 0; index < waiting; index += 1) {
         const accepted = await f.upload(f.profile.id, f.gateway.id, {
           mimeType: 'text/plain',
-          data: base64(`nota ${index}`),
+          data: base64(`note ${index}`),
         });
 
         expect(accepted.statusCode).toBe(201);

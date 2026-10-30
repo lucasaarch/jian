@@ -85,24 +85,20 @@ describe('naming a conversation', () => {
 
     expect(session.title).toBeNull();
 
-    await services.sessions.nameIfUnnamed(profile.id, session.id, 'Plano de migração');
+    await services.sessions.nameIfUnnamed(profile.id, session.id, 'Migration plan');
 
-    expect((await services.sessions.session(profile.id, session.id)).title).toBe(
-      'Plano de migração',
-    );
+    expect((await services.sessions.session(profile.id, session.id)).title).toBe('Migration plan');
 
     // The agent names once; a second answer never renames what is already named.
-    await services.sessions.nameIfUnnamed(profile.id, session.id, 'Outro assunto');
+    await services.sessions.nameIfUnnamed(profile.id, session.id, 'Another topic');
 
-    expect((await services.sessions.session(profile.id, session.id)).title).toBe(
-      'Plano de migração',
-    );
+    expect((await services.sessions.session(profile.id, session.id)).title).toBe('Migration plan');
 
     const renamed = await services.sessions.renameSession(profile.id, session.id, {
-      title: 'Migração do banco',
+      title: 'Database migration',
     });
 
-    expect(renamed.title).toBe('Migração do banco');
+    expect(renamed.title).toBe('Database migration');
   });
 
   it('refuses to rename a session of another profile', async () => {
@@ -112,7 +108,7 @@ describe('naming a conversation', () => {
     const session = await services.sessions.createSession(mine.id, { channel: 'web' });
 
     await expect(
-      services.sessions.renameSession(other.id, session.id, { title: 'Roubada' }),
+      services.sessions.renameSession(other.id, session.id, { title: 'Stolen' }),
     ).rejects.toMatchObject({ statusCode: 404 });
   });
 });

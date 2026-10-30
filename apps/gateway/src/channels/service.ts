@@ -1669,7 +1669,7 @@ export class Channels {
 
       room.profiles.push({
         profileId: contact.profileId,
-        name: names.get(contact.profileId) ?? 'Perfil removido',
+        name: names.get(contact.profileId) ?? 'Removed profile',
         contactId: contact.id,
         status: contact.status,
       });

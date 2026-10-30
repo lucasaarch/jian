@@ -33,7 +33,7 @@ describe('searching the web', () => {
   it('asks for the key before searching, and sends it only to the search service', async () => {
     const { web, requests } = await setup(tavily);
     const tools = web.tools();
-    const input = { query: 'o que é JEV', maxResults: 5, topic: 'general' };
+    const input = { query: 'what is JEV', maxResults: 5, topic: 'general' };
 
     await expect(call(tools.web_search, input)).rejects.toThrow('not configured');
 
@@ -49,7 +49,7 @@ describe('searching the web', () => {
       'Bearer tvly-synthetic',
     );
     expect(JSON.parse(String(requests[0]?.init?.body))).toMatchObject({
-      query: 'o que é JEV',
+      query: 'what is JEV',
       max_results: 5,
     });
   });
@@ -66,7 +66,7 @@ describe('searching the web', () => {
   });
 
   it('reads a page as text, a slice at a time, and refuses what is not text', async () => {
-    const html = `<html><head><title>JEV &amp; co</title><style>p{}</style></head><body><script>evil()</script><p>Primeiro</p><p>${'a'.repeat(25_000)}</p></body></html>`;
+    const html = `<html><head><title>JEV &amp; co</title><style>p{}</style></head><body><script>evil()</script><p>First</p><p>${'a'.repeat(25_000)}</p></body></html>`;
     const { web } = await setup((url) =>
       url === 'http://example.com/jev'
         ? new Response(null, { status: 301, headers: { location: 'https://example.com/jev' } })
@@ -85,7 +85,7 @@ describe('searching the web', () => {
 
     expect(first.url).toBe('https://example.com/jev');
     expect(first.title).toBe('JEV & co');
-    expect(first.text.startsWith('Primeiro\n')).toBe(true);
+    expect(first.text.startsWith('First\n')).toBe(true);
     expect(first.text).not.toContain('evil');
     expect(first.more).toContain('offset 20000');
 

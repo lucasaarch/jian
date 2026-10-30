@@ -22,7 +22,7 @@ test('shellCommandForPlatform uses an absolute POSIX shell', () => {
 });
 
 test('resolveShellCwd uses home when cwd is missing or empty', () => {
-  const home = '/Users/lucas';
+  const home = '/Users/theo';
   assert.deepEqual(
     resolveShellCwd(undefined, {
       home,
@@ -50,7 +50,7 @@ test('resolveShellCwd uses home when cwd is missing or empty', () => {
 });
 
 test('resolveShellCwd falls back when the requested path does not exist', () => {
-  const home = '/Users/lucas';
+  const home = '/Users/theo';
   const result = resolveShellCwd('/no/such/remote/cwd', {
     home,
     exists: (p) => p === home,
@@ -62,12 +62,12 @@ test('resolveShellCwd falls back when the requested path does not exist', () => 
   assert.equal(result.cwd, home);
   assert.equal(result.usedFallback, true);
   assert.match(result.note ?? '', /does not exist/);
-  assert.match(result.note ?? '', /using \/Users\/lucas/);
+  assert.match(result.note ?? '', /using \/Users\/theo/);
 });
 
 test('resolveShellCwd falls back when the path is a file, not a directory', () => {
-  const home = '/Users/lucas';
-  const file = '/Users/lucas/notes.txt';
+  const home = '/Users/theo';
+  const file = '/Users/theo/notes.txt';
   const result = resolveShellCwd(file, {
     home,
     exists: () => true,
@@ -79,8 +79,8 @@ test('resolveShellCwd falls back when the path is a file, not a directory', () =
 });
 
 test('resolveShellCwd keeps a valid requested directory', () => {
-  const home = '/Users/lucas';
-  const project = '/Users/lucas/Code/jian';
+  const home = '/Users/theo';
+  const project = '/Users/theo/Code/jian';
   const result = resolveShellCwd(project, {
     home,
     exists: () => true,
@@ -93,18 +93,18 @@ test('formatShellSpawnError explains cwd ENOENT instead of blaming /bin/sh alone
   const error = Object.assign(new Error('spawn /bin/sh ENOENT'), { code: 'ENOENT' });
   const message = formatShellSpawnError(error, {
     shell: '/bin/sh',
-    cwd: '/Users/lucas',
+    cwd: '/Users/theo',
   });
   assert.match(message, /working directory/i);
-  assert.match(message, /\/Users\/lucas/);
+  assert.match(message, /\/Users\/theo/);
   assert.doesNotMatch(message, /^spawn \/bin\/sh ENOENT$/);
 });
 
 test('workerChildEnv always sets PATH including /bin and a HOME', () => {
-  const env = workerChildEnv({ HOME: '/Users/lucas' });
+  const env = workerChildEnv({ HOME: '/Users/theo' });
   assert.match(env.PATH ?? '', /(?:^|:)\/bin(?::|$)/);
   assert.match(env.PATH ?? '', /(?:^|:)\/usr\/bin(?::|$)/);
-  assert.equal(env.HOME, '/Users/lucas');
+  assert.equal(env.HOME, '/Users/theo');
 });
 
 test('executeShellTask does not spawn with a missing cwd (avoids libuv ENOENT)', async () => {

@@ -26,7 +26,7 @@ describe('what a run reports while it runs', () => {
   it('coalesces a burst of tokens into one write', async () => {
     const { subject, written, advance } = reporter();
 
-    for (const text of ['Bom ', 'Bom dia', 'Bom dia, tudo ', 'Bom dia, tudo certo']) {
+    for (const text of ['Good ', 'Good morning', 'Good morning, all ', 'Good morning, all good']) {
       subject.draft(text);
       advance(50);
     }
@@ -35,24 +35,24 @@ describe('what a run reports while it runs', () => {
 
     // The first token goes out at once; the rest of the burst costs a single further write.
     expect(written).toHaveLength(2);
-    expect(written[0]?.text).toBe('Bom ');
-    expect(written.at(-1)?.text).toBe('Bom dia, tudo certo');
+    expect(written[0]?.text).toBe('Good ');
+    expect(written.at(-1)?.text).toBe('Good morning, all good');
     expect(written.at(-1)?.phase).toBe('writing');
   });
 
   it('drops the text a tool interrupted, so the preview converges on the answer', async () => {
     const { subject, written, advance } = reporter();
 
-    subject.draft('Deixa eu verificar uma coisa');
+    subject.draft('Let me check one thing');
     advance(1000);
     subject.usingTool('read_memories');
     advance(1000);
-    subject.draft('Está tudo certo.');
+    subject.draft('All good.');
     await subject.flush();
 
     expect(written.some((snapshot) => snapshot.phase === 'tool')).toBe(true);
     // Commentary written before the tool is not the answer, so it does not stay on screen.
-    expect(written.at(-1)?.text).toBe('Está tudo certo.');
+    expect(written.at(-1)?.text).toBe('All good.');
   });
 
   it('leaves out of the draft a paragraph already sent as a message', async () => {
@@ -110,10 +110,10 @@ describe('what a run reports while it runs', () => {
   it('keeps the tail when the answer outgrows what a snapshot holds', async () => {
     const { subject, written } = reporter(0);
 
-    subject.draft(`${'x'.repeat(9000)}fim`);
+    subject.draft(`${'x'.repeat(9000)}end`);
     await subject.flush();
 
     expect(written.at(-1)?.text).toHaveLength(8000);
-    expect(written.at(-1)?.text.endsWith('fim')).toBe(true);
+    expect(written.at(-1)?.text.endsWith('end')).toBe(true);
   });
 });

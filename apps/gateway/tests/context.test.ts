@@ -205,13 +205,13 @@ describe('context', () => {
     const session = await services.sessions.createSession(profile.id, { title: 'Unicode' });
 
     const run = await services.runs.submit(profile.id, session.id, {
-      text: 'Olá 世界 🌍',
+      text: 'Café 世界 🌍',
       requestKey: 'current',
     });
 
     const context = await services.contexts.context(run, []);
 
-    expect(context.messages).toEqual([{ role: 'user', content: 'Olá 世界 🌍' }]);
+    expect(context.messages).toEqual([{ role: 'user', content: 'Café 世界 🌍' }]);
   });
 
   it('includes structured identity and a skill catalog while selecting relevant memories', async () => {

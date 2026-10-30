@@ -23,7 +23,7 @@ async function fixture() {
 
 it('keeps structured MCP data readable without encoding JSON inside JSON', async () => {
   const { run } = await fixture();
-  const data = { items: [{ id: 'receipt-123', title: 'Entrega', state: 'OPEN' }] };
+  const data = { items: [{ id: 'receipt-123', title: 'Delivery', state: 'OPEN' }] };
   const result = await boundToolResult(
     {
       content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
@@ -40,7 +40,7 @@ it('keeps structured MCP data readable without encoding JSON inside JSON', async
 it('reads full pages within the token limit without skipping Unicode or JSON escapes', async () => {
   const { services, run } = await fixture();
   const coordination = new Coordination(services);
-  const original = { value: 'Entrega São Paulo "pronto"\n'.repeat(160) };
+  const original = { value: 'Delivery to São Paulo "ready"\n'.repeat(160) };
   const artifact = await coordination.storeArtifact(run, 'read', original);
   const read = profileTools(services, run).read_artifact?.execute as (
     input: unknown,

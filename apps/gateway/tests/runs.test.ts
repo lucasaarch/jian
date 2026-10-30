@@ -211,14 +211,14 @@ it('takes a message sent mid-run as a correction to that run', async () => {
   const { services, profile, session } = await setup();
 
   const first = await services.runs.submit(profile.id, session.id, {
-    text: 'Pergunta ao Moabe se o deploy pode sair',
+    text: 'Ask Omar whether the deploy can go out',
     requestKey: 'one',
   });
 
   await services.lifecycle.claim(first.id, profile.id, 'worker');
 
   const again = await services.runs.submit(profile.id, session.id, {
-    text: 'Na verdade, esquece o Moabe',
+    text: 'Actually, never mind Omar',
     requestKey: 'two',
   });
 
@@ -229,8 +229,8 @@ it('takes a message sent mid-run as a correction to that run', async () => {
   // It is in the history as the person's own turn, and reaches the run exactly once.
   const history = await services.sessions.messages(profile.id, session.id);
 
-  expect(history.map((message) => message.content)).toContain('Na verdade, esquece o Moabe');
-  expect(await services.lifecycle.steer(first.id, 'worker')).toBe('Na verdade, esquece o Moabe');
+  expect(history.map((message) => message.content)).toContain('Actually, never mind Omar');
+  expect(await services.lifecycle.steer(first.id, 'worker')).toBe('Actually, never mind Omar');
   expect(await services.lifecycle.steer(first.id, 'worker')).toBeNull();
 });
 
@@ -238,15 +238,15 @@ it('keeps every correction when two arrive before the run reads them', async () 
   const { services, profile, session } = await setup();
 
   const run = await services.runs.submit(profile.id, session.id, {
-    text: 'Começa',
+    text: 'Start',
     requestKey: 'one',
   });
 
   await services.lifecycle.claim(run.id, profile.id, 'worker');
-  await services.runs.submit(profile.id, session.id, { text: 'Primeira', requestKey: 'a' });
-  await services.runs.submit(profile.id, session.id, { text: 'Segunda', requestKey: 'b' });
+  await services.runs.submit(profile.id, session.id, { text: 'First', requestKey: 'a' });
+  await services.runs.submit(profile.id, session.id, { text: 'Second', requestKey: 'b' });
 
-  expect(await services.lifecycle.steer(run.id, 'worker')).toBe('Primeira\n\nSegunda');
+  expect(await services.lifecycle.steer(run.id, 'worker')).toBe('First\n\nSecond');
 });
 
 it('pins model configuration for queued runs', async () => {

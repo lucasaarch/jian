@@ -12,7 +12,7 @@ async function setup() {
   const session = await services.sessions.createGatewaySession(profile.id, {});
   const turn = async (key: string) => {
     const run = await services.runs.submit(profile.id, session.id, {
-      text: 'Pesquisa o deploy',
+      text: 'Look into the deploy',
       requestKey: key,
     });
 
@@ -22,7 +22,7 @@ async function setup() {
       run,
       write: (data: Record<string, unknown>) =>
         services.lifecycle.checkpoint(profile.id, run.id, 'worker', data),
-      finish: () => services.lifecycle.finish(profile.id, run.id, 'worker', 'completed', 'Pronto.'),
+      finish: () => services.lifecycle.finish(profile.id, run.id, 'worker', 'completed', 'Done.'),
     };
   };
 

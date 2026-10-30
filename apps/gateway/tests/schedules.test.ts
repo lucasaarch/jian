@@ -89,7 +89,7 @@ async function setup() {
   await channels.receive(channel.id, {
     type: 'telegram',
     headers: { 'x-telegram-bot-api-secret-token': channel.webhookToken },
-    payload: { update_id: 1, message: { from: { id: 42 }, chat: { id: 42 }, text: 'Oi' } },
+    payload: { update_id: 1, message: { from: { id: 42 }, chat: { id: 42 }, text: 'Hi' } },
   });
   const [contact] = await channels.contacts(profile.id);
 
@@ -103,7 +103,7 @@ async function setup() {
   // that turn instead of opening another, so the chat is left idle before any schedule runs.
   for (const run of await services.runs.activities(profile.id)) {
     await services.lifecycle.claim(run.id, profile.id, 'worker');
-    await services.lifecycle.finish(profile.id, run.id, 'worker', 'completed', 'Oi.');
+    await services.lifecycle.finish(profile.id, run.id, 'worker', 'completed', 'Hi.');
   }
 
   const api = await services.sessions.createSession(profile.id, { channel: 'api' });
@@ -346,7 +346,7 @@ describe('schedules', () => {
   it('tells the agent the time in the gateway’s zone', async () => {
     const f = await setup();
     const run = await f.services.runs.submit(f.profile.id, f.chat, {
-      text: 'Oi de novo',
+      text: 'Hi again',
       requestKey: 't',
     });
     const system = (await f.services.contexts.context(run, [])).system;

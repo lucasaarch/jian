@@ -18,7 +18,7 @@ The tools are in the \`schedules\` group; load it with \`load_tools\`: \`list_sc
 - **name** — short, for the owner's list: "Morning summary", "Call the dentist".
 - **instruction** — the request you will receive then, written for a version of you that
   remembers nothing of this conversation. Say what to do, for whom, in what form, and
-  anything it depends on. "Remind Lucas to call the dentist about moving Thursday's
+  anything it depends on. "Remind Theo to call the dentist about moving Thursday's
   appointment" works; "remind him about that" does not.
 - **when** — either \`at\`, one time — ISO 8601 with offset (\`2026-10-02T15:00:00-03:00\`
   or with \`Z\`), ISO without offset (treated as UTC), or a relative delay (\`+30s\`,

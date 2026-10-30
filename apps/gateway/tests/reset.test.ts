@@ -26,24 +26,24 @@ async function setup() {
       headers: { 'x-telegram-bot-api-secret-token': channel.webhookToken },
       payload: {
         update_id: id,
-        message: { from: { id: 77, first_name: 'Moabe' }, chat: { id: 77 }, text },
+        message: { from: { id: 77, first_name: 'Omar' }, chat: { id: 77 }, text },
       },
     } satisfies ChannelRequest);
   const finish = async () => {
     for (const run of await services.runs.activities(profile.id)) {
       await services.lifecycle.claim(run.id, profile.id, 'worker');
-      await services.lifecycle.finish(profile.id, run.id, 'worker', 'completed', 'Oi.');
+      await services.lifecycle.finish(profile.id, run.id, 'worker', 'completed', 'Hi.');
     }
   };
 
-  await write('Oi', 1);
+  await write('Hi', 1);
   const [request] = await channels.contacts(profile.id);
 
   if (!request) throw new Error('Contact request missing');
   await channels.approveContact(profile.id, request.id);
   await finish();
   await services.memories.remember(profile.id, {
-    key: 'moabe',
+    key: 'omar',
     content: 'Tests epics.',
     expectedVersion: 0,
   });
@@ -81,18 +81,18 @@ describe('resetting a profile', () => {
 
     await services.profiles.resetProfile(profile.id);
 
-    expect(await write('Voltei', 2)).toMatchObject({ accepted: true });
+    expect(await write('Back again', 2)).toMatchObject({ accepted: true });
 
     const [session] = await services.sessions.sessions(profile.id);
     const history = await services.sessions.messages(profile.id, session?.id ?? '', 20);
 
-    expect(history.map((message) => message.content)).toEqual(['Voltei']);
+    expect(history.map((message) => message.content)).toEqual(['Back again']);
   });
 
   it('waits for an answer that is still being written', async () => {
     const { services, profile, write } = await setup();
 
-    await write('Ainda aí?', 3);
+    await write('Still there?', 3);
 
     await expect(services.profiles.resetProfile(profile.id)).rejects.toMatchObject({
       statusCode: 409,

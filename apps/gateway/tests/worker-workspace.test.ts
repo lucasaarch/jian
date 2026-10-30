@@ -143,10 +143,10 @@ it('lets Git SSH use the profile key from the shared workspace', async () => {
   expect(config.stdout).toContain('user git');
   expect(
     await call(shell, {
-      command: 'git ls-remote --get-url https://bitbucket.org/vxcaselabs/vx-erp.git',
+      command: 'git ls-remote --get-url https://bitbucket.org/harbor-labs/ledger.git',
       timeoutMs: 10_000,
     }),
-  ).toMatchObject({ exitCode: 0, stdout: 'git@bitbucket.org:vxcaselabs/vx-erp.git\n' });
+  ).toMatchObject({ exitCode: 0, stdout: 'git@bitbucket.org:harbor-labs/ledger.git\n' });
   if ((await sandboxAbi()) > 0) {
     // Profile isolation still holds: another profile's home is not writable.
     const other = await workspaceOf(profileId);

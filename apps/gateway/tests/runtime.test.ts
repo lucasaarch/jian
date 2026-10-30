@@ -1501,9 +1501,9 @@ it('tells the owner what the provider answered instead of a generic failure', as
     instructions: 'Help.',
     model: { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
   });
-  const session = await services.sessions.createSession(profile.id, { title: 'Limite' });
+  const session = await services.sessions.createSession(profile.id, { title: 'Limit' });
   const run = await services.runs.submit(profile.id, session.id, {
-    text: 'Oi',
+    text: 'Hi',
     requestKey: 'rate-limited',
   });
 
@@ -1532,7 +1532,7 @@ it('repeats what the provider said when the refusal carries a reason', async () 
   });
   const session = await services.sessions.createSession(profile.id, { title: 'Refused' });
   const run = await services.runs.submit(profile.id, session.id, {
-    text: 'Oi',
+    text: 'Hi',
     requestKey: 'refused',
   });
 
