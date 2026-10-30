@@ -10,16 +10,3 @@
   --status-bar: 2.25rem;
   --app-height: calc(100dvh - var(--title-bar) - var(--status-bar));
 }
-
-/* The window is glass on macOS: the page is transparent and the app's own tint lets the blurred
-   desktop through, a little, under everything it draws. Elsewhere the tint is simply opaque. */
-html,
-body {
-  background: transparent;
-}
-.app-window {
-  background: var(--canvas);
-}
-:root[data-platform="darwin"] .app-window {
-  background: color-mix(in srgb, var(--canvas) 82%, transparent);
-}

@@ -16,18 +16,12 @@ export function createWindow(options: { quitting: () => boolean }): BrowserWindo
     minHeight: 520,
     show: false,
     title: 'Jian',
+    backgroundColor: '#050505',
     // The app draws its own title bar. macOS keeps its traffic lights, inset into that bar;
     // Windows and Linux lose the system's frame, and the bar draws their buttons on the right.
     ...(process.platform === 'darwin'
-      ? {
-          titleBarStyle: 'hiddenInset' as const,
-          trafficLightPosition: { x: 14, y: 13 },
-          // The desktop shows through, blurred by the system, under the app's glass.
-          vibrancy: 'under-window' as const,
-          visualEffectState: 'active' as const,
-          backgroundColor: '#00000000',
-        }
-      : { frame: false, backgroundColor: '#050505' }),
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 13 } }
+      : { frame: false }),
     // Windows and Linux show this in the taskbar and the window switcher; macOS takes the bundle's.
     ...(process.platform === 'darwin' ? {} : { icon: join(resourcesDir(), 'icon.png') }),
     webPreferences: {

@@ -12,7 +12,7 @@ import {
   Plus,
   Terminal,
 } from 'lucide-react';
-import { type ComponentType, useEffect, useRef, useState } from 'react';
+import { type ComponentType, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { ProtectionMode, Run, Session } from '../../lib/api';
 import { date, LOCALE } from '../../lib/format';
@@ -32,7 +32,7 @@ import { useCrew } from '../../lib/stores/crew';
 import { useLayout } from '../../lib/stores/layout';
 import { unread } from '../../lib/unread';
 import { useDeleteConversation, useRefresh } from '../../lib/workspace';
-import { useParams, useRouter } from '../../platform/navigation';
+import { useParams, useRouter, useSearchParams } from '../../platform/navigation';
 import type { SectionActions } from '../props';
 import {
   Badge,
@@ -255,6 +255,29 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   const menuButton = useRef<HTMLButtonElement>(null);
   // Bumped by a sent message, so the open history reads again instead of waiting for its poll.
   const [sent, setSent] = useState(0);
+
+  /** A new chat, written in place of the open one until its first message makes it real. */
+  const startDraft = () => {
+    setChannelFilter(GATEWAY_SESSION_CHANNEL);
+    if (selected) open(undefined);
+    setDraft(true);
+    setDraftProjectId(null);
+    setDraftMachineId(null);
+    setDraftModel(undefined);
+    setDraftProtection('ask');
+    draftSession.current = null;
+  };
+
+  // `?new` in the address asks for a new chat: a command or a shortcut from outside the list.
+  // It is taken once and dropped, so going back does not start another.
+  const search = useSearchParams();
+  const startAsked = useEffectEvent(() => {
+    startDraft();
+    router.replace(agentPath(profile.id, 'sessions'));
+  });
+  useEffect(() => {
+    if (search.has('new')) startAsked();
+  }, [search]);
 
   // A conversation opened from elsewhere — a schedule's history, a project — while this screen
   // stays mounted: leave any unsent new chat and show the channel it belongs to.
@@ -520,16 +543,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
               variant="primary"
               aria-label="New chat"
               disabled={busy || draft}
-              onClick={() => {
-                setChannelFilter(GATEWAY_SESSION_CHANNEL);
-                if (selected) open(undefined);
-                setDraft(true);
-                setDraftProjectId(null);
-                setDraftMachineId(null);
-                setDraftModel(undefined);
-                setDraftProtection('ask');
-                draftSession.current = null;
-              }}
+              onClick={startDraft}
             >
               <Plus size={18} />
             </IconButton>

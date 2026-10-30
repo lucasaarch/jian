@@ -2,8 +2,10 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Channel, Contact, GatewayApi, Session } from '../../lib/api';
+import { memoryNavigation } from '../../platform/navigation';
 import { AgentCache } from '../../test/agent';
 import { profile } from '../../test/fixtures';
+import { goTo } from '../../test/route';
 import { Sessions } from '.';
 
 const { deleteConversation } = vi.hoisted(() => ({
@@ -354,4 +356,11 @@ it('lists the chat spoken in last first, marks one written in since it was read,
   expect(rows[0]?.hasAttribute('data-unread')).toBe(false);
   // The chat on screen is the one spoken in last, and it is read as it shows.
   expect(result.markSessionRead).toHaveBeenCalledWith(profile.id, 'newer-chat');
+});
+
+it('starts a new chat when the address asks for one, and drops the request from it', async () => {
+  const { element } = await render();
+  await act(async () => goTo(`/agents/${profile.id}/sessions?new`));
+  expect(element.querySelector('section[aria-label="New chat"]')).not.toBeNull();
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions`);
 });
