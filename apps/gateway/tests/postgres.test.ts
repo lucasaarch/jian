@@ -8,6 +8,7 @@ import { MetaInbox } from '../src/channels/whatsapp-business-inbox.js';
 import { recordEvent } from '../src/core/events.js';
 import { Peers } from '../src/peers/service.js';
 import { updateProfileRow } from '../src/profiles/repository.js';
+import { BossExecutor } from '../src/runs/executors.js';
 import { RunQueue } from '../src/runs/queue.js';
 import { SecretBox } from '../src/security/crypto.js';
 import { GatewayVault } from '../src/security/gateway-vault.js';
@@ -414,7 +415,12 @@ describe('PostgreSQL durability', () => {
     });
 
     const runtime = new AgentRuntime(services, () => model);
-    const queue = new RunQueue(new PgBoss(connectionString), services, runtime, () => {});
+    const queue = new RunQueue(
+      new BossExecutor(new PgBoss(connectionString), () => {}),
+      services,
+      runtime,
+      () => {},
+    );
     const profile = await services.profiles.createProfile(input);
     const session = await services.sessions.createSession(profile.id, { title: 'Queue' });
 
@@ -455,7 +461,12 @@ describe('PostgreSQL durability', () => {
     });
 
     const runtime = new AgentRuntime(services, () => model);
-    const queue = new RunQueue(new PgBoss(connectionString), services, runtime, () => {});
+    const queue = new RunQueue(
+      new BossExecutor(new PgBoss(connectionString), () => {}),
+      services,
+      runtime,
+      () => {},
+    );
     const caller = await services.profiles.createProfile({ ...input, name: 'Caller' });
     const callee = await services.profiles.createProfile({ ...input, name: 'Callee' });
     const session = await services.sessions.createSession(caller.id, { title: 'Owner' });

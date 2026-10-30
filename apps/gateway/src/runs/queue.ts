@@ -1,19 +1,21 @@
-import type { PgBoss } from 'pg-boss';
 import type { AgentRuntime } from '../agent/runtime.js';
 import type { Store } from '../storage/database.js';
 import type { Work } from '../tasks/service.js';
+import type { RunExecutor } from './executors.js';
 import type { RunRecovery } from './port.js';
 import { listQueuedRuns, listUnreportedSubagents } from './repository.js';
 
-const queueName = 'jian-agent-runs';
-
+/**
+ * Finds the runs that are due — queued ones, after recovering any a dead worker left — and sends
+ * them to its executor. The same on a server and in the desktop app; only the executor differs.
+ */
 export class RunQueue {
   private timer?: ReturnType<typeof setTimeout>;
   private stopped = false;
   private pending: Promise<void> = Promise.resolve();
 
   constructor(
-    private boss: PgBoss,
+    private executor: RunExecutor,
     private services: {
       lifecycle: RunRecovery;
       store: Store;
@@ -24,26 +26,7 @@ export class RunQueue {
   ) {}
 
   async start() {
-    this.boss.on('error', () => this.report('jian: queue connection failed'));
-    await this.boss.start();
-
-    // Run leases handle recovery; queue retries must not replay an agent's external effects.
-    await this.boss.createQueue(queueName, {
-      policy: 'exclusive',
-      retryLimit: 0,
-      expireInSeconds: 660,
-    });
-
-    await this.boss.work<{ profileId: string; runId: string }>(
-      queueName,
-      { localConcurrency: 4, batchSize: 1, pollingIntervalSeconds: 1 },
-      async (jobs) => {
-        for (const job of jobs) {
-          await this.runtime.execute(job.data.profileId, job.data.runId);
-        }
-      },
-    );
-
+    await this.executor.start((profileId, runId) => this.runtime.execute(profileId, runId));
     await this.tick();
   }
 
@@ -64,11 +47,7 @@ export class RunQueue {
         return;
       }
 
-      await this.boss.send(
-        queueName,
-        { profileId: run.profileId, runId: run.id },
-        { singletonKey: run.id },
-      );
+      await this.executor.send(run.profileId, run.id);
     }
   }
 
@@ -97,6 +76,6 @@ export class RunQueue {
     clearTimeout(this.timer);
     this.runtime.stop();
     await this.pending;
-    await this.boss.stop({ graceful: true, timeout: 15_000 });
+    await this.executor.stop();
   }
 }
