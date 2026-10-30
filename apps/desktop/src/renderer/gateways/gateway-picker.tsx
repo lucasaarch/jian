@@ -1,8 +1,8 @@
 import { Picker, PickerAction, PickerRow } from '@jian/ui';
 import { Laptop, Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { GatewaySummary } from '../../shared/bridge';
-import { STATUS_DOT, STATUS_SAID } from './status';
+import { type GatewaySummary, STATUS_SAID } from '../../shared/bridge';
+import { STATUS_DOT } from './status';
 
 /** Said under a gateway only when it is not connected: connected is what the dot already says. */
 function detailOf(gateway: GatewaySummary): string | undefined {

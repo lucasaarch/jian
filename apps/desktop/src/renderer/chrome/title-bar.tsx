@@ -1,4 +1,4 @@
-import { SidebarBar } from '@jian/ui';
+import { SidebarBar, useWelcomeShowing } from '@jian/ui';
 import { useEffect, useSyncExternalStore } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
 import { desktop } from '../desktop';
@@ -18,6 +18,7 @@ const idle = () => () => {};
  */
 export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
   const mac = desktop().platform === 'darwin';
+  const welcoming = useWelcomeShowing();
   const memory = gateway ? navigationFor(gateway.id) : undefined;
   // Read to follow the navigation, so back and forward come alive as it moves.
   useSyncExternalStore(memory?.subscribe ?? idle, memory?.current ?? (() => ''));
@@ -52,23 +53,26 @@ export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
       {/* Behind everything, so it is only a place to hold the window by: what is drawn over it
           and can be pressed is left out of the drag by the app's styles. */}
       <div aria-hidden="true" className={`${drag} absolute inset-x-0 top-0 h-(--title-bar)`} />
-      <header className="absolute top-0 left-0 z-30 flex h-(--title-bar) select-none">
-        <SidebarBar
-          // Room for the traffic lights, which macOS draws over this end of the bar.
-          leading={<div className={mac ? 'w-19 shrink-0' : 'w-1.5 shrink-0'} />}
-          shortcuts={shortcuts}
-          {...(memory
-            ? {
-                history: {
-                  back: () => memory.back(),
-                  forward: () => memory.forward(),
-                  canBack,
-                  canForward,
-                },
-              }
-            : {})}
-        />
-      </header>
+      {/* Nothing to put away, search or go back to while the Welcome is up: only the window's own. */}
+      {!welcoming && (
+        <header className="absolute top-0 left-0 z-30 flex h-(--title-bar) select-none">
+          <SidebarBar
+            // Room for the traffic lights, which macOS draws over this end of the bar.
+            leading={<div className={mac ? 'w-19 shrink-0' : 'w-1.5 shrink-0'} />}
+            shortcuts={shortcuts}
+            {...(memory
+              ? {
+                  history: {
+                    back: () => memory.back(),
+                    forward: () => memory.forward(),
+                    canBack,
+                    canForward,
+                  },
+                }
+              : {})}
+          />
+        </header>
+      )}
       {!mac && <WindowControls className="absolute top-0 right-0 z-30" />}
     </>
   );

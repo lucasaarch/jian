@@ -1,4 +1,4 @@
-import { createMemoryNavigation } from '@jian/ui';
+import { createMemoryNavigation, newChatPath } from '@jian/ui';
 
 type MemoryNavigation = ReturnType<typeof createMemoryNavigation>;
 
@@ -21,6 +21,15 @@ export function navigationFor(gatewayId: string): MemoryNavigation {
 export function openIn(gatewayId: string, path: string): void {
   const navigation = navigationFor(gatewayId);
   navigation.navigation(navigation.current()).push(path);
+}
+
+/**
+ * A new chat with the agent the gateway's panel shows. A panel not shown since the app started
+ * names no agent yet: it opens where it would, on the last agent's chats, with none started.
+ */
+export function openNewChat(gatewayId: string): void {
+  const agent = /^\/agents\/([^/?#]+)/.exec(navigationFor(gatewayId).current())?.[1];
+  if (agent) openIn(gatewayId, newChatPath(decodeURIComponent(agent)));
 }
 
 export function forget(gatewayId: string): void {

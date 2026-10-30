@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { app, type BrowserWindow, powerMonitor } from 'electron';
-import { LOCAL_GATEWAY_ID, type OpenTarget } from '../shared/bridge';
+import { LOCAL_GATEWAY_ID, type MachineUse, type OpenTarget } from '../shared/bridge';
+import { setAppMenu } from './app-menu';
 import { serveBridge } from './bridge';
 import { timedFetch } from './gateways/fetch';
 import { GatewayMonitor } from './gateways/monitor';
@@ -18,10 +19,15 @@ import { ComputerSharing } from './machines/sharing';
 import { Notifier } from './notify';
 import { handleScheme, registerScheme } from './protocol';
 import { createTray, resourcesDir } from './tray';
+import { type TrayState, trayMenu } from './tray-menu';
 import { appUpdates } from './updates/electron';
 import type { UpdateFlow } from './updates/flow';
 import { serveUpdates } from './updates/ipc';
 import { createWindow, reveal } from './window';
+
+// From source the app keeps its own folder beside the installed one: its own lock, local gateway
+// and saved gateways, so both run at once and neither reads the other's data.
+if (!app.isPackaged) app.setPath('userData', join(app.getPath('appData'), 'Jian Dev'));
 
 // One app, one window: a second launch only brings the first one forward.
 if (!holdsLock()) app.exit(0);
@@ -50,6 +56,8 @@ let quitting = false;
 let showing: string | null = null;
 /** Where a notification asked to go before the window could take it. */
 let pending: OpenTarget | undefined;
+/** Created once the app is ready; told whenever what its menu shows changes. */
+let tray: { update(): void } | undefined;
 
 const store = new GatewayStore();
 const notifier = new Notifier((target) => open(target));
@@ -57,6 +65,7 @@ const monitor = new GatewayMonitor(store, app.getVersion(), {
   changed: () => {
     bridge.changed();
     machines.sync();
+    tray?.update();
   },
   replied: (reply) => {
     const seen = window?.isVisible() && window.isFocused() && showing === reply.gatewayId;
@@ -75,13 +84,23 @@ const machinesLoaded = app.whenReady().then(() =>
     logMachines(`The saved machines could not be read: ${String(error)}`);
   }),
 );
+/** What agents are doing on this computer now, by gateway: the window shows it while it lasts. */
+const using = new Map<string, MachineUse['kind']>();
+const usingNow = (): MachineUse[] => [...using].map(([gatewayId, kind]) => ({ gatewayId, kind }));
 const machines: ComputerSharing = new ComputerSharing({
   registry: new MachineRegistry({
     entries: machineFile,
     fetch: timedFetch(10_000),
     identity: thisComputer,
   }),
-  host: new UtilityWorkerHost({ refused: (gatewayId) => machines.refused(gatewayId) }),
+  host: new UtilityWorkerHost({
+    refused: (gatewayId) => machines.refused(gatewayId),
+    using: (gatewayId, kind) => {
+      if (kind) using.set(gatewayId, kind);
+      else using.delete(gatewayId);
+      bridge.machinesUsing(usingNow());
+    },
+  }),
   setting: machineFile,
   gateways: () =>
     monitor.summaries().flatMap((summary) => {
@@ -90,18 +109,24 @@ const machines: ComputerSharing = new ComputerSharing({
       const access = { ...gateway, local: gateway.local === true, token: store.token(gateway) };
       return [{ gateway: access, online: summary.status === 'online' }];
     }),
-  changed: () => bridge.machinesChanged(),
+  changed: () => {
+    bridge.machinesChanged();
+    tray?.update();
+  },
   log: logMachines,
   loaded: machinesLoaded,
 });
 const bridge = serveBridge({
+  using: usingNow,
   store,
   monitor,
   machines,
   window: () => window,
   showing: (id) => {
     showing = id;
+    tray?.update();
   },
+  listChanged: () => tray?.update(),
 });
 let updates: UpdateFlow | undefined;
 const updatesBridge = serveUpdates(
@@ -112,10 +137,21 @@ const updatesBridge = serveUpdates(
 function open(target?: OpenTarget): void {
   if (!window) return;
   reveal(window);
-  if (target) {
-    pending = target;
-    bridge.open(target);
-  }
+  if (!target) return;
+  // Sent while the window loads, a target is lost: it waits for the load. Once taken it is not
+  // kept, or every reload of the window would open the chat, search or sheet again.
+  if (window.webContents.isLoading()) pending = target;
+  else bridge.open(target);
+}
+
+/** What the tray's menu shows: the gateways, the one the window shows, the computer's switch. */
+function trayState(): TrayState {
+  const server = store.list().some((gateway) => !gateway.local);
+  return {
+    gateways: monitor.summaries(),
+    showing,
+    sharing: server ? machines.sharing() : undefined,
+  };
 }
 
 // A second launch brings this one forward, at the place a jian:// link asked for if one did.
@@ -193,10 +229,27 @@ void app.whenReady().then(async () => {
       await stopAll();
     },
   });
+  setAppMenu();
   window = createWindow({ quitting: () => quitting });
   window.webContents.on('did-finish-load', () => {
     if (pending) bridge.open(pending);
+    pending = undefined;
   });
-  createTray({ open: () => open(), quit: () => app.quit() });
+  tray = createTray({
+    menu: () =>
+      trayMenu(trayState(), {
+        open,
+        setSharing: (on) =>
+          void machines
+            .setSharing(on)
+            .catch((error: unknown) =>
+              logMachines(`Sharing could not be changed: ${String(error)}`),
+            )
+            // Refused, the checkbox the click already ticked goes back to how it stands.
+            .finally(() => tray?.update()),
+        quit: () => app.quit(),
+      }),
+    open: () => open(),
+  });
   updates.start();
 });

@@ -34,7 +34,13 @@ export class UtilityWorkerHost implements WorkerHost {
   private awake?: number;
   private quitting = false;
 
-  constructor(private readonly events: { refused(gatewayId: string): void }) {}
+  constructor(
+    private readonly events: {
+      refused(gatewayId: string): void;
+      /** An agent on the gateway began or ended using this computer; null when it ended. */
+      using(gatewayId: string, kind: 'shell' | 'computer' | null): void;
+    },
+  ) {}
 
   start(gatewayId: string, target: WorkerTarget): void {
     this.targets.set(gatewayId, target);
@@ -89,6 +95,8 @@ export class UtilityWorkerHost implements WorkerHost {
         this.keepAwake();
         this.events.refused(message.gatewayId);
       }
+      if (message.type === 'using') this.events.using(message.gatewayId, message.kind);
+      if (message.type === 'done') this.events.using(message.gatewayId, null);
     });
     child.on('spawn', () => {
       this.failures = 0;
@@ -96,6 +104,8 @@ export class UtilityWorkerHost implements WorkerHost {
     child.on('exit', () => {
       if (this.child !== child) return;
       this.child = undefined;
+      // Whatever its workers were doing ended with them.
+      for (const gatewayId of this.targets.keys()) this.events.using(gatewayId, null);
       if (this.quitting || this.targets.size === 0) return;
       const wait = RETRY_MS[Math.min(this.failures, RETRY_MS.length - 1)] ?? 60_000;
       this.failures += 1;

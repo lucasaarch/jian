@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DesktopBridge, GatewaySummary, OpenTarget } from '../shared/bridge';
+import type { DesktopBridge, GatewaySummary, MachineUse, OpenTarget } from '../shared/bridge';
 import type { UpdateState } from '../shared/updates';
 
 /** Subscribes to a channel the main process sends on, and returns how to stop. */
@@ -38,6 +38,8 @@ const bridge: DesktopBridge = {
     state: (gatewayId) => ipcRenderer.invoke('machines:state', gatewayId),
     setSharing: (on) => ipcRenderer.invoke('machines:setSharing', on),
     onChanged: (listener) => listen<null>('machines:changed', () => listener()),
+    using: () => ipcRenderer.invoke('machines:using'),
+    onUsing: (listener) => listen<MachineUse[]>('machines:using', listener),
   },
 };
 
