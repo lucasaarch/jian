@@ -8,13 +8,14 @@
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node scripts/electron.mjs dev",
     "build": "electron-vite build",
     "package": "electron-vite build && node scripts/stage-gateway.mjs && electron-builder --publish never",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "icons": "node scripts/generate-icons.mjs",
-    "stage:gateway": "node scripts/stage-gateway.mjs"
+    "stage:gateway": "node scripts/stage-gateway.mjs",
+    "start": "node scripts/electron.mjs start"
   },
   "devDependencies": {
     "@base-ui/react": "^1.8.0",
