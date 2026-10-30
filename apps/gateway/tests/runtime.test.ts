@@ -228,6 +228,8 @@ it('makes Ponytail available for code review before tools load, unless this agen
       ...input,
       allowShell: true,
       disabledSkills: disabled ? ['discernment-nudge', 'ponytail'] : ['discernment-nudge'],
+      // Room for the coding tools and instructions together: no compaction between the calls.
+      contextPolicy: { inputTokens: 64000 },
     });
     const session = await services.sessions.createSession(profile.id, { title: 'Code' });
     const run = await services.runs.submit(profile.id, session.id, {

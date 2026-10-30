@@ -88,6 +88,11 @@ export class Stats {
     private readonly subscriptionUsage?: Pick<SubscriptionUsageReader, 'read'>,
   ) {}
 
+  /** The installation's subscription windows alone, without a period's work to add up. */
+  async subscriptions() {
+    return this.subscriptionUsage ? this.subscriptionUsage.read() : [];
+  }
+
   async usageRuns(profileId: string, days: number, limit: number, offset: number) {
     await this.profiles.profile(profileId);
     await this.prices.prime();

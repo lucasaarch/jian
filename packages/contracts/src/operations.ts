@@ -99,6 +99,7 @@ import {
   sessionRecordSchema,
   sessionSummarySchema,
   statsQuerySchema,
+  subscriptionUsageSchema,
 } from './records.js';
 import { releasesSchema, repositorySchema } from './releases.js';
 import {
@@ -1283,6 +1284,13 @@ export const operations: Operation[] = [
     access: 'admin',
     query: statsQuerySchema,
     response: profileStatsSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/subscription-usage',
+    operationId: 'listSubscriptionUsage',
+    access: 'admin',
+    response: z.array(subscriptionUsageSchema),
   },
   {
     method: 'GET',
