@@ -163,7 +163,9 @@ for (const aiEnabled of [true, false]) {
     });
     // In the conversation's toolbar below it, not in its header.
     expect(result.control?.closest('.agent-toolbar')).not.toBeNull();
-    expect(result.element.querySelector('.conversation-pane > header [role="switch"]')).toBeNull();
+    expect(
+      result.element.querySelector('.conversation-column > header [role="switch"]'),
+    ).toBeNull();
     expect(result.control?.getAttribute('aria-label')).toBe('AI replies for Customer');
     expect(result.control?.getAttribute('aria-checked')).toBe(String(aiEnabled));
     expect(result.element.textContent).toContain('Channel paused');

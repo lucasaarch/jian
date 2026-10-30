@@ -14,7 +14,7 @@ import type {
   Subagent,
   ToolStep,
 } from '../../lib/api';
-import { Badge, Button, Empty, Spinner } from '../ui';
+import { Empty, Spinner } from '../ui';
 import { plainText } from '../ui/markdown';
 import { CodeChanges } from './code-change';
 import { ConversationMap } from './conversation-map';
@@ -24,8 +24,9 @@ import { useFollowBottom } from './follow-bottom';
 import { MessageMedia } from './media';
 import { authored, ChatMessage } from './message';
 import { LiveTurn, placeSteps, traceOf } from './progress';
-import { running, statusLabels } from './status';
+import { running } from './status';
 import { ThoughtLine } from './thought-line';
+import { TroubleCard } from './trouble';
 
 /**
  * Who answers a message: the agent, or — on a question this profile carried to another agent —
@@ -66,6 +67,18 @@ function Worked({
   );
 }
 
+/** What a turn that went wrong is called, and what is said when the gateway kept no reason. */
+const troubles = {
+  failed: 'Agent encountered an error',
+  interrupted: 'The agent was interrupted',
+  cancelled: 'The run was cancelled',
+} as const;
+const fallbacks = {
+  failed: 'This run hit an unexpected error.',
+  interrupted: 'It stopped before it finished.',
+  cancelled: 'It stopped before it finished.',
+} as const;
+
 export function History({
   api,
   profileId,
@@ -76,6 +89,7 @@ export function History({
   group = false,
   chat,
   onAnswered,
+  retryRun,
 }: {
   api: Pick<GatewayApi, 'messages' | 'activities'> &
     Partial<
@@ -104,6 +118,8 @@ export function History({
    */
   chat?: string;
   onAnswered?: () => void;
+  /** Runs a turn that failed again, where the conversation can be answered from the panel. */
+  retryRun?: (run: Run) => Promise<unknown>;
 }) {
   const [messages, setMessages] = useState<Awaited<ReturnType<GatewayApi['messages']>>>([]);
   const [people, setPeople] = useState(new Map<string, Person>());
@@ -119,6 +135,8 @@ export function History({
   // Bumped by an event about this conversation, so it reads again the moment something happens.
   const [heard, setHeard] = useState(0);
   const [deciding, setDeciding] = useState(false);
+  // The failed turn whose card the owner closed; a later one shows its own.
+  const [dismissed, setDismissed] = useState<string>();
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -566,27 +584,28 @@ export function History({
           floats with the composer over the end of the conversation. */}
       <div className="history-tray">
         {error && (
-          <div className="history-error" role="alert">
-            <p>{error}</p>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setLoading(true);
-                setRetry((value) => value + 1);
-              }}
-            >
-              Try again
-            </Button>
-          </div>
+          <TroubleCard
+            title="The conversation could not be loaded"
+            detail={error}
+            action="Try again"
+            onAction={() => {
+              setLoading(true);
+              setRetry((value) => value + 1);
+            }}
+          />
         )}
-        {/* The dots already say the agent is working; the bar speaks only when a turn went wrong. */}
-        {run && ['failed', 'interrupted', 'cancelled'].includes(run.status) && (
-          <div className="run-status">
-            <Badge tone={run.status === 'cancelled' ? 'neutral' : 'bad'}>
-              {statusLabels[run.status]}
-            </Badge>
-            {run.error && <p className="text-bad">{run.error}</p>}
-          </div>
+        {/* The dots already say the agent is working; the card speaks only when a turn went wrong. */}
+        {run && run.id !== dismissed && troubles[run.status as keyof typeof troubles] && (
+          <TroubleCard
+            title={troubles[run.status as keyof typeof troubles]}
+            detail={`${run.error ?? fallbacks[run.status as keyof typeof troubles]}${
+              retryRun && run.status !== 'cancelled' ? ' Retry or send a follow-up below.' : ''
+            }`}
+            {...(retryRun && run.status !== 'cancelled'
+              ? { action: 'Retry', busy: deciding, onAction: () => settle(retryRun(run)) }
+              : {})}
+            onClose={() => setDismissed(run.id)}
+          />
         )}
         <CrewDock agents={subagents} />
       </div>

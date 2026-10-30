@@ -32,7 +32,7 @@ export function SessionObjective({
   return (
     <Popover.Root>
       <Popover.Trigger
-        className={`badge ${tone[objective.status]} session-objective-trigger`}
+        className={`badge ${tone[objective.status]} session-badge-trigger`}
         aria-label={`${label[objective.status]}: show the objective`}
       >
         <span className="badge-dot" />
@@ -47,10 +47,8 @@ export function SessionObjective({
           positionMethod="fixed"
           collisionBoundary={[]}
         >
-          <Popover.Popup className="model-menu session-objective-popup">
-            <Popover.Title className="session-objective-title">
-              {label[objective.status]}
-            </Popover.Title>
+          <Popover.Popup className="model-menu session-badge-popup">
+            <Popover.Title className="session-badge-title">{label[objective.status]}</Popover.Title>
             <p>{objective.text}</p>
             {objective.status === 'blocked' && objective.note && (
               <p className="session-objective-note">{objective.note}</p>

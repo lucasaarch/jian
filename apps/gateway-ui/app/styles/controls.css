@@ -625,11 +625,9 @@
   .message-history.loading {
     @apply grid place-items-center;
   }
-  .history-error {
-    @apply my-4 flex flex-wrap items-center gap-4 rounded-md bg-bad-soft p-4 text-sm text-bad;
-  }
-  .history-error p {
-    @apply text-bad;
+  /* The spinner is inline, inside the chat column: on its own it hugs the column's left edge. */
+  .history-loading {
+    @apply grid place-items-center;
   }
   .skill-import {
     @apply mb-6 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 gap-y-2;

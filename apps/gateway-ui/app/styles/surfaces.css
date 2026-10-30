@@ -557,49 +557,91 @@
     @apply flex min-h-0 min-w-0 flex-col;
   }
   .conversation-pane .message-list,
-  .conversation-pane .session-history > .history-error,
   .conversation-pane .composer > * {
     @apply mx-auto w-full;
     max-width: var(--chat-column);
   }
-  .conversation-pane > header {
+  .conversation-pane > header,
+  .conversation-column > header {
     @apply flex items-center gap-3 border-b border-line px-6 py-4;
   }
-  .conversation-pane > header h2 {
+  .conversation-pane > header h2,
+  .conversation-column > header h2 {
     @apply truncate text-xl;
   }
-  .conversation-pane > header small {
+  .conversation-pane > header small,
+  .conversation-column > header small {
     @apply block truncate text-xs text-muted;
   }
-  /* The objective is a badge at the end of the row where the chat runs; its goal opens from it. */
-  .session-objective-trigger {
-    @apply ml-auto shrink-0 cursor-pointer transition-opacity hover:opacity-80;
+  /* The objective and the listeners are badges at the end of the row where the chat runs; what
+     each one holds opens from it. */
+  .session-badges {
+    @apply ml-auto flex shrink-0 items-center gap-1.5 empty:hidden;
   }
-  .session-objective-popup {
-    @apply w-auto max-w-[min(26rem,calc(100vw-2rem))] gap-2 p-4 leading-relaxed;
+  .session-badge-trigger {
+    @apply shrink-0 cursor-pointer transition-opacity hover:opacity-80;
+  }
+  /* Built on the model menu's popup, which loads later and sizes itself to its content: named
+     with it, so a long goal wraps in a readable column instead of running across the screen. */
+  .model-menu.session-badge-popup {
+    @apply gap-2 p-4 leading-relaxed;
+    width: min(26rem, calc(100vw - 2rem));
+    max-width: min(26rem, calc(100vw - 2rem));
     color: var(--ink);
+    overflow-wrap: anywhere;
   }
-  .session-objective-title {
+  .session-badge-title {
     @apply text-xs font-medium;
     color: var(--muted);
   }
   .session-objective-note {
     color: var(--warn);
   }
+  /* Each listener in the badge's list: what it is, what it watches, how it stands, and a cross
+     to stop it, shown on hover where there is a pointer and always on a touch screen. */
   .session-listeners {
-    @apply mt-1.5 flex list-none flex-col gap-1 p-0 text-xs text-muted;
+    @apply -mx-2 grid list-none gap-0.5 p-0 text-xs;
+    color: var(--muted);
   }
   .session-listeners > li {
-    @apply flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1;
+    @apply flex min-w-0 items-start gap-2 rounded-lg px-2 py-2 transition-colors;
+  }
+  .session-listeners > li:hover,
+  .session-listeners > li:focus-within {
+    background: var(--canvas);
+  }
+  .session-listener-text {
+    @apply grid min-w-0 flex-1 gap-1;
   }
   .session-listener-name {
-    @apply font-medium text-ink;
+    @apply truncate text-[13px] font-medium;
+    color: var(--ink);
   }
   .session-listener-target {
-    @apply min-w-0 truncate;
+    @apply truncate font-mono text-[11.5px];
   }
   .session-listener-meta {
-    @apply flex flex-wrap gap-x-2 text-muted;
+    @apply flex flex-wrap items-center gap-x-2 gap-y-1;
+  }
+  .session-listener-stop {
+    @apply grid h-7 w-7 shrink-0 place-items-center rounded-md opacity-0 transition-opacity;
+    color: var(--muted);
+  }
+  .session-listeners > li:hover .session-listener-stop,
+  .session-listener-stop:focus-visible {
+    @apply opacity-100;
+  }
+  .session-listener-stop:hover {
+    background: var(--surface);
+    color: var(--bad);
+  }
+  .session-listener-stop:disabled {
+    @apply cursor-default opacity-40;
+  }
+  @media (hover: none) {
+    .session-listener-stop {
+      @apply opacity-100;
+    }
   }
   /* A channel's conversation has, where a chat has its composer, its agent settings: whether
      the agent answers this contact, and on which model. Same column, same box, no text. */
@@ -677,9 +719,35 @@
     -webkit-mask-image: linear-gradient(to bottom, transparent 1rem, black 5.5rem);
     mask-image: linear-gradient(to bottom, transparent 1rem, black 5.5rem);
   }
-  .conversation-pane .run-status {
-    @apply mx-auto mb-4;
+  /* Above the composer, in its column: the title, what went wrong, a way to close it and a way
+     on. Quiet, as a notice is, so the conversation above it still leads. */
+  .trouble-card {
+    @apply mx-auto mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-xl border px-4 py-3 text-sm shadow-lg;
     width: min(var(--chat-column), calc(100% - 3rem));
+    background: var(--surface);
+    border-color: var(--line);
+  }
+  .trouble-text {
+    @apply grid min-w-0 gap-0.5;
+  }
+  .trouble-text strong {
+    @apply font-medium;
+    color: var(--ink);
+  }
+  .trouble-text p {
+    @apply line-clamp-3 break-words;
+    color: var(--muted);
+  }
+  .trouble-close {
+    @apply -mr-1 -mt-0.5 grid h-7 w-7 place-items-center rounded-md transition-colors;
+    color: var(--muted);
+  }
+  .trouble-close:hover {
+    background: var(--canvas);
+    color: var(--ink);
+  }
+  .trouble-card .trouble-action {
+    @apply col-span-2 h-8 min-h-8 justify-self-end rounded-full px-3.5 text-[13px];
   }
   /* The composer as AI chats draw it: one rounded box holding the files, the text and the
      buttons, floating over the end of the conversation. */
@@ -1220,9 +1288,6 @@
   .chat-author {
     @apply mb-1 block text-xs font-semibold text-muted;
   }
-  .run-status {
-    @apply flex flex-wrap items-center gap-3 py-3 text-muted;
-  }
 }
 
 @media (max-width: 760px) {
@@ -1312,7 +1377,7 @@
   .conversation-pane .message-history {
     @apply px-3;
   }
-  .conversation-pane .run-status {
+  .trouble-card {
     width: min(var(--chat-column), calc(100% - 1.5rem));
   }
   .chat-list-toggle {
@@ -1358,10 +1423,12 @@
   .conversation-pane .conversation-back {
     @apply inline-flex;
   }
-  .conversation-pane > header {
+  .conversation-pane > header,
+  .conversation-column > header {
     @apply px-3 py-3;
   }
-  .conversation-pane > header h2 {
+  .conversation-pane > header h2,
+  .conversation-column > header h2 {
     @apply text-base;
   }
 }

@@ -130,6 +130,23 @@ export const sessionCalls = (client: Client) => ({
         body: { decision, requestKey: crypto.randomUUID() },
       }),
     ),
+  /**
+   * The turn that failed, run again from where it stopped. The note is the agent's alone: it
+   * says no one checked what the failed turn already did, so the agent looks before repeating.
+   * One key per failed run, so a second press is the same retry.
+   */
+  retryRun: (profileId: string, runId: string) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/runs/{runId}/continue', {
+        params: { path: { profileId, runId } },
+        body: {
+          text: 'The previous turn stopped on an error. Pick up the work where it stopped.',
+          requestKey: `retry:${runId}`,
+          reconciliation:
+            'Not checked: the owner asked to retry after the error. Read the saved checkpoints before repeating anything the failed turn may already have done.',
+        },
+      }),
+    ),
   answerRun: (profileId: string, runId: string, text: string) =>
     result(
       client.POST('/v1/profiles/{profileId}/runs/{runId}/answer', {
