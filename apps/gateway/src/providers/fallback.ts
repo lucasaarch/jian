@@ -24,13 +24,7 @@ export class ModelFallback {
     // first message that answers and one that asks the owner to go and configure something.
     await this.catalog?.prime().catch(() => undefined);
 
-    const priority = new Map([
-      ['anthropic', 0],
-      ['openai', 1],
-    ]);
-    const live = (await this.providers.providers())
-      .filter((provider) => !provider.revokedAt)
-      .sort((a, b) => (priority.get(a.kind) ?? 2) - (priority.get(b.kind) ?? 2));
+    const live = preferredProviders(await this.providers.providers());
     const available: Array<{ provider: ProviderRecord; models: Candidate[] }> = [];
     const claude = live.filter((provider) => provider.kind === 'anthropic');
     const gpt = live.filter((provider) => provider.kind !== 'anthropic');
@@ -68,6 +62,21 @@ export class ModelFallback {
   private conversational(provider: ProviderRecord): Promise<Candidate[]> {
     return conversationalModels(provider, this.models, this.catalog);
   }
+}
+
+const priority = new Map([
+  ['anthropic', 0],
+  ['openai', 1],
+]);
+
+/**
+ * The live providers, in the order a choice between them is made: Anthropic, then OpenAI, then
+ * the rest as they were connected. Wherever the same model is reachable twice, this decides.
+ */
+export function preferredProviders(providers: ProviderRecord[]): ProviderRecord[] {
+  return providers
+    .filter((provider) => !provider.revokedAt)
+    .sort((a, b) => (priority.get(a.kind) ?? 2) - (priority.get(b.kind) ?? 2));
 }
 
 /** A model that can hold a conversation, with what the catalog knows of it. */

@@ -170,7 +170,7 @@ export function buildServices({
     gatewayVault,
     sshKeys: new SshKeys(store, gatewayVault),
     mcp: new McpServers(store, gatewayVault, clock),
-    remote: new Remote(store, clock),
+    remote: new Remote(store, clock, undefined, gatewayVault),
     push,
   };
 

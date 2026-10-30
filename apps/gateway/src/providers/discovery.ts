@@ -174,7 +174,7 @@ const rank = (model: ProviderModel) =>
  * they read as two models. The catalogued, stable id stays, then the shorter. A saved choice of
  * a dropped id still runs: selections are never checked against this list.
  */
-export function withoutAliases(models: ProviderModel[]): ProviderModel[] {
+function withoutAliases(models: ProviderModel[]): ProviderModel[] {
   const kept = new Map<string, ProviderModel>();
   const unnamed: ProviderModel[] = [];
 

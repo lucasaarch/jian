@@ -99,7 +99,7 @@ export function sanitizeObjectiveText(raw: string, max = MAX_OBJECTIVE_TEXT): st
 }
 
 /** Summary used inside auto-continue wakes and prompt injection — never raw shell output. */
-export function objectiveContinueSummary(text: string): string {
+function objectiveContinueSummary(text: string): string {
   return sanitizeObjectiveText(text, MAX_OBJECTIVE_CONTINUE_SUMMARY);
 }
 

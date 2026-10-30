@@ -14,7 +14,7 @@ import { mediaAssets } from '../storage/schema.js';
  * Prefer compressing/scaling captures so they fit — truncating base64 mid-stream yields a
  * corrupt JPEG (often a grey lower half) that still “looks like” an image.
  */
-export const REMOTE_PAYLOAD_CHARS = 400_000;
+const REMOTE_PAYLOAD_CHARS = 400_000;
 
 function platformOf(machine: { platform: string }) {
   const value = machine.platform.toLowerCase();
@@ -163,7 +163,7 @@ function pushCommand(platform: 'windows' | 'macos' | 'linux', path: string, base
 const coordinateSchema = z.tuple([z.number().int(), z.number().int()]);
 
 /**
- * Remote Control tools: shell, Anthropic-style computer use, and file transfer through the
+ * Machine tools: shell, Anthropic-style computer use, and file transfer through the
  * worker polling channel. Authorization is the machine’s profile ACL — not allowShell.
  */
 export function remoteTools(
@@ -180,7 +180,7 @@ export function remoteTools(
   const tools: ToolSet = {
     list_remote_machines: tool({
       description:
-        'List the remote computers connected to this installation (Remote Control); every agent may use each one. Commands and computer use run there as the logged-in local user.',
+        'List the machines connected to this installation: the computers the owner added under Machines, with their OS (system) and platform. Every agent may use each one. Commands and computer use run there as the logged-in local user.',
       inputSchema: z.object({}),
       execute: async () => remote.list(),
     }),
@@ -200,7 +200,7 @@ export function remoteTools(
     }),
     remote_computer: tool({
       description:
-        'Control an authorized Remote Control computer (macOS, Linux X11, or Windows) with Anthropic-style actions: screenshot the primary display, move/click/drag the pointer, type text, press keys, scroll, wait, or end_session (hides the Jian overlay). Coordinates are pixels in the last screenshot image (origin top-left). Screenshot first; use returned widthPx/heightPx. Call end_session when finished with the GUI.',
+        'Control a connected machine (macOS, Linux X11, or Windows) with Anthropic-style actions: screenshot the primary display, move/click/drag the pointer, type text, press keys, scroll, wait, or end_session (hides the Jian overlay). Coordinates are pixels in the last screenshot image (origin top-left). Screenshot first; use returned widthPx/heightPx. Call end_session when finished with the GUI.',
       inputSchema: z.object({
         machineId: z.uuid(),
         action: remoteComputerActionSchema,

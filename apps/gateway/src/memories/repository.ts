@@ -8,7 +8,7 @@ type Row = typeof memories.$inferSelect;
 /** The contract addresses a memory by one string; the table keys it by profile and key. */
 export const memoryId = (profileId: string, key: string) => `${profileId}:${key}`;
 
-export function toMemory(row: Row): Memory {
+function toMemory(row: Row): Memory {
   return {
     id: memoryId(row.profileId, row.key),
     profileId: row.profileId,

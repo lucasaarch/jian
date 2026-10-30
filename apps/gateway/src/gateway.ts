@@ -2,6 +2,7 @@ import { McpLogins } from './agent/mcp-login.js';
 import { AgentRuntime } from './agent/runtime.js';
 import { createApp } from './app.js';
 import { ApiChannel } from './channels/api.js';
+import { ApiModels } from './channels/api-models.js';
 import type { Channel } from './channels/channel.js';
 import { ChannelRegistry } from './channels/registry.js';
 import { Channels } from './channels/service.js';
@@ -149,6 +150,8 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
   const channels = new Channels(services, outbound.fetch, new ChannelRegistry(adapters));
 
   channels.usePublicUrl(options.publicUrl);
+  // An API channel's caller names a model by its id, among what the providers list.
+  channels.useModels(new ApiModels(services.providers, providerModels));
 
   // A colleague's late answer has no incoming message to hang a delivery on; channels give it one.
   services.peers.useDeliveries(channels);

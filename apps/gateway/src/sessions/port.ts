@@ -1,4 +1,4 @@
-import type { Message, Session } from '@jian/contracts';
+import type { Message, ProtectionMode, Session } from '@jian/contracts';
 import type { Queryable } from '../storage/database.js';
 
 export interface SessionReader {
@@ -34,13 +34,19 @@ export interface SessionNamer {
   nameIfUnnamed(profileId: string, sessionId: string, title: string): Promise<void>;
 }
 
+/** How a conversation the gateway opens for a channel starts, where it differs from Ask. */
+export type SessionStart = { protection: ProtectionMode };
+
 export interface SessionWriter extends SessionReader {
   createSession(
     profileId: string,
     input: unknown,
     transaction?: Queryable,
     scope?: 'direct' | 'group',
+    start?: SessionStart,
   ): Promise<Session>;
+  setModel(profileId: string, sessionId: string, input: unknown): Promise<Session>;
+  setProtection(profileId: string, sessionId: string, input: unknown): Promise<Session>;
 }
 
 /** The session two agents share. Held apart from `SessionWriter`: only peer calls open one. */

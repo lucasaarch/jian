@@ -4,6 +4,7 @@ export * from './decisions.js';
 export * from './github-items.js';
 export * from './integrations.js';
 export * from './media.js';
+export * from './openai.js';
 export * from './operations.js';
 export * from './peers.js';
 export * from './profile.js';

@@ -5,7 +5,7 @@ import { runs, scheduleRuns, schedules } from '../storage/schema.js';
 
 type Row = typeof schedules.$inferSelect;
 
-export function toSchedule(row: Row): Schedule {
+function toSchedule(row: Row): Schedule {
   return {
     id: row.id,
     profileId: row.profileId,
@@ -26,7 +26,7 @@ export function toSchedule(row: Row): Schedule {
   };
 }
 
-export function toRow(schedule: Schedule): typeof schedules.$inferInsert {
+function toRow(schedule: Schedule): typeof schedules.$inferInsert {
   return {
     id: schedule.id,
     profileId: schedule.profileId,

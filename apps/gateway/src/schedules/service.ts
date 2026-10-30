@@ -53,7 +53,7 @@ const DAY_MS = 86_400_000;
  * What a run started by a schedule says. The agent reads it as the owner's request arriving
  * now, marked so it knows nobody typed it this minute; the panel shows the mark apart.
  */
-export const scheduledText = (schedule: Pick<Schedule, 'name' | 'instruction'>) =>
+const scheduledText = (schedule: Pick<Schedule, 'name' | 'instruction'>) =>
   `[Scheduled: ${schedule.name}] ${schedule.instruction}`;
 
 /**

@@ -51,6 +51,79 @@ it('lets every agent use every machine, and runs a task through the worker', asy
   ]);
 });
 
+it('records the OS each worker reports, and keeps it when a later poll says nothing', async () => {
+  const services = await testServices();
+  const token = 'host-admin-token-for-test-1234567890-verysecret';
+  const app = createApp({ ...services, token, logger: false });
+  const owner = { authorization: `Bearer ${token}` };
+  try {
+    const created = await services.remote.create({ name: 'Studio' });
+    expect(created).toMatchObject({ platform: 'unknown', system: null });
+    const worker = { authorization: `Bearer ${created.token}` };
+    const poll = (headers: Record<string, string>) =>
+      app.inject({ url: `/v1/remote/worker/${created.id}/tasks/next`, headers });
+    const listed = async () =>
+      (await app.inject({ url: '/v1/remote/machines', headers: owner })).json()[0];
+
+    await poll({ ...worker, 'x-jian-platform': 'darwin-arm64', 'x-jian-system': '  macOS 27.2 ' });
+    expect(await listed()).toMatchObject({ platform: 'darwin-arm64', system: 'macOS 27.2' });
+
+    // A worker from before it reported its system, or one sending a blank, changes nothing.
+    await poll({ ...worker, 'x-jian-platform': 'darwin-arm64' });
+    await poll({ ...worker, 'x-jian-system': '   ' });
+    expect(await listed()).toMatchObject({ system: 'macOS 27.2' });
+
+    // The worker's word is bounded before it is stored.
+    await poll({ ...worker, 'x-jian-system': `Ubuntu ${'9'.repeat(300)}` });
+    expect((await listed()).system).toHaveLength(100);
+  } finally {
+    await app.close();
+  }
+});
+
+it('shows the OS and architecture its creator gave before the worker ever polls', async () => {
+  const services = await testServices();
+  const token = 'host-admin-token-for-test-1234567890-verysecret';
+  const app = createApp({ ...services, token, logger: false });
+  const headers = { authorization: `Bearer ${token}` };
+  try {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/remote/machines',
+      headers,
+      payload: { name: 'Work laptop', platform: 'win32-x64', system: 'Windows 11 (26100)' },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
+      name: 'Work laptop',
+      platform: 'win32-x64',
+      system: 'Windows 11 (26100)',
+      online: false,
+    });
+    const listed = await app.inject({ url: '/v1/remote/machines', headers });
+    expect(listed.json()).toMatchObject([{ platform: 'win32-x64', system: 'Windows 11 (26100)' }]);
+
+    // Only a name, as before: the machine is created and waits for its worker to say.
+    const named = await app.inject({
+      method: 'POST',
+      url: '/v1/remote/machines',
+      headers,
+      payload: { name: 'Lab box' },
+    });
+    expect(named.json()).toMatchObject({ platform: 'unknown', system: null });
+
+    const invalid = await app.inject({
+      method: 'POST',
+      url: '/v1/remote/machines',
+      headers,
+      payload: { name: 'Bad', platform: 'beos-ppc' },
+    });
+    expect(invalid.statusCode).toBe(400);
+  } finally {
+    await app.close();
+  }
+});
+
 it('shows a worker offline as soon as it says it is stopping', async () => {
   const services = await testServices();
   const created = await services.remote.create({ name: 'MacBook' });

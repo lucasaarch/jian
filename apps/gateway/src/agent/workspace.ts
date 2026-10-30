@@ -89,6 +89,15 @@ export async function workspaceOf(profileId: string): Promise<string> {
   return realpath(home);
 }
 
+/** A project conversation's own checkout, which its instructions name and its clone defaults to. */
+export async function projectCheckout(
+  profileId: string,
+  projectId: string,
+  sessionId: string,
+): Promise<string> {
+  return join(await workspaceOf(profileId), 'projects', projectId, 'sessions', sessionId);
+}
+
 const inside = (path: string, root: string) => path === root || path.startsWith(`${root}${sep}`);
 
 /** The real path of something that may not exist yet: symlinks of the part that exists, resolved. */

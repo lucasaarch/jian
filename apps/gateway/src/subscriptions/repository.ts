@@ -51,7 +51,7 @@ function toRow(subscription: Subscription, secretHash: string): typeof subscript
   };
 }
 
-export function toDelivery(row: DeliveryRow): SubscriptionDelivery {
+function toDelivery(row: DeliveryRow): SubscriptionDelivery {
   return {
     id: row.id,
     subscriptionId: row.subscriptionId,

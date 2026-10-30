@@ -24,7 +24,7 @@ function readObjective(objective: SessionObjective): SessionObjective {
   };
 }
 
-export function toSession(row: SessionRow): Session {
+function toSession(row: SessionRow): Session {
   return {
     id: row.id,
     profileId: row.profileId,
@@ -45,7 +45,7 @@ export function toSession(row: SessionRow): Session {
   };
 }
 
-export function toMessage(row: MessageRow): Message {
+function toMessage(row: MessageRow): Message {
   return {
     id: row.id,
     profileId: row.profileId,

@@ -23,7 +23,7 @@ export type RoleSelections = Record<ModelRole, ModelSelection | 'disabled' | nul
  * Columns come back as dates and as nulls, while the contract speaks ISO strings and leaves an
  * unset field out entirely; the parse is the boundary.
  */
-export function toProviderRecord(row: Row): ProviderRecord {
+function toProviderRecord(row: Row): ProviderRecord {
   return providerRecordSchema.parse({
     id: row.id,
     name: row.name,

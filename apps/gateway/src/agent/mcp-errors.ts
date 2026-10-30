@@ -65,6 +65,3 @@ export function mcpOutcomeUncertain(error: unknown): boolean {
   if (mcpClientDisconnected(error)) return false;
   return matches(error, UNKNOWN_OUTCOME);
 }
-
-/** @deprecated Prefer mcpClientDisconnected — same meaning. */
-export const mcpRequestNeverSent = mcpClientDisconnected;

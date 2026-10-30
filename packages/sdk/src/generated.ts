@@ -845,6 +845,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/channels/{channelId}/openai/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: webhook. */
+        get: operations["listChannelModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/channels/{channelId}/openai/chat/completions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: webhook. */
+        post: operations["createChannelChatCompletion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/whatsapp-business/{channelId}": {
         parameters: {
             query?: never;
@@ -3280,6 +3314,8 @@ export interface operations {
                         id: string;
                         name: string;
                         platform: string;
+                        /** @default null */
+                        system: string | null;
                         online: boolean;
                         /** Format: date-time */
                         createdAt: string;
@@ -3393,6 +3429,8 @@ export interface operations {
             content: {
                 "application/json": {
                     name: string;
+                    platform?: string;
+                    system?: string;
                 };
             };
         };
@@ -3408,6 +3446,8 @@ export interface operations {
                         id: string;
                         name: string;
                         platform: string;
+                        /** @default null */
+                        system: string | null;
                         online: boolean;
                         /** Format: date-time */
                         createdAt: string;
@@ -3533,6 +3573,8 @@ export interface operations {
                         id: string;
                         name: string;
                         platform: string;
+                        /** @default null */
+                        system: string | null;
                         online: boolean;
                         /** Format: date-time */
                         createdAt: string;
@@ -3899,6 +3941,9 @@ export interface operations {
                             };
                             update?: {
                                 version: string;
+                            };
+                            env?: {
+                                [key: string]: string;
                             };
                         } | null;
                     };
@@ -9941,6 +9986,18 @@ export interface operations {
                     };
                     reaction?: boolean;
                     target?: string;
+                    /**
+                     * @description `ask` or `auto`; `full` is refused on an API channel.
+                     * @enum {string}
+                     */
+                    protection?: "ask" | "auto" | "full";
+                    /** @description A model id the providers list, or `default` for the gateway Model defaults. */
+                    model?: string;
+                    /**
+                     * @description Refused when the model does not offer it.
+                     * @enum {string}
+                     */
+                    effort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
                 };
             };
         };
@@ -10047,6 +10104,389 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listChannelModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        object: "list";
+                        data: {
+                            id: string;
+                            /** @constant */
+                            object: "model";
+                            created: number;
+                            owned_by: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    createChannelChatCompletion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description A model id from GET /models, or `default` for the gateway Model defaults. */
+                    model: string;
+                    messages: ({
+                        /** @enum {string} */
+                        role: "system" | "developer" | "user" | "assistant" | "tool" | "function";
+                        content?: (string | ({
+                            type: string;
+                            text?: string;
+                        } & {
+                            [key: string]: unknown;
+                        })[]) | null;
+                    } & {
+                        [key: string]: unknown;
+                    })[];
+                    /** @description When true, the answer arrives as text/event-stream `chat.completion.chunk` events, ending with `data: [DONE]`. */
+                    stream?: boolean | null;
+                    /** @enum {string|null} */
+                    reasoning_effort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | null;
+                    /** @description Who is writing; one Jian contact per user. */
+                    user?: string | null;
+                    metadata?: ({
+                        /** @description The conversation; without it, one is recognised from its first messages. */
+                        chat_id?: string;
+                    } & {
+                        [key: string]: unknown;
+                    }) | null;
+                    /**
+                     * @description Jian extension: `ask` or `auto`; `full` is refused on an API channel.
+                     * @enum {string}
+                     */
+                    protection?: "ask" | "auto" | "full";
+                } & {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        /** @constant */
+                        object: "chat.completion";
+                        created: number;
+                        model: string;
+                        choices: {
+                            index: number;
+                            message: {
+                                /** @constant */
+                                role: "assistant";
+                                content: string;
+                            };
+                            /** @constant */
+                            finish_reason: "stop";
+                        }[];
+                        usage: {
+                            prompt_tokens: number;
+                            completion_tokens: number;
+                            total_tokens: number;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            message: string;
+                            type: string;
+                            code: string | null;
+                        };
+                    };
                 };
             };
         };

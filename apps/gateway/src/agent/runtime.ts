@@ -54,6 +54,8 @@ import type { WebSearch } from '../web/service.js';
 import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
 import { splitDiff } from './diff.js';
+import { githubGitTools } from './github-git.js';
+import { localPlace, remotePlace } from './github-git-place.js';
 import {
   GITHUB_MCP_TOOLSETS,
   githubMcpCredentialKey,
@@ -62,8 +64,8 @@ import {
   githubMcpToolsetsKey,
 } from './github-mcp.js';
 import {
-  ACTION_KINDS,
   ApprovalPause,
+  actionKind,
   approvedOutcome,
   mcpActionKind,
   type PausedCall,
@@ -84,6 +86,7 @@ import { deferTools, profileTools, type ToolServices } from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
 import { markSteering, outsideContent } from './untrusted.js';
 import { prepareProfileGitAccess, prepareWorkerWorkspace } from './worker-workspace.js';
+import { projectCheckout } from './workspace.js';
 
 /**
  * How long a model call or a tool may go without a sign of life before the turn is given up.
@@ -410,8 +413,33 @@ export class AgentRuntime {
       const gitAccess = run.subagent
         ? await prepareWorkerWorkspace(run, this.services.sshKeys)
         : await prepareProfileGitAccess(run.profileId, this.services.sshKeys);
+      // GitHub git runs where the conversation works; one that targets a machine never falls
+      // back to the gateway's workspace.
+      const gitPlace = session.remoteMachineId
+        ? this.services.remote &&
+          remotePlace(profileId, session.remoteMachineId, this.services.remote)
+        : localPlace(profileId, gitAccess);
       const tools: ToolSet = {
         ...profileTools(this.services, run, gitAccess, session.remoteMachineId, skillServers),
+        ...(!learning && this.options.github && gitPlace
+          ? githubGitTools({
+              github: this.options.github,
+              profileId,
+              projectId: session.projectId,
+              ...(session.projectId && !session.remoteMachineId
+                ? {
+                    projectCheckout: await projectCheckout(
+                      profileId,
+                      session.projectId,
+                      session.id,
+                    ),
+                  }
+                : {}),
+              place: gitPlace,
+              // Masked in every result, error and timeline entry of this run from here on.
+              lend: (secret) => secrets.add(secret),
+            })
+          : {}),
         ...this.services.media?.tools(run, async (usage) => {
           await account(
             {
@@ -538,7 +566,7 @@ export class AgentRuntime {
               // what waits for approval has not started, and the timeline must not say it did.
               const kind = mcpToolNames.includes(name)
                 ? mcpActionKind(definition)
-                : ACTION_KINDS[name];
+                : actionKind(name, input);
 
               if (kind && protection.mode !== 'run') {
                 if (approvedCallId !== undefined && approvedCallId === options.toolCallId) {
@@ -761,7 +789,7 @@ export class AgentRuntime {
       };
 
       const targetInstructions = session.remoteMachineId
-        ? `\n\nExecution target: Remote Control machine ${session.remoteMachineId}. Use only remote machine tools for project work; local machine tools are intentionally unavailable.`
+        ? `\n\nExecution target: machine ${session.remoteMachineId}. Use only remote machine tools for project work; local machine tools are intentionally unavailable.`
         : '';
       const instructions = dress(`${context.system}${targetInstructions}`);
       const codingSkill = findSkill(run.profile, skillServers, 'ponytail');

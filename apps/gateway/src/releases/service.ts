@@ -41,7 +41,7 @@ export function compareVersions(a: string, b: string): number {
 }
 
 /** One note file: `date` and an optional `summary` in the front matter, Markdown after it. */
-export function parseNote(file: string, text: string): ReleaseNote {
+function parseNote(file: string, text: string): ReleaseNote {
   const version = file.replace(/\.md$/, '');
   const match = VERSION.exec(version);
   const front = /^---\n([\s\S]*?)\n---\n/.exec(text);
@@ -73,7 +73,7 @@ export function parseNote(file: string, text: string): ReleaseNote {
   };
 }
 
-export function readNotes(directory?: URL): ReleaseNote[] {
+function readNotes(directory?: URL): ReleaseNote[] {
   const location = directory ?? LOCATIONS.find((item) => existsSync(fileURLToPath(item)));
 
   if (!location) {

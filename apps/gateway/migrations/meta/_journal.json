@@ -561,6 +561,13 @@
       "when": 1793245000000,
       "tag": "0079_remote-updates-on-request",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1793246000000,
+      "tag": "0080_machine-system",
+      "breakpoints": true
     }
   ]
 }
