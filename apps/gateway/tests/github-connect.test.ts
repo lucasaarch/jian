@@ -74,3 +74,18 @@ it('refuses an installation the authorized account cannot reach, and saves nothi
   expect(result.location).toBe(`${panel}${returnPath}?github=failed&reason=not-owner`);
   expect((await integrations.status()).accounts).toEqual([]);
 });
+
+it("names a new App without the installation's address", async () => {
+  const store = await TestStore.create();
+  const vault = new GatewayVault(
+    store,
+    new SecretBox({ activeKeyId: 'test', keys: { test: randomBytes(32) } }),
+  );
+  const integrations = new GitHubIntegrations(store, vault, panel);
+
+  const first = await integrations.registration(panel, returnPath);
+  const second = await integrations.registration(panel, returnPath);
+
+  expect(first.manifest.name).toMatch(/^Jian - [0-9a-f]{8}$/);
+  expect(first.manifest.name).not.toBe(second.manifest.name);
+});
