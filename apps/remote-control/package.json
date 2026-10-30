@@ -33,7 +33,7 @@
     "url": "git+https://github.com/lucasaarch/jian.git",
     "directory": "apps/remote-control"
   },
-  "homepage": "https://github.com/lucasaarch/jian/blob/main/docs/remote.md",
+  "homepage": "https://github.com/lucasaarch/jian/tree/main/apps/remote-control#readme",
   "bugs": {
     "url": "https://github.com/lucasaarch/jian/issues"
   },

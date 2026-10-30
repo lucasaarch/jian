@@ -11,7 +11,7 @@ apps/web/             Next.js panel, standalone server in front of the gateway (
 apps/remote-control/  Published npm worker (`@jian-ai/remote-control`)
 packages/contracts/   Zod schemas — the source of the HTTP contract
 packages/sdk/         Generated TypeScript client
-docs/                 Architecture, security, channels, panel
+docs/releases/        One note per release; the only documentation kept
 ```
 
 Products share contracts, never each other's internals.

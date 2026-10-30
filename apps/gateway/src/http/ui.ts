@@ -12,8 +12,7 @@ declare module 'fastify' {
  * installation updated without that container, a PaaS template above all, now reaches this
  * address and finds no panel; this page says what changed and how to finish the update.
  */
-const GUIDE =
-  'https://github.com/lucasaarch/jian/blob/main/docs/deploy.md#moving-the-panel-out-of-the-gateway';
+const GUIDE = 'https://github.com/lucasaarch/jian/blob/main/docs/releases/1.0.0.md#upgrading';
 
 const STYLE = `
 :root { color-scheme: dark light; --ink: #ededed; --muted: #a3a3a3; --line: #262626;
