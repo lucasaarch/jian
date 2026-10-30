@@ -1,22 +1,27 @@
 import { ThemeSync } from '@jian/ui';
 import { useEffect, useState } from 'react';
+import { StatusBar } from './chrome/status-bar';
 import { TitleBar } from './chrome/title-bar';
 import { desktop } from './desktop';
 import { AddGateway } from './gateways/add-gateway';
-import { GatewayBar } from './gateways/gateway-bar';
 import { GatewayPanel } from './gateways/gateway-panel';
+import { GatewayPicker } from './gateways/gateway-picker';
+import { GatewaySettings } from './gateways/gateway-settings';
 import { openIn } from './gateways/navigation';
 import { Incompatible } from './gateways/states';
 import { useGateways, useSelectedGateway } from './gateways/use-gateways';
+import { AppSettings } from './settings/app-settings';
 
 /**
- * The window: the chosen gateway's panel above, every gateway in the bar below. It opens on the
- * app's own gateway, ready to use; connecting another is something the owner chooses to do.
+ * The window: the chats of the gateway and agent in use, the status bar choosing both beneath
+ * them, and every setting in overlays above. It opens on the app's own gateway, ready to use.
  */
 export function App() {
   const { gateways, loaded } = useGateways();
   const { current, select } = useSelectedGateway(gateways);
-  const [adding, setAdding] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const [gatewaySettings, setGatewaySettings] = useState<string>();
+  const [connecting, setConnecting] = useState(false);
 
   // A notification leads to its gateway and chat, whichever gateway was showing.
   useEffect(
@@ -24,45 +29,65 @@ export function App() {
       desktop().onOpen(({ gatewayId, path }) => {
         openIn(gatewayId, path);
         select(gatewayId);
-        setAdding(false);
       }),
     [select],
   );
 
+  // ⌘, on macOS and Ctrl+, elsewhere, as every app opens its settings.
+  useEffect(() => {
+    const mac = desktop().platform === 'darwin';
+    const keys = (event: KeyboardEvent) => {
+      if (event.key !== ',' || !(mac ? event.metaKey : event.ctrlKey)) return;
+      event.preventDefault();
+      setSettings(true);
+    };
+    window.addEventListener('keydown', keys);
+    return () => window.removeEventListener('keydown', keys);
+  }, []);
+
   if (!loaded) return null;
 
-  let body: React.ReactNode;
-  if (!current || adding) {
-    body = (
-      <AddGateway
-        added={(gateway) => {
-          select(gateway.id);
-          setAdding(false);
-        }}
-        cancel={() => setAdding(false)}
-      />
-    );
-  } else if (current.status === 'incompatible') {
-    body = <Incompatible gateway={current} />;
-  } else {
-    body = <GatewayPanel key={current.id} gateway={current} />;
-  }
+  const statusBar = (agent?: React.ReactNode) => (
+    <StatusBar
+      gateway={
+        <GatewayPicker
+          gateways={gateways}
+          {...(current ? { current } : {})}
+          select={select}
+          openSettings={setGatewaySettings}
+          connect={() => setConnecting(true)}
+        />
+      }
+      agent={agent}
+      openSettings={() => setSettings(true)}
+    />
+  );
 
   return (
-    <div className="flex h-dvh flex-col bg-canvas">
-      <TitleBar gateway={adding ? undefined : current} />
-      {/* The panel sizes itself to the window; the app's own screens scroll when it is short.
-          Layout containment makes this area the box the panel's fixed sidebar and dialogs are
-          placed in, so they sit between the title bar and the gateway bar, not over them. */}
-      <div className="min-h-0 flex-1 overflow-y-auto [contain:layout]">{body}</div>
-      <GatewayBar
-        gateways={gateways}
-        current={adding ? undefined : current}
-        select={(id) => {
-          select(id);
-          setAdding(false);
-        }}
-        add={() => setAdding(true)}
+    <div className="app-window flex h-dvh flex-col">
+      <TitleBar gateway={current} />
+      {/* Layout containment makes this area the box the panel's fixed pieces are placed in. */}
+      <div className="flex min-h-0 flex-1 flex-col [contain:layout]">
+        {current?.status === 'incompatible' ? (
+          <>
+            <Incompatible gateway={current} />
+            {statusBar()}
+          </>
+        ) : current ? (
+          <GatewayPanel key={current.id} gateway={current} statusBar={statusBar} />
+        ) : (
+          statusBar()
+        )}
+      </div>
+      <AppSettings open={settings} onOpenChange={setSettings} />
+      <GatewaySettings
+        gateway={gateways.find((gateway) => gateway.id === gatewaySettings)}
+        onOpenChange={(open) => !open && setGatewaySettings(undefined)}
+      />
+      <AddGateway
+        open={connecting}
+        onOpenChange={setConnecting}
+        added={(gateway) => select(gateway.id)}
       />
       <ThemeSync />
     </div>
