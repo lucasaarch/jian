@@ -92,8 +92,9 @@ private let pointerSize: CGFloat = 60
 /// Tip hotspot in the padded 60 pt view (content tip was (2,2) in the 40 pt box).
 private let hotspot = CGPoint(x: 12, y: 12)
 
-/// Ship asset `macos/jian-pointer.png` (@3x master) as base64 — single-file helper stays
-/// reliable when only the binary is copied into Application Support (no sidecar PNG).
+/// Ship asset `assets/jian-pointer.png` (@3x master, shared with Linux and Windows) as base64:
+/// the single-file helper stays reliable when only the binary is copied into Application
+/// Support, with no sidecar PNG.
 private let jianPointerPngBase64 = """
 iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAA
 ADqYAAAXcJy6UTwAAAAGYktHRAD/AP8A/6C9p5MAAAAHdElNRQfqChUTJjnUxztNAAAAJXRFWHRkYXRlOmNyZWF0
