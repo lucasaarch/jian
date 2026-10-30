@@ -54,10 +54,9 @@ connects, shows **Update needed** in the panel, and takes no task but its update
 refuses a mismatched release up front.
 
 Requires Node.js 24+. Computer Use works on macOS, Linux (X11 + `xdotool`/`ffmpeg`), and
-Windows. Published builds include a prebuilt macOS `computer-helper` (no Xcode on the worker
-Mac) plus Linux/Windows helper scripts. From source on a Mac, run
-`packages/remote-core/helpers/macos/build-helper.sh`, or
-let the worker compile with `swiftc` when Command Line Tools are installed.
+Windows. Published builds include a universal macOS `computer-helper`, built from the Rust crate
+in `packages/remote-core/native`, plus Linux/Windows helper scripts. From source on a Mac, build
+it with `pnpm --filter @jian/remote-core helper:macos` (rustup with both Apple targets).
 
 On macOS the LaunchAgent uses `ProcessType=Interactive` and an idle `caffeinate` so the worker
 keeps polling while the screen is locked (App Nap must not freeze timers). A locked Mac stays
