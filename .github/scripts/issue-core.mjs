@@ -138,8 +138,13 @@ export function sanitizeProse(raw) {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/<[^>]*>/g, ' ')
+    // A reference definition has one destination and an optional quoted title. Tags such as
+    // '[Feature]: Pinned chats' are ordinary Issue titles, not Markdown link definitions.
+    .replace(
+      /^\s{0,3}\[[^\]\n]+\]:[ \t]*(?:<[^>\n]+>|[^\s<>]+)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?[ \t]*$/gm,
+      '',
+    )
     .replace(/(?:https?:\/\/|www\.)[^\s]+/gi, '')
-    .replace(/^\s*\[[^\]]+\]:.*$/gm, '')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/[<>]/g, '')
     .trim();
