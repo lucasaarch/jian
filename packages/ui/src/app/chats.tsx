@@ -14,15 +14,7 @@ import { useSavedLayout } from '../lib/stores/layout';
 import { useOnboarding } from '../lib/stores/onboarding';
 import { useActions, useAdoptProfile, useProfileId } from '../lib/workspace';
 import { usePathname, useRouter, useSearchParams } from '../platform/navigation';
-import {
-  type AgentPlace,
-  AgentSettingsView,
-  agentPlace,
-  CustomizeView,
-  OverviewView,
-  SchedulesView,
-  useEscapeTo,
-} from './agent-pages';
+import { AgentOverlays } from './agent-overlays';
 import { AgentPicker } from './agent-picker';
 import { ChatSearch } from './chat-search';
 import { ChatSidebar } from './chat-sidebar';
@@ -51,9 +43,8 @@ export function ChatsApp({ createAgent, header }: { createAgent: () => void; hea
   const pathname = usePathname();
   const search = useSearchParams();
   const phone = usePhone();
-  // Something the sidebar opened: a chat, a new one, or one of the agent's pages.
-  const opened =
-    Boolean(agentPlace(pathname)) || /\/sessions\/[^/]+/.test(pathname) || search.has('new');
+  // Something the sidebar opened: a chat, or a new one.
+  const opened = /\/sessions\/[^/]+/.test(pathname) || search.has('new');
   const sidebar = !phone || (known && !opened);
   const main = !phone || !sidebar;
   useSavedLayout();
@@ -102,6 +93,12 @@ export function ChatsApp({ createAgent, header }: { createAgent: () => void; hea
               <Chats phone={phone} createAgent={createAgent} />
             </div>
           )}
+          {/* Beside both: on a phone the sidebar opens them with no conversation on screen. */}
+          {profileId && known && (
+            <Suspense fallback={null}>
+              <AgentOverlays profileId={profileId} />
+            </Suspense>
+          )}
         </ReadFailed>
       </div>
     </WelcomeHandoff>
@@ -144,43 +141,18 @@ function Chats({ phone, createAgent }: { phone: boolean; createAgent: () => void
 
 function AgentChats({ profileId, phone }: { profileId: string; phone: boolean }) {
   const actions = useActions();
-  const pathname = usePathname();
-  const place = agentPlace(pathname);
   const remember = useLastProfile((state) => state.remember);
-  // The chat open before a page of the agent, the place Escape goes back to from it.
-  const [lastChat, setLastChat] = useState<string>();
   useEventStream(profileId);
   useEffect(() => remember(profileId), [profileId, remember]);
-  useEffect(() => {
-    if (!place) setLastChat(pathname);
-  }, [place, pathname]);
-  useEscapeTo(place ? (lastChat ?? agentPath(profileId, 'sessions')) : undefined);
 
   return (
     <main className="flex h-full flex-col overflow-hidden">
       <ChatNotices profileId={profileId} />
-      {phone && <PhoneBar profileId={profileId} {...(place ? { place } : {})} />}
+      {phone && <PhoneBar profileId={profileId} />}
       <div className="min-h-0 flex-1">
-        <Place place={place} profileId={profileId} actions={actions} />
+        <Sessions {...actions} />
       </div>
       <ChatSearch profileId={profileId} />
     </main>
   );
-}
-
-/** What takes the conversation's place: one of the agent's pages, or the conversation. */
-function Place({
-  place,
-  profileId,
-  actions,
-}: {
-  place: AgentPlace | undefined;
-  profileId: string;
-  actions: ReturnType<typeof useActions>;
-}) {
-  if (place === 'overview') return <OverviewView />;
-  if (place === 'schedules') return <SchedulesView />;
-  if (place === 'settings') return <AgentSettingsView profileId={profileId} />;
-  if (place) return <CustomizeView profileId={profileId} tab={place} />;
-  return <Sessions {...actions} />;
 }

@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { GatewayApi, ProfileStats } from '../../lib/api';
 import { AgentCache } from '../../test/agent';
 import { profile, statsFor } from '../../test/fixtures';
-import { OverviewContent } from './overview-content';
+import { ActivityContent } from './activity-content';
 import { ChannelCards, ModelCards, UsageSummary } from './usage';
 
 // The cache tells its readers on the next tick, not within the one that answered.
@@ -29,17 +29,17 @@ async function render(ui: React.ReactNode) {
 const button = (host: HTMLElement, text: string) =>
   [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === text);
 
-it('holds the overview’s shape while the numbers are read, and says so until they arrive', async () => {
+it('holds the page’s shape while the numbers are read, and says so until they arrive', async () => {
   let answer: (stats: ProfileStats) => void = () => {};
   const api = {
     stats: () => new Promise<ProfileStats>((resolve) => (answer = resolve)),
     activityCalendar: vi.fn(async () => []),
   } as unknown as GatewayApi;
-  const host = await render(<OverviewContent api={api} />);
+  const host = await render(<ActivityContent api={api} />);
   const status = () =>
     [...host.querySelectorAll('[role="status"]')].map((item) => item.textContent);
 
-  expect(status()).toContain('Loading overview…');
+  expect(status()).toContain('Loading activity…');
   expect(host.querySelector('[aria-busy="true"] [aria-label="Usage"]')).not.toBeNull();
   // The year is read beside the numbers, not after them.
   expect(api.activityCalendar).toHaveBeenCalled();
@@ -47,19 +47,19 @@ it('holds the overview’s shape while the numbers are read, and says so until t
   await act(async () => answer(statsFor(30) as ProfileStats));
   await settle();
 
-  expect(status()).not.toContain('Loading overview…');
+  expect(status()).not.toContain('Loading activity…');
   expect(host.querySelector('[aria-busy="true"]')).toBeNull();
   expect(host.textContent).toContain('1,583');
-  expect(host.querySelector('[aria-label="Activity"]')).not.toBeNull();
+  expect(host.querySelector('[aria-label="Over the year"]')).not.toBeNull();
 });
 
 it('offers to read again when the numbers could not be read', async () => {
   const stats = vi.fn().mockRejectedValueOnce(new Error('Offline')).mockResolvedValue(statsFor(30));
   const api = { stats, activityCalendar: async () => [] } as unknown as GatewayApi;
-  const host = await render(<OverviewContent api={api} />);
+  const host = await render(<ActivityContent api={api} />);
   await settle();
 
-  expect(host.textContent).toContain('The overview could not be read.');
+  expect(host.textContent).toContain('The activity could not be read.');
   await act(async () => button(host, 'Try again')?.click());
   await settle();
 
@@ -70,7 +70,7 @@ it('offers to read again when the numbers could not be read', async () => {
 it('reads the usage again over the period chosen', async () => {
   const stats = vi.fn(async (_profile: string, days: number) => statsFor(days));
   const api = { stats, activityCalendar: async () => [] } as unknown as GatewayApi;
-  const host = await render(<OverviewContent api={api} />);
+  const host = await render(<ActivityContent api={api} />);
   await settle();
 
   await act(async () => button(host, '7 days')?.click());

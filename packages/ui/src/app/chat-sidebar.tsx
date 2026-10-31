@@ -1,15 +1,7 @@
 'use client';
 
 import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
-import {
-  AlarmClock,
-  Blocks,
-  Bot,
-  LayoutDashboard,
-  MessageSquare,
-  SquarePen,
-  Terminal,
-} from 'lucide-react';
+import { AlarmClock, Bot, MessageSquare, SquarePen, Terminal } from 'lucide-react';
 import { type ReactNode, Suspense, useEffect, useRef } from 'react';
 import { TelegramLogo, WhatsAppLogo } from '../components/ui';
 import type { Session } from '../lib/api';
@@ -24,6 +16,7 @@ import {
   useProjects,
   useSessions,
 } from '../lib/query/agent';
+import { useAgentOverlay } from '../lib/stores/agent-overlay';
 import {
   MAX_SIDEBAR_WIDTH,
   MIN_CHAT_WIDTH,
@@ -32,8 +25,7 @@ import {
 } from '../lib/stores/layout';
 import { unread } from '../lib/unread';
 import { useActions, useDeleteConversation, useRefresh } from '../lib/workspace';
-import { useParams, usePathname, useRouter } from '../platform/navigation';
-import { agentPlace, customizePath, customizeTabs, schedulesPath } from './agent-pages';
+import { useParams, useRouter } from '../platform/navigation';
 import { ChatRow } from './chat-row';
 import { ChatSection, ProjectFolder } from './chat-section';
 import { channelKind, chatSections, lastAt } from './chat-sections';
@@ -161,12 +153,11 @@ const action =
 
 /**
  * The top of the sidebar: a new chat — an action, never shown as the one open — and the agent's
- * places besides its chats, Overview, Schedules and Customize, marked while open. Customize
- * counts the contacts waiting for approval, and opens on its Channels then, where they wait.
+ * Schedules, which open over its chats.
  */
-function NewChat({ profileId, pending = 0 }: { profileId?: string; pending?: number }) {
+function NewChat({ profileId }: { profileId?: string }) {
   const router = useRouter();
-  const place = agentPlace(usePathname());
+  const openSchedules = useAgentOverlay((state) => state.openSchedules);
   const go = (path: string) => () => router.push(path);
   return (
     <div className="grid gap-px px-2 pt-2 pb-5">
@@ -181,41 +172,12 @@ function NewChat({ profileId, pending = 0 }: { profileId?: string; pending?: num
       </button>
       <button
         type="button"
-        onClick={profileId ? go(agentPath(profileId)) : undefined}
+        onClick={profileId ? openSchedules : undefined}
         disabled={!profileId}
-        aria-current={place === 'overview' ? 'page' : undefined}
-        className={action}
-      >
-        <LayoutDashboard size={15} className="text-muted" aria-hidden="true" />
-        Overview
-      </button>
-      <button
-        type="button"
-        onClick={profileId ? go(schedulesPath(profileId)) : undefined}
-        disabled={!profileId}
-        aria-current={place === 'schedules' ? 'page' : undefined}
         className={action}
       >
         <AlarmClock size={15} className="text-muted" aria-hidden="true" />
         Schedules
-      </button>
-      <button
-        type="button"
-        onClick={
-          profileId ? go(customizePath(profileId, pending > 0 ? 'channels' : 'skills')) : undefined
-        }
-        disabled={!profileId}
-        aria-current={place && customizeTabs.includes(place) ? 'page' : undefined}
-        className={action}
-      >
-        <Blocks size={15} className="text-muted" aria-hidden="true" />
-        Customize
-        {pending > 0 && (
-          <span className="ml-auto grid h-4.5 min-w-4.5 place-items-center rounded-full bg-ink px-1 text-[11px] font-semibold text-canvas tabular-nums">
-            {pending}
-            <span className="sr-only"> waiting for approval</span>
-          </span>
-        )}
       </button>
     </div>
   );
@@ -289,10 +251,7 @@ function AgentSidebar({ profileId }: { profileId: string }) {
 
   return (
     <>
-      <NewChat
-        profileId={profileId}
-        pending={contacts.filter((contact) => contact.status === 'pending').length}
-      />
+      <NewChat profileId={profileId} />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2 pb-4">
         {chatSections({ sessions, projects, channels }).map((section) =>
           section.kind === 'projects' ? (

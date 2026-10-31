@@ -119,23 +119,30 @@ it('keeps the address on the settings page open, and goes back to the chat on cl
   expect(memoryNavigation.current()).toBe(chat);
 });
 
-it('shows an agent’s settings in the conversation’s place, and Escape goes back to the chat', async () => {
-  const host = await render(chat);
+it('opens an agent’s settings over the chat, and Escape closes them where it was', async () => {
+  await render(chat);
 
   // The gear is in the agent picker, beside each agent.
   await press('Agent');
   await press(`${profile.name} settings`);
 
-  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/settings`);
-  expect(dialog()).toBeNull();
-  expect(host.querySelector('main[aria-label="Agent settings"]')?.textContent).toContain(
-    'Danger zone',
-  );
+  expect(memoryNavigation.current()).toBe(chat);
+  expect(dialog()?.textContent).toContain('Danger zone');
 
   await act(async () =>
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    ),
   );
+  expect(dialog()).toBeNull();
   expect(memoryNavigation.current()).toBe(chat);
+});
+
+it('opens the settings an old address asked for, and goes on to the agent’s chats', async () => {
+  await render(`/agents/${profile.id}/settings`);
+
+  expect(dialog()?.textContent).toContain('Danger zone');
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions`);
 });
 
 it('opens the next agent’s chats once this one is deleted from its settings', async () => {
@@ -199,4 +206,11 @@ it('shows a phone the chats first, and the conversation once one is opened', asy
   await press('Chats');
   expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions`);
   expect(host.querySelector('nav[aria-label="Chats"]')).not.toBeNull();
+});
+
+it('opens the agent’s Activity at its own address, which was its Overview', async () => {
+  await render(`/agents/${profile.id}`);
+
+  expect(dialog()?.querySelector('section h2')?.textContent).toBe('Activity');
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions`);
 });

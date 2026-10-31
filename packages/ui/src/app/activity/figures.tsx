@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { Skeleton } from '../../kit';
 
-/** A card of the Overview: flat inside the page, as a settings card is. */
+/** A card of the page: flat, as a settings card is. */
 export const card = 'rounded-xl border border-glass-edge bg-glass-hover';
 
 /**
@@ -40,7 +40,7 @@ export function Tiles({ children }: { children: ReactNode }) {
   return <div className="grid grid-cols-4 gap-2.5 phone:grid-cols-2">{children}</div>;
 }
 
-/** A part of the Overview under its quiet title, with what changes it at the right. */
+/** A part of the page under its quiet title, with what changes it at the right. */
 export function Part({
   title,
   action,

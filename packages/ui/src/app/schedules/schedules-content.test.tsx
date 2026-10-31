@@ -1,11 +1,13 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
+import { scheduleActions } from '../../components/schedules/list';
 import type { GatewayApi, Schedule } from '../../lib/api';
 import { keys } from '../../lib/query/keys';
+import { useAgentOverlay } from '../../lib/stores/agent-overlay';
 import { AgentCache, agentClient } from '../../test/agent';
 import { profile } from '../../test/fixtures';
-import { SchedulesContent } from './schedules-content';
+import { SchedulesOverlay } from './schedules-content';
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
@@ -64,10 +66,11 @@ async function render(api: Record<string, unknown>) {
   document.body.append(host);
   const root = createRoot(host);
   roots.push(() => root.unmount());
+  useAgentOverlay.getState().openSchedules();
   await act(async () =>
     root.render(
       <AgentCache profile={profile} client={client}>
-        <SchedulesContent />
+        <SchedulesOverlay />
       </AgentCache>,
     ),
   );
@@ -92,7 +95,6 @@ it('removes a schedule only once its name is typed', async () => {
   const deleteSchedule = vi.fn(async () => undefined);
   const view = await render({ deleteSchedule });
 
-  await act(async () => view.button('Configure Morning summary')?.click());
   await act(async () => view.button('Remove', lastDialog())?.click());
   const confirm = view.button('Remove schedule', lastDialog());
   expect(confirm?.disabled).toBe(true);
@@ -128,9 +130,9 @@ it('creates a repeating schedule with the time written as its recurrence', async
   const createSchedule = vi.fn(async () => ({}));
   const view = await render({ createSchedule });
 
-  await act(async () => view.button('Add')?.click());
+  await act(async () => view.button('New schedule')?.click());
   const dialog = lastDialog();
-  await view.type(dialog?.querySelector('input'), 'Evening check');
+  await view.type(dialog?.querySelector('input[placeholder="Morning summary"]'), 'Evening check');
   await view.type(dialog?.querySelector('textarea'), 'Tell me what is still open today.');
   await act(async () => view.button('Repeat', dialog)?.click());
   // The time is picked from the hour and minute lists the field opens.
@@ -153,4 +155,44 @@ it('creates a repeating schedule with the time written as its recurrence', async
     enabled: true,
     cron: '30 18 * * *',
   });
+});
+
+it('lists the schedules down the side, with the one open in full beside them', async () => {
+  const view = await render({});
+  const dialog = lastDialog();
+
+  expect(view.button('Morning summary', dialog)?.getAttribute('aria-current')).toBe('page');
+  expect(dialog?.querySelector('section h2')?.textContent).toBe('Morning summary');
+  expect(dialog?.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe(summary.instruction);
+});
+
+it('saves a changed model on a schedule that exists', async () => {
+  const model = { providerId: 'provider', modelId: 'atlas-large', reasoningEffort: 'high' };
+  const updateSchedule = vi.fn(async () => ({}));
+  const act2 = scheduleActions(
+    {
+      api: { updateSchedule } as unknown as GatewayApi,
+      mutate: async (work: () => Promise<unknown>) => {
+        await work();
+        return true;
+      },
+    } as never,
+    profile.id,
+  );
+
+  await act2.save(summary, {
+    name: summary.name,
+    instruction: summary.instruction,
+    sessionId: null,
+    model,
+    timeZone: 'UTC',
+    enabled: true,
+    cron: '0 8 * * *',
+  } as never);
+
+  expect(updateSchedule).toHaveBeenCalledWith(
+    profile.id,
+    summary.id,
+    expect.objectContaining({ model }),
+  );
 });

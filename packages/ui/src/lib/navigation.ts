@@ -1,11 +1,11 @@
-/** Where a place of one agent lives: `''` is its Overview, `'sessions'` its chats. */
+/** Where a place of one agent lives: `'sessions'` is its chats. */
 export function agentPath(profileId: string, path = ''): string {
   const rest = path.replace(/^\//, '');
 
   return `/agents/${encodeURIComponent(profileId)}${rest ? `/${rest}` : ''}`;
 }
 
-/** Where an agent's settings open, in the conversation's place. */
+/** An address that opens an agent's settings, over its chats. */
 export const agentSettingsPath = (profileId: string) => agentPath(profileId, 'settings');
 
 /** Where an agent's new chat opens: its chats, asked to start one, in a project when given. */

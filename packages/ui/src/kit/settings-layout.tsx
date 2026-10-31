@@ -12,6 +12,8 @@ export type SettingsPage = {
   group?: string;
   /** Other words someone may search for it by. */
   keywords?: string[];
+  /** At the end of its line: a count, how it stands. */
+  trailing?: ReactNode;
 };
 
 const found = (page: SettingsPage, query: string) => {
@@ -35,8 +37,21 @@ export function SettingsLayout({
   current,
   onSelect,
   startOnPage = false,
+  title,
+  searchLabel = 'Search settings',
+  emptyLabel = 'No setting matches.',
+  backLabel = 'Settings',
+  action,
   children,
 }: {
+  /** What the open page is called, for a page the list does not hold, such as a new one. */
+  title?: string;
+  searchLabel?: string;
+  emptyLabel?: string;
+  /** The way back to the list, on a phone: what the list is called. */
+  backLabel?: string;
+  /** Above the list, for what can be added to it. */
+  action?: ReactNode;
   heading?: ReactNode;
   pages: SettingsPage[];
   current: string;
@@ -60,7 +75,7 @@ export function SettingsLayout({
       className="group/settings grid size-full grid-cols-[15rem_minmax(0,1fr)] phone:grid-cols-1"
     >
       <nav
-        aria-label="Settings"
+        aria-label={backLabel}
         className="flex min-h-0 flex-col gap-3 border-r border-glass-edge bg-canvas/25 p-2.5 pt-3 phone:border-0 phone:group-data-[reading=true]/settings:hidden"
       >
         <Dialog.Close className="flex h-8 w-fit items-center gap-2 px-2 text-[13px] text-muted transition-colors hover:text-ink">
@@ -72,8 +87,8 @@ export function SettingsLayout({
           <Search size={14} className="shrink-0" aria-hidden="true" />
           <input
             type="search"
-            aria-label="Search settings"
-            placeholder="Search settings"
+            aria-label={searchLabel}
+            placeholder={searchLabel}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
@@ -83,6 +98,7 @@ export function SettingsLayout({
             className={`${bareInput} text-[13px]`}
           />
         </label>
+        {action}
         <div className="grid min-h-0 content-start gap-3 overflow-y-auto">
           {groups.map((group) => (
             <div key={group} className="grid gap-0.5">
@@ -100,30 +116,29 @@ export function SettingsLayout({
                     className="flex h-8 items-center phone:h-11 phone:aria-[current=page]:bg-transparent gap-2.5 rounded-lg px-2.5 text-left text-[13px] text-ink/80 transition-colors hover:bg-glass-hover hover:text-ink aria-[current=page]:bg-glass-press aria-[current=page]:text-ink"
                   >
                     <span className="grid size-4 place-items-center text-muted">{page.icon}</span>
-                    {page.label}
+                    <span className="min-w-0 flex-1 truncate">{page.label}</span>
+                    {page.trailing}
                   </button>
                 ))}
             </div>
           ))}
-          {shown.length === 0 && (
-            <p className="px-2.5 py-2 text-[13px] text-muted">No setting matches.</p>
-          )}
+          {shown.length === 0 && <p className="px-2.5 py-2 text-[13px] text-muted">{emptyLabel}</p>}
         </div>
       </nav>
       <section
-        aria-label={open?.label}
+        aria-label={title ?? open?.label}
         className="scroll-inset min-h-0 overflow-y-auto px-10 pt-9 pb-14 phone:px-4 phone:pt-3 phone:group-data-[reading=false]/settings:hidden"
       >
-        <div className="mx-auto grid max-w-[40rem] gap-7 phone:gap-5">
+        <div className="mx-auto grid max-w-[40rem] grid-cols-1 gap-7 phone:gap-5">
           <button
             type="button"
             onClick={() => setReading(false)}
             className="-ml-1 hidden h-8 w-fit items-center gap-1 text-[13px] text-muted transition-colors hover:text-ink phone:flex"
           >
             <ChevronLeft size={16} />
-            Settings
+            {backLabel}
           </button>
-          <h2 className="px-1 text-base font-semibold tracking-tight">{open?.label}</h2>
+          <h2 className="px-1 text-base font-semibold tracking-tight">{title ?? open?.label}</h2>
           {children}
         </div>
       </section>

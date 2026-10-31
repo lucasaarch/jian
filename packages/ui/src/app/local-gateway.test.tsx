@@ -2,9 +2,11 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { keys } from '../lib/query/keys';
+import { useAgentOverlay } from '../lib/stores/agent-overlay';
+import { memoryNavigation } from '../platform/navigation';
 import { AgentCache, agentClient } from '../test/agent';
 import { profile } from '../test/fixtures';
-import { CustomizeView } from './agent-pages';
+import { AgentOverlays } from './agent-overlays';
 import { AppSettings } from './app-settings';
 
 // What each page lists is its own test's; here only which pages a gateway has.
@@ -25,8 +27,10 @@ afterEach(() => {
 
 async function render(ui: React.ReactNode, mode: 'local' | 'server') {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  const client = agentClient({ profile });
+  const client = agentClient({ profile, slices: { contacts: [], sessions: [] } });
   client.setQueryData(keys.gateway, { status: 'ok', version: '1.4.0', mode });
+  // On its chats: the agent's bare address would ask for its Activity.
+  memoryNavigation.go(`/agents/${profile.id}/sessions`);
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
@@ -45,17 +49,20 @@ const labels = (selector: string) =>
   [...document.querySelectorAll(selector)].map((item) => item.textContent?.trim());
 
 for (const mode of ['local', 'server'] as const) {
-  it(`offers channels in Customize only on a server (${mode})`, async () => {
-    const host = await render(<CustomizeView profileId={profile.id} tab="channels" />, mode);
+  it(`offers channels in the agent's settings only on a server (${mode})`, async () => {
+    useAgentOverlay.getState().openSettings('channels');
+    await render(<AgentOverlays profileId={profile.id} />, mode);
+    const dialog = [...document.querySelectorAll('[role="dialog"]')].at(-1);
 
     if (mode === 'server') {
-      expect(labels('[aria-label="Customize"] button')).toContain('Channels');
-      expect(host.textContent).toContain('Channels');
+      expect(labels('nav button')).toContain('Channels');
+      expect(dialog?.querySelector('section h2')?.textContent).toBe('Channels');
     } else {
-      // An address that names Channels lands on Skills on this computer's gateway.
-      expect(labels('[aria-label="Customize"] button')).not.toContain('Channels');
-      expect(host.textContent).toContain('Skills');
+      // Asked for by name, it lands on Identity on this computer's gateway, which has none.
+      expect(labels('nav button')).not.toContain('Channels');
+      expect(dialog?.querySelector('section h2')?.textContent).toBe('Identity');
     }
+    act(() => useAgentOverlay.getState().closeSettings());
   });
 
   it(`lists machines in Settings only on a server (${mode})`, async () => {

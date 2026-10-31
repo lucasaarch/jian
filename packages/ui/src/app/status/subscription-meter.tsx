@@ -4,10 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { ProviderLogo } from '../../components/ui';
 import type { SubscriptionUsage } from '../../lib/api';
 import { LOCALE } from '../../lib/format';
-import { agentPath } from '../../lib/navigation';
 import { queries } from '../../lib/query/profile';
+import { useAgentOverlay } from '../../lib/stores/agent-overlay';
 import { useProfileId } from '../../lib/workspace';
-import { useRouter } from '../../platform/navigation';
 import { statusItem } from './status-item';
 
 type Window = NonNullable<SubscriptionUsage['fiveHour']>;
@@ -30,11 +29,11 @@ const resets = (label: string, window: Window) =>
 /**
  * How much of the Claude and Codex subscriptions is used, in the status bar: each window's
  * share with a small bar, amber as it nears the end and red at it, the resets in its tooltip.
- * It opens the Overview, where they are told in full. Nothing shows without a subscription.
+ * It opens the agent's Activity, where they are told in full. Nothing shows without a subscription.
  */
 export function SubscriptionMeter() {
   const profileId = useProfileId();
-  const router = useRouter();
+  const openSettings = useAgentOverlay((state) => state.openSettings);
   const usage = useQuery(queries.subscriptionUsage()).data ?? [];
   const shown = usage.filter(
     (subscription) =>
@@ -63,7 +62,7 @@ export function SubscriptionMeter() {
             className={statusItem}
             title={title}
             aria-label={title.replaceAll('\n', '. ')}
-            onClick={() => profileId && router.push(agentPath(profileId))}
+            onClick={() => profileId && openSettings('activity')}
           >
             <ProviderLogo kind={codex ? 'openai' : 'anthropic'} size={12} />
             {windows.map(({ short, window }) => (

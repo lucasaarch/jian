@@ -1,9 +1,10 @@
 'use client';
 
 import {
+  Activity,
   AlarmClock,
   Brain,
-  LayoutDashboard,
+  Compass,
   MessagesSquare,
   Search,
   Sparkles,
@@ -14,16 +15,18 @@ import {
 import { useMemo } from 'react';
 import { AgentFace } from '../../kit/face';
 import type { Profile } from '../../lib/api';
-import { agentPath, agentSettingsPath, newChatPath } from '../../lib/navigation';
+import { agentPath, newChatPath } from '../../lib/navigation';
+import { useAgentOverlay } from '../../lib/stores/agent-overlay';
+import { useOnboarding } from '../../lib/stores/onboarding';
 import { useRouter } from '../../platform/navigation';
-import { customizePath, schedulesPath } from '../agent-pages';
 import { searchChats } from '../sidebar-bar';
 import { type AppCommand, useCommands } from './registry';
 
 /**
  * What can be done with the agents of the gateway open: the open agent's places, a new chat
  * with it, another agent to switch to, one to create. `current` is undefined while no agent is
- * open — the Welcome, an empty gateway — and only creating one is offered then.
+ * open — an empty gateway — and only creating one or meeting Jian again is offered then; none of
+ * this is offered while the Welcome is already up.
  */
 export function useAgentCommands({
   profiles,
@@ -44,7 +47,14 @@ export function useAgentCommands({
       icon: <UserPlus size={15} />,
       run: createAgent,
     };
-    if (!current) return [create];
+    const onboarding: AppCommand = {
+      id: 'show-onboarding',
+      title: 'Show onboarding',
+      keywords: ['welcome', 'introduction', 'setup', 'start', 'tour'],
+      icon: <Compass size={15} />,
+      run: () => useOnboarding.getState().show(),
+    };
+    if (!current) return [create, onboarding];
     const id = current.id;
     const place = (path: string) => () => router.push(path);
     return [
@@ -67,11 +77,11 @@ export function useAgentCommands({
       {
         id: 'overview',
         keys: { key: 'o', shift: true, alt: true },
-        title: 'Overview',
+        title: 'Activity',
         detail: current.name,
-        keywords: ['usage', 'activity', 'dashboard', 'costs', 'tokens'],
-        icon: <LayoutDashboard size={15} />,
-        run: place(agentPath(id)),
+        keywords: ['overview', 'usage', 'stats', 'dashboard', 'costs', 'tokens'],
+        icon: <Activity size={15} />,
+        run: () => useAgentOverlay.getState().openSettings('activity'),
       },
       {
         id: 'schedules',
@@ -80,34 +90,34 @@ export function useAgentCommands({
         detail: current.name,
         keywords: ['schedule', 'reminder', 'recurring', 'cron', 'later'],
         icon: <AlarmClock size={15} />,
-        run: place(schedulesPath(id)),
+        run: () => useAgentOverlay.getState().openSchedules(),
       },
       {
         id: 'skills',
         keys: { key: 'k', shift: true, alt: true },
         title: 'Skills',
         detail: current.name,
-        keywords: ['customize', 'skill', 'abilities'],
+        keywords: ['agent', 'skill', 'abilities'],
         icon: <Sparkles size={15} />,
-        run: place(customizePath(id, 'skills')),
+        run: () => useAgentOverlay.getState().openSettings('skills'),
       },
       {
         id: 'memories',
         keys: { key: 'm', shift: true, alt: true },
         title: 'Memories',
         detail: current.name,
-        keywords: ['customize', 'memory', 'remember', 'facts'],
+        keywords: ['agent', 'memory', 'remember', 'facts'],
         icon: <Brain size={15} />,
-        run: place(customizePath(id, 'memories')),
+        run: () => useAgentOverlay.getState().openSettings('memories'),
       },
       {
         id: 'channels',
         keys: { key: 'c', shift: true, alt: true },
         title: 'Channels',
         detail: current.name,
-        keywords: ['customize', 'whatsapp', 'telegram', 'api', 'connect'],
+        keywords: ['agent', 'whatsapp', 'telegram', 'api', 'connect'],
         icon: <MessagesSquare size={15} />,
-        run: place(customizePath(id, 'channels')),
+        run: () => useAgentOverlay.getState().openSettings('channels'),
       },
       {
         id: 'agent-settings',
@@ -116,7 +126,7 @@ export function useAgentCommands({
         detail: current.name,
         keywords: ['identity', 'name', 'instructions', 'reset', 'delete', 'agent'],
         icon: <UserCog size={15} />,
-        run: place(agentSettingsPath(id)),
+        run: () => useAgentOverlay.getState().openSettings(),
       },
       ...profiles
         .filter((profile) => profile.id !== id)
@@ -128,6 +138,7 @@ export function useAgentCommands({
           run: place(agentPath(profile.id, 'sessions')),
         })),
       create,
+      onboarding,
     ];
   }, [profiles, current, createAgent, router]);
   useCommands('agent', commands);

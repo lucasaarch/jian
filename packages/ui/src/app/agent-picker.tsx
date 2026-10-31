@@ -1,21 +1,54 @@
 'use client';
 
-import { Bot, Plus } from 'lucide-react';
-import { useRef, useState } from 'react';
-import { AgentFace, Picker, PickerAction, PickerRow } from '../kit';
-import { agentPath, agentSettingsPath } from '../lib/navigation';
+import { Bot, Plus, Settings2 } from 'lucide-react';
+import { Suspense, useRef, useState } from 'react';
+import { AgentFace, HoverTip, Picker, PickerAction, PickerRow } from '../kit';
+import { agentPath } from '../lib/navigation';
+import { useContacts } from '../lib/query/agent';
 import { useProfiles } from '../lib/query/profile';
+import { useAgentOverlay } from '../lib/stores/agent-overlay';
 import { useProfileId } from '../lib/workspace';
 import { useRouter } from '../platform/navigation';
+import { WaitingCount } from './agent-overlays';
+
+const gear =
+  'relative mr-1 grid size-7 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-glass-hover hover:text-ink';
+
+/**
+ * The way into the agent's settings, always in reach. Contacts waiting for approval are counted
+ * on it, and it opens where they wait.
+ */
+function SettingsButton() {
+  const open = useAgentOverlay((state) => state.openSettings);
+  const pending = useContacts().filter((contact) => contact.status === 'pending').length;
+  return (
+    <HoverTip tip="Agent settings">
+      <button
+        type="button"
+        aria-label="Agent settings"
+        className={gear}
+        onClick={() => open(pending > 0 ? 'channels' : 'identity')}
+      >
+        <Settings2 size={15} />
+        {pending > 0 && (
+          <span className="absolute -top-1 -right-1">
+            <WaitingCount count={pending} />
+          </span>
+        )}
+      </button>
+    </HoverTip>
+  );
+}
 
 /**
  * The agent in use, at the foot of the sidebar: its face and name open the others, each with
- * its own gear to its settings. Switching opens the other's chats.
+ * its own gear to its settings, and its own gear stays beside it. Switching opens the other's chats.
  */
 export function AgentPicker({ createAgent }: { createAgent: () => void }) {
   const profiles = useProfiles().data ?? [];
   const profileId = useProfileId();
   const router = useRouter();
+  const openSettings = useAgentOverlay((state) => state.openSettings);
   const [open, setOpen] = useState(false);
   // The whole row: the list opens over it, as wide as it.
   const row = useRef<HTMLDivElement>(null);
@@ -63,11 +96,20 @@ export function AgentPicker({ createAgent }: { createAgent: () => void }) {
                 label={profile.name}
                 selected={profile.id === profileId}
                 onPick={close(() => router.push(agentPath(profile.id, 'sessions')))}
-                onSettings={close(() => router.push(agentSettingsPath(profile.id)))}
+                onSettings={close(() => {
+                  // Another agent's settings are opened from that agent, which is what they edit.
+                  if (profile.id !== profileId) router.push(agentPath(profile.id, 'sessions'));
+                  openSettings();
+                })}
               />
             ))}
           </Picker>
         </div>
+        {current && (
+          <Suspense fallback={null}>
+            <SettingsButton />
+          </Suspense>
+        )}
       </div>
     </div>
   );

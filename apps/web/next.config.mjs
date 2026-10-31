@@ -30,8 +30,8 @@ const MOVED = [
   ['/agents/:profileId/remote/:rest*', '/settings/machines'],
   ['/settings/integrations/:rest+', '/settings/integrations'],
   ['/settings/remote', '/settings/machines'],
-  // An agent's skills, memories and channels are the tabs of its Customize; who it is, its
-  // settings over its chats.
+  // An agent's skills, memories and channels are pages of its settings overlay, which these
+  // older addresses open before going on to its chats.
   ['/agents/:profileId/:tab(skills|memories|channels)', '/agents/:profileId/customize/:tab'],
   ['/agents/:profileId/identity', '/agents/:profileId/settings'],
   // Projects are created and chosen in the composer; their screen is gone.

@@ -49,7 +49,12 @@ export function useScheduleList(
 export function scheduleActions({ api, mutate }: Omit<SectionActions, 'busy'>, profileId: string) {
   return {
     /** A new schedule without `schedule`; otherwise its fields, and its time as `input` gives it. */
-    save: (schedule: Schedule | undefined, input: ScheduleInput) =>
+    save: (
+      schedule: Schedule | undefined,
+      input: ScheduleInput,
+      /** Told a new schedule's id, for whoever shows it next. */
+      created?: (id: string) => void,
+    ) =>
       schedule
         ? mutate(
             () =>
@@ -57,12 +62,17 @@ export function scheduleActions({ api, mutate }: Omit<SectionActions, 'busy'>, p
                 name: input.name,
                 instruction: input.instruction,
                 sessionId: input.sessionId,
+                ...(input.model === undefined ? {} : { model: input.model }),
                 timeZone: input.timeZone,
                 ...(input.at ? { at: input.at } : { cron: input.cron }),
               }),
             `${input.name} saved.`,
           )
-        : mutate(() => api.createSchedule(profileId, input), `${input.name} scheduled.`),
+        : mutate(async () => {
+            const made = await api.createSchedule(profileId, input);
+            created?.(made.id);
+            return made;
+          }, `${input.name} scheduled.`),
     run: (item: Schedule) =>
       mutate(() => api.runSchedule(profileId, item.id), `${item.name} started.`),
     switchTo: (item: Schedule, enabled: boolean) =>

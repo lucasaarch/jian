@@ -8,6 +8,7 @@ import { Action, ConfirmDialog, SettingsGroup, SettingsRow } from '../kit';
 import type { Profile } from '../lib/api';
 import { panelApi } from '../lib/query/client';
 import { queries, useProfiles } from '../lib/query/profile';
+import { useAgentOverlay } from '../lib/stores/agent-overlay';
 import { useLastProfile } from '../lib/stores/last-profile';
 import { useRefresh } from '../lib/workspace';
 import { useRouter } from '../platform/navigation';
@@ -15,8 +16,8 @@ import { AgentAvatar } from './agent-avatar';
 import { AgentIdentity } from './agent-identity';
 
 /**
- * One agent's settings, in the conversation's place: who it is, saved as it is typed, and what
- * cannot be taken back — forgetting everything it was told, or deleting it.
+ * Who the agent is, saved as it is typed, and what cannot be taken back: forgetting everything
+ * it was told, or deleting it.
  */
 export function AgentSettingsContent({ profileId }: { profileId: string }) {
   const profile = useProfiles().data?.find((item) => item.id === profileId);
@@ -25,11 +26,10 @@ export function AgentSettingsContent({ profileId }: { profileId: string }) {
   return (
     <>
       <header className="flex items-center gap-3.5">
+        {/* The one place its picture is changed. */}
         <AgentAvatar profile={profile} size={3} />
         <div className="grid min-w-0">
-          <h2 className="truncate font-sans text-base font-semibold tracking-tight">
-            {profile.name}
-          </h2>
+          <p className="truncate text-base font-semibold tracking-tight">{profile.name}</p>
           {profile.summary && <p className="truncate text-[13px] text-muted">{profile.summary}</p>}
         </div>
       </header>
@@ -44,6 +44,7 @@ function DangerZone({ profile }: { profile: Profile }) {
   const router = useRouter();
   const refresh = useRefresh();
   const forget = useLastProfile((state) => state.forget);
+  const closeSettings = useAgentOverlay((state) => state.closeSettings);
   const [working, setWorking] = useState<'reset' | 'delete'>();
   const [asking, setAsking] = useState<'reset' | 'delete'>();
 
@@ -77,6 +78,7 @@ function DangerZone({ profile }: { profile: Profile }) {
       client.removeQueries({ queryKey: ['history', profile.id] });
       toast.success(`${profile.name} was deleted.`);
       forget(profile.id);
+      closeSettings();
       // The chats screen opens the next agent's chats, or offers to create one.
       router.replace('/');
     } catch (failure) {

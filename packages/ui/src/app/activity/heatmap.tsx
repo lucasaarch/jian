@@ -130,7 +130,7 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
 
   return (
     <Part
-      title="Activity"
+      title="Over the year"
       action={
         days ? (
           <span className="text-xs text-muted">
@@ -155,8 +155,8 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
             <div ref={scroller} className="overflow-x-auto pb-1">
               <div className="grid w-max gap-1">
                 <div
-                  className="grid gap-[3px] text-[10px] text-muted"
-                  style={{ gridTemplateColumns: `repeat(${WEEKS}, 0.6875rem)` }}
+                  className="grid gap-[2px] text-[10px] text-muted"
+                  style={{ gridTemplateColumns: `repeat(${WEEKS}, 0.5625rem)` }}
                   aria-hidden="true"
                 >
                   {months.map((month) => (
@@ -166,7 +166,7 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
                   ))}
                 </div>
                 <table
-                  className={`border-separate border-spacing-[3px] -m-[3px] ${reading ? 'motion-safe:animate-pulse' : ''}`}
+                  className={`border-separate border-spacing-[2px] -m-[2px] ${reading ? 'motion-safe:animate-pulse' : ''}`}
                   onMouseLeave={() => setHover(undefined)}
                   aria-label="Runs per day"
                 >
@@ -185,7 +185,7 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
                                 : { 'aria-label': `${longDate(cell.day)}: ${describe(cell)}` })}
                             >
                               <span
-                                className={`block size-[0.6875rem] rounded-[3px] ${cell.future ? 'bg-transparent' : LEVELS[levelOf(cell.runs, busiest)]}`}
+                                className={`block size-[0.5625rem] rounded-[2px] ${cell.future ? 'bg-transparent' : LEVELS[levelOf(cell.runs, busiest)]}`}
                               />
                             </td>
                           );
@@ -212,7 +212,7 @@ export function ActivityHeatmap({ profile, api }: { profile: Profile; api: Gatew
             >
               <span className="mr-1">Less</span>
               {LEVELS.map((tone) => (
-                <span key={tone} className={`size-[0.6875rem] rounded-[3px] ${tone}`} />
+                <span key={tone} className={`size-[0.5625rem] rounded-[2px] ${tone}`} />
               ))}
               <span className="ml-1">More</span>
             </footer>

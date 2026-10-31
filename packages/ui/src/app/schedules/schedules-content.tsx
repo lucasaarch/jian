@@ -1,133 +1,144 @@
 'use client';
 
-import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { AlarmClock, CalendarClock, Plus } from 'lucide-react';
+import { Suspense, useState } from 'react';
 import { choices } from '../../components/schedules/conversations';
-import { scheduleActions, useScheduleList } from '../../components/schedules/list';
+import { ranOnce, scheduleActions, useScheduleList } from '../../components/schedules/list';
 import {
   Action,
   ConfirmDialog,
-  SettingsGroup,
-  SettingsRow,
-  SettingsRowSkeleton,
-  SettingsRowsSkeleton,
+  Overlay,
+  SettingsLayout,
+  type SettingsPage,
+  Skeleton,
   SkeletonRegion,
 } from '../../kit';
 import type { Schedule } from '../../lib/api';
 import { agentPath } from '../../lib/navigation';
 import { useAgent, useAgents, useContacts, useSessions } from '../../lib/query/agent';
+import { useAgentOverlay } from '../../lib/stores/agent-overlay';
 import { useActions } from '../../lib/workspace';
 import { useRouter } from '../../platform/navigation';
-import { ScheduleDialog } from './schedule-dialog';
-import { ScheduleRow } from './schedule-row';
+import { ScheduleForm } from './schedule-form';
 
-/** A few schedules' shape: a name with how it stands, its switch and Configure. */
-const ScheduleRowsWaiting = () => <SettingsRowsSkeleton count={2} pill toggle />;
+const pageOf = (item: Schedule, group: string): SettingsPage => ({
+  id: item.id,
+  label: item.name,
+  group,
+  icon: item.cron ? <AlarmClock size={15} /> : <CalendarClock size={15} />,
+  keywords: [item.instruction],
+  ...(item.lastError
+    ? {
+        trailing: (
+          <span className="size-1.5 shrink-0 rounded-full bg-bad">
+            <span className="sr-only">Failed</span>
+          </span>
+        ),
+      }
+    : !item.enabled && !ranOnce(item)
+      ? { trailing: <span className="text-[11px] text-muted">Paused</span> }
+      : {}),
+});
 
-/**
- * The schedules while the agent is read, as the list will stand while its schedules are: their
- * rows' shape, then the row that adds one.
- */
-export function SchedulesWaiting() {
+const NewSchedule = ({ onClick }: { onClick: () => void }) => (
+  <Action tone="outline" size="small" className="h-8 w-full rounded-lg" onClick={onClick}>
+    <Plus size={13} />
+    New schedule
+  </Action>
+);
+
+const shared = {
+  searchLabel: 'Search schedules',
+  emptyLabel: 'No schedule matches.',
+  backLabel: 'Schedules',
+} as const;
+
+/** The schedules while the agent is read: the same overlay, its list and form still to come. */
+function SchedulesWaiting() {
   return (
-    <SkeletonRegion label="Loading schedules…" className="grid grid-cols-1">
-      <SettingsGroup>
-        <ScheduleRowsWaiting />
-        <SettingsRowSkeleton index={2} />
-      </SettingsGroup>
-    </SkeletonRegion>
+    <SettingsLayout {...shared} pages={[]} current="" onSelect={() => undefined} title="Schedules">
+      <SkeletonRegion label="Loading schedules…" className="grid gap-4">
+        <Skeleton className="h-10 rounded-lg" />
+        <Skeleton className="h-24 rounded-lg" />
+        <Skeleton className="h-10 rounded-lg" />
+      </SkeletonRegion>
+    </SettingsLayout>
   );
 }
 
 /**
- * What the agent does at a time — reminders, summaries, recurring checks — a line each, with its
- * switch and Configure, and the way to add another. The owner and the agent manage the same
- * list; removing one asks for its name first.
+ * What the agent does at a time — reminders, summaries, recurring checks — down the left, and all
+ * of the one open on the right. The owner and the agent manage the same list; removing one asks
+ * for its name first.
  */
-export function SchedulesContent() {
+function Schedules() {
   const { api, mutate, busy } = useActions();
   const profile = useAgent();
   const sessions = useSessions();
   const contacts = useContacts();
   const profiles = useAgents();
   const router = useRouter();
+  const asked = useAgentOverlay((state) => state.schedule);
+  const select = useAgentOverlay((state) => state.selectSchedule);
+  const close = useAgentOverlay((state) => state.closeSchedules);
   const { list, error, repeating, single, zone } = useScheduleList(api, profile.id);
   // An action reloads the agent's queries, the schedules and their runs among them.
   const act = scheduleActions({ api, mutate }, profile.id);
-  // What the form edits stays set while it closes, so it fades out as it was; read from the
-  // list each render, so a run or a switch shows in it at once.
-  const [editing, setEditing] = useState<Schedule>();
-  const current = editing && (list?.find((item) => item.id === editing.id) ?? editing);
-  const [formOpen, setFormOpen] = useState(false);
-  const [round, setRound] = useState(0);
   // The schedule asked about stays named while its dialog fades out.
   const [removing, setRemoving] = useState<Schedule>();
   const [asking, setAsking] = useState(false);
 
-  const edit = (target: Schedule | undefined) => {
-    setEditing(target);
-    setRound((count) => count + 1);
-    setFormOpen(true);
-  };
+  if (!list && !error) return <SchedulesWaiting />;
 
-  const reading = !list && !error;
-  const note = error ? (
-    <span role="alert" className="text-bad">
-      {error}
-    </span>
-  ) : undefined;
+  const ordered = [...repeating, ...single];
+  const pages = [
+    ...repeating.map((item) => pageOf(item, 'Repeating')),
+    ...single.map((item) => pageOf(item, 'Once')),
+  ];
+  // The one asked for, or else the first; with none yet, the way to write one.
+  const writing = asked === 'new' || ordered.length === 0;
+  const schedule = writing ? undefined : (ordered.find((item) => item.id === asked) ?? ordered[0]);
 
   return (
     <>
-      <SettingsGroup note={note} loading={reading && 'Loading schedules…'}>
-        {reading && <ScheduleRowsWaiting />}
-        {[...repeating, ...single].map((item) => (
-          <ScheduleRow
-            key={item.id}
-            item={item}
-            onSwitch={(enabled) => act.switchTo(item, enabled)}
-            onConfigure={() => edit(item)}
-          />
-        ))}
-        <SettingsRow
-          title={list?.length === 0 ? 'Nothing scheduled' : 'Add a schedule'}
-          {...(list?.length === 0
-            ? {
-                description: 'Ask the agent in a chat, or add one here.',
-              }
-            : {})}
-        >
-          <Action tone="outline" size="small" onClick={() => edit(undefined)}>
-            <Plus size={13} />
-            Add
-          </Action>
-        </SettingsRow>
-      </SettingsGroup>
-      <ScheduleDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        round={round}
-        api={api}
-        profileId={profile.id}
-        schedule={current}
-        choices={choices(sessions, contacts, profiles)}
-        zone={zone}
-        busy={busy}
-        onSave={(input) =>
-          void act.save(current, input).then((ok) => {
-            if (ok) setFormOpen(false);
-          })
-        }
-        onRun={() => current && void act.run(current)}
-        onRemove={() => {
-          setRemoving(current);
-          setAsking(true);
-        }}
-        onOpenConversation={(sessionId) => {
-          setFormOpen(false);
-          router.push(agentPath(profile.id, `sessions/${sessionId}`));
-        }}
-      />
+      <SettingsLayout
+        {...shared}
+        pages={pages}
+        current={schedule?.id ?? 'new'}
+        onSelect={select}
+        title={schedule?.name ?? 'New schedule'}
+        startOnPage={Boolean(asked)}
+        action={<NewSchedule onClick={() => select('new')} />}
+      >
+        {error && (
+          <p role="alert" className="text-sm text-bad">
+            {error}
+          </p>
+        )}
+        <ScheduleForm
+          key={schedule?.id ?? 'new'}
+          api={api}
+          profileId={profile.id}
+          schedule={schedule}
+          choices={choices(sessions, contacts, profiles)}
+          zone={zone}
+          busy={busy}
+          onSave={(input) => void act.save(schedule, input, select)}
+          onRun={() => schedule && void act.run(schedule)}
+          onSwitch={(enabled) =>
+            schedule ? act.switchTo(schedule, enabled) : Promise.resolve(false)
+          }
+          onRemove={() => {
+            setRemoving(schedule);
+            setAsking(true);
+          }}
+          onOpenConversation={(sessionId) => {
+            close();
+            router.push(agentPath(profile.id, `sessions/${sessionId}`));
+          }}
+          onCancel={writing && ordered.length > 0 ? () => select(undefined) : undefined}
+        />
+      </SettingsLayout>
       <ConfirmDialog
         open={asking}
         onOpenChange={setAsking}
@@ -138,11 +149,30 @@ export function SchedulesContent() {
         run={async () => {
           if (!removing || !(await act.remove(removing))) return;
           setAsking(false);
-          setFormOpen(false);
+          select(undefined);
         }}
       >
         It will not run again. To stop it for a while instead, pause it with its switch.
       </ConfirmDialog>
     </>
+  );
+}
+
+/** The agent's schedules, over its conversation, as settings are. */
+export function SchedulesOverlay() {
+  const open = useAgentOverlay((state) => state.schedules);
+  const close = useAgentOverlay((state) => state.closeSchedules);
+
+  return (
+    <Overlay
+      open={open}
+      onOpenChange={(next) => !next && close()}
+      title="Schedules"
+      closeButton={false}
+    >
+      <Suspense fallback={<SchedulesWaiting />}>
+        <Schedules />
+      </Suspense>
+    </Overlay>
   );
 }

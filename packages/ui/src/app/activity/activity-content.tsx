@@ -63,24 +63,24 @@ function useStats(api: GatewayApi, profileId: string, days: number) {
  * and when it was at work over the year. The numbers and the year are read apart, and each part
  * holds its shape until its own arrive.
  */
-export function OverviewContent({ api = panelApi() }: { api?: GatewayApi }) {
+export function ActivityContent({ api = panelApi() }: { api?: GatewayApi }) {
   const profile = useAgent();
   const [days, setDays] = useState('30');
   const { stats, failed, retry } = useStats(api, profile.id, Number(days));
 
   return (
-    <>
+    <div className="grid grid-cols-1 gap-6">
       <Figures stats={stats} failed={failed} retry={retry} days={days} onDays={setDays} />
       <ActivityHeatmap profile={profile} api={api} />
-    </>
+    </div>
   );
 }
 
 /**
- * The Overview while the agent itself is still being read: the figures' shape, so the page that
- * follows lands on the same layout. The year is left out, as it needs the agent to be read.
+ * The page while the agent itself is still being read: the figures' shape, so what follows lands
+ * on the same layout. The year is left out, as it needs the agent to be read.
  */
-export function OverviewWaiting() {
+export function ActivityWaiting() {
   return <Figures days="30" />;
 }
 
@@ -105,12 +105,12 @@ function Figures({
   return (
     <>
       <p role="status" className="sr-only">
-        {stats || failed ? '' : 'Loading overview…'}
+        {stats || failed ? '' : 'Loading activity…'}
       </p>
       {failed && !stats ? (
         <div className="grid place-items-center gap-3 py-16">
           <p role="alert" className="text-sm">
-            The overview could not be read.
+            The activity could not be read.
           </p>
           <Action tone="outline" size="small" onClick={retry}>
             Try again
@@ -144,7 +144,7 @@ function Figures({
               <Tile icon={<MessagesSquare size={16} />} label="Conversations">
                 {stats && <CountUp value={stats.totals.conversations} />}
               </Tile>
-              <Tile icon={<GraduationCap size={16} />} label="Skills and memories kept">
+              <Tile icon={<GraduationCap size={16} />} label="Skills and memories">
                 {stats && <CountUp value={stats.totals.skillsWritten + stats.totals.memories} />}
               </Tile>
             </Tiles>

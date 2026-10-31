@@ -7,54 +7,15 @@ import type { Choice } from '../../components/schedules/conversations';
 import { useScheduleDraft } from '../../components/schedules/draft';
 import { ranOnce } from '../../components/schedules/list';
 import { SessionModel } from '../../components/sessions/model-picker';
-import { Action, Overlay, SelectField, Skeleton, TextArea, TextField } from '../../kit';
+import { Action, SelectField, SettingsGroup, Skeleton, TextArea, TextField } from '../../kit';
 import type { GatewayApi, Schedule, ScheduleInput } from '../../lib/api';
 import { inZone } from '../../lib/time';
-import { SchedulePills } from './schedule-row';
 import { ScheduleRuns } from './schedule-runs';
+import { SchedulePills, ScheduleSwitch } from './schedule-standing';
 import { ScheduleWhen } from './schedule-when';
 
 /** The conversation picker's value for a new chat each time: session ids are UUIDs. */
 const NEW = 'new';
-
-type FormProps = {
-  api: GatewayApi;
-  profileId: string;
-  /** The schedule to configure; a new one without it. */
-  schedule?: Schedule | undefined;
-  /** The conversations it can run in, in the order they are offered. */
-  choices: Choice[];
-  /** The gateway's zone, which a new schedule is written in. */
-  zone: string;
-  busy: boolean;
-  onSave: (input: ScheduleInput) => void;
-  onRun: () => void;
-  onRemove: () => void;
-  onOpenConversation: (sessionId: string) => void;
-};
-
-/**
- * Adds a schedule, or configures one: what it asks, where it answers and when, what it did
- * lately, running it now and removing it. `round` changes on every opening, so each starts from
- * the schedule and nothing typed outlives a cancel.
- */
-export function ScheduleDialog({
-  open,
-  onOpenChange,
-  round,
-  ...form
-}: { open: boolean; onOpenChange: (open: boolean) => void; round: number } & FormProps) {
-  return (
-    <Overlay
-      open={open}
-      onOpenChange={onOpenChange}
-      title={form.schedule ? form.schedule.name : 'Add a schedule'}
-      size="form"
-    >
-      <ScheduleForm key={round} {...form} onCancel={() => onOpenChange(false)} />
-    </Overlay>
-  );
-}
 
 /** What is known of a saved schedule beyond its fields, a fact to a part of one line. */
 function factsOf(item: Schedule, zone: string) {
@@ -72,7 +33,11 @@ function factsOf(item: Schedule, zone: string) {
     .join(' · ');
 }
 
-function ScheduleForm({
+/**
+ * One schedule, all of it: what it asks, where it answers and when, what it did lately, running it
+ * now and removing it. Keyed by the schedule, so each starts from what is saved.
+ */
+export function ScheduleForm({
   api,
   profileId,
   schedule,
@@ -81,10 +46,28 @@ function ScheduleForm({
   busy,
   onSave,
   onRun,
+  onSwitch,
   onRemove,
   onOpenConversation,
   onCancel,
-}: FormProps & { onCancel: () => void }) {
+}: {
+  api: GatewayApi;
+  profileId: string;
+  /** The schedule to configure; a new one without it. */
+  schedule?: Schedule | undefined;
+  /** The conversations it can run in, in the order they are offered. */
+  choices: Choice[];
+  /** The gateway's zone, which a new schedule is written in. */
+  zone: string;
+  busy: boolean;
+  onSave: (input: ScheduleInput) => void;
+  onRun: () => void;
+  onSwitch: (enabled: boolean) => Promise<boolean>;
+  onRemove: () => void;
+  onOpenConversation: (sessionId: string) => void;
+  /** Back to the schedules there are, while writing a new one among them. */
+  onCancel?: (() => void) | undefined;
+}) {
   const draft = useScheduleDraft(schedule, zone);
   const chosen = draft.sessionId ?? NEW;
   const options = [
@@ -108,27 +91,34 @@ function ScheduleForm({
 
   return (
     <form
-      className="grid w-full gap-5 p-7"
+      className="grid w-full gap-5"
       onSubmit={(event) => {
         event.preventDefault();
         if (draft.ready) onSave(draft.input());
       }}
     >
-      <header className="grid gap-1 pr-6">
-        <h2 className="flex min-w-0 items-center gap-2.5 text-lg font-semibold tracking-tight">
-          <span className="truncate">{schedule ? schedule.name : 'Add a schedule'}</span>
-          {schedule && <SchedulePills item={schedule} enabled={schedule.enabled} />}
-        </h2>
+      {schedule ? (
+        <div className="grid gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <SchedulePills item={schedule} />
+          </div>
+          <p className="text-sm text-muted">{factsOf(schedule, zone)}</p>
+        </div>
+      ) : (
         <p className="text-sm text-muted">
-          {schedule
-            ? factsOf(schedule, zone)
-            : 'At the time, the agent receives the instruction in the conversation you choose, and answers there.'}
+          At the time, the agent receives the instruction in the conversation you choose, and
+          answers there.
         </p>
-      </header>
+      )}
       {schedule?.lastError && (
         <p className="rounded-lg bg-bad/10 px-3 py-2.5 text-xs leading-relaxed text-bad">
           {schedule.lastError}
         </p>
+      )}
+      {schedule && !ranOnce(schedule) && (
+        <SettingsGroup>
+          <ScheduleSwitch item={schedule} onSwitch={onSwitch} />
+        </SettingsGroup>
       )}
       <TextField
         label="Name"
@@ -201,9 +191,11 @@ function ScheduleForm({
           </>
         )}
         <span className="flex-1" />
-        <Action tone="quiet" onClick={onCancel}>
-          Cancel
-        </Action>
+        {onCancel && (
+          <Action tone="quiet" onClick={onCancel}>
+            Cancel
+          </Action>
+        )}
         <Action tone="primary" type="submit" busy={busy} disabled={!draft.ready}>
           {schedule ? 'Save' : 'Create'}
         </Action>
