@@ -42,7 +42,9 @@ export function plan(paths, full = false) {
     for (const name of names) result[name] = true;
   };
   for (const path of paths) {
-    if (path === 'apps/gateway/Dockerfile' || imageBrowser.has(path)) enable('imageGateway');
+    // On top of what the path selects below: this source still has its own consumers.
+    if (imageBrowser.has(path)) enable('imageGateway');
+    if (path === 'apps/gateway/Dockerfile') enable('imageGateway');
     else if (path === 'apps/web/Dockerfile') enable('imageWeb');
     else if (
       /^\.github\/(?:scripts\/issue-|workflows\/issue-triage\.yml|issue-triage\.md)/.test(path)
