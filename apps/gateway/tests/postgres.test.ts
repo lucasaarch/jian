@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { PgBoss } from 'pg-boss';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
@@ -15,6 +16,7 @@ import { GatewayVault } from '../src/security/gateway-vault.js';
 import { Vault } from '../src/security/vault.js';
 import { buildServices } from '../src/services.js';
 import { pageMessages } from '../src/sessions/repository.js';
+import { migrationsFolder } from '../src/storage/database.js';
 import { PostgresStore } from '../src/storage/postgres.js';
 import { channels, metaInbox } from '../src/storage/schema.js';
 import { mockModel } from './helpers/model.js';
@@ -53,6 +55,20 @@ afterAll(async () => {
 });
 
 describe('PostgreSQL durability', () => {
+  it('applies the complete published migration chain and leaves its ledger unchanged on reapplication', async () => {
+    const applied = async () => {
+      const result = await store.db.execute(
+        sql`select hash from drizzle.__drizzle_migrations order by created_at`,
+      );
+      return (result as unknown as { rows: { hash: string }[] }).rows.map((row) => row.hash);
+    };
+    const expected = readMigrationFiles({ migrationsFolder }).map((migration) => migration.hash);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(await applied()).toEqual(expected);
+    await store.migrate();
+    expect(await applied()).toEqual(expected);
+  });
+
   it('atomically pauses channel runs across pools and rejects ingress overtaken by pause/resume', async () => {
     const profile = await services.profiles.createProfile(input);
     const fetcher = (() => {
