@@ -22,7 +22,7 @@ export const artifactPageSchema = artifactSchema.omit({ content: true }).extend(
 });
 
 export const artifactQuerySchema = z.strictObject({
-  offset: z.coerce.number().int().min(0).max(1000000).default(0),
+  offset: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(16000).default(4000),
 });
 

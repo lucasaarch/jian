@@ -1,21 +1,18 @@
 'use client';
 
+import { Square } from 'lucide-react';
 import { useContext, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { HoverTip } from '../../kit/info-tip';
 import type { GatewayApi, Message, ToolStep } from '../../lib/api';
 import { useCrew } from '../../lib/stores/crew';
 import { CodeChanges } from './code-change';
-import { active, Elapsed, ModelNames, nowOf, TierChip, tierNames, useDrawerFocus } from './crew';
-import { InspectorBar, InspectorBody, InspectorHeader } from './inspector';
+import { active, Elapsed, ModelNames, nowOf, TierChip, useDrawerFocus } from './crew';
+import { barButton, InspectorBar, InspectorBody, InspectorHeader } from './inspector';
 import { MessageMedia } from './media';
 import { ChatMessage } from './message';
 import { statusOf, traceOf } from './progress';
 import { ThoughtLine, WorkMark } from './thought-line';
-
-const reasons = {
-  agent: (tier: string) => `Chosen by the agent: ${tier}`,
-  jev: (tier: string) => `Jev picked ${tier}`,
-  default: (tier: string) => `${tier} by default`,
-};
 
 const chip =
   'inline-flex h-5 shrink-0 items-center rounded-full bg-ink/8 px-2 text-[11px] font-medium whitespace-nowrap text-muted';
@@ -30,7 +27,7 @@ export function CrewDrawer({
   api,
   profileId,
 }: {
-  api: Pick<GatewayApi, 'messages'> & Partial<Pick<GatewayApi, 'media' | 'timeline'>>;
+  api: Pick<GatewayApi, 'messages'> & Partial<Pick<GatewayApi, 'media' | 'timeline' | 'cancelRun'>>;
   profileId: string;
 }) {
   const following = useCrew((state) => state.following);
@@ -39,6 +36,7 @@ export function CrewDrawer({
   const [messages, setMessages] = useState<Message[]>();
   const [steps, setSteps] = useState<ToolStep[]>([]);
   const [error, setError] = useState('');
+  const [stopping, setStopping] = useState<string>();
   const closer = useRef<HTMLButtonElement>(null);
   const working = agent ? active(agent) : false;
   const runId = agent?.runId;
@@ -75,42 +73,84 @@ export function CrewDrawer({
   }, [api, profileId, runId, place, working]);
 
   if (!agent) return null;
-  const tier = agent.tier ? tierNames[agent.tier] : undefined;
   const failed = !working && agent.status !== 'completed';
   const said = messages?.filter((message) => message.role === 'assistant') ?? [];
 
   return (
     <aside className="crew-drawer" aria-label={agent.name}>
-      <InspectorBar closer={closer}>
-        <WorkMark working={working} failed={failed} orb={statusOf(agent).state} />
+      <InspectorBar
+        closer={closer}
+        options={
+          working &&
+          api.cancelRun && (
+            <HoverTip tip="Stop agent">
+              <button
+                type="button"
+                aria-label="Stop agent"
+                className={`${barButton} disabled:opacity-40`}
+                disabled={stopping === agent.runId}
+                onClick={async () => {
+                  const id = agent.runId;
+                  setStopping(id);
+                  try {
+                    const result = await api.cancelRun?.(profileId, id);
+                    if (result?.status === 'cancelled') {
+                      useCrew.setState((state) => ({
+                        agents: state.agents.map((item) =>
+                          item.runId === id
+                            ? { ...item, status: 'cancelled', updatedAt: result.updatedAt }
+                            : item,
+                        ),
+                      }));
+                    }
+                  } catch (failure) {
+                    toast.error(
+                      failure instanceof Error ? failure.message : 'Could not stop this agent.',
+                    );
+                  } finally {
+                    setStopping(undefined);
+                  }
+                }}
+              >
+                <Square size={13} aria-hidden="true" />
+              </button>
+            </HoverTip>
+          )
+        }
+      >
         <span className="text-xs">
           {agent.role === 'review' ? 'Review agent' : 'Execute agent'}
         </span>
-        <span aria-hidden="true" className="text-xs">
-          ·
-        </span>
-        <Elapsed agent={agent} className="font-mono text-xs tabular-nums" />
       </InspectorBar>
       <InspectorHeader title={agent.name}>
         <p className="flex flex-wrap items-center gap-1.5">
           <TierChip tier={agent.tier} />
           {agent.modelSelection && <span className={chip}>{modelName(agent.modelSelection)}</span>}
         </p>
-        {tier && agent.tierBy && (
-          <p className="text-xs text-muted">{reasons[agent.tierBy](tier)}</p>
-        )}
+        <p className="flex min-h-5 items-center gap-2 text-xs text-muted" role="status">
+          <WorkMark working={working} failed={failed} orb={statusOf(agent).state} />
+          <span>
+            {stopping === agent.runId
+              ? 'Stopping…'
+              : working
+                ? 'Working'
+                : agent.status === 'completed'
+                  ? 'Completed in'
+                  : 'Stopped after'}
+          </span>
+          <Elapsed agent={agent} className="font-mono text-xs tabular-nums" />
+        </p>
       </InspectorHeader>
       <InspectorBody className="grid content-start gap-3 px-5 pt-4 [&_.chat-line]:mb-0">
-        <ThoughtLine
-          working={working}
-          label={nowOf(agent)}
-          doneLabel={agent.status === 'completed' ? 'Finished in' : 'Stopped after'}
-          failed={failed}
-          orb={statusOf(agent).state}
-          steps={traceOf(steps)}
-          startedAt={agent.createdAt}
-          finishedAt={working ? undefined : agent.updatedAt}
-        />
+        {steps.length > 0 && (
+          <ThoughtLine
+            working={working}
+            label={nowOf(agent)}
+            failed={failed}
+            orb={statusOf(agent).state}
+            steps={traceOf(steps)}
+          />
+        )}
         <CodeChanges steps={steps} fresh />
         {error && <p className="text-[13px] text-bad">{error}</p>}
         {said.map((message) => (

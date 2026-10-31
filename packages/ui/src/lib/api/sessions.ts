@@ -140,6 +140,12 @@ export const sessionCalls = (client: Client) => ({
         params: { path: { profileId, sessionId } },
       }),
     ),
+  cancelRun: (profileId: string, runId: string) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/runs/{runId}/cancel', {
+        params: { path: { profileId, runId } },
+      }),
+    ),
   run: (profileId: string, runId: string) =>
     result(
       client.GET('/v1/profiles/{profileId}/runs/{runId}', {

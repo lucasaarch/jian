@@ -6,7 +6,7 @@ import { useCrew } from '../../lib/stores/crew';
 
 /** A button of the Inspector's top line: its options, its close. */
 export const barButton =
-  'grid size-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-glass-hover hover:text-ink data-popup-open:bg-glass-press data-popup-open:text-ink';
+  'grid size-7 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-glass-hover hover:text-ink data-popup-open:bg-glass-press data-popup-open:text-ink';
 
 /**
  * The Inspector's first line, at the top of the window: what it follows, quietly, then its

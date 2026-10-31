@@ -78,17 +78,6 @@
     @apply grid h-full min-h-0 grid-cols-1;
   }
 
-  .orb {
-    @apply -my-0.5 inline-flex h-5 w-5 shrink-0;
-  }
-  .orb svg {
-    @apply absolute;
-  }
-  /* The filter reads the shared accent through CSS. */
-  .orb-accent {
-    flood-color: var(--accent);
-  }
-
   .draft-empty {
     @apply flex min-h-0 flex-1 items-center justify-center px-6;
   }
@@ -109,7 +98,7 @@
     max-width: calc(var(--chat-column) + 2 * var(--chat-gutter));
   }
   /* Cards share the user bubble's outer edges; prose keeps its aligned text column. */
-  .message-list .chat-line.theirs > :is(.decision-card, .code-changes, .crew-cards),
+  .message-list .chat-line.theirs > :is(.decision-card, .code-changes, .crew),
   .message-list .chat-line.theirs > .markdown > .code-block {
     width: calc(100% + 2 * var(--chat-gutter));
     margin-inline: calc(-1 * var(--chat-gutter));

@@ -1209,6 +1209,7 @@ it('stores a large tool output and sends only a bounded reference to the model',
         };
       }
 
+      expect(options.tools?.some((tool) => tool.name === 'read_artifact')).toBe(true);
       secondPrompt = JSON.stringify(options.prompt);
 
       return answer('I found the artifact.');

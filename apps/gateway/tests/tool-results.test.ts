@@ -132,3 +132,63 @@ it('keeps file location and both ends of a long read in its preview', async () =
   expect(preview).toContain('FIRST');
   expect(preview).toContain('LAST');
 });
+
+it('preserves and reads a large MCP diff through its final byte beyond the former one-megabyte limit', async () => {
+  const { services, run: originalRun } = await fixture();
+  const run = {
+    ...originalRun,
+    contextPolicy: { ...originalRun.profile.contextPolicy, toolResultTokens: 32000 },
+  };
+  const coordination = new Coordination(services);
+  const output = {
+    content: [
+      {
+        type: 'text',
+        text: `diff --git a/sample.ts b/sample.ts\n${'+ full diff line\n'.repeat(80000)}+ FINAL CHANGE São Paulo 😀`,
+      },
+    ],
+  };
+  type Page = { content: string; nextOffset: number | null; artifactId: string };
+  let page = (await boundToolResult(output, 'mcp__synthetic_diff', run, new Set(), {
+    storeArtifact: (run, name, output) => coordination.storeArtifact(run, name, output),
+  })) as Page;
+  expect(page).not.toHaveProperty('truncated');
+  expect(page.nextOffset).not.toBeNull();
+  const artifactId = page.artifactId;
+  const reader = profileTools(services, run).read_artifact?.execute as (
+    input: unknown,
+    options: unknown,
+  ) => Promise<Page>;
+  let complete = page.content;
+  while (page.nextOffset !== null) {
+    const offset = page.nextOffset;
+    page = await reader({ artifactId, offset, limit: 16000 }, { toolCallId: 'page', messages: [] });
+    expect(page.nextOffset === null || page.nextOffset > offset).toBe(true);
+    expect(tokenCounter('openai', 'test')(JSON.stringify(page))).toBeLessThanOrEqual(32000);
+    complete += page.content;
+  }
+  expect(JSON.parse(complete)).toEqual(output);
+  const end = await coordination.artifact(run.profileId, artifactId, {
+    offset: 1100000,
+    limit: 16000,
+  });
+  expect(end.content).toBe(complete.slice(1100000, 1116000));
+});
+
+it('reports an unavailable full result explicitly without retrying an external mutation', async () => {
+  const { run } = await fixture();
+  const result = await boundToolResult(
+    { content: [{ type: 'text', text: 'large result'.repeat(2000) }] },
+    'mcp__synthetic_write',
+    run,
+    new Set(),
+    {
+      storeArtifact: async () => {
+        throw new Error('Synthetic storage failure');
+      },
+    },
+  );
+  expect(result).toMatchObject({ incomplete: true });
+  expect(result).not.toHaveProperty('artifactId', expect.any(String));
+  expect(JSON.stringify(result)).toContain('Do not treat it as the full result');
+});

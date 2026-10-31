@@ -39,7 +39,7 @@ export class Work {
   constructor(
     private readonly store: Store,
     private readonly sessions: SessionReader & Pick<Sessions, 'taskSession'>,
-    private readonly runs: Pick<Runs, 'run' | 'submit'>,
+    private readonly runs: Pick<Runs, 'run' | 'submit' | 'cancel'>,
     private readonly clock: Clock = Date.now,
     /** Asked for a tier the agent left open. */
     private readonly judge?: Judge,
@@ -159,7 +159,10 @@ export class Work {
         .from(runs)
         .where(and(eq(runs.profileId, profileId), eq(runs.id, runId)));
       const worker = await this.runs.run(profileId, runId, tx);
-      if (!worker.subagent || !['completed', 'failed', 'interrupted'].includes(worker.status))
+      if (
+        !worker.subagent ||
+        !['completed', 'failed', 'interrupted', 'cancelled'].includes(worker.status)
+      )
         return;
       if (state?.reportedAt) return;
       const principal = await this.runs.run(profileId, worker.subagent.parentRunId, tx);
@@ -205,6 +208,18 @@ export class Work {
         .set({ subagentReportedAt: new Date(this.clock()) })
         .where(and(eq(runs.profileId, profileId), eq(runs.id, runId)));
     });
+  }
+
+  /** Parent references are immutable; check their scope before using the shared cancel path. */
+  async cancelInConversation(principal: Run, runId: string) {
+    if (principal.subagent)
+      throw new GatewayError(403, 'Only the principal agent can cancel subagents');
+    const child = await this.runs.run(principal.profileId, runId);
+    if (!child.subagent) throw new GatewayError(403, 'The run is not a conversation subagent');
+    const parent = await this.runs.run(principal.profileId, child.subagent.parentRunId);
+    if (parent.sessionId !== principal.sessionId)
+      throw new GatewayError(403, 'The subagent belongs to another conversation');
+    return this.execution(await this.runs.cancel(principal.profileId, child.id));
   }
 
   async spawnInConversation(parent: Run, input: unknown, spawnKey: string) {

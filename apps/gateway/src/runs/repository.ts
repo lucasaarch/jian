@@ -36,7 +36,7 @@ export async function listUnreportedSubagents(db: Queryable, limit: number) {
       and(
         isNotNull(runs.subagent),
         isNull(runs.subagentReportedAt),
-        inArray(runs.status, ['completed', 'failed', 'interrupted']),
+        inArray(runs.status, ['completed', 'failed', 'interrupted', 'cancelled']),
       ),
     )
     .orderBy(asc(runs.updatedAt))

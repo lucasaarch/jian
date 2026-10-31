@@ -3,12 +3,11 @@
 import { createContext, type RefObject, useContext, useEffect, useRef } from 'react';
 import type { Message, ModelSelection, Subagent } from '../../lib/api';
 import { useCrew } from '../../lib/stores/crew';
-import { Orb } from '../ui';
 import { statusOf } from './progress';
 import { statusLabels } from './status';
 import { WorkMark } from './thought-line';
 
-export const tierNames = { light: 'Light', standard: 'Standard', deep: 'Deep' } as const;
+const tierNames = { light: 'Light', standard: 'Standard', deep: 'Deep' } as const;
 
 export const active = (agent: Subagent) => agent.status === 'queued' || agent.status === 'running';
 
@@ -72,13 +71,12 @@ export function Elapsed({
 }
 
 /**
- * What the agent is on, or what stopped it, in one line. A finished agent has none: its check
- * says it is done, and its report is a click away in the drawer.
+ * Every state keeps a single status line, including the outcome, so cards never shrink.
  */
 export function nowOf(agent: Subagent) {
   if (agent.status === 'queued') return 'Waiting to start';
   if (agent.status === 'running') return statusOf(agent).label;
-  if (agent.status === 'completed') return undefined;
+  if (agent.status === 'completed') return 'Completed';
   return agent.error ?? statusLabels[agent.status];
 }
 
@@ -93,7 +91,7 @@ export function TierChip({ tier }: { tier?: Subagent['tier'] }) {
 }
 
 /** One agent this turn handed work to: who, on what model, doing what, for how long. */
-function AgentCard({ agent }: { agent: Subagent }) {
+function AgentCard({ agent, index }: { agent: Subagent; index: number }) {
   const following = useCrew((state) => state.following);
   const follow = useCrew((state) => state.follow);
   const close = useCrew((state) => state.close);
@@ -105,6 +103,7 @@ function AgentCard({ agent }: { agent: Subagent }) {
     <button
       type="button"
       className="crew-card"
+      style={{ animationDelay: `${Math.min(index, 4) * 40}ms` }}
       data-tier={agent.tier}
       data-state={working ? 'working' : failed ? 'failed' : 'done'}
       aria-pressed={following === agent.runId}
@@ -116,7 +115,7 @@ function AgentCard({ agent }: { agent: Subagent }) {
         <WorkMark working={working} failed={failed} orb={statusOf(agent).state} />
         <strong>{agent.name}</strong>
       </span>
-      {nowOf(agent) && <span className="crew-now">{nowOf(agent)}</span>}
+      <span className="crew-now">{nowOf(agent)}</span>
       <span className="crew-bar" aria-hidden="true" />
       <span className="crew-foot">
         <TierChip tier={agent.tier} />
@@ -141,8 +140,8 @@ export function CrewCards({ agents }: { agents: Subagent[] }) {
         <span>{working ? `${working} working · ${agents.length - working} done` : 'All done'}</span>
       </p>
       <div className="crew-cards">
-        {agents.map((agent) => (
-          <AgentCard key={agent.runId} agent={agent} />
+        {agents.map((agent, index) => (
+          <AgentCard key={agent.runId} agent={agent} index={index} />
         ))}
       </div>
     </section>
@@ -165,34 +164,21 @@ export function reportOf(message: Pick<Message, 'role' | 'content'>, agents: Sub
   return agents.find((agent) => message.content.includes(`\nRun ${agent.runId} status: `));
 }
 
-/**
- * Above the composer while agents work, so they stay in sight once their turn has scrolled
- * away. It opens the first of them that is still working.
- */
-export function CrewDock({ agents }: { agents: Subagent[] }) {
-  const follow = useCrew((state) => state.follow);
-  const working = agents.filter(active);
-
-  if (!working.length) return null;
-
-  return (
-    <button
-      type="button"
-      className="crew-dock"
-      onClick={(event) => follow(working[0]?.runId ?? '', event.currentTarget)}
-    >
-      <span className="crew-dock-orbs" aria-hidden="true">
-        {working.slice(0, 3).map((agent) => (
-          <Orb key={agent.runId} state={statusOf(agent).state} />
-        ))}
-      </span>
-      <span>
-        {working.length === 1 ? '1 agent working' : `${working.length} agents working`}
-        {agents.length > working.length && ` · ${agents.length - working.length} done`}
-      </span>
-      <span className="crew-dock-go">Follow</span>
-    </button>
-  );
+/** A spawn belongs before the first answer written after it, never at a turn's arbitrary end. */
+export function placeCrew(agents: Subagent[], answers: Message[]) {
+  const before = new Map<string, Subagent[]>();
+  const tail = new Map<string, Subagent[]>();
+  for (const agent of agents) {
+    const next = answers.find(
+      (message) =>
+        message.runId === agent.parentRunId &&
+        Date.parse(message.createdAt) >= Date.parse(agent.createdAt),
+    );
+    const target = next ? before : tail;
+    const key = next?.id ?? agent.parentRunId;
+    target.set(key, [...(target.get(key) ?? []), agent]);
+  }
+  return { before, tail };
 }
 
 /**

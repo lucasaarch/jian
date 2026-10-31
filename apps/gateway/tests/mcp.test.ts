@@ -856,3 +856,97 @@ process.stdin.on('data', (chunk) => {
     }),
   ).toBe(false);
 });
+
+it('cleans optional empty fields in the SDK JSON Schema before the MCP server validates them', async () => {
+  let received: unknown;
+  const server = createServer(async (req, res) => {
+    if (req.method !== 'POST') {
+      res.writeHead(405).end();
+      return;
+    }
+    let text = '';
+    for await (const chunk of req) text += chunk;
+    const message = JSON.parse(text);
+    if (message.id === undefined) {
+      res.writeHead(202).end();
+      return;
+    }
+    let result: unknown;
+    if (message.method === 'initialize') {
+      result = {
+        protocolVersion: '2025-03-26',
+        capabilities: { tools: {} },
+        serverInfo: { name: 'synthetic', version: '1' },
+      };
+    } else if (message.method === 'tools/list') {
+      result = {
+        tools: [
+          {
+            name: 'read_diff',
+            inputSchema: {
+              type: 'object',
+              required: ['repository'],
+              properties: {
+                repository: { type: 'string' },
+                cursor: { type: 'string', minLength: 1 },
+                filters: {
+                  type: 'object',
+                  properties: { branch: { type: 'string', minLength: 1 } },
+                },
+                files: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    required: ['path'],
+                    properties: {
+                      path: { type: 'string' },
+                      cursor: { type: 'string', minLength: 1 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      };
+    } else {
+      received = message.params.arguments;
+      result = { content: [{ type: 'text', text: 'Complete diff' }] };
+    }
+    res
+      .writeHead(200, { 'Content-Type': 'application/json' })
+      .end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const outbound = createSafeFetch({ allowPrivateOrigins: [origin] });
+  const clients: MCPClient[] = [];
+  try {
+    const tools: ToolSet = {};
+    await connectMcpTools([mcpSchema.parse({ name: 'diff', url: `${origin}/mcp` })], tools, {
+      clients,
+      vault: { read: async () => undefined },
+      secrets: new Set(),
+      fetcher: outbound.fetch,
+      signal: new AbortController().signal,
+    });
+    const entry = Object.entries(tools).find(([name]) => name.startsWith('mcp__diff_read_diff_'));
+    assert.ok(entry?.[1].execute);
+    const execute = entry[1].execute as (input: unknown, options: unknown) => Promise<unknown>;
+    await execute(
+      {
+        repository: '',
+        cursor: '',
+        filters: { branch: '' },
+        files: [{ path: 'src/main.ts', cursor: '' }],
+      },
+      { toolCallId: 'read', messages: [] },
+    );
+    expect(received).toEqual({ repository: '', filters: {}, files: [{ path: 'src/main.ts' }] });
+  } finally {
+    await Promise.all(clients.map((client) => client.close()));
+    await outbound.close();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});

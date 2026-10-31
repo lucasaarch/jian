@@ -99,7 +99,7 @@ export type ToolServices = {
   subscriptions?: Pick<Subscriptions, 'list' | 'create' | 'update' | 'remove'>;
   settings?: { timeZone(): Promise<string> };
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
-  work?: Pick<Work, 'spawnInConversation'>;
+  work?: Pick<Work, 'spawnInConversation' | 'cancelInConversation'>;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove' | 'sync'>;
   remote?: Pick<Remote, 'list' | 'execute' | 'executeComputer' | 'update'>;
 };
@@ -307,6 +307,12 @@ export function profileTools(
 
     ...(services.work && !run.subagent
       ? {
+          cancel_subagent: tool({
+            description:
+              'Stop a subagent in this conversation when its work is unnecessary or the owner asks. Use the runId returned by spawn_subagent. Completed work is retained; already finished runs stay finished.',
+            inputSchema: z.strictObject({ runId: z.uuid() }),
+            execute: async ({ runId }) => services.work?.cancelInConversation(run, runId),
+          }),
           spawn_subagent: tool({
             description:
               'Start a scoped subagent in this conversation for a focused assignment. Give it the objective and necessary context in the brief, and media IDs for needed images; it does not inherit this conversation. It uses the same profile workspace as you (same HOME and checkouts). The call returns when queued, and the result is delivered here when it finishes. Set tier to light, standard or deep for how much model the work needs, or leave it out to let Decisions pick from the brief; each tier runs on a model the installation offers, subscriptions first.',
@@ -477,7 +483,8 @@ export function profileTools(
     }),
 
     read_artifact: tool({
-      description: 'Read a bounded page of a stored tool result by artifact id.',
+      description:
+        'Read the full stored tool result one page at a time. Follow nextOffset until null; do not review a diff or claim complete coverage from a preview alone. Offsets count UTF-16 code units.',
       inputSchema: z.object({
         artifactId: z.string().uuid(),
         offset: z.number().int().min(0).default(0),
@@ -493,7 +500,7 @@ export function profileTools(
           .limit(1);
 
         const { content } = assertFound(record, 'Artifact');
-        return artifactPage(content, offset, limit, run);
+        return artifactPage(content, offset, limit, run, artifactId);
       },
     }),
 
@@ -801,6 +808,7 @@ export const TOOL_GROUPS = {
       'delegate subagents, inspect checkpoints and output, manage resource leases, or compact context',
     tools: [
       'spawn_subagent',
+      'cancel_subagent',
       'read_run_checkpoints',
       'read_artifact',
       'acquire_resource',
