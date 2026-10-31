@@ -452,7 +452,7 @@ it('makes another agent in the identity scene, skipping what only a first run as
   providers = [provider];
   api.health.mockResolvedValue({ status: 'ok', mode: 'server', version: '1.0.0' });
   memoryNavigation.go(`/agents/${profile.id}/sessions`);
-  await mount();
+  const { cache } = await mount();
 
   await act(async () => useOnboarding.getState().create());
   await settle();
@@ -468,6 +468,8 @@ it('makes another agent in the identity scene, skipping what only a first run as
   await wait(550);
   expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&welcome`);
   expect(useOnboarding.getState().creating).toBe(false);
+  // In the list as soon as it exists, and still there after the list is read again.
+  expect(cache.getQueryData<Profile[]>(keys.profiles)?.map((item) => item.name)).toContain('Mira');
 });
 
 it('leaves the identity scene with Escape, back where the owner was, with no button for it', async () => {
