@@ -20,12 +20,19 @@ const context = {
   actor: 'lucasaarch',
   dryRun: false,
 };
-async function modules(t, enabled = true) {
+async function modules(t, enabled = true, nativeFields = true) {
   const dir = await mkdtemp(join(tmpdir(), 'issue-run-test-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   for (const name of ['issue-run.mjs', 'issue-core.mjs', 'issue-config.json'])
     await cp(new URL(name, import.meta.url), join(dir, name));
   const config = JSON.parse(await readFile(join(dir, 'issue-config.json')));
+  if (nativeFields)
+    config.priority = {
+      id: 46483201,
+      name: 'Priority',
+      type: 'single_select',
+      options: ['Urgent', 'High', 'Medium', 'Low'].map((name, i) => ({ id: 81364764 + i, name })),
+    };
   config.enabled = enabled;
   config.publishEnabled = enabled;
   await writeFile(join(dir, 'issue-config.json'), JSON.stringify(config));
@@ -74,7 +81,7 @@ function fixture(config, core) {
   const proposal = () => ({
     snapshot: origin(),
     type: { name: 'Bug', confidence: 0.99 },
-    priority: { name: 'High', confidence: 0.99 },
+    priority: config.priority ? { name: 'High', confidence: 0.99 } : null,
     labels: [{ name: 'bug', confidence: 0.99 }],
     translation: {
       title: 'Save failure',
@@ -156,9 +163,7 @@ function fixture(config, core) {
           });
         return Response.json(fields);
       }
-      if (path === `/repos/${repo}/labels`)
-        return Response.json({ name: body.name }, { status: 201 });
-      if (path.endsWith('/issues/12/labels')) {
+      if (path.endsWith('/labels')) {
         issue.labels.push(...body.labels.map((name) => ({ name })));
         return Response.json(issue.labels);
       }
@@ -190,9 +195,11 @@ function fixture(config, core) {
         default_branch: 'main',
       });
     if (path.endsWith('/issues/12')) return Response.json(issue);
+    if (path.endsWith('/issue-types')) return Response.json(config.types);
     if (path.endsWith('/labels')) return Response.json(config.labels.map((name) => ({ name })));
+    if (path.endsWith('/issue-field-values')) return Response.json(fields);
     if (path.endsWith('/comments')) return Response.json(comments);
-    if (path.endsWith('/permission')) return Response.json({ role_name: 'maintain' });
+    if (path.endsWith('/permission')) return Response.json({ permission: 'admin' });
     if (path === '/search/issues')
       return Response.json({ total_count: 0, incomplete_results: false, items: [] });
     if (path.endsWith('/runs/500')) return Response.json(own);
@@ -282,7 +289,7 @@ test('disabled CLI refuses before transport or credential getter', async (t) => 
       'DISABLED',
     );
 });
-test('actual CLI isolates credentials and adds Jian type and priority labels preserving originals', async (t) => {
+test('actual CLI isolates credentials and adds native metadata preserving originals and Effort', async (t) => {
   const { dir, run, core, config } = await modules(t);
   const f = fixture(config, core),
     tr = transport(run, f);
@@ -305,16 +312,24 @@ test('actual CLI isolates credentials and adds Jian type and priority labels pre
   assert.equal(
     (
       await run.runCLI(['infer', ctx, snapshot, artifact], {
-        env: { GEMINI_API_KEY: 'fixture-google' },
+        env: { GEMINI_API_KEY: 'fixture-google', GITHUB_API_TOKEN: 'fixture-read-only' },
         transport: tr,
       })
     ).state,
     'ready',
   );
+  assert.ok(
+    f.calls.some(
+      ({ url, opts }) =>
+        url.startsWith('https://api.github.com/') &&
+        opts.headers.Authorization === 'Bearer fixture-read-only',
+    ),
+  );
   assert.equal(f.generation, 1);
   const output = await readFile(artifact, 'utf8');
   assert.ok(
     !output.includes('fixture-google') &&
+      !output.includes('fixture-read-only') &&
       !output.includes('opaque') &&
       !output.includes(original.body),
   );
@@ -328,13 +343,13 @@ test('actual CLI isolates credentials and adds Jian type and priority labels pre
     'ready',
   );
   assert.deepEqual(
-    f.mutations.map((m) => m.body),
+    f.mutations.map((m) => [m.method, m.body]),
     [
-      { name: 'type: bug', color: '1d76db', description: 'Managed by Jian issue triage.' },
-      { name: 'priority: high', color: 'b60205', description: 'Managed by Jian issue triage.' },
-      { labels: ['bug', 'type: bug', 'priority: high'] },
-      { title: 'Save failure', body: 'The operation fails. npm test' },
-      { body: f.comments[0].body },
+      ['PATCH', { type: 'Bug' }],
+      ['POST', { issue_field_values: [{ field_id: 46483201, value: 'High' }] }],
+      ['POST', { labels: ['bug'] }],
+      ['PATCH', { title: 'Save failure', body: 'The operation fails. npm test' }],
+      ['POST', { body: f.comments[0].body }],
     ],
   );
   assert.equal(f.issue.title, 'Save failure');
@@ -381,29 +396,26 @@ test('inference reuses collector-verified types without anonymous catalog access
   assert.deepEqual(anonymousTypes, []);
   assert.equal(s.f.generation, 1);
 });
-test('Jian catalog is local and unavailable native metadata APIs are not queried', async (t) => {
+test('authenticated catalog failures still block collection and publication', async (t) => {
   const s = await setup(t),
-    a = await collected(s),
-    paths = [];
+    a = await collected(s);
   const tr = s.run.createTransport(
-    async (url, opts) => {
-      paths.push(new URL(url).pathname);
-      if (new URL(url).pathname.endsWith('/issue-types')) return Response.json({}, { status: 404 });
-      return s.f.fetch(url, opts);
-    },
+    async (url, opts) =>
+      new URL(url).pathname.endsWith('/issue-types')
+        ? Response.json({}, { status: 404 })
+        : s.f.fetch(url, opts),
     { now: s.tr.now, sleep: s.tr.sleep },
   );
   assert.equal(
-    (await s.run.collectSnapshot(context, tr, { GITHUB_TOKEN: 'fixture-github' })).state,
-    'ready',
+    (await s.run.collectSnapshot(context, tr, { GITHUB_TOKEN: 'fixture-github' })).reason,
+    'GITHUB_READ_FAILED',
   );
   assert.equal(
-    (await s.run.publishProposal(s.f.proposal(), a, tr, { GITHUB_TOKEN: 'fixture-github' })).state,
-    'ready',
+    (await s.run.publishProposal(s.f.proposal(), a, tr, { GITHUB_TOKEN: 'fixture-github' })).reason,
+    'GITHUB_READ_FAILED',
   );
-  assert.ok(
-    paths.every((path) => !path.endsWith('/issue-types') && !path.endsWith('/issue-field-values')),
-  );
+  assert.equal(s.f.mutations.length, 0);
+  assert.equal(s.f.generation, 0);
 });
 test('inference CLI reports only a bounded HTTP status for provider failures', async (t) => {
   const s = await setup(t),
@@ -683,6 +695,169 @@ test('skipped and provenance-verified dry histories consume no admission slots',
   s.f.history[0].event = 'issues';
   assert.equal((await s.run.collectSnapshot(context, s.tr)).reason, 'HISTORY_INCOMPLETE');
 });
+test('incomplete Actions history is retried twice and still fails closed', async (t) => {
+  const s = await setup(t),
+    delays = [];
+  let reads = 0;
+  const retrying = s.run.createTransport(
+    async (url, opts) => {
+      if (url.includes('issue-triage.yml/runs') && ++reads === 1)
+        return Response.json({ total_count: 2, workflow_runs: [s.f.own] });
+      return s.f.fetch(url, opts);
+    },
+    { now: s.tr.now, sleep: async (ms) => delays.push(ms) },
+  );
+  assert.equal((await s.run.collectSnapshot(context, retrying)).state, 'ready');
+  assert.equal(reads, 2);
+  assert.deepEqual(delays, [1000]);
+  assert.equal(s.f.generation, 0);
+
+  reads = 0;
+  delays.length = 0;
+  const incomplete = s.run.createTransport(
+    async (url, opts) => {
+      if (url.includes('issue-triage.yml/runs')) {
+        reads++;
+        return Response.json({ total_count: 2, workflow_runs: [s.f.own] });
+      }
+      return s.f.fetch(url, opts);
+    },
+    { now: s.tr.now, sleep: async (ms) => delays.push(ms) },
+  );
+  assert.equal((await s.run.collectSnapshot(context, incomplete)).reason, 'HISTORY_INCOMPLETE');
+  assert.equal(reads, 3);
+  assert.deepEqual(delays, [1000, 2000]);
+  assert.equal(s.f.generation, 0);
+});
+test('manual live retry is bounded to six attempts for one failed Issue', async (t) => {
+  const s = await setup(t),
+    c = { ...context, event: 'manual' };
+  Object.assign(s.f.own, {
+    event: 'workflow_dispatch',
+    display_title: `issue-triage:${repo}:12:500:manual`,
+  });
+  const original = s.f.runRecord(100, 12, 'completed');
+  original.conclusion = 'failure';
+  s.f.history.push(original);
+  s.f.jobs.set(100, {
+    total_count: 1,
+    jobs: [
+      { steps: [{ name: 'Generate Gemini proposal', status: 'completed', conclusion: 'skipped' }] },
+    ],
+  });
+  const first = await s.run.collectSnapshot(c, s.tr);
+  assert.equal(first.state, 'ready', JSON.stringify(first));
+  assert.equal(s.f.generation, 0);
+  const noInference = {
+    ...s.f.runRecord(101, 12),
+    event: 'workflow_dispatch',
+    conclusion: 'failure',
+    display_title: `issue-triage:${repo}:12:101:manual`,
+  };
+  s.f.history.push(noInference);
+  s.f.jobs.set(101, {
+    total_count: 1,
+    jobs: [
+      {
+        steps: [
+          {
+            name: 'Generate Gemini proposal',
+            status: 'completed',
+            conclusion: 'failure',
+            started_at: '2026-10-12T05:59:00Z',
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal((await s.run.collectSnapshot(c, s.tr)).state, 'ready');
+  s.f.history.push({
+    ...s.f.runRecord(102, 12),
+    event: 'workflow_dispatch',
+    conclusion: 'failure',
+    display_title: `issue-triage:${repo}:12:102:manual`,
+  });
+  s.f.jobs.set(102, {
+    total_count: 1,
+    jobs: [
+      {
+        steps: [
+          {
+            name: 'Generate Gemini proposal',
+            status: 'completed',
+            conclusion: 'failure',
+            started_at: '2026-10-12T05:59:30Z',
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal((await s.run.collectSnapshot(c, s.tr)).state, 'ready');
+  s.f.history.push({
+    ...s.f.runRecord(103, 12),
+    event: 'workflow_dispatch',
+    conclusion: 'failure',
+    display_title: `issue-triage:${repo}:12:103:manual`,
+  });
+  s.f.jobs.set(103, {
+    total_count: 1,
+    jobs: [
+      { steps: [{ name: 'Generate Gemini proposal', status: 'completed', conclusion: 'skipped' }] },
+    ],
+  });
+  assert.equal((await s.run.collectSnapshot(c, s.tr)).state, 'ready');
+  s.f.history.push({
+    ...s.f.runRecord(104, 12),
+    event: 'workflow_dispatch',
+    conclusion: 'failure',
+    display_title: `issue-triage:${repo}:12:104:manual`,
+  });
+  s.f.jobs.set(104, {
+    total_count: 1,
+    jobs: [
+      { steps: [{ name: 'Generate Gemini proposal', status: 'completed', conclusion: 'skipped' }] },
+    ],
+  });
+  assert.equal((await s.run.collectSnapshot(c, s.tr)).state, 'ready');
+  s.f.history.push({
+    ...s.f.runRecord(105, 12),
+    event: 'workflow_dispatch',
+    conclusion: 'failure',
+    display_title: `issue-triage:${repo}:12:105:manual`,
+  });
+  s.f.jobs.set(105, {
+    total_count: 1,
+    jobs: [
+      { steps: [{ name: 'Generate Gemini proposal', status: 'completed', conclusion: 'skipped' }] },
+    ],
+  });
+  assert.equal((await s.run.collectSnapshot(c, s.tr)).state, 'ready');
+  s.f.history.push({
+    ...s.f.runRecord(106, 12),
+    event: 'workflow_dispatch',
+    conclusion: 'failure',
+    display_title: `issue-triage:${repo}:12:106:manual`,
+  });
+  s.f.jobs.set(106, {
+    total_count: 1,
+    jobs: [
+      { steps: [{ name: 'Generate Gemini proposal', status: 'completed', conclusion: 'skipped' }] },
+    ],
+  });
+  assert.equal((await s.run.collectSnapshot(c, s.tr)).reason, 'MANUAL_RETRY_REFUSED');
+  assert.equal(s.f.generation, 0);
+});
+test('pending queued runs are valid history and do not consume Gemini reservations', async (t) => {
+  const s = await setup(t),
+    pending = {
+      ...s.f.runRecord(101, 99, 'pending'),
+      event: 'workflow_dispatch',
+      display_title: `issue-triage:${repo}:99:101:manual`,
+    };
+  s.f.history.push(pending);
+  assert.equal((await s.run.collectSnapshot(context, s.tr)).state, 'ready');
+  assert.equal(s.f.generation, 0);
+});
 test('persistent sequential admission reaches hourly boundary and releases the exact old hour', async (t) => {
   const s = await setup(t);
   for (let index = 0; index < 10; index++) {
@@ -762,7 +937,7 @@ test('persistent monthly quota blocks the hundredth reservation and resets at UT
   });
   assert.equal((await s.run.collectSnapshot(context, later)).state, 'ready');
 });
-for (const mode of ['ignored-translation', 'write-abort']) {
+for (const mode of ['ignored-type', 'ignored-priority', 'ignored-translation', 'write-abort']) {
   test(`publication ${mode} reports unconfirmed without blind retry or later effects`, async (t) => {
     const s = await setup(t),
       a = await collected(s);
@@ -773,7 +948,10 @@ for (const mode of ['ignored-translation', 'write-abort']) {
       'WRITE_UNCONFIRMED',
     );
     assert.equal(s.f.comments.length, 0);
-    assert.equal(s.f.mutations.length, mode === 'ignored-translation' ? 4 : 1);
+    assert.equal(
+      s.f.mutations.length,
+      mode === 'ignored-translation' ? 4 : mode === 'ignored-priority' ? 2 : 1,
+    );
   });
 }
 test('writer preserves existing human type Priority Effort labels and legacy priority', async (t) => {
@@ -805,15 +983,22 @@ test('human fingerprint marker spoof blocks every mutation', async (t) => {
   );
   assert.equal(s.f.mutations.length, 0);
 });
-test('Jian publisher ignores unavailable native metadata and validates issue labels', async (t) => {
+test('writer rejects unknown native metadata and field read shape before mutation', async (t) => {
   const s = await setup(t),
     a = await collected(s);
   delete s.f.issue.type;
+  assert.equal(
+    (await s.run.publishProposal(s.f.proposal(), a, s.tr, { GITHUB_TOKEN: 'fixture-github' }))
+      .reason,
+    'CURRENT_METADATA_REFUSED',
+  );
+  assert.equal(s.f.mutations.length, 0);
+  s.f.issue.type = null;
   s.f.fields[0] = { field_id: 46483204, value: 'Low' };
   assert.equal(
     (await s.run.publishProposal(s.f.proposal(), a, s.tr, { GITHUB_TOKEN: 'fixture-github' }))
-      .state,
-    'ready',
+      .reason,
+    'CURRENT_METADATA_REFUSED',
   );
 });
 test('credential isolation refuses mixed infer and writer environments before key reads', async (t) => {
@@ -1163,7 +1348,7 @@ test('removed configured label catalog is refreshed before writes and never recr
   );
   assert.equal(s.f.mutations.length, 0);
 });
-test('receipt verification catches unrelated human label loss on additive labels', async (t) => {
+test('receipt verification catches unrelated human type loss on additive labels', async (t) => {
   const s = await setup(t),
     a = await collected(s);
   s.f.issue.type = s.config.types[2];
@@ -1171,8 +1356,7 @@ test('receipt verification catches unrelated human label loss on additive labels
   const tr = s.run.createTransport(
     async (url, opts) => {
       const r = await s.f.fetch(url, opts);
-      if (opts.method === 'POST' && url.endsWith('/issues/12/labels'))
-        s.f.issue.labels = s.f.issue.labels.filter((label) => label.name !== 'human');
+      if (opts.method === 'POST' && url.endsWith('/labels')) s.f.issue.type = null;
       return r;
     },
     { now: s.tr.now, sleep: s.tr.sleep },
@@ -1414,7 +1598,7 @@ for (const priorRuns of [0, 1, 2]) {
     assert.equal((await s.run.generateOnce(a, tr, 'fixture-google')).state, 'ready');
     assert.deepEqual(
       { beforeCount, beforeGeneration, total: reads },
-      { beforeCount: 15, beforeGeneration: 17, total: 17 },
+      { beforeCount: 16, beforeGeneration: 18, total: 18 },
     );
     assert.equal(inferPaths.filter((p) => p.endsWith('/actions/runs/500')).length, 1);
     assert.ok(
@@ -1598,4 +1782,49 @@ test('candidate changed after native translation is omitted from the final comme
   assert.equal(s.f.issue.title, 'Save failure');
   assert.equal(s.f.comments.length, 1);
   assert.ok(!s.f.comments[0].body.includes('issues/13'));
+});
+
+test('personal repositories publish complete triage without unsupported native field reads', async (t) => {
+  const m = await modules(t, true, false);
+  const f = fixture(m.config, m.core);
+  const tr = transport(m.run, f);
+  const collected = await m.run.collectSnapshot(context, tr, { GITHUB_TOKEN: 'fixture-github' });
+  assert.equal(collected.state, 'ready');
+  const generated = await m.run.generateOnce(collected, tr, 'fixture-google', 'fixture-read-only');
+  assert.equal(generated.state, 'ready', JSON.stringify(generated));
+  assert.equal(generated.proposal.priority, null);
+  const published = await m.run.publishProposal(generated.proposal, collected, tr, {
+    GITHUB_TOKEN: 'fixture-github',
+  });
+  assert.equal(published.state, 'ready', JSON.stringify(published));
+  assert.equal(f.issue.type.name, 'Bug');
+  assert.equal(f.issue.title, 'Save failure');
+  assert.equal(f.comments.length, 1);
+  assert.ok(f.calls.every(({ url }) => !url.includes('/issue-field-values')));
+});
+
+test('manual dispatch admits a skipped successful original but refuses an already generated success', async (t) => {
+  const s = await setup(t);
+  const c = { ...context, event: 'manual' };
+  Object.assign(s.f.own, {
+    event: 'workflow_dispatch',
+    display_title: `issue-triage:${repo}:12:500:manual`,
+  });
+  const original = { ...s.f.runRecord(100), conclusion: 'success' };
+  s.f.history.push(original);
+  s.f.jobs.set(100, {
+    total_count: 1,
+    jobs: [
+      { steps: [{ name: 'Generate Gemini proposal', status: 'completed', conclusion: 'skipped' }] },
+    ],
+  });
+  assert.equal((await s.run.collectSnapshot(c, s.tr)).state, 'ready');
+  s.f.jobs.get(100).jobs[0].steps[0] = {
+    name: 'Generate Gemini proposal',
+    status: 'completed',
+    conclusion: 'success',
+    started_at: '2026-10-12T05:59:00Z',
+  };
+  assert.equal((await s.run.collectSnapshot(c, s.tr)).reason, 'MANUAL_RETRY_REFUSED');
+  assert.equal(s.f.generation, 0);
 });

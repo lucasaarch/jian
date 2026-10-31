@@ -15,6 +15,7 @@ import {
 
 const workflow = '.github/workflows/issue-triage.yml';
 const generationStep = 'Generate Gemini proposal';
+const maxManualAttemptsPerIssue = 6;
 const keys = ['repo', 'issueNumber', 'issueId', 'contentHash', 'workflowSha', 'runId'];
 const contextKeys = [
   'repo',
@@ -42,6 +43,37 @@ const fail = (code) => {
 const result = (reason, state = 'blocked') => ({ state, reason });
 const same = (a, b) => exact(a, keys) && exact(b, keys) && keys.every((k) => a[k] === b[k]);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// One-line JSON keeps provider-controlled text inert in GitHub Actions logs.
+function logSafe(value) {
+  if (Array.isArray(value)) return value.map(logSafe);
+  if (value && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        /api.?key|secret|password|authorization|credential/i.test(key) || /^(?:token)$/i.test(key)
+          ? '[REDACTED]'
+          : logSafe(item),
+      ]),
+    );
+  if (typeof value !== 'string') return value;
+  return value
+    .replace(
+      /\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|AIza[0-9A-Za-z_-]{20,}|sk_(?:live|test)_[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9]{30,}|xox[baprs]-[A-Za-z0-9-]{20,})\b/g,
+      '[REDACTED]',
+    )
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
+    .replace(
+      /\b(api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|client_secret)\b\s*[:=]\s*["']?[^\s,"'}]+/gi,
+      '$1=[REDACTED]',
+    )
+    .replace(
+      /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+      '[REDACTED PRIVATE KEY]',
+    );
+}
+function debug(event, details = {}) {
+  process.stdout.write(`${JSON.stringify(logSafe({ triage_debug: event, ...details }))}\n`);
+}
 export function createTransport(
   fetchImpl = globalThis.fetch,
   { now = Date.now, sleep = wait } = {},
@@ -63,8 +95,9 @@ function validateContext(c) {
     c.ref !== `refs/heads/${c.defaultBranch}` ||
     !/^[A-Za-z0-9-]+$/.test(c.actor) ||
     typeof c.dryRun !== 'boolean' ||
-    !['opened', 'manualdry'].includes(c.event) ||
+    !['opened', 'manualdry', 'manual'].includes(c.event) ||
     (c.event === 'manualdry' && !c.dryRun) ||
+    (c.event === 'manual' && c.dryRun) ||
     (c.event === 'opened' && c.dryRun)
   )
     fail('CONTEXT_REFUSED');
@@ -82,9 +115,9 @@ function validateSnapshot(s) {
     fail('ARTIFACT_REFUSED');
 }
 function titleFor(c) {
-  return c.event === 'manualdry'
-    ? `issue-triage:${c.repo}:dry`
-    : `issue-triage:${c.repo}:${c.issueNumber}:${c.issueId}:live`;
+  if (c.event === 'manualdry') return `issue-triage:${c.repo}:dry`;
+  if (c.event === 'manual') return `issue-triage:${c.repo}:${c.issueNumber}:${c.runId}:manual`;
+  return `issue-triage:${c.repo}:${c.issueNumber}:${c.issueId}:live`;
 }
 function githubURL(path) {
   const prefix = `/repos/${config.repositories[0]}`;
@@ -98,11 +131,10 @@ function githubURL(path) {
     const u = new URL(`https://api.github.com${path}`);
     if (
       u.hash ||
-      /[%\\]/.test(path.split('?')[0]) ||
-      Array.from(path.split('?')[0]).some((char) => {
-        const code = char.codePointAt(0);
-        return code <= 0x20 || code === 0x7f;
-      })
+      Array.from(path.split('?')[0]).some(
+        (char) =>
+          char === '%' || char === '\\' || char.codePointAt(0) <= 32 || char.codePointAt(0) === 127,
+      )
     )
       fail('ROUTE_REFUSED');
     for (const [k, v] of u.searchParams)
@@ -225,20 +257,25 @@ function provenance(run, c, current = false) {
     !sha(run.head_sha) ||
     run.head_branch !== c.defaultBranch ||
     run.repository?.full_name !== c.repo ||
-    !['completed', 'queued', 'in_progress'].includes(run.status)
+    !['completed', 'queued', 'pending', 'in_progress'].includes(run.status)
   )
     fail('HISTORY_INCOMPLETE');
   const dry = run.display_title === `issue-triage:${c.repo}:dry`;
-  const match = new RegExp(`^issue-triage:${c.repo}:([1-9]\\d*):([1-9]\\d*):live$`).exec(
+  const live = new RegExp(`^issue-triage:${c.repo}:([1-9]\\d*):([1-9]\\d*):live$`).exec(
+    run.display_title ?? '',
+  );
+  const manual = new RegExp(`^issue-triage:${c.repo}:([1-9]\\d*):([1-9]\\d*):manual$`).exec(
     run.display_title ?? '',
   );
   if (
     dry
       ? run.event !== 'workflow_dispatch'
-      : !match ||
-        run.event !== 'issues' ||
-        !positive(Number(match[1])) ||
-        !positive(Number(match[2]))
+      : live
+        ? run.event !== 'issues' || !positive(Number(live[1])) || !positive(Number(live[2]))
+        : !manual ||
+          run.event !== 'workflow_dispatch' ||
+          !positive(Number(manual[1])) ||
+          !positive(Number(manual[2]))
   )
     fail('HISTORY_INCOMPLETE');
   if (
@@ -251,7 +288,12 @@ function provenance(run, c, current = false) {
       run.status !== 'in_progress')
   )
     fail('RUN_ORIGIN_REFUSED');
-  return { dry, number: match ? Number(match[1]) : null, id: match ? Number(match[2]) : null };
+  return {
+    dry,
+    manual: !!manual,
+    number: live ? Number(live[1]) : manual ? Number(manual[1]) : null,
+    id: live ? Number(live[2]) : null,
+  };
 }
 async function currentRun(c, transport, token) {
   provenance(
@@ -271,12 +313,17 @@ async function history(c, transport, token, admit = true) {
   );
   if (new Set(runs.map((r) => r?.id)).size !== runs.length || !runs.some((r) => r.id === c.runId))
     fail('HISTORY_INCOMPLETE');
-  const reservations = [];
+  const reservations = [],
+    attempts = [];
   for (const run of runs) {
     const p = provenance(run, c, run.id === c.runId);
     if (run.id === c.runId) continue;
     if (run.status === 'in_progress') fail('CONCURRENT_RUN');
-    if (p.dry || run.status === 'queued') continue;
+    if (p.dry) continue;
+    if (run.status === 'queued' || run.status === 'pending') {
+      attempts.push({ ...p, status: run.status, runConclusion: run.conclusion });
+      continue;
+    }
     const jobs = await pages(`${root}/actions/runs/${run.id}/jobs`, 'jobs', transport, token);
     if (!jobs.length || jobs.some((j) => !Array.isArray(j.steps))) fail('HISTORY_INCOMPLETE');
     const steps = jobs.flatMap((j) => j.steps).filter((s) => s.name === generationStep);
@@ -287,14 +334,43 @@ async function history(c, transport, token, admit = true) {
     )
       fail('HISTORY_INCOMPLETE');
     const step = steps[0];
-    if (step.conclusion === 'skipped') continue;
-    const started = Date.parse(step.started_at);
-    if (!Number.isFinite(started) || started > transport.now()) fail('HISTORY_INCOMPLETE');
-    reservations.push({ ...p, started });
+    const attempt = {
+      ...p,
+      status: run.status,
+      runConclusion: run.conclusion,
+      generationConclusion: step.conclusion,
+    };
+    if (step.conclusion !== 'skipped') {
+      const started = Date.parse(step.started_at);
+      if (!Number.isFinite(started) || started > transport.now()) fail('HISTORY_INCOMPLETE');
+      attempt.started = started;
+      reservations.push(attempt);
+    }
+    attempts.push(attempt);
   }
   if (!admit || c.dryRun) return;
-  if (reservations.some((r) => r.number === c.issueNumber || r.id === c.issueId))
+  if (c.event === 'manual') {
+    const previous = attempts.filter((a) => a.number === c.issueNumber),
+      originals = previous.filter((a) => !a.manual),
+      earlierManual = previous.filter((a) => a.manual);
+    if (
+      originals.length !== 1 ||
+      originals[0].id !== c.issueId ||
+      originals[0].status !== 'completed' ||
+      !(
+        originals[0].runConclusion === 'failure' ||
+        (originals[0].runConclusion === 'success' &&
+          originals[0].generationConclusion === 'skipped')
+      ) ||
+      earlierManual.length >= maxManualAttemptsPerIssue ||
+      earlierManual.some(
+        (a) => a.status !== 'completed' || !['failure', 'cancelled'].includes(a.runConclusion),
+      )
+    )
+      fail('MANUAL_RETRY_REFUSED');
+  } else if (reservations.some((r) => r.number === c.issueNumber || r.id === c.issueId)) {
     fail('GENERATION_RESERVED');
+  }
   const now = transport.now(),
     month = new Date(now);
   month.setUTCDate(1);
@@ -324,13 +400,13 @@ async function current(c, transport, token) {
     repo = await githubRead(root, transport, token),
     issue = await githubRead(`${root}/issues/${c.issueNumber}`, transport, token);
   let actorPermission;
-  if (c.event === 'manualdry') {
+  if (c.event === 'manualdry' || c.event === 'manual') {
     const permission = await githubRead(
       `${root}/collaborators/${c.actor}/permission`,
       transport,
       token,
     );
-    actorPermission = permission.role_name;
+    actorPermission = permission.permission;
   }
   const decision = eligibility({ ...c, actorPermission }, repo, issue);
   if (decision.state !== 'ready') fail(decision.reason);
@@ -347,13 +423,16 @@ async function current(c, transport, token) {
     },
   };
 }
-async function catalog(_c, _transport, _token, _verifiedTypes) {
-  // Jian is a personal repository, so GitHub's organization-only native Issue Type
-  // and custom field APIs are unavailable. Type and Priority are published as labels.
+async function catalog(c, transport, token, verifiedTypes) {
+  const root = `/repos/${c.repo}`,
+    types = verifiedTypes ?? (await pages(`${root}/issue-types`, null, transport, token)),
+    labels = await pages(`${root}/labels`, null, transport, token);
+  // Native Priority identities were verified out of band and pinned in trusted
+  // source. Repository-token runtime needs neither organization nor Projects scope.
   return {
-    types: structuredClone(config.types),
+    types: types.map((t) => ({ id: t.id, name: t.name })),
     priority: structuredClone(config.priority),
-    labels: [...config.labels],
+    labels: labels.map((l) => l.name).filter((name) => config.labels.includes(name)),
   };
 }
 function excerpt(prose) {
@@ -496,7 +575,15 @@ export async function collectSnapshot(c, transport = createTransport(), env = {}
   try {
     validateContext(c);
     const token = env.GITHUB_TOKEN;
-    await history(c, transport, token);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await history(c, transport, token);
+        break;
+      } catch (e) {
+        if (e?.message !== 'HISTORY_INCOMPLETE' || attempt === 2) throw e;
+        await transport.sleep(1000 * (attempt + 1));
+      }
+    }
     const input = await prepared(c, transport, token);
     const comments = await pages(
       `/repos/${c.repo}/issues/${c.issueNumber}/comments`,
@@ -533,6 +620,7 @@ const reasons = new Set([
   'CONCURRENT_RUN',
   'RUN_ORIGIN_REFUSED',
   'GENERATION_RESERVED',
+  'MANUAL_RETRY_REFUSED',
   'BUDGET_EXHAUSTED',
   'MARKER_REFUSED',
   'PUBLIC_REPOSITORY_REQUIRED',
@@ -705,15 +793,23 @@ function finalText(data) {
     fail('INVALID_RESPONSE');
   return p.text;
 }
-export async function generateOnce(a, transport = createTransport(), key) {
+export async function generateOnce(a, transport = createTransport(), key, githubReadToken) {
   if (!config.enabled && !a?.context?.dryRun) return result('DISABLED');
+  let stage = 'validate_input';
   try {
     inputArtifact(a);
     const c = a.context;
     // The serialized trusted collector admitted this exact same-run artifact.
-    await currentRun(c, transport);
+    await currentRun(c, transport, githubReadToken);
     // GitHub requires authentication for types; this same-run collector verified the pinned catalog.
-    const input = await prepared(c, transport, undefined, a.snapshot, a.candidates, config.types);
+    const input = await prepared(
+      c,
+      transport,
+      githubReadToken,
+      a.snapshot,
+      a.candidates,
+      config.types,
+    );
     if (c.dryRun) return { state: 'ready', reason: 'DRY_RUN_VALIDATED' };
     if (typeof key !== 'string' || !key) return result('KEY_REQUIRED');
     const schema = responseSchema(input);
@@ -730,12 +826,18 @@ export async function generateOnce(a, transport = createTransport(), key) {
         thinkingConfig: { includeThoughts: false },
       },
     };
+    debug('gemini.request', {
+      model: config.model,
+      countTokensRequest: { generateContentRequest: { model: `models/${config.model}`, ...body } },
+      generateContentRequest: body,
+    });
     const base = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}`,
       options = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       };
-    await currentUnchanged(input, transport);
+    await currentUnchanged(input, transport, githubReadToken);
+    stage = 'count_tokens';
     const count = await request(
       `${base}:countTokens`,
       {
@@ -749,10 +851,25 @@ export async function generateOnce(a, transport = createTransport(), key) {
       providerStatuses,
       16384,
     );
-    if (count.status !== 200 || !integer(count.data?.totalTokens))
-      return providerFailure('TOKEN_COUNT_FAILED', count);
-    if (count.data.totalTokens > config.maxInputTokens) return result('TOKEN_LIMIT');
-    await currentUnchanged(input, transport);
+    debug('gemini.count_tokens.response', {
+      status: count.status,
+      response: count.data ?? null,
+      retryAfter: count.retryAfter ?? null,
+    });
+    if (count.status !== 200 || !integer(count.data?.totalTokens)) {
+      const failure = providerFailure('TOKEN_COUNT_FAILED', count);
+      debug('gemini.count_tokens.failed', { result: failure });
+      return failure;
+    }
+    if (count.data.totalTokens > config.maxInputTokens) {
+      debug('gemini.count_tokens.limit_exceeded', {
+        totalTokens: count.data.totalTokens,
+        maxInputTokens: config.maxInputTokens,
+      });
+      return result('TOKEN_LIMIT');
+    }
+    await currentUnchanged(input, transport, githubReadToken);
+    stage = 'generate_content';
     const response = await request(
       `${base}:generateContent`,
       {
@@ -764,13 +881,40 @@ export async function generateOnce(a, transport = createTransport(), key) {
       providerStatuses,
       65536,
     );
-    if (response.status !== 200 || !response.data)
-      return providerFailure('GENERATION_FAILED', response);
-    const proposal = JSON.parse(finalText(response.data));
-    if (!record(proposal) || Object.hasOwn(proposal, 'snapshot')) return result('INVALID_PROPOSAL');
+    debug('gemini.generate_content.response', {
+      status: response.status,
+      response: response.data ?? null,
+      retryAfter: response.retryAfter ?? null,
+    });
+    if (response.status !== 200 || !response.data) {
+      const failure = providerFailure('GENERATION_FAILED', response);
+      debug('gemini.generate_content.failed', { result: failure });
+      return failure;
+    }
+    stage = 'validate_proposal';
+    const text = finalText(response.data);
+    let proposal;
+    try {
+      proposal = JSON.parse(text);
+    } catch (e) {
+      debug('gemini.proposal.parse_failed', { error: e.message, generatedText: text });
+      return result('INVALID_PROPOSAL');
+    }
+    if (!record(proposal) || Object.hasOwn(proposal, 'snapshot')) {
+      debug('gemini.proposal.rejected', {
+        reason: 'INVALID_PROPOSAL',
+        hasSnapshot: record(proposal) && Object.hasOwn(proposal, 'snapshot'),
+        proposal,
+      });
+      return result('INVALID_PROPOSAL');
+    }
     // Workflow identity comes from the verified collector, never from model output.
     const decision = validateProposal({ ...proposal, snapshot: input.snapshot }, input);
-    if (decision.state !== 'ready') return decision;
+    if (decision.state !== 'ready') {
+      debug('gemini.proposal.rejected', { reason: decision.reason, proposal });
+      return decision;
+    }
+    debug('gemini.proposal.accepted', { proposal: decision.proposal });
     return {
       state: 'ready',
       reason: 'INFERRED',
@@ -778,17 +922,69 @@ export async function generateOnce(a, transport = createTransport(), key) {
       usage: usage(response.data.usageMetadata, count.data.totalTokens),
     };
   } catch (e) {
+    debug('gemini.failed', { stage, error: e?.message ?? String(e) });
     return safeFailure(e);
   }
+}
+function fields(raw) {
+  if (!Array.isArray(raw)) fail('CURRENT_METADATA_REFUSED');
+  const ids = new Set();
+  return raw.map((v) => {
+    if (
+      !record(v) ||
+      !positive(v.issue_field_id) ||
+      ids.has(v.issue_field_id) ||
+      typeof v.issue_field_name !== 'string' ||
+      typeof v.data_type !== 'string' ||
+      !Object.hasOwn(v, 'value')
+    )
+      fail('CURRENT_METADATA_REFUSED');
+    ids.add(v.issue_field_id);
+    if (
+      v.issue_field_id === config.priority?.id &&
+      (v.issue_field_name !== config.priority.name ||
+        v.data_type !== 'single_select' ||
+        !config.priority.options.some(
+          (o) =>
+            o.id === v.value &&
+            o.id === v.single_select_option?.id &&
+            o.name === v.single_select_option?.name,
+        ))
+    )
+      fail('CURRENT_METADATA_REFUSED');
+    return {
+      field_id: v.issue_field_id,
+      value: v.single_select_option?.name ?? v.value,
+      native: structuredClone(v),
+    };
+  });
 }
 async function publicationCurrent(input, transport, token) {
   const issue = await currentUnchanged(input, transport, token);
   const cat = await catalog(input.context, transport, token);
   if (prepareInput({ ...input.snapshot, issue }, input.candidates, cat).decision.state !== 'ready')
     fail('CURRENT_METADATA_REFUSED');
-  if (!Array.isArray(issue.labels) || issue.labels.some((l) => typeof l?.name !== 'string'))
+  if (
+    !Object.hasOwn(issue, 'type') ||
+    (issue.type !== null &&
+      !config.types.some((t) => t.id === issue.type?.id && t.name === issue.type?.name)) ||
+    !Array.isArray(issue.labels) ||
+    issue.labels.some((l) => typeof l?.name !== 'string')
+  )
     fail('CURRENT_METADATA_REFUSED');
-  return { ...issue, repo: input.context.repo, type: null, fieldValues: [] };
+  // Personal repositories have no organization Issue fields. Never infer support from a failed request.
+  const values =
+    config.priority === null
+      ? []
+      : fields(
+          await pages(
+            `/repos/${input.context.repo}/issues/${input.context.issueNumber}/issue-field-values`,
+            null,
+            transport,
+            token,
+          ),
+        );
+  return { ...issue, repo: input.context.repo, fieldValues: values };
 }
 async function mutation(path, method, body, transport, token, statuses) {
   if (!token || !['PATCH', 'POST'].includes(method)) fail('CREDENTIAL_ISOLATION');
@@ -806,37 +1002,6 @@ async function mutation(path, method, body, transport, token, statuses) {
   if (!response.data) fail('WRITE_UNCONFIRMED');
   return response.data;
 }
-async function ensureLabels(names, repo, transport, token) {
-  const root = `/repos/${repo}`;
-  let existing = await pages(`${root}/labels`, null, transport, token);
-  const known = new Set(existing.map((label) => label.name));
-  for (const name of names) {
-    if (known.has(name)) continue;
-    const color = name.startsWith('priority:')
-      ? 'b60205'
-      : name.startsWith('type:')
-        ? '1d76db'
-        : '5319e7';
-    const response = await request(
-      githubURL(`${root}/labels`),
-      {
-        method: 'POST',
-        headers: { ...headers(token), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, color, description: 'Managed by Jian issue triage.' }),
-        signal: AbortSignal.timeout(30000),
-      },
-      transport,
-      [201, 422],
-    );
-    if (response.status === 201) known.add(name);
-    else {
-      existing = await pages(`${root}/labels`, null, transport, token);
-      if (!existing.some((label) => label.name === name)) fail('LABEL_CREATION_UNCONFIRMED');
-      known.add(name);
-    }
-  }
-}
-
 function unchangedHuman(before, after) {
   if (
     (before.type !== null &&
@@ -891,11 +1056,6 @@ export async function publishProposal(proposal, a, transport = createTransport()
         method = 'POST';
       }
       if (kind === 'labels' && effects.labelsToAdd.length) {
-        try {
-          await ensureLabels(effects.labelsToAdd, a.context.repo, transport, token);
-        } catch {
-          fail('WRITE_UNCONFIRMED');
-        }
         body = { labels: effects.labelsToAdd };
         path = `${root}/labels`;
         method = 'POST';
@@ -930,7 +1090,7 @@ export async function publishProposal(proposal, a, transport = createTransport()
         (kind === 'priority' &&
           !after.fieldValues.some(
             (v) =>
-              v.field_id === config.priority.id && v.value === body.issue_field_values[0].value,
+              v.field_id === config.priority?.id && v.value === body.issue_field_values[0].value,
           )) ||
         (kind === 'labels' &&
           body.labels.some((name) => !after.labels.some((l) => l.name === name)))
@@ -1053,7 +1213,12 @@ export async function runCLI(argv, { env = process.env, transport = createTransp
       const a = await readTransfer(inputPath);
       inputArtifact(a);
       if (contextKeys.some((k) => c[k] !== a.context[k])) fail('ARTIFACT_REFUSED');
-      const generated = await generateOnce(a, transport, c.dryRun ? undefined : env.GEMINI_API_KEY);
+      const generated = await generateOnce(
+        a,
+        transport,
+        c.dryRun ? undefined : env.GEMINI_API_KEY,
+        env.GITHUB_API_TOKEN,
+      );
       if (generated.state === 'ready') await atomicJSON(outputPath, { ...generated, origin: a });
       return generated.state === 'ready' ? result(generated.reason, generated.state) : generated;
     }

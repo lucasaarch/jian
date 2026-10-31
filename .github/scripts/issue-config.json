@@ -7,63 +7,20 @@
   "apiVersion": "2026-03-10",
   "types": [
     {
-      "id": 1,
+      "id": 610603862,
       "name": "Task"
     },
     {
-      "id": 2,
+      "id": 610603863,
       "name": "Bug"
     },
     {
-      "id": 3,
+      "id": 610603864,
       "name": "Feature"
     }
   ],
-  "priority": {
-    "id": 1,
-    "name": "Priority",
-    "type": "single_select",
-    "options": [
-      {
-        "id": 1,
-        "name": "Urgent"
-      },
-      {
-        "id": 2,
-        "name": "High"
-      },
-      {
-        "id": 3,
-        "name": "Medium"
-      },
-      {
-        "id": 4,
-        "name": "Low"
-      }
-    ]
-  },
-  "labels": [
-    "bug",
-    "enhancement",
-    "documentation",
-    "question",
-    "accessibility",
-    "dependencies",
-    "area: gateway",
-    "area: gateway-ui",
-    "area: providers",
-    "area: sessions",
-    "area: runtime",
-    "area: contracts",
-    "area: sdk",
-    "area: memory",
-    "area: channels",
-    "area: security",
-    "area: voice",
-    "area: integrations",
-    "area: ci",
-    "area: docs"
-  ],
+  "priority": null,
+  "labels": ["bug", "enhancement", "documentation", "question", "accessibility"],
   "metadataConfidence": 0.85,
   "duplicateConfidence": 0.9,
   "maxLabels": 3,
