@@ -51,6 +51,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     )
       selected = plan([], true);
     else {
+      if (pr !== 'true') execFileSync('git', ['merge-base', '--is-ancestor', base, head]);
       const range = `${base}${pr === 'true' ? '...' : '..'}${head}`;
       const paths = execFileSync('git', ['diff', '--no-renames', '--name-only', '-z', range], {
         encoding: 'utf8',
