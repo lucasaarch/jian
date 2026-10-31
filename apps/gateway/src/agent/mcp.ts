@@ -227,6 +227,34 @@ async function reconnectServer(
  * request never left, so a fresh client is safe. After the bounded reconnects are spent, the
  * failure is returned to the agent as a normal tool error — never as an uncertain interrupt.
  */
+export function omitEmptyOptionalArguments(input: unknown, schema: unknown): unknown {
+  if (!input || typeof input !== 'object' || !schema || typeof schema !== 'object') return input;
+
+  const shape = (schema as { shape?: Record<string, unknown> }).shape;
+
+  if (!shape) return input;
+
+  const cleaned = { ...(input as Record<string, unknown>) };
+
+  for (const [key, field] of Object.entries(shape)) {
+    if (!(key in cleaned) || !field || typeof field !== 'object') continue;
+
+    const candidate = field as {
+      safeParse?: (value: unknown) => { success: boolean };
+      shape?: Record<string, unknown>;
+    };
+    const optional = candidate.safeParse?.(undefined).success === true;
+
+    if (optional && cleaned[key] === '') {
+      delete cleaned[key];
+    } else {
+      cleaned[key] = omitEmptyOptionalArguments(cleaned[key], field);
+    }
+  }
+
+  return cleaned;
+}
+
 function withClosedClientRetry(
   live: LiveServer,
   serverTool: string,
@@ -247,7 +275,7 @@ function withClosedClientRetry(
       throw new Error(`MCP server ${live.config.name} no longer offers ${serverTool}`);
     }
 
-    return execute(input, options);
+    return execute(omitEmptyOptionalArguments(input, remote.inputSchema), options);
   };
 
   return {
