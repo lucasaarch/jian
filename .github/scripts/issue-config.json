@@ -42,5 +42,6 @@
   "monthlyGoalUSD": 5,
   "inputUSDPerMillionTokens": 0.3,
   "outputUSDPerMillionTokens": 2.5,
-  "artifactRetentionDays": 1
+  "artifactRetentionDays": 1,
+  "nativeTypes": false
 }

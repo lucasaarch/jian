@@ -974,6 +974,8 @@ function fields(raw) {
 async function publicationCurrent(input, transport, token) {
   const issue = await currentUnchanged(input, transport, token);
   const cat = await catalog(input.context, transport, token);
+  // This repository explicitly has no native Issue types; missing metadata is expected only here.
+  if (!config.nativeTypes && !Object.hasOwn(issue, 'type')) issue.type = null;
   if (prepareInput({ ...input.snapshot, issue }, input.candidates, cat).decision.state !== 'ready')
     fail('CURRENT_METADATA_REFUSED');
   if (

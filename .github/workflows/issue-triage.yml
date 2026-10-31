@@ -64,9 +64,9 @@ jobs:
           set -euo pipefail
           cd .github/scripts
           sha256sum -c - <<'HASHES' > /dev/null
-          0b2106e688cc1e7382b62d992a83aa694f0a70d0d741fbaf931e0509574ca9d8  issue-core.mjs
-          c86077cd2591970a50870dd424e019d6508c0aa051bb274b7929f277e77cfde0  issue-run.mjs
-          b51a57eb6c17da5decce0852808e16563e9a066593d3a2fde8e9ad3d28101f31  issue-config.json
+          2526a6ef5f8e7574dce5172f97e250f468fcf78b2095f0cc9cad7734e8039ed2  issue-core.mjs
+          487d318fecba7692941a97e86043f50c906e5472bd3ec444898c57a4f6ae57a4  issue-run.mjs
+          98fb2022fff924d7ac0b6f4be9ab07e3f9bfbd53ed61f9c06ebc9ea411ee4b06  issue-config.json
           HASHES
           node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
           import { config } from './issue-core.mjs';
@@ -200,9 +200,9 @@ jobs:
               "https://raw.githubusercontent.com/lucasaarch/jian/$SOURCE_SHA/.github/scripts/$file" --output "$file"
           done
           sha256sum -c - <<'HASHES' > /dev/null
-          0b2106e688cc1e7382b62d992a83aa694f0a70d0d741fbaf931e0509574ca9d8  issue-core.mjs
-          c86077cd2591970a50870dd424e019d6508c0aa051bb274b7929f277e77cfde0  issue-run.mjs
-          b51a57eb6c17da5decce0852808e16563e9a066593d3a2fde8e9ad3d28101f31  issue-config.json
+          2526a6ef5f8e7574dce5172f97e250f468fcf78b2095f0cc9cad7734e8039ed2  issue-core.mjs
+          487d318fecba7692941a97e86043f50c906e5472bd3ec444898c57a4f6ae57a4  issue-run.mjs
+          98fb2022fff924d7ac0b6f4be9ab07e3f9bfbd53ed61f9c06ebc9ea411ee4b06  issue-config.json
           HASHES
           node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
           import { config } from './issue-core.mjs';
@@ -270,9 +270,9 @@ jobs:
           set -euo pipefail
           cd .github/scripts
           sha256sum -c - <<'HASHES' > /dev/null
-          0b2106e688cc1e7382b62d992a83aa694f0a70d0d741fbaf931e0509574ca9d8  issue-core.mjs
-          c86077cd2591970a50870dd424e019d6508c0aa051bb274b7929f277e77cfde0  issue-run.mjs
-          b51a57eb6c17da5decce0852808e16563e9a066593d3a2fde8e9ad3d28101f31  issue-config.json
+          2526a6ef5f8e7574dce5172f97e250f468fcf78b2095f0cc9cad7734e8039ed2  issue-core.mjs
+          487d318fecba7692941a97e86043f50c906e5472bd3ec444898c57a4f6ae57a4  issue-run.mjs
+          98fb2022fff924d7ac0b6f4be9ab07e3f9bfbd53ed61f9c06ebc9ea411ee4b06  issue-config.json
           HASHES
           node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
           import { config } from './issue-core.mjs';
