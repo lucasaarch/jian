@@ -4,6 +4,35 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.1.5 — 2026-10-31
+
+Local Ollama models work without an API key, GitHub pull requests can be updated from Jian, and MCP calls omit optional arguments that are empty. A guarded predeploy drain is planned, with explicit operator-controlled release.
+
+### Local models
+
+* **Ollama without an API key:** the OpenAI-compatible provider accepts keyless local servers, including Ollama. Setup now suggests `http://localhost:11434/v1`, with a Docker host address where needed, instead of centering Whisper transcription.
+
+### GitHub
+
+* **Update a pull request branch from its drawer:** bring the branch up to date with its base without leaving Jian.
+
+### MCP
+
+* **Optional empty arguments stay omitted:** the gateway no longer sends empty optional arguments to MCP tools, avoiding validation failures from servers that reject them.
+
+### Security
+
+* **Dependencies patched:** Dependabot's reported `minimatch` vulnerability is resolved by updating the affected dependency.
+
+### Deployment — planned, pending review
+
+* **A guarded predeploy execution drain (PR #84):** optionally hold new work while active executions drain, with inspection and explicit recovery commands. The hold fails closed and requires a generation-matched manual release; it does not activate or change production deployment configuration by itself. See `docs/predeploy-drain.md` for the deployment contract and limitations. This feature is included in this draft because its PR is open, but is not confirmed for release until merged.
+
+### Upgrading
+
+* From 1.1.4, recreate the gateway and web containers with the 1.1.5 images, or follow the `latest` tags. No migration is expected for these changes; confirm against the final release contents before publishing.
+* The desktop app updates itself to this release.
+
 ## 1.1.4 — 2026-10-30
 
 The window's buttons work on Windows and Linux, what you are writing survives leaving the page, and renaming a chat works, in a dialog. Dependencies with known vulnerabilities are patched.
