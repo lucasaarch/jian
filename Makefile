@@ -17,7 +17,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust \
         check test test-integration lint format build image image-push \
-        release rollback test-display image-test-display
+        release rollback test-display image-test-display image-test-inspection
 
 ##@ General
 
@@ -116,6 +116,11 @@ image-test-display: ## Real image X11/GL/Vulkan capture, isolation and cleanup; 
 	docker run --rm --security-opt=no-new-privileges --cap-drop=ALL \
 		-v "$(CURDIR)/apps/gateway/test-display.py:/usr/local/libexec/test-display.py:ro" \
 		--entrypoint python3 $(IMAGE):$(VERSION) /usr/local/libexec/test-display.py
+
+image-test-inspection: ## Real image page inspection, confined as in production; requires Landlock
+	docker run --rm --security-opt=no-new-privileges --cap-drop=ALL \
+		-v "$(CURDIR)/apps/gateway/test-inspection.mjs:/app/test-inspection.mjs:ro" \
+		--entrypoint node $(IMAGE):$(VERSION) /app/test-inspection.mjs
 
 image-push: ## Push the locally built images; the multi-architecture indexes come from CI
 	docker push $(IMAGE):$(VERSION)

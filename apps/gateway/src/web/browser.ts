@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import type { Page } from 'playwright';
 
 const MAX_RESOURCE_BYTES = 5 * 1024 * 1024;
@@ -8,6 +9,10 @@ const MAX_REQUESTS = 200;
  * A page inspection runs JavaScript in a temporary browser. Give each read an empty browser context;
  * every resource goes through the same DNS-pinned outbound guard as ordinary page reads.
  * The browser never gets cookies, credentials or a direct network fallback.
+ *
+ * Chromium's own sandbox needs user namespaces, which a container refuses. The image's
+ * JIAN_BROWSER_PATH runs it under Landlock instead, as an agent's commands run, so a page that broke
+ * out of the renderer still reaches no secret of the gateway. Elsewhere its own sandbox stays on.
  */
 export type PageResource = { url: string; mimeType: string; data: Buffer };
 export type BlockedResource = { url: string; reason: string };
@@ -21,14 +26,30 @@ export async function withPage<T>(
 ): Promise<T> {
   const { chromium } = await import('playwright');
   signal.throwIfAborted();
-  const browser = await chromium.launch({
-    chromiumSandbox: true,
-    ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
-      ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH }
-      : {}),
-    args: ['--force-webrtc-ip-handling-policy=disable_non_proxied_udp'],
-    timeout: 10_000,
-  });
+  const confined = process.env.JIAN_BROWSER_PATH;
+  const executable = confined || process.env.PLAYWRIGHT_EXECUTABLE_PATH;
+  const browser = await chromium
+    .launch({
+      chromiumSandbox: !confined,
+      ...(executable ? { executablePath: executable } : {}),
+      args: [
+        '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+        // A container's /dev/shm is 64 MB, too little for a page of any size.
+        ...(confined ? ['--disable-dev-shm-usage'] : []),
+      ],
+      // By name, never inherited: the gateway's environment holds its keys.
+      env: {
+        PATH: process.env.PATH ?? '',
+        HOME: confined ? tmpdir() : (process.env.HOME ?? tmpdir()),
+        TMPDIR: tmpdir(),
+      },
+      timeout: 10_000,
+    })
+    .catch((error: unknown) => {
+      throw new Error(
+        `The browser could not start on this gateway: ${(error instanceof Error ? error.message : String(error)).split('\n')[0]}`,
+      );
+    });
   const close = () => {
     void browser.close().catch(() => {});
   };
