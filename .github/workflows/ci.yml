@@ -126,8 +126,6 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-    needs: changes
-    if: needs.changes.outputs.gateway == 'true'
         image: postgres:17
         env:
           POSTGRES_DB: jian_test
