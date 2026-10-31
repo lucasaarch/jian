@@ -47,8 +47,8 @@ export const providers = [
   },
   {
     kind: 'openai-compatible',
-    name: 'OpenAI-compatible server',
-    description: 'A server you run that speaks the OpenAI API, such as a local Whisper.',
+    name: 'Local model server',
+    description: 'Connect Ollama or another server that speaks the OpenAI API.',
     symbol: '⌘',
     variables: '',
   },

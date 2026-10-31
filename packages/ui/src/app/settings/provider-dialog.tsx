@@ -185,7 +185,7 @@ function ProviderForm({
           hint={addressHint}
           type="url"
           required
-          placeholder="http://whisper:8000/v1"
+          placeholder="http://localhost:11434/v1"
           value={baseURL}
           onChange={(event) => setBaseURL(event.target.value)}
         />
