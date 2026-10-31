@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-const areas = ['node', 'gateway', 'panel', 'desktop', 'remote', 'rust', 'triage'];
+const areas = ['node', 'gateway', 'image', 'panel', 'desktop', 'remote', 'rust', 'triage'];
 
 /** Follow package consumers as well as owners; unknown paths conservatively select every gate. */
 export function plan(paths, full = false) {
@@ -13,20 +13,22 @@ export function plan(paths, full = false) {
   for (const path of paths) {
     if (/^\.github\/(?:scripts\/issue-|workflows\/issue-triage\.yml|issue-triage\.md)/.test(path))
       enable('triage');
-    else if (/^apps\/gateway\//.test(path)) enable('node', 'gateway', 'desktop');
+    else if (/^apps\/gateway\/(?:test-display|Dockerfile|display\.sh|sandbox\.)/.test(path))
+      enable('image');
+    else if (/^apps\/gateway\//.test(path)) enable('node', 'gateway', 'desktop', 'image');
     else if (/^packages\/ui\//.test(path)) enable('node', 'panel', 'desktop');
     else if (/^apps\/web\//.test(path)) enable('node', 'panel');
     else if (/^apps\/desktop\//.test(path)) enable('node', 'desktop');
     else if (/^packages\/contracts\//.test(path))
-      enable('node', 'gateway', 'panel', 'desktop', 'remote');
+      enable('node', 'gateway', 'panel', 'desktop', 'remote', 'image');
     else if (/^packages\/sdk\//.test(path)) enable('node', 'panel', 'desktop');
     else if (/^packages\/remote-core\//.test(path)) {
-      enable('node', 'remote', 'desktop', 'gateway');
+      enable('node', 'remote', 'desktop', 'gateway', 'image');
       if (path.startsWith('packages/remote-core/native/')) enable('rust');
     } else if (/^apps\/remote-control\//.test(path)) enable('node', 'remote');
-    else if (/^docs\/releases\//.test(path)) enable('node', 'gateway', 'panel', 'desktop');
+    else if (/^docs\/releases\//.test(path)) enable('node', 'gateway', 'panel', 'desktop', 'image');
     else if (/^(Cargo\.(toml|lock)|rust-toolchain(?:\.toml)?)$/.test(path))
-      enable('rust', 'gateway', 'desktop', 'node');
+      enable('rust', 'gateway', 'desktop', 'node', 'image');
     else if (/\.md$/.test(path) || path.startsWith('.github/ISSUE_TEMPLATE/')) continue;
     else enable(...areas);
   }

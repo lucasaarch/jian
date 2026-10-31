@@ -1034,3 +1034,16 @@ test('only explicit administrator dispatch admits bot-authored Issues', () => {
     );
   }
 });
+
+test('classification prefixes are prose while real Markdown reference definitions are removed', () => {
+  for (const title of ['[Feature]: Pinned chats', '[Bug]: A dialog is clipped']) {
+    const result = core.sanitizeProse(title);
+    ready(result);
+    assert.equal(result.prose, title);
+  }
+  const result = core.sanitizeProse(
+    'Useful context\n[reference]: https://example.test/private "Reference"',
+  );
+  ready(result);
+  assert.equal(result.prose, 'Useful context');
+});

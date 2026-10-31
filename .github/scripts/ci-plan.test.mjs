@@ -22,10 +22,16 @@ test('shared UI reaches both hosts while host-only changes stay scoped', () => {
   assert.deepEqual(selected(['apps/desktop/src/main/index.ts']), ['desktop', 'node']);
 });
 test('gateway and worker changes reach the embedded gateway and native resources', () => {
-  assert.deepEqual(selected(['apps/gateway/src/local.ts']), ['desktop', 'gateway', 'node']);
+  assert.deepEqual(selected(['apps/gateway/src/local.ts']), [
+    'desktop',
+    'gateway',
+    'image',
+    'node',
+  ]);
   assert.deepEqual(selected(['packages/remote-core/native/src/lib.rs']), [
     'desktop',
     'gateway',
+    'image',
     'node',
     'remote',
     'rust',
@@ -35,6 +41,7 @@ test('contracts propagate to every Node consumer and shared configuration select
   assert.deepEqual(selected(['packages/contracts/src/sessions.ts']), [
     'desktop',
     'gateway',
+    'image',
     'node',
     'panel',
     'remote',
@@ -52,7 +59,13 @@ test('contracts propagate to every Node consumer and shared configuration select
 });
 test('ordinary prose changes need no builds, release notes still reach bundled products', () => {
   assert.deepEqual(selected(['README.md']), []);
-  assert.deepEqual(selected(['docs/releases/1.2.3.md']), ['desktop', 'gateway', 'node', 'panel']);
+  assert.deepEqual(selected(['docs/releases/1.2.3.md']), [
+    'desktop',
+    'gateway',
+    'image',
+    'node',
+    'panel',
+  ]);
 });
 
 test('the required check rejects failed detection and every skipped or failed selected desktop gate', () => {
@@ -64,11 +77,11 @@ test('the required check rejects failed detection and every skipped or failed se
     changes: {
       result: 'success',
       outputs: Object.fromEntries(
-        ['node', 'triage', 'desktop', 'rust', 'gateway'].map((key) => [key, 'false']),
+        ['node', 'triage', 'desktop', 'rust', 'gateway', 'image'].map((key) => [key, 'false']),
       ),
     },
     ...Object.fromEntries(
-      ['node', 'triage', 'desktop', 'rust', 'postgres'].map((name) => [
+      ['node', 'triage', 'desktop', 'rust', 'postgres', 'image'].map((name) => [
         name,
         { result: 'skipped' },
       ]),
@@ -89,4 +102,8 @@ test('the required check rejects failed detection and every skipped or failed se
   assert.equal(run(), 0);
   jobs.changes.result = 'failure';
   assert.notEqual(run(), 0);
+});
+
+test('display harness changes select image checks without database or desktop builds', () => {
+  assert.deepEqual(selected(['apps/gateway/test-display.py']), ['image']);
 });

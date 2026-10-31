@@ -19,6 +19,7 @@ jobs:
     outputs:
       node: ${{ steps.plan.outputs.node }}
       gateway: ${{ steps.plan.outputs.gateway }}
+      image: ${{ steps.plan.outputs.image }}
       panel: ${{ steps.plan.outputs.panel }}
       desktop: ${{ steps.plan.outputs.desktop }}
       remote: ${{ steps.plan.outputs.remote }}
@@ -80,7 +81,6 @@ jobs:
         run: |
           pnpm --filter @jian/gateway test
           pnpm --filter @jian/gateway build
-          make test-display
       - if: needs.changes.outputs.panel == 'true'
         run: |
           pnpm --filter @jian/ui knip
@@ -163,42 +163,19 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run test:integration
+  image:
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make test-display
       - run: docker build -f apps/gateway/Dockerfile -t jian:ci .
       - run: make image-test-display IMAGE=jian VERSION=ci
-      - name: Check out pinned Lemon render fixture
-        uses: actions/checkout@v4
-        with:
-          repository: lucasaarch/lemon
-          ref: a5c716a263b67c0ce51ecb47e81251bf4439ec2e
-          path: .lemon-smoke
-          persist-credentials: false
-      - name: Build and render the actual Lemon counter in the image
-        timeout-minutes: 20
-        run: |
-          mkdir -p "$RUNNER_TEMP/lemon-display"
-          docker run --rm --user "$(id -u):$(id -g)" \
-            -e HOME=/home/node/lemon \
-            -v "$GITHUB_WORKSPACE/.lemon-smoke:/home/node/lemon" \
-            -v "$GITHUB_WORKSPACE/apps/gateway/test-display.py:/usr/local/libexec/test-display.py:ro" \
-            -v "$RUNNER_TEMP/lemon-display:/artifacts" \
-            --entrypoint bash jian:ci -euo pipefail -c '
-              cd "$HOME"
-              cargo build --locked --example counter 2>&1 | tee /artifacts/build.log
-              python3 /usr/local/libexec/test-display.py \
-                --lemon "$HOME/target/debug/examples/counter" /artifacts \
-                2>&1 | tee /artifacts/test.log
-            '
-      - name: Preserve Lemon render evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lemon-display
-          path: ${{ runner.temp }}/lemon-display
-          if-no-files-found: warn
   # This name remains the branch rule's single required check, even when every area is skipped.
   check:
     if: always()
-    needs: [changes, node, triage, desktop, rust, postgres]
+    needs: [changes, node, triage, desktop, rust, postgres, image]
     runs-on: ubuntu-latest
     steps:
       - name: Verify every selected gate
@@ -208,7 +185,7 @@ jobs:
           node --input-type=module <<'NODE'
           const jobs = JSON.parse(process.env.RESULTS);
           if (jobs.changes.result !== 'success') throw new Error('Change detection failed.');
-          const areas = { node: 'node', triage: 'triage', desktop: 'desktop', rust: 'rust', postgres: 'gateway' };
+          const areas = { node: 'node', triage: 'triage', desktop: 'desktop', rust: 'rust', postgres: 'gateway', image: 'image' };
           for (const [job, area] of Object.entries(areas)) {
             const selected = jobs.changes.outputs[area];
             if (!['true', 'false'].includes(selected)) throw new Error(`Missing selection for ${area}.`);
