@@ -589,6 +589,13 @@
       "when": 1793422561450,
       "tag": "0083_held-channel-references",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793422561451,
+      "tag": "0084_pinned-chats",
+      "breakpoints": true
     }
   ]
 }

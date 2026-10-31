@@ -16,6 +16,7 @@
     "@electric-sql/pglite": "^0.5.8",
     "@fastify/helmet": "^13.1.1",
     "@fastify/rate-limit": "^11.2.0",
+    "@jian/browser-core": "workspace:*",
     "@jian/contracts": "workspace:*",
     "ai": "^7.0.108",
     "ai-sdk-ollama": "^4.0.0",

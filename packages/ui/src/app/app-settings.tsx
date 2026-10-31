@@ -1,6 +1,16 @@
 'use client';
 
-import { Cable, Cpu, KeyRound, Link2, Monitor, Palette, Plug, Settings2 } from 'lucide-react';
+import {
+  Cable,
+  Cpu,
+  Keyboard,
+  KeyRound,
+  Link2,
+  Monitor,
+  Palette,
+  Plug,
+  Settings2,
+} from 'lucide-react';
 import { Suspense, useState } from 'react';
 import { Overlay, SettingsLayout, type SettingsPage } from '../kit';
 import { useOnboarding } from '../lib/stores/onboarding';
@@ -8,6 +18,7 @@ import { Appearance } from './appearance';
 import { type GatewayActions, GatewayConnection, type GatewayInfo } from './gateway-connection';
 import { GatewayPage, type GatewayPageId, GatewayPageWaiting } from './gateway-pages';
 import { type AppHost, GeneralSettings } from './general-settings';
+import { KeymapsPage } from './settings/keymaps-page';
 import type { ThisComputer } from './settings/machines-page';
 
 export type { AppHost } from './general-settings';
@@ -21,7 +32,7 @@ export type GatewaySettings = {
   thisComputer?: ThisComputer;
 };
 
-type Page = 'general' | 'appearance' | GatewayPageId | 'connection';
+type Page = 'general' | 'appearance' | 'keymaps' | GatewayPageId | 'connection';
 
 /**
  * Settings, from ⌘, or the status bar's gear: the app's own, and under them the gateway in use's,
@@ -104,6 +115,7 @@ function PageOf({
       />
     );
   if (page === 'appearance') return <Appearance />;
+  if (page === 'keymaps') return <KeymapsPage />;
   if (!gateway) return null;
   if (page === 'connection') {
     if (!gateway.actions) return null;
@@ -150,6 +162,13 @@ const appPages: SettingsPage[] = [
     icon: <Palette size={15} />,
     group: APP,
     keywords: ['theme', 'dark', 'light'],
+  },
+  {
+    id: 'keymaps',
+    label: 'Keymaps',
+    icon: <Keyboard size={15} />,
+    group: APP,
+    keywords: ['keyboard', 'shortcut', 'binding', 'command'],
   },
 ];
 

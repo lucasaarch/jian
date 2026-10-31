@@ -9,7 +9,11 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-async function render(rename?: (title: string) => Promise<boolean>) {
+async function render(
+  rename?: (title: string) => Promise<boolean>,
+  pinned?: boolean,
+  pin?: () => void,
+) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const remove = vi.fn();
   const host = document.createElement('ul');
@@ -26,6 +30,8 @@ async function render(rename?: (title: string) => Promise<boolean>) {
         working={false}
         open={() => {}}
         {...(rename ? { rename } : {})}
+        pinned={pinned}
+        pin={pin}
         remove={remove}
       />,
     ),
@@ -106,4 +112,50 @@ it('deletes from its menu, and offers no rename where the name is not the chatâ€
   await act(async () => items[0]?.click());
 
   expect(view.remove).toHaveBeenCalledOnce();
+});
+
+it('replaces time with working, then unread until the conversation is opened', () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const host = document.createElement('ul');
+  document.body.append(host);
+  const root = createRoot(host);
+  const row = (working: boolean, unread: boolean, selected = false) => (
+    <ChatRow
+      name="Release notes"
+      at="2026-10-31T08:00:00Z"
+      selected={selected}
+      working={working}
+      unread={unread}
+      open={() => {}}
+      remove={() => {}}
+    />
+  );
+  try {
+    act(() => root.render(row(true, false)));
+    expect(host.querySelector('[role="status"][aria-label="Working"] svg')).not.toBeNull();
+    expect(host.querySelector('time')).toBeNull();
+    act(() => root.render(row(true, true)));
+    expect(host.querySelector('[aria-label="Working"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Unread"]')).toBeNull();
+    act(() => root.render(row(false, true)));
+    expect(host.querySelector('[aria-label="Working"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Unread"]')).not.toBeNull();
+    expect(host.querySelector('time')).toBeNull();
+    act(() => root.render(row(false, false, true)));
+    expect(host.querySelector('[aria-label="Unread"]')).toBeNull();
+    expect(host.querySelector('time')).not.toBeNull();
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});
+
+it.each([false, true])('offers the pin action for pinned=%s', async (pinned) => {
+  const pin = vi.fn();
+  const view = await render(undefined, pinned, pin);
+  const items = await view.menu();
+  const item = items.find((entry) => entry.textContent === (pinned ? 'Unpin' : 'Pin'));
+  expect(item).toBeDefined();
+  await act(async () => item?.click());
+  expect(pin).toHaveBeenCalledOnce();
 });

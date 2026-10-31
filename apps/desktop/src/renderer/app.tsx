@@ -11,6 +11,7 @@ import {
   useWelcomeShowing,
 } from '@jian/ui';
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BrowserInspector } from './chrome/browser-panel';
 import { useComputerUses } from './chrome/computer-uses';
 import { StatusBar, type StatusSlots } from './chrome/status-bar';
 import { TitleBar } from './chrome/title-bar';
@@ -114,13 +115,15 @@ function Window() {
     >
       <TitleBar gateway={current} />
       {/* Layout containment makes this area the box the panel's fixed pieces are placed in. */}
-      <div className="flex min-h-0 flex-1 flex-col [contain:layout]">
-        {current?.status === 'incompatible' ? (
-          <Incompatible gateway={current} />
-        ) : current ? (
-          <GatewayPanel key={current.id} gateway={current} settings={settings} slots={slots} />
-        ) : null}
-      </div>
+      <BrowserInspector hidden={settings.open || connecting || welcoming}>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col [contain:layout]">
+          {current?.status === 'incompatible' ? (
+            <Incompatible gateway={current} />
+          ) : current ? (
+            <GatewayPanel key={current.id} gateway={current} settings={settings} slots={slots} />
+          ) : null}
+        </div>
+      </BrowserInspector>
       {!welcoming && (
         <StatusBar
           gateway={

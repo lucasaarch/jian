@@ -8,6 +8,7 @@ type ChannelKind = 'whatsapp' | 'telegram' | 'api' | 'agents';
 type ProjectFolder = { project: Project; sessions: Session[] };
 
 export type ChatSection =
+  | { id: 'pinned'; kind: 'pinned'; name: string; sessions: Session[] }
   | { id: 'projects'; kind: 'projects'; name: string; folders: ProjectFolder[] }
   | { id: 'conversations'; kind: 'conversations'; name: string; sessions: Session[] }
   | { id: ChannelKind; kind: 'channel'; channel: ChannelKind; name: string; sessions: Session[] };
@@ -44,7 +45,8 @@ export function chatSections({
   projects: Project[];
   channels: Channel[];
 }): ChatSection[] {
-  const sorted = [...sessions].sort(newestFirst);
+  const pinned = sessions.filter((session) => session.pinned).sort(newestFirst);
+  const sorted = sessions.filter((session) => !session.pinned).sort(newestFirst);
   const chats = sorted.filter((session) => session.channel === GATEWAY_SESSION_CHANNEL);
   const others = sorted.filter((session) => session.channel !== GATEWAY_SESSION_CHANNEL);
   const known = new Set(projects.map((project) => project.id));
@@ -74,6 +76,9 @@ export function chatSections({
     .filter((section) => section.sessions.length > 0 || connected.has(section.channel));
 
   return [
+    ...(pinned.length
+      ? [{ id: 'pinned' as const, kind: 'pinned' as const, name: 'Pinned', sessions: pinned }]
+      : []),
     ...(folders.length
       ? [{ id: 'projects' as const, kind: 'projects' as const, name: 'Projects', folders }]
       : []),

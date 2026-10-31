@@ -1,8 +1,9 @@
 'use client';
 
 import { ContextMenu } from '@base-ui/react/context-menu';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { Spinner } from '../components/ui/spinner';
 import { Action, Overlay, TextField } from '../kit';
 import { MenuEntry, menuPopup } from '../kit/menu';
 import { ago } from '../lib/format';
@@ -22,6 +23,8 @@ export type ChatRowProps = {
   /** Absent where the name is not the chat's own: a contact's, another agent's. */
   /** Whether the name was saved. */
   rename?: (title: string) => Promise<boolean>;
+  pinned?: boolean;
+  pin?: () => void;
   remove: () => void;
 };
 
@@ -35,6 +38,14 @@ export function ChatRow(props: ChatRowProps) {
 
   const actions = (
     <>
+      {props.pin && (
+        <MenuEntry
+          icon={props.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+          onClick={props.pin}
+        >
+          {props.pinned ? 'Unpin' : 'Pin'}
+        </MenuEntry>
+      )}
       {props.rename && (
         <MenuEntry icon={<Pencil size={14} />} onClick={() => setRenaming(true)}>
           Rename
@@ -95,11 +106,9 @@ export function ChatRow(props: ChatRowProps) {
 function Status({ at, unread, working, selected }: ChatRowProps) {
   if (working) {
     return (
-      <span
-        role="img"
-        aria-label="Working"
-        className="size-2 animate-pulse rounded-full bg-ink/70"
-      />
+      <span role="status" aria-label="Working" className="grid size-4 place-items-center">
+        <Spinner size={13} />
+      </span>
     );
   }
   if (unread && !selected) {

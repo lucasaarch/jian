@@ -3,6 +3,7 @@ import { app, type BrowserWindow, powerMonitor } from 'electron';
 import { LOCAL_GATEWAY_ID, type MachineUse, type OpenTarget, type Showing } from '../shared/bridge';
 import { setAppMenu } from './app-menu';
 import { serveBridge } from './bridge';
+import { JianBrowser } from './browser';
 import { timedFetch } from './gateways/fetch';
 import { GatewayMonitor } from './gateways/monitor';
 import { gatewayName } from './gateways/rules';
@@ -64,6 +65,8 @@ let pending: OpenTarget | undefined;
 /** Created once the app is ready; told whenever what its menu shows changes. */
 let tray: { update(): void } | undefined;
 
+const browser = new JianBrowser(() => window);
+browser.register();
 const store = new GatewayStore();
 const notifier = new Notifier((target) => open(target));
 const monitor = new GatewayMonitor(store, app.getVersion(), {
@@ -148,6 +151,7 @@ const bridge = serveBridge({
   showing: (place) => {
     const moved = place?.gatewayId !== showing?.gatewayId;
     showing = place;
+    browser.showing(place);
     readShowing();
     if (moved) tray?.update();
   },
@@ -231,6 +235,7 @@ void app.whenReady().then(async () => {
       bridge.changed();
     },
     (reason) => monitor.failed(LOCAL_GATEWAY_ID, reason),
+    browser,
   );
   void local.start();
   handleScheme(store, {
@@ -263,6 +268,7 @@ void app.whenReady().then(async () => {
   });
   setAppMenu();
   window = createWindow({ quitting: () => quitting });
+  browser.attach(window);
   window.on('focus', readShowing);
   window.webContents.on('did-finish-load', () => {
     if (pending) bridge.open(pending);

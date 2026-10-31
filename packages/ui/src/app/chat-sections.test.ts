@@ -85,3 +85,18 @@ it('keeps a chat whose project was removed among the conversations', () => {
 
   expect(names(sections)).toEqual([['Conversations', ['orphan']]]);
 });
+
+it('shows pinned chats once at the top and restores their date order when unpinned', () => {
+  const old = { ...chat('old', 'gateway', '2026-10-01T00:00:00Z', 'p1'), pinned: true };
+  const recent = chat('recent', 'gateway', '2026-10-30T00:00:00Z', 'p1');
+  const input = { sessions: [old, recent], projects: [project('p1', 'atlas')], channels: [] };
+  expect(names(chatSections(input))).toEqual([
+    ['Pinned', ['old']],
+    ['Projects', [['atlas', ['recent']]]],
+    ['Conversations', []],
+  ]);
+  expect(names(chatSections({ ...input, sessions: [{ ...old, pinned: false }, recent] }))).toEqual([
+    ['Projects', [['atlas', ['recent', 'old']]]],
+    ['Conversations', []],
+  ]);
+});

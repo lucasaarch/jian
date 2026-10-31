@@ -66,6 +66,7 @@ export function useAgentCommands({
       },
       {
         id: 'overview',
+        keys: { key: 'o', shift: true, alt: true },
         title: 'Overview',
         detail: current.name,
         keywords: ['usage', 'activity', 'dashboard', 'costs', 'tokens'],
@@ -74,6 +75,7 @@ export function useAgentCommands({
       },
       {
         id: 'schedules',
+        keys: { key: 's', shift: true, alt: true },
         title: 'Schedules',
         detail: current.name,
         keywords: ['schedule', 'reminder', 'recurring', 'cron', 'later'],
@@ -82,6 +84,7 @@ export function useAgentCommands({
       },
       {
         id: 'skills',
+        keys: { key: 'k', shift: true, alt: true },
         title: 'Skills',
         detail: current.name,
         keywords: ['customize', 'skill', 'abilities'],
@@ -90,6 +93,7 @@ export function useAgentCommands({
       },
       {
         id: 'memories',
+        keys: { key: 'm', shift: true, alt: true },
         title: 'Memories',
         detail: current.name,
         keywords: ['customize', 'memory', 'remember', 'facts'],
@@ -98,6 +102,7 @@ export function useAgentCommands({
       },
       {
         id: 'channels',
+        keys: { key: 'c', shift: true, alt: true },
         title: 'Channels',
         detail: current.name,
         keywords: ['customize', 'whatsapp', 'telegram', 'api', 'connect'],
@@ -106,6 +111,7 @@ export function useAgentCommands({
       },
       {
         id: 'agent-settings',
+        keys: { key: 'a', shift: true, alt: true },
         title: 'Agent settings',
         detail: current.name,
         keywords: ['identity', 'name', 'instructions', 'reset', 'delete', 'agent'],

@@ -66,7 +66,37 @@ export type Showing = { gatewayId: string; chat?: { profileId: string; sessionId
 /** An agent using this computer as a machine right now: on which gateway, and how. */
 export type MachineUse = { gatewayId: string; kind: 'shell' | 'computer' };
 
+export type BrowserState = {
+  /** The conversation this is the browser of; absent outside any. */
+  sessionId?: string;
+  focus: number;
+  open: boolean;
+  url: string;
+  title: string;
+  loading: boolean;
+  canBack: boolean;
+  canForward: boolean;
+  error?: string;
+};
+
 export interface DesktopBridge {
+  browser: {
+    state(): Promise<BrowserState>;
+    open(): void;
+    close(): void;
+    navigate(url: string): Promise<BrowserState>;
+    command(command: 'back' | 'forward' | 'reload' | 'stop'): void;
+    layout(bounds: { x: number; y: number; width: number; height: number }): void;
+    /** The page as a picture, to hold in its place while something is drawn over it. */
+    snapshot(): Promise<string | null>;
+    openExternal(): void;
+    cookieSources(): Promise<Array<{ id: string; name: string }>>;
+    importCookies(
+      source: string,
+      scope: 'site' | 'all',
+    ): Promise<{ imported: number; skipped: number }>;
+    onChanged(listener: (state: BrowserState) => void): () => void;
+  };
   /** This app's release; 0.0.0-dev when built from source. */
   version: string;
   /** The system the app runs on, as Node names it: `darwin`, `win32`, `linux`. */

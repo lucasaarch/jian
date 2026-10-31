@@ -140,7 +140,7 @@ function LiveThought({
   steps,
   startedAt,
 }: {
-  run: Run;
+  run: Pick<Run, 'status' | 'progress' | 'createdAt'>;
   steps: ToolStep[];
   startedAt: string;
 }) {
@@ -218,7 +218,7 @@ export function LiveTurn({
   startedAt = run.createdAt,
   children,
 }: {
-  run: Run;
+  run: Pick<Run, 'status' | 'progress' | 'createdAt'>;
   agent?: Pick<Profile, 'name' | 'avatar'>;
   /**
    * Only the tools since the last thing the turn said: the earlier ones already sit under the

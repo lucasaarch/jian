@@ -4,6 +4,8 @@ import { ChevronLeft, ChevronRight, PanelLeft, Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useChatSearch } from '../lib/stores/chat-search';
 import { useLayout } from '../lib/stores/layout';
+import { shortcutOf } from './commands/keybindings';
+import { useKeymaps } from './commands/registry';
 
 /** Going back and forward through the places the host's navigation has been. */
 export type History = {
@@ -41,6 +43,14 @@ export function SidebarBar({
   trailing?: ReactNode;
   shortcuts?: SidebarShortcuts;
 }) {
+  const keymaps = useKeymaps();
+  const bound = keymaps
+    ? {
+        ...shortcuts,
+        sidebar: shortcutOf(keymaps.commands.find((command) => command.id === 'sidebar')?.keys),
+        search: shortcutOf(keymaps.commands.find((command) => command.id === 'search-chats')?.keys),
+      }
+    : shortcuts;
   const collapsed = useLayout((state) => state.chatList);
   const toggle = useLayout((state) => state.toggle);
   const search = useChatSearch((state) => state.setOpen);
@@ -55,7 +65,7 @@ export function SidebarBar({
         onClick={() => toggle('chatList')}
         aria-label={collapsed ? 'Show the sidebar' : 'Hide the sidebar'}
         aria-expanded={!collapsed}
-        title={titled(collapsed ? 'Show the sidebar' : 'Hide the sidebar', shortcuts.sidebar)}
+        title={titled(collapsed ? 'Show the sidebar' : 'Hide the sidebar', bound.sidebar)}
       >
         <PanelLeft size={15} />
       </button>
@@ -64,7 +74,7 @@ export function SidebarBar({
         className={barButton}
         onClick={() => search(true)}
         aria-label="Search chats"
-        title={titled('Search chats', shortcuts.search)}
+        title={titled('Search chats', bound.search)}
       >
         <Search size={15} />
       </button>

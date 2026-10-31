@@ -12,6 +12,7 @@ import {
   type SessionObjective,
   sessionModelSchema,
   sessionObjectiveInputSchema,
+  sessionPinSchema,
   sessionProtectionSchema,
   sessionRenameSchema,
   sessionSchema,
@@ -44,6 +45,7 @@ import {
   setGatewaySessionTarget,
   setSessionModel,
   setSessionObjective,
+  setSessionPin,
   setSessionProtection,
   writeSessionSummary,
 } from './repository.js';
@@ -288,8 +290,7 @@ export class Sessions {
       profileId,
       title: title.slice(0, 160),
       channel: TASK_SESSION_CHANNEL,
-      // Never read: a subagent acts under the protection of the conversation that sent it.
-      protection: 'ask',
+      protection: 'auto',
       createdAt: nowIso(this.clock),
     };
     await insertSession(tx, session);
@@ -311,6 +312,18 @@ export class Sessions {
 
       await recordEvent(tx, this.clock, profileId, 'session.renamed', session);
 
+      return session;
+    });
+  }
+
+  async setPin(profileId: string, sessionId: string, input: unknown) {
+    const { pinned } = sessionPinSchema.parse(input);
+    return this.store.transaction(profileId, async (tx) => {
+      if ((await this.session(profileId, sessionId, tx)).channel === TASK_SESSION_CHANNEL) {
+        throw new GatewayError(403, 'Subagent sessions are read-only');
+      }
+      const session = assertFound(await setSessionPin(tx, profileId, sessionId, pinned), 'Session');
+      await recordEvent(tx, this.clock, profileId, 'session.pinned', session);
       return session;
     });
   }

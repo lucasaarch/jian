@@ -10,6 +10,20 @@ function listen<T>(channel: string, listener: (value: T) => void): () => void {
 }
 
 const bridge: DesktopBridge = {
+  browser: {
+    state: () => ipcRenderer.invoke('browser:state'),
+    open: () => ipcRenderer.send('browser:open'),
+    close: () => ipcRenderer.send('browser:close'),
+    navigate: (url) => ipcRenderer.invoke('browser:navigate', url),
+    command: (command) => ipcRenderer.send('browser:command', command),
+    layout: (bounds) => ipcRenderer.send('browser:layout', bounds),
+    snapshot: () => ipcRenderer.invoke('browser:snapshot'),
+    openExternal: () => ipcRenderer.send('browser:external'),
+    cookieSources: () => ipcRenderer.invoke('browser:cookie-sources'),
+    importCookies: (source, scope) => ipcRenderer.invoke('browser:import-cookies', source, scope),
+    onChanged: (listener) =>
+      listen<import('../shared/bridge').BrowserState>('browser:changed', listener),
+  },
   version: ipcRenderer.sendSync('app:version'),
   platform: process.platform,
   gateways: () => ipcRenderer.invoke('gateways:list'),

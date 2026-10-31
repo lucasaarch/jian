@@ -11,6 +11,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY .husky/install.mjs .husky/install.mjs
 COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/browser-core/package.json packages/browser-core/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile --filter @jian/web...

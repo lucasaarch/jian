@@ -344,6 +344,10 @@ export const sessionSchema = z.strictObject({
     .default('api'),
 });
 
+export const sessionPinSchema = z.strictObject({
+  pinned: z.boolean(),
+});
+
 export const sessionRenameSchema = z.strictObject({
   title: z.string().trim().min(1).max(160),
 });

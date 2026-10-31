@@ -95,6 +95,57 @@ describe('searching the web', () => {
   });
 });
 
+describe('reading a shared artifact from the desktop', () => {
+  const challenge = () => new Response('Verify you are human', { status: 403 });
+  const never = {
+    inspect: async () => {
+      throw new Error('A read does not open the native browser');
+    },
+    act: async () => {
+      throw new Error('A read does not drive the native browser');
+    },
+  };
+
+  async function desktop(respond: (url: string) => Response) {
+    const services = await testServices();
+    const requests: string[] = [];
+    const web = new WebSearch(
+      services.store,
+      services.gatewayVault,
+      async (input) => {
+        requests.push(String(input));
+        return respond(String(input));
+      },
+      never,
+    );
+    return { web, requests };
+  }
+
+  it('points at the native browser without asking a challenge-guarded viewer first', async () => {
+    const { web, requests } = await desktop(challenge);
+
+    const page = await web.read('https://claude.ai/artifact/atlas', 0);
+
+    expect(page.text).toContain('inspect_page');
+    expect(requests).toEqual([]);
+  });
+
+  it('does the same when a public link redirects to a viewer that answers with a challenge', async () => {
+    const { web } = await desktop((url) =>
+      url === 'https://example.test/atlas'
+        ? new Response(null, {
+            status: 302,
+            headers: { location: 'https://claude.ai/public/artifacts/atlas' },
+          })
+        : challenge(),
+    );
+
+    const page = await web.read('https://example.test/atlas', 0);
+
+    expect(page.text).toContain('inspect_page');
+  });
+});
+
 describe('the web search key', () => {
   it('is set, reported and removed by the owner, and never read back', async () => {
     const services = await testServices();

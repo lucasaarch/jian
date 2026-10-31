@@ -82,3 +82,43 @@ it('forgets it once sent, and keeps it when sending failed', async () => {
   expect(field().value).toBe('');
   expect(useDrafts.getState().texts['agent:new']).toBeUndefined();
 });
+
+it('continues lists with Shift+Enter, keeps the draft and caret, then Enter sends', async () => {
+  const send = vi.fn(async () => undefined);
+  await show('agent:list', send);
+  await type('1. First');
+  field().setSelectionRange(8, 8);
+  await act(async () => {
+    field().dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  expect(field().value).toBe('1. First\n2. ');
+  expect(field().selectionStart).toBe(12);
+  expect(useDrafts.getState().texts['agent:list']).toBe('1. First\n2. ');
+  expect(send).not.toHaveBeenCalled();
+  await act(async () => {
+    field().dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  expect(field().value).toBe('1. First\n');
+  await type('1. First\n2. Second');
+  await act(async () => {
+    field().dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+  });
+  expect(send).toHaveBeenCalledWith('1. First\n2. Second', []);
+});

@@ -84,7 +84,7 @@ import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
 import { reason, toolFailure } from './tool-failure.js';
-import { deferTools, profileTools, type ToolServices } from './tools.js';
+import { deferTools, groupMates, profileTools, type ToolServices } from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
 import { markSteering, outsideContent } from './untrusted.js';
 import { prepareProfileGitAccess, prepareWorkerWorkspace } from './worker-workspace.js';
@@ -104,7 +104,8 @@ export type RuntimeServices = ToolServices & {
   contexts: ContextSource;
   /** The installation's MCP servers, which every run reaches. */
   mcp: McpServerReader;
-  providers?: Pick<Providers, 'selectedModel'> & Partial<Pick<Providers, 'modelDefaults'>>;
+  providers?: Pick<Providers, 'selectedModel'> &
+    Partial<Pick<Providers, 'modelDefaults' | 'loadCapabilities'>>;
   media?: Pick<Media, 'prepare' | 'tools'>;
   web?: Pick<WebSearch, 'tools'>;
   learning?: Pick<Learning, 'consider'>;
@@ -198,23 +199,11 @@ export class AgentRuntime {
     }
   }
 
-  /**
-   * What an action does in this run. A subagent answers to the conversation that sent it, read
-   * fresh: an unreadable parent asks rather than runs. A chat channel can approve only through
-   * a contact the owner allowed to.
-   */
+  /** Principals follow their conversation; scoped workers run on Auto independently. */
   private async protection(run: Run, session: Session): Promise<Protection> {
-    let mode = session.protection;
-
-    if (run.subagent) {
-      const parent = await this.services.runs
-        .run(run.profileId, run.subagent.parentRunId)
-        .catch(() => null);
-      const sent = parent
-        ? await this.services.sessions.session(run.profileId, parent.sessionId).catch(() => null)
-        : null;
-      mode = sent?.protection ?? 'ask';
-    }
+    // Auto does not let an orphaned worker outlive a deleted principal conversation.
+    if (run.subagent) await this.services.runs.run(run.profileId, run.subagent.parentRunId);
+    const mode = session.protection;
 
     const contact =
       mode === 'ask' && !run.subagent && isChatChannel(session.channel)
@@ -471,7 +460,14 @@ export class AgentRuntime {
             0,
           );
         }),
-        ...this.services.web?.tools(),
+        ...this.services.web?.tools(run, async () =>
+          Boolean(
+            !defaults?.vision &&
+              (await this.services.providers?.loadCapabilities?.(config))?.inputModalities.includes(
+                'image',
+              ),
+          ),
+        ),
         compact_context: tool({
           description:
             'Request a context checkpoint before continuing a long task. The gateway summarizes older turns with the configured compaction model after this tool returns, preserving recent work and the latest request. Automatic compaction remains active.',
@@ -585,7 +581,9 @@ export class AgentRuntime {
               // what waits for approval has not started, and the timeline must not say it did.
               const kind = mcpToolNames.includes(name)
                 ? mcpActionKind(definition)
-                : actionKind(name, input);
+                : (definition.metadata as { nativeBrowser?: boolean } | undefined)?.nativeBrowser
+                  ? 'machine'
+                  : actionKind(name, input);
 
               if (kind && protection.mode !== 'run') {
                 if (approvedCallId !== undefined && approvedCallId === options.toolCallId) {
@@ -698,6 +696,11 @@ export class AgentRuntime {
                   this.options,
                   currentCavemanMode !== 'off',
                 );
+                for (const mate of groupMates(name, tools)) loadedTools.add(mate);
+                if (name === 'inspect_page' || name === 'browser_control') {
+                  loadedTools.add('analyze_media');
+                  loadedTools.add('save_attachment');
+                }
                 if (result && typeof result === 'object' && 'artifactId' in result) {
                   loadedTools.add('read_artifact');
                 }
