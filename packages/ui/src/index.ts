@@ -37,6 +37,7 @@ export {
 export { AppUpdates, UpdateBadge } from './app/updates/app-updates';
 /** The web's panel: the app's chats behind a signed-in session, its overlays at addresses. */
 export { WebApp } from './app/web-app';
+export { type WindowActions, WindowControls } from './app/window-controls';
 export { Notifications } from './components/shell/notice';
 export { QueryProvider } from './components/shell/query';
 export { ThemeSync, useThemeChoice } from './components/shell/theme';

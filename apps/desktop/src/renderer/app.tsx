@@ -100,7 +100,7 @@ function Window() {
       // The Welcome takes the whole window: no status bar under it.
       style={
         {
-          '--window-controls': mac ? '0px' : '8.25rem',
+          '--window-controls': mac ? '0px' : '6rem',
           ...(welcoming ? { '--status-bar': '0px', '--app-height': '100dvh' } : {}),
         } as CSSProperties
       }
