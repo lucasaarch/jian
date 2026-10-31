@@ -4,15 +4,7 @@ import type { GatewaySettings } from '@jian/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
-import type {
-  GatewayApi,
-  Message,
-  ModelDefaults,
-  ModelDefaultsInput,
-  Profile,
-  ProtectionMode,
-  Session,
-} from '../../lib/api';
+import type { GatewayApi, Message, Profile, ProtectionMode, Session } from '../../lib/api';
 import { useAppearance } from '../../lib/appearance';
 import { keys } from '../../lib/query/keys';
 import { draftKey, useDrafts } from '../../lib/stores/drafts';
@@ -109,18 +101,11 @@ export function DraftPane({
   const words = draftKey(profile.id);
 
   /**
-   * This chat's choices are where the next one starts. Worth having, not worth failing over: a
-   * gateway from before this answers no, and the message has gone regardless.
+   * This chat's protection is where the next one starts. Worth having, not worth failing over: a
+   * gateway from before this answers no, and the message has gone regardless. Its model was
+   * remembered when it was picked.
    */
   const remember = () => {
-    const defaults = client.getQueryData<ModelDefaults>(keys.modelDefaults);
-    if (model && defaults && JSON.stringify(model) !== JSON.stringify(defaults.conversation)) {
-      client.setQueryData<ModelDefaults>(keys.modelDefaults, { ...defaults, conversation: model });
-      const { updatedAt: _saved, ...input } = defaults;
-      void api
-        .setModelDefaults({ ...input, conversation: model } as ModelDefaultsInput)
-        .catch(() => {});
-    }
     if (protection !== (settings?.newChatProtection ?? 'ask')) {
       client.setQueryData<GatewaySettings>(keys.settings, (known) =>
         known ? { ...known, newChatProtection: protection } : known,
@@ -275,6 +260,7 @@ export function DraftPane({
                 draftModel={model}
                 onDraftChange={setModel}
                 className="composer-model-control"
+                remembers
                 saved={refresh}
               />
             </>

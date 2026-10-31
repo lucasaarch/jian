@@ -30,6 +30,28 @@ import { usePhone } from '../../lib/phone';
 import { type BrowserPageTab, type InspectorTab, useCrew } from '../../lib/stores/crew';
 import { MIN_CHAT_WIDTH, useLayout } from '../../lib/stores/layout';
 
+/** The conversation's browser brought forward, or opened if it has none yet. */
+export const showBrowser = () => {
+  const crew = useCrew.getState();
+  const tab = crew.tabs.find((candidate) => candidate.kind === 'browser');
+  return tab?.kind === 'browser' ? crew.browser(tab.pageId) : crew.openBrowser?.();
+};
+/** Another page beside the ones open. */
+export const openBrowserTab = () => useCrew.getState().openBrowser?.();
+/** Whether this host has a browser to open, and whether this conversation has one open. */
+export const useBrowserOffer = () => ({
+  offered: useCrew((state) => Boolean(state.openBrowser)),
+  open: useCrew((state) => state.tabs.some((tab) => tab.kind === 'browser')),
+});
+/** The chat's whole area, or back beside it. Closed, it opens already taking the area. */
+export const toggleInspectorFull = () => {
+  const crew = useCrew.getState();
+  if (crew.opened) return crew.toggleFull();
+  if (!crew.tabs.length && !crew.openBrowser) return;
+  crew.reopen();
+  if (!crew.full) crew.toggleFull();
+};
+
 /** An agent asked the panel to show something. Only the conversation it works in listens. */
 export function focusInspector(
   sessionId: string,
@@ -38,10 +60,7 @@ export function focusInspector(
   if (!request || request.sessionId !== sessionId) return;
   const crew = useCrew.getState();
   if (request.kind === 'subagent' && request.runId) return crew.follow(request.runId);
-  if (request.kind === 'browser') {
-    const tab = crew.tabs.find((candidate) => candidate.kind === 'browser');
-    return tab?.kind === 'browser' ? crew.browser(tab.pageId) : crew.openBrowser?.();
-  }
+  if (request.kind === 'browser') return showBrowser();
   const item = request.url ? githubItemOf(request.url) : undefined;
   if (item) crew.open(item);
 }
@@ -274,7 +293,8 @@ export function InspectorHost({
             data-inspector-host
             data-full={full || undefined}
             aria-label="Inspector"
-            className="inspector-host glass-bar relative flex min-h-0 shrink-0 flex-col border-l border-glass-edge"
+            // Taking the chat's place, the sidebar's own border already parts them.
+            className="inspector-host glass-bar relative flex min-h-0 shrink-0 flex-col border-l border-glass-edge data-full:border-l-0"
             style={{ '--inspector-width': `${width}px` } as CSSProperties}
           >
             <hr

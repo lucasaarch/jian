@@ -107,18 +107,14 @@ function Window() {
     <div
       className="relative flex h-dvh flex-col bg-canvas"
       // Windows and Linux draw the window's buttons over the top right: what sits there keeps clear.
-      // The Welcome takes the whole window: no status bar under it.
-      style={
-        {
-          '--window-controls': mac ? '0px' : '6rem',
-          ...(welcoming ? { '--status-bar': '0px', '--app-height': '100dvh' } : {}),
-        } as CSSProperties
-      }
+      style={{ '--window-controls': mac ? '0px' : '6rem' } as CSSProperties}
     >
       <TitleBar gateway={current} />
       {/* Layout containment makes this area the box the panel's fixed pieces are placed in. */}
       <BrowserInspector hidden={settings.open || connecting || welcoming}>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col [contain:layout]">
+        <div
+          className={`flex min-h-0 min-w-0 flex-1 flex-col [contain:layout] ${welcoming ? 'z-10' : ''}`}
+        >
           {current?.status === 'incompatible' ? (
             <Incompatible gateway={current} />
           ) : current ? (
@@ -126,7 +122,9 @@ function Window() {
           ) : null}
         </div>
       </BrowserInspector>
-      {!welcoming && (
+      {/* Always in its place, a stage drawn over it: taking it away would move everything above
+          the moment a stage came or went. Under one it is out of reach of the keyboard too. */}
+      <div className="contents" inert={welcoming}>
         <StatusBar
           gateway={
             <GatewayPicker
@@ -140,7 +138,7 @@ function Window() {
           slots={slotRefs}
           openSettings={() => openSettings()}
         />
-      )}
+      </div>
       {/* With a gateway in use, its panel draws the settings, where that gateway can be read. */}
       {!(current && current.status !== 'incompatible') && (
         <AppSettings {...settings} host={appHost} />

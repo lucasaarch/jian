@@ -3,6 +3,7 @@
 import { Dialog } from '@base-ui/react/dialog';
 import { Search } from 'lucide-react';
 import {
+  Fragment,
   type KeyboardEvent,
   type ReactNode,
   useEffect,
@@ -21,6 +22,10 @@ export type Command = {
   /** Other words someone may type for it. */
   keywords?: string[];
   icon?: ReactNode;
+  /** The part of the list it stands under, named while nothing is typed. */
+  group?: string;
+  /** Destructive: drawn in red, as a menu draws it. */
+  danger?: boolean;
   /** The keys shown beside it, as the system writes them: `⌘N`, `Ctrl+N`. */
   shortcut?: string;
   run: () => void;
@@ -134,32 +139,46 @@ export function CommandPalette({
             className="scroll-inset grid max-h-80 gap-px overflow-y-auto p-1.5"
           >
             {shown.map((command, index) => (
-              <div
-                key={command.id}
-                id={`${list}-${command.id}`}
-                role="option"
-                tabIndex={-1}
-                aria-selected={index === active}
-                onMouseMove={() => setActive(index)}
-                onClick={() => run(command)}
-                onKeyDown={(event) => event.key === 'Enter' && run(command)}
-                className="flex h-9 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-[13px] aria-selected:bg-glass-press"
-              >
-                <span className="grid size-4 shrink-0 place-items-center text-muted">
-                  {command.icon}
-                </span>
-                <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                  <span className="truncate">{command.title}</span>
-                  {command.detail && (
-                    <span className="min-w-0 truncate text-xs text-muted">{command.detail}</span>
-                  )}
-                </span>
-                {command.shortcut && (
-                  <kbd className="shrink-0 rounded-md bg-ink/8 px-1.5 py-0.5 font-sans text-[11px] text-muted">
-                    {command.shortcut}
-                  </kbd>
+              <Fragment key={command.id}>
+                {/* Found by typing, the best match matters and not where it is kept. */}
+                {!query && command.group && command.group !== shown[index - 1]?.group && (
+                  <div
+                    role="presentation"
+                    className="px-2.5 pt-2.5 pb-1 text-xs font-medium text-muted first:pt-1"
+                  >
+                    {command.group}
+                  </div>
                 )}
-              </div>
+                <div
+                  id={`${list}-${command.id}`}
+                  role="option"
+                  tabIndex={-1}
+                  aria-selected={index === active}
+                  onMouseMove={() => setActive(index)}
+                  onClick={() => run(command)}
+                  onKeyDown={(event) => event.key === 'Enter' && run(command)}
+                  className="flex h-9 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-[13px] aria-selected:bg-glass-press"
+                >
+                  <span
+                    className={`grid size-4 shrink-0 place-items-center ${command.danger ? 'text-bad' : 'text-muted'}`}
+                  >
+                    {command.icon}
+                  </span>
+                  <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                    <span className={`truncate ${command.danger ? 'text-bad' : ''}`}>
+                      {command.title}
+                    </span>
+                    {command.detail && (
+                      <span className="min-w-0 truncate text-xs text-muted">{command.detail}</span>
+                    )}
+                  </span>
+                  {command.shortcut && (
+                    <kbd className="shrink-0 rounded-md bg-ink/8 px-1.5 py-0.5 font-sans text-[11px] text-muted">
+                      {command.shortcut}
+                    </kbd>
+                  )}
+                </div>
+              </Fragment>
             ))}
             {shown.length === 0 && (
               <p className="px-3 py-6 text-center text-[13px] text-muted">{labels.empty}</p>

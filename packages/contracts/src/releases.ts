@@ -26,6 +26,14 @@ export const releasesSchema = z.strictObject({
   behind: z.number().int().nonnegative(),
 });
 
+/** A picture a release note shows, from the folder of pictures beside the notes. */
+export const releaseMediaSchema = z.strictObject({
+  file: z.string(),
+  mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
+  bytes: z.number().int().positive(),
+  data: z.string().describe('The picture, base64-encoded.'),
+});
+
 /** Where the project lives, and its GitHub stars when GitHub could be reached. */
 export const repositorySchema = z.strictObject({
   url: z.url(),
@@ -35,3 +43,4 @@ export const repositorySchema = z.strictObject({
 export type Repository = z.infer<typeof repositorySchema>;
 export type ReleaseNote = z.infer<typeof releaseNoteSchema>;
 export type Releases = z.infer<typeof releasesSchema>;
+export type ReleaseMedia = z.infer<typeof releaseMediaSchema>;

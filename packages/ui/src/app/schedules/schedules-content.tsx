@@ -5,7 +5,6 @@ import { Suspense, useState } from 'react';
 import { choices } from '../../components/schedules/conversations';
 import { ranOnce, scheduleActions, useScheduleList } from '../../components/schedules/list';
 import {
-  Action,
   ConfirmDialog,
   Overlay,
   SettingsLayout,
@@ -40,11 +39,17 @@ const pageOf = (item: Schedule, group: string): SettingsPage => ({
       : {}),
 });
 
+/** Says "New" for the corner it sits in; the list beside it says of what. */
 const NewSchedule = ({ onClick }: { onClick: () => void }) => (
-  <Action tone="outline" size="small" className="h-8 w-full rounded-lg" onClick={onClick}>
-    <Plus size={13} />
-    New schedule
-  </Action>
+  <button
+    type="button"
+    aria-label="New schedule"
+    onClick={onClick}
+    className="flex h-8 w-fit items-center gap-1.5 px-2 text-[13px] text-muted transition-colors hover:text-ink"
+  >
+    <Plus size={15} />
+    New
+  </button>
 );
 
 const shared = {

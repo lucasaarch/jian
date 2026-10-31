@@ -50,7 +50,7 @@ export function SettingsLayout({
   emptyLabel?: string;
   /** The way back to the list, on a phone: what the list is called. */
   backLabel?: string;
-  /** Above the list, for what can be added to it. */
+  /** Across from the way back, for what can be added to the list. */
   action?: ReactNode;
   heading?: ReactNode;
   pages: SettingsPage[];
@@ -78,10 +78,13 @@ export function SettingsLayout({
         aria-label={backLabel}
         className="flex min-h-0 flex-col gap-3 border-r border-glass-edge bg-canvas/25 p-2.5 pt-3 phone:border-0 phone:group-data-[reading=true]/settings:hidden"
       >
-        <Dialog.Close className="flex h-8 w-fit items-center gap-2 px-2 text-[13px] text-muted transition-colors hover:text-ink">
-          <ArrowLeft size={15} />
-          Back
-        </Dialog.Close>
+        <div className="flex items-center justify-between gap-2">
+          <Dialog.Close className="flex h-8 w-fit items-center gap-2 px-2 text-[13px] text-muted transition-colors hover:text-ink">
+            <ArrowLeft size={15} />
+            Back
+          </Dialog.Close>
+          {action}
+        </div>
         {heading && <div className="px-2 text-sm font-semibold">{heading}</div>}
         <label className="flex h-8 items-center gap-2 rounded-lg border border-glass-edge bg-glass-hover px-2.5 text-muted focus-within:border-ink/20">
           <Search size={14} className="shrink-0" aria-hidden="true" />
@@ -98,7 +101,6 @@ export function SettingsLayout({
             className={`${bareInput} text-[13px]`}
           />
         </label>
-        {action}
         <div className="grid min-h-0 content-start gap-3 overflow-y-auto">
           {groups.map((group) => (
             <div key={group} className="grid gap-0.5">
@@ -122,7 +124,10 @@ export function SettingsLayout({
                 ))}
             </div>
           ))}
-          {shown.length === 0 && <p className="px-2.5 py-2 text-[13px] text-muted">{emptyLabel}</p>}
+          {/* A list with nothing in it yet is not a search that found nothing. */}
+          {shown.length === 0 && query && (
+            <p className="px-2.5 py-2 text-[13px] text-muted">{emptyLabel}</p>
+          )}
         </div>
       </nav>
       <section

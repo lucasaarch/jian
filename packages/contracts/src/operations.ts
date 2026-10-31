@@ -106,7 +106,7 @@ import {
   statsQuerySchema,
   subscriptionUsageSchema,
 } from './records.js';
-import { releasesSchema, repositorySchema } from './releases.js';
+import { releaseMediaSchema, releasesSchema, repositorySchema } from './releases.js';
 import {
   remoteMachineCreatedSchema,
   remoteMachineCreateSchema,
@@ -389,6 +389,14 @@ export const operations: Operation[] = [
     operationId: 'markReleasesSeen',
     access: 'admin',
     response: releasesSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/releases/media/:file',
+    operationId: 'readReleaseMedia',
+    access: 'admin',
+    params: z.strictObject({ file: z.string().max(128) }),
+    response: releaseMediaSchema,
   },
   {
     method: 'GET',

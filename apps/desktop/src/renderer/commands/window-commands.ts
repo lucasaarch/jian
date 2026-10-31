@@ -29,6 +29,7 @@ export function useWindowCommands({
         .filter((gateway) => gateway.id !== current?.id)
         .map<AppCommand>((gateway) => ({
           id: `switch-gateway-${gateway.id}`,
+          group: 'Gateway',
           title: `Switch to ${gateway.name}`,
           detail: 'Gateway',
           keywords: ['gateway', 'server', 'change'],
@@ -39,6 +40,7 @@ export function useWindowCommands({
         ? [
             {
               id: 'restart-local-gateway',
+              group: 'Gateway' as const,
               title: 'Restart local gateway',
               detail: 'This computer',
               keywords: ['restart', 'gateway', 'server', 'local', 'this computer'],
@@ -49,6 +51,7 @@ export function useWindowCommands({
         : []),
       {
         id: 'connect-gateway',
+        group: 'Gateway',
         title: 'Connect a gateway',
         keywords: ['add', 'server', 'gateway', 'remote'],
         icon: createElement(ServerCog, { size: 15 }),
@@ -56,6 +59,7 @@ export function useWindowCommands({
       },
       {
         id: 'updates',
+        group: 'App',
         title: 'Check for updates',
         keywords: ['update', 'version', 'release', 'upgrade'],
         icon: createElement(RefreshCw, { size: 15 }),

@@ -52,3 +52,40 @@ it('moves through the list with the arrows', async () => {
   expect(view.ran).toEqual(['Check for updates']);
   await view.done();
 });
+
+it('names the parts of the list until something is typed', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const run = () => {};
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () =>
+    root.render(
+      <CommandPalette
+        open
+        onOpenChange={() => {}}
+        commands={[
+          { id: 'one', title: 'New chat', group: 'Chats', run },
+          { id: 'two', title: 'Search chats', group: 'Chats', run },
+          { id: 'three', title: 'Open browser', group: 'Inspector', run },
+        ]}
+      />,
+    ),
+  );
+  const parts = () =>
+    [...document.querySelectorAll('[role="listbox"] [role="presentation"]')].map(
+      (part) => part.textContent,
+    );
+
+  expect(parts()).toEqual(['Chats', 'Inspector']);
+
+  const input = document.querySelector<HTMLInputElement>('input[aria-label="Search commands"]');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, 'open');
+    input?.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(parts()).toEqual([]);
+
+  await act(async () => root.unmount());
+  host.remove();
+});

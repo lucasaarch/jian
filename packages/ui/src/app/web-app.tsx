@@ -14,7 +14,6 @@ import { AppSettings } from './app-settings';
 import { ChatsApp } from './chats';
 import { useAppCommands } from './commands/app-commands';
 import { type AppCommand, CommandsProvider, isMac, useCommands } from './commands/registry';
-import { CreateAgent } from './create-agent';
 import { ReleaseNotes } from './release-notes';
 import { ReloadCurtain } from './reload';
 import { barButton, SidebarBar } from './sidebar-bar';
@@ -77,7 +76,6 @@ function SignedIn() {
   }, [overlay, href]);
   const behind = under ?? (working ? agentPath(working, 'sessions') : '/');
 
-  const [creating, setCreating] = useState(false);
   const signOut = useSignOut();
   const gateway = useQuery(queries.gateway()).data;
   const mode = useGatewayMode();
@@ -103,7 +101,9 @@ function SignedIn() {
       () => [
         {
           id: 'sign-out',
+          group: 'App',
           title: 'Sign out',
+          danger: true,
           keywords: ['log out', 'leave', 'session'],
           icon: <LogOut size={15} />,
           run: () => void signOut(),
@@ -118,7 +118,6 @@ function SignedIn() {
     <div className="[--chrome-top:2.75rem] phone:[--chrome-top:calc(2.75rem+env(safe-area-inset-top))]">
       <NavigationAt href={overlay ? behind : href}>
         <ChatsApp
-          createAgent={() => setCreating(true)}
           header={
             <header className="absolute top-0 left-0 z-30 flex h-(--chrome-top) phone:right-0 phone:pt-[env(safe-area-inset-top)]">
               <SidebarBar
@@ -140,7 +139,6 @@ function SignedIn() {
           }
         />
       </NavigationAt>
-      <CreateAgent open={creating} onOpenChange={setCreating} />
       <AppSettings
         open={settings !== undefined}
         onOpenChange={(open) => !open && router.replace(behind)}

@@ -2,7 +2,6 @@ import {
   AgentsWorking,
   AppSettings,
   ChatsApp,
-  CreateAgent,
   connectGateway,
   NavigationProvider,
   QueryProvider,
@@ -56,7 +55,6 @@ export function GatewayPanel({
   // The whole address, query included: the panel reads the query, the screens the path.
   const href = useSyncExternalStore(memory.subscribe, memory.current);
   const navigation = useMemo(() => memory.navigation(href), [memory, href]);
-  const [creating, setCreating] = useState(false);
   // Out of reach — seen not answering, or the app's own still starting with no address yet —
   // the panel shows what it kept and waits for it. One still being reached is asked at once: a
   // read held until the first look would leave whatever was never kept loading meanwhile.
@@ -91,10 +89,9 @@ export function GatewayPanel({
     // chats: it opens at once, and still reads while the gateway cannot be reached.
     <QueryProvider keep={{ key: gateway.id, release: desktop().version }}>
       <NavigationProvider navigation={navigation}>
-        <ChatsApp createAgent={() => setCreating(true)} />
+        <ChatsApp greet />
         {slots.start && createPortal(<AgentsWorking />, slots.start)}
         {slots.end && createPortal(<SubscriptionMeter />, slots.end)}
-        <CreateAgent open={creating} onOpenChange={setCreating} />
         <AppSettings
           {...settings}
           host={appHost}

@@ -23,6 +23,8 @@ type Layout = Panels & {
   toggle: (panel: 'chatList') => void;
   toggleSection: (id: string) => void;
   setSidebarWidth: (width: number | null) => void;
+  /** The sidebar came or went: nothing kept changes, but whoever measures it has to hear. */
+  sidebarMoved: () => void;
   load: (saved: Panels) => void;
 };
 
@@ -47,6 +49,7 @@ export const useLayout = create<Layout>()((set, get) => ({
     set({ sidebarWidth });
     save(get());
   },
+  sidebarMoved: () => set({}),
   toggle: (panel) => {
     set({ [panel]: !get()[panel] });
     save(get());

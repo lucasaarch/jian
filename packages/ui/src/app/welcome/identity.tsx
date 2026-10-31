@@ -107,15 +107,15 @@ export function WelcomeIdentity({
             value={draft.name}
             onChange={(event) => change({ ...draft, name: event.target.value })}
           />
+          <AgentStarters
+            choose={({ summary, instructions }) => change({ ...draft, summary, instructions })}
+          />
           <TextField
             label="Summary"
             placeholder="What would you like a hand with?"
             maxLength={280}
             value={draft.summary}
             onChange={(event) => change({ ...draft, summary: event.target.value })}
-          />
-          <AgentStarters
-            choose={({ summary, instructions }) => change({ ...draft, summary, instructions })}
           />
           <TextArea
             label="Instructions"

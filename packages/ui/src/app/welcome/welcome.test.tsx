@@ -88,7 +88,13 @@ const provider: Provider = {
 const cleanups: (() => void)[] = [];
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  useOnboarding.setState({ completed: false, requested: false });
+  useOnboarding.setState({
+    completed: false,
+    requested: false,
+    creating: false,
+    departed: undefined,
+  });
+  sessionStorage.clear();
   api.activities.mockResolvedValue([]);
   agents = [];
   providers = [];
@@ -121,6 +127,7 @@ afterEach(() => {
 async function mount(
   cache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } }),
   extra?: ReactNode,
+  greet = false,
 ) {
   const node = document.createElement('div');
   document.body.append(node);
@@ -132,7 +139,7 @@ async function mount(
   await act(async () => {
     root.render(
       <QueryClientProvider client={cache}>
-        <ChatsApp createAgent={() => {}} />
+        <ChatsApp greet={greet} />
         {extra}
       </QueryClientProvider>,
     );
@@ -361,4 +368,172 @@ it('keeps a created agent when opening its chat fails and retries only the hando
   await settle();
   expect(document.body.textContent).toContain('First conversation');
   expect(agents.map((agent) => agent.name)).toEqual(['Mira']);
+});
+
+const wait = (ms: number) => act(async () => new Promise((resolve) => setTimeout(resolve, ms)));
+const greetingLasts = 1_900;
+
+it('holds the mark until the agents are known, without drawing the app behind it', async () => {
+  useOnboarding.setState({ completed: true });
+  api.profiles.mockImplementation(() => new Promise(() => {}));
+  await mount();
+
+  expect(document.querySelector('[role="status"]')?.textContent).toContain('Loading agents');
+  expect(document.body.textContent).not.toContain('Conversations');
+});
+
+it('gives up the mark when the gateway never answers, for the way to another', async () => {
+  useOnboarding.setState({ completed: true });
+  api.profiles.mockImplementation(() => new Promise(() => {}));
+  // Its patience, shortened: nothing else here waits that long.
+  const real = globalThis.setTimeout;
+  vi.spyOn(globalThis, 'setTimeout').mockImplementation(((run: () => void, ms?: number) =>
+    real(run, ms === 15_000 ? 80 : ms)) as typeof setTimeout);
+  await mount();
+  expect(document.body.textContent).not.toContain('Conversations');
+
+  await wait(120);
+  expect(document.body.textContent).toContain('Conversations');
+});
+
+it('greets on launch, lands on a new chat, and does not greet again in that window', async () => {
+  useOnboarding.setState({ completed: true });
+  agents = [profile];
+  memoryNavigation.go(`/agents/${profile.id}/sessions/earlier`);
+  const first = await mount(undefined, undefined, true);
+  expect(document.body.textContent).toContain('Welcome back.');
+  expect(document.body.textContent).toContain(`${profile.name} has been waiting for you.`);
+
+  await wait(greetingLasts);
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&welcome`);
+  expect(document.body.textContent).toContain('First conversation');
+
+  first.unmount();
+  await mount(undefined, undefined, true);
+  expect(document.body.textContent).not.toContain('Welcome back.');
+});
+
+it('keeps a place asked for while the greeting played', async () => {
+  useOnboarding.setState({ completed: true });
+  agents = [profile];
+  memoryNavigation.go(`/agents/${profile.id}/sessions`);
+  await mount(undefined, undefined, true);
+
+  await act(async () => memoryNavigation.go(`/agents/${profile.id}/sessions/from-a-notification`));
+  await wait(greetingLasts);
+
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions/from-a-notification`);
+  expect(document.body.textContent).toContain('First conversation');
+});
+
+it('does not let a chat that cannot be read hold the greeting', async () => {
+  useOnboarding.setState({ completed: true });
+  agents = [profile];
+  api.activities.mockRejectedValue(new Error('Gateway unavailable'));
+  await mount(undefined, undefined, true);
+
+  await wait(greetingLasts);
+
+  expect(document.body.textContent).not.toContain('Welcome back.');
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&welcome`);
+});
+
+it('does not greet an owner with no agent, nor after they create their first', async () => {
+  useOnboarding.setState({ completed: true });
+  await mount(undefined, undefined, true);
+
+  expect(document.body.textContent).not.toContain('Welcome back.');
+  expect(document.body.textContent).toContain('A place for your next agent');
+});
+
+it('makes another agent in the identity scene, skipping what only a first run asks', async () => {
+  useOnboarding.setState({ completed: true });
+  agents = [profile];
+  providers = [provider];
+  api.health.mockResolvedValue({ status: 'ok', mode: 'server', version: '1.0.0' });
+  memoryNavigation.go(`/agents/${profile.id}/sessions`);
+  await mount();
+
+  await act(async () => useOnboarding.getState().create());
+  await settle();
+  expect(document.body.textContent).toContain('Make it yours.');
+
+  await type('Name', 'Mira');
+  await press('Research partner');
+  await press('Create agent');
+  expect(api.createProfile).toHaveBeenCalledOnce();
+  expect(document.body.textContent).not.toContain('Take the conversation with you.');
+  expect(document.body.textContent).toContain('This is the beginning.');
+
+  await wait(550);
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&welcome`);
+  expect(useOnboarding.getState().creating).toBe(false);
+});
+
+it('leaves the identity scene with Escape, back where the owner was, with no button for it', async () => {
+  useOnboarding.setState({ completed: true });
+  agents = [profile];
+  const chat = `/agents/${profile.id}/sessions/s1`;
+  memoryNavigation.go(chat);
+  await mount();
+  await act(async () => useOnboarding.getState().create());
+  await settle();
+  expect(document.body.textContent).toContain('Make it yours.');
+  expect(document.body.textContent).not.toContain('Back');
+
+  await act(async () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  });
+  await settle();
+
+  expect(document.body.textContent).not.toContain('Make it yours.');
+  expect(document.body.textContent).toContain('First conversation');
+  expect(memoryNavigation.current()).toBe(chat);
+  expect(api.createProfile).not.toHaveBeenCalled();
+});
+
+it('keeps the way back on a phone, which has no Escape', async () => {
+  const match = window.matchMedia.bind(window);
+  vi.spyOn(window, 'matchMedia').mockImplementation((query) =>
+    query.includes('max-width')
+      ? {
+          ...match(query),
+          matches: true,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }
+      : match(query),
+  );
+  useOnboarding.setState({ completed: true });
+  agents = [profile];
+  memoryNavigation.go(`/agents/${profile.id}/sessions`);
+  await mount();
+  await act(async () => useOnboarding.getState().create());
+  await settle();
+
+  await press('Back');
+  expect(document.body.textContent).not.toContain('Make it yours.');
+  expect(api.createProfile).not.toHaveBeenCalled();
+});
+
+it('sees a deleted agent off, then opens what is left', async () => {
+  const ran = vi.fn();
+  useOnboarding.setState({ completed: true });
+  agents = [profile];
+  memoryNavigation.go(`/agents/${profile.id}/sessions`);
+  await mount();
+  expect(document.body.textContent).toContain('First conversation');
+
+  await act(async () => useOnboarding.getState().seeOff({ name: 'Mira' }, ran));
+  await settle();
+  expect(document.body.textContent).toContain('Goodbye.');
+  expect(document.body.textContent).toContain('Mira');
+  expect(document.body.textContent).not.toContain('First conversation');
+
+  expect(ran).not.toHaveBeenCalled();
+
+  await wait(2_500);
+  expect(ran).toHaveBeenCalledOnce();
+  expect(document.body.textContent).not.toContain('Goodbye.');
+  expect(document.body.textContent).toContain('First conversation');
 });

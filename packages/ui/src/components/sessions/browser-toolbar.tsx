@@ -246,15 +246,21 @@ export function BrowserToolbar({
               <MenuEntry
                 icon={<History size={14} />}
                 onClick={() => void clear('history', 'Browsing history cleared')}
+                danger
               >
                 Clear browsing history
               </MenuEntry>
-              <MenuEntry icon={<Trash2 size={14} />} onClick={() => setClearingCookies(true)}>
+              <MenuEntry
+                icon={<Trash2 size={14} />}
+                onClick={() => setClearingCookies(true)}
+                danger
+              >
                 Clear cookies
               </MenuEntry>
               <MenuEntry
                 icon={<Database size={14} />}
                 onClick={() => void clear('cache', 'Cache cleared')}
+                danger
               >
                 Clear cache
               </MenuEntry>

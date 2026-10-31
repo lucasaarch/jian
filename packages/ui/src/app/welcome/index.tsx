@@ -2,21 +2,22 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
-import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
+import { Suspense, useEffect, useState } from 'react';
 import { Action } from '../../kit';
 import { AgentHero } from '../../kit/agent-hero';
 import type { Profile } from '../../lib/api';
 import { useAppearance } from '../../lib/appearance';
 import { useCreateProfile } from '../../lib/create-profile';
+import { usePhone } from '../../lib/phone';
 import { queries } from '../../lib/query/profile';
 import { ProviderConnections } from '../settings/providers-page';
 import { WelcomeChannels } from './channels';
 import { ExistingAgent } from './existing-agent';
 import { type IdentityDraft, WelcomeIdentity } from './identity';
 import { WelcomeIntro } from './intro';
+import { readChat, Scene, SceneColumn, Stage } from './stage';
 
-const settle = [0.23, 1, 0.32, 1] as const;
 type Step = 'intro' | 'models' | 'identity' | 'channels' | 'arrival';
 const titles: Record<Step, string> = {
   intro: 'A little intelligence. A world of possibility.',
@@ -31,10 +32,18 @@ export function Welcome({
   saved,
   onCreated,
   finish,
+  creating = false,
+  cancel,
 }: {
   saved?: Profile;
   onCreated: (profile: Profile) => void;
   finish: (profile: Profile) => void;
+  /**
+   * Only the making of another agent, for an owner already past the introduction: from its
+   * identity straight to its first chat, and back to where they were.
+   */
+  creating?: boolean;
+  cancel?: () => void;
 }) {
   // A persisted empty cache is not evidence that the gateway is still empty.
   const profiles = useQuery({ ...queries.profiles(), refetchOnMount: 'always' });
@@ -42,9 +51,9 @@ export function Welcome({
   const gateway = useQuery(queries.gateway());
   const connected = providers.data?.some((provider) => !provider.revokedAt) ?? false;
   const server = gateway.data?.mode !== 'local';
-  const [newAgent, setNewAgent] = useState(false);
+  const [newAgent, setNewAgent] = useState(creating);
   const [modelsVisited, setModelsVisited] = useState(false);
-  const [step, setStep] = useState<Step>('intro');
+  const [step, setStep] = useState<Step>(creating ? 'identity' : 'intro');
   const [draft, setDraft] = useState<IdentityDraft>({
     name: '',
     summary: '',
@@ -52,170 +61,146 @@ export function Welcome({
     avatar: null,
   });
   const { still } = useAppearance();
+  const phone = usePhone();
   const { create, busy, error } = useCreateProfile((profile) => {
     onCreated(profile);
-    setStep(server ? 'channels' : 'arrival');
+    setStep(server && !creating ? 'channels' : 'arrival');
   });
   const steps: Step[] = [
     'intro',
     ...(connected && !modelsVisited ? [] : ['models' as const]),
     'identity',
-    ...(server ? ['channels' as const] : []),
+    ...(server && !creating ? ['channels' as const] : []),
     'arrival',
   ];
   const current = steps.indexOf(step);
-  const failure = !saved && (profiles.isError || providers.isError || gateway.isError);
+  // Making another agent asks nothing of what the gateway says: there is nowhere to resume from.
+  const failure = !creating && !saved && (profiles.isError || providers.isError || gateway.isError);
   const ready =
-    saved || (profiles.isFetchedAfterMount && providers.isFetchedAfterMount && gateway.data);
+    creating ||
+    saved ||
+    (profiles.isFetchedAfterMount && providers.isFetchedAfterMount && gateway.data);
+  useEffect(() => {
+    if (!creating || !cancel) return;
+    const leave = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !busy && step === 'identity')
+        cancel();
+    };
+    window.addEventListener('keydown', leave);
+    return () => window.removeEventListener('keydown', leave);
+  }, [creating, cancel, busy, step]);
 
   return (
-    <main
-      aria-label="Welcome to Jian"
-      className="relative isolate flex h-(--app-height) min-h-0 flex-col overflow-hidden bg-canvas text-ink select-none pt-[max(2.5rem,var(--chrome-top,0px))]"
-    >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
-      >
-        <div className="absolute -top-64 left-1/2 h-[42rem] w-[60rem] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,var(--glass-press),transparent_65%)]" />
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {!ready || failure ? (
-          <div
-            className="grid flex-1 place-content-center gap-4 px-6 text-center"
-            role={failure ? 'alert' : 'status'}
-          >
-            <p className="text-sm text-muted">
-              {failure
-                ? 'Your gateway could not be read. Your progress is safe.'
-                : 'Finding where you left off…'}
-            </p>
-            {failure && (
-              <Action
-                onClick={() => {
-                  void profiles.refetch();
-                  void providers.refetch();
-                  void gateway.refetch();
-                }}
-              >
-                Try again
-              </Action>
-            )}
+    <Stage label={creating ? 'Create an agent' : 'Welcome to Jian'}>
+      {!ready || failure ? (
+        <div
+          className="grid flex-1 place-content-center gap-4 px-6 text-center"
+          role={failure ? 'alert' : 'status'}
+        >
+          <p className="text-sm text-muted">
+            {failure
+              ? 'Your gateway could not be read. Your progress is safe.'
+              : 'Finding where you left off…'}
+          </p>
+          {failure && (
+            <Action
+              onClick={() => {
+                void profiles.refetch();
+                void providers.refetch();
+                void gateway.refetch();
+              }}
+            >
+              Try again
+            </Action>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            Step {current + 1} of {steps.length}. {titles[step]}
           </div>
-        ) : (
-          <>
-            <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-              Step {current + 1} of {steps.length}. {titles[step]}
-            </div>
-            <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-6 py-[clamp(1rem,4dvh,2.5rem)] md:px-12">
-              {/* The way back from a step, at its corner: the steps themselves carry no footer. */}
-              {(step === 'models' || step === 'identity') && (
-                <div className="absolute top-2 left-4 md:left-10">
-                  <Action
-                    tone="quiet"
-                    disabled={busy}
-                    onClick={() => {
-                      if (step === 'identity' && newAgent && profiles.data?.length)
-                        setNewAgent(false);
-                      else setStep(step === 'identity' && !connected ? 'models' : 'intro');
+          <SceneColumn>
+            {/* The way back from a step, at its corner: the steps themselves carry no footer. */}
+            {/* Making another agent is left with Escape, which a phone does not have. */}
+            {(step === 'models' || step === 'identity') && (!creating || phone) && (
+              <div className="absolute top-2 left-4 md:left-10">
+                <Action
+                  tone="quiet"
+                  disabled={busy}
+                  onClick={() => {
+                    if (creating) cancel?.();
+                    else if (step === 'identity' && newAgent && profiles.data?.length)
+                      setNewAgent(false);
+                    else setStep(step === 'identity' && !connected ? 'models' : 'intro');
+                  }}
+                >
+                  <ArrowLeft size={14} aria-hidden="true" /> Back
+                </Action>
+              </div>
+            )}
+            <AnimatePresence mode="wait" initial={false}>
+              <Scene key={step} title={titles[step]} hiddenTitle={step === 'intro'} still={still}>
+                {step === 'intro' && (
+                  <WelcomeIntro
+                    still={still}
+                    begin={() => {
+                      if (!connected) setModelsVisited(true);
+                      setStep(connected ? 'identity' : 'models');
                     }}
-                  >
-                    <ArrowLeft size={14} aria-hidden="true" /> Back
-                  </Action>
-                </div>
-              )}
-              <AnimatePresence mode="wait" initial={false}>
-                <Scene key={step} step={step} still={still}>
-                  {step === 'intro' && (
-                    <WelcomeIntro
-                      still={still}
-                      begin={() => {
-                        if (!connected) setModelsVisited(true);
-                        setStep(connected ? 'identity' : 'models');
+                  />
+                )}
+                {step === 'models' && (
+                  <div className="mx-auto grid w-full max-w-2xl gap-[clamp(1rem,3dvh,1.5rem)]">
+                    <p className="text-center text-sm leading-relaxed text-muted">
+                      Connect a provider to bring your agent to life.
+                      <br />
+                      Your credentials stay on your gateway.
+                    </p>
+                    <Suspense fallback={<p role="status">Reading providers…</p>}>
+                      <ProviderConnections tiles />
+                    </Suspense>
+                    <div className="flex items-center justify-end gap-3">
+                      <Action
+                        tone="primary"
+                        disabled={!connected}
+                        onClick={() => setStep('identity')}
+                      >
+                        Continue <ArrowRight size={15} aria-hidden="true" />
+                      </Action>
+                    </div>
+                  </div>
+                )}
+                {step === 'identity' &&
+                  (!newAgent && profiles.data?.length ? (
+                    <ExistingAgent
+                      agents={profiles.data}
+                      create={() => setNewAgent(true)}
+                      select={(agent) => {
+                        onCreated(agent);
+                        setStep('arrival');
                       }}
                     />
-                  )}
-                  {step === 'models' && (
-                    <div className="mx-auto grid w-full max-w-2xl gap-[clamp(1rem,3dvh,1.5rem)]">
-                      <p className="text-center text-sm leading-relaxed text-muted">
-                        Connect a provider to bring your agent to life.
-                        <br />
-                        Your credentials stay on your gateway.
-                      </p>
-                      <Suspense fallback={<p role="status">Reading providers…</p>}>
-                        <ProviderConnections tiles />
-                      </Suspense>
-                      <div className="flex items-center justify-end gap-3">
-                        <Action
-                          tone="primary"
-                          disabled={!connected}
-                          onClick={() => setStep('identity')}
-                        >
-                          Continue <ArrowRight size={15} aria-hidden="true" />
-                        </Action>
-                      </div>
-                    </div>
-                  )}
-                  {step === 'identity' &&
-                    (!newAgent && profiles.data?.length ? (
-                      <ExistingAgent
-                        agents={profiles.data}
-                        create={() => setNewAgent(true)}
-                        select={(agent) => {
-                          onCreated(agent);
-                          setStep('arrival');
-                        }}
-                      />
-                    ) : (
-                      <WelcomeIdentity
-                        draft={draft}
-                        change={setDraft}
-                        busy={busy}
-                        error={error}
-                        create={() => void create(draft)}
-                      />
-                    ))}
-                  {step === 'channels' && saved && server && (
-                    <WelcomeChannels profileId={saved.id} finish={() => setStep('arrival')} />
-                  )}
-                  {step === 'arrival' && saved && (
-                    <Arrival profile={saved} still={still} finish={finish} />
-                  )}
-                </Scene>
-              </AnimatePresence>
-            </div>
-          </>
-        )}
-      </div>
-    </main>
-  );
-}
-
-/** Focus moves only when a scene mounts, never on a preview update or a provider poll. */
-function Scene({ step, still, children }: { step: Step; still: boolean; children: ReactNode }) {
-  const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    heading.current?.focus({ preventScroll: true });
-  }, []);
-  return (
-    <motion.section
-      className="grid gap-[clamp(1.25rem,4dvh,2rem)]"
-      initial={{ opacity: 0, y: still ? 0 : 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: still ? 0 : -12 }}
-      transition={{ duration: still ? 0.1 : 0.32, ease: settle }}
-    >
-      <motion.h1
-        exit={{ opacity: 0, y: still ? 0 : -8 }}
-        transition={{ duration: still ? 0.08 : 0.18 }}
-        ref={heading}
-        tabIndex={-1}
-        className={`mx-auto max-w-2xl text-center text-balance outline-none ${step === 'intro' ? 'sr-only' : 'text-3xl font-semibold tracking-tight'}`}
-      >
-        {titles[step]}
-      </motion.h1>
-      {children}
-    </motion.section>
+                  ) : (
+                    <WelcomeIdentity
+                      draft={draft}
+                      change={setDraft}
+                      busy={busy}
+                      error={error}
+                      create={() => void create(draft)}
+                    />
+                  ))}
+                {step === 'channels' && saved && server && (
+                  <WelcomeChannels profileId={saved.id} finish={() => setStep('arrival')} />
+                )}
+                {step === 'arrival' && saved && (
+                  <Arrival profile={saved} still={still} finish={finish} />
+                )}
+              </Scene>
+            </AnimatePresence>
+          </SceneColumn>
+        </>
+      )}
+    </Stage>
   );
 }
 
@@ -239,13 +224,7 @@ function Arrival({
       try {
         // The first chat must replace the hero with a ready composer, not another loading screen.
         await Promise.all([
-          client.fetchQuery(queries.sessions(profile.id)),
-          client.fetchQuery(queries.projects(profile.id)),
-          client.fetchQuery(queries.channels(profile.id)),
-          client.fetchQuery(queries.contacts(profile.id)),
-          client.fetchQuery(queries.activities(profile.id)),
-          client.fetchQuery(queries.groups()),
-          client.fetchQuery(queries.modelDefaults()),
+          ...readChat(client, profile.id),
           new Promise<void>((resolve) => {
             timer = setTimeout(resolve, still || attempt > 0 ? 0 : 500);
           }),

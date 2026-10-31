@@ -2,7 +2,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useCrew } from '../../lib/stores/crew';
-import { MIN_CHAT_WIDTH } from '../../lib/stores/layout';
+import { MIN_CHAT_WIDTH, useLayout } from '../../lib/stores/layout';
 import { focusInspector, InspectorHost, toggleInspector } from './inspector-host';
 
 const KEY = 'jian:inspector-size';
@@ -115,6 +115,39 @@ it('leaves the chat its minimum beside a sidebar, however wide the owner dragged
   );
   expect(host()?.hasAttribute('data-full')).toBe(true);
   expect(element.querySelector<HTMLElement>('[data-inspector-beside]')?.style.width).toBe('256px');
+});
+
+it('leaves room for a sidebar that arrives after it, as one does behind a stage', async () => {
+  room = 1280;
+  vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(function (this: Element) {
+    return { width: this.hasAttribute('data-chat-sidebar') ? 256 : room } as DOMRect;
+  });
+  useCrew.setState({ full: true });
+  root = createRoot(element);
+  await act(async () =>
+    root?.render(
+      <InspectorHost browser={<p>Page</p>} wholePanel>
+        {null}
+      </InspectorHost>,
+    ),
+  );
+  const beside = () => element.querySelector<HTMLElement>('[data-inspector-beside]');
+  expect(beside()?.style.width).toBe('0px');
+
+  await act(async () =>
+    root?.render(
+      <InspectorHost browser={<p>Page</p>} wholePanel>
+        <nav data-chat-sidebar />
+      </InspectorHost>,
+    ),
+  );
+  await act(async () => {
+    useLayout.getState().sidebarMoved();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  });
+
+  expect(beside()?.style.width).toBe('256px');
+  useCrew.setState({ full: false });
 });
 
 it('takes the chat’s place when both cannot fit, rather than crush it', async () => {

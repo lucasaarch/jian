@@ -243,6 +243,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                                   session={active}
                                   channel={false}
                                   className="composer-model-control"
+                                  remembers
                                   saved={() => void refresh()}
                                 />
                               </>

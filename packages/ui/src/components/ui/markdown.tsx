@@ -9,6 +9,27 @@ export const MarkdownLinks = createContext<
   ((href: string, label: string) => ReactNode | undefined) | undefined
 >(undefined);
 
+/**
+ * How a page shows the pictures in its text. Without it they stay text: an agent's answer or a
+ * skill never makes the app fetch an address someone else wrote, which would tell them it was read.
+ */
+export const MarkdownImages = createContext<((src: string, alt: string) => ReactNode) | undefined>(
+  undefined,
+);
+
+function MarkdownImage({ text, alt, src }: { text: string; alt: string; src: string }) {
+  const drawn = useContext(MarkdownImages)?.(src, alt);
+  if (drawn) return drawn;
+  // As it read before pictures were known: a link with its mark, or the words as written.
+  return /^https?:\/\//.test(src) ? (
+    <>
+      !<MarkdownLink href={src} label={alt || src} />
+    </>
+  ) : (
+    text
+  );
+}
+
 /** A link as the page around it chooses to show it, or as a plain one. */
 export function MarkdownLink({ href, label }: { href: string; label: string }) {
   const custom = useContext(MarkdownLinks)?.(href, label);
@@ -61,7 +82,7 @@ function words(text: string, streaming: boolean): ReactNode {
 function inline(text: string, streaming = false): ReactNode[] {
   const parts: ReactNode[] = [];
   const pattern =
-    /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(?<![\w*])[*_]([^*_\s](?:[^*_]*[^*_\s])?)[*_](?![\w*])|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g;
+    /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(?<![\w*])[*_]([^*_\s](?:[^*_]*[^*_\s])?)[*_](?![\w*])|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|!\[([^\]]*)\]\(([^)\s]+)\)/g;
   let last = 0;
 
   for (const match of text.matchAll(pattern)) {
@@ -75,6 +96,8 @@ function inline(text: string, streaming = false): ReactNode[] {
     if (match[1]) parts.push(<strong key={at}>{inline(match[1], streaming)}</strong>);
     else if (match[2]) parts.push(<code key={at}>{words(match[2], streaming)}</code>);
     else if (match[5]) parts.push(<em key={at}>{words(match[5], streaming)}</em>);
+    else if (match[8])
+      parts.push(<MarkdownImage key={at} text={match[0]} alt={match[7] ?? ''} src={match[8]} />);
     else {
       const href = match[4] ?? match[6] ?? '';
 

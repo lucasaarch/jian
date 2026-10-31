@@ -1,14 +1,36 @@
 'use client';
 
 import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import type { GatewayApi, Session } from '../../lib/api';
+import type { GatewayApi, ModelDefaults, ModelDefaultsInput, Session } from '../../lib/api';
 import { useModelCatalog } from '../../lib/query/agent';
+import { keys } from '../../lib/query/keys';
 import { usableProviders } from '../providers/catalog';
 import { preferredModelSelection, withDefaultEffort } from '../providers/role-choices';
 import { modelEntries } from './model-entries';
 import { EffortMenu, type MenuAlign, ModelMenu } from './model-menu';
+
+/**
+ * A choice in a composer is where the next new chat starts, and only that: other conversations
+ * keep the model they have. Worth having, not worth failing over: a gateway from before this
+ * answers no, and the conversation has its model regardless. It is held until the gateway answers,
+ * so a read of the defaults that follows cannot bring the old one back.
+ */
+function useRememberModel(api: GatewayApi) {
+  const client = useQueryClient();
+
+  return async (model: NonNullable<Session['model']>) => {
+    const defaults = client.getQueryData<ModelDefaults>(keys.modelDefaults);
+    if (!defaults || JSON.stringify(model) === JSON.stringify(defaults.conversation)) return;
+    client.setQueryData<ModelDefaults>(keys.modelDefaults, { ...defaults, conversation: model });
+    const { updatedAt: _saved, ...input } = defaults;
+    await api
+      .setModelDefaults({ ...input, conversation: model } as ModelDefaultsInput)
+      .catch(() => {});
+  };
+}
 
 /**
  * The model one conversation runs on, over the profile's defaults, and its reasoning effort.
@@ -24,6 +46,7 @@ export function SessionModel({
   channel,
   saved,
   menuAlign,
+  remembers = false,
 }: {
   api: GatewayApi;
   profileId: string;
@@ -36,10 +59,13 @@ export function SessionModel({
   saved: () => void;
   /** Where the menus line up with their triggers; the end unless the controls sit on the left. */
   menuAlign?: MenuAlign;
+  /** A composer's: what the owner picks here is also where their next new chat starts. */
+  remembers?: boolean;
 }) {
   const [savedModel, setSavedModel] = useState(session?.model);
   const [busy, setBusy] = useState(false);
   const initialSave = useRef(false);
+  const remember = useRememberModel(api);
   const catalog = useModelCatalog();
   const providers = usableProviders(catalog);
   const fallback =
@@ -84,6 +110,7 @@ export function SessionModel({
 
     try {
       if (session) await api.setSessionModel(profileId, session.id, selection ?? null);
+      if (remembers && selection) await remember(selection);
       saved();
     } catch (error) {
       setSavedModel(previous);

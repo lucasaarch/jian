@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MotionGlobalConfig } from 'motion/react';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -10,7 +11,9 @@ import { profile } from '../test/fixtures';
 import { goTo } from '../test/route';
 import { WebApp } from './web-app';
 
-beforeEach(() => useOnboarding.setState({ completed: true, requested: false }));
+beforeEach(() =>
+  useOnboarding.setState({ completed: true, requested: false, departed: undefined }),
+);
 
 // The screen's own pieces stand in for themselves; what is under test is where they open.
 vi.mock('../components/sessions', () => ({
@@ -146,6 +149,8 @@ it('opens the settings an old address asked for, and goes on to the agent’s ch
 });
 
 it('opens the next agent’s chats once this one is deleted from its settings', async () => {
+  // Chats fade out behind the farewell, which happy-dom would never finish.
+  MotionGlobalConfig.skipAnimations = true;
   const other = { ...profile, id: '7d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d', name: 'Harbor Desk' };
   gateway.deleteProfile.mockResolvedValue(undefined);
   const client = agentClient({
@@ -174,7 +179,12 @@ it('opens the next agent’s chats once this one is deleted from its settings', 
   await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
   expect(gateway.deleteProfile).toHaveBeenCalledWith(profile.id);
+  // Seen off first, and only then on to what is left.
+  expect(document.body.textContent).toContain('Goodbye.');
+  await act(async () => useOnboarding.getState().seenOff());
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
   expect(memoryNavigation.current()).toBe(`/agents/${other.id}/sessions`);
+  MotionGlobalConfig.skipAnimations = false;
 });
 
 it('sends a browser without a session to sign in', async () => {

@@ -20,10 +20,17 @@ import {
   shortcutOf,
 } from './keybindings';
 
-export type AppCommand = Omit<Command, 'shortcut'> & { keys?: Binding };
+/** The parts of the palette: what is done most first, the app's housekeeping last. */
+const GROUPS = ['Chats', 'Inspector', 'Agent', 'View', 'Settings', 'Gateway', 'App'] as const;
+
+export type AppCommand = Omit<Command, 'shortcut' | 'group'> & {
+  group?: (typeof GROUPS)[number];
+  keys?: Binding;
+};
 type Registry = { register(source: string, commands: AppCommand[]): () => void };
 const Context = createContext<Registry | null>(null);
 const SAVED = 'jian-keymaps';
+const PALETTE = 'command-palette';
 type Keymaps = {
   commands: AppCommand[];
   overrides: Bindings;
@@ -36,13 +43,13 @@ export const useKeymaps = () => useContext(KeymapsContext);
 export { isMac } from './keybindings';
 
 /**
- * Where each part's commands stand in the list: what is done most first — the agent's chats
- * and places — then the app's, the window's own, and the host's. A part not named comes last.
+ * Who comes first inside a group offered by several: "New chat" before what is done to the chat
+ * open, the way to open the browser before what is done to its page. A source not named is last.
  */
-const ORDER = ['agent', 'app', 'window', 'web'];
-const rank = (source: string) => {
-  const at = ORDER.indexOf(source);
-  return at === -1 ? ORDER.length : at;
+const SOURCES = ['agent', 'chat', 'app', 'browser', 'window', 'web'];
+const rank = (order: readonly string[], name: string | undefined) => {
+  const at = order.indexOf(name ?? '');
+  return at === -1 ? order.length : at;
 };
 
 /**
@@ -89,17 +96,19 @@ export function CommandsProvider({
   }, []);
 
   const offered = useMemo(
-    () => [
-      ...Object.entries(sources)
-        .sort(([a], [b]) => rank(a) - rank(b))
-        .flatMap(([, listed]) => listed),
-      {
-        id: 'command-palette',
-        title: 'Command palette',
-        keys: { key: 'p', shift: true },
-        run: () => setOpen(true),
-      },
-    ],
+    () =>
+      [
+        ...Object.entries(sources)
+          .sort(([a], [b]) => rank(SOURCES, a) - rank(SOURCES, b))
+          .flatMap(([, listed]) => listed),
+        {
+          id: PALETTE,
+          group: 'App' as const,
+          title: 'Command palette',
+          keys: { key: 'p', shift: true },
+          run: () => setOpen(true),
+        },
+      ].sort((a, b) => rank(GROUPS, a.group) - rank(GROUPS, b.group)),
     [sources],
   );
 
@@ -168,10 +177,13 @@ export function CommandsProvider({
 
   const listed = useMemo(
     () =>
-      commands.map(({ keys, ...command }) => {
-        const shortcut = shortcutOf(keys);
-        return shortcut ? { ...command, shortcut } : command;
-      }),
+      commands
+        // Already open: its key can be changed in Keymaps, but it has nothing to offer here.
+        .filter((command) => command.id !== PALETTE)
+        .map(({ keys, ...command }) => {
+          const shortcut = shortcutOf(keys);
+          return shortcut ? { ...command, shortcut } : command;
+        }),
     [commands],
   );
 

@@ -5,6 +5,7 @@ import {
   Cpu,
   Keyboard,
   KeyRound,
+  Maximize2,
   Monitor,
   MoonStar,
   Palette,
@@ -16,7 +17,7 @@ import {
   Sun,
 } from 'lucide-react';
 import { type ReactNode, useMemo } from 'react';
-import { toggleInspector } from '../../components/sessions/inspector-host';
+import { toggleInspector, toggleInspectorFull } from '../../components/sessions/inspector-host';
 import { useThemeChoice } from '../../components/shell/theme';
 import { reloadApp } from '../reload';
 import { toggleSidebar } from '../sidebar-bar';
@@ -25,16 +26,16 @@ import { type AppCommand, useCommands } from './registry';
 /** The settings pages a command opens straight to; a gateway without one shows General. */
 const pages: { id: string; title: string; keywords: string[]; icon: ReactNode }[] = [
   {
-    id: 'keymaps',
-    title: 'Keymaps',
-    keywords: ['keyboard', 'shortcut', 'binding'],
-    icon: <Keyboard size={15} />,
-  },
-  {
     id: 'appearance',
     title: 'Appearance',
     keywords: ['theme', 'font', 'motion'],
     icon: <Palette size={15} />,
+  },
+  {
+    id: 'keymaps',
+    title: 'Keymaps',
+    keywords: ['keyboard', 'shortcut', 'binding'],
+    icon: <Keyboard size={15} />,
   },
   {
     id: 'providers',
@@ -79,6 +80,7 @@ export function useAppCommands(openSettings: (page?: string) => void): void {
     return [
       {
         id: 'settings',
+        group: 'Settings',
         title: 'Open settings',
         keywords: ['preferences', 'options'],
         icon: <Settings2 size={15} />,
@@ -87,6 +89,7 @@ export function useAppCommands(openSettings: (page?: string) => void): void {
       },
       ...pages.map<AppCommand>((page) => ({
         id: `settings-${page.id}`,
+        group: 'Settings',
         title: page.title,
         detail: 'Settings',
         keywords: ['settings', ...page.keywords],
@@ -96,6 +99,7 @@ export function useAppCommands(openSettings: (page?: string) => void): void {
       })),
       {
         id: 'sidebar',
+        group: 'View',
         title: 'Toggle sidebar',
         keywords: ['chats', 'list', 'hide', 'show', 'collapse'],
         icon: <PanelLeft size={15} />,
@@ -104,6 +108,7 @@ export function useAppCommands(openSettings: (page?: string) => void): void {
       },
       {
         id: 'inspector',
+        group: 'Inspector',
         title: 'Toggle inspector',
         keywords: ['browser', 'panel', 'side', 'tabs', 'pull request', 'subagent'],
         icon: <PanelRight size={15} />,
@@ -111,7 +116,16 @@ export function useAppCommands(openSettings: (page?: string) => void): void {
         run: toggleInspector,
       },
       {
+        id: 'inspector-full',
+        group: 'Inspector',
+        title: 'Toggle inspector full screen',
+        keywords: ['browser', 'panel', 'maximize', 'expand', 'wide'],
+        icon: <Maximize2 size={15} />,
+        run: () => void toggleInspectorFull(),
+      },
+      {
         id: 'theme',
+        group: 'View',
         keys: { key: 'l', shift: true },
         title: next === 'light' ? 'Switch to light theme' : 'Switch to dark theme',
         keywords: ['appearance', 'theme', 'dark', 'light', 'mode'],
@@ -120,6 +134,7 @@ export function useAppCommands(openSettings: (page?: string) => void): void {
       },
       {
         id: 'reload',
+        group: 'App',
         title: 'Reload app',
         keywords: ['refresh', 'restart', 'reload'],
         icon: <RotateCcw size={15} />,

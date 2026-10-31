@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -47,11 +47,13 @@ describe('the release notes the panel announces', () => {
     expect((await at('2.2.0').releases()).unseen).toEqual([]);
   });
 
-  it('announces nothing on a build with no version stamped on it', async () => {
+  it('offers the newest release to read on a build with no version, and announces nothing', async () => {
     const { store } = await testServices();
 
-    expect(await new ReleaseNotes(store, undefined, history).releases()).toEqual({
-      notes: [],
+    // The newest stable one, with a candidate ahead of it left out.
+    const ahead = [note('2.3.0-rc.1'), ...history];
+    expect(await new ReleaseNotes(store, undefined, ahead).releases()).toEqual({
+      notes: [note('2.2.0')],
       unseen: [],
       updates: [],
       behind: 0,
@@ -101,6 +103,49 @@ describe('the release notes the panel announces', () => {
 
     const candidate = await new ReleaseNotes(store, '2.2.0-rc.1', [], fetcher).releases();
     expect(candidate.updates.map((item) => item.version)).toEqual(['2.3.0', '2.2.0-rc.2']);
+  });
+
+  it("serves a note's pictures to the owner, and nothing outside their folder", async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'jian-release-media-'));
+    mkdirSync(join(directory, 'media'));
+    writeFileSync(join(directory, 'media', 'picker.png'), 'synthetic picture');
+    writeFileSync(join(directory, 'secret.png'), 'outside the folder');
+    writeFileSync(join(directory, 'media', 'note.txt'), 'not a picture');
+    const services = await testServices();
+    const app = createApp({
+      ...services,
+      releases: new ReleaseNotes(
+        services.store,
+        '2.1.0',
+        history,
+        undefined,
+        pathToFileURL(`${directory}/`),
+      ),
+      token,
+      logger: false,
+    });
+    const read = (file: string, headers = admin) =>
+      app.inject({ url: `/v1/releases/media/${file}`, headers });
+
+    try {
+      expect((await read('picker.png', {} as typeof admin)).statusCode).toBe(401);
+
+      const picture = await read('picker.png');
+      expect(picture.statusCode).toBe(200);
+      expect(picture.json()).toMatchObject({
+        file: 'picker.png',
+        mimeType: 'image/png',
+        bytes: 17,
+        data: Buffer.from('synthetic picture').toString('base64'),
+      });
+
+      for (const refused of ['..%2Fsecret.png', '%2E%2E%2Fsecret.png', 'note.txt', 'gone.png']) {
+        expect((await read(refused)).statusCode).toBe(404);
+      }
+    } finally {
+      await app.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('is read and marked only by the owner', async () => {

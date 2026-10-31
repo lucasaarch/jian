@@ -270,16 +270,8 @@ const model = {
   fast: true,
 };
 
-it('leaves its model, effort, speed and protection for the next new chat', async () => {
-  const setModelDefaults = vi.fn(async () => ({}));
+it('leaves its protection for the next new chat, once its first message has gone', async () => {
   const updateSettings = vi.fn(async () => ({}));
-  const before = {
-    conversation: null,
-    channel: { providerId: 'provider', modelId: 'atlas-small' },
-    updatedAt: '2026-10-31T10:00:00Z',
-  };
-  client.setQueryData(keys.modelDefaults, before);
-  chosen.model = model;
   chosen.protection = 'full';
   await render({
     createGatewaySession: vi.fn(async () => session) as never,
@@ -287,7 +279,6 @@ it('leaves its model, effort, speed and protection for the next new chat', async
     send: vi.fn(async () => ({ id: 'run' })) as never,
     setSessionModel: vi.fn(async () => session) as never,
     setSessionProtection: vi.fn(async () => session) as never,
-    setModelDefaults: setModelDefaults as never,
     updateSettings: updateSettings as never,
   });
   await flush();
@@ -296,28 +287,16 @@ it('leaves its model, effort, speed and protection for the next new chat', async
   await press();
   await flush();
 
-  // Only what a chat chooses moves; a channel's own model is not touched.
-  expect(setModelDefaults).toHaveBeenCalledWith({
-    conversation: model,
-    channel: before.channel,
-  });
   expect(updateSettings).toHaveBeenCalledWith({ newChatProtection: 'full' });
-  expect(client.getQueryData<{ conversation: unknown }>(keys.modelDefaults)?.conversation).toEqual(
-    model,
-  );
 });
 
-it('changes nothing when the message did not reach the gateway', async () => {
-  const setModelDefaults = vi.fn(async () => ({}));
+it('leaves the protection as it was when the message did not reach the gateway', async () => {
   const updateSettings = vi.fn(async () => ({}));
-  client.setQueryData(keys.modelDefaults, { conversation: null, updatedAt: 'now' });
-  chosen.model = model;
   chosen.protection = 'full';
   await render({
     createGatewaySession: vi.fn(async () => {
       throw new Error('No gateway.');
     }) as never,
-    setModelDefaults: setModelDefaults as never,
     updateSettings: updateSettings as never,
   });
   await flush();
@@ -326,7 +305,6 @@ it('changes nothing when the message did not reach the gateway', async () => {
   await press();
   await flush();
 
-  expect(setModelDefaults).not.toHaveBeenCalled();
   expect(updateSettings).not.toHaveBeenCalled();
 });
 

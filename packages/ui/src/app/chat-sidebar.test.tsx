@@ -1,6 +1,6 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import type { Project, Run, Session } from '../lib/api';
 import { MIN_CHAT_WIDTH, useLayout } from '../lib/stores/layout';
 import { memoryNavigation } from '../platform/navigation';
@@ -153,4 +153,13 @@ it('resizes from its edge, keeps the size, and gives the chat the room it needs'
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: inner });
     useLayout.setState({ sidebarWidth: null });
   }
+});
+
+it('tells whoever measures it that it arrived, as the Inspector goes by its width', async () => {
+  const heard = vi.fn();
+  const stop = useLayout.subscribe(heard);
+  await render();
+  stop();
+
+  expect(heard).toHaveBeenCalled();
 });

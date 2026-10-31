@@ -10,6 +10,7 @@ import { panelApi } from '../lib/query/client';
 import { queries, useProfiles } from '../lib/query/profile';
 import { useAgentOverlay } from '../lib/stores/agent-overlay';
 import { useLastProfile } from '../lib/stores/last-profile';
+import { useOnboarding } from '../lib/stores/onboarding';
 import { useRefresh } from '../lib/workspace';
 import { useRouter } from '../platform/navigation';
 import { AgentAvatar } from './agent-avatar';
@@ -45,6 +46,7 @@ function DangerZone({ profile }: { profile: Profile }) {
   const refresh = useRefresh();
   const forget = useLastProfile((state) => state.forget);
   const closeSettings = useAgentOverlay((state) => state.closeSettings);
+  const seeOff = useOnboarding((state) => state.seeOff);
   const [working, setWorking] = useState<'reset' | 'delete'>();
   const [asking, setAsking] = useState<'reset' | 'delete'>();
 
@@ -72,15 +74,18 @@ function DangerZone({ profile }: { profile: Profile }) {
     setWorking('delete');
     try {
       await panelApi().deleteProfile(profile.id);
-      client.setQueryData(queries.profiles().queryKey, (profiles = []) =>
-        profiles.filter((item) => item.id !== profile.id),
-      );
-      client.removeQueries({ queryKey: ['history', profile.id] });
-      toast.success(`${profile.name} was deleted.`);
-      forget(profile.id);
       closeSettings();
-      // The chats screen opens the next agent's chats, or offers to create one.
-      router.replace('/');
+      // The stage says it is gone, in place of a toast. The address and the lists wait for it:
+      // the chats are still fading behind it, and they read the agent they were showing.
+      seeOff({ name: profile.name, avatar: profile.avatar, summary: profile.summary }, () => {
+        client.setQueryData(queries.profiles().queryKey, (profiles = []) =>
+          profiles.filter((item) => item.id !== profile.id),
+        );
+        client.removeQueries({ queryKey: ['history', profile.id] });
+        forget(profile.id);
+        // The chats screen opens the next agent's chats, or offers to create one.
+        router.replace('/');
+      });
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : 'The agent could not be deleted.');
       setWorking(undefined);

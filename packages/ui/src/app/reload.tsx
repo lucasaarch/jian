@@ -40,6 +40,38 @@ export function reloadApp(): void {
 }
 
 /**
+ * The mark as a reload shows it, for as long as a load takes: it comes into focus, breathes while
+ * it waits, and lifts away as what was loading takes its place.
+ */
+export function LoadingMark({ label }: { label: string }) {
+  const { still } = useAppearance();
+
+  return (
+    <main
+      aria-busy="true"
+      aria-label={label}
+      className="grid h-dvh place-items-center bg-canvas text-ink"
+    >
+      <p role="status" className="sr-only">
+        {label}…
+      </p>
+      <motion.span
+        aria-hidden="true"
+        className="relative size-16 [&_svg]:size-full"
+        initial={still ? false : { opacity: 0, scale: 0.4, rotate: -24, filter: 'blur(8px)' }}
+        animate={{ opacity: 1, scale: 1, rotate: 0, filter: 'blur(0px)' }}
+        exit={{ opacity: 0, scale: 1.2, y: -28, filter: 'blur(8px)' }}
+        transition={{ duration: still ? 0 : 0.6, ease: [0.23, 1, 0.32, 1] }}
+      >
+        <span className="block size-full motion-safe:animate-pulse">
+          <Mark />
+        </span>
+      </motion.span>
+    </main>
+  );
+}
+
+/**
  * The glass a reload passes behind: it mists over the app as the Jian mark comes into focus,
  * the page loads again behind it, and on the new page it clears as the mark lifts away. Under
  * reduced motion the page simply reloads.

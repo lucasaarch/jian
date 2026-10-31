@@ -22,4 +22,12 @@ if (
 }
 
 const summary = /^summary: (.+)$/m.exec(front[1] ?? '')?.[1];
-process.stdout.write(`${summary ? `${summary}\n\n` : ''}${note.slice(front[0].length).trim()}\n`);
+// The panel reads a note's pictures from its gateway; a GitHub release needs their full address.
+const body = note
+  .slice(front[0].length)
+  .trim()
+  .replaceAll(
+    '](media/',
+    `](https://raw.githubusercontent.com/lucasaarch/jian/v${version}/docs/releases/media/`,
+  );
+process.stdout.write(`${summary ? `${summary}\n\n` : ''}${body}\n`);

@@ -23,6 +23,7 @@ const older = {
 const gateway = vi.hoisted(() => ({
   releases: vi.fn(),
   markReleasesSeen: vi.fn(async () => ({})),
+  releaseMedia: vi.fn(),
 }));
 vi.mock('../lib/query/client', () => ({ panelApi: () => gateway }));
 
@@ -33,14 +34,14 @@ afterEach(() => {
   gateway.markReleasesSeen.mockClear();
 });
 
-async function render(ui: ReactNode) {
+async function render(ui: ReactNode, shown = note) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   gateway.releases.mockResolvedValue({
     version: '2.2.0',
     behind: 0,
     notes: [note, older],
     updates: [],
-    unseen: [note],
+    unseen: [shown],
   });
   const host = document.createElement('div');
   document.body.append(host);
@@ -87,7 +88,55 @@ it('opens every release from Settings, newest first, and marks nothing read', as
       item.getAttribute('aria-label'),
     ),
   ).toEqual(['Jian 2.2.0', 'Jian 2.1.0']);
-  await act(async () => button('Close')?.click());
+  await act(async () => button('Got it')?.click());
+
+  expect(gateway.markReleasesSeen).not.toHaveBeenCalled();
+});
+
+const pictured = {
+  version: '2.2.0',
+  date: '2026-09-24',
+  body: 'Look: ![The new picker](media/picker.png) and ![A tracker](https://tracker.example/a.png)',
+  prerelease: false,
+};
+
+it('shows a note’s own picture, and only asks its gateway for it', async () => {
+  gateway.releaseMedia.mockResolvedValue({
+    file: 'picker.png',
+    mimeType: 'image/png',
+    bytes: 4,
+    data: 'AAAA',
+  });
+  await render(<ReleaseNotes />, pictured as never);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  expect(gateway.releaseMedia).toHaveBeenCalledWith('picker.png');
+  const shown = [...(dialog()?.querySelectorAll('img') ?? [])].map((item) =>
+    item.getAttribute('src'),
+  );
+  expect(shown).toEqual(['data:image/png;base64,AAAA']);
+  // An address elsewhere is a link to follow, never something the app fetches.
+  expect(dialog()?.querySelector('a')?.getAttribute('href')).toBe('https://tracker.example/a.png');
+});
+
+it('opens a picture over the notes, and Escape leaves the notes open', async () => {
+  gateway.releaseMedia.mockResolvedValue({
+    file: 'picker.png',
+    mimeType: 'image/png',
+    bytes: 4,
+    data: 'AAAA',
+  });
+  await render(<ReleaseNotes />, pictured as never);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  await act(async () =>
+    dialog()?.querySelector<HTMLButtonElement>('[aria-label="Open The new picker"]')?.click(),
+  );
+  expect(document.querySelector('dialog')).not.toBeNull();
+
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
 
   expect(gateway.markReleasesSeen).not.toHaveBeenCalled();
 });

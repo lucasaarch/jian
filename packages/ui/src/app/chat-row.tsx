@@ -4,7 +4,7 @@ import { ContextMenu } from '@base-ui/react/context-menu';
 import { Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Spinner } from '../components/ui/spinner';
-import { Action, Overlay, TextField } from '../kit';
+import { Action, ConfirmDialog, Overlay, TextField } from '../kit';
 import { MenuEntry, menuPopup } from '../kit/menu';
 import { ago } from '../lib/format';
 
@@ -25,7 +25,8 @@ export type ChatRowProps = {
   rename?: (title: string) => Promise<boolean>;
   pinned?: boolean;
   pin?: () => void;
-  remove: () => void;
+  /** Whether it was deleted. Only ever called once the owner has said yes. */
+  remove: () => Promise<boolean>;
 };
 
 /**
@@ -35,6 +36,7 @@ export type ChatRowProps = {
  */
 export function ChatRow(props: ChatRowProps) {
   const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const actions = (
     <>
@@ -51,7 +53,7 @@ export function ChatRow(props: ChatRowProps) {
           Rename
         </MenuEntry>
       )}
-      <MenuEntry icon={<Trash2 size={14} />} onClick={props.remove} danger>
+      <MenuEntry icon={<Trash2 size={14} />} onClick={() => setDeleting(true)} danger>
         Delete
       </MenuEntry>
     </>
@@ -98,7 +100,46 @@ export function ChatRow(props: ChatRowProps) {
           rename={props.rename}
         />
       )}
+      <DeleteChatDialog
+        open={deleting}
+        onOpenChange={setDeleting}
+        name={props.name}
+        remove={props.remove}
+      />
     </>
+  );
+}
+
+/** Asks before a chat is deleted. It stays open when the chat could not be deleted. */
+export function DeleteChatDialog({
+  open,
+  onOpenChange,
+  name,
+  remove,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  name: string;
+  remove: () => Promise<boolean>;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <ConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`Delete ${name}?`}
+      action="Delete chat"
+      busy={busy}
+      run={async () => {
+        setBusy(true);
+        const deleted = await remove();
+        setBusy(false);
+        if (deleted) onOpenChange(false);
+      }}
+    >
+      The chat and everything said in it are gone for good.
+    </ConfirmDialog>
   );
 }
 

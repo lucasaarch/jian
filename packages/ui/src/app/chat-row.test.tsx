@@ -15,7 +15,7 @@ async function render(
   pin?: () => void,
 ) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  const remove = vi.fn();
+  const remove = vi.fn(async () => true);
   const host = document.createElement('ul');
   document.body.append(host);
   const root = createRoot(host);
@@ -104,13 +104,25 @@ it('asks nothing of the gateway when the name did not change', async () => {
   expect(close).toHaveBeenCalled();
 });
 
-it('deletes from its menu, and offers no rename where the name is not the chat’s own', async () => {
+it('asks before deleting, and offers no rename where the name is not the chat’s own', async () => {
   const view = await render();
 
   const items = await view.menu();
   expect(items.map((item) => item.textContent)).toEqual(['Delete']);
   await act(async () => items[0]?.click());
 
+  // Asked, and nothing is deleted until the answer is yes.
+  expect(view.remove).not.toHaveBeenCalled();
+  const button = (name: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+      (item) => item.textContent === name,
+    );
+  expect(document.querySelector('[role="dialog"] input')).toBeNull();
+  await act(async () => button('Cancel')?.click());
+  expect(view.remove).not.toHaveBeenCalled();
+
+  await act(async () => (await view.menu())[0]?.click());
+  await act(async () => button('Delete chat')?.click());
   expect(view.remove).toHaveBeenCalledOnce();
 });
 
@@ -127,7 +139,7 @@ it('replaces time with working, then unread until the conversation is opened', (
       working={working}
       unread={unread}
       open={() => {}}
-      remove={() => {}}
+      remove={async () => true}
     />
   );
   try {

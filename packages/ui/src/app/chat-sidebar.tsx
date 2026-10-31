@@ -24,8 +24,8 @@ import {
   useLayout,
 } from '../lib/stores/layout';
 import { unread } from '../lib/unread';
-import { useActions, useDeleteConversation, useRefresh } from '../lib/workspace';
 import { useParams, useRouter } from '../platform/navigation';
+import { useChatActions } from './chat-actions';
 import { ChatRow } from './chat-row';
 import { ChatSection, ProjectFolder } from './chat-section';
 import { channelKind, chatSections, lastAt } from './chat-sections';
@@ -115,6 +115,11 @@ export function ChatSidebar({
   const phone = usePhone();
   // A phone has no room beside the sidebar to put it away for: it is the list there.
   const collapsed = useLayout((state) => state.chatList) && !phone;
+  // It mounts long after the window when a stage comes first, and the Inspector goes by its width.
+  useEffect(() => {
+    useLayout.getState().sidebarMoved();
+    return () => useLayout.getState().sidebarMoved();
+  }, []);
   if (collapsed) return null;
 
   return (
@@ -191,9 +196,7 @@ function AgentSidebar({ profileId }: { profileId: string }) {
   const profiles = useAgents();
   const activities = useActivities();
   const router = useRouter();
-  const { api, mutate } = useActions();
-  const refresh = useRefresh();
-  const deleteConversation = useDeleteConversation();
+  const actions = useChatActions(profileId);
   const { sessionId: selected } = useParams<{ sessionId?: string }>();
 
   const parents = new Map(activities.map((run) => [run.id, run]));
@@ -220,13 +223,7 @@ function AgentSidebar({ profileId }: { profileId: string }) {
       })}
       {...(inProject ? {} : { icon: conversationIcon(session) })}
       pinned={session.pinned}
-      pin={() =>
-        void mutate(() => api.setSessionPin(profileId, session.id, !session.pinned)).then(
-          (saved) => {
-            if (saved) return refresh();
-          },
-        )
-      }
+      pin={() => actions.pin(session)}
       at={lastAt(session)}
       selected={session.id === selected}
       unread={unread(session)}
@@ -234,18 +231,10 @@ function AgentSidebar({ profileId }: { profileId: string }) {
       open={() => open(session.id)}
       {...(session.channel === GATEWAY_SESSION_CHANNEL
         ? {
-            rename: async (title: string) => {
-              const saved = await mutate(() => api.renameSession(profileId, session.id, title));
-              if (saved) await refresh();
-              return Boolean(saved);
-            },
+            rename: (title: string) => actions.rename(session, title),
           }
         : {})}
-      remove={() =>
-        void deleteConversation(session.id).then((deleted) => {
-          if (deleted && session.id === selected) router.replace(agentPath(profileId, 'sessions'));
-        })
-      }
+      remove={() => actions.remove(session)}
     />
   );
 

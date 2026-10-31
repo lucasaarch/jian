@@ -1,4 +1,5 @@
 import {
+  type AppCommand,
   BrowserStart,
   BrowserToolbar,
   browserPageOfInspector,
@@ -8,8 +9,10 @@ import {
   onInspectorMoved,
   openBrowserInspector,
   syncBrowserInspector,
+  useCommands,
 } from '@jian/ui';
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { Camera, ExternalLink, RotateCw, Star, StarOff } from 'lucide-react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserPlaces, BrowserState } from '../../shared/bridge';
 import { desktop } from '../desktop';
 
@@ -108,6 +111,56 @@ export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
   const covered = useRef(false);
   const blank = !state.url || state.url === 'about:blank';
   const readPlaces = useCallback(() => void desktop().browser.places().then(setPlaces), []);
+  // Offered only while a page is in front: this panel is not there behind another tab.
+  const { url, title, favorite } = state;
+  const pageOpen = state.open && !blank;
+  useCommands(
+    'browser',
+    useMemo<AppCommand[]>(
+      () =>
+        pageOpen
+          ? [
+              {
+                id: 'browser-reload',
+                group: 'Inspector',
+                title: 'Reload page',
+                detail: title,
+                keywords: ['browser', 'refresh'],
+                icon: <RotateCw size={15} />,
+                run: () => void desktop().browser.command('reload'),
+              },
+              {
+                id: 'browser-favorite',
+                group: 'Inspector',
+                title: favorite ? 'Remove page from favorites' : 'Add page to favorites',
+                detail: title,
+                keywords: ['browser', 'bookmark', 'star'],
+                icon: favorite ? <StarOff size={15} /> : <Star size={15} />,
+                run: () => void desktop().browser.setFavorite(!favorite, url, title),
+              },
+              {
+                id: 'browser-screenshot',
+                group: 'Inspector',
+                title: 'Take a screenshot of the page',
+                detail: title,
+                keywords: ['browser', 'capture', 'picture', 'image'],
+                icon: <Camera size={15} />,
+                run: () => void desktop().browser.screenshot(),
+              },
+              {
+                id: 'browser-external',
+                group: 'Inspector',
+                title: 'Open page in default browser',
+                detail: title,
+                keywords: ['browser', 'external', 'system', 'chrome', 'safari'],
+                icon: <ExternalLink size={15} />,
+                run: () => void desktop().browser.openExternal(),
+              },
+            ]
+          : [],
+      [pageOpen, url, title, favorite],
+    ),
+  );
   // A blank tab reads them when it is shown; what changes them below reads them again.
   useEffect(() => {
     if (blank) readPlaces();

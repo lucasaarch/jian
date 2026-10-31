@@ -16,7 +16,10 @@ function parse(file) {
   const front = /^---\n([\s\S]*?)\n---\n/.exec(note);
   const date = /^date: (\d{4}-\d{2}-\d{2})$/m.exec(front?.[1] ?? '')?.[1];
   const summary = /^summary: (.+)$/m.exec(front?.[1] ?? '')?.[1];
-  const body = front ? note.slice(front[0].length).trim() : '';
+  // The panel reads a note's pictures from its gateway; here they need their full address.
+  const body = front
+    ? note.slice(front[0].length).trim().replaceAll('](media/', '](docs/releases/media/')
+    : '';
   if (!date || !body) throw new Error(`Invalid release note: ${file}`);
 
   return { version: file.slice(0, -3), date, summary, body, key: match.slice(1) };

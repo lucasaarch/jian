@@ -10,7 +10,6 @@ export {
   isMac,
   useCommands,
 } from './app/commands/registry';
-export { CreateAgent } from './app/create-agent';
 export type { GatewayActions, GatewayInfo } from './app/gateway-connection';
 export { ReloadCurtain, reloadApp } from './app/reload';
 export type { ThisComputer } from './app/settings/machines-page';

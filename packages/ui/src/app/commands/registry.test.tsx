@@ -56,7 +56,7 @@ it('opens with Ctrl+Shift+P and runs a command from its keys', async () => {
   expect(app.ran).toEqual(['new']);
 
   await app.press('P', true);
-  expect(app.listed()).toEqual(['New chatCtrl+N', 'Command paletteCtrl+Shift+P']);
+  expect(app.listed()).toEqual(['New chatCtrl+N']);
 });
 
 it('leaves the browser the keys it keeps, and still lists their commands', async () => {
@@ -65,7 +65,7 @@ it('leaves the browser the keys it keeps, and still lists their commands', async
   expect(web.ran).toEqual([]);
 
   await web.press('P', true);
-  expect(web.listed()).toEqual(['New chat', 'Command paletteCtrl+Shift+P']);
+  expect(web.listed()).toEqual(['New chat']);
 });
 
 const button = (name: string) => {
@@ -136,8 +136,9 @@ it('ignores corrupt saved data and does not advertise a reserved browser overrid
   expect(button('Shortcut for New chat').textContent).toBe('Unassigned');
   await app.press('t');
   expect(app.ran).toEqual([]);
+  // The palette's own saved key was corrupt, so it still opens on its default.
   await app.press('p', true);
-  expect(app.listed()).toContain('Command paletteCtrl+Shift+P');
+  expect(app.listed()).toContain('New chat');
 });
 
 it('records shifted punctuation using the same physical key when executing', async () => {
@@ -168,4 +169,41 @@ it('records shifted punctuation using the same physical key when executing', asy
     );
   });
   expect(app.ran).toEqual(['new']);
+});
+
+it('lists commands by their group, whichever part of the app offered them', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const run = () => {};
+  const Offers = ({ source, commands }: { source: string; commands: AppCommand[] }) => {
+    useCommands(source, commands);
+    return null;
+  };
+  const late: AppCommand[] = [{ id: 'updates', group: 'App', title: 'Check for updates', run }];
+  const early: AppCommand[] = [
+    { id: 'theme', group: 'View', title: 'Switch theme', run },
+    { id: 'new', group: 'Chats', title: 'New chat', run },
+  ];
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  await act(async () =>
+    root.render(
+      <CommandsProvider>
+        <Offers source="window" commands={late} />
+        <Offers source="agent" commands={early} />
+      </CommandsProvider>,
+    ),
+  );
+  await act(async () => {
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, cancelable: true }),
+    );
+  });
+
+  expect(
+    [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent),
+  ).toEqual(['New chat', 'Switch theme', 'Check for updates']);
+
+  await act(async () => root.unmount());
+  element.remove();
 });

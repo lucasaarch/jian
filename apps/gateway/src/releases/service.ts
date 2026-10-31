@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { ReleaseNote, Releases } from '@jian/contracts';
+import type { ReleaseMedia, ReleaseNote, Releases } from '@jian/contracts';
 import { eq, sql } from 'drizzle-orm';
+import { GatewayError } from '../core/errors.js';
 import type { Store } from '../storage/database.js';
 import { releaseReads } from '../storage/schema.js';
 
@@ -19,6 +20,19 @@ const LOCATIONS = [
   new URL('../release-notes/', import.meta.url),
   new URL('../../../../docs/releases/', import.meta.url),
 ];
+
+/**
+ * A picture's name, one level under the notes: nothing else can be asked for, so a request never
+ * reaches another folder, whatever it spells.
+ */
+const MEDIA_FILE = /^[a-z0-9][a-z0-9._-]*\.(png|jpe?g|webp|gif)$/i;
+const MEDIA_TYPES: Record<string, ReleaseMedia['mimeType']> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+};
 
 /** Semantic order; a candidate sorts below the release it leads to. */
 export function compareVersions(a: string, b: string): number {
@@ -113,12 +127,33 @@ export class ReleaseNotes {
     version: string | undefined,
     private readonly notes: ReleaseNote[] = readNotes(),
     private readonly fetcher?: typeof fetch,
+    private readonly directory: URL | undefined = LOCATIONS.find((item) =>
+      existsSync(fileURLToPath(item)),
+    ),
   ) {
     const stamped = version?.replace(/^v/, '');
 
     // A build with no version, or a placeholder one, is a developer's: nothing to announce.
     this.version =
       stamped && VERSION.test(stamped) && stamped !== '0.0.0-dev' ? stamped : undefined;
+  }
+
+  /** A picture a note shows, kept beside the notes in their `media` folder. */
+  media(file: string): ReleaseMedia {
+    const type = MEDIA_FILE.exec(file)?.[1]?.toLowerCase();
+    const mimeType = type ? MEDIA_TYPES[type] : undefined;
+
+    if (mimeType && this.directory) {
+      try {
+        const bytes = readFileSync(new URL(`media/${file}`, this.directory));
+
+        return { file, mimeType, bytes: bytes.length, data: bytes.toString('base64') };
+      } catch {
+        // Not there: the same answer as a name that could never be.
+      }
+    }
+
+    throw new GatewayError(404, 'Release picture not found');
   }
 
   async releases(): Promise<Releases> {
@@ -129,7 +164,9 @@ export class ReleaseNotes {
       ? this.notes.filter(
           (note) => compareVersions(note.version, running) <= 0 && (candidate || !note.prerelease),
         )
-      : [];
+      : // A build with no version does not know what it ran: the newest release is still worth
+        // reading, though nothing announces it.
+        this.notes.filter((note) => !note.prerelease).slice(0, 1);
     const seen = await this.seen();
 
     const updates = running ? await this.updates(running, candidate) : [];

@@ -1,7 +1,8 @@
+import { Server } from 'lucide-react';
 import type { ModelCatalog, ModelSelection, Provider } from '../../lib/api';
 import type { Role } from '../providers/catalog';
 import { choiceOf, modelChoices } from '../providers/role-choices';
-import { ProviderLogo } from '../ui';
+import { hasLogo, ProviderLogo } from '../ui';
 import type { ModelEntry } from './model-menu';
 
 /**
@@ -34,7 +35,15 @@ export function modelEntries(
         modelId,
         name: choice.label,
         provider: provider ? (provider.name ?? provider.kind) : '',
-        ...(provider ? { icon: <ProviderLogo kind={provider.kind} size={16} /> } : {}),
+        ...(provider
+          ? {
+              icon: hasLogo(provider.kind) ? (
+                <ProviderLogo kind={provider.kind} size={16} />
+              ) : (
+                <Server size={15} strokeWidth={1.6} className="text-muted" aria-hidden="true" />
+              ),
+            }
+          : {}),
         efforts: offered?.reasoningEfforts ?? [],
         fast: Boolean(offered?.fast),
       };
