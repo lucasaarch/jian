@@ -293,6 +293,7 @@ export const sessions = pgTable(
       .notNull()
       .references(() => profiles.id, { onDelete: 'cascade' }),
     title: text('title'),
+    pinned: boolean('pinned').notNull().default(false),
     channel: text('channel').notNull(),
     projectId: uuid('project_id'),
     // A deleted machine stays as the session target so work never silently falls back to local.

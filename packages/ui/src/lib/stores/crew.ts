@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { Subagent } from '../api';
 
-/** A pull request or an issue on GitHub, as a link names it. */
 export type GitHubItem = {
   kind: 'pull' | 'issue';
   owner: string;
@@ -9,48 +8,117 @@ export type GitHubItem = {
   number: number;
   url: string;
 };
-
-/**
- * The agents the open conversation handed work to, and what the drawer beside it follows: one
- * of those agents or a GitHub item the conversation links to. The history writes the list each
- * time it reads the conversation; the drawer, which sits outside the history, reads it here.
- */
+export type InspectorTab =
+  | { key: string; kind: 'agent'; runId: string }
+  | { key: string; kind: 'github'; item: GitHubItem }
+  | { key: 'browser'; kind: 'browser' };
 type Crew = {
   sessionId?: string;
   agents: Subagent[];
-  /**
-   * What the drawer follows: an agent's run id, or a GitHub item's `github:` key. One value for
-   * both, so whatever watches the drawer open and close watches one field.
-   */
   following?: string;
-  /** The GitHub item followed, when `following` is one. */
   item?: GitHubItem;
-  /** What opened the drawer, so focus can go back to it. */
   opener?: HTMLElement | null;
+  tabs: InspectorTab[];
+  /** The host's way to open its browser; absent where there is none. */
+  openBrowser?: () => void;
   show: (sessionId: string, agents: Subagent[]) => void;
   follow: (runId: string, opener?: HTMLElement | null) => void;
   open: (item: GitHubItem, opener?: HTMLElement | null) => void;
+  browser: () => void;
+  keepBrowser: () => void;
+  select: (key: string) => void;
+  remove: (key: string) => void;
   close: () => void;
-  /** The conversation closed: its agents go with it. */
   leave: (sessionId: string) => void;
 };
-
 export const itemKey = (item: Pick<GitHubItem, 'owner' | 'repo' | 'number'>) =>
   `github:${item.owner}/${item.repo}#${item.number}`.toLowerCase();
+const selected = (tab?: InspectorTab) => ({
+  following: tab?.key,
+  item: tab?.kind === 'github' ? tab.item : undefined,
+});
 
+/**
+ * What each conversation had open, for when the owner comes back. Only these few words per
+ * conversation: nothing of an Inspector is drawn or loaded while its conversation is not open.
+ */
+type Kept = Pick<Crew, 'tabs' | 'following' | 'item'>;
+const kept = new Map<string, Kept>();
+const KEPT_CONVERSATIONS = 50;
+const keep = (sessionId: string | undefined, state: Kept) => {
+  if (!sessionId) return;
+  kept.delete(sessionId);
+  if (state.tabs.length)
+    kept.set(sessionId, { tabs: state.tabs, following: state.following, item: state.item });
+  for (const oldest of kept.keys()) {
+    if (kept.size <= KEPT_CONVERSATIONS) break;
+    kept.delete(oldest);
+  }
+};
+const EMPTY: Kept = { tabs: [], following: undefined, item: undefined };
+const restored = (sessionId: string): Kept => kept.get(sessionId) ?? EMPTY;
 export const useCrew = create<Crew>()((set, get) => ({
   agents: [],
-  show: (sessionId, agents) =>
-    set(
-      get().sessionId === sessionId
-        ? { agents }
-        : { sessionId, agents, following: undefined, item: undefined },
+  tabs: [],
+  show: (sessionId, agents) => {
+    const state = get();
+    if (state.sessionId === sessionId) {
+      set({ agents });
+      return;
+    }
+    keep(state.sessionId, state);
+    set({ sessionId, agents, opener: undefined, ...restored(sessionId) });
+  },
+  follow: (runId, opener) =>
+    set((state) => ({
+      following: runId,
+      item: undefined,
+      opener,
+      tabs: state.tabs.some((tab) => tab.key === runId)
+        ? state.tabs
+        : [...state.tabs, { key: runId, kind: 'agent', runId }],
+    })),
+  open: (item, opener) =>
+    set((state) => ({
+      following: itemKey(item),
+      item,
+      opener,
+      tabs: state.tabs.some((tab) => tab.key === itemKey(item))
+        ? state.tabs
+        : [...state.tabs, { key: itemKey(item), kind: 'github', item }],
+    })),
+  browser: () =>
+    set((state) => ({
+      following: 'browser',
+      item: undefined,
+      tabs: state.tabs.some((tab) => tab.key === 'browser')
+        ? state.tabs
+        : [...state.tabs, { key: 'browser', kind: 'browser' }],
+    })),
+  keepBrowser: () =>
+    set((state) =>
+      state.tabs.some((tab) => tab.key === 'browser')
+        ? state
+        : { tabs: [...state.tabs, { key: 'browser', kind: 'browser' }] },
     ),
-  follow: (following, opener) => set({ following, item: undefined, opener }),
-  open: (item, opener) => set({ following: itemKey(item), item, opener }),
+  select: (key) => {
+    const tab = get().tabs.find((tab) => tab.key === key);
+    if (tab) set(selected(tab));
+  },
+  remove: (key) =>
+    set((state) => {
+      const index = state.tabs.findIndex((tab) => tab.key === key);
+      const tabs = state.tabs.filter((tab) => tab.key !== key);
+      return {
+        tabs,
+        ...(state.following === key ? selected(tabs[Math.min(index, tabs.length - 1)]) : {}),
+      };
+    }),
   close: () => set({ following: undefined, item: undefined }),
   leave: (sessionId) => {
-    if (get().sessionId === sessionId)
-      set({ sessionId: undefined, agents: [], following: undefined, item: undefined });
+    const state = get();
+    if (state.sessionId !== sessionId) return;
+    keep(sessionId, state);
+    set({ sessionId: undefined, agents: [], opener: undefined, ...EMPTY });
   },
 }));

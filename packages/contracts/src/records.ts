@@ -30,6 +30,7 @@ export const sessionRecordSchema = sessionSchema.extend({
   title: z.string().max(160).nullable(),
   id: uuid,
   profileId: uuid,
+  pinned: z.boolean().optional(),
   projectId: uuid.optional(),
   remoteMachineId: uuid.optional(),
   // Only on the session a pair of agents shares: the profile on the other side of it. The

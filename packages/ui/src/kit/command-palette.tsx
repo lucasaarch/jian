@@ -2,7 +2,15 @@
 
 import { Dialog } from '@base-ui/react/dialog';
 import { Search } from 'lucide-react';
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useMemo, useState } from 'react';
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { bareInput } from './text-field';
 
 export type Command = {
@@ -57,6 +65,7 @@ export function CommandPalette({
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const list = useId();
+  const viewport = useRef<HTMLDivElement>(null);
   const shown = useMemo(
     () => commands.filter((command) => matches(command, query)),
     [commands, query],
@@ -86,6 +95,12 @@ export function CommandPalette({
     }
   };
 
+  useEffect(() => {
+    if (!open || !shown[active]) return;
+    const option = document.getElementById(`${list}-${shown[active].id}`);
+    if (option && viewport.current?.contains(option)) option.scrollIntoView({ block: 'nearest' });
+  }, [open, active, shown, list]);
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -112,6 +127,7 @@ export function CommandPalette({
             />
           </div>
           <div
+            ref={viewport}
             id={list}
             role="listbox"
             aria-label={labels.title}

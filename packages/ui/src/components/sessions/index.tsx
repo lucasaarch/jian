@@ -15,7 +15,6 @@ import {
   useProviderModels,
   useSessions,
 } from '../../lib/query/agent';
-import { useCrew } from '../../lib/stores/crew';
 import { draftKey } from '../../lib/stores/drafts';
 import { sendNow } from '../../lib/stores/outbox';
 import { useRefresh } from '../../lib/workspace';
@@ -30,6 +29,7 @@ import { ConversationDock } from './dock';
 import { DraftPane } from './draft-pane';
 import { GitHubDrawer, GitHubLinks } from './github';
 import { History } from './history';
+import { InspectorLayout } from './inspector-host';
 import { SessionListeners } from './listeners';
 import { SessionModel } from './model-picker';
 import { SessionObjective } from './objective';
@@ -82,7 +82,6 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       ),
     [selected, profile.id],
   );
-  const following = useCrew((state) => state.following);
   const providerModels = useProviderModels();
   // Agents' models by the name their provider gives, the id read as a name when it gives none.
   const modelName = ({ providerId, modelId }: { providerId: string; modelId: string }) =>
@@ -172,134 +171,136 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
         <ModelNames.Provider value={modelName}>
           <GitHubLinks api={api}>
             {/* The Inspector beside the conversation runs from the top of the pane. */}
-            <div className="conversation-main" data-following={following ? true : undefined}>
-              <div className="conversation-column">
-                {/* A conversation without a bar at the bottom keeps its badges in the corner. */}
-                {!docked(active) && <div className="pane-badges">{badges('bottom')}</div>}
-                <div className="conversation-chat">
-                  <History
-                    key={active.id}
-                    agent={profile}
-                    agents={profiles}
-                    api={api}
-                    profileId={profile.id}
-                    sessionId={active.id}
-                    revision={sent}
-                    group={active.scope === 'group' || contact?.scope === 'group'}
-                    chat={isMessaging(active) ? chatName(active) : undefined}
-                    empty={
-                      isGateway(active)
-                        ? `Write to ${profile.name} below.`
-                        : 'Messages arriving through the channel show up here.'
-                    }
-                    initialRun={activities
-                      .filter((run) => run.sessionId === active.id)
-                      .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
-                      .at(-1)}
-                    // A failed turn is retried where the panel answers the conversation itself.
-                    retryRun={
-                      isGateway(active) ? (run) => api.retryRun(profile.id, run.id) : undefined
-                    }
-                    onAnswered={answered}
-                    onReply={isGateway(active) ? setReplyTo : undefined}
-                  />
-                  {docked(active) && (
-                    <ConversationDock key={`dock-${active.id}`}>
-                      {isGateway(active) ? (
-                        <Composer
-                          key={`composer-${active.id}`}
-                          draftKey={draftKey(profile.id, active.id)}
-                          name={profile.name}
-                          replyTo={replyTo}
-                          onCancelReply={() => setReplyTo(undefined)}
-                          modelControl={
-                            <>
-                              <ContextRing
-                                key={`composer-context-${active.id}`}
-                                profileId={profile.id}
-                                sessionId={active.id}
-                                compact={async () => {
-                                  await api.send(profile.id, active.id, '/compact');
-                                  answered();
-                                }}
-                              />
-                              <SessionProtection
-                                key={`composer-protection-${active.id}`}
-                                api={api}
-                                profileId={profile.id}
-                                session={active}
-                                saved={() => void refresh()}
-                              />
-                              <SessionModel
-                                key={`composer-model-${active.id}`}
-                                api={api}
-                                profileId={profile.id}
-                                session={active}
-                                channel={false}
-                                className="composer-model-control"
-                                saved={() => void refresh()}
-                              />
-                            </>
-                          }
-                          status={badges()}
-                          // Writing instead of deciding declines, and the words reach the agent.
-                          placeholder={
-                            waits?.approval
-                              ? 'Write to decline and say why…'
-                              : waits
-                                ? 'Answer to continue…'
-                                : undefined
-                          }
-                          upload={(file) => api.upload(profile.id, active.id, file)}
-                          // Shown in the conversation at once and sent behind it, as a messenger
-                          // does: one that fails stays there to be sent again.
-                          send={async (text, mediaIds, replyToId) =>
-                            sendNow({
-                              sessionId: active.id,
-                              text,
-                              mediaIds,
-                              ...(replyTo
-                                ? { replyTo: { id: replyTo.id, content: replyTo.content } }
-                                : {}),
-                              deliver: (key) =>
-                                api.send(profile.id, active.id, text, mediaIds, key, replyToId),
-                              delivered: answered,
-                            })
-                          }
-                          onSent={answered}
-                        />
-                      ) : (
-                        <AgentToolbar
-                          key={`toolbar-${active.id}`}
-                          api={api}
-                          mutate={mutate}
-                          busy={busy}
-                          profileId={profile.id}
-                          session={active}
-                          messaging={isMessaging(active)}
-                          contact={contact}
-                          channels={channels}
-                          badges={badges()}
-                          saved={() => void refresh()}
-                        />
-                      )}
-                    </ConversationDock>
-                  )}
+            <InspectorLayout>
+              <div className="conversation-main">
+                <div className="conversation-column">
+                  {/* A conversation without a bar at the bottom keeps its badges in the corner. */}
+                  {!docked(active) && <div className="pane-badges">{badges('bottom')}</div>}
+                  <div className="conversation-chat">
+                    <History
+                      key={active.id}
+                      agent={profile}
+                      agents={profiles}
+                      api={api}
+                      profileId={profile.id}
+                      sessionId={active.id}
+                      revision={sent}
+                      group={active.scope === 'group' || contact?.scope === 'group'}
+                      chat={isMessaging(active) ? chatName(active) : undefined}
+                      empty={
+                        isGateway(active)
+                          ? `Write to ${profile.name} below.`
+                          : 'Messages arriving through the channel show up here.'
+                      }
+                      initialRun={activities
+                        .filter((run) => run.sessionId === active.id)
+                        .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
+                        .at(-1)}
+                      // A failed turn is retried where the panel answers the conversation itself.
+                      retryRun={
+                        isGateway(active) ? (run) => api.retryRun(profile.id, run.id) : undefined
+                      }
+                      onAnswered={answered}
+                      onReply={isGateway(active) ? setReplyTo : undefined}
+                    />
+                    {docked(active) && (
+                      <ConversationDock key={`dock-${active.id}`}>
+                        {isGateway(active) ? (
+                          <Composer
+                            key={`composer-${active.id}`}
+                            draftKey={draftKey(profile.id, active.id)}
+                            name={profile.name}
+                            replyTo={replyTo}
+                            onCancelReply={() => setReplyTo(undefined)}
+                            modelControl={
+                              <>
+                                <ContextRing
+                                  key={`composer-context-${active.id}`}
+                                  profileId={profile.id}
+                                  sessionId={active.id}
+                                  compact={async () => {
+                                    await api.send(profile.id, active.id, '/compact');
+                                    answered();
+                                  }}
+                                />
+                                <SessionProtection
+                                  key={`composer-protection-${active.id}`}
+                                  api={api}
+                                  profileId={profile.id}
+                                  session={active}
+                                  saved={() => void refresh()}
+                                />
+                                <SessionModel
+                                  key={`composer-model-${active.id}`}
+                                  api={api}
+                                  profileId={profile.id}
+                                  session={active}
+                                  channel={false}
+                                  className="composer-model-control"
+                                  saved={() => void refresh()}
+                                />
+                              </>
+                            }
+                            status={badges()}
+                            // Writing instead of deciding declines, and the words reach the agent.
+                            placeholder={
+                              waits?.approval
+                                ? 'Write to decline and say why…'
+                                : waits
+                                  ? 'Answer to continue…'
+                                  : undefined
+                            }
+                            upload={(file) => api.upload(profile.id, active.id, file)}
+                            // Shown in the conversation at once and sent behind it, as a messenger
+                            // does: one that fails stays there to be sent again.
+                            send={async (text, mediaIds, replyToId) =>
+                              sendNow({
+                                sessionId: active.id,
+                                text,
+                                mediaIds,
+                                ...(replyTo
+                                  ? { replyTo: { id: replyTo.id, content: replyTo.content } }
+                                  : {}),
+                                deliver: (key) =>
+                                  api.send(profile.id, active.id, text, mediaIds, key, replyToId),
+                                delivered: answered,
+                              })
+                            }
+                            onSent={answered}
+                          />
+                        ) : (
+                          <AgentToolbar
+                            key={`toolbar-${active.id}`}
+                            api={api}
+                            mutate={mutate}
+                            busy={busy}
+                            profileId={profile.id}
+                            session={active}
+                            messaging={isMessaging(active)}
+                            contact={contact}
+                            channels={channels}
+                            badges={badges()}
+                            saved={() => void refresh()}
+                          />
+                        )}
+                      </ConversationDock>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <CrewDrawer api={api} profileId={profile.id} />
-              {/* Any conversation can have its agent settle a pull request's conflicts; merging
+                <CrewDrawer api={api} profileId={profile.id} profile={profile} />
+                {/* Any conversation can have its agent settle a pull request's conflicts; merging
                   belongs to the panel's own chat, as a channel's approvals are left to it. */}
-              <GitHubDrawer
-                api={api}
-                profileId={profile.id}
-                merges={isGateway(active)}
-                fixConflicts={async (pull) => {
-                  await api.fixGithubConflicts(profile.id, active.id, pull);
-                  answered();
-                }}
-              />
-            </div>
+                <GitHubDrawer
+                  api={api}
+                  profileId={profile.id}
+                  merges={isGateway(active)}
+                  fixConflicts={async (pull) => {
+                    await api.fixGithubConflicts(profile.id, active.id, pull);
+                    answered();
+                  }}
+                />
+              </div>
+            </InspectorLayout>
           </GitHubLinks>
         </ModelNames.Provider>
       </section>

@@ -49,6 +49,9 @@ importers:
       '@fontsource/playfair-display':
         specifier: ^5.3.0
         version: 5.3.0
+      '@jian/browser-core':
+        specifier: workspace:*
+        version: link:../../packages/browser-core
       '@jian/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -142,6 +145,9 @@ importers:
       '@fastify/rate-limit':
         specifier: ^11.2.0
         version: 11.2.0
+      '@jian/browser-core':
+        specifier: workspace:*
+        version: link:../../packages/browser-core
       '@jian/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -303,6 +309,12 @@ importers:
       vitest:
         specifier: 5.0.3
         version: 5.0.3(@types/node@26.6.2)(happy-dom@21.0.4)(msw@2.15.0(@types/node@26.6.2)(typescript@5.9.3))(vite@8.3.5(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/browser-core:
+    dependencies:
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
 
   packages/contracts:
     dependencies:

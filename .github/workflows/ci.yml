@@ -101,6 +101,7 @@ jobs:
       - run: pnpm --filter @jian/contracts build
       - run: pnpm exec biome check apps/gateway packages/contracts --error-on-warnings
       - run: pnpm --filter @jian/gateway typecheck
+      - run: pnpm --filter @jian/gateway exec playwright install --with-deps chromium
       - run: pnpm --filter @jian/gateway test --shard=${{ matrix.shard }}
       - if: matrix.shard == '1/2'
         run: pnpm --filter @jian/gateway build

@@ -6,6 +6,7 @@ export { DateTimeField, TimeField } from './date-time-field';
 export { AgentFace } from './face';
 export { Fold, FoldChevron } from './fold';
 export { HoverTip, InfoTip } from './info-tip';
+export { MenuDivider, MenuEntry, menuPopup } from './menu';
 export { Overlay } from './overlay';
 export { Picker, PickerAction, PickerRow } from './picker';
 export { Progress } from './progress';

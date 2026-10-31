@@ -3,6 +3,7 @@
 import {
   Cable,
   Cpu,
+  Keyboard,
   KeyRound,
   Monitor,
   MoonStar,
@@ -21,6 +22,12 @@ import { type AppCommand, useCommands } from './registry';
 
 /** The settings pages a command opens straight to; a gateway without one shows General. */
 const pages: { id: string; title: string; keywords: string[]; icon: ReactNode }[] = [
+  {
+    id: 'keymaps',
+    title: 'Keymaps',
+    keywords: ['keyboard', 'shortcut', 'binding'],
+    icon: <Keyboard size={15} />,
+  },
   {
     id: 'appearance',
     title: 'Appearance',
@@ -82,6 +89,7 @@ export function useAppCommands(openSettings: (page?: string) => void): void {
         detail: 'Settings',
         keywords: ['settings', ...page.keywords],
         icon: page.icon,
+        ...(page.id === 'keymaps' ? { keys: { key: ',', shift: true } } : {}),
         run: () => openSettings(page.id),
       })),
       {
@@ -94,6 +102,7 @@ export function useAppCommands(openSettings: (page?: string) => void): void {
       },
       {
         id: 'theme',
+        keys: { key: 'l', shift: true },
         title: next === 'light' ? 'Switch to light theme' : 'Switch to dark theme',
         keywords: ['appearance', 'theme', 'dark', 'light', 'mode'],
         icon: next === 'light' ? <Sun size={15} /> : <MoonStar size={15} />,

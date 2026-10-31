@@ -1,4 +1,5 @@
-import { SidebarBar, useWelcomeShowing, WindowControls } from '@jian/ui';
+import { SidebarBar, useInspectorShowing, useWelcomeShowing, WindowControls } from '@jian/ui';
+import { Globe } from 'lucide-react';
 import { useEffect, useSyncExternalStore } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
 import { desktop } from '../desktop';
@@ -18,6 +19,7 @@ const idle = () => () => {};
 export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
   const mac = desktop().platform === 'darwin';
   const welcoming = useWelcomeShowing();
+  const inspecting = useInspectorShowing();
   const memory = gateway ? navigationFor(gateway.id) : undefined;
   // Read to follow the navigation, so back and forward come alive as it moves.
   useSyncExternalStore(memory?.subscribe ?? idle, memory?.current ?? (() => ''));
@@ -71,6 +73,17 @@ export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
               : {})}
           />
         </header>
+      )}
+      {!welcoming && !inspecting && (
+        <button
+          type="button"
+          aria-label="Open Jian Browser"
+          title="Open Jian Browser"
+          onClick={() => desktop().browser.open()}
+          className="absolute top-0 right-(--window-controls) z-30 grid h-(--title-bar) w-10 place-items-center text-muted hover:text-ink [-webkit-app-region:no-drag]"
+        >
+          <Globe size={15} />
+        </button>
       )}
       {!mac && (
         <WindowControls

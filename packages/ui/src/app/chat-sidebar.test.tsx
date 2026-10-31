@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it } from 'vitest';
-import type { Project, Session } from '../lib/api';
+import type { Project, Run, Session } from '../lib/api';
 import { useLayout } from '../lib/stores/layout';
 import { memoryNavigation } from '../platform/navigation';
 import { AgentCache } from '../test/agent';
@@ -34,7 +34,7 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-async function render() {
+async function render(activities: Run[] = []) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const host = document.createElement('div');
   document.body.append(host);
@@ -49,7 +49,7 @@ async function render() {
           projects: [project],
           channels: [],
           contacts: [],
-          activities: [],
+          activities,
         }}
       >
         <ChatSidebar profileId={profile.id} />
@@ -98,4 +98,21 @@ it('opens a chat in the address', async () => {
   await act(async () => row?.click());
 
   expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions/s-2`);
+});
+
+it('shows worker activity on the principal conversation instead of its hidden task session', async () => {
+  const view = await render([
+    { id: 'parent', sessionId: 's-1', status: 'completed' },
+    {
+      id: 'child',
+      sessionId: 'private-task',
+      status: 'running',
+      subagent: { parentRunId: 'parent' },
+    },
+  ] as Run[]);
+  const row = [...view.host.querySelectorAll('li')].find((item) =>
+    item.textContent?.includes('Release notes'),
+  );
+  expect(row?.querySelector('[aria-label="Working"]')).not.toBeNull();
+  expect(row?.querySelector('time')).toBeNull();
 });

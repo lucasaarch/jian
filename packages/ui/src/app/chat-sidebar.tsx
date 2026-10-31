@@ -173,10 +173,15 @@ function AgentSidebar({ profileId }: { profileId: string }) {
   const deleteConversation = useDeleteConversation();
   const { sessionId: selected } = useParams<{ sessionId?: string }>();
 
+  const parents = new Map(activities.map((run) => [run.id, run]));
   const working = new Set(
     activities
       .filter((run) => run.status === 'queued' || run.status === 'running')
-      .map((run) => run.sessionId),
+      .map((run) =>
+        run.subagent
+          ? (parents.get(run.subagent.parentRunId)?.sessionId ?? run.sessionId)
+          : run.sessionId,
+      ),
   );
   const open = (id: string) =>
     router.push(agentPath(profileId, `sessions/${encodeURIComponent(id)}`));
@@ -191,6 +196,14 @@ function AgentSidebar({ profileId }: { profileId: string }) {
         profiles,
       })}
       {...(inProject ? {} : { icon: conversationIcon(session) })}
+      pinned={session.pinned}
+      pin={() =>
+        void mutate(() => api.setSessionPin(profileId, session.id, !session.pinned)).then(
+          (saved) => {
+            if (saved) return refresh();
+          },
+        )
+      }
       at={lastAt(session)}
       selected={session.id === selected}
       unread={unread(session)}

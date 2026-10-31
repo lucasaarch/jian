@@ -16,12 +16,14 @@
     "test": "vitest run",
     "icons": "node scripts/generate-icons.mjs",
     "stage:gateway": "node scripts/stage-gateway.mjs",
+    "smoke:browser": "electron-vite build && node scripts/smoke-browser.mjs",
     "start": "node scripts/electron.mjs start"
   },
   "devDependencies": {
     "@fontsource-variable/ibm-plex-sans": "5.3.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/playfair-display": "^5.3.0",
+    "@jian/browser-core": "workspace:*",
     "@jian/contracts": "workspace:*",
     "@jian/remote-core": "workspace:*",
     "@jian/sdk": "workspace:*",

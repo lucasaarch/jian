@@ -50,3 +50,68 @@ it('stops the followed worker without closing its inspector or duplicating the c
     useCrew.getState().leave('parent-session');
   }
 });
+
+it('uses the chat message layout with the profile avatar above the tool activity', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const avatar = 'data:image/png;base64,c3ludGhldGlj';
+  const agent = {
+    runId: 'review',
+    sessionId: 'review-session',
+    name: 'Review task',
+    role: 'review',
+    status: 'completed',
+    createdAt: '2026-10-31T10:00:00Z',
+    updatedAt: '2026-10-31T10:00:03Z',
+  } as Subagent;
+  const api = {
+    messages: async () => [
+      {
+        id: 'reply',
+        runId: 'review',
+        sessionId: 'review-session',
+        profileId: 'profile',
+        role: 'assistant',
+        content: 'The review is complete.',
+        createdAt: agent.updatedAt,
+      },
+    ],
+    timeline: async () => [
+      {
+        runId: 'review',
+        steps: [
+          {
+            toolCallId: 'read',
+            toolName: 'read_file',
+            status: 'done',
+            startedAt: '2026-10-31T10:00:01Z',
+            finishedAt: '2026-10-31T10:00:02Z',
+          },
+        ],
+      },
+    ],
+  } as unknown as GatewayApi;
+  useCrew.setState({ sessionId: 'parent', agents: [agent], following: agent.runId });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(<CrewDrawer api={api} profileId="profile" profile={{ name: 'Mia', avatar }} />),
+    );
+    const message = host.querySelector('.chat-line.theirs');
+    const author = message?.querySelector('.chat-author-row');
+    const activity = message?.querySelector('.thought-line');
+    expect(author?.textContent).toContain('Mia');
+    expect(author?.querySelector('img')?.getAttribute('src')).toBe(avatar);
+    expect(activity).not.toBeNull();
+    expect(
+      (author?.compareDocumentPosition(activity as Node) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(host.querySelectorAll('.thought-line')).toHaveLength(1);
+    expect(message?.querySelector('.chat-text')?.textContent).toBe('The review is complete.');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    useCrew.getState().leave('parent');
+  }
+});

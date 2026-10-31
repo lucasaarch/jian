@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { NO_APPROVER, protectionFor, SUBAGENT_ASKS } from '../src/agent/guard.js';
+import { NO_APPROVER, protectionFor } from '../src/agent/guard.js';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { createApp } from '../src/app.js';
 import { readRunAction } from '../src/runs/repository.js';
@@ -58,6 +58,8 @@ function writer(file: string, seen: string[]) {
         seen.push(prompt);
         return stop('Done.');
       }
+      if (prompt.includes('"write-1"')) return stop('Done.');
+      if (prompt.includes('You are the guardrail')) return stop('ALLOW');
       if (!prompt.includes('"load_tools"'))
         return call('load', 'load_tools', { groups: ['files'] });
       return call('write-1', 'write_file', { path: file, content: 'hello' });
@@ -254,7 +256,7 @@ describe('a chat channel nobody may approve from', () => {
 });
 
 describe('a subagent', () => {
-  async function child(protection: 'ask' | 'full') {
+  async function child(protection: 'ask' | 'auto' | 'full') {
     const { services, profile, session, file, runtime, ask } = await setup();
     await services.sessions.setProtection(profile.id, session.id, { protection });
     const parent = await ask('Have someone write the notes');
@@ -263,20 +265,26 @@ describe('a subagent', () => {
       { role: 'execute', name: 'Scribe', identity: 'Write files.', brief: 'Write the notes.' },
       `spawn-${protection}`,
     );
+    expect((await services.sessions.session(profile.id, sent.sessionId)).protection).toBe('auto');
     await runtime.execute(profile.id, sent.runId);
 
-    return { file, run: await services.runs.run(profile.id, sent.runId) };
+    return {
+      file,
+      run: await services.runs.run(profile.id, sent.runId),
+      session: await services.sessions.session(profile.id, session.id),
+    };
   }
 
-  it('acts under the conversation that sent it, and never when that one asks', async () => {
-    const asking = await child('ask');
-    expect(asking.run.status).not.toBe('waiting');
-    expect(asking.run.approval).toBeUndefined();
-    expect(existsSync(asking.file)).toBe(false);
-
-    const trusted = await child('full');
-    expect(readFileSync(trusted.file, 'utf8')).toBe('hello');
-  });
+  it.each(['ask', 'auto', 'full'] as const)(
+    'runs on Auto independently of the principal mode (%s)',
+    async (mode) => {
+      const result = await child(mode);
+      expect(result.run.status).toBe('completed');
+      expect(result.run.approval).toBeUndefined();
+      expect(readFileSync(result.file, 'utf8')).toBe('hello');
+      expect(result.session.protection).toBe(mode);
+    },
+  );
 });
 
 describe('who decides an action', () => {
@@ -299,14 +307,15 @@ describe('who decides an action', () => {
     });
   });
 
-  it('never lets a subagent act in a conversation that asks, and lets everything run in full', () => {
-    expect(protectionFor({ ...base, subagent: true })).toEqual({
-      mode: 'decline',
-      reason: SUBAGENT_ASKS,
-    });
-    expect(protectionFor({ ...base, mode: 'full', subagent: true })).toEqual({ mode: 'run' });
-    expect(protectionFor({ ...base, mode: 'full', channel: 'telegram' })).toEqual({ mode: 'run' });
-  });
+  it.each(['ask', 'auto', 'full'] as const)(
+    'keeps the Auto guardrail for every subagent (%s)',
+    (mode) => {
+      expect(protectionFor({ ...base, mode, subagent: true })).toEqual({ mode: 'guard' });
+      expect(protectionFor({ ...base, mode: 'full', channel: 'telegram' })).toEqual({
+        mode: 'run',
+      });
+    },
+  );
 });
 
 describe('the approval and protection routes', () => {

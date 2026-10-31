@@ -29,6 +29,7 @@ function toSession(row: SessionRow): Session {
     id: row.id,
     profileId: row.profileId,
     title: row.title,
+    pinned: row.pinned,
     channel: row.channel,
     ...(row.projectId ? { projectId: row.projectId } : {}),
     ...(row.remoteMachineId ? { remoteMachineId: row.remoteMachineId } : {}),
@@ -448,6 +449,20 @@ export async function renameSession(
     .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)))
     .returning();
 
+  return row ? toSession(row) : null;
+}
+
+export async function setSessionPin(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  pinned: boolean,
+): Promise<Session | null> {
+  const [row] = await db
+    .update(sessions)
+    .set({ pinned })
+    .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)))
+    .returning();
   return row ? toSession(row) : null;
 }
 

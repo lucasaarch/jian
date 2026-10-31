@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { conversationSubagentInputSchema, type Run } from '@jian/contracts';
+import {
+  conversationSubagentInputSchema,
+  type InspectorFocusInput,
+  type Run,
+} from '@jian/contracts';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { findChannel, findContactBySession } from '../channels/repository.js';
 import type { Clock } from '../core/clock.js';
@@ -220,6 +224,28 @@ export class Work {
     if (parent.sessionId !== principal.sessionId)
       throw new GatewayError(403, 'The subagent belongs to another conversation');
     return this.execution(await this.runs.cancel(principal.profileId, child.id));
+  }
+
+  /** Asks the panel showing this conversation to focus a tab; nothing else depends on it. */
+  async focusInspector(principal: Run, input: InspectorFocusInput) {
+    if (principal.subagent) throw new GatewayError(403, 'Only the principal agent has a panel');
+    if (input.kind === 'subagent') {
+      if (!input.runId) throw new GatewayError(400, 'A subagent is named by its runId');
+      const child = await this.runs.run(principal.profileId, input.runId);
+      if (!child.subagent) throw new GatewayError(403, 'The run is not a conversation subagent');
+      const parent = await this.runs.run(principal.profileId, child.subagent.parentRunId);
+      if (parent.sessionId !== principal.sessionId)
+        throw new GatewayError(403, 'The subagent belongs to another conversation');
+    }
+    await this.store.db.transaction((tx) =>
+      recordEvent(tx, this.clock, principal.profileId, 'conversation.inspector.focus', {
+        sessionId: principal.sessionId,
+        kind: input.kind,
+        ...(input.url ? { url: input.url } : {}),
+        ...(input.runId ? { runId: input.runId } : {}),
+      }),
+    );
+    return { sent: true };
   }
 
   async spawnInConversation(parent: Run, input: unknown, spawnKey: string) {

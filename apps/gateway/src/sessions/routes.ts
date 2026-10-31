@@ -16,6 +16,7 @@ type SessionRouteServices = {
       | 'createGatewaySession'
       | 'deleteSession'
       | 'renameSession'
+      | 'setPin'
       | 'setModel'
       | 'setProtection'
       | 'setGatewayTarget'
@@ -46,6 +47,12 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
       reply
         .code(201)
         .send(await deps.sessions.createGatewaySession(request.params.profileId, request.body)),
+  );
+
+  app.put<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/pin',
+    async (request) =>
+      deps.sessions.setPin(request.params.profileId, request.params.sessionId, request.body),
   );
 
   app.patch<{ Params: SessionParams }>(

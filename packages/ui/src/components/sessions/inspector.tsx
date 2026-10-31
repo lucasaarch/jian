@@ -3,6 +3,7 @@
 import { X } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
 import { useCrew } from '../../lib/stores/crew';
+import { useInspectorHosted } from './inspector-host';
 
 /** A button of the Inspector's top line: its options, its close. */
 export const barButton =
@@ -23,16 +24,25 @@ export function InspectorBar({
   closer: RefObject<HTMLButtonElement | null>;
 }) {
   const close = useCrew((state) => state.close);
+  const hosted = useInspectorHosted();
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2 pr-[calc(var(--window-controls,0px)+0.75rem)] pl-5 text-muted">
+    <div className="flex h-10 shrink-0 items-center gap-2 pr-[calc(var(--window-controls,0px)+0.375rem)] pl-5 text-muted">
       {children}
       <span className="flex-1" />
       <span className="flex items-center gap-0.5">
         {options}
-        <button ref={closer} type="button" aria-label="Close" className={barButton} onClick={close}>
-          <X size={16} aria-hidden="true" />
-        </button>
+        {!hosted && (
+          <button
+            ref={closer}
+            type="button"
+            aria-label="Close"
+            className={barButton}
+            onClick={close}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        )}
       </span>
     </div>
   );

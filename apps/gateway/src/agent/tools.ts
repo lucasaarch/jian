@@ -2,6 +2,7 @@ import {
   agentCallSchema,
   conversationSubagentInputSchema,
   decisionUseSchema,
+  inspectorFocusInputSchema,
   MAX_OBJECTIVE_TEXT,
   type McpServer,
   memoryKeySchema,
@@ -99,7 +100,7 @@ export type ToolServices = {
   subscriptions?: Pick<Subscriptions, 'list' | 'create' | 'update' | 'remove'>;
   settings?: { timeZone(): Promise<string> };
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
-  work?: Pick<Work, 'spawnInConversation' | 'cancelInConversation'>;
+  work?: Pick<Work, 'spawnInConversation' | 'cancelInConversation' | 'focusInspector'>;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove' | 'sync'>;
   remote?: Pick<Remote, 'list' | 'execute' | 'executeComputer' | 'update'>;
 };
@@ -312,6 +313,12 @@ export function profileTools(
               'Stop a subagent in this conversation when its work is unnecessary or the owner asks. Use the runId returned by spawn_subagent. Completed work is retained; already finished runs stay finished.',
             inputSchema: z.strictObject({ runId: z.uuid() }),
             execute: async ({ runId }) => services.work?.cancelInConversation(run, runId),
+          }),
+          open_in_inspector: tool({
+            description:
+              "Bring something to the owner's Inspector, the panel beside this conversation, and focus its tab: a GitHub pull request or issue, one of this conversation's subagents, or the browser (desktop app only). Do it when they ask, or when watching it would help them, as when you start a subagent they care about or open a pull request for them to review. It shows nothing if they are looking at another conversation.",
+            inputSchema: inspectorFocusInputSchema,
+            execute: async (input) => services.work?.focusInspector(run, input),
           }),
           spawn_subagent: tool({
             description:
@@ -789,8 +796,9 @@ export const TOOL_GROUPS = {
     ],
   },
   web: {
-    summary: 'search the web and read public pages',
-    tools: ['web_search', 'fetch_url'],
+    summary:
+      'search the web, read pages, inspect website designs and interactions with screenshots, DOM, styles and assets, and use the desktop browser the owner watches',
+    tools: ['web_search', 'fetch_url', 'inspect_page', 'browser_control'],
   },
   conversations: {
     summary:
@@ -805,10 +813,11 @@ export const TOOL_GROUPS = {
   },
   tasks: {
     summary:
-      'delegate subagents, inspect checkpoints and output, manage resource leases, or compact context',
+      "delegate subagents, show a subagent, pull request or issue in the owner's Inspector, inspect checkpoints and output, manage resource leases, or compact context",
     tools: [
       'spawn_subagent',
       'cancel_subagent',
+      'open_in_inspector',
       'read_run_checkpoints',
       'read_artifact',
       'acquire_resource',
@@ -834,6 +843,15 @@ const deferred = new Map<string, ToolGroup>(
     entry.tools.map((name) => [name, group as ToolGroup] as const),
   ),
 );
+
+/**
+ * A tool's group mates this run has. Loaded tools last one run, and the turn that carries on after
+ * an approval is a new one: without this, the group it was working from would go out of reach.
+ */
+export function groupMates(name: string, tools: ToolSet): string[] {
+  const group = deferred.get(name);
+  return group ? TOOL_GROUPS[group].tools.filter((mate) => mate in tools) : [];
+}
 
 /** The groups this run can actually offer: a group whose tools are all absent is not one. */
 function offeredGroups(tools: ToolSet): ToolGroup[] {

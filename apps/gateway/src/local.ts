@@ -6,6 +6,7 @@ import { LocalExecutor } from './runs/executors.js';
 import { SecretBox } from './security/crypto.js';
 import { startupFailure } from './startup.js';
 import { PGliteStore } from './storage/pglite.js';
+import { nativeBrowser } from './web/native.js';
 
 /**
  * The gateway a desktop app runs for its owner, on their own computer: its database is a
@@ -14,7 +15,10 @@ import { PGliteStore } from './storage/pglite.js';
  * configuration and reads one line on stdout, `{"listening":"http://127.0.0.1:<port>"}`.
  */
 /** The channel to the Electron app that started this process; absent anywhere else. */
-type ParentPort = { on(event: 'message', listener: (message: { data: unknown }) => void): void };
+type ParentPort = {
+  postMessage(message: unknown): void;
+  on(event: 'message', listener: (message: { data: unknown }) => void): void;
+};
 
 const config = z
   .object({
@@ -47,7 +51,9 @@ await mkdir(join(dir, 'database'), { recursive: true });
 // The agents' workspaces stay with the rest of the app's data, not in the owner's home.
 process.env.JIAN_WORKSPACES ||= join(dir, 'workspaces');
 
+const parentPort = (process as { parentPort?: ParentPort }).parentPort;
 const gateway = await createGateway({
+  ...(parentPort ? { nativeBrowser: nativeBrowser(parentPort) } : {}),
   store: await PGliteStore.open(join(dir, 'database')),
   box: new SecretBox({
     activeKeyId: 'local',
@@ -74,7 +80,6 @@ process.once('SIGINT', stop);
 process.once('SIGTERM', stop);
 // Run by the desktop app as an Electron utility process, it is asked to stop by a message:
 // Windows has no SIGTERM, and a hard kill could cut the database mid-write.
-const parentPort = (process as { parentPort?: ParentPort }).parentPort;
 parentPort?.on('message', ({ data }) => {
   if ((data as { stop?: unknown } | null)?.stop === true) stop();
 });

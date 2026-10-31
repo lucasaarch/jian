@@ -58,6 +58,8 @@ export type GatewayOptions = {
   /** Whether agents and providers may reach services on this computer itself. */
   allowLoopback?: boolean;
   trustedProxies: string[];
+  /** The desktop app's own browser; absent on a server. */
+  nativeBrowser?: import('./web/native.js').NativeBrowser;
   publicUrl?: string;
   timeZone?: string;
 };
@@ -106,6 +108,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
       catalog,
       fetcher: outbound.fetch,
       github,
+      nativeBrowser: options.nativeBrowser,
       ...(options.publicUrl ? { publicUrl: options.publicUrl } : {}),
       ...(options.timeZone ? { timeZone: options.timeZone } : {}),
     }),

@@ -14,6 +14,7 @@ import {
 import { useRecorder } from '../../lib/recorder';
 import { useDrafts } from '../../lib/stores/drafts';
 import { AudioPlayer } from '../ui';
+import { listBreak } from './list-break';
 import { size } from './media';
 import { VoicePill } from './voice-pill';
 
@@ -358,6 +359,23 @@ export function Composer({
               }
             }}
             onKeyDown={(event) => {
+              if (
+                event.key === 'Enter' &&
+                event.shiftKey &&
+                !event.nativeEvent.isComposing &&
+                !event.ctrlKey &&
+                !event.metaKey &&
+                !event.altKey
+              ) {
+                const field = event.currentTarget;
+                const next = listBreak(text, field.selectionStart, field.selectionEnd);
+                if (next && next.text.length <= field.maxLength) {
+                  event.preventDefault();
+                  write(next.text);
+                  requestAnimationFrame(() => field.setSelectionRange(next.caret, next.caret));
+                }
+                return;
+              }
               // A touch keyboard has no Shift to hold, so there Return breaks the line and the
               // button sends.
               if (

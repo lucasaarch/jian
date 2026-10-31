@@ -7,6 +7,7 @@ import { profileTools } from '../src/agent/tools.js';
 import { createApp } from '../src/app.js';
 import { findMedia } from '../src/media/repository.js';
 import { listUnreportedSubagents } from '../src/runs/repository.js';
+import { events } from '../src/storage/schema.js';
 import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
@@ -245,6 +246,20 @@ it('lets the owner and the principal cancel workers while enforcing conversation
   await expect(services.work.cancelInConversation(parent, other.id)).rejects.toMatchObject({
     statusCode: 403,
   });
+  // The Inspector follows the same scope: nothing of another conversation can be brought into it.
+  const focus = (run: typeof parent, runId: string) =>
+    services.work.focusInspector(run, { kind: 'subagent', runId });
+  await expect(focus(worker, child.runId)).rejects.toMatchObject({ statusCode: 403 });
+  await expect(focus(other, child.runId)).rejects.toMatchObject({ statusCode: 403 });
+  await expect(focus(parent, other.id)).rejects.toMatchObject({ statusCode: 403 });
+  expect(profileTools(services, worker)).not.toHaveProperty('open_in_inspector');
+  await focus(parent, child.runId);
+  const heard = await services.store.db.select().from(events);
+  expect(
+    heard
+      .filter((event) => event.type === 'conversation.inspector.focus')
+      .map((event) => event.data),
+  ).toEqual([{ sessionId: session.id, kind: 'subagent', runId: child.runId }]);
   await expect(
     services.runs.cancel('00000000-0000-4000-8000-000000000099', child.runId),
   ).rejects.toMatchObject({ statusCode: 404 });

@@ -68,6 +68,7 @@ import {
   profileSchema,
   sessionModelSchema,
   sessionObjectiveInputSchema,
+  sessionPinSchema,
   sessionProtectionSchema,
   sessionRenameSchema,
   sessionSchema,
@@ -996,6 +997,14 @@ export const operations: Operation[] = [
     body: sessionSchema,
     response: sessionRecordSchema,
     status: 201,
+  },
+  {
+    method: 'PUT',
+    path: `${session}/pin`,
+    operationId: 'setSessionPin',
+    access: 'admin',
+    body: sessionPinSchema,
+    response: sessionRecordSchema,
   },
   {
     method: 'PATCH',

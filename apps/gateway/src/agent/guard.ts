@@ -51,26 +51,22 @@ export type Protection =
 export const NO_APPROVER =
   'Not run: this conversation asks before acting, and nobody in it may approve. This is a protection setting, not a missing key or permission: say what you would do, and that the owner can let it act by setting this conversation to Auto, or by allowing this contact to approve in Jian.';
 
-export const SUBAGENT_ASKS =
-  'Not run: this conversation asks before acting, and only the agent that sent you can ask. Report what you would do, with the exact command, file or message, so it can ask for approval.';
-
 /**
- * The protection of a run. A subagent acts under the conversation that sent it, never its own
- * task session; a chat channel can only ask a contact the owner allowed to approve, and every
- * other conversation is approved by the owner from the panel.
+ * Scoped subagents always use Auto. Principal runs keep their conversation protection; chat
+ * approvals still require a contact the owner allowed to approve.
  */
 export function protectionFor(input: {
-  /** The protection of the conversation the action would happen in, or that sent the subagent. */
+  /** The conversation protection, used only by principal runs. */
   mode: ProtectionMode;
   subagent: boolean;
   channel: string;
   /** Whether the contact of a chat channel conversation may approve; ignored elsewhere. */
   contactCanApprove: boolean;
 }): Protection {
+  if (input.subagent) return { mode: 'guard' };
   if (input.mode === 'full') return { mode: 'run' };
   // Auto waits for nobody, so a subagent and a channel's contact act under it as the chat does.
   if (input.mode === 'auto') return { mode: 'guard' };
-  if (input.subagent) return { mode: 'decline', reason: SUBAGENT_ASKS };
   if (isChatChannel(input.channel) && !input.contactCanApprove) {
     return { mode: 'decline', reason: NO_APPROVER };
   }
@@ -114,6 +110,23 @@ const PLAIN: Record<
   string,
   (input: unknown) => { title: string; detail?: string; confirm: string }
 > = {
+  inspect_page: (input) => ({
+    title: 'Inspect a website in Jian Browser',
+    detail: field(input, 'url'),
+    confirm: 'Inspect',
+  }),
+  browser_control: (input) => ({
+    title: `Jian Browser: ${field(input, 'action')}`,
+    detail: [
+      field(input, 'url'),
+      field(input, 'selector'),
+      field(input, 'text'),
+      field(input, 'key'),
+    ]
+      .filter(Boolean)
+      .join(' · '),
+    confirm: 'Allow',
+  }),
   run_command: (input) => ({
     title: 'Run a command',
     detail: field(input, 'command'),

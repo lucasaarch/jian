@@ -1,4 +1,12 @@
 import { join } from 'node:path';
+import type { InspectionCapture } from '@jian/browser-core';
+import {
+  type BrowserActionResult,
+  nativeBrowserActSchema,
+  nativeBrowserCancelSchema,
+  nativeBrowserRequestSchema,
+  type PageInspectionInput,
+} from '@jian/contracts';
 import { app, Notification, type UtilityProcess, utilityProcess } from 'electron';
 import { stablePort } from './address';
 import type { LocalCredentials } from './credentials';
@@ -24,11 +32,24 @@ export class LocalGateway {
   private timer?: NodeJS.Timeout;
   private readonly log = new LocalLog();
   private logOpen?: Promise<void>;
+  private readonly inspections = new Map<string, AbortController>();
 
   constructor(
     private readonly credentials: LocalCredentials,
     private readonly listener: Listener,
     private readonly failed: Failed = () => {},
+    private readonly browser?: {
+      inspect(
+        scope: { profileId: string; sessionId: string },
+        input: PageInspectionInput,
+        signal: AbortSignal,
+      ): Promise<InspectionCapture>;
+      act(
+        scope: { profileId: string; sessionId: string },
+        input: unknown,
+        signal: AbortSignal,
+      ): Promise<BrowserActionResult<Buffer>>;
+    },
   ) {}
 
   async start(): Promise<void> {
@@ -56,6 +77,50 @@ export class LocalGateway {
       },
     });
     this.child = child;
+    child.on('message', (message: unknown) => {
+      if (!message || typeof message !== 'object') return;
+      const cancel = nativeBrowserCancelSchema.safeParse(message);
+      if (cancel.success) {
+        this.inspections.get(cancel.data.id)?.abort();
+        return;
+      }
+      const inspection = nativeBrowserRequestSchema.safeParse(message);
+      const action = inspection.success ? undefined : nativeBrowserActSchema.safeParse(message);
+      const request = inspection.success ? inspection.data : action?.data;
+      if (!request || !this.browser) return;
+      const scope = { profileId: request.profileId, sessionId: request.sessionId };
+      const controller = new AbortController();
+      this.inspections.set(request.id, controller);
+      const answer = (reply: Record<string, unknown>) => {
+        if (this.child === child)
+          child.postMessage({ type: 'browser:result', id: request.id, ...reply });
+      };
+      const work = inspection.success
+        ? this.browser.inspect(scope, inspection.data.input, controller.signal).then((capture) =>
+            answer({
+              capture: {
+                screenshot: Buffer.from(capture.screenshot).toString('base64'),
+                archive: Buffer.from(capture.archive).toString('base64'),
+                snapshot: capture.snapshot,
+              },
+            }),
+          )
+        : this.browser.act(scope, request.input, controller.signal).then((acted) =>
+            answer({
+              acted: {
+                ...acted,
+                screenshot: acted.screenshot ? acted.screenshot.toString('base64') : null,
+              },
+            }),
+          );
+      void work
+        .catch((error) =>
+          answer({
+            error: error instanceof Error ? error.message : 'Native browser action failed',
+          }),
+        )
+        .finally(() => this.inspections.delete(request.id));
+    });
 
     let buffer = '';
     let listened = false;
@@ -81,6 +146,8 @@ export class LocalGateway {
     child.on('exit', (code) => {
       if (this.child !== child) return;
       this.child = undefined;
+      for (const controller of this.inspections.values()) controller.abort();
+      this.inspections.clear();
       this.listener(undefined);
       if (this.stopping) return;
       if (!listened) this.failed(this.log.reason(code));

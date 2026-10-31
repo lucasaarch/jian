@@ -15,7 +15,13 @@ const TIMEOUT_MS = 2000;
  * it to read like an order.
  */
 export function outsideContent(name: string, mcpToolNames: readonly string[]): boolean {
-  return name === 'fetch_url' || name === 'web_search' || mcpToolNames.includes(name);
+  return (
+    name === 'fetch_url' ||
+    name === 'web_search' ||
+    name === 'inspect_page' ||
+    name === 'browser_control' ||
+    mcpToolNames.includes(name)
+  );
 }
 
 /**

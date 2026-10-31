@@ -25,6 +25,7 @@ import { CrewCards, placeCrew, reportOf } from './crew';
 import { ApprovalCard, QuestionCard } from './decision-cards';
 import { useFollowBottom } from './follow-bottom';
 import { HistorySkeleton } from './history-skeleton';
+import { focusInspector } from './inspector-host';
 import { useKeptHistory } from './kept-history';
 import { MessageMedia } from './media';
 import { authored, ChatMessage } from './message';
@@ -176,6 +177,10 @@ export function History({
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const stop = subscribe((event) => {
+      if (event.type === 'conversation.inspector.focus') {
+        focusInspector(sessionId, event.data as Parameters<typeof focusInspector>[1]);
+        return;
+      }
       if (
         !event.type.startsWith('run.') &&
         !event.type.startsWith('session.') &&

@@ -39,6 +39,13 @@ export const sessionCalls = (client: Client) => ({
         },
       }),
     ),
+  setSessionPin: (profileId: string, sessionId: string, pinned: boolean) =>
+    result(
+      client.PUT('/v1/profiles/{profileId}/sessions/{sessionId}/pin', {
+        params: { path: { profileId, sessionId } },
+        body: { pinned },
+      }),
+    ),
   renameSession: (profileId: string, sessionId: string, title: string) =>
     result(
       client.PATCH('/v1/profiles/{profileId}/sessions/{sessionId}', {

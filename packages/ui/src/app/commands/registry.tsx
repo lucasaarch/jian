@@ -10,25 +10,30 @@ import {
   useState,
 } from 'react';
 import { type Command, CommandPalette } from '../../kit';
+import {
+  type Binding,
+  type Bindings,
+  bindingId,
+  bindingOf,
+  readBindings,
+  reserved,
+  shortcutOf,
+} from './keybindings';
 
-/**
- * A command of the app. `keys` binds it to the system's modifier — ⌘ on macOS, Ctrl elsewhere —
- * with the key named, and shift when asked: the palette shows it, and the window answers to it.
- */
-export type AppCommand = Omit<Command, 'shortcut'> & { keys?: { key: string; shift?: boolean } };
-
+export type AppCommand = Omit<Command, 'shortcut'> & { keys?: Binding };
 type Registry = { register(source: string, commands: AppCommand[]): () => void };
-
 const Context = createContext<Registry | null>(null);
-
-/** Whether the keys are the Mac's: ⌘ for the app's shortcuts, Ctrl elsewhere. */
-export const isMac = () => /Mac|iPhone|iPad/.test(navigator.userAgent);
-
-/**
- * Keys a browser keeps for itself — a new window, a tab, closing it, its own settings — and
- * never hands to the page. In a browser their commands stay in the palette without the keys.
- */
-const BROWSER_KEEPS = new Set(['n', 't', 'w', ',']);
+const SAVED = 'jian-keymaps';
+type Keymaps = {
+  commands: AppCommand[];
+  overrides: Bindings;
+  browser: boolean;
+  setBinding: (id: string, keys: Binding | null | undefined) => string | undefined;
+  reset: () => void;
+};
+const KeymapsContext = createContext<Keymaps | null>(null);
+export const useKeymaps = () => useContext(KeymapsContext);
+export { isMac } from './keybindings';
 
 /**
  * Where each part's commands stand in the list: what is done most first — the agent's chats
@@ -39,25 +44,6 @@ const rank = (source: string) => {
   const at = ORDER.indexOf(source);
   return at === -1 ? ORDER.length : at;
 };
-
-/** How a binding is written beside the command, the way the system writes its own. */
-function shortcutOf(keys: AppCommand['keys']): string | undefined {
-  if (!keys) return undefined;
-  const key = keys.key.length === 1 ? keys.key.toUpperCase() : keys.key;
-  if (isMac()) return `${keys.shift ? '⇧' : ''}⌘${key}`;
-  return `Ctrl+${keys.shift ? 'Shift+' : ''}${key}`;
-}
-
-/** Whether a key press is the one a binding names. */
-function pressed(event: KeyboardEvent, keys: NonNullable<AppCommand['keys']>): boolean {
-  const modifier = isMac() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-  return (
-    modifier &&
-    !event.altKey &&
-    event.shiftKey === Boolean(keys.shift) &&
-    event.key.toLowerCase() === keys.key.toLowerCase()
-  );
-}
 
 /**
  * Holds every command the app's parts offer — the window's, the open gateway's, its agent's —
@@ -73,6 +59,22 @@ export function CommandsProvider({
 }) {
   const [sources, setSources] = useState<Record<string, AppCommand[]>>({});
   const [open, setOpen] = useState(false);
+  const [overrides, setOverrides] = useState<Bindings>({});
+  useEffect(() => {
+    try {
+      setOverrides(readBindings(localStorage.getItem(SAVED)));
+    } catch {
+      /* Storage is optional. */
+    }
+  }, []);
+  const save = useCallback((next: Bindings) => {
+    setOverrides(next);
+    try {
+      localStorage.setItem(SAVED, JSON.stringify(next));
+    } catch {
+      /* Keep this visit's choice. */
+    }
+  }, []);
 
   const register = useCallback((source: string, commands: AppCommand[]) => {
     setSources((current) => ({ ...current, [source]: commands }));
@@ -83,28 +85,71 @@ export function CommandsProvider({
       });
   }, []);
 
-  const commands = useMemo(
-    () =>
-      Object.entries(sources)
+  const offered = useMemo(
+    () => [
+      ...Object.entries(sources)
         .sort(([a], [b]) => rank(a) - rank(b))
-        .flatMap(([, listed]) => listed)
-        .map((command): AppCommand => {
-          if (!browser || !command.keys || command.keys.shift) return command;
-          if (!BROWSER_KEEPS.has(command.keys.key)) return command;
-          const { keys: _browsers, ...rest } = command;
-          return rest;
-        }),
-    [sources, browser],
+        .flatMap(([, listed]) => listed),
+      {
+        id: 'command-palette',
+        title: 'Command palette',
+        keys: { key: 'p', shift: true },
+        run: () => setOpen(true),
+      },
+    ],
+    [sources],
+  );
+
+  const commands = useMemo(() => {
+    // Explicit choices win over defaults, including defaults offered by a newly opened agent.
+    const claimed = new Set<string>();
+    const resolved = new Map<string, Binding>();
+    const ordered = [...offered].sort(
+      (a, b) => Number(Object.hasOwn(overrides, b.id)) - Number(Object.hasOwn(overrides, a.id)),
+    );
+    for (const command of ordered) {
+      const keys = Object.hasOwn(overrides, command.id) ? overrides[command.id] : command.keys;
+      if (!keys || reserved(keys, browser) || claimed.has(bindingId(keys))) continue;
+      claimed.add(bindingId(keys));
+      resolved.set(command.id, keys);
+    }
+    return offered.map(({ keys: _default, ...command }): AppCommand => {
+      const keys = resolved.get(command.id);
+      return keys ? { ...command, keys } : command;
+    });
+  }, [offered, overrides, browser]);
+
+  const setBinding = useCallback(
+    (id: string, keys: Binding | null | undefined) => {
+      const candidate =
+        keys === undefined ? offered.find((command) => command.id === id)?.keys : keys;
+      if (candidate) {
+        if (reserved(candidate, browser))
+          return 'This shortcut is reserved by the system or browser.';
+        const conflict = commands.find(
+          (command) =>
+            command.id !== id && command.keys && bindingId(command.keys) === bindingId(candidate),
+        );
+        if (conflict) return `Already assigned to ${conflict.title}. Clear that shortcut first.`;
+      }
+      const next = { ...overrides };
+      if (keys === undefined) delete next[id];
+      else next[id] = keys;
+      save(next);
+      return undefined;
+    },
+    [offered, commands, browser, overrides, save],
   );
 
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
-      if (pressed(event, { key: 'p', shift: true })) {
-        event.preventDefault();
-        setOpen(true);
-        return;
-      }
-      const command = commands.find((item) => item.keys && pressed(event, item.keys));
+      // A recorder or another control may consume a key before app commands see it.
+      if (event.defaultPrevented || event.isComposing || event.repeat) return;
+      const binding = bindingOf(event);
+      if (!binding) return;
+      const command = commands.find(
+        (item) => item.keys && bindingId(item.keys) === bindingId(binding),
+      );
       if (!command) return;
       event.preventDefault();
       setOpen(false);
@@ -125,8 +170,15 @@ export function CommandsProvider({
 
   return (
     <Context.Provider value={useMemo(() => ({ register }), [register])}>
-      {children}
-      <CommandPalette open={open} onOpenChange={setOpen} commands={listed} />
+      <KeymapsContext.Provider
+        value={useMemo(
+          () => ({ commands, overrides, browser, setBinding, reset: () => save({}) }),
+          [commands, overrides, browser, setBinding, save],
+        )}
+      >
+        {children}
+        <CommandPalette open={open} onOpenChange={setOpen} commands={listed} />
+      </KeymapsContext.Provider>
     </Context.Provider>
   );
 }

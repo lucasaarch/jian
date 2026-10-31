@@ -1346,6 +1346,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/profiles/{profileId}/sessions/{sessionId}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Required permission: admin. */
+        put: operations["setSessionPin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/sessions/{sessionId}": {
         parameters: {
             query?: never;
@@ -14924,6 +14941,7 @@ export interface operations {
                         id: string;
                         /** Format: uuid */
                         profileId: string;
+                        pinned?: boolean;
                         /** Format: uuid */
                         projectId?: string;
                         /** Format: uuid */
@@ -15091,6 +15109,7 @@ export interface operations {
                         id: string;
                         /** Format: uuid */
                         profileId: string;
+                        pinned?: boolean;
                         /** Format: uuid */
                         projectId?: string;
                         /** Format: uuid */
@@ -15490,6 +15509,7 @@ export interface operations {
                         id: string;
                         /** Format: uuid */
                         profileId: string;
+                        pinned?: boolean;
                         /** Format: uuid */
                         projectId?: string;
                         /** Format: uuid */
@@ -15652,6 +15672,167 @@ export interface operations {
                         id: string;
                         /** Format: uuid */
                         profileId: string;
+                        pinned?: boolean;
+                        /** Format: uuid */
+                        projectId?: string;
+                        /** Format: uuid */
+                        remoteMachineId?: string;
+                        /** Format: uuid */
+                        peerProfileId?: string;
+                        /** @enum {string} */
+                        scope?: "direct" | "group";
+                        summary?: string;
+                        /** Format: date-time */
+                        summarizedUpTo?: string;
+                        /** Format: uuid */
+                        summarizedThroughId?: string;
+                        model?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                            voiceName?: string;
+                        };
+                        /**
+                         * @default ask
+                         * @enum {string}
+                         */
+                        protection: "ask" | "auto" | "full";
+                        objective?: {
+                            text: string;
+                            /** @enum {string} */
+                            status: "open" | "blocked" | "done" | "cancelled";
+                            /** Format: date-time */
+                            updatedAt: string;
+                            /** @default 0 */
+                            continuations: number;
+                            note?: string;
+                        };
+                        /** Format: date-time */
+                        readAt?: string;
+                        /** Format: date-time */
+                        createdAt: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setSessionPin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    pinned: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        title: string | null;
+                        /** @default api */
+                        channel: string;
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        pinned?: boolean;
                         /** Format: uuid */
                         projectId?: string;
                         /** Format: uuid */
@@ -15805,6 +15986,7 @@ export interface operations {
                         id: string;
                         /** Format: uuid */
                         profileId: string;
+                        pinned?: boolean;
                         /** Format: uuid */
                         projectId?: string;
                         /** Format: uuid */
@@ -15964,6 +16146,7 @@ export interface operations {
                         id: string;
                         /** Format: uuid */
                         profileId: string;
+                        pinned?: boolean;
                         /** Format: uuid */
                         projectId?: string;
                         /** Format: uuid */
@@ -16131,6 +16314,7 @@ export interface operations {
                         id: string;
                         /** Format: uuid */
                         profileId: string;
+                        pinned?: boolean;
                         /** Format: uuid */
                         projectId?: string;
                         /** Format: uuid */
@@ -16291,6 +16475,7 @@ export interface operations {
                         id: string;
                         /** Format: uuid */
                         profileId: string;
+                        pinned?: boolean;
                         /** Format: uuid */
                         projectId?: string;
                         /** Format: uuid */
@@ -16773,6 +16958,7 @@ export interface operations {
                         id: string;
                         /** Format: uuid */
                         profileId: string;
+                        pinned?: boolean;
                         /** Format: uuid */
                         projectId?: string;
                         /** Format: uuid */
@@ -17198,6 +17384,7 @@ export interface operations {
                         id: string;
                         /** Format: uuid */
                         profileId: string;
+                        pinned?: boolean;
                         /** Format: uuid */
                         projectId?: string;
                         /** Format: uuid */

@@ -76,6 +76,7 @@ export function buildServices({
   timeZone,
   github,
   publicUrl,
+  nativeBrowser,
 }: {
   store: Store;
   vault: Vault;
@@ -85,6 +86,7 @@ export function buildServices({
   fetcher?: typeof fetch;
   timeZone?: string;
   github?: Pick<GitHubIntegrations, 'repository'>;
+  nativeBrowser?: import('./web/native.js').NativeBrowser;
   /** Where the panel is served, which push services are given as the sender. */
   publicUrl?: string;
 }): Services {
@@ -127,7 +129,7 @@ export function buildServices({
     projects,
     memories,
     media,
-    web: new WebSearch(store, gatewayVault, fetcher ?? createSafeFetch().fetch),
+    web: new WebSearch(store, gatewayVault, fetcher ?? createSafeFetch().fetch, nativeBrowser),
     // Stamped into the image at build time; a gateway run from source has none.
     releases: new ReleaseNotes(
       store,

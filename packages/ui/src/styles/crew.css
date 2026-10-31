@@ -105,9 +105,6 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
   }
-  .conversation-main[data-following] {
-    grid-template-columns: minmax(0, 1fr) 25rem;
-  }
   /* The conversation's header and the chat under it, one column; the Inspector beside it runs
      the pane's full height. */
   .conversation-column {
@@ -162,5 +159,41 @@
 @keyframes crew-up {
   from {
     transform: translateY(100%);
+  }
+}
+
+/* The width arrives as a variable, not an inline width, so the phone layout below can replace it
+   without !important. */
+.inspector-host {
+  width: var(--inspector-width);
+}
+
+/* The shared host owns glass, border and sizing; content drawers remain plain inside it. */
+[data-inspector-host] .crew-drawer {
+  position: static;
+  inset: auto;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  padding-bottom: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+@media (max-width: 760px) {
+  .inspector-host {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 40;
+    width: 100%;
+    height: 72dvh;
+    border-radius: 1rem 1rem 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .inspector-host > hr {
+    display: none;
   }
 }
