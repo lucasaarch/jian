@@ -1,6 +1,4 @@
 name: CI
-# A branch push and its pull request are the same commit, so `push` covers only what has no
-# pull request of its own.
 on:
   push:
     branches: [main]
@@ -8,8 +6,49 @@ on:
   pull_request:
 permissions:
   contents: read
+# A newer commit supersedes validation of an older commit on the same branch or pull request.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
-  check:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      node: ${{ steps.plan.outputs.node }}
+      gateway: ${{ steps.plan.outputs.gateway }}
+      panel: ${{ steps.plan.outputs.panel }}
+      desktop: ${{ steps.plan.outputs.desktop }}
+      remote: ${{ steps.plan.outputs.remote }}
+      rust: ${{ steps.plan.outputs.rust }}
+      triage: ${{ steps.plan.outputs.triage }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test .github/scripts/ci-plan.test.mjs
+      - id: plan
+        env:
+          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          CI_PR: ${{ github.event_name == 'pull_request' }}
+          CI_FULL: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: node .github/scripts/ci-plan.mjs
+  triage:
+    needs: changes
+    if: needs.changes.outputs.triage == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test .github/scripts/issue-*.test.mjs
+  node:
+    needs: changes
+    if: needs.changes.outputs.node == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,11 +58,53 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run check
-      - run: make test-display
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm contracts:check
+      - run: pnpm changelog:check
+      - if: needs.changes.outputs.gateway == 'true'
+        run: |
+          pnpm --filter @jian/gateway test
+          pnpm --filter @jian/gateway build
+          make test-display
+      - if: needs.changes.outputs.panel == 'true'
+        run: |
+          pnpm --filter @jian/ui knip
+          pnpm --filter @jian/web knip
+          pnpm --filter @jian/ui test
+          pnpm --filter @jian/web test
+          pnpm --filter @jian/web build
+      - if: needs.changes.outputs.remote == 'true'
+        run: |
+          pnpm --filter @jian/remote-core test
+          pnpm --filter @jian-ai/remote-control test
+  desktop:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @jian/contracts build
+      - run: pnpm --filter @jian/sdk build
+      - run: pnpm --filter @jian/desktop typecheck
+      - run: pnpm --filter @jian/desktop test
+      - run: pnpm --filter @jian/desktop build
+      - run: pnpm --filter @jian/desktop stage:gateway
   # The Computer Use helper on each OS it runs on: a platform's code compiles, lints and tests
   # only on that platform.
   rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -40,9 +121,13 @@ jobs:
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
   postgres:
+    needs: changes
+    if: needs.changes.outputs.gateway == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
+    needs: changes
+    if: needs.changes.outputs.gateway == 'true'
         image: postgres:17
         env:
           POSTGRES_DB: jian_test
@@ -98,3 +183,24 @@ jobs:
           name: lemon-display
           path: ${{ runner.temp }}/lemon-display
           if-no-files-found: warn
+  # This name remains the branch rule's single required check, even when every area is skipped.
+  check:
+    if: always()
+    needs: [changes, node, triage, desktop, rust, postgres]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify every selected gate
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'NODE'
+          const jobs = JSON.parse(process.env.RESULTS);
+          if (jobs.changes.result !== 'success') throw new Error('Change detection failed.');
+          const areas = { node: 'node', triage: 'triage', desktop: 'desktop', rust: 'rust', postgres: 'gateway' };
+          for (const [job, area] of Object.entries(areas)) {
+            const selected = jobs.changes.outputs[area];
+            if (!['true', 'false'].includes(selected)) throw new Error(`Missing selection for ${area}.`);
+            const accepted = selected === 'true' ? ['success'] : ['success', 'skipped'];
+            if (!accepted.includes(jobs[job].result)) throw new Error(`${job}: ${jobs[job].result}`);
+          }
+          NODE

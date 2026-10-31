@@ -21,7 +21,10 @@ attempt so a later skipped attempt cannot hide an earlier generation.
 ## Repository metadata
 
 The configured Task, Bug and Feature IDs were read from the Jian repository's
-Issue type catalog. Only configured labels that actually exist are proposed:
+Issue type catalog. Personal repositories omit native Issue types from their Issue
+responses, so `nativeTypes` is false: type suggestions remain classification context
+and only existing labels are written. Missing type metadata is accepted only when
+this explicit capability is disabled. Only configured labels that actually exist are proposed:
 `bug`, `enhancement`, `documentation`, `question` and `accessibility`.
 Human classifications are preserved. Duplicate links are suggestions, never
 automatic closure.

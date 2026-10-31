@@ -34,7 +34,7 @@ copyFileSync(new URL('./issue-core.mjs', import.meta.url), join(fixtureDir, 'iss
 const checkedConfig = JSON.parse(readFileSync(new URL('./issue-config.json', import.meta.url)));
 writeFileSync(
   join(fixtureDir, 'issue-config.json'),
-  JSON.stringify({ ...checkedConfig, priority: catalog.priority }),
+  JSON.stringify({ ...checkedConfig, priority: catalog.priority, nativeTypes: true }),
 );
 const core = await import(pathToFileURL(join(fixtureDir, 'issue-core.mjs')));
 const issue = () => ({

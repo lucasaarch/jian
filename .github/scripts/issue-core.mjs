@@ -605,7 +605,7 @@ export function planEffects(proposal, current, candidates) {
       : null;
   return {
     labelsToAdd: p.labels.map((l) => l.name).filter((l) => !labels.includes(l)),
-    typeToSet: current.type === null ? (p.type?.name ?? null) : null,
+    typeToSet: config.nativeTypes && current.type === null ? (p.type?.name ?? null) : null,
     priorityToSet:
       config.priority && !priority && !legacy && p.priority
         ? { field_id: config.priority.id, value: p.priority.name }

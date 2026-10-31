@@ -33,6 +33,7 @@ async function modules(t, enabled = true, nativeFields = true) {
       type: 'single_select',
       options: ['Urgent', 'High', 'Medium', 'Low'].map((name, i) => ({ id: 81364764 + i, name })),
     };
+  config.nativeTypes = nativeFields;
   config.enabled = enabled;
   config.publishEnabled = enabled;
   await writeFile(join(dir, 'issue-config.json'), JSON.stringify(config));
@@ -1787,6 +1788,7 @@ test('candidate changed after native translation is omitted from the final comme
 test('personal repositories publish complete triage without unsupported native field reads', async (t) => {
   const m = await modules(t, true, false);
   const f = fixture(m.config, m.core);
+  delete f.issue.type;
   const tr = transport(m.run, f);
   const collected = await m.run.collectSnapshot(context, tr, { GITHUB_TOKEN: 'fixture-github' });
   assert.equal(collected.state, 'ready');
@@ -1797,7 +1799,9 @@ test('personal repositories publish complete triage without unsupported native f
     GITHUB_TOKEN: 'fixture-github',
   });
   assert.equal(published.state, 'ready', JSON.stringify(published));
-  assert.equal(f.issue.type.name, 'Bug');
+  assert.equal(Object.hasOwn(f.issue, 'type'), false);
+  assert.ok(f.issue.labels.some((label) => label.name === 'bug'));
+  assert.ok(f.mutations.every(({ body }) => !Object.hasOwn(body, 'type')));
   assert.equal(f.issue.title, 'Save failure');
   assert.equal(f.comments.length, 1);
   assert.ok(f.calls.every(({ url }) => !url.includes('/issue-field-values')));
