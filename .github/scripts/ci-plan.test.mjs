@@ -63,6 +63,7 @@ test('how the image runs its browser is tested in the image', () => {
     'apps/gateway/src/web/browser.ts',
   ])
     assert.equal(plan([path]).imageGateway, true, path);
+  assert.equal(plan(['apps/gateway/src/web/browser.ts']).gateway, true);
 });
 
 test('each image requires a change to its Dockerfile, including conservative fallback', () => {
