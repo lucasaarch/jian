@@ -1,20 +1,22 @@
 import {
+  BrowserStart,
   BrowserToolbar,
-  closeBrowserInspector,
+  browserPageOfInspector,
   conversationOfInspector,
   InspectorHost,
-  keepBrowserInspector,
-  onInspectorConversation,
+  onInspectorMoved,
   openBrowserInspector,
+  syncBrowserInspector,
 } from '@jian/ui';
-import { Globe } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
-import type { BrowserState } from '../../shared/bridge';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import type { BrowserPlaces, BrowserState } from '../../shared/bridge';
 import { desktop } from '../desktop';
 
 const initial: BrowserState = {
   focus: 0,
   open: false,
+  pages: [],
+  favorite: false,
   url: '',
   title: '',
   loading: false,
@@ -23,7 +25,7 @@ const initial: BrowserState = {
 };
 
 const openNativeBrowser = () => desktop().browser.open();
-const closeNativeBrowser = () => desktop().browser.close();
+const closeNativeBrowser = (pageId: string) => desktop().browser.close(pageId);
 
 /** One shared inspector: browser, PRs and subagents use the same glass, tabs and resize handle. */
 export function BrowserInspector({
@@ -38,24 +40,43 @@ export function BrowserInspector({
     const follow = (state: BrowserState) => {
       // The app and the main process change conversation in turn: what is about another waits.
       if (conversationOfInspector() !== state.sessionId) return;
+      syncBrowserInspector(state.pages);
       const key = state.sessionId ?? '';
-      if (!state.open) closeBrowserInspector();
-      else if (state.focus !== seen.current.get(key)) openBrowserInspector();
-      else keepBrowserInspector();
+      // Asked to look: a new tab, or an agent acting. Otherwise the owner's choice of tab stands.
+      if (state.activePageId && state.focus !== seen.current.get(key))
+        openBrowserInspector(state.activePageId);
       seen.current.set(key, state.focus);
+      const chosen = browserPageOfInspector();
+      if (chosen && chosen !== state.activePageId) desktop().browser.select(chosen);
     };
     const read = () => void desktop().browser.state().then(follow);
     read();
     const stopFollowing = desktop().browser.onChanged(follow);
-    const stopWatching = onInspectorConversation(read);
+    const stopWatching = onInspectorMoved(read);
+    // Comes back as the key it was, so the commands and the owner's bindings decide what it does.
+    const stopShortcuts = desktop().browser.onShortcut(({ key, code, shift, alt }) => {
+      const mac = desktop().platform === 'darwin';
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key,
+          code,
+          shiftKey: shift,
+          altKey: alt,
+          metaKey: mac,
+          ctrlKey: !mac,
+        }),
+      );
+    });
     return () => {
       stopFollowing();
       stopWatching();
+      stopShortcuts();
     };
   }, []);
   return (
     <InspectorHost
       browser={<BrowserPanel hidden={hidden} />}
+      wholePanel
       openBrowser={openNativeBrowser}
       closeBrowser={closeNativeBrowser}
     >
@@ -73,7 +94,22 @@ export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
   const [state, setState] = useState(initial);
   const [error, setError] = useState('');
   const [picture, setPicture] = useState<string>();
+  const [places, setPlaces] = useState<BrowserPlaces>({ favorites: [], recents: [] });
   const covered = useRef(false);
+  const blank = !state.url || state.url === 'about:blank';
+  const readPlaces = useCallback(() => void desktop().browser.places().then(setPlaces), []);
+  // A blank tab reads them when it is shown; what changes them below reads them again.
+  useEffect(() => {
+    if (blank) readPlaces();
+  }, [blank, readPlaces]);
+  const navigate = (address: string) => {
+    setError('');
+    void desktop()
+      .browser.navigate(address)
+      .catch((failure) =>
+        setError(failure instanceof Error ? failure.message : 'The page could not be opened'),
+      );
+  };
   const shown = useRef('');
   const viewport = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -119,7 +155,8 @@ export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
       desktop().browser.layout({
         x: rect.x,
         y: rect.y,
-        width: state.url && state.url !== 'about:blank' ? rect.width : 0,
+        // A tab's id changes with the conversation too, so a page moved in is always placed.
+        width: state.activePageId && state.url && state.url !== 'about:blank' ? rect.width : 0,
         height: rect.height,
       });
       setPicture(undefined);
@@ -135,7 +172,7 @@ export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
       covers.disconnect();
       window.removeEventListener('resize', layout);
     };
-  }, [state.open, state.url, hidden]);
+  }, [state.open, state.url, state.activePageId, hidden]);
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-label="Jian Browser">
       <BrowserToolbar
@@ -144,15 +181,12 @@ export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
         canBack={state.canBack}
         canForward={state.canForward}
         loading={state.loading}
-        onNavigate={(address) => {
-          setError('');
-          void desktop()
-            .browser.navigate(address)
-            .catch((failure) =>
-              setError(failure instanceof Error ? failure.message : 'The page could not be opened'),
-            );
-        }}
+        favorite={state.favorite}
+        onNavigate={navigate}
         onCommand={(command) => desktop().browser.command(command)}
+        onFavorite={(on) => void desktop().browser.setFavorite(on, state.url, state.title)}
+        onScreenshot={() => desktop().browser.screenshot()}
+        onClear={(what) => desktop().browser.clear(what).then(readPlaces)}
         onOpenExternal={() => desktop().browser.openExternal()}
         cookieSources={() => desktop().browser.cookieSources()}
         onImportCookies={(source, scope) => desktop().browser.importCookies(source, scope)}
@@ -166,13 +200,16 @@ export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
         {picture && (
           <img src={picture} alt="" className="absolute inset-0 size-full object-cover" />
         )}
-        {(!state.url || state.url === 'about:blank') && (
-          <div className="grid h-full place-content-center justify-items-center gap-3 px-8 text-center text-muted">
-            <Globe size={24} strokeWidth={1.2} />
-            <p className="max-w-60 text-[13px] leading-relaxed">
-              Open a website to explore it alongside your conversation.
-            </p>
-          </div>
+        {blank && (
+          <BrowserStart
+            key={state.activePageId}
+            places={places}
+            onNavigate={navigate}
+            onFavorite={(on, place) =>
+              void desktop().browser.setFavorite(on, place.url, place.title).then(readPlaces)
+            }
+            onForget={(url) => void desktop().browser.forget(url).then(readPlaces)}
+          />
         )}
       </div>
     </section>

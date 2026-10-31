@@ -1,5 +1,11 @@
-import { SidebarBar, useInspectorShowing, useWelcomeShowing, WindowControls } from '@jian/ui';
-import { Globe } from 'lucide-react';
+import {
+  openInspector,
+  SidebarBar,
+  useInspectorShowing,
+  useWelcomeShowing,
+  WindowControls,
+} from '@jian/ui';
+import { PanelRight } from 'lucide-react';
 import { useEffect, useSyncExternalStore } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
 import { desktop } from '../desktop';
@@ -77,12 +83,12 @@ export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
       {!welcoming && !inspecting && (
         <button
           type="button"
-          aria-label="Open Jian Browser"
-          title="Open Jian Browser"
-          onClick={() => desktop().browser.open()}
+          aria-label="Open inspector"
+          title="Open inspector"
+          onClick={openInspector}
           className="absolute top-0 right-(--window-controls) z-30 grid h-(--title-bar) w-10 place-items-center text-muted hover:text-ink [-webkit-app-region:no-drag]"
         >
-          <Globe size={15} />
+          <PanelRight size={15} />
         </button>
       )}
       {!mac && (

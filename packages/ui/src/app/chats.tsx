@@ -98,7 +98,7 @@ export function ChatsApp({ createAgent, header }: { createAgent: () => void; hea
             />
           )}
           {main && (
-            <div className="min-w-0 flex-1">
+            <div data-app-main className="min-w-0 flex-1">
               <Chats phone={phone} createAgent={createAgent} />
             </div>
           )}

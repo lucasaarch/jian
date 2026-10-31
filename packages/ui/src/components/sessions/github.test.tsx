@@ -256,7 +256,6 @@ it('shows a card in what a person wrote too', async () => {
 });
 
 const section = (name: string) => element.querySelector(`section[aria-label="${name}"]`);
-const heading = (name: string) => section(name)?.querySelector('button[aria-expanded]');
 /** The merge confirmation, drawn over the page rather than inside the drawer. */
 const dialog = () => document.querySelector('[role="dialog"]');
 
@@ -278,20 +277,33 @@ it('opens the pull request in folding sections, and merges with the chosen metho
   expect(document.activeElement?.getAttribute('aria-label')).toBe('Close');
   expect(drawer()?.querySelector('[aria-label="Refresh"]')).toBeNull();
 
-  // Every part in one view, each saying what it holds while folded.
+  // It opens on the overview: the description, and what the other tabs hold at a glance.
+  const pullTab = (label: string) =>
+    [...(drawer()?.querySelectorAll('button') ?? [])].find((item) =>
+      item.textContent?.startsWith(label),
+    );
   expect(section('Description')?.textContent).toContain('pricing page.');
-  expect(heading('Checks')?.textContent).toBe('Checks1/2');
-  expect(section('Checks')?.textContent).toContain('3m 12s');
-  expect(heading('Changes')?.textContent).toBe('Changes1 file');
-  expect(section('Changes')?.querySelector('.code-diff-path')?.textContent).toBe('app/pricing.tsx');
+  expect(pullTab('Checks')?.textContent).toBe('Checks 1/2');
+  expect(pullTab('Changes')?.textContent).toBe('Changes 1');
+  expect(pullTab('Reviews')?.textContent).toBe('Reviews 1');
+  // Only the tab in front is drawn: a diff costs nothing until it is asked for.
+  expect(drawer()?.querySelector('.code-diff-path')).toBeNull();
+
+  await act(async () => pullTab('Checks')?.click());
+  expect(drawer()?.textContent).toContain('3m 12s');
+  expect(drawer()?.textContent).toContain('1 passed');
+  expect(section('Description')).toBeFalsy();
+
+  await act(async () => pullTab('Changes')?.click());
+  expect(drawer()?.querySelector('.code-diff-path')?.textContent).toBe('app/pricing.tsx');
+
   // A review opens where it was written.
-  const review = section('Reviews')?.querySelector('a');
-  expect(review?.getAttribute('href')).toBe(`${pullUrl}#pullrequestreview-81`);
+  await act(async () => pullTab('Reviews')?.click());
+  const review = drawer()?.querySelector(`a[href="${pullUrl}#pullrequestreview-81"]`);
   expect(review?.textContent).toContain('sky-example');
   expect(review?.textContent).toContain('Approved');
 
-  await act(async () => (heading('Checks') as HTMLButtonElement | null)?.click());
-  expect(heading('Checks')?.getAttribute('aria-expanded')).toBe('false');
+  await act(async () => pullTab('Overview')?.click());
 
   // Mergeable, so merging is offered and fixing conflicts is not.
   expect(button('Fix merge conflicts')).toBeUndefined();

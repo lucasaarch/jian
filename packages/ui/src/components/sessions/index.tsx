@@ -177,6 +177,12 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                   {/* A conversation without a bar at the bottom keeps its badges in the corner. */}
                   {!docked(active) && <div className="pane-badges">{badges('bottom')}</div>}
                   <div className="conversation-chat">
+                    <div className="conversation-glass-top" aria-hidden="true">
+                      <i />
+                      <i />
+                      <i />
+                      <i />
+                    </div>
                     <History
                       key={active.id}
                       agent={profile}

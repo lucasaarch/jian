@@ -2,15 +2,15 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
-import { Action } from '../../../kit';
+import { Action, Segmented } from '../../../kit';
 import type { GatewayApi, GitHubMergeMethod, GitHubPull } from '../../../lib/api';
 import { keys } from '../../../lib/query/keys';
 import { InspectorBody, InspectorHeader } from '../inspector';
 import { MergeButton, MergeConfirm } from './merge';
-import { Byline, Section, Written } from './parts';
-import { Changes, Checks, Reviews } from './pull-sections';
+import { Byline, CheckMark, Section, Written } from './parts';
+import { ChangeBar, Changes, Checks, checksStanding, Reviews } from './pull-sections';
 
 export type Pull = Pick<GitHubPull, 'owner' | 'repo' | 'number'>;
 type MergeApi = Pick<GatewayApi, 'mergeGithubPull' | 'updateGithubPullBranch'>;
@@ -25,6 +25,26 @@ const mergeable: Record<GitHubPull['mergeable'], { note: string; colour: string 
   behind: { note: 'This branch is behind the base branch.', colour: 'text-warn' },
   unknown: { note: 'Checking whether it can merge…', colour: 'text-muted' },
 };
+
+type PullTab = 'overview' | 'checks' | 'changes' | 'reviews';
+/** The tab each pull request was left on, for as long as the panel is open. */
+const lastTab = new Map<string, PullTab>();
+
+/** A figure of the overview, which is also the way to the tab with all of it. */
+function Glance({ label, go, children }: { label: string; go: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={go}
+      className="grid min-w-0 gap-1.5 rounded-xl border border-glass-edge p-3 text-left transition-colors hover:bg-glass-hover"
+    >
+      <span className="text-xs text-muted">{label}</span>
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-medium text-ink">
+        {children}
+      </span>
+    </button>
+  );
+}
 
 const branch =
   'min-w-0 truncate rounded-md bg-ink/6 px-1.5 py-0.5 font-mono text-[11.5px] text-ink';
@@ -53,6 +73,14 @@ export function PullView({
   const [busy, setBusy] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const itemId = `${pull.owner}/${pull.repo}#${pull.number}`;
+  const [tab, setTabState] = useState<PullTab>(lastTab.get(itemId) ?? 'overview');
+  const setTab = (next: PullTab) => {
+    lastTab.set(itemId, next);
+    setTabState(next);
+  };
+  const checks = checksStanding(pull.checks.runs);
+  const reviews = pull.reviews;
   const open = pull.state === 'open';
   const behind = open && pull.mergeable === 'behind';
   const fixable = open && pull.mergeable === 'conflicts' && Boolean(fixConflicts);
@@ -158,13 +186,65 @@ export function PullView({
           </div>
         )}
       </InspectorHeader>
-      <InspectorBody>
-        <Section title="Description">
-          <Written text={pull.body} none="No description." />
-        </Section>
-        <Checks runs={pull.checks.runs} />
-        <Changes pull={pull} />
-        <Reviews reviews={pull.reviews.latest} />
+      <div className="shrink-0 border-b border-glass-edge px-5 py-2.5">
+        <Segmented
+          label="Pull request"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'overview', label: 'Overview' },
+            {
+              value: 'checks',
+              label: pull.checks.runs.length
+                ? `Checks ${checks.passed}/${pull.checks.runs.length}`
+                : 'Checks',
+            },
+            { value: 'changes', label: `Changes ${pull.changedFiles}` },
+            { value: 'reviews', label: `Reviews ${reviews.latest.length}` },
+          ]}
+        />
+      </div>
+      {/* One tab at a time is drawn: a large diff costs nothing until it is asked for. */}
+      <InspectorBody key={tab}>
+        {tab === 'overview' && (
+          <>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-2 px-5 pt-4 pb-4">
+              <Glance label="Checks" go={() => setTab('checks')}>
+                {pull.checks.runs.length ? (
+                  <>
+                    <CheckMark state={checks.state} size={13} />
+                    {checks.passed}/{pull.checks.runs.length} passed
+                  </>
+                ) : (
+                  'None reported'
+                )}
+              </Glance>
+              <Glance label="Changes" go={() => setTab('changes')}>
+                <span className="font-mono text-good">+{pull.additions}</span>
+                <span className="font-mono text-bad">−{pull.deletions}</span>
+                <ChangeBar additions={pull.additions} deletions={pull.deletions} />
+              </Glance>
+              <Glance label="Reviews" go={() => setTab('reviews')}>
+                {reviews.approved || reviews.changesRequested
+                  ? [
+                      reviews.approved ? `${reviews.approved} approved` : '',
+                      reviews.changesRequested ? `${reviews.changesRequested} changes` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                  : reviews.latest.length
+                    ? `${reviews.latest.length} commented`
+                    : 'None yet'}
+              </Glance>
+            </div>
+            <Section title="Description">
+              <Written text={pull.body} none="No description." />
+            </Section>
+          </>
+        )}
+        {tab === 'checks' && <Checks runs={pull.checks.runs} />}
+        {tab === 'changes' && <Changes pull={pull} />}
+        {tab === 'reviews' && <Reviews reviews={reviews.latest} />}
       </InspectorBody>
       <MergeConfirm
         pull={pull}

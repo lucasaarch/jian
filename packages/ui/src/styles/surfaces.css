@@ -268,6 +268,53 @@
     -webkit-mask-image: linear-gradient(to bottom, transparent 1rem, black 5.5rem);
     mask-image: linear-gradient(to bottom, transparent 1rem, black 5.5rem);
   }
+  /* Glass at the top, where a host draws its title bar over the chat; no bar, no height, no glass.
+     A backdrop blur cannot vary on its own, and two strengths read as a line where one ends. Each
+     layer here is a little stronger, starts higher and overlaps the last, so sharp text loses
+     focus by degrees, and the tint thins out along an eased curve for the same reason. */
+  .conversation-glass-top {
+    @apply pointer-events-none absolute inset-x-0 top-0 z-[1];
+    height: calc(var(--chrome-top, 0px) * 1.8);
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--canvas) 72%, transparent) 0%,
+      color-mix(in srgb, var(--canvas) 58%, transparent) 30%,
+      color-mix(in srgb, var(--canvas) 30%, transparent) 60%,
+      color-mix(in srgb, var(--canvas) 9%, transparent) 85%,
+      transparent 100%
+    );
+  }
+  .conversation-glass-top i {
+    @apply absolute inset-0;
+    -webkit-backdrop-filter: blur(var(--glass-step));
+    backdrop-filter: blur(var(--glass-step));
+    -webkit-mask-image: linear-gradient(
+      to top,
+      transparent var(--glass-from),
+      black var(--glass-to)
+    );
+    mask-image: linear-gradient(to top, transparent var(--glass-from), black var(--glass-to));
+  }
+  .conversation-glass-top i:nth-child(1) {
+    --glass-step: 0.5px;
+    --glass-from: 0%;
+    --glass-to: 30%;
+  }
+  .conversation-glass-top i:nth-child(2) {
+    --glass-step: 1px;
+    --glass-from: 15%;
+    --glass-to: 50%;
+  }
+  .conversation-glass-top i:nth-child(3) {
+    --glass-step: 2.5px;
+    --glass-from: 35%;
+    --glass-to: 70%;
+  }
+  .conversation-glass-top i:nth-child(4) {
+    --glass-step: 5px;
+    --glass-from: 55%;
+    --glass-to: 95%;
+  }
   /* Above the composer, in its column: the title, what went wrong, a way to close it and a way
      on. Quiet, as a notice is, so the conversation above it still leads. */
   /* Floats over the end of the conversation, so it is glass, as everything that floats is. */

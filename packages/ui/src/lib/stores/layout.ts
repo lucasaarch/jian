@@ -10,17 +10,25 @@ type Panels = {
   chatList: boolean;
   /** The sidebar's sections folded to their heading, by section id. */
   closedSections: string[];
+  /** The owner's own sidebar width in pixels; the default until they resize it. */
+  sidebarWidth: number | null;
 };
+
+/** What a conversation needs to read as one. The sidebar and the Inspector give way to it. */
+export const MIN_CHAT_WIDTH = 400;
+export const MIN_SIDEBAR_WIDTH = 200;
+export const MAX_SIDEBAR_WIDTH = 420;
 
 type Layout = Panels & {
   toggle: (panel: 'chatList') => void;
   toggleSection: (id: string) => void;
+  setSidebarWidth: (width: number | null) => void;
   load: (saved: Panels) => void;
 };
 
-function save({ chatList, closedSections }: Panels) {
+function save({ chatList, closedSections, sidebarWidth }: Panels) {
   try {
-    window.localStorage.setItem(SAVED, JSON.stringify({ chatList, closedSections }));
+    window.localStorage.setItem(SAVED, JSON.stringify({ chatList, closedSections, sidebarWidth }));
   } catch {
     // No storage: the choice holds for this visit.
   }
@@ -34,6 +42,11 @@ function save({ chatList, closedSections }: Panels) {
 export const useLayout = create<Layout>()((set, get) => ({
   chatList: false,
   closedSections: [],
+  sidebarWidth: null,
+  setSidebarWidth: (sidebarWidth) => {
+    set({ sidebarWidth });
+    save(get());
+  },
   toggle: (panel) => {
     set({ [panel]: !get()[panel] });
     save(get());
@@ -60,6 +73,7 @@ export function useSavedLayout() {
         closedSections: Array.isArray(saved.closedSections)
           ? saved.closedSections.filter((id): id is string => typeof id === 'string')
           : [],
+        sidebarWidth: typeof saved.sidebarWidth === 'number' ? saved.sidebarWidth : null,
       });
     } catch {
       // Nothing saved, or nothing readable: stay expanded.

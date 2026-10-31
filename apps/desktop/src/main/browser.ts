@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type { InspectionCapture } from '@jian/browser-core';
 import {
   type BrowserActionResult,
@@ -6,11 +7,21 @@ import {
   type PageInspectionInput,
   pageInspectionInputSchema,
 } from '@jian/contracts';
-import { type BrowserWindow, ipcMain, session, shell, WebContentsView } from 'electron';
-import type { BrowserState, Showing } from '../shared/bridge';
+import {
+  app,
+  type BrowserWindow,
+  ClipboardItem,
+  clipboard,
+  ipcMain,
+  session,
+  shell,
+  WebContentsView,
+} from 'electron';
+import type { BrowserPageSummary, BrowserState, Showing } from '../shared/bridge';
 import { runBrowserAction } from './browser-control';
 import { type CookieSourceId, cookieSources, importCookies } from './browser-cookies';
-import { allowed, inspectContents } from './browser-inspect';
+import { allowed, inspectContents, pageKey } from './browser-inspect';
+import { addressFrom, BrowserPlaces } from './browser-places';
 import { BrowserPointer } from './browser-pointer';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,19 +39,13 @@ const FALLBACK_SIZE = { width: 1280, height: 800 };
 /** Far outside any window, so a page an agent works in draws nothing the owner can see. */
 const OFF_SCREEN = -30000;
 
-/**
- * What a conversation keeps of its browser. The page itself is a whole renderer process, so only
- * a conversation on screen is sure to have one; the others keep the address it comes back to.
- */
-type PageTab = {
-  key: string;
-  /** Logins belong to the profile; every conversation of it shares them, never a page. */
-  scope: string;
-  sessionId?: string;
+/** One tab of a conversation's browser. Its page is a whole renderer process, so it may be let go. */
+type BrowserPage = {
+  id: string;
+  conversation: Conversation;
   view?: WebContentsView;
   restoring?: Promise<unknown>;
-  opened: boolean;
-  focus: number;
+  /** What brings the page back after it was let go. */
   url: string;
   title: string;
   error?: string;
@@ -55,12 +60,25 @@ type PageTab = {
   evicting?: NodeJS.Timeout;
 };
 
+/** What a conversation keeps of its browser; it reaches no other conversation's. */
+type Conversation = {
+  key: string;
+  /** Logins belong to the profile; every conversation of it shares them, never a page. */
+  scope: string;
+  sessionId?: string;
+  pages: BrowserPage[];
+  activeId?: string;
+  /** The tab an agent works in, so the owner choosing another does not move its work. */
+  agentPageId?: string;
+  focus: number;
+};
+
 export type BrowserLimits = {
   /** How long a page outlives the owner moving to another conversation, for a quick way back. */
   keepMs: number;
   /** How long after an agent's last action its page waits for the next one. */
   agentKeepMs: number;
-  /** Pages alive off screen at most, however many conversations an owner has been through. */
+  /** Pages alive off screen at most, however many tabs and conversations an owner has been through. */
   liveBackground: number;
   /** How long the agent's pointer stands without an action before it dims. */
   pointerIdleMs: number;
@@ -68,24 +86,42 @@ export type BrowserLimits = {
 const LIMITS: BrowserLimits = {
   keepMs: 30_000,
   agentKeepMs: 120_000,
-  liveBackground: 2,
+  liveBackground: 3,
   pointerIdleMs: 30_000,
+};
+const AWAY = { x: 0, y: 0, width: 0, height: 0 };
+
+const pageSummary = (page: BrowserPage): BrowserPageSummary => {
+  const contents = page.view?.webContents;
+  const live = contents && !contents.isDestroyed() ? contents : undefined;
+  return {
+    id: page.id,
+    title: live?.getTitle() || page.title,
+    url: live?.getURL() || page.url,
+  };
 };
 
 /**
- * The browser beside a conversation: each has its own page and tab state, and none reaches
- * another's. Separate from the app's origin, preload and secrets.
+ * The browser beside a conversation: each has its own tabs, and none reaches another's. Separate
+ * from the app's origin, preload and secrets.
  */
 export class JianBrowser {
-  private tabs = new Map<string, PageTab>();
-  private current?: PageTab;
+  private conversations = new Map<string, Conversation>();
+  private current?: Conversation;
   private place: Showing | null = null;
   private focusCount = 0;
-  private bounds = { x: 0, y: 0, width: 0, height: 0 };
+  private bounds = AWAY;
   private lastSize = FALLBACK_SIZE;
+  /** The view drawn in the panel now. */
+  private attached?: WebContentsView;
   private inspecting = new Set<number>();
   private partitions = new Set<string>();
+  /** The app's own keys, in the form the panel's registry writes them. */
+  private shortcuts = new Set<string>();
   private readonly pointer: BrowserPointer;
+  private readonly places = new BrowserPlaces(() =>
+    join(app.getPath('userData'), 'browser-places.json'),
+  );
   constructor(
     private readonly window: () => BrowserWindow | undefined,
     private readonly limits: BrowserLimits = LIMITS,
@@ -99,82 +135,103 @@ export class JianBrowser {
    */
   attach(window: BrowserWindow) {
     window.webContents.on('did-start-navigation', (details) => {
-      if (details.isMainFrame && !details.isSameDocument)
-        this.layout({ x: 0, y: 0, width: 0, height: 0 });
+      if (details.isMainFrame && !details.isSameDocument) this.layout(AWAY);
     });
   }
 
+  private shownPage() {
+    const conversation = this.current;
+    return conversation?.pages.find((page) => page.id === conversation.activeId);
+  }
   private get view() {
-    return this.current?.view;
+    return this.shownPage()?.view;
   }
   state(): BrowserState {
-    const tab = this.current;
-    const candidate = tab?.view?.webContents;
+    const conversation = this.current;
+    const page = this.shownPage();
+    const candidate = page?.view?.webContents;
     const contents = candidate?.isDestroyed() ? undefined : candidate;
     return {
       sessionId: this.place?.chat?.sessionId,
-      focus: tab?.focus ?? 0,
-      open: tab?.opened ?? false,
-      url: contents?.getURL() || tab?.url || '',
-      title: contents?.getTitle() || tab?.title || '',
+      focus: conversation?.focus ?? 0,
+      open: Boolean(conversation?.pages.length),
+      pages: conversation?.pages.map(pageSummary) ?? [],
+      activePageId: page?.id,
+      favorite: Boolean(
+        page && conversation && this.places.isFavorite(conversation.scope, page.url),
+      ),
+      url: contents?.getURL() || page?.url || '',
+      title: contents?.getTitle() || page?.title || '',
       loading: contents?.isLoading() ?? false,
       canBack: contents?.navigationHistory.canGoBack() ?? false,
       canForward: contents?.navigationHistory.canGoForward() ?? false,
-      error: tab?.error,
+      error: page?.error,
     };
   }
   private changed() {
     const window = this.window();
     if (window && !window.isDestroyed()) window.webContents.send('browser:changed', this.state());
   }
-  private changedIn(tab: PageTab) {
-    if (tab === this.current) this.changed();
+  private changedIn(page: BrowserPage) {
+    if (page.conversation === this.current) this.changed();
   }
 
-  private tabFor(gatewayId: string, profileId: string | undefined, sessionId: string | undefined) {
+  private conversationFor(
+    gatewayId: string,
+    profileId: string | undefined,
+    sessionId: string | undefined,
+  ) {
     const scope = `${gatewayId}:${profileId ?? 'owner'}`;
     const key = `${scope}:${sessionId ?? 'new'}`;
-    let tab = this.tabs.get(key);
-    if (!tab) {
-      tab = {
-        key,
-        scope,
-        sessionId,
-        opened: false,
-        focus: 0,
-        url: '',
-        title: '',
-        queue: Promise.resolve(),
-        busy: 0,
-        usedAt: Date.now(),
-        keepUntil: 0,
-      };
-      this.tabs.set(key, tab);
+    let conversation = this.conversations.get(key);
+    if (!conversation) {
+      conversation = { key, scope, sessionId, pages: [], focus: 0 };
+      this.conversations.set(key, conversation);
     }
-    return tab;
+    return conversation;
   }
-  private shownTab() {
-    return this.tabFor(
+  private shownConversation() {
+    return this.conversationFor(
       this.place?.gatewayId ?? 'local',
       this.place?.chat?.profileId,
       this.place?.chat?.sessionId,
     );
   }
+  private addPage(conversation: Conversation) {
+    const page: BrowserPage = {
+      id: randomUUID(),
+      conversation,
+      url: '',
+      title: '',
+      queue: Promise.resolve(),
+      busy: 0,
+      usedAt: Date.now(),
+      keepUntil: 0,
+    };
+    conversation.pages.push(page);
+    return page;
+  }
 
   showing(place: Showing | null) {
+    const before = this.current;
     this.place = place;
-    const next = place ? this.shownTab() : undefined;
-    if (next === this.current) return;
-    const previous = this.current;
-    if (previous) previous.tip = this.pointer.position;
-    this.current = next;
+    const next = place ? this.shownConversation() : undefined;
+    if (next === before) return;
+    const shown = this.shownPage();
+    if (shown) shown.tip = this.pointer.position;
+    this.detach();
     this.pointer.hide();
-    if (previous) this.leave(previous);
-    if (next?.opened) {
-      this.present(next);
-      if (next.tip) this.pointer.restore(next.tip, this.visible());
-    }
+    this.current = next;
+    // The panel of the new conversation says where its page goes, when it has one on screen.
+    this.bounds = AWAY;
+    if (before) this.leave(before);
+    this.restorePointer();
     this.changed();
+  }
+
+  private restorePointer() {
+    const tip = this.shownPage()?.tip;
+    if (tip) this.pointer.restore(tip, this.visible());
   }
 
   /** The partition's rules are set once: a page is made many times, and listeners would pile up. */
@@ -199,14 +256,14 @@ export class JianBrowser {
     return partition;
   }
 
-  /** The tab's page, made again from its address when it was let go. */
-  private live(tab: PageTab) {
-    clearTimeout(tab.evicting);
-    tab.usedAt = Date.now();
-    if (tab.view && !tab.view.webContents.isDestroyed()) return tab.view;
+  /** The page itself, made again from its address when it was let go. */
+  private live(page: BrowserPage) {
+    clearTimeout(page.evicting);
+    page.usedAt = Date.now();
+    if (page.view && !page.view.webContents.isDestroyed()) return page.view;
     const view = new WebContentsView({
       webPreferences: {
-        partition: this.partition(tab.scope),
+        partition: this.partition(page.conversation.scope),
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,
@@ -225,121 +282,185 @@ export class JianBrowser {
     };
     const remember = () => {
       if (contents.isDestroyed()) return;
-      tab.url = contents.getURL();
-      tab.title = contents.getTitle();
-      this.changedIn(tab);
+      page.url = contents.getURL();
+      page.title = contents.getTitle();
+      // What an agent opens is its work, not the owner's history.
+      if (!page.busy && allowed(page.url))
+        this.places.titled(page.conversation.scope, page.url, page.title);
+      this.changedIn(page);
     };
+    const visited = () => {
+      remember();
+      if (!page.busy && allowed(page.url))
+        this.places.visited(page.conversation.scope, page.url, page.title);
+    };
+    // A page in focus gets the keyboard before the app can. The app's own keys are passed up, and
+    // only those: everything else, ⌘C and ⌘V among them, is the page's.
+    contents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown' || input.isAutoRepeat) return;
+      const mac = process.platform === 'darwin';
+      if (mac ? !input.meta || input.control : !input.control || input.meta) return;
+      const letter = /^(?:Key|Digit)(.)$/.exec(input.code)?.[1]?.toLowerCase();
+      const key = letter ?? input.key.toLowerCase();
+      if (!this.shortcuts.has(`${input.alt}:${input.shift}:${key}`)) return;
+      event.preventDefault();
+      this.window()?.webContents.send('browser:shortcut', {
+        key: input.key,
+        code: input.code,
+        shift: input.shift,
+        alt: input.alt,
+      });
+    });
     contents.on('will-navigate', navigation);
     contents.on('will-redirect', navigation);
     contents.on('will-attach-webview', (event) => event.preventDefault());
-    contents.on('did-navigate', remember);
+    contents.on('did-navigate', visited);
     contents.on('did-navigate-in-page', remember);
     contents.on('page-title-updated', remember);
-    contents.on('did-start-loading', () => this.changedIn(tab));
-    contents.on('did-stop-loading', () => this.changedIn(tab));
+    contents.on('did-start-loading', () => this.changedIn(page));
+    contents.on('did-stop-loading', () => this.changedIn(page));
     contents.on('did-fail-load', (_event, code, description, _url, mainFrame) => {
       if (mainFrame && code !== -3) {
-        tab.error = description;
-        this.changedIn(tab);
+        page.error = description;
+        this.changedIn(page);
       }
     });
-    tab.view = view;
-    tab.restoring = tab.url ? contents.loadURL(tab.url).catch(() => {}) : undefined;
+    page.view = view;
+    page.restoring = page.url ? contents.loadURL(page.url).catch(() => {}) : undefined;
     return view;
   }
 
-  private present(tab: PageTab) {
+  /** Into the panel, in place of whatever was there. */
+  private present(page: BrowserPage) {
     const window = this.window();
     if (!window) throw new Error('The Jian window is not open');
-    window.contentView.addChildView(this.live(tab));
+    const view = this.live(page);
+    if (this.attached === view) return view;
+    this.detach();
+    window.contentView.addChildView(view);
+    this.attached = view;
     this.pointer.raise();
-    this.layout(this.bounds);
+    return view;
+  }
+
+  /** Out of the panel. A page an agent is working in carries on where no one sees it. */
+  private detach() {
+    const view = this.attached;
+    this.attached = undefined;
+    if (!view || view.webContents.isDestroyed()) return;
+    const page = [...this.conversations.values()]
+      .flatMap((conversation) => conversation.pages)
+      .find((candidate) => candidate.view === view);
+    if (page?.busy) {
+      this.offScreen(page);
+      return;
+    }
+    this.window()?.contentView.removeChildView(view);
+    view.setVisible(false);
   }
 
   /** Rendering with no one watching, so an agent's clicks land where the page has them. */
-  private offScreen(tab: PageTab) {
+  private offScreen(page: BrowserPage) {
     const window = this.window();
     if (!window) throw new Error('The Jian window is not open');
-    const view = this.live(tab);
+    const view = this.live(page);
+    if (this.attached === view) this.attached = undefined;
     window.contentView.addChildView(view);
     view.setBounds({ x: OFF_SCREEN, y: 0, ...this.lastSize });
     view.setVisible(true);
   }
 
-  private leave(tab: PageTab) {
-    if (tab.busy > 0) {
-      if (tab.view) this.offScreen(tab);
-      return;
-    }
-    if (tab.view) {
-      this.window()?.contentView.removeChildView(tab.view);
-      tab.view.setVisible(false);
-    }
-    // A conversation whose browser was never opened has nothing to come back to.
-    if (!tab.opened) {
-      this.tabs.delete(tab.key);
-      return;
-    }
+  private leave(conversation: Conversation) {
     // A browser opened outside any conversation belongs to that moment, not to the next chat.
-    if (!tab.sessionId) {
-      this.drop(tab);
-      return;
-    }
-    this.scheduleRelease(tab);
+    if (!conversation.sessionId)
+      for (const page of [...conversation.pages]) if (!page.busy) this.drop(page);
+    for (const page of conversation.pages) this.scheduleRelease(page);
+    this.enforceLimit();
+    if (!conversation.pages.length) this.conversations.delete(conversation.key);
   }
 
-  private scheduleRelease(tab: PageTab) {
-    clearTimeout(tab.evicting);
-    if (!tab.view) return;
-    const wait = Math.max(this.limits.keepMs, tab.keepUntil - Date.now());
-    tab.evicting = setTimeout(() => this.release(tab), wait);
-    const away = [...this.tabs.values()]
-      .filter((other) => other.view && other !== this.current && other.busy === 0)
+  private scheduleRelease(page: BrowserPage) {
+    clearTimeout(page.evicting);
+    if (!page.view) return;
+    const wait = Math.max(this.limits.keepMs, page.keepUntil - Date.now());
+    page.evicting = setTimeout(() => this.release(page), wait);
+  }
+
+  /** The tabs left alone longest go first; a tab of the conversation on screen comes back at once. */
+  private enforceLimit() {
+    const shown = this.shownPage();
+    const away = [...this.conversations.values()]
+      .flatMap((conversation) => conversation.pages)
+      .filter((page) => page.view && page !== shown && page.busy === 0)
       .sort((a, b) => b.usedAt - a.usedAt);
     for (const old of away.slice(this.limits.liveBackground)) this.release(old);
   }
 
   /** Frees the page, the renderer process with it; its address is what brings it back. */
-  private release(tab: PageTab) {
-    clearTimeout(tab.evicting);
-    if (tab === this.current || tab.busy > 0 || !tab.view) return;
-    const view = tab.view;
-    tab.view = undefined;
-    tab.restoring = undefined;
+  private release(page: BrowserPage) {
+    clearTimeout(page.evicting);
+    if (page === this.shownPage() || page.busy > 0 || !page.view) return;
+    const view = page.view;
+    page.view = undefined;
+    page.restoring = undefined;
     this.window()?.contentView.removeChildView(view);
     if (!view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false });
   }
 
   /** The owner closed it: nothing of it stays. */
-  private drop(tab: PageTab) {
-    clearTimeout(tab.evicting);
-    const view = tab.view;
-    tab.view = undefined;
-    tab.url = '';
-    tab.title = '';
-    tab.opened = false;
-    this.tabs.delete(tab.key);
+  private drop(page: BrowserPage) {
+    clearTimeout(page.evicting);
+    const conversation = page.conversation;
+    const at = conversation.pages.indexOf(page);
+    conversation.pages.splice(at, 1);
+    if (conversation.agentPageId === page.id) conversation.agentPageId = undefined;
+    if (conversation.activeId === page.id)
+      conversation.activeId = (conversation.pages[at] ?? conversation.pages[at - 1])?.id;
+    const view = page.view;
+    page.view = undefined;
+    if (this.attached === view) this.attached = undefined;
     if (view) {
       this.window()?.contentView.removeChildView(view);
       if (!view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false });
     }
   }
 
+  /** A new tab of the conversation on screen. */
   open() {
-    const tab = this.current ?? this.shownTab();
-    this.current = tab;
-    tab.focus = ++this.focusCount;
-    tab.opened = true;
-    this.present(tab);
+    const conversation = this.current ?? this.shownConversation();
+    this.current = conversation;
+    const shown = this.shownPage();
+    if (shown) shown.tip = this.pointer.position;
+    this.pointer.hide();
+    const page = this.addPage(conversation);
+    conversation.activeId = page.id;
+    conversation.focus = ++this.focusCount;
+    this.layout(this.bounds);
+    this.enforceLimit();
+    this.changed();
+    return page;
+  }
+  select(pageId: string) {
+    const conversation = this.current;
+    if (!conversation || conversation.activeId === pageId) return;
+    if (!conversation.pages.some((page) => page.id === pageId)) return;
+    const shown = this.shownPage();
+    if (shown) shown.tip = this.pointer.position;
+    this.pointer.hide();
+    conversation.activeId = pageId;
+    this.layout(this.bounds);
+    this.restorePointer();
+    this.enforceLimit();
     this.changed();
   }
-  close() {
-    const tab = this.current;
-    this.pointer.hide();
-    if (tab) {
-      this.drop(tab);
-      this.current = this.place ? this.shownTab() : undefined;
-    }
+  closePage(pageId: string) {
+    const conversation = this.current;
+    const page = conversation?.pages.find((candidate) => candidate.id === pageId);
+    if (!conversation || !page) return;
+    if (page === this.shownPage()) this.pointer.hide();
+    this.drop(page);
+    this.layout(this.bounds);
+    this.restorePointer();
     this.changed();
   }
   layout(bounds: { x: number; y: number; width: number; height: number }) {
@@ -356,13 +477,17 @@ export class JianBrowser {
     };
     if (this.bounds.width > 0 && this.bounds.height > 0)
       this.lastSize = { width: this.bounds.width, height: this.bounds.height };
+    const page = this.shownPage();
     const visible = this.visible();
+    // A page is made when there is somewhere to show it, not when its conversation is opened.
+    if (page && visible) this.present(page);
+    else if (this.attached && this.attached !== page?.view) this.detach();
     this.view?.setBounds(this.bounds);
     this.view?.setVisible(visible);
     this.pointer.follow(this.bounds, visible);
   }
   private visible() {
-    return Boolean(this.current?.opened && this.bounds.width > 0 && this.bounds.height > 0);
+    return Boolean(this.shownPage() && this.bounds.width > 0 && this.bounds.height > 0);
   }
   /** What the page looks like now, for the panel to hold while something is drawn over it. */
   private async snapshot() {
@@ -374,17 +499,16 @@ export class JianBrowser {
       : null;
   }
   async navigate(raw: string) {
-    const url = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
+    const url = addressFrom(raw);
     if (!allowed(url)) throw new Error('Enter an HTTP or HTTPS address without credentials');
-    if (!this.current?.opened) this.open();
-    const tab = this.current;
-    if (!tab) return;
-    tab.error = undefined;
+    const page = this.shownPage() ?? this.open();
+    page.error = undefined;
     try {
-      await this.live(tab).webContents.loadURL(url);
+      await this.live(page).webContents.loadURL(url);
     } catch (error) {
-      tab.error = error instanceof Error ? error.message : 'The page could not be opened';
+      page.error = error instanceof Error ? error.message : 'The page could not be opened';
     }
+    this.layout(this.bounds);
     this.changed();
   }
   command(command: string) {
@@ -395,8 +519,14 @@ export class JianBrowser {
     if (command === 'forward' && contents.navigationHistory.canGoForward())
       contents.navigationHistory.goForward();
     if (command === 'reload') {
-      if (this.current) this.current.error = undefined;
+      const page = this.shownPage();
+      if (page) page.error = undefined;
       contents.reload();
+    }
+    if (command === 'hard-reload') {
+      const page = this.shownPage();
+      if (page) page.error = undefined;
+      contents.reloadIgnoringCache();
     }
     if (command === 'stop') contents.stop();
   }
@@ -420,9 +550,13 @@ export class JianBrowser {
       trusted(event);
       this.open();
     });
-    ipcMain.on('browser:close', (event) => {
+    ipcMain.on('browser:select', (event, pageId: unknown) => {
       trusted(event);
-      this.close();
+      if (typeof pageId === 'string') this.select(pageId);
+    });
+    ipcMain.on('browser:close', (event, pageId: unknown) => {
+      trusted(event);
+      if (typeof pageId === 'string') this.closePage(pageId);
     });
     ipcMain.on('browser:layout', (event, bounds) => {
       trusted(event);
@@ -440,6 +574,56 @@ export class JianBrowser {
       trusted(event);
       const url = this.view?.webContents.getURL();
       if (url && allowed(url)) void shell.openExternal(url);
+    });
+    ipcMain.on('browser:shortcuts', (event, bindings: unknown) => {
+      trusted(event);
+      if (Array.isArray(bindings))
+        this.shortcuts = new Set(bindings.filter((id) => typeof id === 'string'));
+    });
+    ipcMain.handle('browser:screenshot', async (event) => {
+      trusted(event);
+      const image = await this.view?.webContents.capturePage().catch(() => null);
+      if (!image || image.isEmpty()) return false;
+      await clipboard.write([
+        new ClipboardItem({
+          'image/png': new Blob([new Uint8Array(image.toPNG())], { type: 'image/png' }),
+        }),
+      ]);
+      return true;
+    });
+    ipcMain.handle('browser:clear', async (event, what: unknown) => {
+      trusted(event);
+      const conversation = this.current ?? this.shownConversation();
+      const profile = session.fromPartition(this.partition(conversation.scope));
+      if (what === 'history') {
+        this.places.clearRecents(conversation.scope);
+        for (const other of this.conversations.values()) {
+          if (other.scope !== conversation.scope) continue;
+          for (const page of other.pages) page.view?.webContents.navigationHistory.clear();
+        }
+      }
+      if (what === 'cookies') await profile.clearStorageData({ storages: ['cookies'] });
+      if (what === 'cache') await profile.clearCache();
+      this.changed();
+    });
+    ipcMain.handle('browser:places', (event) => {
+      trusted(event);
+      return this.places.view((this.current ?? this.shownConversation()).scope);
+    });
+    ipcMain.handle('browser:favorite', (event, on: unknown, url: unknown, title: unknown) => {
+      trusted(event);
+      if (typeof url !== 'string' || !allowed(url)) return;
+      this.places.setFavorite(
+        (this.current ?? this.shownConversation()).scope,
+        { url, title: typeof title === 'string' ? title : '' },
+        on === true,
+      );
+      this.changed();
+    });
+    ipcMain.handle('browser:forget', (event, url: unknown) => {
+      trusted(event);
+      if (typeof url === 'string')
+        this.places.forget((this.current ?? this.shownConversation()).scope, url);
     });
     ipcMain.handle('browser:cookie-sources', (event) => {
       trusted(event);
@@ -462,45 +646,63 @@ export class JianBrowser {
   }
 
   /**
-   * One agent's work in its conversation's page, one thing at a time there. Conversations do not
+   * One agent's work in a tab of its conversation, one thing at a time there. Conversations do not
    * wait for each other. A renderer stuck in a page's own loop may never answer: the race lets
    * that page fail its own work and frees the queue for what comes next.
    */
   private work<T>(
     scope: { profileId: string; sessionId: string },
     signal: AbortSignal | undefined,
-    run: (tab: PageTab, shown: boolean, deadline: AbortSignal) => Promise<T>,
+    choose: (conversation: Conversation) => BrowserPage | undefined,
+    run: (page: BrowserPage, shown: boolean, deadline: AbortSignal) => Promise<T>,
   ): Promise<T> {
-    const tab = this.tabFor('local', scope.profileId, scope.sessionId);
+    const conversation = this.conversationFor('local', scope.profileId, scope.sessionId);
+    const page =
+      choose(conversation) ??
+      conversation.pages.find((candidate) => candidate.id === conversation.agentPageId) ??
+      conversation.pages.find((candidate) => candidate.id === conversation.activeId) ??
+      this.addPage(conversation);
+    conversation.agentPageId = page.id;
     const deadline = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(45000)]);
-    const task = tab.queue
+    const task = page.queue
       .catch(() => {})
       .then(async () => {
         deadline.throwIfAborted();
-        tab.busy += 1;
-        tab.opened = true;
-        tab.focus = ++this.focusCount;
-        tab.keepUntil = Date.now() + this.limits.agentKeepMs;
+        page.busy += 1;
+        page.keepUntil = Date.now() + this.limits.agentKeepMs;
+        conversation.focus = ++this.focusCount;
         try {
-          const shown = tab === this.current;
+          const shown = conversation === this.current;
           if (shown) {
-            this.present(tab);
-            this.changed();
-          } else this.offScreen(tab);
-          await tab.restoring;
-          return await Promise.race([run(tab, shown, deadline), rejectOnAbort(deadline)]);
-        } finally {
-          tab.busy -= 1;
-          if (tab !== this.current && tab.busy === 0) {
-            if (tab.view) {
-              this.window()?.contentView.removeChildView(tab.view);
-              tab.view.setVisible(false);
+            const before = this.shownPage();
+            if (before !== page) {
+              if (before) before.tip = this.pointer.position;
+              this.pointer.hide();
             }
-            this.scheduleRelease(tab);
+            conversation.activeId = page.id;
+            this.layout(this.bounds);
+            if (before !== page) this.restorePointer();
+            this.changed();
+          } else {
+            conversation.activeId ??= page.id;
+            this.offScreen(page);
+          }
+          this.live(page);
+          await page.restoring;
+          return await Promise.race([run(page, shown, deadline), rejectOnAbort(deadline)]);
+        } finally {
+          page.busy -= 1;
+          if (page !== this.shownPage() && page.busy === 0) {
+            if (page.view) {
+              this.window()?.contentView.removeChildView(page.view);
+              page.view.setVisible(false);
+            }
+            if (conversation !== this.current) this.scheduleRelease(page);
+            this.enforceLimit();
           }
         }
       });
-    tab.queue = task;
+    page.queue = task;
     return task;
   }
 
@@ -509,40 +711,46 @@ export class JianBrowser {
     raw: unknown,
     signal?: AbortSignal,
   ): Promise<BrowserActionResult<Buffer>> {
-    return this.work(scope, signal, async (tab, shown, deadline) => {
-      const input = browserActionInputSchema.parse(raw);
-      if (input.action === 'open' && !allowed(input.url ?? ''))
-        throw new Error('Enter an HTTP or HTTPS address without credentials');
-      const contents = this.live(tab).webContents;
-      // The panel opens because of the change `work` sent; a click needs the page where it lands.
-      if (shown)
-        for (let waited = 0; waited < 1500 && !this.visible() && !deadline.aborted; waited += 50)
-          await delay(50);
-      deadline.throwIfAborted();
-      const onScreen = () => tab === this.current;
-      return runBrowserAction(contents, input, {
-        pointer: shown ? this.pointer : undefined,
-        signal: deadline,
-        bounds: () => (onScreen() ? this.bounds : this.lastSize),
-        visible: () => (onScreen() ? this.visible() : true),
-        offScreen: () => !onScreen(),
-        open: async (url) => {
-          tab.error = undefined;
-          await contents.loadURL(url);
-        },
-        // Only the conversation on screen may take the keyboard from the owner.
-        focus: () => {
-          if (onScreen()) contents.focus();
-        },
-        keepFocus: () => {
-          const app = this.window()?.webContents;
-          const had = app?.isFocused() ?? false;
-          return () => {
-            if (had && app && !app.isDestroyed()) app.focus();
-          };
-        },
-      });
-    });
+    const input = browserActionInputSchema.parse(raw);
+    if (input.action === 'open' && !allowed(input.url ?? ''))
+      return Promise.reject(new Error('Enter an HTTP or HTTPS address without credentials'));
+    return this.work(
+      scope,
+      signal,
+      (conversation) =>
+        input.action === 'open' && input.newTab ? this.addPage(conversation) : undefined,
+      async (page, shown, deadline) => {
+        const contents = this.live(page).webContents;
+        // The panel opens because of the change `work` sent; a click needs the page where it lands.
+        if (shown)
+          for (let waited = 0; waited < 1500 && !this.visible() && !deadline.aborted; waited += 50)
+            await delay(50);
+        deadline.throwIfAborted();
+        const onScreen = () => page === this.shownPage();
+        return runBrowserAction(contents, input, {
+          pointer: shown ? this.pointer : undefined,
+          signal: deadline,
+          bounds: () => (onScreen() ? this.bounds : this.lastSize),
+          visible: () => (onScreen() ? this.visible() : true),
+          offScreen: () => !onScreen(),
+          open: async (url) => {
+            page.error = undefined;
+            await contents.loadURL(url);
+          },
+          // Only the page on screen may take the keyboard from the owner.
+          focus: () => {
+            if (onScreen()) contents.focus();
+          },
+          keepFocus: () => {
+            const app = this.window()?.webContents;
+            const had = app?.isFocused() ?? false;
+            return () => {
+              if (had && app && !app.isDestroyed()) app.focus();
+            };
+          },
+        });
+      },
+    );
   }
 
   inspect(
@@ -550,26 +758,36 @@ export class JianBrowser {
     raw: PageInspectionInput,
     signal?: AbortSignal,
   ): Promise<InspectionCapture> {
-    return this.work(scope, signal, async (tab, _shown, deadline) => {
-      const input = pageInspectionInputSchema.parse(raw);
-      if (!allowed(input.url)) throw new Error('Only HTTP and HTTPS pages can be inspected');
-      return inspectContents(this.live(tab).webContents, input, deadline, {
-        inspecting: this.inspecting,
-        cancelled: () => {
-          tab.error = 'The browser inspection was cancelled or timed out';
-          if (!input.reusePage) {
-            const view = tab.view;
-            tab.view = undefined;
-            if (view) {
-              this.window()?.contentView.removeChildView(view);
-              if (!view.webContents.isDestroyed())
-                view.webContents.close({ waitForBeforeUnload: false });
+    const input = pageInspectionInputSchema.parse(raw);
+    if (!allowed(input.url))
+      return Promise.reject(new Error('Only HTTP and HTTPS pages can be inspected'));
+    return this.work(
+      scope,
+      signal,
+      // Reusing means the tab the owner has that page in, whichever is in front.
+      (conversation) =>
+        input.reusePage
+          ? conversation.pages.find((page) => page.url && pageKey(page.url) === pageKey(input.url))
+          : undefined,
+      async (page, _shown, deadline) =>
+        inspectContents(this.live(page).webContents, input, deadline, {
+          inspecting: this.inspecting,
+          cancelled: () => {
+            page.error = 'The browser inspection was cancelled or timed out';
+            if (!input.reusePage) {
+              const view = page.view;
+              page.view = undefined;
+              if (this.attached === view) this.attached = undefined;
+              if (view) {
+                this.window()?.contentView.removeChildView(view);
+                if (!view.webContents.isDestroyed())
+                  view.webContents.close({ waitForBeforeUnload: false });
+              }
             }
-          }
-          this.changedIn(tab);
-        },
-        finished: () => this.changedIn(tab),
-      });
-    });
+            this.changedIn(page);
+          },
+          finished: () => this.changedIn(page),
+        }),
+    );
   }
 }

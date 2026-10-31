@@ -168,6 +168,20 @@
   width: var(--inspector-width);
 }
 
+/* Full screen: the chat's whole area, its width no longer the owner's to drag. */
+.inspector-host[data-full] {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+.inspector-host[data-full] > hr {
+  display: none;
+}
+/* The conversation stays mounted, keeping its draft and scroll, only out of sight. */
+[data-inspector-beside="full"] [data-app-main] {
+  display: none;
+}
+
 /* The shared host owns glass, border and sizing; content drawers remain plain inside it. */
 [data-inspector-host] .crew-drawer {
   position: static;

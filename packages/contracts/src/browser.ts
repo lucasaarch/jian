@@ -47,6 +47,12 @@ export const browserActionInputSchema = z
         'open navigates to url. click needs a selector or x and y. type enters text, into a selector when given, else where the focus is. key presses one key. scroll moves the page by deltaX and deltaY. read only reports the page as it stands.',
       ),
     url: z.url().max(2000).optional(),
+    newTab: z
+      .boolean()
+      .default(false)
+      .describe(
+        'With open: in a new tab beside the ones the owner has, not over the current page.',
+      ),
     selector: z
       .string()
       .min(1)

@@ -22,7 +22,7 @@ export const allowed = (url: string) => {
  * Origin, path and query name a page. A fragment is client state inside it and a trailing slash is
  * spelling, so neither makes the owner's open page "another page".
  */
-const pageKey = (url: string) => {
+export const pageKey = (url: string) => {
   const parsed = new URL(url);
   parsed.hash = '';
   parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';

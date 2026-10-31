@@ -20,7 +20,7 @@ try {
   const renderer = join(temporary, 'renderer.js');
   await build({
     stdin: {
-      contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {BrowserInspector} from './src/renderer/chrome/browser-panel'; import {InspectorContent} from '../../packages/ui/src/components/sessions/inspector-host'; import {useCrew} from '../../packages/ui/src/lib/stores/crew'; function PreviewInspector(){const following=useCrew(s=>s.following); return following && following!=='browser' ? <InspectorContent><p className="p-6 text-ink">Reference: {following}</p></InspectorContent> : null;} window.openTestPull=()=>useCrew.getState().open({kind:'pull',owner:'atlas-example',repo:'site',number:7,url:'https://github.com/atlas-example/site/pull/7'}); window.openTestAgent=()=>{useCrew.setState({agents:[{runId:'reviewer',name:'Reviewer'}]});useCrew.getState().follow('reviewer')}; window.showTestConversation=(id)=>useCrew.getState().show(id,[]); function App(){const [hidden,setHidden]=React.useState(false); window.setPanelHidden=setHidden; return <div className="flex bg-canvas" style={{height:"100vh"}}><BrowserInspector hidden={hidden}><main className="min-w-0 flex-1 p-12 text-ink"><button onClick={()=>window.jian.browser.open()}>Open Jian Browser</button><p>Atlas conversation</p><PreviewInspector /></main></BrowserInspector></div>;} createRoot(document.getElementById('root')).render(<App />);`,
+      contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {BrowserInspector} from './src/renderer/chrome/browser-panel'; import {InspectorContent} from '../../packages/ui/src/components/sessions/inspector-host'; import {useCrew} from '../../packages/ui/src/lib/stores/crew'; function PreviewInspector(){const following=useCrew(s=>s.following); return following && following!=='browser' ? <InspectorContent><p className="p-6 text-ink">Reference: {following}</p></InspectorContent> : null;} window.openTestPull=()=>useCrew.getState().open({kind:'pull',owner:'atlas-example',repo:'site',number:7,url:'https://github.com/atlas-example/site/pull/7'}); window.openTestAgent=()=>{useCrew.setState({agents:[{runId:'reviewer',name:'Reviewer'}]});useCrew.getState().follow('reviewer')}; window.showTestConversation=(id)=>useCrew.getState().show(id,[]); function App(){const [hidden,setHidden]=React.useState(false); window.setPanelHidden=setHidden; return <div className="flex bg-canvas" style={{height:"100vh"}}><BrowserInspector hidden={hidden}><main className="min-w-0 flex-1 p-12 text-ink"><button onClick={()=>useCrew.getState().reopen()}>Open the inspector</button><p>Atlas conversation</p><PreviewInspector /></main></BrowserInspector></div>;} createRoot(document.getElementById('root')).render(<App />);`,
       resolveDir: root,
       loader: 'tsx',
     },
@@ -99,9 +99,14 @@ try {
   app.process().stdout.on('data', (data) => process.stdout.write(data));
   app.process().stderr.on('data', (data) => process.stderr.write(data));
   const page = await app.firstWindow();
-  await page.getByRole('button', { name: 'Open Jian Browser', exact: true }).click();
+  // It opens empty, and offers what can be opened in it.
+  await page.getByRole('button', { name: 'Open the inspector', exact: true }).click();
+  await page.getByText('Keep something open', { exact: false }).waitFor();
+  assert.equal(await page.getByLabel('Open in inspector', { exact: true }).count(), 0);
+  await page.getByRole('button', { name: /^Browser/ }).click();
   await page.getByLabel('Browser address', { exact: true }).waitFor();
   const url = await app.evaluate(() => globalThis.nativeBrowserTest.url);
+  const baseUrl = url;
   await page.getByLabel('Browser address', { exact: true }).fill(url);
   await page.getByLabel('Browser address', { exact: true }).press('Enter');
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -117,17 +122,17 @@ try {
   assert.equal(Number(await divider.getAttribute('aria-valuenow')), before + 32);
   const box = await divider.boundingBox();
   assert.ok(box && box.height > 200, 'The divider runs the height of the inspector');
-  await page.mouse.move(box.x + box.width / 2, box.y + 120);
-  await page.mouse.down();
-  await page.mouse.move(box.x - 100, box.y + 120, { steps: 8 });
-  await page.mouse.up();
-  await page.waitForFunction(
-    (minimum) =>
-      Number(
-        document.querySelector('[aria-label="Resize inspector"]')?.getAttribute('aria-valuenow'),
-      ) > minimum,
-    before + 60,
-  );
+  // A synthetic drag loses its capture when a real mouse moves over the window meanwhile, which
+  // is not what is being tested: real input was checked to hold, and only a retry is asked here.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const handle = await divider.boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + 120);
+    await page.mouse.down();
+    await page.mouse.move(handle.x - 100, handle.y + 120, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+    if (Number(await divider.getAttribute('aria-valuenow')) > before + 60) break;
+  }
   assert.ok(
     Number(await divider.getAttribute('aria-valuenow')) > before + 60,
     'Pointer drag resizes the actual split view',
@@ -143,7 +148,8 @@ try {
   await page.evaluate(() => window.openTestAgent());
   await page.getByRole('tab', { name: 'Reviewer', exact: true }).waitFor();
   assert.equal(await page.getByRole('tab').count(), 3);
-  await page.getByRole('tab', { name: 'Browser', exact: true }).click();
+  // A browser tab goes by the name of its page.
+  await page.getByRole('tab', { name: 'Atlas Native Preview', exact: true }).click();
   await page.getByLabel('Browser address', { exact: true }).waitFor();
   const inspected = await app.evaluate(async () => {
     const { browser, url } = globalThis.nativeBrowserTest;
@@ -207,7 +213,8 @@ try {
   // A conversation does not inherit the browser the app had open before it.
   await page.waitForTimeout(200);
   assert.deepEqual(await page.getByRole('tab').allTextContents(), []);
-  await page.getByRole('button', { name: 'Open Jian Browser', exact: true }).click();
+  await page.getByRole('button', { name: 'Open the inspector', exact: true }).click();
+  await page.getByRole('button', { name: /^Browser/ }).click();
   await page.getByLabel('Browser address', { exact: true }).waitFor();
   const reused = await app.evaluate(async (_electron, profileId) => {
     const { browser, url, hits } = globalThis.nativeBrowserTest;
@@ -433,7 +440,7 @@ try {
       return { visible: browser.view.getVisible(), bounds: browser.view.getBounds() };
     });
   await page.getByLabel('Browser options', { exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Copy address' }).waitFor();
+  await page.getByRole('menuitem', { name: 'Copy current URL' }).waitFor();
   await page.waitForFunction(() =>
     document.querySelector('section[aria-label="Jian Browser"] img[src^="data:image"]'),
   );
@@ -541,7 +548,7 @@ try {
     );
     const inBDuring = browser.state();
     const sameViewInB = browser.view === pageInB;
-    const aTab = browser.tabs.get(`local:${profileId}:${A}`);
+    const aTab = browser.conversations.get(`local:${profileId}:${A}`).pages[0];
     const aFacts = await aTab.view.webContents.executeJavaScript(
       `[document.getElementById('clicks').textContent, document.getElementById('out').textContent]`,
     );
@@ -561,15 +568,15 @@ try {
     const backInA = browser.state();
     await wait(300);
     const afterReturn = browser.view?.webContents.getURL();
-    const bTab = browser.tabs.get(`local:${profileId}:${B}`);
+    const bTab = browser.conversations.get(`local:${profileId}:${B}`).pages[0];
     await wait(1200);
     const bReleased = bTab.view === undefined;
     // A conversation that never opened it has none, and leaves nothing behind.
-    const before = browser.tabs.size;
+    const before = browser.conversations.size;
     place(C);
     const inC = browser.state();
     place(A);
-    const afterC = browser.tabs.size;
+    const afterC = browser.conversations.size;
     return {
       inA,
       inB,
@@ -625,12 +632,174 @@ try {
   assert.equal(await page.locator('[data-inspector-host]').count(), 0, 'Nothing is drawn for it');
   await openConversation(owner);
   await page.getByLabel('Browser address', { exact: true }).waitFor();
-  assert.deepEqual(await page.getByRole('tab').allTextContents(), ['Browser']);
+  assert.equal(await page.getByRole('tab').count(), 1);
+
+  // Several tabs in one conversation, each its own page; the plus button opens the next.
+  const pagesBefore = await app.evaluate(() => globalThis.nativeBrowserTest.browser.state().pages);
+  await page.getByLabel('Open in inspector', { exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Browser', exact: true }).click();
+  await page.getByLabel('Search or enter a website', { exact: true }).waitFor();
+  await page.waitForFunction(
+    (count) => document.querySelectorAll('[role=tab]').length === count,
+    pagesBefore.length + 1,
+  );
+  const typed = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
+  assert.equal(typed, 'Search or enter a website', 'A new tab is for typing where to go');
+  // The page the owner opened is offered back; what the agent opened stays its own work.
+  const recents = await page.getByRole('region', { name: 'Recents' }).innerText();
+  assert.ok(recents.includes('Atlas Private'), `Recent pages are offered: ${recents}`);
+  assert.ok(!recents.includes('Atlas Late'), `An agent's pages are not the owner's: ${recents}`);
+  await page.getByLabel('Browser address', { exact: true }).fill(`${baseUrl}private`);
+  await page.getByLabel('Browser address', { exact: true }).press('Enter');
+  await page.getByRole('tab', { name: 'Atlas Private', exact: true }).waitFor();
+  const pair = await app.evaluate(() => {
+    const state = globalThis.nativeBrowserTest.browser.state();
+    return { pages: state.pages, activePageId: state.activePageId };
+  });
+  assert.equal(pair.pages.length, pagesBefore.length + 1);
+  assert.equal(pair.activePageId, pair.pages.at(-1).id);
+  // Going back to the first tab shows its own page, and the second stays as it was.
+  await page.getByRole('tab').first().click();
+  await page.waitForFunction(() => document.querySelector('[role=tab][aria-selected=true]'));
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const active = await app.evaluate(
+      () => globalThis.nativeBrowserTest.browser.state().activePageId,
+    );
+    if (active === pair.pages[0].id) break;
+    await page.waitForTimeout(50);
+  }
+  assert.equal(
+    await app.evaluate(() => globalThis.nativeBrowserTest.browser.state().activePageId),
+    pair.pages[0].id,
+  );
+  // An agent keeps to the tab it works in when the owner looks at another.
+  const scoped = await app.evaluate(
+    async (_electron, { profileId, second }) => {
+      const { browser } = globalThis.nativeBrowserTest;
+      const conversation = browser.conversations.get(`local:${profileId}:${profileId}`);
+      conversation.agentPageId = second;
+      const acted = await browser.act({ profileId, sessionId: profileId }, { action: 'read' });
+      return { url: acted.url, active: browser.state().activePageId };
+    },
+    { profileId: owner, second: pair.pages.at(-1).id },
+  );
+  assert.ok(scoped.url.endsWith('/private'), JSON.stringify(scoped));
+  assert.equal(scoped.active, pair.pages.at(-1).id, 'What the agent acts in comes to the front');
+  // A favorite is kept, and offered in the next new tab.
+  await page.getByRole('button', { name: 'Add to favorites', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove from favorites', exact: true }).waitFor();
+  // The menu's actions, against the page and the profile behind it.
+  await page.getByLabel('Browser options', { exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Take screenshot' }).click();
+  await page
+    .getByText('Screenshot copied to the clipboard')
+    .waitFor({ timeout: 8000 })
+    .catch(() => {});
+  const copied = await app.evaluate(async ({ clipboard }) =>
+    (await clipboard.read()).flatMap((item) => item.types),
+  );
+  assert.ok(copied.includes('image/png'), `The page is on the clipboard: ${copied}`);
+  await page.getByLabel('Browser options', { exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Clear cookies' }).click();
+  await page.getByRole('button', { name: 'Clear cookies', exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('[role=dialog]'));
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const left = await app.evaluate(() =>
+      globalThis.nativeBrowserTest.browser.view.webContents.session.cookies.get({
+        name: 'session',
+      }),
+    );
+    if (!left.length) break;
+    await page.waitForTimeout(50);
+  }
+  assert.equal(
+    (
+      await app.evaluate(() =>
+        globalThis.nativeBrowserTest.browser.view.webContents.session.cookies.get({
+          name: 'session',
+        }),
+      )
+    ).length,
+    0,
+    'Clear cookies signs the browser out',
+  );
+  await page.getByLabel('Open in inspector', { exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Browser', exact: true }).click();
+  await page.getByRole('region', { name: 'Favorites' }).waitFor();
+  assert.ok(
+    (await page.getByRole('region', { name: 'Favorites' }).innerText()).includes('Atlas Private'),
+  );
+  await page.getByLabel('Browser options', { exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Clear browsing history' }).click();
+  await page.waitForFunction(() => !document.querySelector('section[aria-label="Recents"]'));
+  assert.equal(await page.getByRole('region', { name: 'Favorites' }).count(), 1);
+  const blankTab = await app.evaluate(
+    () => globalThis.nativeBrowserTest.browser.state().activePageId,
+  );
+  await page
+    .getByRole('button', { name: /^Close .* tab$/ })
+    .last()
+    .click();
+  await page.waitForFunction((id) => !document.querySelector(`[data-page="${id}"]`), blankTab);
+  // Full screen gives the Inspector the chat's area, and gives it back.
+  await page.getByLabel('Full screen', { exact: true }).click();
+  await page.locator('[data-inspector-host][data-full]').waitFor();
+  await page.getByLabel('Exit full screen', { exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('[data-inspector-host][data-full]'));
+  // Closing a tab frees its page and leaves the others.
+  await page.getByRole('tab', { name: 'Atlas Private', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Close Atlas Private tab', exact: true }).click();
+  await page.waitForFunction(
+    (count) => document.querySelectorAll('[role=tab]').length === count,
+    pagesBefore.length,
+  );
+  assert.equal(
+    await app.evaluate(() => globalThis.nativeBrowserTest.browser.state().pages.length),
+    pagesBefore.length,
+  );
+  // A page in focus passes up the app's keys, and keeps everything else for itself.
+  const keys = await app.evaluate(async () => {
+    const { browser, win } = globalThis.nativeBrowserTest;
+    browser.shortcuts = new Set(['false:true:b']);
+    const seen = [];
+    const hear = (_event, channel, payload) => {
+      if (channel === 'browser:shortcut') seen.push(payload);
+    };
+    const send = win.webContents.send.bind(win.webContents);
+    win.webContents.send = (channel, ...rest) => {
+      hear(null, channel, ...rest);
+      return send(channel, ...rest);
+    };
+    const contents = browser.view.webContents;
+    await contents.loadURL(`${globalThis.nativeBrowserTest.url}form`);
+    contents.focus();
+    const modifier = process.platform === 'darwin' ? 'meta' : 'control';
+    const press = (keyCode, modifiers) => {
+      contents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
+      contents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
+    };
+    press('b', [modifier, 'shift']);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const app = seen.length;
+    press('c', [modifier]);
+    press('b', [modifier]);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    win.webContents.send = send;
+    return { app, total: seen.length, first: seen[0] };
+  });
+  assert.equal(keys.app, 1, `The app's key reaches the app: ${JSON.stringify(keys)}`);
+  assert.equal(keys.total, 1, 'Other keys stay with the page');
+  assert.equal(keys.first.shift, true);
+  // The inspector closes with its tabs kept, and opens again on them.
+  await page.getByRole('button', { name: 'Close inspector', exact: true }).click();
+  await page.getByRole('button', { name: 'Open the inspector', exact: true }).click();
+  await page.getByLabel('Browser address', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('tab').count(), pagesBefore.length);
 
   await page.getByRole('button', { name: 'Close inspector', exact: true }).click();
   await page.getByLabel('Browser address', { exact: true }).waitFor({ state: 'detached' });
   console.log(
-    'Native Electron browser: navigation, keyboard and pointer resizing, responsive screenshots, DOM/styles/resources, interactions, profile isolation, reused signed-in pages, cross-origin frames, refused writes, locked pages, hidden windows, agent control with its pointer, the menu over the page, live resizing, app reloads and one browser per conversation passed.',
+    'Native Electron browser: navigation, keyboard and pointer resizing, responsive screenshots, DOM/styles/resources, interactions, profile isolation, reused signed-in pages, cross-origin frames, refused writes, locked pages, hidden windows, agent control with its pointer, the menu over the page, live resizing, app reloads and one browser per conversation, several tabs, the empty inspector, recents, favorites and the menu actions passed.',
   );
 } finally {
   await app?.close();
