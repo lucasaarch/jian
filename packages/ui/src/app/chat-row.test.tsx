@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ChatRow } from './chat-row';
+import { ChatRow, RenameDialog } from './chat-row';
 
 const roots: (() => void)[] = [];
 afterEach(() => {
@@ -9,7 +9,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-async function render(rename?: (title: string) => Promise<void>) {
+async function render(rename?: (title: string) => Promise<boolean>) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const remove = vi.fn();
   const host = document.createElement('ul');
@@ -41,33 +41,61 @@ async function render(rename?: (title: string) => Promise<void>) {
   return { host, remove, menu };
 }
 
-const type = (input: HTMLInputElement | null, value: string) =>
+async function dialog(rename: (title: string) => Promise<boolean>) {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const close = vi.fn();
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  roots.push(() => root.unmount());
+  await act(async () =>
+    root.render(<RenameDialog open onOpenChange={close} name="Old title" rename={rename} />),
+  );
+  return close;
+}
+
+const field = () => document.querySelector<HTMLInputElement>('[role="dialog"] input');
+
+const type = (value: string) =>
   act(async () => {
+    const input = field();
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
     input?.dispatchEvent(new Event('input', { bubbles: true }));
   });
 
-it('renames a chat from its menu, and keeps the name when Escape is pressed', async () => {
-  const rename = vi.fn(async () => {});
+const save = () =>
+  act(async () => {
+    document
+      .querySelector('[role="dialog"] form')
+      ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+
+it('renames a chat from its menu, in a dialog that opens on its name', async () => {
+  const rename = vi.fn(async () => true);
   const view = await render(rename);
 
   const items = await view.menu();
   await act(async () => items.find((item) => item.textContent === 'Rename')?.click());
-  const field = view.host.querySelector<HTMLInputElement>('input[aria-label="Chat name"]');
-  await type(field, 'Release checks');
-  await act(async () =>
-    field?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
-  );
-  expect(rename).toHaveBeenCalledExactlyOnceWith('Release checks');
+  expect(field()?.value).toBe('Old title');
 
-  const again = await view.menu();
-  await act(async () => again.find((item) => item.textContent === 'Rename')?.click());
-  const second = view.host.querySelector<HTMLInputElement>('input[aria-label="Chat name"]');
-  await type(second, 'Something else');
-  await act(async () =>
-    second?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
-  );
-  expect(rename).toHaveBeenCalledTimes(1);
+  await type('  Release checks  ');
+  await save();
+  expect(rename).toHaveBeenCalledExactlyOnceWith('Release checks');
+});
+
+it('stays open when the name could not be saved', async () => {
+  const close = await dialog(async () => false);
+  await type('Release checks');
+  await save();
+  expect(close).not.toHaveBeenCalled();
+});
+
+it('asks nothing of the gateway when the name did not change', async () => {
+  const rename = vi.fn(async () => true);
+  const close = await dialog(rename);
+  await save();
+  expect(rename).not.toHaveBeenCalled();
+  expect(close).toHaveBeenCalled();
 });
 
 it('deletes from its menu, and offers no rename where the name is not the chat’s own', async () => {

@@ -201,6 +201,7 @@ function AgentSidebar({ profileId }: { profileId: string }) {
             rename: async (title: string) => {
               const saved = await mutate(() => api.renameSession(profileId, session.id, title));
               if (saved) await refresh();
+              return Boolean(saved);
             },
           }
         : {})}

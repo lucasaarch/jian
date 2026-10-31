@@ -10,6 +10,7 @@ import { agentPath } from './navigation';
 import { panelApi } from './query/client';
 import { keys } from './query/keys';
 import { queries, useProfiles } from './query/profile';
+import { draftKey, useDrafts } from './stores/drafts';
 import { useLastProfile } from './stores/last-profile';
 
 /**
@@ -133,6 +134,7 @@ export function useDeleteConversation(): (sessionId: string) => Promise<boolean>
         return false;
       }
 
+      useDrafts.getState().write(draftKey(profileId, sessionId), '');
       await client.cancelQueries({ queryKey: keys.sessions(profileId) });
       // The key from the query's own options carries its type, so the update is checked.
       client.setQueryData(queries.sessions(profileId).queryKey, (sessions = []) =>
@@ -174,5 +176,6 @@ export function useSignOut(): () => Promise<void> {
       .catch(() => undefined);
     router.replace('/sign-in');
     client.clear();
+    useDrafts.getState().forgetAll();
   }, [client, router]);
 }

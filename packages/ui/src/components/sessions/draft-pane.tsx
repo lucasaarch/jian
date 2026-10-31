@@ -11,6 +11,7 @@ import type {
   Session,
 } from '../../lib/api';
 import { useAppearance } from '../../lib/appearance';
+import { draftKey } from '../../lib/stores/drafts';
 import { useSearchParams } from '../../platform/navigation';
 import { AgentHero } from './agent-hero';
 import { Composer } from './composer';
@@ -90,6 +91,7 @@ export function DraftPane({
       >
         <Composer
           draft
+          draftKey={draftKey(profile.id)}
           machines={machines}
           remoteMachineId={machineId}
           projectControl={
