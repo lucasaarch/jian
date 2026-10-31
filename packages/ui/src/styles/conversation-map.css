@@ -12,10 +12,9 @@
   }
   .conversation-map {
     @apply absolute left-5 z-[3] hidden flex-col items-start gap-1;
-    /* Centred on the conversation, not on the part the composer covers. */
-    top: calc((100% - var(--dock-height, 0px)) / 2);
+    top: 50%;
     transform: translateY(-50%);
-    max-height: calc(100% - var(--dock-height, 0px) - 4rem);
+    max-height: calc(100% - 4rem);
   }
   .conversation-map[data-dense] {
     @apply gap-0.5;

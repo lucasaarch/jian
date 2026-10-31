@@ -1,10 +1,8 @@
 'use client';
 
 import { AGENT_SESSION_CHANNEL, GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
-import { useQuery } from '@tanstack/react-query';
-import { FolderKanban } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { Session } from '../../lib/api';
+import type { Message, Session } from '../../lib/api';
 import { conversationName } from '../../lib/conversation-name';
 import { agentPath } from '../../lib/navigation';
 import {
@@ -17,16 +15,13 @@ import {
   useProviderModels,
   useSessions,
 } from '../../lib/query/agent';
-import { keys } from '../../lib/query/keys';
 import { useCrew } from '../../lib/stores/crew';
 import { draftKey } from '../../lib/stores/drafts';
 import { sendNow } from '../../lib/stores/outbox';
 import { useRefresh } from '../../lib/workspace';
 import { useParams, useRouter, useSearchParams } from '../../platform/navigation';
 import type { SectionActions } from '../props';
-import { GitHubLogo } from '../ui';
 import { AgentToolbar } from './agent-toolbar';
-import { ChatTarget } from './chat-target';
 import { Composer } from './composer';
 import { ContextRing } from './context-ring';
 import { ModelNames, prettyModel } from './crew';
@@ -77,6 +72,16 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   const asked = search.has('new');
   const draft = !selected;
   const active = selected ? sessions.find((session) => session.id === selected) : undefined;
+  const [replyTo, setReplyTo] = useState<Message>();
+  useEffect(
+    () =>
+      setReplyTo((current) =>
+        current && (current.sessionId !== selected || current.profileId !== profile.id)
+          ? undefined
+          : current,
+      ),
+    [selected, profile.id],
+  );
   const following = useCrew((state) => state.following);
   const providerModels = useProviderModels();
   // Agents' models by the name their provider gives, the id read as a name when it gives none.
@@ -89,15 +94,6 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
     setSent((value) => value + 1);
     void refresh();
   };
-
-  // The machines a chat can run on, every one of them; none when the list cannot be read.
-  // Shares the cache with Machines, and is read again now and then so a machine that connects
-  // or stops shows up without a reload.
-  const { data: machines = [] } = useQuery({
-    queryKey: keys.remoteMachines,
-    queryFn: () => api.remoteMachines(),
-    refetchInterval: 15_000,
-  });
 
   const onScreen = active && isGateway(active) ? active.id : undefined;
   // biome-ignore lint/correctness/useExhaustiveDependencies: A new last message is read as it arrives.
@@ -130,8 +126,6 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
           key={asked ? search.toString() : 'idle'}
           api={api}
           profile={profile}
-          projects={projects}
-          machines={machines}
           project={project && projects.some((item) => item.id === project) ? project : null}
           // The draft became this conversation; going back should not return to the draft.
           opened={(id) =>
@@ -185,6 +179,8 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                 <div className="conversation-chat">
                   <History
                     key={active.id}
+                    agent={profile}
+                    agents={profiles}
                     api={api}
                     profileId={profile.id}
                     sessionId={active.id}
@@ -205,6 +201,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                       isGateway(active) ? (run) => api.retryRun(profile.id, run.id) : undefined
                     }
                     onAnswered={answered}
+                    onReply={isGateway(active) ? setReplyTo : undefined}
                   />
                   {docked(active) && (
                     <ConversationDock key={`dock-${active.id}`}>
@@ -213,24 +210,8 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                           key={`composer-${active.id}`}
                           draftKey={draftKey(profile.id, active.id)}
                           name={profile.name}
-                          machines={machines}
-                          remoteMachineId={active.remoteMachineId ?? null}
-                          targetFixed
-                          projectControl={
-                            <ChatTarget
-                              icon={
-                                active.projectId ? (
-                                  <GitHubLogo size={14} />
-                                ) : (
-                                  <FolderKanban size={14} />
-                                )
-                              }
-                              label={
-                                projects.find((item) => item.id === active.projectId)?.name ??
-                                'No project'
-                              }
-                            />
-                          }
+                          replyTo={replyTo}
+                          onCancelReply={() => setReplyTo(undefined)}
                           modelControl={
                             <>
                               <ContextRing
@@ -272,13 +253,16 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                           upload={(file) => api.upload(profile.id, active.id, file)}
                           // Shown in the conversation at once and sent behind it, as a messenger
                           // does: one that fails stays there to be sent again.
-                          send={async (text, mediaIds) =>
+                          send={async (text, mediaIds, replyToId) =>
                             sendNow({
                               sessionId: active.id,
                               text,
                               mediaIds,
+                              ...(replyTo
+                                ? { replyTo: { id: replyTo.id, content: replyTo.content } }
+                                : {}),
                               deliver: (key) =>
-                                api.send(profile.id, active.id, text, mediaIds, key),
+                                api.send(profile.id, active.id, text, mediaIds, key, replyToId),
                               delivered: answered,
                             })
                           }

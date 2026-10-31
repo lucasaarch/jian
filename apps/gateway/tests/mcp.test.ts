@@ -247,7 +247,8 @@ it.each([false, true])(
       const profile = await services.profiles.createProfile({
         name: 'MCP test',
         instructions: 'Help.',
-        model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+        // A known tokenizer keeps catalog loading separate from the compaction workflow.
+        model: { provider: 'openai', modelId: 'gpt-4o-mini', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
       });
       await services.mcp.replace({
         servers: [

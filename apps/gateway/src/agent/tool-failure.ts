@@ -142,43 +142,53 @@ export function enrichToolFailure(error: unknown): Record<string, unknown> {
   return enriched;
 }
 
-/** One line, redacted against this run's credentials, short enough for a chat bubble. */
-export function reason(error: unknown, secrets: ReadonlySet<string>, limit = 300): string {
+function redacted(error: unknown, secrets: ReadonlySet<string>): string {
   const text =
     typeof error === 'string' ? error : error instanceof Error ? error.message : String(error);
 
-  return redactText(text, secrets)
-    .replace(CREDENTIAL_SHAPES, (match, _group, name?: string, joint?: string) =>
+  return redactText(text, secrets).replace(
+    CREDENTIAL_SHAPES,
+    (match, _group, name?: string, joint?: string) =>
       name
         ? `${name}${joint}[REDACTED]`
         : /^bearer/i.test(match)
           ? 'Bearer [REDACTED]'
           : '[REDACTED]',
-    )
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, limit);
+  );
+}
+
+/** One line, redacted against this run's credentials, short enough for a chat bubble. */
+export function reason(error: unknown, secrets: ReadonlySet<string>, limit = 300): string {
+  return redacted(error, secrets).replace(/\s+/g, ' ').trim().slice(0, limit);
 }
 
 /**
  * What the model sees when a tool throws: structured validation fields when present, otherwise
- * a short redacted sentence. Keeps GitHub `errors[]` and documentation_url intact.
+ * a short redacted sentence. The owner's diagnostic view keeps complete strings and arrays,
+ * including line breaks, while sharing the same credential redaction and safe field allowlist.
  */
-export function toolFailure(error: unknown, secrets: ReadonlySet<string>): string {
+export function toolFailure(
+  error: unknown,
+  secrets: ReadonlySet<string>,
+  audience: 'agent' | 'owner' = 'agent',
+): string {
+  const full = audience === 'owner';
   const enriched = enrichToolFailure(error);
   const stringLimit = enriched.errors || enriched.documentation_url || enriched.hint ? 2_000 : 200;
 
   const sanitize = (value: unknown, depth = 0): unknown => {
-    if (typeof value === 'string') return reason(value, secrets, stringLimit);
+    if (typeof value === 'string')
+      return full ? redacted(value, secrets) : reason(value, secrets, stringLimit);
     if (typeof value === 'number' || typeof value === 'boolean') return value;
     if (depth >= 5) return undefined;
-    if (Array.isArray(value)) return value.slice(0, 12).map((item) => sanitize(item, depth + 1));
+    if (Array.isArray(value))
+      return value.slice(0, full ? undefined : 12).map((item) => sanitize(item, depth + 1));
     if (!value || typeof value !== 'object') return undefined;
 
     return Object.fromEntries(
       Object.entries(value)
         .filter(([key]) => FAILURE_FIELDS.has(key))
-        .slice(0, 16)
+        .slice(0, full ? undefined : 16)
         .map(([key, item]) => [key, sanitize(item, depth + 1)])
         .filter(([, item]) => item !== undefined),
     );
@@ -188,7 +198,7 @@ export function toolFailure(error: unknown, secrets: ReadonlySet<string>): strin
 
   if (structured && typeof structured === 'object' && Object.keys(structured).length) {
     const encoded = JSON.stringify(structured);
-    if (encoded.length <= 4_000) return encoded;
+    if (full || encoded.length <= 4_000) return encoded;
 
     const { message, origin, code, format, path, issues, errors, documentation_url, status, hint } =
       structured as Record<string, unknown>;
@@ -201,5 +211,8 @@ export function toolFailure(error: unknown, secrets: ReadonlySet<string>): strin
     return concise.length <= 4_000 ? concise : JSON.stringify(summary);
   }
 
-  return reason(error, secrets) || 'no reason given. Inspect saved steps before retrying.';
+  return (
+    (full ? redacted(error, secrets) : reason(error, secrets)) ||
+    'no reason given. Inspect saved steps before retrying.'
+  );
 }

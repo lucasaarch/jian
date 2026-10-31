@@ -89,7 +89,14 @@ function Window() {
   );
   const uses = useComputerUses(gateways);
   const mac = desktop().platform === 'darwin';
-  useWindowCommands({ openSettings, gateways, current, select, connect });
+  useWindowCommands({
+    openSettings,
+    gateways,
+    current,
+    select,
+    connect,
+    restartLocal: () => void desktop().local.restart(),
+  });
 
   if (!loaded) return null;
 

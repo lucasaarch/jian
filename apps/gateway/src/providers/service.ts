@@ -25,6 +25,7 @@ import {
   isUniqueViolation,
   listProviders,
   markProviderRevoked,
+  migrateLocalOllamaProvider,
   readModelDefaults,
   revokeLiveProviders,
   writeModelDefaults,
@@ -61,6 +62,11 @@ export class Providers {
     private readonly catalog?: ModelCatalog,
   ) {}
 
+  /** Moves a prior Ollama connection from the generic API provider after schema migration. */
+  migrateLegacyOllamaConnection(): Promise<void> {
+    return migrateLocalOllamaProvider(this.store.db);
+  }
+
   async providers() {
     const stored = await listProviders(this.store.db);
     // A configured provider hides the host environment's key for the same vendor.
@@ -79,12 +85,14 @@ export class Providers {
 
   async createProvider(input: unknown) {
     const { secret, credential, baseURL, ...data } = providerInputSchema.parse(input);
-    const server = data.kind === 'openai-compatible';
+    const server = data.kind === 'openai-compatible' || data.kind === 'ollama';
 
     if (server && !baseURL) {
       throw new GatewayError(
         400,
-        'Give the address of the server, such as http://localhost:11434/v1 for Ollama',
+        data.kind === 'ollama'
+          ? 'Give the Ollama server address, such as http://localhost:11434'
+          : 'Give the address of the server, such as http://localhost:11434/v1',
       );
     }
 
@@ -315,6 +323,7 @@ export class Providers {
         ...(selection.reasoningEffort ? { reasoningEffort: selection.reasoningEffort } : {}),
         // Only where the model takes it: a stale choice must not cost a refused request.
         ...(selection.fast && takesFast(provider.kind, selection.modelId) ? { fast: true } : {}),
+        ...(provider.kind === 'ollama' ? { baseURL: provider.baseURL } : {}),
         ...(provider.apiKeyEnv ? { apiKeyEnv: provider.apiKeyEnv } : { providerId: provider.id }),
       },
       // Reserve output inside the model's actual window. Session compaction, not a fixed

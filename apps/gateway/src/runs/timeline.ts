@@ -55,7 +55,9 @@ export async function sessionTimeline(
       tools: sql<
         string[] | null
       >`jsonb_path_query_array(${checkpoints.data}, '$.tools[*].toolCallId')`,
-      reason: sql<string | null>`${checkpoints.data}->>'reason'`,
+      reason: sql<
+        string | null
+      >`coalesce(${checkpoints.data}->>'detail', ${checkpoints.data}->>'reason')`,
       // Only a write's own diff checkpoint carries one; every other row reads null here.
       diff: sql<unknown>`${checkpoints.data}->'diff'`,
       // Only an image being drawn is asked for one; every other row reads null here.

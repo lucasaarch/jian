@@ -241,6 +241,8 @@ it('creates and titles a chat only when the first message is sent, then opens it
   );
   expect(result.mutate).not.toHaveBeenCalled();
   expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions/new-gateway-chat`);
+  expect(result.element.textContent).not.toContain('This conversation is not here');
+  expect(result.element.textContent).toContain('History');
 });
 
 it('reads the open chat as it shows', async () => {

@@ -22,7 +22,7 @@ import type { ProviderAdmin } from './port.js';
 import { providerSecret } from './service.js';
 
 /** Each provider's own list of what the authenticated account may call. */
-const endpoints: Record<Exclude<ProviderKind, 'openai-compatible'>, string> = {
+const endpoints: Record<Exclude<ProviderKind, 'openai-compatible' | 'ollama'>, string> = {
   openai: 'https://api.openai.com/v1/models',
   anthropic: 'https://api.anthropic.com/v1/models?limit=1000',
   google: 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000',
@@ -33,9 +33,11 @@ const endpoints: Record<Exclude<ProviderKind, 'openai-compatible'>, string> = {
 
 /** A server the owner runs lists its models where the OpenAI API does, under its address. */
 const endpointOf = (provider: ProviderRecord) =>
-  provider.kind === 'openai-compatible'
-    ? `${provider.baseURL ?? ''}/models`
-    : endpoints[provider.kind as Exclude<ProviderKind, 'openai-compatible'>];
+  provider.kind === 'ollama'
+    ? `${provider.baseURL ?? ''}/api/tags`
+    : provider.kind === 'openai-compatible'
+      ? `${provider.baseURL ?? ''}/models`
+      : endpoints[provider.kind as Exclude<ProviderKind, 'openai-compatible' | 'ollama'>];
 
 /** What the router publishes per model; everything the capability table exists to supply. */
 const routed = z.object({
@@ -110,6 +112,10 @@ const listed = z.object({
     .optional(),
 });
 
+const ollamaListed = z.object({
+  models: z.array(z.object({ name: z.string().min(1), model: z.string().optional() })),
+});
+
 function parse(
   kind: ProviderKind,
   body: unknown,
@@ -117,6 +123,23 @@ function parse(
 ): ProviderModel[] {
   if (kind === 'openrouter') {
     return parseRouted(body, catalog);
+  }
+
+  if (kind === 'ollama') {
+    const rows = ollamaListed.parse(body).models.map((model) => ({
+      id: model.model ?? model.name,
+      displayName: model.name,
+    }));
+    const unique = new Map<string, ProviderModel>();
+    for (const row of rows) {
+      if (row.id.length > 160 || unique.has(row.id)) continue;
+      unique.set(row.id, {
+        id: row.id,
+        ...(row.displayName !== row.id ? { displayName: row.displayName.slice(0, 200) } : {}),
+        ...modelCapabilities('ollama', row.id, undefined, catalog?.lookup('ollama', row.id)),
+      });
+    }
+    return [...unique.values()].sort((a, b) => a.id.localeCompare(b.id)).slice(0, 500);
   }
 
   const payload = listed.parse(body);
@@ -316,7 +339,7 @@ export class ProviderModels {
       provider.kind === 'openrouter' ||
       provider.kind === 'groq' ||
       provider.kind === 'xai' ||
-      (provider.kind === 'openai-compatible' && Boolean(key)) ||
+      ((provider.kind === 'openai-compatible' || provider.kind === 'ollama') && Boolean(key)) ||
       (provider.kind === 'anthropic' &&
         anthropicCredential(provider.credential, provider.apiKeyEnv, key) === 'subscription');
 
@@ -389,7 +412,7 @@ export class ProviderModels {
     const secret = await this.services.vault.read(providerSecret(provider.id));
 
     // A server the owner runs may take no key at all.
-    if (!secret && provider.kind !== 'openai-compatible') {
+    if (!secret && provider.kind !== 'openai-compatible' && provider.kind !== 'ollama') {
       throw new Error('Provider key is not configured');
     }
 

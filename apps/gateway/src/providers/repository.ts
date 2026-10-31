@@ -67,6 +67,31 @@ export async function listProviders(db: Queryable): Promise<ProviderRecord[]> {
   return rows.map(toProviderRecord);
 }
 
+/**
+ * Upgrades the old OpenAI-compatible setup that pointed at Ollama, after its enum migration has
+ * committed. Drizzle applies a whole migration batch in one transaction, so this cannot run in
+ * the same SQL migration that adds the enum value.
+ */
+export async function migrateLocalOllamaProvider(db: Queryable): Promise<void> {
+  const [ollama] = await db
+    .select({ id: providers.id })
+    .from(providers)
+    .where(and(eq(providers.kind, 'ollama'), isNull(providers.revokedAt)))
+    .limit(1);
+  if (ollama) return;
+
+  await db
+    .update(providers)
+    .set({ kind: 'ollama', name: 'Ollama', baseUrl: 'http://localhost:11434' })
+    .where(
+      and(
+        eq(providers.kind, 'openai-compatible'),
+        isNull(providers.revokedAt),
+        sql`lower(${providers.baseUrl}) = 'http://localhost:11434/v1'`,
+      ),
+    );
+}
+
 export async function insertProvider(db: Queryable, provider: ProviderRecord): Promise<void> {
   await db.insert(providers).values({
     id: provider.id,

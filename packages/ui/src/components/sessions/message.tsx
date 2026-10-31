@@ -2,12 +2,24 @@
 
 import { AlarmClock, GraduationCap, Reply } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { Message, Person } from '../../lib/api';
+import { AgentFace } from '../../kit';
+import type { Message, Person, Profile } from '../../lib/api';
 import { Face } from '../ui';
 import { Markdown, MarkdownLink } from '../ui/markdown';
+import { MessageActions, MessageReactions } from './message-actions';
 
 const GITHUB_LINK =
   /https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/(?:pull|issues)\/\d+(?:[^\s<>()]*[^\s<>().,;:!?'"])?/g;
+
+/** Live and stored messages keep the same author header and text origin. */
+export function ChatSpeaker({ agent }: { agent?: Pick<Profile, 'name' | 'avatar'> }) {
+  return (
+    <span className="chat-speaker" data-author="assistant">
+      <AgentFace name={agent?.name ?? 'Agent'} avatar={agent?.avatar} size={1.25} />
+      {agent?.name ?? 'Agent'}
+    </span>
+  );
+}
 
 /**
  * What a person typed, as typed, except that a pull request or an issue they link to is shown
@@ -126,7 +138,7 @@ function PersonText({ text }: { text: string }) {
 
 /**
  * One message, as an AI chat shows it, in every conversation alike: whoever wrote to the agent
- * in a card across the column, the agent that answers as plain text under it with its tools
+ * on the same text column, the agent that answers as plain text under it with its tools
  * above. In a group the writers are several people, on the right, so each run of messages from
  * one of them opens with their face and name.
  */
@@ -137,6 +149,10 @@ export function ChatMessage({
   opensRun,
   before,
   children,
+  agent,
+  entered = false,
+  onReply,
+  onReact,
 }: {
   message: Message;
   group: boolean;
@@ -145,6 +161,11 @@ export function ChatMessage({
   /** Shown above the text, as the tools the agent used to write it. */
   before?: React.ReactNode;
   children?: React.ReactNode;
+  agent?: Pick<Profile, 'name' | 'avatar'>;
+  /** A streamed answer already entered; storing it must not play that entrance again. */
+  entered?: boolean;
+  onReply?: () => void;
+  onReact?: (emoji: string | null) => Promise<unknown>;
 }) {
   // Attachment markers and the gateway's notes about files are drawn as attachments below. A
   // channel writes "[Voice message]" or "[Photo]" for a message that is only a file: with the
@@ -197,7 +218,19 @@ export function ChatMessage({
 
   if (!mine || !group) {
     return (
-      <article className={`chat-line ${mine ? 'mine' : 'theirs'}`} data-message-id={message.id}>
+      <article
+        className={`chat-line ${mine ? 'mine' : 'theirs'}`}
+        data-message-id={message.id}
+        data-entered={entered || undefined}
+      >
+        {(!mine || message.call) && (
+          <div className="chat-author-row">
+            <ChatSpeaker agent={agent} />
+            {message.role === 'assistant' && !message.call && (
+              <MessageActions message={message} onReply={onReply} onReact={onReact} />
+            )}
+          </div>
+        )}
         {before}
         {clean(message.content) &&
           (mine ? (
@@ -209,6 +242,7 @@ export function ChatMessage({
             </div>
           ))}
         {children}
+        <MessageReactions message={message} agentName={agent?.name} />
       </article>
     );
   }
@@ -232,6 +266,7 @@ export function ChatMessage({
         {clean(author.text) && <PersonText text={clean(author.text)} />}
         {children}
       </div>
+      <MessageReactions message={message} agentName={agent?.name} />
     </article>
   );
 }

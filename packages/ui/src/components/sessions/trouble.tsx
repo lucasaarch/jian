@@ -35,13 +35,7 @@ export function TroubleCard({
         </button>
       )}
       {action && onAction && (
-        <Action
-          tone="outline"
-          size="small"
-          className="trouble-action"
-          busy={busy}
-          onClick={onAction}
-        >
+        <Action tone="glass" className="trouble-action" busy={busy} onClick={onAction}>
           {action}
         </Action>
       )}

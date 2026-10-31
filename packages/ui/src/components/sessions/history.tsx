@@ -7,6 +7,7 @@ import type {
   GatewayApi,
   Message,
   Person,
+  Profile,
   Run,
   RunApproval,
   RunQuestion,
@@ -86,6 +87,8 @@ const fallbacks = {
 
 export function History({
   api,
+  agent,
+  agents = [],
   profileId,
   sessionId,
   initialRun,
@@ -95,6 +98,7 @@ export function History({
   chat,
   onAnswered,
   retryRun,
+  onReply,
 }: {
   api: Pick<GatewayApi, 'messages' | 'activities'> &
     Partial<
@@ -107,9 +111,13 @@ export function History({
         | 'conversationSubagents'
         | 'answerRun'
         | 'decideApproval'
+        | 'react'
       >
     >;
   profileId: string;
+  onReply?: (message: Message) => void;
+  agent?: Pick<Profile, 'name' | 'avatar'>;
+  agents?: Pick<Profile, 'id' | 'name' | 'avatar'>[];
   sessionId: string;
   initialRun?: Run;
   /** A change reads the history again at once, as after sending a message. */
@@ -190,6 +198,22 @@ export function History({
     };
   }, [sessionId]);
   const [run, setRun] = useState(initialRun ?? kept?.run);
+  const previewed = useRef(new Set<string>());
+  useEffect(() => {
+    for (const live of [run, callRun]) {
+      if (live?.progress?.text) previewed.current.add(live.id);
+    }
+  }, [run, callRun]);
+  // A persisted message can reach a read before its matching progress snapshot is cleared.
+  const alreadySaid = (live: Run) =>
+    live.progress?.phase === 'writing' &&
+    Boolean(live.progress.text) &&
+    messages.some(
+      (message) =>
+        answers(message) &&
+        turnOf(message) === live.id &&
+        message.content.trim() === live.progress?.text.trim(),
+    );
   const [loading, setLoading] = useState(!kept);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -574,6 +598,32 @@ export function History({
                   ) : (
                     <ChatMessage
                       message={message}
+                      onReply={onReply ? () => onReply(message) : undefined}
+                      onReact={
+                        api.react
+                          ? async (emoji) => {
+                              const updated = await api.react?.(
+                                profileId,
+                                sessionId,
+                                message.id,
+                                emoji,
+                              );
+                              if (updated)
+                                setMessages((known) =>
+                                  known.map((item) => (item.id === updated.id ? updated : item)),
+                                );
+                            }
+                          : undefined
+                      }
+                      entered={
+                        answers(message) &&
+                        Boolean(turnOf(message) && previewed.current.has(turnOf(message) ?? ''))
+                      }
+                      agent={
+                        message.call && message.role === 'user'
+                          ? agents.find((item) => item.id === message.call?.profileId)
+                          : agent
+                      }
                       group={group}
                       people={people}
                       opensRun={!previous || who(previous) !== who(message)}
@@ -638,11 +688,15 @@ export function History({
                 api={api}
               />
             ))}
-          {!loading && pendingCall && callRun && running(callRun) && (
-            <LiveTurn run={callRun} {...trailing(callRun, callTools)} />
+          {!loading && pendingCall && callRun && running(callRun) && !alreadySaid(callRun) && (
+            <LiveTurn
+              run={callRun}
+              agent={agents.find((item) => item.id === pendingCall.profileId)}
+              {...trailing(callRun, callTools)}
+            />
           )}
-          {!loading && run && isRunning && (
-            <LiveTurn run={run} {...trailing(run, tools)}>
+          {!loading && run && isRunning && !alreadySaid(run) && (
+            <LiveTurn run={run} agent={agent} {...trailing(run, tools)}>
               <CrewCards agents={subagents.filter((child) => child.parentRunId === run.id)} />
             </LiveTurn>
           )}

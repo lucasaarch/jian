@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { groupTurnSchema } from './channels.js';
+import { channelMessageSchema, messageReactionSchema } from './message-actions.js';
 import { agentCallOriginSchema } from './peers.js';
 import {
   contextPolicySchema,
@@ -80,6 +81,8 @@ export const sessionSummarySchema = sessionRecordSchema.extend({
 export const messagePurposeSchema = z.enum(['answer', 'resume']);
 
 export const messageRecordSchema = z.strictObject({
+  reactions: z.array(messageReactionSchema).max(2).optional(),
+  channelMessage: channelMessageSchema.optional(),
   id: uuid,
   profileId: uuid,
   sessionId: uuid,

@@ -25,7 +25,7 @@ const show = (item: Outgoing) =>
     root.render(<OutgoingMessage item={item} profileId="profile" people={new Map()} api={{}} />),
   );
 
-it('draws the message as the owner’s at once, marked as on its way', async () => {
+it('draws the message at once without a sending footer', async () => {
   await show({
     key: 'one',
     sessionId: 'session',
@@ -36,7 +36,8 @@ it('draws the message as the owner’s at once, marked as on its way', async () 
   });
 
   expect(element.querySelector('.chat-line.mine')?.textContent).toContain('Ship it');
-  expect(element.textContent).toContain('Sending…');
+  expect(element.textContent).not.toContain('Sending…');
+  expect(element.querySelector('.outgoing-state')).toBeNull();
   expect(element.querySelector('[role="alert"]')).toBeNull();
 });
 

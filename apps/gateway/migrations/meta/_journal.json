@@ -568,6 +568,27 @@
       "when": 1793246000000,
       "tag": "0080_machine-system",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1793419169403,
+      "tag": "0081_ollama-provider",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1793421858933,
+      "tag": "0082_message-reactions",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1793422561450,
+      "tag": "0083_held-channel-references",
+      "breakpoints": true
     }
   ]
 }

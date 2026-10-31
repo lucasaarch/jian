@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronRight } from 'lucide-react';
+import { Check, ChevronRight, MessageCircleQuestion, ShieldCheck } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { Action } from '../../kit';
 import type { RunApproval, RunQuestion } from '../../lib/api';
@@ -20,13 +20,13 @@ function Card({
   footer?: ReactNode;
 }) {
   return (
-    <section className="decision-card" aria-label={chip}>
-      {/* The state sits in the corner, so what is asked opens the card. */}
+    <section className="decision-card" data-tone={tone} aria-label={chip}>
       <header className="decision-head">
-        <p className="decision-title">{title}</p>
         <span className="decision-chip" data-tone={tone}>
+          {chip === 'Question' ? <MessageCircleQuestion size={14} /> : <ShieldCheck size={14} />}
           {chip}
         </span>
+        <p className="decision-title">{title}</p>
       </header>
       {children && <div className="decision-body">{children}</div>}
       {footer && <div className="decision-footer">{footer}</div>}
@@ -37,9 +37,16 @@ function Card({
 /** The call as the agent asked for it, folded until the reader wants to see it. */
 function Request({ json }: { json: string }) {
   const [open, setOpen] = useState(false);
+  let preview: string | undefined;
   const pretty = (() => {
     try {
-      return JSON.stringify(JSON.parse(json), null, 2);
+      const parsed = JSON.parse(json);
+      if (parsed && typeof parsed === 'object') {
+        preview = [parsed.command, parsed.path, parsed.filePath, parsed.url].find(
+          (value): value is string => typeof value === 'string' && value.length > 0,
+        );
+      }
+      return JSON.stringify(parsed, null, 2);
     } catch {
       // Cut to its limit by the gateway, the text may no longer parse; it still reads.
       return json;
@@ -48,6 +55,11 @@ function Request({ json }: { json: string }) {
 
   return (
     <div className="decision-request" data-open={open || undefined}>
+      {preview && (
+        <pre className="decision-preview">
+          <code>{preview.length > 2000 ? `${preview.slice(0, 2000)}…` : preview}</code>
+        </pre>
+      )}
       <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
         <ChevronRight size={14} aria-hidden="true" />
         {open ? 'Hide request' : 'Show request'}
@@ -108,16 +120,17 @@ export function ApprovalCard({
       footer={
         !decided && !chat && onDecide ? (
           <>
-            <Action tone="outline" size="small" disabled={busy} onClick={() => onDecide('reject')}>
+            <Action tone="glass" disabled={busy} onClick={() => onDecide('reject')}>
               Reject
             </Action>
-            <Action tone="primary" size="small" disabled={busy} onClick={() => onDecide('approve')}>
+            <Action tone="primary" disabled={busy} onClick={() => onDecide('approve')}>
               {approval.confirmLabel}
             </Action>
           </>
         ) : undefined
       }
     >
+      <p>{approval.detail}</p>
       <Request json={approval.request} />
       {!decided && chat && <p className="decision-state">Waiting for an answer in {chat}.</p>}
       {decided && approval.note && <p className="decision-state">{approval.note}</p>}
@@ -193,8 +206,10 @@ export function QuestionCard({
       )}
       {answered && !picked && <p className="decision-answer">{question.answer}</p>}
       {!answered && chat && <p className="decision-state">Waiting for an answer in {chat}.</p>}
-      {!answered && !chat && !choices.length && (
-        <p className="decision-state">Answer below to continue.</p>
+      {!answered && !chat && (
+        <p className="decision-state">
+          {choices.length ? 'Choose an option or reply below.' : 'Answer below to continue.'}
+        </p>
       )}
     </Card>
   );

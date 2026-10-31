@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { inlineMediaSchema } from './media.js';
+import { channelMessageSchema, reactionDeliverySchema } from './message-actions.js';
 import { protectionModeSchema } from './profile.js';
 import { reasoningEffortSchema } from './providers.js';
 import { secretSchema } from './security.js';
@@ -148,6 +149,7 @@ export const contactPatchSchema = z
   });
 
 export const ingressSchema = z.strictObject({
+  channelMessage: channelMessageSchema.optional(),
   actorId: z.string().min(1).max(100),
   chatId: z.string().min(1).max(100),
   text: z.string().trim().min(1).max(8000),
@@ -231,6 +233,7 @@ export const telegramUpdateSchema = z.object({
     .optional(),
   message: z
     .object({
+      message_id: z.number().int().optional(),
       from: z
         .object({
           id: z.number().int(),
@@ -323,6 +326,7 @@ export const groupSchema = z.strictObject({
 });
 
 export const deliverySchema = z.strictObject({
+  reaction: reactionDeliverySchema.optional(),
   id: z.uuid(),
   profileId: z.uuid(),
   channelId: z.uuid(),

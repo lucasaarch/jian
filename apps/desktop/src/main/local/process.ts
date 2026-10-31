@@ -98,19 +98,50 @@ export class LocalGateway {
     void this.start();
   }
 
+  /** Restarts the local gateway even when its process is alive but no longer answering. */
+  async restart(): Promise<void> {
+    if (this.stopping) return;
+    this.stopping = true;
+    clearTimeout(this.timer);
+    try {
+      const child = this.child;
+      if (child) await this.stopChild(child);
+      this.failures = 0;
+      this.stopping = false;
+      await this.start();
+    } catch (error) {
+      this.stopping = false;
+      throw error;
+    }
+  }
+
   /** Lets the gateway finish what it is writing; it is killed if it has not ended in time. */
   async stop(): Promise<void> {
     this.stopping = true;
     clearTimeout(this.timer);
     const child = this.child;
     if (!child) return;
-    await new Promise<void>((resolve) => {
-      const forced = setTimeout(() => {
-        child.kill();
-        resolve();
+    await this.stopChild(child);
+  }
+
+  private async stopChild(child: UtilityProcess): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      let forced: NodeJS.Timeout | undefined;
+      const forceStop = setTimeout(() => {
+        try {
+          child.kill();
+        } catch (error) {
+          reject(error);
+          return;
+        }
+        forced = setTimeout(
+          () => reject(new Error('The local gateway did not stop after being killed.')),
+          2_000,
+        );
       }, 5_000);
       child.once('exit', () => {
-        clearTimeout(forced);
+        clearTimeout(forceStop);
+        if (forced) clearTimeout(forced);
         resolve();
       });
       child.postMessage({ stop: true });

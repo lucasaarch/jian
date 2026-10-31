@@ -102,7 +102,7 @@ function aloneBox(media?: LoadedMedia, drawn?: string) {
 }
 
 /**
- * What a message carries, laid out as a messaging app does: files and voice notes stacked
+ * What a message carries, laid out as a messaging app does: files and voice notes in a compact grid
  * first, then the pictures as one mosaic. Any picture or document opens in the viewer. Until an
  * attachment is here its tile is a frame at work, and a picture resolves into that same frame.
  */
@@ -164,22 +164,33 @@ export function MessageMedia({
 
   return (
     <div className="message-media">
-      {files.map((media) =>
-        media.mimeType.startsWith('audio/') ? (
-          <AudioPlayer key={media.id} src={media.url} label={media.name ?? 'audio'} />
-        ) : (
-          <button type="button" key={media.id} className="file-card" onClick={() => setOpen(media)}>
-            <span className="file-icon" aria-hidden="true">
-              <FileText size={18} />
-            </span>
-            <span className="file-text">
-              <strong>{nameOf(media)}</strong>
-              <small>
-                {kindNames[media.mimeType] ?? media.mimeType} · {size(media.bytes)}
-              </small>
-            </span>
-          </button>
-        ),
+      {files.length > 0 && (
+        <ul className="message-files" data-count={files.length} aria-label="Attachments">
+          {files.map((media) => (
+            <li key={media.id}>
+              {media.mimeType.startsWith('audio/') ? (
+                <AudioPlayer src={media.url} label={media.name ?? 'audio'} />
+              ) : (
+                <button
+                  type="button"
+                  className="file-card"
+                  title={nameOf(media)}
+                  onClick={() => setOpen(media)}
+                >
+                  <span className="file-icon" aria-hidden="true">
+                    <FileText size={18} />
+                  </span>
+                  <span className="file-text">
+                    <strong>{nameOf(media)}</strong>
+                    <small>
+                      {kindNames[media.mimeType] ?? media.mimeType} · {size(media.bytes)}
+                    </small>
+                  </span>
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
       {shown.length > 0 && (
         <div className="mosaic" data-count={shown.length}>

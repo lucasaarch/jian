@@ -520,6 +520,10 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           ...(subject ? { groupName: subject } : {}),
           ...(message.pushName ? { displayName: message.pushName.slice(0, 100) } : {}),
           mentions,
+          channelMessage: {
+            id: requestKey,
+            ...(message.key.participant ? { participant: message.key.participant } : {}),
+          },
           ...(replyTo ? { replyTo } : {}),
           ...about,
         });
@@ -539,6 +543,7 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
 
       // Use the authenticated message's sender, never an actor ID supplied inside its text.
       await callbacks.message({
+        channelMessage: { id: requestKey },
         actorId: sender,
         chatId: sender,
         text,
@@ -689,6 +694,36 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           }
 
           throw error instanceof Error ? error : new Error('WhatsApp send was not confirmed');
+        } finally {
+          deadline.removeEventListener('abort', abort);
+        }
+      },
+      react: async (chatId, reaction, signal) => {
+        const jid = toDeviceJid(chatId);
+        if (closed || !socket || !jid) throw new Error('Device unavailable');
+        const deadline = AbortSignal.any([signal, AbortSignal.timeout(DEVICE_SEND_TIMEOUT_MS)]);
+        deadline.throwIfAborted();
+        let abort: () => void = () => {};
+        const interrupted = new Promise<never>((_resolve, reject) => {
+          abort = () => reject(new Error('WhatsApp reaction interrupted'));
+          deadline.addEventListener('abort', abort, { once: true });
+        });
+        try {
+          const sent = await Promise.race([
+            socket.sendMessage(jid, {
+              react: {
+                text: reaction.emoji ?? '',
+                key: {
+                  remoteJid: jid,
+                  id: reaction.messageId,
+                  fromMe: reaction.fromMe,
+                  ...(reaction.participant ? { participant: reaction.participant } : {}),
+                },
+              },
+            }),
+            interrupted,
+          ]);
+          if (!sent?.key.id) throw new Error('WhatsApp reaction was not confirmed');
         } finally {
           deadline.removeEventListener('abort', abort);
         }

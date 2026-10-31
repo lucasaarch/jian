@@ -1,6 +1,7 @@
 /* biome-ignore-all lint/style/noDescendingSpecificity: The card's parts are styled per state and do not overlap. */
 @reference "tailwindcss";
 @reference "./themes.css";
+@reference "./kit.css";
 
 /* Approvals and questions in the conversation: one card in the glass kit's manner — a quiet
    chip saying what it is, the title, what it would do, and the decision at the foot — with no
@@ -8,32 +9,26 @@
    exist at runtime. */
 @layer components {
   .decision-card {
-    @apply grid w-full gap-3 rounded-xl border p-4;
-    background: color-mix(in srgb, var(--ink) 4%, transparent);
-    border-color: color-mix(in srgb, var(--ink) 9%, transparent);
-    animation: thought-rise 220ms cubic-bezier(0.23, 1, 0.32, 1);
+    @apply glass grid w-full gap-4 rounded-2xl p-4;
   }
   .decision-head {
-    @apply flex items-start gap-3;
+    @apply flex flex-col items-start gap-2;
   }
   .decision-head .decision-title {
     @apply min-w-0 flex-1;
   }
   .decision-chip {
-    @apply shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium;
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    @apply inline-flex shrink-0 items-center gap-1.5 text-xs font-medium;
     color: var(--muted);
   }
   .decision-chip[data-tone="good"] {
-    background: color-mix(in srgb, var(--good) 14%, transparent);
     color: var(--good);
   }
   .decision-chip[data-tone="bad"] {
-    background: color-mix(in srgb, var(--bad) 14%, transparent);
     color: var(--bad);
   }
   .decision-title {
-    @apply m-0 text-sm font-medium leading-snug;
+    @apply m-0 text-[15px] font-medium leading-relaxed;
     color: var(--ink);
   }
   .decision-body {
@@ -47,7 +42,7 @@
     color: var(--ink);
   }
   .decision-request > button {
-    @apply inline-flex items-center gap-1.5 text-[13px] transition-colors;
+    @apply glass inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors hover:bg-glass-hover;
     color: var(--muted);
   }
   .decision-request > button:hover {
@@ -61,20 +56,25 @@
   }
   /* The request as it would be sent, on a slightly deeper ground, in the shared syntax colours. */
   .decision-request pre {
-    @apply mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg px-3 py-2.5 font-mono text-xs leading-5;
-    background: color-mix(in srgb, var(--ink) 5%, transparent);
+    @apply mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-glass-press px-3 py-2.5 font-mono text-xs leading-5;
     color: var(--ink);
+  }
+  .decision-request .decision-preview {
+    @apply mt-0 mb-3;
   }
   /* Choices as rows, as a chooser lists them, so a long one wraps instead of stretching. */
   .decision-options {
-    @apply -mx-1.5 m-0 grid list-none gap-0.5 p-0;
+    @apply m-0 grid list-none gap-2 p-0;
   }
   .decision-option {
-    @apply flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] leading-snug transition-colors;
+    @apply flex w-full items-start gap-2.5 rounded-full px-3 py-2.5 text-left text-[13px] leading-snug transition-colors;
     color: var(--ink);
   }
+  button.decision-option {
+    @apply glass;
+  }
   button.decision-option:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    background: var(--glass-hover);
   }
   button.decision-option:disabled {
     @apply cursor-default opacity-60;
@@ -105,6 +105,6 @@
     color: var(--ink);
   }
   .decision-footer {
-    @apply flex flex-wrap justify-end gap-2;
+    @apply flex flex-wrap gap-2 pt-1;
   }
 }

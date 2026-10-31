@@ -49,7 +49,34 @@ it('leaves out the words a channel writes for a message that is only a file', as
 
   expect(element.textContent).not.toContain('[Voice message]');
   expect(element.querySelector('.chat-text')).toBeNull();
+  expect(element.querySelector('.chat-speaker')).toBeNull();
   expect(element.textContent).toContain('the voice note');
+});
+
+it('shows the agent name and avatar on its message', async () => {
+  const avatar = 'data:image/png;base64,c3ludGhldGlj';
+  await act(async () =>
+    root.render(
+      <ChatMessage
+        message={
+          {
+            id: 'agent-message',
+            profileId: 'profile',
+            sessionId: 'session',
+            role: 'assistant',
+            content: 'Ready.',
+            createdAt: '2026-10-31T10:00:00Z',
+          } as Message
+        }
+        agent={{ name: 'Nova', avatar }}
+        group={false}
+        people={new Map()}
+        opensRun
+      />,
+    ),
+  );
+  expect(element.querySelector('.chat-speaker')?.textContent).toBe('Nova');
+  expect(element.querySelector('.chat-speaker img')?.getAttribute('src')).toBe(avatar);
 });
 
 it('keeps what was written beside a file, and the same words when no file came', async () => {

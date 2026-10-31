@@ -103,6 +103,7 @@ type Params<M extends Method> = Parameters<Methods[M]>[0];
 type Result<M extends Method> = ReturnType<Methods[M]>;
 
 export class TelegramChannel implements Channel {
+  readonly supportsReactions = true;
   readonly type = 'telegram';
   readonly webhookHeader = 'x-telegram-bot-api-secret-token';
   readonly hidesAgentsFromEachOther = true;
@@ -158,6 +159,9 @@ export class TelegramChannel implements Channel {
       chatId: String(message.chat.id),
       text,
       requestKey: String(update.update_id),
+      ...(message.message_id !== undefined
+        ? { channelMessage: { id: String(message.message_id) } }
+        : {}),
       ...(name ? { displayName: name } : {}),
       scope: group ? 'group' : 'direct',
       ...(group && message.chat.title ? { groupName: message.chat.title } : {}),
@@ -470,6 +474,38 @@ export class TelegramChannel implements Channel {
 
     if (!token || !BOT_TOKEN.test(token)) {
       return { status: 'failed', remoteMessageIds };
+    }
+
+    if (message.reaction) {
+      const id = Number(message.reaction.messageId);
+      if (!Number.isSafeInteger(id) || id <= 0)
+        return { status: 'failed', remoteMessageIds, error: 'Invalid Telegram message reference' };
+      try {
+        const response = await context.fetch(
+          `https://api.telegram.org/bot${token}/setMessageReaction`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: message.chatId,
+              message_id: id,
+              reaction: message.reaction.emoji
+                ? [{ type: 'emoji', emoji: message.reaction.emoji }]
+                : [],
+            }),
+            signal: AbortSignal.any([context.signal, AbortSignal.timeout(15_000)]),
+          },
+        );
+        const body = z
+          .object({ ok: z.boolean(), error_code: z.number().optional() })
+          .parse(JSON.parse((await readMediaBody(response, 100_000)).toString()));
+        return {
+          status: body.ok ? 'sent' : body.error_code === 429 ? 'pending' : 'failed',
+          remoteMessageIds,
+        };
+      } catch {
+        return { status: 'unknown', remoteMessageIds };
+      }
     }
 
     if (message.media) {

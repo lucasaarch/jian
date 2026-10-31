@@ -28,19 +28,37 @@ export function MarkdownLink({ href, label }: { href: string; label: string }) {
  * injected as HTML, so no text can carry markup into the panel.
  */
 /** Stable keys from the content itself; a repeated line gets its occurrence appended. */
-function keyed(items: string[]): Array<[string, string]> {
+function keyed(items: string[], stable = false): Array<[string, string]> {
   const counts = new Map<string, number>();
 
-  return items.map((item) => {
+  return items.map((item, index) => {
     const count = (counts.get(item) ?? 0) + 1;
 
     counts.set(item, count);
 
-    return [`${item}#${count}`, item];
+    return [stable ? String(index) : `${item}#${count}`, item];
   });
 }
 
-function inline(text: string): ReactNode[] {
+/** Word nodes keep their offsets as tokens append; only new nodes animate, with a bounded stagger. */
+function words(text: string, streaming: boolean): ReactNode {
+  if (!streaming) return text;
+  return [...text.matchAll(/\s+|\S+/g)].map((match, index) =>
+    /^\s+$/.test(match[0]) ? (
+      match[0]
+    ) : (
+      <span
+        key={match.index}
+        className="stream-word"
+        style={{ animationDelay: `${(Math.floor(index / 2) % 6) * 24}ms` }}
+      >
+        {match[0]}
+      </span>
+    ),
+  );
+}
+
+function inline(text: string, streaming = false): ReactNode[] {
   const parts: ReactNode[] = [];
   const pattern =
     /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(?<![\w*])[*_]([^*_\s](?:[^*_]*[^*_\s])?)[*_](?![\w*])|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g;
@@ -49,11 +67,14 @@ function inline(text: string): ReactNode[] {
   for (const match of text.matchAll(pattern)) {
     const at = match.index ?? 0;
 
-    if (at > last) parts.push(text.slice(last, at));
+    if (at > last)
+      parts.push(
+        <Fragment key={`text-${last}`}>{words(text.slice(last, at), streaming)}</Fragment>,
+      );
 
-    if (match[1]) parts.push(<strong key={at}>{inline(match[1])}</strong>);
-    else if (match[2]) parts.push(<code key={at}>{match[2]}</code>);
-    else if (match[5]) parts.push(<em key={at}>{match[5]}</em>);
+    if (match[1]) parts.push(<strong key={at}>{inline(match[1], streaming)}</strong>);
+    else if (match[2]) parts.push(<code key={at}>{words(match[2], streaming)}</code>);
+    else if (match[5]) parts.push(<em key={at}>{words(match[5], streaming)}</em>);
     else {
       const href = match[4] ?? match[6] ?? '';
 
@@ -63,7 +84,8 @@ function inline(text: string): ReactNode[] {
     last = at + match[0].length;
   }
 
-  if (last < text.length) parts.push(text.slice(last));
+  if (last < text.length)
+    parts.push(<Fragment key={`text-${last}`}>{words(text.slice(last), streaming)}</Fragment>);
 
   return parts;
 }
@@ -164,7 +186,15 @@ function separated(text: string) {
     .join('\n');
 }
 
-function Blocks({ text, breaks }: { text: string; breaks: boolean }) {
+function Blocks({
+  text,
+  breaks,
+  streaming,
+}: {
+  text: string;
+  breaks: boolean;
+  streaming: boolean;
+}) {
   const blocks = separated(text)
     .split(/\n{2,}/)
     .map((block) => block.trim())
@@ -172,14 +202,14 @@ function Blocks({ text, breaks }: { text: string; breaks: boolean }) {
 
   return (
     <>
-      {keyed(blocks).map(([key, block]) => {
+      {keyed(blocks, streaming).map(([key, block]) => {
         const heading = /^(#{1,6})\s+(.*)$/.exec(block);
 
         if (heading) {
           return heading[1] === '#' || heading[1] === '##' ? (
-            <h3 key={key}>{inline(heading[2] ?? '')}</h3>
+            <h3 key={key}>{inline(heading[2] ?? '', streaming)}</h3>
           ) : (
-            <h4 key={key}>{inline(heading[2] ?? '')}</h4>
+            <h4 key={key}>{inline(heading[2] ?? '', streaming)}</h4>
           );
         }
 
@@ -192,16 +222,19 @@ function Blocks({ text, breaks }: { text: string; breaks: boolean }) {
               <table>
                 <thead>
                   <tr>
-                    {keyed(grid.head).map(([cellKey, cell]) => (
-                      <th key={cellKey}>{inline(cell)}</th>
+                    {keyed(grid.head, streaming).map(([cellKey, cell]) => (
+                      <th key={cellKey}>{inline(cell, streaming)}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {keyed(grid.rows.map((row) => row.join('|'))).map(([rowKey], index) => (
+                  {keyed(
+                    grid.rows.map((row) => row.join('|')),
+                    streaming,
+                  ).map(([rowKey], index) => (
                     <tr key={rowKey}>
-                      {keyed(grid.rows[index] ?? []).map(([cellKey, cell]) => (
-                        <td key={cellKey}>{inline(cell)}</td>
+                      {keyed(grid.rows[index] ?? [], streaming).map(([cellKey, cell]) => (
+                        <td key={cellKey}>{inline(cell, streaming)}</td>
                       ))}
                     </tr>
                   ))}
@@ -219,8 +252,8 @@ function Blocks({ text, breaks }: { text: string; breaks: boolean }) {
         if (lines.every((line) => bullet.test(line) || continued(line))) {
           return (
             <ul key={key}>
-              {keyed(list(lines, bullet)).map(([itemKey, item]) => (
-                <li key={itemKey}>{inline(item)}</li>
+              {keyed(list(lines, bullet), streaming).map(([itemKey, item]) => (
+                <li key={itemKey}>{inline(item, streaming)}</li>
               ))}
             </ul>
           );
@@ -229,8 +262,8 @@ function Blocks({ text, breaks }: { text: string; breaks: boolean }) {
         if (lines.every((line) => numbered.test(line) || continued(line))) {
           return (
             <ol key={key}>
-              {keyed(list(lines, numbered)).map(([itemKey, item]) => (
-                <li key={itemKey}>{inline(item)}</li>
+              {keyed(list(lines, numbered), streaming).map(([itemKey, item]) => (
+                <li key={itemKey}>{inline(item, streaming)}</li>
               ))}
             </ol>
           );
@@ -239,17 +272,17 @@ function Blocks({ text, breaks }: { text: string; breaks: boolean }) {
         if (lines.every((line) => line.startsWith('>'))) {
           return (
             <blockquote key={key}>
-              {inline(lines.map((line) => line.replace(/^>\s?/, '')).join(' '))}
+              {inline(lines.map((line) => line.replace(/^>\s?/, '')).join(' '), streaming)}
             </blockquote>
           );
         }
 
         return (
           <p key={key}>
-            {keyed(lines).map(([lineKey, line], position) => (
+            {keyed(lines, streaming).map(([lineKey, line], position) => (
               <Fragment key={lineKey}>
                 {position > 0 && (breaks ? <br /> : ' ')}
-                {inline(line)}
+                {inline(line, streaming)}
               </Fragment>
             ))}
           </p>
@@ -263,15 +296,25 @@ function Blocks({ text, breaks }: { text: string; breaks: boolean }) {
  * `breaks` keeps a single line break as one, the way a chat reads; documents join the lines of
  * a paragraph, the way Markdown does.
  */
-export function Markdown({ text, breaks = false }: { text: string; breaks?: boolean }) {
+export function Markdown({
+  text,
+  breaks = false,
+  streaming = false,
+}: {
+  text: string;
+  breaks?: boolean;
+  streaming?: boolean;
+}) {
   return (
     <>
       {keyed(
         segments(text).map((part) =>
           part.code ? `\`\`\`${part.language ?? ''}\n${part.text}` : part.text,
         ),
+        streaming,
       ).map(([key, part]) => {
-        if (!part.startsWith('```')) return <Blocks key={key} text={part} breaks={breaks} />;
+        if (!part.startsWith('```'))
+          return <Blocks key={key} text={part} breaks={breaks} streaming={streaming} />;
         const head = part.indexOf('\n');
 
         return (

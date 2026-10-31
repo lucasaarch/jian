@@ -5,8 +5,49 @@
 .spin {
   animation: spin 1s linear infinite;
 }
-.chat-line {
-  animation: arrive 180ms ease-out;
+
+/* Position-stable Markdown nodes animate once as they arrive, never on token updates. */
+.message-list :is(.chat-line, .decision-card, .code-diff, .code-block, .message-media, .crew-card),
+.message-list .markdown > * {
+  animation: history-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.history-tray > * {
+  animation: history-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.message-list .chat-line[data-entered],
+.message-list .chat-line[data-entered] :is(.markdown > *, .code-block, .message-media) {
+  animation: none;
+}
+.stream-word {
+  animation: stream-ink 420ms cubic-bezier(0.2, 0.65, 0.3, 1) both;
+}
+@keyframes history-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes stream-ink {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes activity-change {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes viewer-in {

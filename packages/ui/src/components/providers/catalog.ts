@@ -46,9 +46,16 @@ export const providers = [
     variables: 'XAI_API_KEY',
   },
   {
+    kind: 'ollama',
+    name: 'Ollama',
+    description: 'Run local models through Ollama.',
+    symbol: '◉',
+    variables: '',
+  },
+  {
     kind: 'openai-compatible',
-    name: 'Local model server',
-    description: 'Connect Ollama or another server that speaks the OpenAI API.',
+    name: 'Custom OpenAI-compatible server',
+    description: 'Connect another server that exposes the OpenAI API.',
     symbol: '⌘',
     variables: '',
   },

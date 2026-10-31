@@ -26,6 +26,7 @@ export const modelSchema = z
       'anthropic',
       'google',
       'openrouter',
+      'ollama',
       'openai-compatible',
       'openai-codex',
     ]),
@@ -53,6 +54,10 @@ export const modelSchema = z
 
     if (value.provider === 'openai-compatible' && !value.baseURL) {
       ctx.addIssue({ code: 'custom', message: 'baseURL is required for compatible providers' });
+    }
+
+    if (value.provider === 'ollama' && !value.baseURL) {
+      ctx.addIssue({ code: 'custom', message: 'baseURL is required for Ollama' });
     }
 
     if (value.baseURL && !/^https?:\/\//.test(value.baseURL)) {
@@ -397,6 +402,7 @@ export const sessionObjectiveInputSchema = z
 
 export const submitSchema = z
   .strictObject({
+    replyToId: z.uuid().optional(),
     mediaIds: z.array(z.uuid()).max(MAX_MESSAGE_MEDIA).optional(),
     // May be empty when attachments are the message, as a voice note is.
     text: z.string().trim().max(8_000),

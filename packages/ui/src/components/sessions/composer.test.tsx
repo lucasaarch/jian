@@ -83,3 +83,31 @@ it('Return sends from a keyboard, and breaks the line on a touch screen', async 
     vi.unstubAllGlobals();
   }
 });
+
+it('sends a selected reply reference with the text and clears it only after submission', async () => {
+  const send = vi.fn(async () => undefined);
+  const cancel = vi.fn();
+  await act(async () =>
+    root.render(
+      <Composer
+        name="Nova"
+        upload={vi.fn()}
+        send={send}
+        onSent={vi.fn()}
+        replyTo={{ id: 'quoted-message', content: 'The proposal is ready.' }}
+        onCancelReply={cancel}
+      />,
+    ),
+  );
+  const field = container.querySelector('textarea');
+  if (!field) throw new Error('Composer missing');
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  await act(async () => {
+    setter?.call(field, 'Please explain.');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Send"]')?.click());
+  expect(send).toHaveBeenCalledWith('Please explain.', [], 'quoted-message');
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(container.querySelector('.composer-send .spin')).toBeNull();
+});

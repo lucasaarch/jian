@@ -163,6 +163,9 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
   services.objectives.useDeliveries(channels);
   // Answering a mid-run question from the panel resumes a channel run the same way.
   services.runs.useDeliveries(channels);
+  services.sessions.useReactionDelivery((tx, session, message, emoji, runId) =>
+    channels.queueReaction(tx, session, message, emoji, runId),
+  );
   // A matching GitHub event (poll or optional webhook) wakes the subscribed session the same way.
   services.subscriptions.useDeliveries(channels);
   // Private repositories are polled with the connected account's installation token.
@@ -215,6 +218,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
     async start(listen) {
       stage = 'database';
       await store.migrate();
+      await services.providers.migrateLegacyOllamaConnection();
       // Secrets of the MCP servers migration 0071 made the installation's; nothing once done.
       await moveMcpSecrets(store, vault, gatewayVault);
       // SSH keys that still live only as files in an agent's workspace; nothing once imported.

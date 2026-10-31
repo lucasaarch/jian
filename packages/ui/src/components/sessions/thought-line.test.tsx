@@ -51,7 +51,7 @@ it('settles into the time the work took, from its own timestamps, and folds its 
   );
   expect(element.querySelector('.thought-timer')?.textContent).toBe('1m 12s');
   expect(element.querySelector('[role="status"]')?.textContent).toBe(
-    'Worked for 1 minutes 12 seconds',
+    '2 tool calls · 1 minutes 12 seconds',
   );
   expect(line?.hasAttribute('data-open')).toBe(false);
 
@@ -71,4 +71,32 @@ it('keeps a failed step in the trace with what went wrong', () => {
   const step = element.querySelector('.thought-trace li');
   expect(step?.getAttribute('data-status')).toBe('failed');
   expect(step?.textContent).toContain('Failed: 404');
+});
+
+it('opens full highlighted error details on click instead of exposing a hover tooltip', async () => {
+  const message = `The tool could not read the attachment. ${'Diagnostic detail. '.repeat(100)}Final detail.`;
+  await act(async () =>
+    root.render(
+      <ThoughtLine
+        working
+        steps={[
+          {
+            key: 'failed',
+            text: 'Looking at an attachment',
+            status: 'failed',
+            note: 'Failed',
+            detail: JSON.stringify({ name: 'Error', message }),
+          },
+        ]}
+      />,
+    ),
+  );
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  await act(async () => element.querySelector<HTMLButtonElement>('.thought-note')?.click());
+  const dialog = document.querySelector('[role="dialog"]');
+  expect(dialog?.textContent).toContain(message);
+  expect(dialog?.textContent).toContain('Final detail.');
+  expect(dialog?.querySelector('.hljs-string')).not.toBeNull();
+  await act(async () => dialog?.querySelector<HTMLButtonElement>('[aria-label="Close"]')?.click());
 });

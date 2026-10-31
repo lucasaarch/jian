@@ -53,6 +53,8 @@ function toMessage(row: MessageRow): Message {
     ...(row.runId ? { runId: row.runId } : {}),
     role: row.role,
     content: row.content,
+    ...(row.reactions?.length ? { reactions: row.reactions } : {}),
+    ...(row.channelMessage ? { channelMessage: row.channelMessage } : {}),
     ...(row.authorId
       ? { author: { id: row.authorId, ...(row.authorName ? { name: row.authorName } : {}) } }
       : {}),
@@ -285,6 +287,27 @@ export async function insertMessage(
   });
   if (repeatable) await insert.onConflictDoNothing({ target: messages.id });
   else await insert;
+}
+
+/** A message ID never grants access to another profile or conversation. */
+export async function findMessage(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  id: string,
+): Promise<Message | null> {
+  const [row] = await db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        eq(messages.profileId, profileId),
+        eq(messages.sessionId, sessionId),
+        eq(messages.id, id),
+      ),
+    )
+    .limit(1);
+  return row ? toMessage(row) : null;
 }
 
 export async function listSessionMessages(

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { InlineMedia } from '@jian/contracts';
+import type { InlineMedia, ReactionDelivery } from '@jian/contracts';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -39,12 +39,16 @@ async function setup(send?: (chatId: string, text: string) => Promise<string>) {
   const box = new SecretBox({ activeKeyId: 'v1', keys: { v1: randomBytes(32) } });
   const devices: Array<{ callbacks: DeviceCallbacks; store: DeviceSessionStore }> = [];
   const sent: Array<{ chatId: string; text: string; media?: InlineMedia }> = [];
+  const reactions: Array<{ chatId: string; reaction: ReactionDelivery }> = [];
 
   const factory: DeviceFactory = async (_id, sessionStore, callbacks) => {
     devices.push({ callbacks, store: sessionStore });
 
     return {
       start: async () => {},
+      react: async (chatId, reaction) => {
+        reactions.push({ chatId, reaction });
+      },
       send: async (chatId, text, _signal, media) => {
         sent.push({ chatId, text, ...(media ? { media } : {}) });
         return send ? send(chatId, text) : `wa-sent-${sent.length}`;
@@ -74,6 +78,7 @@ async function setup(send?: (chatId: string, text: string) => Promise<string>) {
     store,
     devices,
     sent,
+    reactions,
     whatsapp,
     channels,
     receive,
@@ -795,3 +800,51 @@ it.each(['image', 'speech'] as const)(
     }
   },
 );
+
+it('sends an agent reaction through the paired device and fences it after disconnect', async () => {
+  const f = await setup();
+  f.services.sessions.useReactionDelivery((...args) => f.channels.queueReaction(...args));
+  try {
+    await f.channels.update(f.profile.id, f.binding.id, { allowAllContacts: true });
+    await f.whatsapp.connect(f.profile.id, f.binding.id);
+    await f.whatsapp.tick(f.receive);
+    const device = f.devices[0];
+    if (!device) throw new Error('Device missing');
+    await device.callbacks.ready('5511888888888@c.us');
+    await device.callbacks.message({ ...message, channelMessage: { id: 'native-original' } });
+    await f.whatsapp.tick(f.receive);
+    const [contact] = await f.channels.contacts(f.profile.id);
+    if (!contact?.sessionId) throw new Error('Conversation missing');
+    const [received] = await f.services.sessions.messages(f.profile.id, contact.sessionId);
+    const [run] = await f.services.runs.activities(f.profile.id);
+    if (!received || !run) throw new Error('Incoming message missing');
+    await f.services.sessions.react(
+      f.profile.id,
+      contact.sessionId,
+      received.id,
+      { emoji: '👍' },
+      'agent',
+      run.id,
+    );
+    await f.channels.dispatch();
+    expect(f.reactions).toEqual([
+      { chatId: actorId, reaction: { messageId: 'native-original', fromMe: false, emoji: '👍' } },
+    ]);
+    expect(f.sent).toHaveLength(0);
+    await f.services.sessions.react(
+      f.profile.id,
+      contact.sessionId,
+      received.id,
+      { emoji: '🎉' },
+      'agent',
+      run.id,
+    );
+    await f.whatsapp.disconnect(f.profile.id, f.binding.id);
+    await f.channels.dispatch();
+    expect(f.reactions).toHaveLength(1);
+  } finally {
+    await f.channels.stop();
+    await f.whatsapp.stop();
+    await f.app.close();
+  }
+});

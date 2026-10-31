@@ -106,3 +106,16 @@ describe('toolFailure', () => {
     }
   });
 });
+
+it('keeps complete multiline owner details while redacting credentials and bounding the agent summary', () => {
+  const secret = 'synthetic-private-value';
+  const message = `Command failed\n${'diagnostic line\n'.repeat(100)}token=${secret}\nFinal diagnostic`;
+  const error = new Error(message);
+  const full = JSON.parse(toolFailure(error, new Set([secret]), 'owner'));
+  expect(full.message).toContain('diagnostic line\n');
+  expect(full.message).toContain('Final diagnostic');
+  expect(full.message).not.toContain(secret);
+  expect(full.message).toContain('[REDACTED]');
+  expect(full.message.length).toBeGreaterThan(900);
+  expect(toolFailure(error, new Set([secret])).length).toBeLessThan(400);
+});

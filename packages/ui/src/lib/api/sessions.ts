@@ -66,6 +66,7 @@ export const sessionCalls = (client: Client) => ({
     // Each press is a new message; the key only stops one request from landing twice, and
     // a message sent again after a failure keeps its own.
     requestKey: string = crypto.randomUUID(),
+    replyToId?: string,
   ) =>
     result(
       client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/messages', {
@@ -73,11 +74,20 @@ export const sessionCalls = (client: Client) => ({
         body: {
           text,
           requestKey,
+          ...(replyToId ? { replyToId } : {}),
           ...(mediaIds.length ? { mediaIds } : {}),
         },
       }),
     ),
   /** Null puts the conversation back on the profile's model defaults. */
+  react: (profileId: string, sessionId: string, messageId: string, emoji: string | null) =>
+    result(
+      client.PUT('/v1/profiles/{profileId}/sessions/{sessionId}/messages/{messageId}/reaction', {
+        params: { path: { profileId, sessionId, messageId } },
+        body: { emoji },
+        signal: AbortSignal.timeout(15_000),
+      }),
+    ),
   setSessionModel: (profileId: string, sessionId: string, model: ModelSelection | null) =>
     result(
       client.PUT('/v1/profiles/{profileId}/sessions/{sessionId}/model', {

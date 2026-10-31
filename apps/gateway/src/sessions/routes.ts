@@ -21,6 +21,7 @@ type SessionRouteServices = {
       | 'setGatewayTarget'
       | 'setObjective'
       | 'overview'
+      | 'react'
       | 'timeline'
       | 'context'
       | 'markRead'
@@ -140,6 +141,16 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
         await deps.runs.submit(request.params.profileId, request.params.sessionId, request.body, {
           ownerMessage: true,
         }),
+      ),
+  );
+  app.put<{ Params: SessionParams & { messageId: string } }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/messages/:messageId/reaction',
+    (request) =>
+      deps.sessions.react(
+        request.params.profileId,
+        request.params.sessionId,
+        request.params.messageId,
+        request.body,
       ),
   );
 

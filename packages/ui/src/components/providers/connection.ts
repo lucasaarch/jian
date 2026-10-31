@@ -47,6 +47,7 @@ export function staleLine(list: ProviderModelList | undefined) {
 /** What the credential of a vendor is called where it is entered. */
 export function secretLabel(entry: ProviderEntry) {
   if (entry.kind === 'openai-compatible') return 'API key (optional)';
+  if (entry.kind === 'ollama') return 'Ollama API key (optional)';
   if (entry.kind === 'openai' || entry.kind === 'groq') return 'API key';
 
   return `${entry.name} credential`;
@@ -60,12 +61,18 @@ export function secretHint(entry: ProviderEntry, configured: Provider | undefine
   if (entry.kind === 'openai-compatible') {
     return 'Only if your server asks for one. It is never shown again.';
   }
+  if (entry.kind === 'ollama') {
+    return 'Optional for local Ollama. Used for Ollama Cloud authentication.';
+  }
 
   return 'What you save here is never shown again.';
 }
 
-export const addressHint =
-  'Ollama: http://localhost:11434/v1 when the gateway runs on the same machine, or http://host.docker.internal:11434/v1 from Docker. A private address must be allowed in JIAN_ALLOW_PRIVATE_ORIGINS.';
+export function addressHint(entry: ProviderEntry) {
+  return entry.kind === 'ollama'
+    ? 'The Ollama server root, usually http://localhost:11434. A private address must be allowed in JIAN_ALLOW_PRIVATE_ORIGINS.'
+    : 'The server API root, through /v1. A private address must be allowed in JIAN_ALLOW_PRIVATE_ORIGINS.';
+}
 
 /**
  * The provider to register from what the owner entered, or what is missing. Registering
@@ -77,7 +84,7 @@ export function providerRequest(
 ): { error: string } | { input: NewProvider } {
   const secret = form.secret.trim();
   const baseURL = form.baseURL.trim();
-  const server = entry.kind === 'openai-compatible';
+  const server = entry.kind === 'openai-compatible' || entry.kind === 'ollama';
   if (!secret && !server) return { error: `Enter the ${entry.name} credential.` };
 
   return {

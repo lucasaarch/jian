@@ -2,6 +2,7 @@
 
 import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
+import { SwitchControl } from '../../kit/toggle';
 import { highlightLines } from './highlight';
 
 /**
@@ -11,28 +12,35 @@ import { highlightLines } from './highlight';
  */
 export function CodeBlock({ text, language }: { text: string; language?: string }) {
   const [copied, setCopied] = useState(false);
+  const [wrap, setWrap] = useState(false);
   const lines = highlightLines(text, language);
 
   return (
-    <figure className="code-block">
+    <figure className="code-block" data-wrap={wrap || undefined}>
       <figcaption className="code-block-head">
         <span>{language || 'Code'}</span>
-        <button
-          type="button"
-          aria-label={copied ? 'Copied' : 'Copy the code'}
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(text);
-              setCopied(true);
-              window.setTimeout(() => setCopied(false), 1500);
-            } catch {
-              // Refused by the browser: the code stays selectable.
-            }
-          }}
-        >
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? 'Copied' : 'Copy'}
-        </button>
+        <div className="code-block-actions">
+          <div className="inline-flex items-center gap-2 font-sans">
+            Wrap lines
+            <SwitchControl checked={wrap} onCheckedChange={setWrap} label="Wrap lines" />
+          </div>
+          <button
+            type="button"
+            aria-label={copied ? 'Copied' : 'Copy the code'}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(text);
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1500);
+              } catch {
+                // Refused by the browser: the code stays selectable.
+              }
+            }}
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
       </figcaption>
       <div className="code-block-body">
         <pre className="code-block-lines">

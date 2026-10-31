@@ -27,6 +27,7 @@ import {
  */
 export type ContactRecord = z.infer<typeof contactSchema> & {
   requestKey?: string;
+  channelMessage?: IncomingMessage['channelMessage'];
   agentTurns?: number;
   seen?: string[];
   avatarCheckedAt?: string;
@@ -70,6 +71,7 @@ export class Contacts {
   /** The owner-facing shape of a contact. */
   view({
     requestKey: _key,
+    channelMessage: _native,
     agentTurns: _turns,
     seen: _seen,
     avatarCheckedAt: _checked,
@@ -136,7 +138,13 @@ export class Contacts {
         canApprove: false,
         // Nothing is held for a room. Releasing it on approval would answer a message that
         // named nobody, which is exactly what a group with several agents must not do.
-        ...(group || allow ? {} : { message: message.text, requestKey: message.requestKey }),
+        ...(group || allow
+          ? {}
+          : {
+              message: message.text,
+              requestKey: message.requestKey,
+              ...(message.channelMessage ? { channelMessage: message.channelMessage } : {}),
+            }),
         createdAt: now,
         updatedAt: now,
       };
@@ -178,6 +186,7 @@ export class Contacts {
         await updateContact(tx, {
           ...existing,
           message: held,
+          ...(message.channelMessage ? { channelMessage: message.channelMessage } : {}),
           updatedAt: now,
           ...(channel.type === 'whatsapp-business'
             ? { seen: [...(existing.seen ?? []), message.requestKey] }
@@ -261,7 +270,9 @@ export class Contacts {
       canApprove: patch.canApprove ?? current.canApprove,
       updatedAt: now,
       ...(current.aiEnabled !== aiEnabled ? { aiPausedAt: now } : {}),
-      ...(!aiEnabled ? { message: undefined, requestKey: undefined } : {}),
+      ...(!aiEnabled
+        ? { message: undefined, channelMessage: undefined, requestKey: undefined }
+        : {}),
     };
     await updateContact(tx, contact);
     await recordEvent(tx, this.clock, profileId, 'contact.updated', this.view(contact));
@@ -298,6 +309,7 @@ export class Contacts {
         ...current,
         status: 'blocked',
         message: undefined,
+        channelMessage: undefined,
         requestKey: undefined,
         updatedAt: nowIso(this.clock),
       };
@@ -316,6 +328,7 @@ export class Contacts {
       const contact: ContactRecord = {
         ...current,
         message: undefined,
+        channelMessage: undefined,
         requestKey: undefined,
         updatedAt: nowIso(this.clock),
       };

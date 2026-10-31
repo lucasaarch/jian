@@ -1603,6 +1603,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/profiles/{profileId}/sessions/{sessionId}/messages/{messageId}/reaction": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Required permission: admin. */
+        put: operations["setMessageReaction"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/schedules": {
         parameters: {
             query?: never;
@@ -6365,7 +6382,7 @@ export interface operations {
                     "application/json": {
                         name: string;
                         /** @enum {string} */
-                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "openai-compatible";
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "ollama" | "openai-compatible";
                         /** @enum {string} */
                         credential?: "key" | "subscription";
                         /** Format: uri */
@@ -6477,7 +6494,7 @@ export interface operations {
                 "application/json": {
                     name: string;
                     /** @enum {string} */
-                    kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "openai-compatible";
+                    kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "ollama" | "openai-compatible";
                     secret?: string;
                     /** @enum {string} */
                     credential?: "key" | "subscription";
@@ -6496,7 +6513,7 @@ export interface operations {
                     "application/json": {
                         name: string;
                         /** @enum {string} */
-                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "openai-compatible";
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "ollama" | "openai-compatible";
                         /** @enum {string} */
                         credential?: "key" | "subscription";
                         /** Format: uri */
@@ -6737,7 +6754,7 @@ export interface operations {
                     "application/json": {
                         name: string;
                         /** @enum {string} */
-                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "openai-compatible";
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "ollama" | "openai-compatible";
                         /** @enum {string} */
                         credential?: "key" | "subscription";
                         /** Format: uri */
@@ -7588,7 +7605,7 @@ export interface operations {
                         continuationOf?: string;
                         model?: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -7851,7 +7868,7 @@ export interface operations {
                         continuationOf?: string;
                         model?: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -8113,7 +8130,7 @@ export interface operations {
                         continuationOf?: string;
                         model?: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -9540,6 +9557,12 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        reaction?: {
+                            messageId: string;
+                            participant?: string;
+                            fromMe: boolean;
+                            emoji: string | null;
+                        };
                         /** Format: uuid */
                         id: string;
                         /** Format: uuid */
@@ -10125,6 +10148,10 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    channelMessage?: {
+                        id: string;
+                        participant?: string;
+                    };
                     actorId: string;
                     chatId: string;
                     text: string;
@@ -10904,6 +10931,7 @@ export interface operations {
                         }[];
                     };
                     message?: {
+                        message_id?: number;
                         from?: {
                             id: number;
                             first_name?: string;
@@ -11122,6 +11150,15 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: {
+                            reactions?: {
+                                /** @enum {string} */
+                                actor: "owner" | "agent";
+                                emoji: string;
+                            }[];
+                            channelMessage?: {
+                                id: string;
+                                participant?: string;
+                            };
                             /** Format: uuid */
                             id: string;
                             /** Format: uuid */
@@ -11260,6 +11297,15 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: {
+                            reactions?: {
+                                /** @enum {string} */
+                                actor: "owner" | "agent";
+                                emoji: string;
+                            }[];
+                            channelMessage?: {
+                                id: string;
+                                participant?: string;
+                            };
                             /** Format: uuid */
                             id: string;
                             /** Format: uuid */
@@ -13264,7 +13310,7 @@ export interface operations {
                          */
                         model: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -13468,7 +13514,7 @@ export interface operations {
                          */
                         model: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -13666,7 +13712,7 @@ export interface operations {
                      */
                     model?: {
                         /** @enum {string} */
-                        provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                        provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                         modelId: string;
                         apiKeyEnv?: string;
                         /** Format: uuid */
@@ -13772,7 +13818,7 @@ export interface operations {
                          */
                         model: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -13978,7 +14024,7 @@ export interface operations {
                          */
                         model: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -14276,7 +14322,7 @@ export interface operations {
                     avatar?: string | null;
                     model?: {
                         /** @enum {string} */
-                        provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                        provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                         modelId: string;
                         apiKeyEnv?: string;
                         /** Format: uuid */
@@ -14358,7 +14404,7 @@ export interface operations {
                          */
                         model: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -14676,7 +14722,7 @@ export interface operations {
                              */
                             model: {
                                 /** @enum {string} */
-                                provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                                provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                                 modelId: string;
                                 apiKeyEnv?: string;
                                 /** Format: uuid */
@@ -16925,7 +16971,7 @@ export interface operations {
                         continuationOf?: string;
                         model?: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -17414,6 +17460,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        reactions?: {
+                            /** @enum {string} */
+                            actor: "owner" | "agent";
+                            emoji: string;
+                        }[];
+                        channelMessage?: {
+                            id: string;
+                            participant?: string;
+                        };
                         /** Format: uuid */
                         id: string;
                         /** Format: uuid */
@@ -17540,6 +17595,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** Format: uuid */
+                    replyToId?: string;
                     mediaIds?: string[];
                     text: string;
                     requestKey: string;
@@ -17607,7 +17664,7 @@ export interface operations {
                         continuationOf?: string;
                         model?: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -18251,6 +18308,153 @@ export interface operations {
                         name?: string;
                         avatar?: string;
                     }[];
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setMessageReaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    emoji: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        reactions?: {
+                            /** @enum {string} */
+                            actor: "owner" | "agent";
+                            emoji: string;
+                        }[];
+                        channelMessage?: {
+                            id: string;
+                            participant?: string;
+                        };
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        /** Format: uuid */
+                        sessionId: string;
+                        /** Format: uuid */
+                        runId?: string;
+                        /** @enum {string} */
+                        role: "user" | "assistant";
+                        content: string;
+                        author?: {
+                            id: string;
+                            name?: string;
+                        };
+                        call?: {
+                            /** Format: uuid */
+                            profileId: string;
+                            /** Format: uuid */
+                            sessionId: string;
+                            /** Format: uuid */
+                            runId: string;
+                        };
+                        /** @enum {string} */
+                        purpose?: "answer" | "resume";
+                        /** Format: date-time */
+                        createdAt: string;
+                    };
                 };
             };
             /** @description Error */
@@ -20128,7 +20332,7 @@ export interface operations {
                         continuationOf?: string;
                         model?: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -21259,7 +21463,7 @@ export interface operations {
                         continuationOf?: string;
                         model?: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -21514,7 +21718,7 @@ export interface operations {
                         continuationOf?: string;
                         model?: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
@@ -21769,7 +21973,7 @@ export interface operations {
                         continuationOf?: string;
                         model?: {
                             /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "openai-compatible" | "openai-codex";
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
                             modelId: string;
                             apiKeyEnv?: string;
                             /** Format: uuid */
