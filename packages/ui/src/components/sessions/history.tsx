@@ -21,7 +21,7 @@ import { plainText } from '../ui/markdown';
 import { CodeChanges } from './code-change';
 import { Confetti } from './confetti';
 import { ConversationMap } from './conversation-map';
-import { CrewCards, CrewDock, reportOf } from './crew';
+import { CrewCards, placeCrew, reportOf } from './crew';
 import { ApprovalCard, QuestionCard } from './decision-cards';
 import { useFollowBottom } from './follow-bottom';
 import { HistorySkeleton } from './history-skeleton';
@@ -220,6 +220,10 @@ export function History({
   const isRunning = running(run);
   // The turn being read now: its file changes open whole, older ones only when short.
   const newest = messages.findLast((message) => message.runId)?.runId;
+  const crewPlacement = useMemo(
+    () => placeCrew(subagents, messages.filter(answers)),
+    [subagents, messages],
+  );
   // Each turn's tools among the lines it said, so the work shows up as it was spoken.
   const placed = useMemo(() => {
     const said = new Map<string, { lines: Message[]; call: boolean }>();
@@ -533,13 +537,9 @@ export function History({
               const live = isRunning && run?.id === message.runId;
               const crew =
                 message.runId && !live && messages[index + 1]?.runId !== message.runId
-                  ? subagents.filter((child) => child.parentRunId === message.runId)
+                  ? (crewPlacement.tail.get(message.runId) ?? [])
                   : [];
-              const handedOff =
-                opensAnswer && answering
-                  ? subagents.some((child) => child.parentRunId === answering)
-                  : false;
-
+              const beforeCrew = crewPlacement.before.get(message.id) ?? [];
               // A finished agent's report is the agent's mail; its card already says it ended.
               const report = reportOf(message, subagents);
               // The line the gateway writes for an approval or a question becomes its card.
@@ -560,11 +560,11 @@ export function History({
                 message.purpose === 'resume' ||
                 (message.purpose === 'answer' && Boolean(asked?.question || asked?.approval));
               const thought =
-                answering && (steps?.length || handedOff) ? (
+                answering && steps?.length ? (
                   <Worked
-                    steps={steps ?? []}
-                    startedAt={span(answering).startedAt}
-                    {...(steps?.length ? {} : { finishedAt: span(answering).finishedAt })}
+                    steps={steps}
+                    startedAt={steps[0]?.startedAt ?? span(answering).startedAt}
+                    finishedAt={steps.at(-1)?.finishedAt ?? span(answering).finishedAt}
                     fresh={answering === newest}
                   />
                 ) : undefined;
@@ -574,6 +574,7 @@ export function History({
                   {report || pause ? null : approval && message.runId ? (
                     <div className="chat-line theirs">
                       {thought}
+                      <CrewCards agents={beforeCrew} />
                       <ApprovalCard
                         approval={approval}
                         chat={chat}
@@ -586,6 +587,7 @@ export function History({
                   ) : question && message.runId ? (
                     <div className="chat-line theirs">
                       {thought}
+                      <CrewCards agents={beforeCrew} />
                       <QuestionCard
                         question={question}
                         chat={chat}
@@ -627,7 +629,12 @@ export function History({
                       group={group}
                       people={people}
                       opensRun={!previous || who(previous) !== who(message)}
-                      before={thought}
+                      before={
+                        <>
+                          {thought}
+                          <CrewCards agents={beforeCrew} />
+                        </>
+                      }
                     >
                       {api.media && (
                         <MessageMedia
@@ -697,7 +704,7 @@ export function History({
           )}
           {!loading && run && isRunning && !alreadySaid(run) && (
             <LiveTurn run={run} agent={agent} {...trailing(run, tools)}>
-              <CrewCards agents={subagents.filter((child) => child.parentRunId === run.id)} />
+              <CrewCards agents={crewPlacement.tail.get(run.id) ?? []} />
             </LiveTurn>
           )}
         </div>
@@ -732,7 +739,6 @@ export function History({
             onClose={() => setDismissed(run.id)}
           />
         )}
-        <CrewDock agents={subagents} />
       </div>
     </div>
   );

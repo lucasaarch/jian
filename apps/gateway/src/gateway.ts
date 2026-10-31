@@ -183,6 +183,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
     outbound,
     storeArtifact: (run, toolName, output) => coordination.storeArtifact(run, toolName, output),
   });
+  services.runs.useCancellation((id) => runtime.cancel(id));
 
   const queue =
     options.role !== 'api' && options.executor
@@ -204,7 +205,6 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
           token: options.token,
           mode: options.mode,
           trustedProxies: options.trustedProxies,
-          onCancel: (id) => runtime.cancel(id),
         })
       : undefined;
 

@@ -72,6 +72,12 @@ type RunDeliveries = {
 
 export class Runs {
   private deliveries?: RunDeliveries;
+  private cancelled?: (runId: string) => void;
+
+  /** The hosting process owns abort handles; notify it only after cancellation commits. */
+  useCancellation(cancelled: (runId: string) => void): void {
+    this.cancelled = cancelled;
+  }
 
   constructor(
     private readonly store: Store,
@@ -569,7 +575,6 @@ export class Runs {
   async cancel(profileId: string, runId: string, transaction?: Queryable) {
     const write = async (tx: Queryable) => {
       const run = await this.run(profileId, runId, tx);
-      if (run.subagent) throw new GatewayError(403, 'Subagents are managed by the agent');
 
       if (!cancellable(run)) {
         return run;
@@ -591,7 +596,10 @@ export class Runs {
 
       return final;
     };
-    return transaction ? write(transaction) : this.store.transaction(profileId, write);
+    if (transaction) return write(transaction);
+    const result = await this.store.transaction(profileId, write);
+    if (result.status === 'cancelled') this.cancelled?.(result.id);
+    return result;
   }
 
   /**

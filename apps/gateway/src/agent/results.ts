@@ -63,14 +63,34 @@ function structuredMcpResult(output: unknown): unknown {
 }
 
 /** Fit the serialized page, including escaped quotes and its cursor, rather than guessing chars. */
-export function artifactPage(content: string, offset: number, limit: number, run: Run) {
+export function artifactPage(
+  content: string,
+  offset: number,
+  limit: number,
+  run: Run,
+  artifactId?: string,
+) {
+  if (offset > content.length) throw new Error('Artifact offset is beyond the end of the result');
   const model = run.model ?? run.profile.model;
   const count = tokenCounter(model.provider, model.modelId);
   const budget = (run.contextPolicy ?? run.profile.contextPolicy).toolResultTokens;
+  const metadata: { artifactId?: string; totalCharacters?: number; instruction?: string } =
+    artifactId
+      ? {
+          artifactId,
+          totalCharacters: content.length,
+          instruction:
+            'Read every page with read_artifact at nextOffset until null before reviewing. Full output is preserved.',
+        }
+      : {};
   const page = (size: number) => ({
+    ...metadata,
     content: content.slice(offset, offset + size),
     nextOffset: offset + size < content.length ? offset + size : null,
   });
+  // Tiny result budgets still need a usable cursor, rather than an endlessly empty page.
+  if (count(JSON.stringify(page(1))) > budget) delete metadata.instruction;
+  if (count(JSON.stringify(page(1))) > budget) delete metadata.totalCharacters;
   let low = 0;
   let high = Math.max(0, Math.min(limit, content.length - offset));
   while (low < high) {
@@ -142,17 +162,28 @@ export async function boundToolResult(
     // Tool execution already happened. Keep a bounded preview rather than retrying the effect.
   }
 
+  if (artifact && toolName.startsWith('mcp__')) {
+    return artifactPage(json, 0, json.length, run, artifact.artifactId);
+  }
+
   let previewSize = Math.min(json.length, limit);
   const previewAt = (size: number) =>
     (concise && artifact ? concisePreview(sanitized, toolName, size) : undefined) ??
     json.slice(0, size);
   let preview = previewAt(previewSize);
 
-  let result: { truncated: true; preview: string; artifactId?: string; bytes: number } = {
+  let result = {
     truncated: true,
     preview,
     artifactId: artifact?.artifactId,
     bytes: Buffer.byteLength(json),
+    ...(!artifact
+      ? {
+          incomplete: true,
+          error:
+            'The full output could not be saved. This preview is incomplete. Do not treat it as the full result or repeat a mutating call; narrow or paginate a read request instead.',
+        }
+      : {}),
   };
 
   while (previewSize > 0 && count(JSON.stringify(result)) > limit) {

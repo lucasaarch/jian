@@ -82,8 +82,11 @@ export class Coordination {
     const content = JSON.stringify(output) ?? 'null';
     const bytes = Buffer.byteLength(content);
 
-    if (bytes > 1000000) {
-      throw new GatewayError(413, 'Tool result exceeds the artifact size limit');
+    if (bytes > 64 * 1024 * 1024) {
+      throw new GatewayError(
+        413,
+        'Tool result exceeds the 64 MiB artifact limit; paginate the source request',
+      );
     }
 
     const record: ArtifactRecord = {

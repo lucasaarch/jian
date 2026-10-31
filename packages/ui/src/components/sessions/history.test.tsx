@@ -121,12 +121,13 @@ it('shows the agents a turn handed work to as cards, and follows one in the draw
     const drawer = element.querySelector('.crew-drawer');
     expect(childReads).toBe(1);
     expect(card?.getAttribute('aria-pressed')).toBe('true');
-    expect(drawer?.textContent).toContain('Jev picked Deep');
+    expect(drawer?.textContent).not.toContain('Jev picked');
+    expect(drawer?.querySelector('[role="status"]')?.textContent).toContain('Working');
     expect(document.activeElement?.getAttribute('aria-label')).toBe('Close');
 
     completed = true;
     await act(async () => root.render(page(1)));
-    // A finished card says so by its mark alone; the report is read in the drawer.
+    // The outcome stays in the card's status slot; the report is read in the drawer.
     expect(card?.textContent).not.toContain('Build passed.');
     expect(card?.querySelector('.work-mark')).not.toBeNull();
     expect(element.querySelector('.crew-drawer')?.textContent).toContain('Build passed.');
@@ -142,7 +143,7 @@ it('shows the agents a turn handed work to as cards, and follows one in the draw
   }
 });
 
-it('keeps a dock above the composer only while an agent works, and it opens the drawer', async () => {
+it('keeps agent status in the card and inspector without a follow dock', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   let status: 'running' | 'completed' = 'running';
   const api = {
@@ -186,11 +187,11 @@ it('keeps a dock above the composer only while an agent works, and it opens the 
   );
   try {
     await act(async () => root.render(page()));
-    const dock = element.querySelector<HTMLButtonElement>('.crew-dock');
-    expect(dock?.textContent).toContain('1 agent working');
-
-    await act(async () => dock?.click());
-    expect(element.querySelector('.crew-drawer')?.textContent).toContain('Chosen by the agent');
+    expect(element.querySelector('.crew-dock')).toBeNull();
+    const card = element.querySelector<HTMLButtonElement>('.crew-card');
+    expect(card?.querySelector('.crew-now')?.textContent).toBeTruthy();
+    await act(async () => card?.click());
+    expect(element.querySelector('.crew-drawer')?.textContent).not.toContain('Chosen by the agent');
 
     status = 'completed';
     await act(async () => root.render(page(1)));
@@ -558,6 +559,99 @@ it('does not duplicate a delivered answer while the writing snapshot is still in
     expect(element.querySelectorAll('.chat-text')).toHaveLength(1);
     expect(element.querySelector('.chat-text')?.textContent).toBe(content);
     expect(element.querySelector('.pending')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+
+it('keeps spawned agents before text written later when the streamed answer becomes history', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  let finished = false;
+  const reply = 'I launched the agents. Their reports will arrive here.';
+  const run = () =>
+    ({
+      id: 'ordered-parent',
+      sessionId: 'ordered',
+      profileId: 'profile',
+      status: finished ? 'completed' : 'running',
+      createdAt: '2026-10-31T10:00:00Z',
+      updatedAt: '2026-10-31T10:00:04Z',
+      progress: { phase: 'writing', text: reply, steps: 1, updatedAt: '2026-10-31T10:00:03Z' },
+    }) as Run;
+  const api = {
+    messages: async () => [
+      {
+        id: 'request',
+        profileId: 'profile',
+        sessionId: 'ordered',
+        runId: 'ordered-parent',
+        role: 'user',
+        content: 'Delegate the research.',
+        createdAt: '2026-10-31T10:00:00Z',
+      },
+      ...(finished
+        ? [
+            {
+              id: 'answer',
+              profileId: 'profile',
+              sessionId: 'ordered',
+              runId: 'ordered-parent',
+              role: 'assistant',
+              content: reply,
+              createdAt: '2026-10-31T10:00:04Z',
+            },
+          ]
+        : []),
+    ],
+    activities: async () => [run()],
+    conversationSubagents: async () => [
+      {
+        runId: 'ordered-child',
+        sessionId: 'child',
+        parentRunId: 'ordered-parent',
+        name: 'Researcher',
+        role: 'execute',
+        status: finished ? 'completed' : 'running',
+        input: 'Research.',
+        createdAt: '2026-10-31T10:00:01Z',
+        updatedAt: '2026-10-31T10:00:04Z',
+      },
+    ],
+    timeline: async () => [],
+  } as unknown as GatewayApi;
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  const render = (revision: number) =>
+    root.render(
+      <History
+        api={api}
+        profileId="profile"
+        sessionId="ordered"
+        initialRun={run()}
+        revision={revision}
+      />,
+    );
+  try {
+    await act(async () => render(0));
+    const beforeAnswer = () => {
+      const crew = element.querySelector('.crew');
+      const answer = [...element.querySelectorAll('.chat-text')].find(
+        (item) => item.textContent === reply,
+      );
+      expect(crew).not.toBeNull();
+      expect(answer).toBeDefined();
+      expect(
+        (crew?.compareDocumentPosition(answer as Node) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(element.querySelectorAll('.crew-card')).toHaveLength(1);
+    };
+    beforeAnswer();
+    finished = true;
+    await act(async () => render(1));
+    beforeAnswer();
+    expect(element.querySelector('.crew-now')?.textContent).toBe('Completed');
   } finally {
     await act(async () => root.unmount());
     element.remove();

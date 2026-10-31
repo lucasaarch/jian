@@ -209,3 +209,142 @@ it('executes a conversation subagent through the agent loop and retains its tran
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+it('lets the owner and the principal cancel workers while enforcing conversation and profile scope', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile({
+    name: 'Coordinator',
+    instructions: 'Help.',
+    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  });
+  const session = await services.sessions.createSession(profile.id, { title: 'Research' });
+  const otherSession = await services.sessions.createSession(profile.id, { title: 'Other work' });
+  const parent = await services.runs.submit(profile.id, session.id, {
+    text: 'Research',
+    requestKey: 'parent',
+  });
+  const other = await services.runs.submit(profile.id, otherSession.id, {
+    text: 'Unrelated',
+    requestKey: 'other',
+  });
+  const assignment = {
+    name: 'Researcher',
+    role: 'execute',
+    identity: 'Research.',
+    brief: 'Read the release.',
+  };
+  const child = await services.work.spawnInConversation(parent, assignment, 'child');
+  const worker = await services.runs.run(profile.id, child.runId);
+  expect(profileTools(services, worker)).not.toHaveProperty('cancel_subagent');
+  await expect(services.work.cancelInConversation(worker, child.runId)).rejects.toMatchObject({
+    statusCode: 403,
+  });
+  await expect(services.work.cancelInConversation(other, child.runId)).rejects.toMatchObject({
+    statusCode: 403,
+  });
+  await expect(services.work.cancelInConversation(parent, other.id)).rejects.toMatchObject({
+    statusCode: 403,
+  });
+  await expect(
+    services.runs.cancel('00000000-0000-4000-8000-000000000099', child.runId),
+  ).rejects.toMatchObject({ statusCode: 404 });
+  expect((await services.runs.run(profile.id, child.runId)).status).toBe('queued');
+
+  await services.lifecycle.claim(child.runId, profile.id, 'running-worker');
+  let committed: Promise<string> | undefined;
+  services.runs.useCancellation((id) => {
+    committed = services.runs.run(profile.id, id).then((run) => run.status);
+  });
+  const tools = profileTools(services, parent);
+  const cancel = tools.cancel_subagent?.execute as unknown as (
+    input: { runId: string },
+    options: { toolCallId: string; messages: [] },
+  ) => Promise<unknown>;
+  await cancel({ runId: child.runId }, { toolCallId: 'stop', messages: [] });
+  expect(await committed).toBe('cancelled');
+  expect((await services.runs.run(profile.id, child.runId)).leaseOwner).toBeUndefined();
+  await services.work.reportWorker(profile.id, child.runId);
+  const messages = await services.sessions.messages(profile.id, session.id);
+  expect(
+    messages.some((message) => message.content.includes(`Run ${child.runId} status: cancelled`)),
+  ).toBe(true);
+
+  const second = await services.work.spawnInConversation(parent, assignment, 'owner-child');
+  const app = createApp({ ...services, token, logger: false });
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profile.id}/runs/${second.runId}/cancel`,
+      headers,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().status).toBe('cancelled');
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/v1/profiles/${profile.id}/runs/${second.runId}/cancel`,
+          headers,
+        })
+      ).json().status,
+    ).toBe('cancelled');
+  } finally {
+    await app.close();
+  }
+});
+
+it('aborts an in-flight subagent model call after the cancellation commits', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile({
+    name: 'Coordinator',
+    instructions: 'Help.',
+    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  });
+  const session = await services.sessions.createSession(profile.id, { title: 'Research' });
+  const parent = await services.runs.submit(profile.id, session.id, {
+    text: 'Research.',
+    requestKey: 'parent',
+  });
+  const child = await services.work.spawnInConversation(
+    parent,
+    { name: 'Reader', role: 'execute', identity: 'Read.', brief: 'Read the release.' },
+    'reader',
+  );
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let aborted = false;
+  const model = mockModel({
+    doGenerate: async ({ abortSignal }) => {
+      return new Promise<never>((_resolve, reject) => {
+        const stop = () => {
+          aborted = true;
+          reject(new DOMException('Synthetic cancelled request', 'AbortError'));
+        };
+        if (abortSignal?.aborted) stop();
+        else abortSignal?.addEventListener('abort', stop, { once: true });
+        started();
+      });
+    },
+  });
+  const runtime = new AgentRuntime(services, () => model);
+  services.runs.useCancellation((id) => runtime.cancel(id));
+  const executing = runtime.execute(profile.id, child.runId);
+  try {
+    await ready;
+    await services.work.cancelInConversation(parent, child.runId);
+    await executing;
+    expect(aborted).toBe(true);
+    const finished = await services.runs.run(profile.id, child.runId);
+    expect(finished.status).toBe('cancelled');
+    expect(finished.output).toBeUndefined();
+    expect(
+      (await services.sessions.messages(profile.id, child.sessionId)).some(
+        (message) => message.role === 'assistant',
+      ),
+    ).toBe(false);
+  } finally {
+    runtime.stop();
+  }
+});

@@ -230,6 +230,31 @@ async function reconnectServer(
 export function omitEmptyOptionalArguments(input: unknown, schema: unknown): unknown {
   if (!input || typeof input !== 'object' || !schema || typeof schema !== 'object') return input;
 
+  // Automatic MCP tools use the SDK's JSON Schema wrapper, not a Zod object.
+  const json = (schema as { jsonSchema?: unknown }).jsonSchema ?? schema;
+  if (json && typeof json === 'object' && ('properties' in json || 'items' in json)) {
+    const definition = json as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+      items?: unknown;
+    };
+    if (Array.isArray(input)) {
+      return definition.items
+        ? input.map((item) => omitEmptyOptionalArguments(item, definition.items))
+        : input;
+    }
+    if (definition.properties) {
+      const required = new Set(definition.required ?? []);
+      return Object.fromEntries(
+        Object.entries(input).flatMap(([key, value]) => {
+          const field = definition.properties?.[key];
+          if (field && !required.has(key) && value === '') return [];
+          return [[key, field ? omitEmptyOptionalArguments(value, field) : value]];
+        }),
+      );
+    }
+  }
+
   const shape = (schema as { shape?: Record<string, unknown> }).shape;
 
   if (!shape) return input;

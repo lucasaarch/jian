@@ -698,6 +698,9 @@ export class AgentRuntime {
                   this.options,
                   currentCavemanMode !== 'off',
                 );
+                if (result && typeof result === 'object' && 'artifactId' in result) {
+                  loadedTools.add('read_artifact');
+                }
 
                 // Read after secrets are masked: the judge sees no more than the agent will.
                 return judge && outsideContent(name, mcpToolNames)
