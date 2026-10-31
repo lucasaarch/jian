@@ -124,7 +124,7 @@ function githubURL(path) {
   const suffix = path.split('?')[0].slice(prefix.length);
   if (
     path.startsWith(prefix) &&
-    /^(?:|\/issues\/[1-9]\d*(?:\/issue-field-values|\/comments|\/labels)?|\/issues\/comments\/[1-9]\d*|\/issue-types|\/labels|\/actions\/workflows\/issue-triage\.yml\/runs|\/actions\/runs\/[1-9]\d*(?:\/jobs)?|\/collaborators\/[A-Za-z0-9-]+\/permission)$/.test(
+    /^(?:|\/issues\/[1-9]\d*(?:\/issue-field-values|\/comments|\/labels)?|\/issues\/comments\/[1-9]\d*|\/issue-types|\/labels|\/actions\/workflows\/issue-triage\.yml\/runs|\/actions\/runs\/[1-9]\d*(?:\/jobs|\/attempts\/[1-9]\d*\/jobs)?|\/collaborators\/[A-Za-z0-9-]+\/permission)$/.test(
       suffix,
     )
   ) {
@@ -252,7 +252,9 @@ function provenance(run, c, current = false) {
   if (
     !record(run) ||
     !positive(run.id) ||
-    run.run_attempt !== 1 ||
+    !positive(run.run_attempt) ||
+    run.run_attempt > 10 ||
+    (current && run.run_attempt !== 1) ||
     run.path !== workflow ||
     !sha(run.head_sha) ||
     run.head_branch !== c.defaultBranch ||
@@ -324,27 +326,37 @@ async function history(c, transport, token, admit = true) {
       attempts.push({ ...p, status: run.status, runConclusion: run.conclusion });
       continue;
     }
-    const jobs = await pages(`${root}/actions/runs/${run.id}/jobs`, 'jobs', transport, token);
-    if (!jobs.length || jobs.some((j) => !Array.isArray(j.steps))) fail('HISTORY_INCOMPLETE');
-    const steps = jobs.flatMap((j) => j.steps).filter((s) => s.name === generationStep);
-    if (
-      steps.length !== 1 ||
-      steps[0].status !== 'completed' ||
-      typeof steps[0].conclusion !== 'string'
-    )
-      fail('HISTORY_INCOMPLETE');
-    const step = steps[0];
     const attempt = {
       ...p,
       status: run.status,
       runConclusion: run.conclusion,
-      generationConclusion: step.conclusion,
+      generationConclusion: 'skipped',
     };
-    if (step.conclusion !== 'skipped') {
-      const started = Date.parse(step.started_at);
-      if (!Number.isFinite(started) || started > transport.now()) fail('HISTORY_INCOMPLETE');
-      attempt.started = started;
-      reservations.push(attempt);
+    // The default jobs endpoint shows only the latest rerun. Inspect every attempt so a skipped
+    // rerun cannot hide an earlier generation from admission checks or consumption budgets.
+    for (let ordinal = 1; ordinal <= run.run_attempt; ordinal++) {
+      const suffix = run.run_attempt === 1 ? 'jobs' : `attempts/${ordinal}/jobs`;
+      const jobs = await pages(
+        `${root}/actions/runs/${run.id}/${suffix}`,
+        'jobs',
+        transport,
+        token,
+      );
+      if (!jobs.length || jobs.some((j) => !Array.isArray(j.steps))) fail('HISTORY_INCOMPLETE');
+      const steps = jobs.flatMap((j) => j.steps).filter((s) => s.name === generationStep);
+      if (
+        steps.length !== 1 ||
+        steps[0].status !== 'completed' ||
+        typeof steps[0].conclusion !== 'string'
+      )
+        fail('HISTORY_INCOMPLETE');
+      const step = steps[0];
+      if (step.conclusion !== 'skipped') {
+        attempt.generationConclusion = step.conclusion;
+        const started = Date.parse(step.started_at);
+        if (!Number.isFinite(started) || started > transport.now()) fail('HISTORY_INCOMPLETE');
+        reservations.push({ ...attempt, started });
+      }
     }
     attempts.push(attempt);
   }

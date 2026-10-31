@@ -15,7 +15,8 @@ An administrator may set `dry_run=false` to triage an open Issue whose earlier
 attempt failed or succeeded with inference skipped. Explicit administrator dispatch
 also admits bot-authored Issues; automatic triggers and non-admin dispatch still exclude them. Retry history, source identity and generation
 limits are checked again; ambiguous history fails closed. Re-running an old
-Actions attempt is not a retry mechanism.
+Actions attempt is not a retry mechanism. Historical reruns are read attempt by
+attempt so a later skipped attempt cannot hide an earlier generation.
 
 ## Repository metadata
 

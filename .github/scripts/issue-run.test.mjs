@@ -1367,9 +1367,9 @@ test('receipt verification catches unrelated human type loss on additive labels'
   );
   assert.equal(s.f.comments.length, 0);
 });
-test('historical rerun cannot hide an earlier generation behind a later skipped attempt', async (t) => {
+test('an invalid historical attempt count blocks collection', async (t) => {
   const s = await setup(t);
-  s.f.history.push({ ...s.f.runRecord(100, 30), run_attempt: 2 });
+  s.f.history.push({ ...s.f.runRecord(100, 30), run_attempt: 0 });
   s.f.jobs.set(100, {
     total_count: 1,
     jobs: [
@@ -1826,5 +1826,48 @@ test('manual dispatch admits a skipped successful original but refuses an alread
     started_at: '2026-10-12T05:59:00Z',
   };
   assert.equal((await s.run.collectSnapshot(c, s.tr)).reason, 'MANUAL_RETRY_REFUSED');
+  assert.equal(s.f.generation, 0);
+});
+
+test('rerun history reads each attempt and cannot hide a prior generation behind a skipped success', async (t) => {
+  const s = await setup(t),
+    c = { ...context, event: 'manual' };
+  Object.assign(s.f.own, {
+    event: 'workflow_dispatch',
+    display_title: `issue-triage:${repo}:12:500:manual`,
+  });
+  s.f.history.push({ ...s.f.runRecord(100), run_attempt: 2, conclusion: 'success' });
+  let generated = false;
+  const reads = [];
+  const tr = s.run.createTransport(
+    async (url, opts) => {
+      if (/\/runs\/100\/attempts\/[12]\/jobs/.test(url)) {
+        reads.push(url);
+        const earlier = url.includes('/attempts/1/');
+        return Response.json({
+          total_count: 1,
+          jobs: [
+            {
+              steps: [
+                {
+                  name: 'Generate Gemini proposal',
+                  status: 'completed',
+                  conclusion: earlier && generated ? 'success' : 'skipped',
+                  started_at: '2026-10-12T05:59:00Z',
+                },
+              ],
+            },
+          ],
+        });
+      }
+      return s.f.fetch(url, opts);
+    },
+    { now: s.tr.now, sleep: s.tr.sleep },
+  );
+  assert.equal((await s.run.collectSnapshot(c, tr)).state, 'ready');
+  assert.ok(reads.some((url) => url.includes('/attempts/1/')));
+  assert.ok(reads.some((url) => url.includes('/attempts/2/')));
+  generated = true;
+  assert.equal((await s.run.collectSnapshot(c, tr)).reason, 'MANUAL_RETRY_REFUSED');
   assert.equal(s.f.generation, 0);
 });
