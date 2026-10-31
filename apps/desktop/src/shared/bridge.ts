@@ -79,7 +79,7 @@ export interface DesktopBridge {
   onGatewaysChanged(listener: (gateways: GatewaySummary[]) => void): () => void;
   onOpen(listener: (target: OpenTarget) => void): () => void;
   /** The app's own gateway: start it again now, or show the folder with its log. */
-  local: { retry(): void; openLog(): void };
+  local: { retry(): void; restart(): Promise<void>; openLog(): void };
   /**
    * Where the window is, or null with no gateway shown. The main process notifies for every
    * conversation but the one open in a focused window.

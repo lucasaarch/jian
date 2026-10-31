@@ -139,6 +139,7 @@ const machines: ComputerSharing = new ComputerSharing({
 });
 const bridge = serveBridge({
   retryLocal: () => local?.retry(),
+  restartLocal: () => local?.restart() ?? Promise.resolve(),
   using: usingNow,
   store,
   monitor,

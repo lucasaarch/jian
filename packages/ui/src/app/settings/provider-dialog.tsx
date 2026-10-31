@@ -111,12 +111,14 @@ function ProviderForm({
   actions: SectionActions;
 }) {
   const stale = staleLine(list);
-  const server = entry.kind === 'openai-compatible';
+  const server = entry.kind === 'openai-compatible' || entry.kind === 'ollama';
   const [credential, setCredential] = useState<Credential>(
     as?.credential ?? (configured?.credential === 'subscription' ? 'subscription' : 'key'),
   );
   const name = as?.name ?? entry.name;
-  const [baseURL, setBaseURL] = useState(configured?.baseURL ?? '');
+  const [baseURL, setBaseURL] = useState(
+    configured?.baseURL ?? (entry.kind === 'ollama' ? 'http://localhost:11434' : ''),
+  );
   const [secret, setSecret] = useState('');
   const [error, setError] = useState('');
   const detail = anthropicCredentials.find((item) => item.value === credential)?.detail;
@@ -182,10 +184,12 @@ function ProviderForm({
       {server && (
         <TextField
           label="Address"
-          hint={addressHint}
+          hint={addressHint(entry)}
           type="url"
           required
-          placeholder="http://localhost:11434/v1"
+          placeholder={
+            entry.kind === 'ollama' ? 'http://localhost:11434' : 'https://server.example/v1'
+          }
           value={baseURL}
           onChange={(event) => setBaseURL(event.target.value)}
         />

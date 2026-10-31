@@ -13,12 +13,14 @@ export function useWindowCommands({
   current,
   select,
   connect,
+  restartLocal,
 }: {
   openSettings: (page?: string) => void;
   gateways: GatewaySummary[];
   current: GatewaySummary | undefined;
   select: (id: string) => void;
   connect: () => void;
+  restartLocal: () => void;
 }): void {
   useAppCommands(openSettings);
   const commands = useMemo<AppCommand[]>(
@@ -33,6 +35,18 @@ export function useWindowCommands({
           icon: createElement(ArrowLeftRight, { size: 15 }),
           run: () => select(gateway.id),
         })),
+      ...(current?.local
+        ? [
+            {
+              id: 'restart-local-gateway',
+              title: 'Restart local gateway',
+              detail: 'This computer',
+              keywords: ['restart', 'gateway', 'server', 'local', 'this computer'],
+              icon: createElement(RefreshCw, { size: 15 }),
+              run: restartLocal,
+            },
+          ]
+        : []),
       {
         id: 'connect-gateway',
         title: 'Connect a gateway',
@@ -48,7 +62,7 @@ export function useWindowCommands({
         run: () => openUpdates({ check: true }),
       },
     ],
-    [gateways, current, select, connect],
+    [gateways, current, select, connect, restartLocal],
   );
   useCommands('window', commands);
 }

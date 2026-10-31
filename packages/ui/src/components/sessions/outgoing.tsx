@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock3, RotateCcw, X } from 'lucide-react';
+import { RotateCcw, X } from 'lucide-react';
 import type { GatewayApi, Message, Person } from '../../lib/api';
 import { discard, type Outgoing, resend } from '../../lib/stores/outbox';
 import { MessageMedia } from './media';
@@ -22,9 +22,12 @@ export function OutgoingMessage({
   api: Partial<Pick<GatewayApi, 'media'>>;
 }) {
   // What the stored message will hold: the words, and a marker for each file sent with them.
-  const content = [item.text, ...item.mediaIds.map((id) => `[Attached media: ${id}]`)]
-    .filter(Boolean)
-    .join('\n');
+  const quote = item.replyTo
+    ? `[Replying to your message: "${item.replyTo.content.replace(/\s+/g, ' ').trim().slice(0, 300)}"]\n`
+    : '';
+  const content =
+    quote +
+    [item.text, ...item.mediaIds.map((id) => `[Attached media: ${id}]`)].filter(Boolean).join('\n');
   const message = {
     id: item.key,
     profileId,
@@ -51,11 +54,6 @@ export function OutgoingMessage({
             <button type="button" onClick={() => discard(item.key)}>
               <X size={12} aria-hidden="true" /> Discard
             </button>
-          </div>
-        ) : item.state === 'sending' ? (
-          <div className="outgoing-state" aria-live="polite">
-            <Clock3 size={12} aria-hidden="true" />
-            <span>Sending…</span>
           </div>
         ) : null}
       </ChatMessage>

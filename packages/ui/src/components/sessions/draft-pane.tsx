@@ -1,23 +1,17 @@
 'use client';
 
+import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
-import type {
-  GatewayApi,
-  Profile,
-  Project,
-  ProtectionMode,
-  RemoteMachine,
-  Session,
-} from '../../lib/api';
+import type { GatewayApi, Profile, ProtectionMode, Session } from '../../lib/api';
 import { useAppearance } from '../../lib/appearance';
+import { keys } from '../../lib/query/keys';
 import { draftKey } from '../../lib/stores/drafts';
 import { useSearchParams } from '../../platform/navigation';
 import { AgentHero } from './agent-hero';
 import { Composer } from './composer';
 import { ContextRing } from './context-ring';
 import { SessionModel } from './model-picker';
-import { ProjectSelect } from './project-select';
 import { SessionProtection } from './protection-menu';
 
 const openingTitle = (text: string, hasMedia: boolean) => {
@@ -28,14 +22,12 @@ const openingTitle = (text: string, hasMedia: boolean) => {
 
 /**
  * A new chat, written before it exists: the conversation is created with its first upload or
- * message, never by opening the page, so an abandoned draft leaves nothing behind. Its choices —
- * project, machine, model, protection — are its own; a new draft starts them over.
+ * message, never by opening the page, so an abandoned draft leaves nothing behind. Its model
+ * and protection choices are its own; a project comes from the page that opened the draft.
  */
 export function DraftPane({
   api,
   profile,
-  projects,
-  machines,
   project,
   opened,
   sent,
@@ -43,8 +35,6 @@ export function DraftPane({
 }: {
   api: GatewayApi;
   profile: Profile;
-  projects: Project[];
-  machines: RemoteMachine[];
   /** The project it starts in, as a project's own new-chat button asks. */
   project: string | null;
   /** The draft became this conversation. */
@@ -52,6 +42,7 @@ export function DraftPane({
   sent: () => void;
   refresh: () => void;
 }) {
+  const client = useQueryClient();
   const pane = useRef<HTMLElement>(null);
   const arriving = useSearchParams().has('welcome');
   const { still } = useAppearance();
@@ -64,13 +55,11 @@ export function DraftPane({
     );
     return () => clearTimeout(timer);
   }, [arriving, still]);
-  const [projectId, setProjectId] = useState(project);
-  const [machineId, setMachineId] = useState<string | null>(null);
   const [model, setModel] = useState<Session['model']>();
   const [protection, setProtection] = useState<ProtectionMode>('ask');
   const created = useRef<Promise<Session> | null>(null);
   const ensure = () => {
-    created.current ??= api.createGatewaySession(profile.id, projectId, machineId);
+    created.current ??= api.createGatewaySession(profile.id, project, null);
     return created.current;
   };
 
@@ -92,18 +81,6 @@ export function DraftPane({
         <Composer
           draft
           draftKey={draftKey(profile.id)}
-          machines={machines}
-          remoteMachineId={machineId}
-          projectControl={
-            <ProjectSelect
-              api={api}
-              profileId={profile.id}
-              projects={projects}
-              projectId={projectId}
-              onChange={setProjectId}
-            />
-          }
-          onMachineChange={setMachineId}
           modelControl={
             <>
               <ContextRing profileId={profile.id} />
@@ -136,12 +113,18 @@ export function DraftPane({
             if (protection !== 'ask') {
               await api.setSessionProtection(profile.id, session.id, protection);
             }
-            await api.renameSession(
+            const named = await api.renameSession(
               profile.id,
               session.id,
               openingTitle(text, mediaIds.length > 0),
             );
             await api.send(profile.id, session.id, text, mediaIds);
+            // Navigation can beat the sessions refresh. Seed the real record before opening it.
+            const ready = { ...session, ...named, title: openingTitle(text, mediaIds.length > 0) };
+            client.setQueryData<Session[]>(keys.sessions(profile.id), (known = []) => [
+              ready,
+              ...known.filter((item) => item.id !== ready.id),
+            ]);
             created.current = null;
             opened(session.id);
           }}

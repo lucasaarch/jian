@@ -97,12 +97,22 @@
      column, and the composer lines up with it. */
   .conversation-pane {
     --chat-column: 52rem;
+    --chat-gutter: 0.75rem;
     @apply flex min-h-0 min-w-0 flex-col;
   }
-  .conversation-pane .message-list,
-  .conversation-pane .composer > * {
+  .conversation-pane .message-list {
     @apply mx-auto w-full;
     max-width: var(--chat-column);
+  }
+  .conversation-pane .composer > * {
+    @apply mx-auto w-full;
+    max-width: calc(var(--chat-column) + 2 * var(--chat-gutter));
+  }
+  /* Cards share the user bubble's outer edges; prose keeps its aligned text column. */
+  .message-list .chat-line.theirs > :is(.decision-card, .code-changes, .crew-cards),
+  .message-list .chat-line.theirs > .markdown > .code-block {
+    width: calc(100% + 2 * var(--chat-gutter));
+    margin-inline: calc(-1 * var(--chat-gutter));
   }
   /* A conversation has no header: its one control floats round in the top corner, over the
      conversation, and the badges of one with no bar at the bottom in the other. */
@@ -274,7 +284,10 @@
   /* Floats over the end of the conversation, so it is glass, as everything that floats is. */
   .trouble-card {
     @apply glass-strong mx-auto mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-2xl px-4 py-3 text-sm;
-    width: min(var(--chat-column), calc(100% - 3rem));
+    width: min(
+      calc(var(--chat-column) + 2 * var(--chat-gutter)),
+      calc(100% - 3rem + 2 * var(--chat-gutter))
+    );
   }
   .trouble-text {
     @apply grid min-w-0 gap-0.5;
@@ -288,7 +301,7 @@
     color: var(--muted);
   }
   .trouble-close {
-    @apply -mr-1 -mt-0.5 grid h-7 w-7 place-items-center rounded-md transition-colors;
+    @apply -mr-1 -mt-0.5 grid h-7 w-7 place-items-center rounded-full transition-colors hover:bg-glass-hover;
     color: var(--muted);
   }
   .trouble-close:hover {
@@ -301,14 +314,14 @@
      buttons, floating over the end of the conversation. */
   .composer {
     @apply grid gap-2 px-6 pb-5 pt-2;
+    padding-inline: calc(1.5rem - var(--chat-gutter, 0.75rem));
   }
   /* Its column never grows past the screen for something wide inside it. */
-  /* A card of the glass kit, opaque: the conversation passes behind it as it scrolls. */
+  /* Uses the shared glass surface so content scrolling behind it stays softly visible. */
   .composer-box {
-    @apply grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-2xl border p-3 transition-colors;
+    @apply glass grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-3xl p-3 transition-colors;
     container: composer / inline-size;
-    background: color-mix(in srgb, var(--ink) 6%, var(--canvas));
-    border-color: color-mix(in srgb, var(--ink) 10%, transparent);
+    background: linear-gradient(135deg, var(--glass-light), transparent 55%), var(--glass);
   }
   .composer-box:focus-within {
     border-color: color-mix(in srgb, var(--ink) 18%, transparent);
@@ -328,7 +341,7 @@
   .composer-actions {
     @apply flex items-center gap-2;
   }
-  /* Above the box, on its left: what the turn works on and where it runs. */
+  /* Conversation status stays above the input surface. */
   .composer-context {
     @apply flex min-w-0 flex-wrap items-center gap-1 px-1;
   }
@@ -347,18 +360,6 @@
     .composer-actions:has(.voice-pill[data-state="listening"]) > .model-trigger {
       @apply hidden;
     }
-  }
-  .composer-hint {
-    @apply px-2 text-xs text-muted;
-  }
-  /* Return breaks the line on a touch keyboard, so there is no shortcut to explain. */
-  @media (pointer: coarse) {
-    .composer-hint {
-      @apply hidden;
-    }
-  }
-  .composer-hint kbd {
-    @apply mx-0.5 rounded-md border border-glass-edge px-1.5 py-0.5 font-mono text-[11px];
   }
   /* Every control in the row is the same 32px: the menus, the tools and send. */
   .composer-tool {
@@ -407,10 +408,10 @@
   }
   /* A document, in the composer and in the conversation alike. */
   .file-card {
-    @apply flex w-72 max-w-full items-center gap-3 rounded-xl border border-glass-edge bg-glass-hover px-3 py-2.5 text-ink transition-colors hover:bg-glass-press;
+    @apply glass flex w-72 max-w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-ink transition-colors hover:bg-glass-hover;
   }
   .file-icon {
-    @apply grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-glass-press text-ink;
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-glass-press text-ink;
   }
   .file-text {
     @apply grid min-w-0 flex-1;
@@ -421,9 +422,22 @@
   .file-text small {
     @apply truncate text-xs text-muted;
   }
-  /* Files and voice notes first, pictures under them, all on the side of whoever sent them. */
+  /* Equal-width attachment tiles share a row when the message has room for them. */
   .message-media {
-    @apply mt-2 flex max-w-full flex-col items-start gap-2;
+    @apply mt-3 flex w-full min-w-0 flex-col items-start gap-2;
+  }
+  .message-files {
+    @apply m-0 grid w-full min-w-0 list-none gap-2 p-0;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  }
+  .message-files[data-count="1"] {
+    @apply max-w-80;
+  }
+  .message-files > li {
+    @apply min-w-0;
+  }
+  .message-files :is(.file-card, .audio-player) {
+    @apply h-14 w-full rounded-2xl;
   }
   .chat-line.member .message-media {
     @apply items-end;
@@ -669,7 +683,7 @@
   }
   /* A voice note: the round button, the waveform that fills in as it plays, time and speed. */
   .audio-player {
-    @apply flex w-80 max-w-full items-center gap-3 rounded-xl border border-glass-edge bg-glass-hover px-3 py-2;
+    @apply glass flex w-80 max-w-full items-center gap-3 rounded-full px-3 py-2;
   }
   .audio-toggle {
     @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-on-accent;
@@ -810,18 +824,39 @@
   .markdown tr:last-child td {
     @apply border-b-0;
   }
-  /* Mixed from the ink so the card stays a step off the page; its text starts where the
-     answer's does. */
+  /* Shared text origin: authorship and spacing distinguish turns without indenting words. */
+  .chat-speaker {
+    @apply mb-2 inline-flex min-h-5 items-center gap-2 text-xs font-semibold text-ink;
+  }
+  .chat-speaker[data-author="assistant"] {
+    @apply text-muted;
+  }
   .chat-line.mine .chat-text {
-    @apply rounded-2xl px-4 py-2.5 text-left;
+    @apply text-left;
+  }
+  .chat-line.mine:not(.member) {
+    @apply relative isolate py-3;
+  }
+  /* The surface extends into the gutter; text and attachments keep the answer's exact origin. */
+  .chat-line.mine:not(.member)::before {
+    @apply glass pointer-events-none absolute inset-y-0 -z-10 rounded-2xl;
+    inset-inline: calc(-1 * var(--chat-gutter));
+    content: "";
+  }
+  .chat-speaker + .message-media {
+    @apply mt-0;
+  }
+  .chat-line.mine.member .chat-text {
+    @apply rounded-2xl px-4 py-2.5;
     background: color-mix(in srgb, var(--ink) 7%, transparent);
   }
   /* A message on its way: its bubble as it will be, a quiet word under it; one that did not go
      takes the bad ink, with why, and the way to send it again or let it go. */
-  .outgoing[data-state="sending"] .chat-line.mine .chat-text {
+  .outgoing[data-state="sending"] .chat-line.mine {
     @apply opacity-80;
   }
-  .outgoing[data-state="failed"] .chat-line.mine .chat-text {
+  .outgoing[data-state="failed"] .chat-line.mine:not(.member)::before,
+  .outgoing[data-state="failed"] .chat-line.mine.member .chat-text {
     background: color-mix(in srgb, var(--bad) 14%, transparent);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 45%, transparent);
   }
@@ -833,7 +868,7 @@
     color: var(--bad);
   }
   .outgoing-state button {
-    @apply inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 font-medium transition-colors;
+    @apply glass inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors;
   }
   .outgoing-state button:hover {
     background: var(--glass-hover);
@@ -844,7 +879,7 @@
   }
   /* A voice note someone sent is their message too: it takes the bubble's ground and corners,
      as wide as the player, and stands alone when it came without words. */
-  .chat-line.mine .message-media .audio-player {
+  .chat-line.mine.member .message-media .audio-player {
     @apply rounded-2xl border-0 py-2.5;
     background: color-mix(in srgb, var(--ink) 7%, transparent);
   }
@@ -888,11 +923,17 @@
 }
 
 @media (max-width: 760px) {
+  .conversation-pane {
+    --chat-gutter: 0.5rem;
+  }
   .conversation-pane .message-history {
     @apply px-3;
   }
   .trouble-card {
-    width: min(var(--chat-column), calc(100% - 1.5rem));
+    width: min(
+      calc(var(--chat-column) + 2 * var(--chat-gutter)),
+      calc(100% - 1.5rem + 2 * var(--chat-gutter))
+    );
   }
   /* Clear of the home indicator and the rounded corners, which are the margin themselves; on
      the keyboard there is neither. */
@@ -900,6 +941,9 @@
   .agent-toolbar {
     @apply px-3;
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+  .composer {
+    padding-inline: calc(0.75rem - var(--chat-gutter, 0.5rem));
   }
   :root[data-keyboard] :is(.composer, .agent-toolbar) {
     @apply pb-2;

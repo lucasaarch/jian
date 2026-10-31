@@ -17,7 +17,7 @@ export function HistorySkeleton() {
     <div className="flex flex-col gap-9 py-6" aria-hidden="true">
       {turns.map((turn) => (
         <div key={turn.id} className="flex flex-col gap-5">
-          <Skeleton className={`h-10 self-end rounded-2xl bg-ink/7 ${turn.asked}`} />
+          <Skeleton className={`h-4 self-start rounded bg-ink/7 ${turn.asked}`} />
           <div className="flex flex-col gap-2.5">
             {Object.entries(turn.answer).map(([line, width]) => (
               <Skeleton key={line} className={`h-3 rounded-full bg-ink/7 ${width}`} />

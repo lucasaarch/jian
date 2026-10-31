@@ -14,16 +14,6 @@ export const date = (value?: string) =>
     : '—';
 
 /**
- * `owner/repo` for a GitHub address, over HTTPS or SSH, with or without `.git`: how a project's
- * repository is named in a list. Any other address is shown whole.
- */
-export function repositorySlug(url: string): string {
-  const match = /github\.com[/:]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(url);
-
-  return match ? `${match[1]}/${match[2]}` : url;
-}
-
-/**
  * How long ago, in the fewest characters a list can carry: `now`, `5m`, `6h`, `9d`, `3w`, then
  * the date. Past four weeks a count of weeks says less than the day itself.
  */

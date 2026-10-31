@@ -4,14 +4,35 @@ type MemoryNavigation = ReturnType<typeof createMemoryNavigation>;
 
 /**
  * Each gateway's panel keeps its own place: switching to another gateway and back returns to the
- * conversation that was open. Kept for as long as the app runs.
+ * conversation that was open, including after a reload or a later launch.
  */
 const places = new Map<string, MemoryNavigation>();
 
 export function navigationFor(gatewayId: string): MemoryNavigation {
   let navigation = places.get(gatewayId);
   if (!navigation) {
-    navigation = createMemoryNavigation('/');
+    const key = `jian.desktop.place.${gatewayId}`;
+    let initial = '/';
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved?.startsWith('/') && !saved.startsWith('//') && saved !== '/sign-in') {
+        initial = saved;
+      }
+    } catch {
+      // Navigation still works when browser storage is unavailable.
+    }
+    const memory = createMemoryNavigation(initial);
+    memory.subscribe(() => {
+      const href = memory.current();
+      // An unreachable gateway's temporary sign-in screen must not replace the owner's place.
+      if (href.split('?')[0] === '/sign-in') return;
+      try {
+        localStorage.setItem(key, href);
+      } catch {
+        // Only the next reload forgets this move.
+      }
+    });
+    navigation = memory;
     places.set(gatewayId, navigation);
   }
   return navigation;
@@ -45,4 +66,9 @@ export function chatAt(href: string): { profileId: string; sessionId: string } |
 
 export function forget(gatewayId: string): void {
   places.delete(gatewayId);
+  try {
+    localStorage.removeItem(`jian.desktop.place.${gatewayId}`);
+  } catch {
+    // Removing a gateway must work even when browser storage is unavailable.
+  }
 }

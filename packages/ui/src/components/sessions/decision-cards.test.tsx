@@ -80,7 +80,8 @@ it('asks for approval in the conversation, and approving or rejecting decides th
   // The card takes the place of the line the gateway wrote for it.
   expect(element.textContent).toContain('Needs approval');
   expect(element.textContent).not.toContain('Waiting for approval:');
-  expect(element.textContent).not.toContain('rm -rf');
+  expect(element.querySelector('.decision-preview')?.textContent).toContain('rm -rf archive/');
+  expect(element.textContent).toContain(approval.detail);
   await act(async () => button('Show request')?.click());
   expect(element.querySelector('.decision-request pre')?.textContent).toContain('rm -rf archive/');
 

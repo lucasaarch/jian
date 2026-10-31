@@ -199,6 +199,7 @@ export function opusMono(bytes: Buffer): boolean {
 }
 
 export class WhatsAppBusinessChannel implements Channel {
+  readonly supportsReactions = true;
   readonly type = 'whatsapp-business' as const;
 
   receive(payload: unknown) {
@@ -211,6 +212,7 @@ export class WhatsAppBusinessChannel implements Channel {
       return null;
     return ingressSchema.parse({
       actorId: message.from,
+      channelMessage: { id: message.id },
       chatId: message.from,
       text:
         message.type === 'audio'
@@ -325,7 +327,12 @@ export class WhatsAppBusinessChannel implements Channel {
     if (!(await context.canReply?.(message.chatId))) return expired;
     const credentials = metaCredentials(context.credential);
     let payload: Record<string, unknown>;
-    if (message.media) {
+    if (message.reaction) {
+      payload = {
+        type: 'reaction',
+        reaction: { message_id: message.reaction.messageId, emoji: message.reaction.emoji ?? '' },
+      };
+    } else if (message.media) {
       const bytes = Buffer.from(message.media.data, 'base64');
       if (
         message.media.mimeType !== 'audio/ogg' ||

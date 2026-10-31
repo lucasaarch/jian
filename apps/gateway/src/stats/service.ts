@@ -59,6 +59,7 @@ const priced = (mix: Mix, price: Price) =>
  */
 function catalogKind(config: ModelConfig): ProviderKind | undefined {
   if (config.provider === 'openai-codex') return 'openai';
+  if (config.provider === 'ollama') return undefined;
   if (config.provider === 'openai-compatible')
     return config.baseURL?.includes('api.groq.com') ? 'groq' : undefined;
 

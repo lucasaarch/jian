@@ -68,11 +68,20 @@ export const providerCredentialSchema = z.enum(['key', 'subscription']);
 /** The key travels once, on the way in. `createdAt` is the only thing said about it afterwards. */
 export const providerInputSchema = z.strictObject({
   name: z.string().trim().min(1).max(100),
-  kind: z.enum(['openai', 'anthropic', 'google', 'openrouter', 'groq', 'xai', 'openai-compatible']),
-  // Required for every vendor; a server the owner runs, such as a local Whisper, may need none.
+  kind: z.enum([
+    'openai',
+    'anthropic',
+    'google',
+    'openrouter',
+    'groq',
+    'xai',
+    'ollama',
+    'openai-compatible',
+  ]),
+  // Local servers may need no key; Ollama Cloud may.
   secret: secretSchema.optional(),
   credential: providerCredentialSchema.optional(),
-  // Only for an OpenAI-compatible server: where its API is, up to and including `/v1`.
+  // For Ollama, the server root; for an OpenAI-compatible server, its API root through `/v1`.
   baseURL: z
     .url({ protocol: /^https?$/ })
     .max(500)

@@ -26,7 +26,8 @@ async function profileWith() {
   const profile = await services.profiles.createProfile({
     name: 'Atlas',
     instructions: 'Help.',
-    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    // Use a known tokenizer so this fixture exercises learning, without incidental compaction.
+    model: { provider: 'openai', modelId: 'gpt-4o-mini', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
     allowShell: true,
   });
   const session = await services.sessions.createSession(profile.id, { title: 'Work' });

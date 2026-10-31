@@ -3,6 +3,7 @@ import type { Channel, DeliveryContext, OutgoingMessage } from '../channel.js';
 import type { WhatsAppConnections } from './connections.js';
 
 export class WhatsAppChannel implements Channel {
+  readonly supportsReactions = true;
   readonly type = 'whatsapp';
 
   constructor(private readonly connections: WhatsAppConnections) {}

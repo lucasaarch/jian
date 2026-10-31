@@ -458,3 +458,30 @@ describe('fast mode', () => {
     expect(offered('xai', 'grok-4')).toBe(false);
   });
 });
+
+it.each([undefined, 'synthetic-ollama-cloud-key'])(
+  'uses the native Ollama endpoint with an optional key (%s)',
+  async (key) => {
+    const requests: Request[] = [];
+    const model = await resolveModel(
+      {
+        provider: 'ollama',
+        providerId: 'stored-local-provider',
+        modelId: 'synthetic-model',
+        baseURL: 'http://localhost:11434',
+      },
+      { OPENAI_API_KEY: 'other-provider-secret' },
+      async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({ error: 'Synthetic failure' }, { status: 400 });
+      },
+      key,
+    );
+    await expect(generateText({ model, prompt: 'ping', maxRetries: 0 })).rejects.toThrow();
+    expect(requests).toHaveLength(1);
+    const request = requests[0];
+    expect(request?.url).toBe('http://localhost:11434/api/chat');
+    expect(request?.headers.get('authorization')).toBe(key ? `Bearer ${key}` : null);
+    expect(await request?.json()).toMatchObject({ model: 'synthetic-model' });
+  },
+);

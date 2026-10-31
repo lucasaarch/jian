@@ -5,6 +5,8 @@ import {
   gatewaySessionInputSchema,
   gatewaySessionTargetSchema,
   LEARNING_SESSION_CHANNEL,
+  type Message,
+  messageReactionInputSchema,
   type Profile,
   type Session,
   type SessionObjective,
@@ -22,11 +24,12 @@ import { recordEvent } from '../core/events.js';
 import { sessionContext } from '../runs/context-usage.js';
 import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
-import { projects, remoteMachines, runs } from '../storage/schema.js';
+import { messages, projects, remoteMachines, runs } from '../storage/schema.js';
 import { objectiveAt, sanitizeObjectiveText } from './objective.js';
 import type { SessionStart } from './port.js';
 import {
   deleteSession as deleteSessionRecord,
+  findMessage,
   findOwnSession,
   findPeerSession,
   findSession,
@@ -51,6 +54,59 @@ type ProfileLookup = {
 };
 
 export class Sessions {
+  private reactionDelivery?: (
+    tx: Queryable,
+    session: Session,
+    message: Message,
+    emoji: string | null,
+    runId?: string,
+  ) => Promise<void>;
+  useReactionDelivery(deliver: NonNullable<Sessions['reactionDelivery']>): void {
+    this.reactionDelivery = deliver;
+  }
+
+  async react(
+    profileId: string,
+    sessionId: string,
+    messageId: string,
+    input: unknown,
+    actor: 'owner' | 'agent' = 'owner',
+    runId?: string,
+  ): Promise<Message> {
+    const { emoji } = messageReactionInputSchema.parse(input);
+    return this.store.transaction(profileId, async (tx) => {
+      const session = await this.session(profileId, sessionId, tx);
+      const message = assertFound(
+        await findMessage(tx, profileId, sessionId, messageId),
+        'Message',
+      );
+      if (
+        (actor === 'agent' && message.role !== 'user') ||
+        (actor === 'owner' && message.role !== 'assistant')
+      )
+        throw new GatewayError(400, 'React to the other participant’s message');
+      const current = message.reactions ?? [];
+      if ((current.find((item) => item.actor === actor)?.emoji ?? null) === emoji) return message;
+      if (
+        actor === 'agent' &&
+        ![GATEWAY_SESSION_CHANNEL, AGENT_SESSION_CHANNEL, TASK_SESSION_CHANNEL].includes(
+          session.channel,
+        )
+      ) {
+        if (!this.reactionDelivery)
+          throw new GatewayError(409, 'Channel reactions are unavailable');
+        await this.reactionDelivery(tx, session, message, emoji, runId);
+      }
+      const reactions = current.filter((item) => item.actor !== actor);
+      if (emoji) reactions.push({ actor, emoji });
+      await tx
+        .update(messages)
+        .set({ reactions })
+        .where(and(eq(messages.profileId, profileId), eq(messages.id, message.id)));
+      await recordEvent(tx, this.clock, profileId, 'session.reaction', { sessionId, messageId });
+      return { ...message, reactions };
+    });
+  }
   constructor(
     private readonly store: Store,
     private readonly profiles: ProfileLookup,

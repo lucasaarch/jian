@@ -476,6 +476,16 @@ export class WhatsAppConnections {
     let attempted = false;
 
     try {
+      if (message.reaction) {
+        signal.throwIfAborted();
+        if (!(await this.canSend(id, generation))) return { status: 'pending', remoteMessageIds };
+        const local = assertFound(this.devices.get(id), 'Device');
+        if (!local.device.react)
+          return { status: 'failed', remoteMessageIds, error: 'Device reactions are unavailable' };
+        attempted = true;
+        await local.device.react(message.chatId, message.reaction, signal);
+        return { status: 'sent', remoteMessageIds };
+      }
       if (message.media) {
         signal.throwIfAborted();
         if (!(await this.canSend(id, generation))) return { status: 'failed', remoteMessageIds };

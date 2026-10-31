@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, FileCode2 } from 'lucide-react';
 import { Fragment, useId, useState } from 'react';
 import type { CodeDiff, ToolStep } from '../../lib/api';
 import { highlightLines, type Segment } from '../ui/highlight';
@@ -58,6 +58,7 @@ export function FileDiff({ diff, open: initiallyOpen }: { diff: CodeDiff; open: 
         onClick={() => setOpen((value) => !value)}
       >
         <ChevronDown size={14} className="code-diff-chevron" aria-hidden="true" />
+        <FileCode2 size={14} aria-hidden="true" />
         <span className="code-diff-path">{diff.path}</span>
         <Counts diff={diff} />
       </button>
@@ -123,8 +124,7 @@ function summaryOf(step: ToolStep & { diff: CodeDiff }) {
 /**
  * What a turn's file writes changed, below its Thought Line: one block per write, as the tool
  * reported it. Only writes that went through have a diff; a failed or refused one stays a line
- * in the trace. `fresh` opens every file, as for the turn being read now; otherwise only short
- * ones open by themselves.
+ * in the trace. `fresh` opens short changes in the newest turn; larger changes always wait for a click.
  */
 export function CodeChanges({ steps, fresh = false }: { steps: ToolStep[]; fresh?: boolean }) {
   const changes = steps.filter(
@@ -140,11 +140,7 @@ export function CodeChanges({ steps, fresh = false }: { steps: ToolStep[]; fresh
 
         return (
           <section key={step.toolCallId} className="code-change" aria-label={summaryOf(step)}>
-            {/* The counts are the file's, on its own header below: once is enough. */}
-            <p className="code-change-row">
-              <span className="code-change-summary">{summaryOf(step)}</span>
-            </p>
-            <FileDiff diff={step.diff} open={fresh || lines <= SHORT} />
+            <FileDiff diff={step.diff} open={lines <= (fresh ? SHORT : 12)} />
           </section>
         );
       })}

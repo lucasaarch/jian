@@ -1438,3 +1438,39 @@ describe('Meta native transport safety', () => {
     expect(large).toHaveBeenCalledTimes(1);
   });
 });
+
+it('sends and removes a native reaction without turning it into text', async () => {
+  const sent: unknown[] = [];
+  const fetcher: typeof fetch = async (_url, init) => {
+    sent.push(JSON.parse(String(init?.body)));
+    return Response.json({ messages: [{ id: 'wamid.reaction' }] });
+  };
+  const adapter = new WhatsAppBusinessChannel();
+  for (const emoji of ['❤️', null]) {
+    const result = await adapter.send(
+      {
+        chatId: '15550000001',
+        text: '',
+        reaction: { messageId: 'wamid.original', fromMe: false, emoji },
+      },
+      context(fetcher),
+    );
+    expect(result.status).toBe('sent');
+  }
+  expect(sent).toEqual([
+    {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '15550000001',
+      type: 'reaction',
+      reaction: { message_id: 'wamid.original', emoji: '❤️' },
+    },
+    {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '15550000001',
+      type: 'reaction',
+      reaction: { message_id: 'wamid.original', emoji: '' },
+    },
+  ]);
+});

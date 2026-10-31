@@ -53,7 +53,9 @@ afterEach(() => {
 it('shows what an edit changed, line by line, numbered on each side', () => {
   act(() => root.render(<CodeChanges steps={[step({ diff })]} />));
 
-  expect(container.querySelector('.code-change-row')?.textContent).toBe('Applied 1 edit');
+  expect(container.querySelector('.code-change')?.getAttribute('aria-label')).toBe(
+    'Applied 1 edit',
+  );
   expect(container.querySelector('.code-diff-path')?.textContent).toBe(diff.path);
   expect(container.querySelector('.code-diff-hunk')?.textContent).toBe(
     '@@ -18,3 +18,4 @@ export function withRetry(',
@@ -101,7 +103,9 @@ it('says a write made a file, and shows nothing for a step without a change', ()
   );
 
   expect(container.querySelectorAll('.code-change')).toHaveLength(1);
-  expect(container.querySelector('.code-change-summary')?.textContent).toBe('Created a file');
+  expect(container.querySelector('.code-change')?.getAttribute('aria-label')).toBe(
+    'Created a file',
+  );
 
   act(() => root.render(<CodeChanges steps={[step({})]} />));
   expect(container.querySelector('.code-changes')).toBeNull();

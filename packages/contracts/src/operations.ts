@@ -47,6 +47,7 @@ import {
   githubManifestSchema,
 } from './integrations.js';
 import { inlineMediaSchema, mediaContentSchema, mediaRecordSchema } from './media.js';
+import { messageReactionInputSchema } from './message-actions.js';
 import {
   chatCompletionRequestSchema,
   chatCompletionSchema,
@@ -1126,6 +1127,14 @@ export const operations: Operation[] = [
     body: submitSchema,
     response: runRecordSchema,
     status: 202,
+  },
+  {
+    method: 'PUT',
+    path: `${session}/messages/{messageId}/reaction`,
+    operationId: 'setMessageReaction',
+    access: 'admin',
+    body: messageReactionInputSchema,
+    response: messageRecordSchema,
   },
   {
     method: 'GET',

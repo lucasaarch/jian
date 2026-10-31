@@ -7,7 +7,7 @@
 export const keys = {
   profiles: ['profiles'] as const,
   providers: ['providers'] as const,
-  providerModels: (providerId: string) => ['providers', providerId, 'models'] as const,
+  providerModels: (providerId: string) => ['provider-models', providerId] as const,
   modelDefaults: ['model-defaults'] as const,
   subscriptionUsage: ['subscription-usage'] as const,
   sshKeys: ['ssh-keys'] as const,

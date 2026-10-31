@@ -6,6 +6,7 @@ import {
   type McpServer,
   memoryKeySchema,
   memorySchema,
+  messageReactionInputSchema,
   type Run,
 } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
@@ -87,7 +88,7 @@ export type ToolServices = {
   sessions: SessionReader &
     SessionNamer &
     SessionSummarizer &
-    Partial<Pick<Sessions, 'setObjective' | 'writeObjective'>>;
+    Partial<Pick<Sessions, 'setObjective' | 'writeObjective' | 'react'>>;
   runs: RunReader;
   peers: PeerAgents;
   lifecycle: RunExecution;
@@ -115,6 +116,30 @@ export function profileTools(
   const rechecked = new Set<string>();
 
   const tools: ToolSet = {
+    react_to_message: tool({
+      description:
+        'React naturally to a person’s message with one emoji when it fits the conversation. Be selective; do not react to every message. Omit messageId for the latest user message in this conversation, or use read_session to find an older message ID. Null removes your reaction. Works in Jian, WhatsApp and Telegram; channel reactions are queued for native delivery.',
+      inputSchema: messageReactionInputSchema.extend({ messageId: z.uuid().optional() }),
+      execute: async ({ messageId, emoji }) => {
+        if (!services.sessions.react)
+          throw new GatewayError(409, 'Message reactions are unavailable');
+        const id =
+          messageId ??
+          (await services.sessions.messages(run.profileId, run.sessionId, 50)).findLast(
+            (message) => message.role === 'user' && message.purpose !== 'resume',
+          )?.id;
+        if (!id) throw new GatewayError(404, 'No user message to react to');
+        const result = await services.sessions.react(
+          run.profileId,
+          run.sessionId,
+          id,
+          { emoji },
+          'agent',
+          run.id,
+        );
+        return { messageId: result.id, reactions: result.reactions ?? [] };
+      },
+    }),
     list_ssh_keys: tool({
       description:
         'List the installation’s SSH keys, shared by every agent. Returns names, public keys and fingerprints only; private keys are never returned.',
@@ -390,6 +415,7 @@ export function profileTools(
       inputSchema: z.object({ sessionId: z.string().uuid() }),
       execute: async ({ sessionId }) =>
         (await services.sessions.messages(run.profileId, sessionId, 20)).map((m) => ({
+          id: m.id,
           role: m.role,
           content: m.content.slice(0, 2000),
           createdAt: m.createdAt,

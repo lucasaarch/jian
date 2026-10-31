@@ -5,6 +5,7 @@ import type {
   GroupTurn,
   Identity,
   McpServer,
+  Message,
   ModelConfig,
   ModelSelection,
   Profile,
@@ -91,6 +92,7 @@ export const providerKind = pgEnum('provider_kind', [
   'openrouter',
   'groq',
   'xai',
+  'ollama',
   'openai-compatible',
 ]);
 
@@ -423,6 +425,8 @@ export const messages = pgTable(
     // Null on what the agent read in a group without being called.
     runId: uuid('run_id').references(() => runs.id, { onDelete: 'cascade' }),
     role: messageRole('role').notNull(),
+    reactions: jsonb('reactions').$type<NonNullable<Message['reactions']>>().notNull().default([]),
+    channelMessage: jsonb('channel_message').$type<Message['channelMessage']>(),
     content: text('content').notNull(),
     // Set in a group: who wrote it, by their id on the channel and the name they showed.
     authorId: text('author_id'),
@@ -864,6 +868,7 @@ export const contacts = pgTable(
     // The first message, kept until approval releases it exactly once.
     heldMessage: jsonb('held_message'),
     heldMessageId: text('held_message_id'),
+    heldChannelMessage: jsonb('held_channel_message').$type<Message['channelMessage']>(),
     agentTurns: integer('agent_turns').notNull().default(0),
     seen: jsonb('seen').$type<string[]>().notNull().default([]),
     // The channel's own picture of this contact, small, and when it was last asked for: a
@@ -966,6 +971,7 @@ export const deliveries = pgTable(
     chatId: text('chat_id').notNull(),
     // Gateway-authored text sent without a run, such as the approval notice.
     notice: text('notice'),
+    reaction: jsonb('reaction').$type<import('@jian/contracts').ReactionDelivery>(),
     mediaId: uuid('media_id'),
     // Only direct inbound intake can grant a Meta delivery its causal authority.
     inboundEventId: text('inbound_event_id'),

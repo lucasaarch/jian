@@ -27,6 +27,9 @@ overrides:
   tslib: 2.8.1
   # drizzle-kit still pulls @esbuild-kit → esbuild@0.18.x (GHSA-67mh-4wv8-2f99)
   'esbuild@<=0.24.2': '0.25.12'
+  # Keep the Ollama adapter on the same AI SDK contracts as the gateway's pinned providers.
+  '@ai-sdk/provider': '4.0.17'
+  '@ai-sdk/provider-utils': '5.0.45'
 minimumReleaseAgeExclude:
   - '@ai-sdk/gateway@4.0.88'
   - '@ai-sdk/mcp@2.0.55'

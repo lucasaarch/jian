@@ -9,8 +9,8 @@
   .thought-line {
     --thought-settle: 350ms;
     --thought-ease: cubic-bezier(0.23, 1, 0.32, 1);
-    @apply inline-flex max-w-full flex-col items-start text-sm font-medium leading-tight;
-    color: var(--ink);
+    @apply inline-flex max-w-full flex-col items-start text-xs font-normal leading-5;
+    color: var(--muted);
   }
   .chat-line .thought-line {
     @apply mb-2;
@@ -18,7 +18,13 @@
   /* Settled work's mark, in the 20px the orb took. */
   .work-mark {
     @apply grid h-5 w-5 shrink-0 place-items-center;
-    color: var(--good);
+    color: var(--muted);
+  }
+  .work-spinner {
+    @apply block h-3 w-3 rounded-full border;
+    border-color: color-mix(in srgb, var(--muted) 25%, transparent);
+    border-top-color: var(--muted);
+    animation: spin 1s linear infinite;
   }
   .work-mark[data-failed] {
     color: var(--bad);
@@ -27,51 +33,19 @@
     @apply relative inline-flex max-w-full items-center gap-2 whitespace-nowrap text-left;
   }
   .thought-head:disabled {
-    @apply cursor-default;
-  }
-  /* The working label and the settled one share a cell and cross-fade through a slight blur,
-     so settling reads as one line changing its mind rather than a swap. */
-  .thought-labels {
-    @apply inline-grid min-w-0;
+    @apply cursor-default opacity-100;
   }
   .thought-label {
-    @apply min-w-0 truncate opacity-0;
-    grid-area: 1 / 1;
-    filter: blur(2px);
-    transition:
-      opacity var(--thought-settle) var(--thought-ease),
-      filter var(--thought-settle) var(--thought-ease);
-  }
-  .thought-label[data-active] {
-    @apply opacity-100;
-    filter: none;
-  }
-  /* Only the shown label sets the width: a long working line, faded out, would otherwise keep
-     the settled one wide and push the time away from it. */
-  .thought-label:not([data-active]) {
-    @apply w-0 overflow-visible;
-  }
-  .thought-label.done[data-active] {
-    color: var(--muted);
-  }
-  /* A band of ink sweeps the working label. */
-  .thought-line[data-working] .thought-label.working {
-    background-image: linear-gradient(
-      100deg,
-      color-mix(in srgb, var(--ink) 45%, transparent) 30%,
-      var(--ink) 50%,
-      color-mix(in srgb, var(--ink) 45%, transparent) 70%
-    );
-    background-size: 250% 100%;
-    background-position: 125% 0;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: thought-shimmer 1.8s linear infinite;
+    @apply min-w-0 truncate;
+    animation: activity-change 180ms ease-out both;
   }
   .thought-timer {
     @apply font-normal tabular-nums;
     color: var(--muted);
+  }
+  .thought-timer::before {
+    content: "·";
+    margin-right: 0.5rem;
   }
   .thought-chevron {
     @apply shrink-0 opacity-55;
@@ -90,7 +64,7 @@
     grid-template-rows: 1fr;
   }
   .thought-trace > ol {
-    @apply m-0 grid min-h-0 list-none gap-1.5 overflow-hidden pl-7 text-[13px] font-normal;
+    @apply m-0 grid min-h-0 list-none gap-1.5 overflow-hidden p-0 text-[13px] font-normal;
   }
   .thought-trace > ol > li:first-child {
     @apply mt-2.5;
@@ -104,7 +78,7 @@
     color: var(--muted);
   }
   .thought-mark {
-    @apply grid h-3.5 w-3.5 shrink-0 place-items-center;
+    @apply grid h-5 w-5 shrink-0 place-items-center;
     animation: mark-pop 260ms cubic-bezier(0.3, 1.4, 0.5, 1);
   }
   .thought-trace li[data-status="failed"] .thought-mark {
@@ -121,17 +95,12 @@
     @apply shrink-0 truncate text-xs;
     color: var(--bad);
   }
-  /* What went wrong waits under the pointer: the note says it can be read. */
+  /* The underlined outcome opens its complete diagnostic dialog. */
   .thought-note[data-detail] {
-    @apply cursor-help rounded-sm underline decoration-dotted underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ink;
+    @apply cursor-pointer rounded-sm underline decoration-dotted underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ink;
   }
 }
 
-@keyframes thought-shimmer {
-  to {
-    background-position: -125% 0;
-  }
-}
 @keyframes thought-pulse {
   0%,
   100% {

@@ -35,6 +35,10 @@ export const providerCatalog = {
     name: 'xAI',
     env: ['XAI_API_KEY'],
   },
+  ollama: {
+    name: 'Ollama',
+    env: [],
+  },
   // A server the owner points at — a local Whisper, for one. It has an address, not a vendor,
   // so the environment has no key to offer for it.
   'openai-compatible': {

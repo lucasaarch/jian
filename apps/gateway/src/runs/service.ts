@@ -31,6 +31,7 @@ import {
 } from '../sessions/objective.js';
 import type { SessionReader } from '../sessions/port.js';
 import {
+  findMessage,
   insertMessage,
   parseCavemanMode,
   parsePonytailMode,
@@ -168,6 +169,15 @@ export class Runs {
 
     const write = async (tx: Queryable) => {
       await options.beforeSubmit?.(tx);
+      if (parsed.replyToId) {
+        const target = assertFound(
+          await findMessage(tx, profileId, sessionId, parsed.replyToId),
+          'Reply target',
+        );
+        const quote = target.content.replace(/\s+/g, ' ').trim().slice(0, 300);
+        const whose = target.role === 'assistant' ? 'your message' : 'a message';
+        data.text = `[Replying to ${whose}: "${quote}"]\n${[parsed.text, ...(parsed.mediaIds ?? []).map(mediaMarker)].filter(Boolean).join('\n')}`;
+      }
       const profile = await this.profiles.profile(profileId, tx);
 
       if (continuationOf) {
@@ -223,6 +233,7 @@ export class Runs {
           author,
           activity,
           data.text,
+          options.channelMessage,
         );
       }
 
@@ -242,7 +253,11 @@ export class Runs {
             decidedBy: chat ? 'contact' : 'owner',
             note: chat ? chat.note : data.text,
             requestKey: resumeKey,
-            reply: { text: data.text, ...(author ? { author } : {}) },
+            reply: {
+              text: data.text,
+              ...(author ? { author } : {}),
+              ...(options.channelMessage ? { channelMessage: options.channelMessage } : {}),
+            },
             activity,
           });
         }
@@ -262,6 +277,7 @@ export class Runs {
           runId: inFlight.id,
           role: 'user',
           content: data.text,
+          ...(options.channelMessage ? { channelMessage: options.channelMessage } : {}),
           ...(author ? { author } : {}),
           ...(options.purpose ? { purpose: options.purpose } : {}),
           createdAt: nowIso(this.clock),
@@ -373,6 +389,7 @@ export class Runs {
         runId: run.id,
         role: 'user',
         content: data.text,
+        ...(options.channelMessage ? { channelMessage: options.channelMessage } : {}),
         ...(author ? { author } : {}),
         ...(options.purpose ? { purpose: options.purpose } : {}),
         createdAt: nowIso(this.clock),
@@ -593,6 +610,7 @@ export class Runs {
     activity: 'conversation' | 'channel',
     // What the person wrote, when the answer it stands for differs: "2" for the second choice.
     said: string = answer,
+    channelMessage?: Message['channelMessage'],
   ): Promise<Run> {
     const question = waiting.question;
     if (!question) throw new GatewayError(409, 'That run is not waiting for an answer');
@@ -622,6 +640,7 @@ export class Runs {
       runId: waiting.id,
       role: 'user',
       content: said,
+      ...(channelMessage ? { channelMessage } : {}),
       ...(author ? { author } : {}),
       purpose: 'answer',
       createdAt: nowIso(this.clock),
@@ -661,7 +680,11 @@ export class Runs {
       note?: string;
       requestKey: string;
       /** The message that decided it, when one did. */
-      reply?: { text: string; author?: Message['author'] };
+      reply?: {
+        text: string;
+        author?: Message['author'];
+        channelMessage?: Message['channelMessage'];
+      };
       activity: 'conversation' | 'channel';
     },
   ): Promise<Run> {
@@ -708,6 +731,7 @@ export class Runs {
         runId: waiting.id,
         role: 'user',
         content: decision.reply.text,
+        ...(decision.reply.channelMessage ? { channelMessage: decision.reply.channelMessage } : {}),
         ...(decision.reply.author ? { author: decision.reply.author } : {}),
         purpose: 'answer',
         createdAt: nowIso(this.clock),

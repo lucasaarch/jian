@@ -270,13 +270,18 @@ export function buildContext(
   let currentStartIndex = 0;
 
   for (const message of selected) {
+    const content =
+      message.content +
+      (message.reactions?.length
+        ? `\n[Message reactions: ${message.reactions.map((reaction) => `${reaction.actor}: ${reaction.emoji}`).join(', ')}]`
+        : '');
     const last = messages.at(-1);
     if (message === current) currentStartIndex = messages.length;
 
     if (message !== current && last?.role === 'user' && message.role === 'user') {
-      last.content = `${last.content}\n\n${message.content}`;
+      last.content = `${last.content}\n\n${content}`;
     } else {
-      messages.push({ role: message.role, content: message.content });
+      messages.push({ role: message.role, content });
     }
   }
 
@@ -293,7 +298,7 @@ export function buildContext(
     : '';
 
   return {
-    system: `${system}\n\n${hint}Context: this turn starts at about ${used.toLocaleString('en')} of ${policy.inputTokens.toLocaleString('en')} tokens (${share}%). Tool results add to it as you work; near the limit the older part is summarised automatically. See managing-context.`,
+    system: `${system}\n\nUse react_to_message when an emoji is a natural acknowledgment or response to the person. Be selective, do not react mechanically to every message, and never claim a reaction was delivered when its tool failed.\n\n${hint}Context: this turn starts at about ${used.toLocaleString('en')} of ${policy.inputTokens.toLocaleString('en')} tokens (${share}%). Tool results add to it as you work; near the limit the older part is summarised automatically. See managing-context.`,
     messages,
     currentStartIndex,
   };

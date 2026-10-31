@@ -10,6 +10,7 @@ export type Outgoing = {
   sessionId: string;
   text: string;
   mediaIds: string[];
+  replyTo?: { id: string; content: string };
   at: string;
   state: 'sending' | 'failed' | 'sent';
   error?: string;
@@ -40,6 +41,7 @@ export function sendNow(message: {
   sessionId: string;
   text: string;
   mediaIds: string[];
+  replyTo?: { id: string; content: string };
   deliver: (key: string) => Promise<{ id: string }>;
   delivered: () => void;
 }): void {
@@ -64,6 +66,7 @@ export function sendNow(message: {
         sessionId: message.sessionId,
         text: message.text,
         mediaIds: message.mediaIds,
+        ...(message.replyTo ? { replyTo: message.replyTo } : {}),
         at: new Date().toISOString(),
         state: 'sending',
       },

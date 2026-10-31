@@ -1,11 +1,12 @@
 'use client';
 
 import type { OrbState } from 'thinking-orbs';
-import type { Message, Run, ToolStep } from '../../lib/api';
+import type { Message, Profile, Run, ToolStep } from '../../lib/api';
 import { Markdown } from '../ui/markdown';
 import { RefineFrame } from '../ui/refine-frame';
 import { CodeChanges } from './code-change';
 import { drawnBox } from './media';
+import { ChatSpeaker } from './message';
 import { ThoughtLine, type ThoughtStep } from './thought-line';
 
 /** What the panel calls each tool, so the owner reads an action instead of a function name. */
@@ -148,13 +149,16 @@ function LiveThought({
 
   return (
     <>
-      <ThoughtLine
-        working
-        label={writing ? 'Writing' : label}
-        orb={state}
-        steps={traceOf(steps)}
-        startedAt={startedAt}
-      />
+      {(!writing || steps.length > 0) && (
+        <ThoughtLine
+          working={!writing}
+          label={label}
+          orb={state}
+          steps={traceOf(steps)}
+          startedAt={startedAt}
+          finishedAt={writing ? (steps.at(-1)?.finishedAt ?? run.progress?.updatedAt) : undefined}
+        />
+      )}
       <CodeChanges steps={steps} fresh />
       <ImageDrafts steps={steps} />
     </>
@@ -209,11 +213,13 @@ export function placeSteps(steps: ToolStep[], said: Pick<Message, 'id' | 'create
  */
 export function LiveTurn({
   run,
+  agent,
   steps,
   startedAt = run.createdAt,
   children,
 }: {
   run: Run;
+  agent?: Pick<Profile, 'name' | 'avatar'>;
   /**
    * Only the tools since the last thing the turn said: the earlier ones already sit under the
    * words they followed, where they stay once the turn ends.
@@ -232,11 +238,14 @@ export function LiveTurn({
 
   return (
     <article className="chat-line pending theirs" aria-live="polite">
+      <div className="chat-author-row">
+        <ChatSpeaker agent={agent} />
+      </div>
       <LiveThought run={run} steps={steps} startedAt={startedAt} />
       {children}
       {writing && (
         <div className="chat-text markdown streaming">
-          <Markdown text={progress?.text ?? ''} breaks />
+          <Markdown text={progress?.text ?? ''} breaks streaming />
         </div>
       )}
     </article>

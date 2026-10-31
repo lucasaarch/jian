@@ -29,6 +29,8 @@ export function serveBridge(deps: {
   listChanged: () => void;
   /** Starts the app's own gateway again now, after it could not start. */
   retryLocal: () => void;
+  /** Restarts the app's own gateway, including a process that stopped answering. */
+  restartLocal: () => Promise<void>;
 }): {
   changed(): void;
   machinesChanged(): void;
@@ -44,6 +46,7 @@ export function serveBridge(deps: {
   });
   ipcMain.handle('gateways:list', () => monitor.summaries());
   ipcMain.on('local:retry', () => deps.retryLocal());
+  ipcMain.handle('local:restart', () => deps.restartLocal());
   // The folder, with the file chosen in it: the owner can open it, or send it on.
   ipcMain.on('local:openLog', () => shell.showItemInFolder(localLogPath()));
 

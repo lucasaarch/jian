@@ -9,6 +9,8 @@ import {
   type Group,
   type GroupTurn,
   type ingressResultSchema,
+  type Message,
+  type Session,
   whatsappBusinessSetupSchema,
 } from '@jian/contracts';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
@@ -33,6 +35,7 @@ import type { Queryable, Store } from '../storage/database.js';
 import {
   channelInbox,
   contacts,
+  deliveries as deliveryRows,
   mediaAssets,
   metaBindings,
   metaInbox,
@@ -914,6 +917,8 @@ export class Channels {
       undefined,
       undefined,
       mediaIds,
+      undefined,
+      contact.channelMessage,
     );
 
     return this.people.release(profileId, contactId);
@@ -1175,6 +1180,7 @@ export class Channels {
                 role: 'user',
                 content: `${data.displayName ?? data.actorId}: ${data.text}${heard.join('')}`,
                 author: authorOf(data),
+                ...(data.channelMessage ? { channelMessage: data.channelMessage } : {}),
                 createdAt: new Date().toISOString(),
               },
               true,
@@ -1276,6 +1282,7 @@ export class Channels {
         intake.decision?.turn,
         mediaIds,
         author,
+        data.channelMessage,
       );
     } catch (error) {
       if (!(error instanceof NoModelAvailable)) throw error;
@@ -1287,6 +1294,7 @@ export class Channels {
         data.requestKey,
         connectionGeneration,
         author,
+        data.channelMessage,
       );
 
       return { accepted: false, contact: 'approved' as const, silence: 'no-model' as const };
@@ -1309,6 +1317,7 @@ export class Channels {
     requestKey: string,
     connectionGeneration?: number,
     author?: { id: string; name?: string },
+    channelMessage?: IncomingMessage['channelMessage'],
   ) {
     const sessionId = assertFound(contact.sessionId ?? null, 'Session');
     const key = `${channel.id}\u0000${contact.chatId}`;
@@ -1331,6 +1340,7 @@ export class Channels {
           role: 'user',
           content: text,
           ...(author ? { author } : {}),
+          ...(channelMessage ? { channelMessage } : {}),
           createdAt: new Date(now).toISOString(),
         },
         true,
@@ -1510,6 +1520,7 @@ export class Channels {
     group?: GroupTurn,
     mediaIds: string[] = [],
     author?: { id: string; name?: string },
+    channelMessage?: IncomingMessage['channelMessage'],
   ) {
     const sessionId = assertFound(contact.sessionId ?? null, 'Session');
     const reading = await this.readReply(channel, contact, sessionId, text, author);
@@ -1527,6 +1538,7 @@ export class Channels {
         },
         {
           activity: 'channel',
+          ...(channelMessage ? { channelMessage } : {}),
           ...(group ? { group } : {}),
           ...(author ? { author } : {}),
           ...reading,
@@ -1740,6 +1752,52 @@ export class Channels {
     return listDeliveries(this.services.store.db, profileId);
   }
 
+  /** Queued atomically with the badge; channel authority is checked again at send time. */
+  async queueReaction(
+    tx: Queryable,
+    session: Session,
+    message: Message,
+    emoji: string | null,
+    runId?: string,
+  ): Promise<void> {
+    const contact = await findContactBySession(tx, session.profileId, session.id);
+    if (contact?.status !== 'approved') throw new GatewayError(403, 'Contact is not approved');
+    const channel = assertFound(await findChannel(tx, contact.channelId), 'Channel');
+    if (!this.registry.get(channel.type).supportsReactions)
+      throw new GatewayError(409, 'This channel does not support reactions');
+    const target = message.channelMessage;
+    if (!target) throw new GatewayError(409, 'This older message has no native channel reference');
+    const connection = await findConnection(tx, channel.id);
+    const [latest] = await tx
+      .select({ at: deliveryRows.createdAt })
+      .from(deliveryRows)
+      .where(
+        and(
+          eq(deliveryRows.channelId, channel.id),
+          eq(deliveryRows.chatId, contact.chatId),
+          sql`${deliveryRows.reaction}->>'messageId' = ${target.id}`,
+        ),
+      )
+      .orderBy(sql`${deliveryRows.createdAt} desc`)
+      .limit(1);
+    const now = new Date(Math.max(Date.now(), (latest?.at.getTime() ?? 0) + 1)).toISOString();
+    await insertDelivery(tx, {
+      id: randomUUID(),
+      profileId: session.profileId,
+      channelId: channel.id,
+      chatId: contact.chatId,
+      notice: emoji ?? '',
+      reaction: { messageId: target.id, participant: target.participant, fromMe: false, emoji },
+      ...(runId ? { sourceRunId: runId } : {}),
+      ...(connection ? { connectionGeneration: connection.generation } : {}),
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+      remoteMessageIds: [],
+      saidCount: 0,
+    });
+  }
+
   /** A complete manual tick; the running worker uses independent intake/outbox clocks. */
   async dispatch() {
     await Promise.all([
@@ -1779,7 +1837,7 @@ export class Channels {
       let text = delivery.notice ?? '';
       let commentary: string[] = [];
       // What the room received from the agent itself, not a failure notice the gateway wrote.
-      let spoken = Boolean(delivery.notice);
+      let spoken = Boolean(delivery.notice) && !delivery.reaction;
       let poll: { question: string; options: string[] } | undefined;
 
       if (delivery.runId) {
@@ -1865,7 +1923,7 @@ export class Channels {
       // A media-only delivery has no text left on purpose — it still has to go out.
       const outbound = remainingOutbound(text, commentary);
       const outcome =
-        !outbound && !delivery.mediaId
+        !outbound && !delivery.mediaId && !delivery.reaction
           ? { status: 'sent' as const, remoteMessageIds: [] as string[] }
           : await this.deliver(delivery, outbound ?? '', poll);
 
@@ -2046,6 +2104,23 @@ export class Channels {
       if (current?.status !== 'pending') {
         return false;
       }
+      if (delivery.reaction) {
+        // Serialize native updates to one message even when multiple dispatchers claim work.
+        const [earlier] = await tx
+          .select({ id: deliveryRows.id })
+          .from(deliveryRows)
+          .where(
+            and(
+              eq(deliveryRows.channelId, delivery.channelId),
+              eq(deliveryRows.chatId, delivery.chatId),
+              sql`${deliveryRows.reaction}->>'messageId' = ${delivery.reaction.messageId}`,
+              sql`${deliveryRows.id} <> ${delivery.id}`,
+              sql`(${deliveryRows.status} = 'sending' OR (${deliveryRows.status} = 'pending' AND (${deliveryRows.createdAt}, ${deliveryRows.id}) < (${new Date(delivery.createdAt)}, ${delivery.id}::uuid)))`,
+            ),
+          )
+          .limit(1);
+        if (earlier) return false;
+      }
 
       // Persist intent before network I/O so another worker cannot send the same delivery.
       await updateDelivery(tx, {
@@ -2132,7 +2207,7 @@ export class Channels {
         channelSecret(channel.id),
       );
 
-      if (!adapter.send || (!text && !delivery.mediaId)) {
+      if (!adapter.send || (!text && !delivery.mediaId && !delivery.reaction)) {
         throw new Error('Channel does not support delivery');
       }
 
@@ -2150,6 +2225,12 @@ export class Channels {
           !(await this.metaDeliveryError(channel, delivery)),
       };
       const people = await this.groupPeople(delivery);
+
+      if (delivery.reaction)
+        return adapter.send(
+          { chatId: delivery.chatId, text: '', reaction: delivery.reaction },
+          context,
+        );
 
       if (delivery.mediaId) {
         if (!this.services.media) throw new Error('Media delivery is unavailable');

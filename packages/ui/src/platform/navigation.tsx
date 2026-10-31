@@ -173,8 +173,3 @@ function routeParams(pathname: string): { profileId?: string; sessionId?: string
     ...(match[2] ? { sessionId: decodeURIComponent(match[2]) } : {}),
   };
 }
-
-export function Link(props: LinkProps) {
-  const { Link: HostLink } = useNavigation();
-  return <HostLink {...props} />;
-}

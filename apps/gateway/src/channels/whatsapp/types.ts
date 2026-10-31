@@ -48,6 +48,11 @@ export interface DeviceCallbacks {
 }
 
 export interface LinkedDevice {
+  react?(
+    chatId: string,
+    reaction: NonNullable<OutgoingMessage['reaction']>,
+    signal: AbortSignal,
+  ): Promise<void>;
   start(): Promise<void>;
   send(
     chatId: string,

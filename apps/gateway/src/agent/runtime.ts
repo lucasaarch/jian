@@ -356,7 +356,7 @@ export class AgentRuntime {
       } else if (config.providerId) {
         providerKey = await this.options.gatewayVault?.read(providerSecret(config.providerId));
 
-        if (!providerKey && config.provider !== 'openai-compatible') {
+        if (!providerKey && !['ollama', 'openai-compatible'].includes(config.provider)) {
           throw new Error('Provider key is not configured');
         }
 
@@ -749,6 +749,7 @@ export class AgentRuntime {
                     toolName: name,
                     toolCallId: options.toolCallId,
                     reason: failure,
+                    detail: toolFailure(error, secrets, 'owner'),
                   })
                   .catch(() => {});
 

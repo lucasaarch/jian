@@ -20,6 +20,7 @@ const bridge: DesktopBridge = {
   onOpen: (listener) => listen<OpenTarget>('window:open', listener),
   local: {
     retry: () => ipcRenderer.send('local:retry'),
+    restart: () => ipcRenderer.invoke('local:restart'),
     openLog: () => ipcRenderer.send('local:openLog'),
   },
   showing: (place) => ipcRenderer.send('gateways:showing', place),

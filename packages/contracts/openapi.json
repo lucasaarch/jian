@@ -7344,6 +7344,7 @@
                           "openrouter",
                           "groq",
                           "xai",
+                          "ollama",
                           "openai-compatible"
                         ]
                       },
@@ -7519,6 +7520,7 @@
                       "openrouter",
                       "groq",
                       "xai",
+                      "ollama",
                       "openai-compatible"
                     ]
                   },
@@ -7572,6 +7574,7 @@
                         "openrouter",
                         "groq",
                         "xai",
+                        "ollama",
                         "openai-compatible"
                       ]
                     },
@@ -8000,6 +8003,7 @@
                         "openrouter",
                         "groq",
                         "xai",
+                        "ollama",
                         "openai-compatible"
                       ]
                     },
@@ -10152,6 +10156,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]
@@ -10927,6 +10932,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]
@@ -11700,6 +11706,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]
@@ -14543,6 +14550,38 @@
                   "items": {
                     "type": "object",
                     "properties": {
+                      "reaction": {
+                        "type": "object",
+                        "properties": {
+                          "messageId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "participant": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "fromMe": {
+                            "type": "boolean"
+                          },
+                          "emoji": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "minLength": 1,
+                            "maxLength": 32
+                          }
+                        },
+                        "required": [
+                          "messageId",
+                          "fromMe",
+                          "emoji"
+                        ],
+                        "additionalProperties": false
+                      },
                       "id": {
                         "type": "string",
                         "format": "uuid",
@@ -15459,6 +15498,25 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "channelMessage": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "participant": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ],
+                    "additionalProperties": false
+                  },
                   "actorId": {
                     "type": "string",
                     "minLength": 1,
@@ -17235,6 +17293,11 @@
                   "message": {
                     "type": "object",
                     "properties": {
+                      "message_id": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
                       "from": {
                         "type": "object",
                         "properties": {
@@ -17823,6 +17886,51 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "reactions": {
+                            "maxItems": 2,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "actor": {
+                                  "type": "string",
+                                  "enum": [
+                                    "owner",
+                                    "agent"
+                                  ]
+                                },
+                                "emoji": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 32
+                                }
+                              },
+                              "required": [
+                                "actor",
+                                "emoji"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "channelMessage": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "participant": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "additionalProperties": false
+                          },
                           "id": {
                             "type": "string",
                             "format": "uuid",
@@ -18092,6 +18200,51 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "reactions": {
+                            "maxItems": 2,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "actor": {
+                                  "type": "string",
+                                  "enum": [
+                                    "owner",
+                                    "agent"
+                                  ]
+                                },
+                                "emoji": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 32
+                                }
+                              },
+                              "required": [
+                                "actor",
+                                "emoji"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "channelMessage": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "participant": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "additionalProperties": false
+                          },
                           "id": {
                             "type": "string",
                             "format": "uuid",
@@ -21414,6 +21567,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]
@@ -21848,6 +22002,7 @@
                               "anthropic",
                               "google",
                               "openrouter",
+                              "ollama",
                               "openai-compatible",
                               "openai-codex"
                             ]
@@ -22278,6 +22433,7 @@
                           "anthropic",
                           "google",
                           "openrouter",
+                          "ollama",
                           "openai-compatible",
                           "openai-codex"
                         ]
@@ -22561,6 +22717,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]
@@ -23004,6 +23161,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]
@@ -23438,6 +23596,7 @@
                           "anthropic",
                           "google",
                           "openrouter",
+                          "ollama",
                           "openai-compatible",
                           "openai-codex"
                         ]
@@ -23706,6 +23865,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]
@@ -24444,6 +24604,7 @@
                                   "anthropic",
                                   "google",
                                   "openrouter",
+                                  "ollama",
                                   "openai-compatible",
                                   "openai-codex"
                                 ]
@@ -28803,6 +28964,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]
@@ -29931,6 +30093,51 @@
                   "items": {
                     "type": "object",
                     "properties": {
+                      "reactions": {
+                        "maxItems": 2,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "actor": {
+                              "type": "string",
+                              "enum": [
+                                "owner",
+                                "agent"
+                              ]
+                            },
+                            "emoji": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32
+                            }
+                          },
+                          "required": [
+                            "actor",
+                            "emoji"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "channelMessage": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "participant": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      },
                       "id": {
                         "type": "string",
                         "format": "uuid",
@@ -30158,6 +30365,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "replyToId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "mediaIds": {
                     "maxItems": 10,
                     "type": "array",
@@ -30401,6 +30613,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]
@@ -31990,6 +32203,304 @@
                     ],
                     "additionalProperties": false
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profileId}/sessions/{sessionId}/messages/{messageId}/reaction": {
+      "put": {
+        "operationId": "setMessageReaction",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Required permission: admin.",
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "emoji": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 32
+                  }
+                },
+                "required": [
+                  "emoji"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reactions": {
+                      "maxItems": 2,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "actor": {
+                            "type": "string",
+                            "enum": [
+                              "owner",
+                              "agent"
+                            ]
+                          },
+                          "emoji": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 32
+                          }
+                        },
+                        "required": [
+                          "actor",
+                          "emoji"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "channelMessage": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "participant": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "profileId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sessionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "runId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "assistant"
+                      ]
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "author": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "call": {
+                      "type": "object",
+                      "properties": {
+                        "profileId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "sessionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "runId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "profileId",
+                        "sessionId",
+                        "runId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "purpose": {
+                      "type": "string",
+                      "enum": [
+                        "answer",
+                        "resume"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "profileId",
+                    "sessionId",
+                    "role",
+                    "content",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -35406,6 +35917,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]
@@ -37764,6 +38276,7 @@
                               "anthropic",
                               "google",
                               "openrouter",
+                              "ollama",
                               "openai-compatible",
                               "openai-codex"
                             ]
@@ -38512,6 +39025,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]
@@ -39259,6 +39773,7 @@
                             "anthropic",
                             "google",
                             "openrouter",
+                            "ollama",
                             "openai-compatible",
                             "openai-codex"
                           ]

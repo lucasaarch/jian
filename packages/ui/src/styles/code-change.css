@@ -1,6 +1,7 @@
 /* biome-ignore-all lint/style/noDescendingSpecificity: A diff's parts are styled per kind and do not overlap. */
 @reference "tailwindcss";
 @reference "./themes.css";
+@reference "./kit.css";
 
 /* What a turn's file writes changed, as a review tool shows it: a card of the glass kit, a step
    off the page in either theme, with each theme's own syntax colours. Long lines scroll inside
@@ -11,13 +12,6 @@
   }
   .code-change {
     @apply grid min-w-0 gap-2;
-  }
-  .code-change-row {
-    @apply flex min-w-0 items-baseline gap-2 text-sm;
-  }
-  .code-change-summary {
-    @apply min-w-0 truncate font-medium;
-    color: var(--ink);
   }
   .code-change-counts {
     @apply ml-auto flex shrink-0 gap-1.5 font-mono text-xs tabular-nums;
@@ -33,9 +27,7 @@
     --diff-ink: #e6edf3;
     --diff-dim: #8b949e;
     --diff-rule: color-mix(in srgb, var(--ink) 9%, transparent);
-    @apply min-w-0 overflow-hidden rounded-xl border;
-    background: color-mix(in srgb, var(--ink) 4%, transparent);
-    border-color: var(--diff-rule);
+    @apply glass min-w-0 overflow-hidden rounded-2xl;
     color: var(--diff-ink);
   }
   .code-diff-head {
@@ -139,9 +131,7 @@
     --diff-ink: #e6edf3;
     --diff-dim: #8b949e;
     --diff-rule: color-mix(in srgb, var(--ink) 9%, transparent);
-    @apply my-3 min-w-0 overflow-hidden rounded-xl border;
-    background: color-mix(in srgb, var(--ink) 4%, transparent);
-    border-color: var(--diff-rule);
+    @apply glass my-3 min-w-0 overflow-hidden rounded-2xl;
     color: var(--diff-ink);
   }
   .code-block-head {
@@ -149,11 +139,14 @@
     border-color: var(--diff-rule);
     color: var(--diff-dim);
   }
-  .code-block-head button {
-    @apply inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 font-sans transition-colors;
+  .code-block-actions {
+    @apply flex flex-wrap items-center justify-end gap-3;
+  }
+  .code-block-head button:not([role="switch"]) {
+    @apply glass inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-sans transition-colors;
     color: var(--diff-dim);
   }
-  .code-block-head button:hover {
+  .code-block-head button:not([role="switch"]):hover {
     color: var(--diff-ink);
   }
   .code-block-body {
@@ -170,6 +163,16 @@
     @apply inline-block w-10 select-none pr-3 text-right tabular-nums;
     content: attr(data-line);
     color: #6e7681;
+  }
+  .code-block[data-wrap] .code-block-lines {
+    @apply min-w-0;
+  }
+  .code-block[data-wrap] .code-block-line {
+    @apply relative whitespace-pre-wrap pl-10;
+    overflow-wrap: anywhere;
+  }
+  .code-block[data-wrap] .code-block-line::before {
+    @apply absolute left-0;
   }
   :root[data-theme="light"] .code-block {
     --diff-ink: #1f2328;

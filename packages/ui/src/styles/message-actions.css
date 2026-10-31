@@ -1,0 +1,54 @@
+@reference "tailwindcss";
+@reference "./themes.css";
+@reference "./kit.css";
+@layer components {
+  .reaction-picker {
+    @apply glass max-w-[calc(100vw-2rem)] rounded-3xl p-1.5 text-ink;
+    background: linear-gradient(135deg, var(--glass-light), transparent 55%), var(--glass);
+    backdrop-filter: blur(calc(var(--glass-blur) * 1.3)) saturate(185%);
+    -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.3)) saturate(185%);
+    animation: history-enter 160ms ease-out;
+  }
+  .reaction-quick,
+  .reaction-grid {
+    @apply grid grid-cols-[repeat(6,2.25rem)] gap-0.5;
+  }
+  .reaction-picker button {
+    @apply grid size-9 shrink-0 place-items-center rounded-full text-base leading-none transition-colors hover:bg-glass-hover disabled:opacity-45;
+  }
+  .reaction-picker button[aria-pressed="true"] {
+    @apply bg-glass-press;
+  }
+  .reaction-grid {
+    @apply mt-0.5;
+  }
+  .message-reactions {
+    @apply mt-2 flex flex-wrap gap-1.5;
+  }
+  .chat-line.mine:not(.member) > .message-reactions {
+    @apply absolute -bottom-2.5 -right-1.5 z-10 m-0;
+  }
+  .reaction-badge {
+    @apply glass inline-flex min-h-6 min-w-7 items-center justify-center rounded-full px-1.5 text-xs leading-none;
+    animation: history-enter 180ms ease-out;
+  }
+  .composer-reply {
+    @apply glass flex min-w-0 items-center gap-2 rounded-2xl px-4 py-3 text-xs text-muted;
+    background: linear-gradient(135deg, var(--glass-light), transparent 55%), var(--glass);
+  }
+  .composer-reply-shell {
+    @apply min-w-0 overflow-hidden;
+  }
+  .composer-reply > div {
+    @apply grid min-w-0 flex-1 gap-0.5;
+  }
+  .composer-reply strong {
+    @apply font-medium text-ink;
+  }
+  .composer-reply span {
+    @apply truncate;
+  }
+  .composer-reply > button {
+    @apply grid size-7 shrink-0 place-items-center rounded-full hover:bg-glass-hover;
+  }
+}

@@ -15,6 +15,7 @@ export interface ChannelRequest {
 export class CredentialRefused extends Error {}
 
 export interface OutgoingMessage {
+  reaction?: import('@jian/contracts').ReactionDelivery;
   chatId: string;
   text: string;
   media?: InlineMedia;
@@ -53,6 +54,7 @@ export interface DeliveryOutcome {
 
 /** Protocol adapters never choose the profile, session or permissions of an incoming message. */
 export interface Channel {
+  readonly supportsReactions?: boolean;
   readonly type: ChannelType;
   readonly webhookHeader?: string;
 

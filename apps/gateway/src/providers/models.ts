@@ -4,6 +4,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { ModelConfig } from '@jian/contracts';
 import type { LanguageModel } from 'ai';
+import { createOllama } from 'ai-sdk-ollama';
 import { createSafeFetch } from '../security/outbound.js';
 import { providerEnvironment } from './catalog.js';
 import { limitsKey, recordClaudeLimits } from './claude-limits.js';
@@ -28,11 +29,15 @@ export async function resolveModel(
     (config.apiKeyEnv ||
     config.providerId ||
     config.provider === 'openai-compatible' ||
+    config.provider === 'ollama' ||
     config.provider === 'openai-codex'
       ? undefined
       : env[providerEnvironment(config.provider, env) ?? '']);
 
   if (!apiKey) {
+    if (config.provider === 'ollama' && config.baseURL) {
+      return createOllama({ baseURL: config.baseURL, fetch: fetcher })(config.modelId);
+    }
     throw new Error('Provider key is not configured');
   }
 
@@ -91,5 +96,10 @@ export async function resolveModel(
         baseURL: config.baseURL,
         fetch: fetcher,
       }).chatModel(config.modelId);
+    case 'ollama':
+      if (!config.baseURL) {
+        throw new Error('baseURL is required for Ollama');
+      }
+      return createOllama({ baseURL: config.baseURL, apiKey, fetch: fetcher })(config.modelId);
   }
 }

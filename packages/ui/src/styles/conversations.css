@@ -27,3 +27,62 @@
     opacity: 0;
   }
 }
+
+.chat-author-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  min-height: 1.75rem;
+}
+.chat-author-row .chat-speaker {
+  margin-bottom: 0;
+  min-width: 0;
+}
+.message-tools {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+.message-tool {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 9999px;
+  color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    color 140ms ease,
+    background 140ms ease;
+}
+.message-tool[data-persistent],
+.chat-line:is(:hover, :focus-within) .message-tool,
+.message-tools[data-open] .message-tool {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+.message-tool-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+.message-tool:hover {
+  color: var(--ink);
+  background: var(--glass-hover);
+}
+@media (hover: none) {
+  .message-tool {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+}

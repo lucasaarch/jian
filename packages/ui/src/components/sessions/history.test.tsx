@@ -517,3 +517,49 @@ it('offers to retry a failed turn above the composer, and closes when dismissed'
     element.remove();
   }
 });
+
+it('does not duplicate a delivered answer while the writing snapshot is still in flight', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const sessionId = 'stream-handoff';
+  const content = 'The update is ready.';
+  const at = '2026-10-31T10:00:00Z';
+  const live = {
+    id: 'handoff-run',
+    profileId: 'profile',
+    sessionId,
+    status: 'running',
+    createdAt: at,
+    updatedAt: at,
+    progress: { phase: 'writing', text: content, steps: 0, updatedAt: at },
+  } as Run;
+  const api = {
+    messages: async () => [
+      {
+        id: 'delivered',
+        profileId: 'profile',
+        sessionId,
+        role: 'assistant',
+        runId: live.id,
+        content,
+        createdAt: at,
+      },
+    ],
+    activities: async () => [live],
+  } as unknown as GatewayApi;
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  try {
+    await act(async () =>
+      root.render(
+        <History api={api} profileId="profile" sessionId={sessionId} initialRun={live} />,
+      ),
+    );
+    expect(element.querySelectorAll('.chat-text')).toHaveLength(1);
+    expect(element.querySelector('.chat-text')?.textContent).toBe(content);
+    expect(element.querySelector('.pending')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});

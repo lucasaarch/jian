@@ -1,8 +1,9 @@
 'use client';
 
-import { ArrowUp, FileText, LaptopMinimal, LoaderCircle, Plus, Trash2, X } from 'lucide-react';
+import { ArrowUp, FileText, LoaderCircle, Plus, Reply, Trash2, X } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import type { MediaUpload, RemoteMachine } from '../../lib/api';
+import type { MediaUpload } from '../../lib/api';
 import {
   type AttachmentKind,
   base64,
@@ -13,8 +14,6 @@ import {
 import { useRecorder } from '../../lib/recorder';
 import { useDrafts } from '../../lib/stores/drafts';
 import { AudioPlayer } from '../ui';
-import { Select, type SelectOption } from '../ui/select';
-import { ChatTarget } from './chat-target';
 import { size } from './media';
 import { VoicePill } from './voice-pill';
 
@@ -45,32 +44,21 @@ export function Composer({
   onSent,
   placeholder,
   draft = false,
-  machines = [],
-  remoteMachineId = null,
-  onMachineChange,
-  targetFixed = false,
-  projectControl,
   modelControl,
   status,
+  replyTo,
+  onCancelReply,
 }: {
   name: string;
   upload: (file: MediaUpload) => Promise<{ id: string }>;
   /** Where what is being written is kept until it is sent, across pages and restarts. */
   draftKey?: string;
-  send: (text: string, mediaIds: string[]) => Promise<unknown>;
+  send: (text: string, mediaIds: string[], replyToId?: string) => Promise<unknown>;
+  replyTo?: { id: string; content: string };
+  onCancelReply?: () => void;
   onSent: () => void;
   placeholder?: string;
   draft?: boolean;
-  machines?: RemoteMachine[];
-  remoteMachineId?: string | null;
-  onMachineChange?: (value: string | null) => void;
-  /**
-   * The chat began: where it runs is shown, no longer chosen. Its project and machine are set
-   * before its first message, so every turn of it works in the same place.
-   */
-  targetFixed?: boolean;
-  /** Which repository the chat works on; a gateway chat has one, a channel's does not. */
-  projectControl?: ReactNode;
   modelControl?: ReactNode;
   /** Where the conversation's objective and listeners stand, at the end of the row above it. */
   status?: ReactNode;
@@ -87,44 +75,13 @@ export function Composer({
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
+  const editor = useRef<HTMLTextAreaElement>(null);
+  const still = useReducedMotion();
+  useEffect(() => {
+    if (replyTo) editor.current?.focus();
+  }, [replyTo]);
   const recorder = useRecorder();
   const pastes = useRef(0);
-  // A chat that began keeps where it runs: the machine is shown, no longer chosen.
-  const machineShown = targetFixed
-    ? {
-        label: remoteMachineId
-          ? (machines.find((machine) => machine.id === remoteMachineId)?.name ??
-            'Unavailable machine')
-          : 'Local',
-      }
-    : undefined;
-  const machineOptions: SelectOption[] = [
-    {
-      value: '',
-      label: 'Local',
-      detail: 'Runs on this Jian machine',
-      icon: <LaptopMinimal size={16} />,
-    },
-    ...machines.map((machine) => ({
-      value: machine.id,
-      label: machine.name,
-      detail: `${machine.online ? 'Online' : 'Offline'} · ${machine.platform}`,
-      icon: <LaptopMinimal size={16} />,
-      disabled: !machine.online,
-    })),
-    ...(remoteMachineId && !machines.some((machine) => machine.id === remoteMachineId)
-      ? [
-          {
-            value: remoteMachineId,
-            label: 'Unavailable machine',
-            detail: 'Choose Local explicitly to change the target',
-            icon: <LaptopMinimal size={16} />,
-            disabled: true,
-          },
-        ]
-      : []),
-  ];
-
   // Local previews hold memory until released; the last ones go with the composer.
   const previews = useRef(new Set<string>());
   useEffect(
@@ -230,7 +187,9 @@ export function Composer({
           return media.id;
         }),
       );
-      await send(text.trim(), mediaIds);
+      if (replyTo) await send(text.trim(), mediaIds, replyTo.id);
+      else await send(text.trim(), mediaIds);
+      onCancelReply?.();
       for (const item of attachments) if (item.preview) URL.revokeObjectURL(item.preview);
       previews.current.clear();
       write('');
@@ -290,28 +249,34 @@ export function Composer({
           {error}
         </p>
       )}
-      {/* Where the turn runs, above the box: what it works on and on which machine. */}
-      {(projectControl || onMachineChange || machineShown || status) && (
-        <div className="composer-context">
-          {projectControl}
-          {onMachineChange ? (
-            <Select
-              aria-label="Execution machine"
-              variant="ghost"
-              popup="content"
-              side="top"
-              value={remoteMachineId ?? ''}
-              onValueChange={(value) => onMachineChange(value || null)}
-              options={machineOptions}
-            />
-          ) : (
-            machineShown && (
-              <ChatTarget icon={<LaptopMinimal size={14} />} label={machineShown.label} />
-            )
-          )}
-          {status}
-        </div>
-      )}
+      {status && <div className="composer-context">{status}</div>}
+      <AnimatePresence initial={false}>
+        {replyTo && (
+          <motion.div
+            key="reply"
+            className="composer-reply-shell"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: still ? 0 : 0.18, ease: 'easeOut' }}
+          >
+            <div className="composer-reply" role="status">
+              <Reply size={15} aria-hidden="true" />
+              <div>
+                <strong>Replying to {name}</strong>
+                <span>
+                  {replyTo.content
+                    .replace(/\[Attached media: [0-9a-f-]{36}\]/g, '')
+                    .slice(0, 300) || 'Attachment'}
+                </span>
+              </div>
+              <button type="button" aria-label="Cancel reply" onClick={onCancelReply}>
+                <X size={15} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="composer-box" data-dragging={dragging}>
         {attachments.length > 0 && (
           <ul className="composer-attachments" aria-label="Attachments">
@@ -360,6 +325,7 @@ export function Composer({
           </div>
         ) : (
           <textarea
+            ref={editor}
             aria-label={`Message to ${name}`}
             placeholder={placeholder ?? 'Ask anything'}
             rows={1}
@@ -451,13 +417,10 @@ export function Composer({
           <span className="grow" />
           {modelControl}
           <button type="submit" className="composer-send" aria-label="Send" disabled={!canSend}>
-            {sending ? <LoaderCircle size={16} className="spin" /> : <ArrowUp size={16} />}
+            <ArrowUp size={16} />
           </button>
         </div>
       </div>
-      <p className="composer-hint">
-        <kbd>Enter</kbd> to send <kbd>Shift Enter</kbd> for a new line
-      </p>
     </form>
   );
 }
