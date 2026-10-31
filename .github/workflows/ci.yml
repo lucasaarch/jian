@@ -12,6 +12,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   changes:
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
     outputs:
       node: ${{ steps.plan.outputs.node }}
@@ -29,9 +32,20 @@ jobs:
         with:
           node-version: 24
       - run: node --test .github/scripts/ci-plan.test.mjs
+      # Include earlier changes that have not passed CI yet, even after superseded runs cancel.
+      - id: baseline
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          base="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+            -f branch="$BRANCH" -f event=push -f status=success -f per_page=1 \
+            --jq '.workflow_runs[0].head_sha // empty')" || base=''
+          if [[ "$base" =~ ^[a-f0-9]{40}$ ]]; then echo "base=$base" >> "$GITHUB_OUTPUT"; fi
       - id: plan
         env:
-          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || steps.baseline.outputs.base }}
           CI_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           CI_PR: ${{ github.event_name == 'pull_request' }}
           CI_FULL: ${{ startsWith(github.ref, 'refs/tags/') }}
