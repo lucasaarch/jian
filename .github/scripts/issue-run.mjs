@@ -366,14 +366,15 @@ async function history(c, transport, token, admit = true) {
       originals = previous.filter((a) => !a.manual),
       earlierManual = previous.filter((a) => a.manual);
     if (
-      originals.length !== 1 ||
-      originals[0].id !== c.issueId ||
-      originals[0].status !== 'completed' ||
-      !(
-        originals[0].runConclusion === 'failure' ||
-        (originals[0].runConclusion === 'success' &&
-          originals[0].generationConclusion === 'skipped')
-      ) ||
+      originals.length > 1 ||
+      (originals.length === 1 &&
+        (originals[0].id !== c.issueId ||
+          originals[0].status !== 'completed' ||
+          !(
+            originals[0].runConclusion === 'failure' ||
+            (originals[0].runConclusion === 'success' &&
+              originals[0].generationConclusion === 'skipped')
+          ))) ||
       earlierManual.length >= maxManualAttemptsPerIssue ||
       earlierManual.some(
         (a) => a.status !== 'completed' || !['failure', 'cancelled'].includes(a.runConclusion),

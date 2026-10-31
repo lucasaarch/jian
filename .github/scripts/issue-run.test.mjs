@@ -1875,3 +1875,21 @@ test('rerun history reads each attempt and cannot hide a prior generation behind
   assert.equal((await s.run.collectSnapshot(c, tr)).reason, 'MANUAL_RETRY_REFUSED');
   assert.equal(s.f.generation, 0);
 });
+
+test('administrator backfill admits a missing original run but still rejects a completed manual triage', async (t) => {
+  const s = await setup(t),
+    c = { ...context, event: 'manual' };
+  Object.assign(s.f.own, {
+    event: 'workflow_dispatch',
+    display_title: `issue-triage:${repo}:12:500:manual`,
+  });
+  assert.equal((await s.run.collectSnapshot(c, s.tr)).state, 'ready');
+  s.f.history.push({
+    ...s.f.runRecord(100),
+    event: 'workflow_dispatch',
+    conclusion: 'success',
+    display_title: `issue-triage:${repo}:12:100:manual`,
+  });
+  assert.equal((await s.run.collectSnapshot(c, s.tr)).reason, 'MANUAL_RETRY_REFUSED');
+  assert.equal(s.f.generation, 0);
+});

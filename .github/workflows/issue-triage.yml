@@ -11,7 +11,7 @@ on:
         type: string
         required: true
       dry_run:
-        description: Validate only when true; false triages an open Issue with a failed or skipped attempt
+        description: Validate only when true; false triages an open Issue not already completed
         type: boolean
         default: true
         required: true
@@ -65,7 +65,7 @@ jobs:
           cd .github/scripts
           sha256sum -c - <<'HASHES' > /dev/null
           2526a6ef5f8e7574dce5172f97e250f468fcf78b2095f0cc9cad7734e8039ed2  issue-core.mjs
-          487d318fecba7692941a97e86043f50c906e5472bd3ec444898c57a4f6ae57a4  issue-run.mjs
+          f796787868ec3a6bcb2fa69e525161285311afeec0a9b28518195b4c004ac6dc  issue-run.mjs
           98fb2022fff924d7ac0b6f4be9ab07e3f9bfbd53ed61f9c06ebc9ea411ee4b06  issue-config.json
           HASHES
           node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
@@ -201,7 +201,7 @@ jobs:
           done
           sha256sum -c - <<'HASHES' > /dev/null
           2526a6ef5f8e7574dce5172f97e250f468fcf78b2095f0cc9cad7734e8039ed2  issue-core.mjs
-          487d318fecba7692941a97e86043f50c906e5472bd3ec444898c57a4f6ae57a4  issue-run.mjs
+          f796787868ec3a6bcb2fa69e525161285311afeec0a9b28518195b4c004ac6dc  issue-run.mjs
           98fb2022fff924d7ac0b6f4be9ab07e3f9bfbd53ed61f9c06ebc9ea411ee4b06  issue-config.json
           HASHES
           node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
@@ -271,7 +271,7 @@ jobs:
           cd .github/scripts
           sha256sum -c - <<'HASHES' > /dev/null
           2526a6ef5f8e7574dce5172f97e250f468fcf78b2095f0cc9cad7734e8039ed2  issue-core.mjs
-          487d318fecba7692941a97e86043f50c906e5472bd3ec444898c57a4f6ae57a4  issue-run.mjs
+          f796787868ec3a6bcb2fa69e525161285311afeec0a9b28518195b4c004ac6dc  issue-run.mjs
           98fb2022fff924d7ac0b6f4be9ab07e3f9bfbd53ed61f9c06ebc9ea411ee4b06  issue-config.json
           HASHES
           node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
