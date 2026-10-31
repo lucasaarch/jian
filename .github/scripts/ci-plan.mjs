@@ -18,6 +18,12 @@ const areas = [
   'imageWeb',
 ];
 const images = new Set(['imageGateway', 'imageWeb']);
+/** How the image runs its browser: only a real container can tell whether these still work. */
+const imageBrowser = new Set([
+  'apps/gateway/jian-chromium.sh',
+  'apps/gateway/test-inspection.mjs',
+  'apps/gateway/src/web/browser.ts',
+]);
 const nodeConsumers = [
   'quality',
   'gateway',
@@ -36,7 +42,7 @@ export function plan(paths, full = false) {
     for (const name of names) result[name] = true;
   };
   for (const path of paths) {
-    if (path === 'apps/gateway/Dockerfile') enable('imageGateway');
+    if (path === 'apps/gateway/Dockerfile' || imageBrowser.has(path)) enable('imageGateway');
     else if (path === 'apps/web/Dockerfile') enable('imageWeb');
     else if (
       /^\.github\/(?:scripts\/issue-|workflows\/issue-triage\.yml|issue-triage\.md)/.test(path)

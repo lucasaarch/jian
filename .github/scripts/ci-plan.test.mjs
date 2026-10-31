@@ -56,6 +56,15 @@ test('contracts and SDK changes reach their actual consumers', () => {
     'rust',
   ]);
 });
+test('how the image runs its browser is tested in the image', () => {
+  for (const path of [
+    'apps/gateway/jian-chromium.sh',
+    'apps/gateway/test-inspection.mjs',
+    'apps/gateway/src/web/browser.ts',
+  ])
+    assert.equal(plan([path]).imageGateway, true, path);
+});
+
 test('each image requires a change to its Dockerfile, including conservative fallback', () => {
   assert.deepEqual(selected(['apps/gateway/Dockerfile']), ['imageGateway']);
   assert.deepEqual(selected(['apps/web/Dockerfile']), ['imageWeb']);

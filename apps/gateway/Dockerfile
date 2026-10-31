@@ -132,6 +132,8 @@ RUN corepack enable
 COPY --from=display-build /out/Xvfb /usr/local/bin/Xvfb
 COPY apps/gateway/jian-display.py /usr/local/bin/jian-display
 RUN chmod 755 /usr/local/bin/jian-display
+COPY apps/gateway/jian-chromium.sh /usr/local/bin/jian-chromium
+RUN chmod 755 /usr/local/bin/jian-chromium
 COPY apps/gateway/native/jian-sandbox.c /tmp/jian-sandbox.c
 RUN gcc -O2 -Wall -Wextra -Werror -o /usr/local/bin/jian-sandbox /tmp/jian-sandbox.c \
  && rm /tmp/jian-sandbox.c
@@ -143,6 +145,7 @@ ENV GOPATH=/home/node/go \
     NPM_CONFIG_PREFIX=/home/node/.local \
     PATH=/home/node/.local/bin:/home/node/go/bin:/usr/local/go/bin:$PATH \
     PLAYWRIGHT_EXECUTABLE_PATH=/usr/bin/chromium \
+    JIAN_BROWSER_PATH=/usr/local/bin/jian-chromium \
     JIAN_TOOLBOX=1
 ARG JIAN_VERSION=0.0.0-dev
 ARG JIAN_REVISION=unknown

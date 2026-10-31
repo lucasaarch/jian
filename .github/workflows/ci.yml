@@ -102,6 +102,8 @@ jobs:
       - run: pnpm exec biome check apps/gateway packages/contracts --error-on-warnings
       - run: pnpm --filter @jian/gateway typecheck
       - run: pnpm --filter @jian/gateway exec playwright install --with-deps chromium
+      # Ubuntu's AppArmor refuses the user namespaces Chromium's own sandbox runs in.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: pnpm --filter @jian/gateway test --shard=${{ matrix.shard }}
       - if: matrix.shard == '1/2'
         run: pnpm --filter @jian/gateway build
@@ -235,6 +237,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker build -f apps/gateway/Dockerfile -t jian:ci .
       - run: make image-test-display IMAGE=jian VERSION=ci
+      - run: make image-test-inspection IMAGE=jian VERSION=ci
   image-web:
     needs: changes
     if: needs.changes.outputs.imageWeb == 'true'
