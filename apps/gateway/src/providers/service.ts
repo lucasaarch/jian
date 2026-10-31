@@ -82,7 +82,10 @@ export class Providers {
     const server = data.kind === 'openai-compatible';
 
     if (server && !baseURL) {
-      throw new GatewayError(400, 'Give the address of the server, such as http://localhost:11434/v1 for Ollama');
+      throw new GatewayError(
+        400,
+        'Give the address of the server, such as http://localhost:11434/v1 for Ollama',
+      );
     }
 
     if (!server && !secret) {
