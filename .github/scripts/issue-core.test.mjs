@@ -1,16 +1,42 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import test from 'node:test';
-import * as core from './issue-core.mjs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test, { after } from 'node:test';
+import { pathToFileURL } from 'node:url';
 
 const repoName = 'lucasaarch/jian',
   sha = 'a'.repeat(40);
 const catalog = {
-  types: structuredClone(core.config.types),
-  priority: structuredClone(core.config.priority),
-  labels: [...core.config.labels],
+  types: [
+    { id: 610603862, name: 'Task' },
+    { id: 610603863, name: 'Bug' },
+    { id: 610603864, name: 'Feature' },
+  ],
+  priority: {
+    id: 46483201,
+    name: 'Priority',
+    type: 'single_select',
+    options: [
+      { id: 81364764, name: 'Urgent' },
+      { id: 81364765, name: 'High' },
+      { id: 81364766, name: 'Medium' },
+      { id: 81364767, name: 'Low' },
+    ],
+  },
+  labels: ['bug', 'enhancement', 'documentation', 'question', 'accessibility'],
 };
+// Exercise native organization metadata with synthetic identities as well as the personal-repo path.
+const fixtureDir = mkdtempSync(join(tmpdir(), 'issue-core-test-'));
+after(() => rmSync(fixtureDir, { recursive: true, force: true }));
+copyFileSync(new URL('./issue-core.mjs', import.meta.url), join(fixtureDir, 'issue-core.mjs'));
+const checkedConfig = JSON.parse(readFileSync(new URL('./issue-config.json', import.meta.url)));
+writeFileSync(
+  join(fixtureDir, 'issue-config.json'),
+  JSON.stringify({ ...checkedConfig, priority: catalog.priority }),
+);
+const core = await import(pathToFileURL(join(fixtureDir, 'issue-core.mjs')));
 const issue = () => ({
   number: 12,
   id: 1200,
@@ -85,19 +111,6 @@ const clone = (x) => structuredClone(x);
 const ready = (x) => assert.equal(x.state ?? x.decision?.state, 'ready');
 const blocked = (x) => assert.equal(x.state ?? x.decision?.state, 'blocked');
 
-test('ordinary words ending in a scheme name do not count as a link', () => {
-  const i = input({
-    title: 'Per-profile environment variables',
-    body: 'Add a section on the profile: name and value. Keep the metadata: owner only.',
-  });
-  ready(core.validateProposal(proposal(i), i));
-
-  for (const link of ['Open file:/etc/passwd now.', 'Load data:text/plain,hello here.']) {
-    const p = proposal(i);
-    blocked(core.validateProposal({ ...p, translation: { ...p.translation, body: link } }, i));
-  }
-});
-
 test('English translation replaces native title and body without losing protected technical content', () => {
   const source = {
     title: 'Falha ao salvar',
@@ -146,23 +159,40 @@ test('English source remains unchanged and a missing English translation refuses
   blocked(core.validateProposal({ ...p, translation: null }, i));
 });
 
+test('English source preserves dotted words that are not file extensions', () => {
+  const source = {
+      title: 'Deploy with Fly.io',
+      body: 'For example, e.g. deploy the app there.',
+    },
+    i = input(source),
+    p = proposal(i);
+  p.translation = {
+    title: i.prose.title,
+    body: i.prose.body,
+    sourceLanguage: 'en',
+    targetLanguage: 'en',
+  };
+  ready(core.validateProposal(p, i));
+});
+
 test('pure Issue policy exports exist', () => {
-  for (const value of [
-    core.eligibility,
-    core.fingerprint,
-    core.sanitizeProse,
-    core.prepareInput,
-    core.responseSchema,
-    core.validateProposal,
-    core.planEffects,
-    core.renderComment,
+  for (const name of [
+    'eligibility',
+    'fingerprint',
+    'sanitizeProse',
+    'prepareInput',
+    'responseSchema',
+    'validateProposal',
+    'planEffects',
+    'renderComment',
   ])
-    assert.equal(typeof value, 'function');
+    assert.equal(typeof core[name], 'function', name);
 });
 test('provider schema uses supported keywords while local validation rejects invalid translations', () => {
   const i = input(),
     schema = core.responseSchema(i);
   assert.doesNotMatch(JSON.stringify(schema), /"(?:minLength|maxLength|pattern)":/);
+  assert.match(core.SYSTEM_INSTRUCTION, /Do not return a snapshot field/);
   const p = proposal(i);
   p.translation = {
     title: 'Translated',
@@ -180,7 +210,7 @@ test('checked-in configuration is enabled, scoped, immutable and uses verified I
   assert.equal(c.model, 'gemini-3.5-flash-lite');
   assert.equal(c.targetLanguage, 'en');
   assert.deepEqual(c.types, catalog.types);
-  assert.deepEqual(c.priority, catalog.priority);
+  assert.equal(c.priority, null);
   assert.deepEqual(c.labels, catalog.labels);
   for (const [key, value] of Object.entries({
     maxCandidates: 10,
@@ -206,6 +236,13 @@ test('eligibility accepts opened public Issues and maintainer manual dry runs', 
   ready(
     core.eligibility(
       { ...ctx(), event: 'manualdry', actorPermission: 'maintain', dryRun: true },
+      repo(),
+      issue(),
+    ),
+  );
+  ready(
+    core.eligibility(
+      { ...ctx(), event: 'manual', actorPermission: 'admin', dryRun: false },
       repo(),
       issue(),
     ),
@@ -242,6 +279,7 @@ test('eligibility refuses private, PR, bot, closed, malformed, mismatched, wrong
     { event: 'edited' },
     { event: 'manualdry', dryRun: false },
     { event: 'manualdry', dryRun: true, actorPermission: 'write' },
+    { event: 'manual', dryRun: false, actorPermission: 'maintain' },
   ])
     blocked(core.eligibility({ ...ctx(), ...change }, repo(), issue()));
 });
@@ -412,7 +450,7 @@ test('validator rejects malformed JSON, root and nested extras, origin tampering
     (p) => (p.extra = 1),
     (p) => (p.snapshot.extra = 1),
     (p) => p.snapshot.runId++,
-    (p) => (p.type.id = 858946829),
+    (p) => (p.type.id = 610603863),
     (p) => (p.priority.field_id = 46483204),
     (p) => (p.labels[0].location = 'body'),
     (p) => (p.duplicates[0].url = 'https://evil.test'),
@@ -503,9 +541,9 @@ test('effect planning fills only absent metadata and uses one additive Priority 
     'translationToSet',
     'typeToSet',
   ]);
-  assert.deepEqual(effects.labelsToAdd, ['bug', 'type: bug', 'priority: high']);
-  assert.equal(effects.typeToSet, null);
-  assert.equal(effects.priorityToSet, null);
+  assert.deepEqual(effects.labelsToAdd, ['bug']);
+  assert.equal(effects.typeToSet, 'Bug');
+  assert.deepEqual(effects.priorityToSet, { field_id: 46483201, value: 'High' });
   assert.ok(!/46483204|Effort|title|assignees/.test(JSON.stringify(effects)));
 });
 test('Issue12 native Bug High Effort Low, human labels and originals survive proposals', () => {
@@ -514,13 +552,8 @@ test('Issue12 native Bug High Effort Low, human labels and originals survive pro
   const current = {
       ...issue(),
       repo: repoName,
-      type: null,
-      labels: [
-        { name: 'human-label' },
-        { name: 'bug' },
-        { name: 'type: feature' },
-        { name: 'priority: low' },
-      ],
+      type: { id: 610603863, name: 'Bug' },
+      labels: [{ name: 'human-label' }, { name: 'bug' }],
       fieldValues: [
         { field_id: 46483201, value: 'High' },
         { field_id: 46483204, value: 'Low' },
@@ -725,7 +758,7 @@ test('undefined or unverified current native type returns no effects', () => {
       translationToSet: null,
       comment: '',
     };
-  for (const type of [undefined, {}, { name: 'Bug' }, { id: 858946830, name: 'Bug' }])
+  for (const type of [undefined, {}, { name: 'Bug' }, { id: 610603864, name: 'Bug' }])
     assert.deepEqual(core.planEffects(p, { ...issue(), repo: repoName, type }, i.candidates), none);
 });
 test('explicitly incomplete current field values returns no effects', () => {
@@ -950,12 +983,54 @@ test('configured product areas are valid additive labels, while manual policy la
     ready(core.validateProposal(p, i));
     assert.deepEqual(
       core.planEffects(p, { ...issue(), repo: repoName }, i.candidates).labelsToAdd,
-      [name, 'type: bug', 'priority: high'],
+      [name],
     );
   }
   for (const name of ['duplicate', 'invalid', 'wontfix', 'priority: P1', 'major-review']) {
     const p = proposal(i);
     p.labels = [{ name, confidence: 0.99 }];
     blocked(core.validateProposal(p, i));
+  }
+});
+
+test('ordinary words ending in a scheme name do not count as a link', () => {
+  const i = input({
+    title: 'Per-profile environment variables',
+    body: 'Add a section on the profile: name and value. Keep the metadata: owner only.',
+  });
+  ready(core.validateProposal(proposal(i), i));
+
+  for (const link of ['Open file:/etc/passwd now.', 'Load data:text/plain,hello here.']) {
+    const p = proposal(i);
+    blocked(core.validateProposal({ ...p, translation: { ...p.translation, body: link } }, i));
+  }
+});
+
+test('only explicit administrator dispatch admits bot-authored Issues', () => {
+  const target = { ...issue(), user: { type: 'Bot', login: 'reporter-app[bot]' } };
+  blocked(core.eligibility(ctx(), repo(), target));
+  for (const event of ['manual', 'manualdry']) {
+    const context = { ...ctx(), event, dryRun: event === 'manualdry' };
+    ready(core.eligibility({ ...context, actorPermission: 'admin' }, repo(), target));
+    blocked(core.eligibility({ ...context, actorPermission: 'maintain' }, repo(), target));
+    blocked(
+      core.eligibility(
+        { ...context, actorPermission: 'admin', actor: 'helper[bot]' },
+        repo(),
+        target,
+      ),
+    );
+    blocked(
+      core.eligibility({ ...context, actorPermission: 'admin' }, repo(), {
+        ...target,
+        pull_request: {},
+      }),
+    );
+    blocked(
+      core.eligibility({ ...context, actorPermission: 'admin' }, repo(), {
+        ...target,
+        state: 'closed',
+      }),
+    );
   }
 });

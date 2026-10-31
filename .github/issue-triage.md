@@ -1,31 +1,66 @@
-# Jian GitHub automation workflows
+# Public Issue triage
 
-These workflows adapt the complete Issue Triage, Assign PR and PR Size Label automation from the read-only `cubeshipd/cubeship` reference. Issue Triage is implemented by `workflows/issue-triage.yml` and the pinned-hash, tested scripts in `scripts/issue-core.mjs`, `issue-run.mjs`, and `issue-config.json`.
+The workflow and runner are adapted from `cubeshipd/cubeship`, with the repository,
+branch, technical-content tokens and comment markers scoped to `lucasaarch/jian`.
+Both `enabled` and `publishEnabled` are true. The existing `GEMINI_API_KEY` secret
+is used only by the inference step.
 
-## Required repository setting
+## Triggers and retries
 
-Set the repository Actions secret `GEMINI_API_KEY` in **Settings → Secrets and variables → Actions**. The key is used only by the conditional `Generate Gemini proposal` step, after collection and inference gates pass. It is not passed to collection/publication, logs, artifacts or untrusted Issue content as a credential. The workflow cannot create repository secrets; a repository administrator must add this secret before live triage can generate proposals. Until then, inference fails safely without applying AI-derived updates.
+Newly opened public, human-authored Issues enter automatic triage. PRs, edits,
+comments, private repositories, other branches and untrusted contexts are refused.
+Bot-authored Issues and bot senders are skipped at the job gate rather than starting a doomed collection. The runner independently refuses bot contexts. Manual dispatch defaults to `dry_run=true`,
+verifies maintain/admin permission, and performs no Google request or publication.
+An administrator may set `dry_run=false` to triage an open Issue whose earlier
+attempt failed or succeeded with inference skipped. Explicit administrator dispatch
+also admits bot-authored Issues; automatic triggers and non-admin dispatch still exclude them. Retry history, source identity and generation
+limits are checked again; ambiguous history fails closed. Re-running an old
+Actions attempt is not a retry mechanism.
 
-Enable Actions and allow the workflow's `GITHUB_TOKEN` permissions. The workflow requests only its job-scoped permissions: collector read access; Gemini inference no repository permissions; publisher `issues: write` plus read access needed for trusted provenance. Assign PR and PR Size Label use their own narrowly-scoped write permissions and never check out or execute pull-request code.
+## Repository metadata
 
-## Issue Triage
+The configured Task, Bug and Feature IDs were read from the Jian repository's
+Issue type catalog. Only configured labels that actually exist are proposed:
+`bug`, `enhancement`, `documentation`, `question` and `accessibility`.
+Human classifications are preserved. Duplicate links are suggestions, never
+automatic closure.
 
-Only a newly opened Issue in the public `lucasaarch/jian` repository on its default branch is eligible. A maintainer may run `workflow_dispatch` with `dry_run=true` to validate an open Issue; dry run performs no Gemini request or GitHub writes. Reruns, private repositories, bot authors, closed Issues, PRs and untrusted contexts fail closed. Repository-wide concurrency and bounded history/quota admission serialize publication. The workflow collects verified public Issue data, generates a constrained Gemini proposal in an isolated permissionless job, then refetches and validates source before any additive effect.
+This is a personal repository. Its native Issue field endpoint returns 404, so
+`priority` is explicitly null. The model must return null for priority and the
+writer makes no Issue field request. Organization repositories can configure a
+verified native Priority catalog; this path remains covered by synthetic tests.
+An unexpected failure reading any configured catalog still blocks publication.
 
-The model can suggest up to three allowlisted labels (`bug`, `enhancement`, `documentation`, `question`, `accessibility`, `dependencies`, and relevant `area: ...` labels), an Issue type, a priority and possible same-repository duplicates. Jian is a personal repository; GitHub's native Issue Types and custom Issue Fields APIs are unavailable here. Therefore type and priority are represented as labels (`type: task|bug|feature` and `priority: urgent|high|medium|low`), rather than copying Cubeship's organization-specific field IDs. A human's existing type/priority labels are preserved; legacy priority labels block inferred priority. Missing selected labels are created only by the publisher, and labels are added without replacing existing ones. Translation and a bot comment occur only when translation or verified duplicate suggestions add information. Issues are never closed, assigned, or deleted by triage.
+## Validation and preservation
 
-Issue prose is untrusted data, never instructions. The workflow bounds and sanitizes input, detects common credentials/private markers, preserves complete technical/code/log blocks through opaque tokens, restricts duplicates to verified candidates, validates a closed JSON schema, caps output and provider requests, never follows model-provided URLs, and does not upload raw source/prompts/responses. The publisher rechecks content and candidate identity, preserves human metadata, verifies each write and avoids blind mutation retries. Labels, translations and comments are not atomic; an uncertain write is reported rather than retried blindly.
+Gemini receives sanitized public prose and at most ten same-repository duplicate
+candidates. Code, commands, links and other technical content are protected with
+opaque `JIAN_KEEP` tokens and restored locally. Each token must appear exactly
+once. Existing dotted terms, including product domains, can survive translation;
+invented dotted terms cannot. Scheme detection uses a word boundary so an ordinary
+word such as `profile:` does not become a false link rejection.
 
-## Assign PR and PR Size Label
+The model returns a closed JSON schema. The trusted runner attaches the snapshot
+rather than asking the model to reproduce repository identity. A fingerprint of
+the original title and body binds collection, inference and publication. Every
+write is preceded by fresh source checks and followed by read-back verification.
+The `jian-issue-triage` comment marker prevents duplicate publication. Existing
+human metadata and protected technical content are preserved.
 
-`assign-pr.yml` assigns `lucasaarch` on PR open/reopen. `pr-size-label.yml` runs for PRs targeting `main`, computes changed lines, creates the required size label if absent, applies exactly one `size: XS/S/M/L/XL` label and removes stale size labels. Both use `pull_request_target` without checkout, execute no PR-supplied code, and pass event values through environment variables rather than interpolating them into shell source.
+The collector reads only, inference has no Issue write credential, and the writer
+has no Gemini credential. Downloads are bound to the workflow SHA and verified
+with pinned SHA256 hashes in both collection and inference. Update all workflow
+hashes after formatting or changing a trusted script or its configuration.
 
-## Validation
+## Limits and proof
 
-Run the offline regression suite with:
+The configured model is `gemini-3.5-flash-lite`, without tools or exposed thoughts.
+Input, output, network time, retries and generation budgets remain bounded.
+Only sanitized public content is used in bounded diagnostics; credentials are
+redacted. Full original input is checked before any safe candidate excerpts.
 
-```sh
-node --test .github/scripts/*.test.mjs
-```
-
-The tests cover core proposal validation/effects and workflow gates, source pin verification, transport boundaries and synthetic GitHub/Gemini responses. The repository's usual `pnpm run check` validates the Jian application separately. Offline tests cannot confirm that the Actions secret or live GitHub/Gemini service access is configured; first activation should be observed in Actions.
+`pnpm test:triage` runs the offline core, runner and actual workflow-shell tests.
+It is part of `pnpm check`, including hash-drift validation. Tests cover native
+organization metadata and complete publication for personal repositories without
+native fields. They use synthetic credentials and do not call Google or write to
+GitHub. A successful live Actions run is separate evidence from offline checks.
