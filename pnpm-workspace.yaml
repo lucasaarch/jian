@@ -20,6 +20,8 @@ overrides:
   ip-address: '>=10.7.4'
   zod: '>=4.6.6'
   fast-uri: '4.2.3'
+  # minimatch 10.x has a DoS advisory with the fix only in 11.0.1.
+  'minimatch@10': '11.0.1'
   # Keep unrelated transitive dependencies within the existing release-age policy.
   set-cookie-parser@^3: 3.1.2
   tslib: 2.8.1
