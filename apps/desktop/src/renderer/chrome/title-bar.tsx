@@ -1,9 +1,8 @@
-import { SidebarBar, useWelcomeShowing } from '@jian/ui';
+import { SidebarBar, useWelcomeShowing, WindowControls } from '@jian/ui';
 import { useEffect, useSyncExternalStore } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
 import { desktop } from '../desktop';
 import { navigationFor } from '../gateways/navigation';
-import { WindowControls } from './window-controls';
 
 const drag = '[-webkit-app-region:drag]';
 
@@ -73,7 +72,12 @@ export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
           />
         </header>
       )}
-      {!mac && <WindowControls className="absolute top-0 right-0 z-30" />}
+      {!mac && (
+        <WindowControls
+          actions={desktop().windowControls}
+          className="absolute top-0 right-0 z-30"
+        />
+      )}
     </>
   );
 }
