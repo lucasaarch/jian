@@ -66,11 +66,26 @@ export type Showing = { gatewayId: string; chat?: { profileId: string; sessionId
 /** An agent using this computer as a machine right now: on which gateway, and how. */
 export type MachineUse = { gatewayId: string; kind: 'shell' | 'computer' };
 
+/** A key pressed inside a page that belongs to the app. */
+export type BrowserShortcut = { key: string; code: string; shift: boolean; alt: boolean };
+
+export type BrowserPageSummary = { id: string; title: string; url: string };
+export type BrowserPlaces = {
+  favorites: Array<{ url: string; title: string }>;
+  recents: Array<{ url: string; title: string }>;
+};
+
 export type BrowserState = {
   /** The conversation this is the browser of; absent outside any. */
   sessionId?: string;
+  /** Grows when something asks the owner to look at the active page. */
   focus: number;
   open: boolean;
+  /** The conversation's tabs, in the order they were opened. */
+  pages: BrowserPageSummary[];
+  activePageId?: string;
+  /** Whether the active page is among the owner's favorites. */
+  favorite: boolean;
   url: string;
   title: string;
   loading: boolean;
@@ -83,13 +98,23 @@ export interface DesktopBridge {
   browser: {
     state(): Promise<BrowserState>;
     open(): void;
-    close(): void;
+    select(pageId: string): void;
+    close(pageId: string): void;
     navigate(url: string): Promise<BrowserState>;
-    command(command: 'back' | 'forward' | 'reload' | 'stop'): void;
+    command(command: 'back' | 'forward' | 'reload' | 'hard-reload' | 'stop'): void;
     layout(bounds: { x: number; y: number; width: number; height: number }): void;
     /** The page as a picture, to hold in its place while something is drawn over it. */
     snapshot(): Promise<string | null>;
     openExternal(): void;
+    /** The keys that are the app's, so a page holding the keyboard passes them on. */
+    shortcuts(bindings: string[]): void;
+    onShortcut(listener: (key: BrowserShortcut) => void): () => void;
+    /** Copies the page as an image; false when there is no page to take. */
+    screenshot(): Promise<boolean>;
+    clear(what: 'history' | 'cookies' | 'cache'): Promise<void>;
+    places(): Promise<BrowserPlaces>;
+    setFavorite(on: boolean, url: string, title: string): Promise<void>;
+    forget(url: string): Promise<void>;
     cookieSources(): Promise<Array<{ id: string; name: string }>>;
     importCookies(
       source: string,

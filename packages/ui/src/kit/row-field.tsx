@@ -1,6 +1,6 @@
 'use client';
 
-import type { InputHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, Ref, TextareaHTMLAttributes } from 'react';
 
 const field =
   'rounded-lg border border-glass-edge bg-glass-hover text-[13px] text-ink outline-none transition-[border-color,background-color] placeholder:text-muted/70 hover:bg-glass-press focus:border-ink/25 focus:bg-glass-press';
@@ -13,10 +13,16 @@ export function RowInput({
   labelledBy,
   describedBy,
   className = 'w-64',
+  ref,
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & { labelledBy: string; describedBy?: string }) {
+}: InputHTMLAttributes<HTMLInputElement> & {
+  labelledBy: string;
+  describedBy?: string;
+  ref?: Ref<HTMLInputElement>;
+}) {
   return (
     <input
+      ref={ref}
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
       {...props}

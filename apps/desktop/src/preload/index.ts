@@ -13,12 +13,21 @@ const bridge: DesktopBridge = {
   browser: {
     state: () => ipcRenderer.invoke('browser:state'),
     open: () => ipcRenderer.send('browser:open'),
-    close: () => ipcRenderer.send('browser:close'),
+    select: (pageId) => ipcRenderer.send('browser:select', pageId),
+    close: (pageId) => ipcRenderer.send('browser:close', pageId),
     navigate: (url) => ipcRenderer.invoke('browser:navigate', url),
     command: (command) => ipcRenderer.send('browser:command', command),
     layout: (bounds) => ipcRenderer.send('browser:layout', bounds),
     snapshot: () => ipcRenderer.invoke('browser:snapshot'),
     openExternal: () => ipcRenderer.send('browser:external'),
+    shortcuts: (bindings) => ipcRenderer.send('browser:shortcuts', bindings),
+    onShortcut: (listener) =>
+      listen<import('../shared/bridge').BrowserShortcut>('browser:shortcut', listener),
+    screenshot: () => ipcRenderer.invoke('browser:screenshot'),
+    clear: (what) => ipcRenderer.invoke('browser:clear', what),
+    places: () => ipcRenderer.invoke('browser:places'),
+    setFavorite: (on, url, title) => ipcRenderer.invoke('browser:favorite', on, url, title),
+    forget: (url) => ipcRenderer.invoke('browser:forget', url),
     cookieSources: () => ipcRenderer.invoke('browser:cookie-sources'),
     importCookies: (source, scope) => ipcRenderer.invoke('browser:import-cookies', source, scope),
     onChanged: (listener) =>

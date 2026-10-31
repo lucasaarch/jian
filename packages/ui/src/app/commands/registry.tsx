@@ -53,9 +53,12 @@ const rank = (source: string) => {
 export function CommandsProvider({
   children,
   browser = false,
+  onBound,
 }: {
   children: ReactNode;
   browser?: boolean;
+  /** Told which keys are the app's, for a host with content that takes the keyboard from it. */
+  onBound?: (bindings: string[]) => void;
 }) {
   const [sources, setSources] = useState<Record<string, AppCommand[]>>({});
   const [open, setOpen] = useState(false);
@@ -118,6 +121,10 @@ export function CommandsProvider({
       return keys ? { ...command, keys } : command;
     });
   }, [offered, overrides, browser]);
+
+  useEffect(() => {
+    onBound?.(commands.flatMap((command) => (command.keys ? [bindingId(command.keys)] : [])));
+  }, [commands, onBound]);
 
   const setBinding = useCallback(
     (id: string, keys: Binding | null | undefined) => {

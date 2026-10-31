@@ -16,16 +16,19 @@ export function MenuEntry({
   children,
   onClick,
   danger = false,
+  disabled = false,
 }: {
   icon?: ReactNode;
   children: ReactNode;
   onClick: () => void;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <Menu.Item
       onClick={onClick}
-      className={`flex h-8 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 outline-none select-none data-highlighted:bg-glass-press ${danger ? 'text-bad' : ''}`}
+      disabled={disabled}
+      className={`flex h-8 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-45 data-highlighted:bg-glass-press ${danger ? 'text-bad' : ''}`}
     >
       {icon && <span className="grid size-4 place-items-center text-current">{icon}</span>}
       {children}

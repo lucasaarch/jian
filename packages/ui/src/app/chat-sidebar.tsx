@@ -10,7 +10,7 @@ import {
   SquarePen,
   Terminal,
 } from 'lucide-react';
-import { type ReactNode, Suspense } from 'react';
+import { type ReactNode, Suspense, useEffect, useRef } from 'react';
 import { TelegramLogo, WhatsAppLogo } from '../components/ui';
 import type { Session } from '../lib/api';
 import { conversationName } from '../lib/conversation-name';
@@ -24,7 +24,12 @@ import {
   useProjects,
   useSessions,
 } from '../lib/query/agent';
-import { useLayout } from '../lib/stores/layout';
+import {
+  MAX_SIDEBAR_WIDTH,
+  MIN_CHAT_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  useLayout,
+} from '../lib/stores/layout';
 import { unread } from '../lib/unread';
 import { useActions, useDeleteConversation, useRefresh } from '../lib/workspace';
 import { useParams, usePathname, useRouter } from '../platform/navigation';
@@ -49,6 +54,61 @@ function conversationIcon(session: Session) {
  * a folder for each, the chats in none, and each channel the agent is reached on. Put away, it
  * leaves the conversation the whole width; `data-chat-sidebar` tells the bar above it so.
  */
+/**
+ * The sidebar's edge, to drag or to move with the arrow keys; a double click gives back the
+ * default. It stops where the chat, with the Inspector beside it, would lose its minimum.
+ */
+function SidebarResizer() {
+  const chosen = useLayout((state) => state.sidebarWidth);
+  const setWidth = useLayout((state) => state.setSidebarWidth);
+  const drag = useRef<{ x: number; width: number } | null>(null);
+  const edge = useRef<HTMLHRElement>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    if (chosen === null) root.style.removeProperty('--sidebar-chosen');
+    else root.style.setProperty('--sidebar-chosen', `${chosen}px`);
+  }, [chosen]);
+  const current = () => edge.current?.parentElement?.getBoundingClientRect().width ?? 256;
+  const resize = (next: number) => {
+    const inspector = document.querySelector<HTMLElement>('[data-inspector-host]:not([data-full])');
+    const room = window.innerWidth - (inspector?.offsetWidth ?? 0) - MIN_CHAT_WIDTH;
+    const limit = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, room));
+    setWidth(Math.round(Math.max(MIN_SIDEBAR_WIDTH, Math.min(next, limit))));
+  };
+  const finish = () => {
+    drag.current = null;
+  };
+  return (
+    <hr
+      ref={edge}
+      aria-label="Resize sidebar"
+      aria-orientation="vertical"
+      aria-valuemin={MIN_SIDEBAR_WIDTH}
+      aria-valuemax={MAX_SIDEBAR_WIDTH}
+      aria-valuenow={Math.round(chosen ?? 256)}
+      tabIndex={0}
+      className="absolute inset-y-0 -right-1 z-30 m-0 h-full w-2 cursor-col-resize touch-none border-0 bg-transparent focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink/20"
+      onDoubleClick={() => setWidth(null)}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault();
+          resize(current() + (event.key === 'ArrowRight' ? 16 : -16));
+        }
+      }}
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        drag.current = { x: event.clientX, width: current() };
+      }}
+      onPointerMove={(event) => {
+        if (drag.current) resize(drag.current.width + event.clientX - drag.current.x);
+      }}
+      onPointerUp={finish}
+      onPointerCancel={finish}
+      onLostPointerCapture={finish}
+    />
+  );
+}
+
 export function ChatSidebar({
   profileId,
   loading = false,
@@ -71,7 +131,7 @@ export function ChatSidebar({
       aria-label="Chats"
       // A host that draws its title bar over the window's top keeps `--chrome-top` clear here.
       // On a phone it is the screen itself, until something it lists is opened.
-      className="flex h-full w-(--sidebar-width) shrink-0 flex-col border-r border-line bg-sidebar pt-(--chrome-top) phone:w-full phone:border-r-0 phone:bg-canvas phone:pb-[env(safe-area-inset-bottom)]"
+      className="relative flex h-full w-(--sidebar-width) shrink-0 flex-col border-r border-line bg-sidebar pt-(--chrome-top) phone:w-full phone:border-r-0 phone:bg-canvas phone:pb-[env(safe-area-inset-bottom)]"
     >
       {profileId ? (
         <Suspense
@@ -91,6 +151,7 @@ export function ChatSidebar({
         </>
       )}
       <div className="mt-auto">{footer}</div>
+      {!phone && <SidebarResizer />}
     </nav>
   );
 }

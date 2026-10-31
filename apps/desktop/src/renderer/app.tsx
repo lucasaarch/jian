@@ -29,9 +29,11 @@ import { appHost, updatesHost } from './settings/hosts';
  * The window: the chats of the gateway and agent in use, the status bar choosing the gateway
  * beneath them, and every setting in overlays above. It opens on the app's own gateway, ready to use.
  */
+const tellBrowserShortcuts = (bindings: string[]) => desktop().browser.shortcuts(bindings);
+
 export function App() {
   return (
-    <CommandsProvider>
+    <CommandsProvider onBound={tellBrowserShortcuts}>
       <Window />
     </CommandsProvider>
   );

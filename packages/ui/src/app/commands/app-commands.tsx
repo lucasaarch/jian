@@ -9,12 +9,14 @@ import {
   MoonStar,
   Palette,
   PanelLeft,
+  PanelRight,
   Plug,
   RotateCcw,
   Settings2,
   Sun,
 } from 'lucide-react';
 import { type ReactNode, useMemo } from 'react';
+import { toggleInspector } from '../../components/sessions/inspector-host';
 import { useThemeChoice } from '../../components/shell/theme';
 import { reloadApp } from '../reload';
 import { toggleSidebar } from '../sidebar-bar';
@@ -99,6 +101,14 @@ export function useAppCommands(openSettings: (page?: string) => void): void {
         icon: <PanelLeft size={15} />,
         keys: { key: 'b' },
         run: toggleSidebar,
+      },
+      {
+        id: 'inspector',
+        title: 'Toggle inspector',
+        keywords: ['browser', 'panel', 'side', 'tabs', 'pull request', 'subagent'],
+        icon: <PanelRight size={15} />,
+        keys: { key: 'b', shift: true },
+        run: toggleInspector,
       },
       {
         id: 'theme',
