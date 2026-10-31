@@ -17,14 +17,19 @@ jobs:
       actions: read
     runs-on: ubuntu-latest
     outputs:
-      node: ${{ steps.plan.outputs.node }}
+      quality: ${{ steps.plan.outputs.quality }}
       gateway: ${{ steps.plan.outputs.gateway }}
-      image: ${{ steps.plan.outputs.image }}
-      panel: ${{ steps.plan.outputs.panel }}
+      web: ${{ steps.plan.outputs.web }}
+      ui: ${{ steps.plan.outputs.ui }}
       desktop: ${{ steps.plan.outputs.desktop }}
       remote: ${{ steps.plan.outputs.remote }}
       rust: ${{ steps.plan.outputs.rust }}
+      postgres: ${{ steps.plan.outputs.postgres }}
       triage: ${{ steps.plan.outputs.triage }}
+      contracts: ${{ steps.plan.outputs.contracts }}
+      display: ${{ steps.plan.outputs.display }}
+      imageGateway: ${{ steps.plan.outputs.imageGateway }}
+      imageWeb: ${{ steps.plan.outputs.imageWeb }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,9 +66,9 @@ jobs:
         with:
           node-version: 24
       - run: node --test .github/scripts/issue-*.test.mjs
-  node:
+  quality:
     needs: changes
-    if: needs.changes.outputs.node == 'true'
+    if: needs.changes.outputs.quality == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,24 +79,73 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm contracts:check
       - run: pnpm changelog:check
-      - if: needs.changes.outputs.gateway == 'true'
-        run: |
-          pnpm --filter @jian/gateway test
-          pnpm --filter @jian/gateway build
-      - if: needs.changes.outputs.panel == 'true'
+      - if: needs.changes.outputs.contracts == 'true'
+        run: pnpm contracts:check
+  gateway:
+    needs: changes
+    if: needs.changes.outputs.gateway == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['1/2', '2/2']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @jian/contracts build
+      - run: pnpm exec biome check apps/gateway packages/contracts --error-on-warnings
+      - run: pnpm --filter @jian/gateway typecheck
+      - run: pnpm --filter @jian/gateway test --shard=${{ matrix.shard }}
+      - if: matrix.shard == '1/2'
+        run: pnpm --filter @jian/gateway build
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @jian/contracts build
+      - run: pnpm --filter @jian/sdk build
+      - run: pnpm exec biome check apps/web packages/ui packages/sdk --error-on-warnings
+      - run: pnpm --filter @jian/ui typecheck
+      - run: pnpm --filter @jian/web typecheck
+      - run: pnpm --filter @jian/web knip
+      - if: needs.changes.outputs.ui == 'true'
         run: |
           pnpm --filter @jian/ui knip
-          pnpm --filter @jian/web knip
           pnpm --filter @jian/ui test
-          pnpm --filter @jian/web test
-          pnpm --filter @jian/web build
-      - if: needs.changes.outputs.remote == 'true'
-        run: |
-          pnpm --filter @jian/remote-core test
-          pnpm --filter @jian-ai/remote-control test
+      - run: pnpm --filter @jian/web test
+      - run: pnpm --filter @jian/web build
+  remote:
+    needs: changes
+    if: needs.changes.outputs.remote == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @jian/contracts build
+      - run: pnpm exec biome check apps/remote-control packages/remote-core --error-on-warnings
+      - run: pnpm --filter @jian/remote-core typecheck
+      - run: pnpm --filter @jian-ai/remote-control typecheck
+      - run: pnpm --filter @jian/remote-core test
+      - run: pnpm --filter @jian-ai/remote-control test
   desktop:
     needs: changes
     if: needs.changes.outputs.desktop == 'true'
@@ -110,6 +164,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @jian/contracts build
       - run: pnpm --filter @jian/sdk build
+      - run: pnpm exec biome check apps/desktop --error-on-warnings
       - run: pnpm --filter @jian/desktop typecheck
       - run: pnpm --filter @jian/desktop test
       - run: pnpm --filter @jian/desktop build
@@ -136,7 +191,7 @@ jobs:
       - run: cargo test --locked
   postgres:
     needs: changes
-    if: needs.changes.outputs.gateway == 'true'
+    if: needs.changes.outputs.postgres == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -163,19 +218,33 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run test:integration
-  image:
+  display:
     needs: changes
-    if: needs.changes.outputs.image == 'true'
+    if: needs.changes.outputs.display == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: make test-display
+      - run: python3 -m py_compile apps/gateway/test-display.py
+  image-gateway:
+    needs: changes
+    if: needs.changes.outputs.imageGateway == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - run: docker build -f apps/gateway/Dockerfile -t jian:ci .
       - run: make image-test-display IMAGE=jian VERSION=ci
+  image-web:
+    needs: changes
+    if: needs.changes.outputs.imageWeb == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f apps/web/Dockerfile -t jian-web:ci .
   # This name remains the branch rule's single required check, even when every area is skipped.
   check:
     if: always()
-    needs: [changes, node, triage, desktop, rust, postgres, image]
+    needs: [changes, quality, gateway, web, remote, triage, desktop, rust, postgres, display, image-gateway, image-web]
     runs-on: ubuntu-latest
     steps:
       - name: Verify every selected gate
@@ -185,7 +254,7 @@ jobs:
           node --input-type=module <<'NODE'
           const jobs = JSON.parse(process.env.RESULTS);
           if (jobs.changes.result !== 'success') throw new Error('Change detection failed.');
-          const areas = { node: 'node', triage: 'triage', desktop: 'desktop', rust: 'rust', postgres: 'gateway', image: 'image' };
+          const areas = { quality: 'quality', gateway: 'gateway', web: 'web', remote: 'remote', triage: 'triage', desktop: 'desktop', rust: 'rust', postgres: 'postgres', display: 'display', 'image-gateway': 'imageGateway', 'image-web': 'imageWeb' };
           for (const [job, area] of Object.entries(areas)) {
             const selected = jobs.changes.outputs[area];
             if (!['true', 'false'].includes(selected)) throw new Error(`Missing selection for ${area}.`);
