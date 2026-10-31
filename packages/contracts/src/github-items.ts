@@ -150,6 +150,16 @@ export const githubLinkSummarySchema = z.union([
   z.strictObject({ url: z.string().max(1000), reachable: z.literal(false) }),
 ]);
 
+export const githubUpdateBranchInputSchema = z.strictObject({
+  /** Refuse to update if the head changed since the pull request was displayed. */
+  expectedHeadSha: z.string().regex(/^[0-9a-f]{40}$/),
+});
+
+export const githubUpdateBranchResultSchema = z.strictObject({
+  updated: z.literal(true),
+  message: z.string().max(500),
+});
+
 export const githubMergeInputSchema = z.strictObject({
   method: githubMergeMethodSchema,
   /** The head the owner saw: a branch that moved since is not merged blind. */

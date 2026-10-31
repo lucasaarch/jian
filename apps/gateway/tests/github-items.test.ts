@@ -387,6 +387,23 @@ it('summarizes links for cards, keeps an unseen one plain, and reuses a recent a
   expect(asked).toHaveLength(count);
 });
 
+it('asks GitHub to update a pull request branch using the head the owner saw', async () => {
+  const { app, asked } = await gateway({
+    [`POST ${base}/pulls/7/update-branch`]: { status: 202, body: {} },
+  });
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/integrations/github/pulls/octo-example/site/7/update-branch',
+    headers,
+    payload: { expectedHeadSha: head },
+  });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toEqual({ updated: true, message: 'GitHub accepted the branch update.' });
+  expect(asked[0]).toMatchObject({ method: 'POST', path: `${base}/pulls/7/update-branch` });
+  expect(JSON.parse(asked[0]?.body ?? '{}')).toEqual({ expected_head_sha: head });
+});
+
 it('merges with the method and the head the owner saw, and records it on the agent', async () => {
   const { app, asked, services } = await gateway({
     [`PUT ${base}/pulls/7/merge`]: {
