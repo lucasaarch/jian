@@ -3,6 +3,7 @@
 import { ContextMenu } from '@base-ui/react/context-menu';
 import { Pencil, Trash2 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { Action, Overlay, TextField } from '../kit';
 import { MenuEntry, menuPopup } from '../kit/menu';
 import { ago } from '../lib/format';
 
@@ -19,7 +20,8 @@ export type ChatRowProps = {
   working: boolean;
   open: () => void;
   /** Absent where the name is not the chat's own: a contact's, another agent's. */
-  rename?: (title: string) => Promise<void>;
+  /** Whether the name was saved. */
+  rename?: (title: string) => Promise<boolean>;
   remove: () => void;
 };
 
@@ -30,10 +32,6 @@ export type ChatRowProps = {
  */
 export function ChatRow(props: ChatRowProps) {
   const [renaming, setRenaming] = useState(false);
-
-  if (renaming && props.rename) {
-    return <RenameRow name={props.name} rename={props.rename} done={() => setRenaming(false)} />;
-  }
 
   const actions = (
     <>
@@ -49,34 +47,47 @@ export function ChatRow(props: ChatRowProps) {
   );
 
   return (
-    <ContextMenu.Root>
-      <ContextMenu.Trigger
-        render={<li />}
-        className="relative rounded-lg data-popup-open:bg-glass-hover"
-      >
-        <button
-          type="button"
-          onClick={props.open}
-          aria-current={props.selected ? 'page' : undefined}
-          className="flex h-8 w-full items-center gap-2 rounded-lg pr-12 pl-2.5 text-left text-[13px] text-ink transition-colors hover:bg-glass-hover aria-[current=page]:bg-glass-press phone:h-10 phone:text-sm"
+    <>
+      <ContextMenu.Root>
+        <ContextMenu.Trigger
+          render={<li />}
+          className="relative rounded-lg data-popup-open:bg-glass-hover"
         >
-          {props.icon && (
-            <span className="grid size-4 shrink-0 place-items-center text-muted" aria-hidden="true">
-              {props.icon}
-            </span>
-          )}
-          <span className="min-w-0 flex-1 truncate">{props.name}</span>
-        </button>
-        <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-[11px] text-muted tabular-nums">
-          <Status {...props} />
-        </span>
-      </ContextMenu.Trigger>
-      <ContextMenu.Portal>
-        <ContextMenu.Positioner className="z-50">
-          <ContextMenu.Popup className={menuPopup}>{actions}</ContextMenu.Popup>
-        </ContextMenu.Positioner>
-      </ContextMenu.Portal>
-    </ContextMenu.Root>
+          <button
+            type="button"
+            onClick={props.open}
+            aria-current={props.selected ? 'page' : undefined}
+            className="flex h-8 w-full items-center gap-2 rounded-lg pr-12 pl-2.5 text-left text-[13px] text-ink transition-colors hover:bg-glass-hover aria-[current=page]:bg-glass-press phone:h-10 phone:text-sm"
+          >
+            {props.icon && (
+              <span
+                className="grid size-4 shrink-0 place-items-center text-muted"
+                aria-hidden="true"
+              >
+                {props.icon}
+              </span>
+            )}
+            <span className="min-w-0 flex-1 truncate">{props.name}</span>
+          </button>
+          <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-[11px] text-muted tabular-nums">
+            <Status {...props} />
+          </span>
+        </ContextMenu.Trigger>
+        <ContextMenu.Portal>
+          <ContextMenu.Positioner className="z-50">
+            <ContextMenu.Popup className={menuPopup}>{actions}</ContextMenu.Popup>
+          </ContextMenu.Positioner>
+        </ContextMenu.Portal>
+      </ContextMenu.Root>
+      {props.rename && (
+        <RenameDialog
+          open={renaming}
+          onOpenChange={setRenaming}
+          name={props.name}
+          rename={props.rename}
+        />
+      )}
+    </>
   );
 }
 
@@ -97,45 +108,74 @@ function Status({ at, unread, working, selected }: ChatRowProps) {
   return <time dateTime={at}>{ago(at)}</time>;
 }
 
-/** The row as a field: Enter or leaving it keeps the name, Escape leaves it as it was. */
-function RenameRow({
+/**
+ * The chat's name in a dialog, chosen whole to be typed over: Enter keeps it, Escape leaves it as
+ * it was. A dialog, as a field in the row lost its focus to the row the moment the menu closed,
+ * and ended before anything could be typed. It stays open when the name could not be saved.
+ */
+export function RenameDialog({
+  open,
+  onOpenChange,
   name,
   rename,
-  done,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  name: string;
+  rename: (title: string) => Promise<boolean>;
+}) {
+  return (
+    <Overlay open={open} onOpenChange={onOpenChange} title="Rename chat" size="form">
+      {open && <RenameForm name={name} rename={rename} close={() => onOpenChange(false)} />}
+    </Overlay>
+  );
+}
+
+function RenameForm({
+  name,
+  rename,
+  close,
 }: {
   name: string;
-  rename: (title: string) => Promise<void>;
-  done: () => void;
+  rename: (title: string) => Promise<boolean>;
+  close: () => void;
 }) {
   const [title, setTitle] = useState(name);
-  const input = useRef<HTMLInputElement>(null);
-  // Settled once: Escape, then the blur of the field going away, must not save after all.
-  const settled = useRef(false);
-  const finish = (keep: boolean) => {
-    if (settled.current) return;
-    settled.current = true;
-    const next = title.trim();
-    done();
-    if (keep && next && next !== name) void rename(next);
-  };
+  const [busy, setBusy] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
 
-  useEffect(() => input.current?.select(), []);
+  useEffect(() => form.current?.querySelector('input')?.select(), []);
 
   return (
-    <li>
-      <input
-        aria-label="Chat name"
+    <form
+      ref={form}
+      className="grid w-full gap-5 p-7"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const next = title.trim();
+        if (!next || next === name) return close();
+        setBusy(true);
+        const saved = await rename(next);
+        setBusy(false);
+        if (saved) close();
+      }}
+    >
+      <h2 className="pr-6 text-lg font-semibold tracking-tight">Rename chat</h2>
+      <TextField
+        label="Name"
         value={title}
         maxLength={160}
+        autoComplete="off"
         onChange={(event) => setTitle(event.target.value)}
-        onBlur={() => finish(true)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') finish(true);
-          if (event.key === 'Escape') finish(false);
-        }}
-        ref={input}
-        className="h-8 w-full rounded-lg border border-glass-edge bg-glass-press px-2.5 py-0 text-[13px] text-ink"
       />
-    </li>
+      <div className="flex justify-end gap-2">
+        <Action tone="quiet" onClick={close}>
+          Cancel
+        </Action>
+        <Action tone="primary" type="submit" busy={busy} disabled={!title.trim()}>
+          Save
+        </Action>
+      </div>
+    </form>
   );
 }

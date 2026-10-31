@@ -11,6 +11,7 @@ import {
   PASTE_AS_FILE_CHARS,
 } from '../../lib/attachments';
 import { useRecorder } from '../../lib/recorder';
+import { useDrafts } from '../../lib/stores/drafts';
 import { AudioPlayer } from '../ui';
 import { Select, type SelectOption } from '../ui/select';
 import { ChatTarget } from './chat-target';
@@ -37,6 +38,7 @@ type Attachment = {
  * text and the files stay until the gateway accepts the message, so a failed send loses nothing.
  */
 export function Composer({
+  draftKey,
   name,
   upload,
   send,
@@ -53,6 +55,8 @@ export function Composer({
 }: {
   name: string;
   upload: (file: MediaUpload) => Promise<{ id: string }>;
+  /** Where what is being written is kept until it is sent, across pages and restarts. */
+  draftKey?: string;
   send: (text: string, mediaIds: string[]) => Promise<unknown>;
   onSent: () => void;
   placeholder?: string;
@@ -71,7 +75,13 @@ export function Composer({
   /** Where the conversation's objective and listeners stand, at the end of the row above it. */
   status?: ReactNode;
 }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() =>
+    draftKey ? (useDrafts.getState().texts[draftKey] ?? '') : '',
+  );
+  const write = (next: string) => {
+    setText(next);
+    if (draftKey) useDrafts.getState().write(draftKey, next);
+  };
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -223,7 +233,7 @@ export function Composer({
       await send(text.trim(), mediaIds);
       for (const item of attachments) if (item.preview) URL.revokeObjectURL(item.preview);
       previews.current.clear();
-      setText('');
+      write('');
       setAttachments([]);
       onSent();
     } catch (failure) {
@@ -355,7 +365,7 @@ export function Composer({
             rows={1}
             maxLength={8000}
             value={text}
-            onChange={(event) => setText(event.target.value)}
+            onChange={(event) => write(event.target.value)}
             onPaste={(event) => {
               const files = [...event.clipboardData.files];
 

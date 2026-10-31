@@ -61,7 +61,6 @@ export function AgentPicker({ createAgent }: { createAgent: () => void }) {
                 key={profile.id}
                 leading={<AgentFace name={profile.name} avatar={profile.avatar} />}
                 label={profile.name}
-                {...(profile.summary ? { detail: profile.summary } : {})}
                 selected={profile.id === profileId}
                 onPick={close(() => router.push(agentPath(profile.id, 'sessions')))}
                 onSettings={close(() => router.push(agentSettingsPath(profile.id)))}

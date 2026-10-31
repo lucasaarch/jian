@@ -19,6 +19,7 @@ import {
 } from '../../lib/query/agent';
 import { keys } from '../../lib/query/keys';
 import { useCrew } from '../../lib/stores/crew';
+import { draftKey } from '../../lib/stores/drafts';
 import { sendNow } from '../../lib/stores/outbox';
 import { useRefresh } from '../../lib/workspace';
 import { useParams, useRouter, useSearchParams } from '../../platform/navigation';
@@ -210,6 +211,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                       {isGateway(active) ? (
                         <Composer
                           key={`composer-${active.id}`}
+                          draftKey={draftKey(profile.id, active.id)}
                           name={profile.name}
                           machines={machines}
                           remoteMachineId={active.remoteMachineId ?? null}
