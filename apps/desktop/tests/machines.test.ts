@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { computerName } from '../src/main/machines/identity';
 import {
   type GatewayAccess,
@@ -284,12 +284,14 @@ describe('this computer’s workers', () => {
     const machine = gateway.machines.get('machine-1');
     if (machine) machine.token = 'worker-token-owner-rotated-synthetic';
     computer.refused('gw-1');
-    await settle();
 
-    expect(host.running.get('gw-1')).toMatchObject({
-      machineId: 'machine-1',
-      token: 'worker-token-owner-rotated-synthetic-rotated',
-    });
+    // Restarting takes several awaited steps, and a loaded runner can outlast a fixed wait.
+    await vi.waitFor(() =>
+      expect(host.running.get('gw-1')).toMatchObject({
+        machineId: 'machine-1',
+        token: 'worker-token-owner-rotated-synthetic-rotated',
+      }),
+    );
   });
 });
 
