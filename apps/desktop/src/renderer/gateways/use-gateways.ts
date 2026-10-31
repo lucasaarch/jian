@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
 import { desktop } from '../desktop';
-import { chatAt, navigationFor } from './navigation';
+import { chatAt, navigationFor, profileAt } from './navigation';
 
 /** The gateways in the app and how each stands, as the main process keeps them. */
 export function useGateways(): { gateways: GatewaySummary[]; loaded: boolean } {
@@ -60,7 +60,12 @@ export function useSelectedGateway(gateways: GatewaySummary[]) {
     const navigation = navigationFor(shown);
     const tell = () => {
       const chat = chatAt(navigation.current());
-      desktop().showing(chat ? { gatewayId: shown, chat } : { gatewayId: shown });
+      const profileId = profileAt(navigation.current());
+      desktop().showing({
+        gatewayId: shown,
+        ...(chat ? { chat } : {}),
+        ...(profileId ? { profileId } : {}),
+      });
     };
     tell();
     const stop = navigation.subscribe(tell);

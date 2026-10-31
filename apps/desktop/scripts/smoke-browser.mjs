@@ -624,6 +624,48 @@ try {
   assert.equal(conversations.inC.open, false);
   assert.equal(conversations.afterC, conversations.before, 'A visit leaves nothing behind');
 
+  // A new chat's browser goes with it into the chat it becomes, the page still alive; one left
+  // for another chat goes away with the draft.
+  const handedOver = await app.evaluate(async (_electron, profileId) => {
+    const { browser, url } = globalThis.nativeBrowserTest;
+    const chat = '00000000-0000-4000-8000-0000000000ee';
+    const other = '00000000-0000-4000-8000-0000000000ef';
+    const draft = { gatewayId: 'local', profileId };
+    browser.showing(draft);
+    browser.open();
+    await browser.navigate(`${url}form`);
+    const page = browser.view;
+    browser.adopt(chat);
+    browser.showing({ gatewayId: 'local', profileId, chat: { profileId, sessionId: chat } });
+    const state = browser.state();
+    const kept = {
+      samePage: browser.view === page,
+      alive: !page.webContents.isDestroyed(),
+      pages: state.pages.length,
+      url: state.url,
+      sessionId: state.sessionId,
+      draftLeft: browser.conversations.has(`local:${profileId}:new`),
+    };
+    browser.showing(draft);
+    browser.open();
+    await browser.navigate(`${url}private`);
+    const abandoned = browser.view;
+    browser.showing({ gatewayId: 'local', profileId, chat: { profileId, sessionId: other } });
+    const pages = browser.state().pages.length;
+    // A page closes on its own time.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    // Once closed, a view has no contents left to ask.
+    const left = { pages, destroyed: abandoned.webContents?.isDestroyed() ?? true };
+    return { kept, left, chat };
+  }, owner);
+  assert.equal(handedOver.kept.samePage, true, JSON.stringify(handedOver));
+  assert.equal(handedOver.kept.alive, true);
+  assert.equal(handedOver.kept.pages, 1);
+  assert.ok(handedOver.kept.url.endsWith('/form'));
+  assert.equal(handedOver.kept.sessionId, handedOver.chat);
+  assert.equal(handedOver.kept.draftLeft, false);
+  assert.deepEqual(handedOver.left, { pages: 0, destroyed: true });
+
   // The same, as the owner sees it: another conversation shows none of this one's Inspector.
   const away = '00000000-0000-4000-8000-0000000000dd';
   await openConversation(away);
@@ -771,6 +813,7 @@ try {
       return send(channel, ...rest);
     };
     const contents = browser.view.webContents;
+    await browser.shownPage().restoring;
     await contents.loadURL(`${globalThis.nativeBrowserTest.url}form`);
     contents.focus();
     const modifier = process.platform === 'darwin' ? 'meta' : 'control';

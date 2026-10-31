@@ -40,7 +40,7 @@ Use \`inspect_page\` for any public website, including shared artifacts and desi
 It runs on the gateway, both a server and the desktop app's local gateway. No connected
 machine is required. Choose the viewport to inspect desktop and mobile layouts.
 
-Inspect the screenshot with \`analyze_media\`; text alone cannot show a design. Save the ZIP
+Look at the screenshot, which comes back with the result; \`analyze_media\` shows it again by its media ID. Text alone cannot show a design. Save the ZIP
 with \`save_attachment\` and unpack it in your workspace: \`inspection.json\` contains frame
 indexes, selectors, element bounds, computed styles and asset URLs; \`frames/*.html\` contains
 the rendered DOM; \`resources/*\` contains the publicly served HTML, scripts, CSS, fonts and

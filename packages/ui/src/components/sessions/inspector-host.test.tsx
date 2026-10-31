@@ -366,3 +366,83 @@ it('closes rather than empties where nothing can be opened in it', async () => {
 
   expect(crew().opened).toBe(false);
 });
+
+it('hands a new chat its Inspector as it stood, browser included', () => {
+  clean();
+  const adoptBrowser = vi.fn();
+  useCrew.setState({ adoptBrowser });
+  crew().browser('draft-page');
+  crew().open(pull);
+
+  crew().adopt('new-chat');
+  crew().show('new-chat', []);
+
+  expect(adoptBrowser).toHaveBeenCalledWith('new-chat');
+  expect(crew().tabs.map((tab) => tab.key)).toEqual([
+    'browser:draft-page',
+    'github:atlas-example/site#7',
+  ]);
+  expect(crew().following).toBe('github:atlas-example/site#7');
+  useCrew.setState({ adoptBrowser: undefined });
+});
+
+it('does not hand one chat the Inspector of another', () => {
+  clean();
+  const adoptBrowser = vi.fn();
+  useCrew.setState({ adoptBrowser });
+  crew().show('open-chat', []);
+  crew().browser('its-page');
+
+  crew().adopt('another-chat');
+
+  expect(adoptBrowser).not.toHaveBeenCalled();
+  crew().leave('open-chat');
+  crew().show('another-chat', []);
+  expect(crew().tabs).toEqual([]);
+  useCrew.setState({ adoptBrowser: undefined });
+});
+
+it('brings a conversation back as it was after the app closes', async () => {
+  clean();
+  vi.useFakeTimers();
+  try {
+    crew().show('saved-chat', []);
+    crew().open(pull);
+    crew().browser('kept-page');
+    crew().select('github:atlas-example/site#7');
+    crew().toggleFull();
+    crew().close();
+    vi.advanceTimersByTime(400);
+  } finally {
+    vi.useRealTimers();
+  }
+
+  // A new store, as a new launch has, reading only what was written down.
+  vi.resetModules();
+  const { useCrew: reopened } = await import('../../lib/stores/crew');
+  reopened.getState().show('saved-chat', []);
+
+  expect(reopened.getState().tabs.map((tab) => tab.key)).toEqual([
+    'github:atlas-example/site#7',
+    'browser:kept-page',
+  ]);
+  expect(reopened.getState().opened).toBe(false);
+  expect(reopened.getState().full).toBe(true);
+  reopened.getState().reopen();
+  expect(reopened.getState().following).toBe('github:atlas-example/site#7');
+  expect(reopened.getState().item?.number).toBe(7);
+});
+
+it('ignores what it saved in a shape it does not read', async () => {
+  localStorage.setItem(
+    'jian-inspector',
+    JSON.stringify({ broken: { tabs: 'nope' }, other: { tabs: [{ key: 1 }] } }),
+  );
+  vi.resetModules();
+  const { useCrew: reopened } = await import('../../lib/stores/crew');
+
+  reopened.getState().show('broken', []);
+  expect(reopened.getState().tabs).toEqual([]);
+  reopened.getState().show('other', []);
+  expect(reopened.getState().tabs).toEqual([]);
+});

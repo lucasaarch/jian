@@ -149,7 +149,9 @@ export const modelDefaultsInputSchema = z.strictObject({
   channel: roleSelection,
   compaction: roleSelection,
   image: optionalRoleSelection,
-  vision: optionalRoleSelection,
+  vision: optionalRoleSelection.describe(
+    'Deprecated and unused: the conversation model reads images itself. Accepted so that older clients can still save.',
+  ),
   audio: optionalRoleSelection,
   speech: optionalRoleSelection,
   transcription: roleSelection.describe(

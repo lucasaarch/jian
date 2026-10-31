@@ -153,7 +153,7 @@ export class Sessions {
    * It starts on Auto: nobody is there to approve at the hour it runs, and a run left waiting
    * until morning would do its work a day late.
    */
-  async scheduledChat(profileId: string, id: string, title: string) {
+  async scheduledChat(profileId: string, id: string, title: string, model?: Session['model']) {
     return this.store.transaction(profileId, async (tx) => {
       const found = await findSession(tx, profileId, id);
       if (found) return found;
@@ -164,6 +164,7 @@ export class Sessions {
         title,
         channel: GATEWAY_SESSION_CHANNEL,
         protection: 'auto',
+        ...(model ? { model } : {}),
         createdAt: nowIso(this.clock),
       };
       await insertSession(tx, session);

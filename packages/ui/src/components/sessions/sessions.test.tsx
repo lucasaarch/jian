@@ -238,6 +238,7 @@ it('creates and titles a chat only when the first message is sent, then opens it
     'new-gateway-chat',
     'Fix the first bug',
     [],
+    expect.any(String),
   );
   expect(result.mutate).not.toHaveBeenCalled();
   expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions/new-gateway-chat`);

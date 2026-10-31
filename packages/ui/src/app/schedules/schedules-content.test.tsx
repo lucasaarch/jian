@@ -47,7 +47,17 @@ afterEach(() => {
 async function render(api: Record<string, unknown>) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   actions.api = { scheduleHistory: async () => [], ...api } as unknown as GatewayApi;
-  const client = agentClient({ profile, slices: { sessions: [], contacts: [] } });
+  const client = agentClient({
+    profile,
+    slices: {
+      sessions: [],
+      contacts: [],
+      // What the model menu of a new chat each time reads; no provider, so it starts empty.
+      providers: [],
+      providerModels: {},
+      modelDefaults: { conversation: null },
+    } as never,
+  });
   client.setQueryData(keys.schedules(profile.id), [summary]);
   client.setQueryData(keys.settings, { timeZone: 'UTC', timeZoneSource: 'setting' });
   const host = document.createElement('div');
@@ -130,12 +140,15 @@ it('creates a repeating schedule with the time written as its recurrence', async
   await act(async () => document.getElementById(at?.htmlFor ?? '')?.click());
   await act(async () => document.querySelector<HTMLElement>('[aria-label="Hour 18"]')?.click());
   await act(async () => document.querySelector<HTMLElement>('[aria-label="Minute 30"]')?.click());
+  // A new chat each time is what it runs in until told otherwise, and that says how it will run.
+  expect(dialog?.textContent).toContain('Each run opens a new chat on Auto');
   await act(async () => view.button('Create', dialog)?.click());
 
   expect(createSchedule).toHaveBeenCalledWith(profile.id, {
     name: 'Evening check',
     instruction: 'Tell me what is still open today.',
     sessionId: null,
+    model: null,
     timeZone: 'UTC',
     enabled: true,
     cron: '30 18 * * *',

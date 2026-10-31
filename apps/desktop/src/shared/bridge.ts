@@ -61,7 +61,12 @@ export type OpenTarget =
  * Where the window is: the gateway it shows and, when one is open, the conversation. The main
  * process announces what arrives anywhere else, so it needs the chat and not only the gateway.
  */
-export type Showing = { gatewayId: string; chat?: { profileId: string; sessionId: string } };
+export type Showing = {
+  gatewayId: string;
+  chat?: { profileId: string; sessionId: string };
+  /** The agent on screen when no chat is open yet, as on a new chat. */
+  profileId?: string;
+};
 
 /** An agent using this computer as a machine right now: on which gateway, and how. */
 export type MachineUse = { gatewayId: string; kind: 'shell' | 'computer' };
@@ -99,6 +104,8 @@ export interface DesktopBridge {
     state(): Promise<BrowserState>;
     open(): void;
     select(pageId: string): void;
+    /** A new chat became this conversation, and keeps its tabs. */
+    adopt(sessionId: string): void;
     close(pageId: string): void;
     navigate(url: string): Promise<BrowserState>;
     command(command: 'back' | 'forward' | 'reload' | 'hard-reload' | 'stop'): void;

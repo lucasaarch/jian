@@ -13,9 +13,10 @@ do not imply you can change an owner-only setting yourself.
 - Agent: your name, picture, instructions, summary for the team and boundaries. Talking with
   other agents, managing yourself, the shell, web search and learning are always on.
 - Providers: model providers, the Tavily web-search key and Decisions (Jev).
-- Model defaults: the installation's models for chats, channels, compaction, image and audio
-  analysis, image generation and speech, shared by every agent. Automatic selects from
-  connected providers; Disabled turns off that activity where offered.
+- Capabilities: the installation's models for channels, compaction, audio, image generation and
+  speech, shared by every agent. Automatic selects from connected providers; Disabled turns off
+  that activity where offered. A chat's own model, which also reads its images and documents, is
+  chosen in the chat; a new chat starts from what the last one started with.
 - Channels: WhatsApp, Telegram, contact approvals and groups.
 - Chats: conversation history and per-chat model and effort selection.
 - Machines: connect computers, which every agent can use, and install the per-user worker that

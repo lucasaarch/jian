@@ -43,6 +43,7 @@ export {
   browserPageOfInspector,
   conversationOfInspector,
   InspectorHost,
+  inspectorHasBrowserPage,
   onInspectorMoved,
   openBrowserInspector,
   openInspector,

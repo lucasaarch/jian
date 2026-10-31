@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { protectionModeSchema } from './profile.js';
+import { modelSelectionSchema } from './providers.js';
 
 /** How many schedules one profile keeps: plenty for a person's routines, bounded for a loop. */
 export const SCHEDULE_LIMIT = 50;
@@ -77,6 +79,11 @@ const scheduleFields = {
    * on a channel, an API conversation. Null: each run opens a new chat of the panel.
    */
   sessionId: z.uuid().nullable(),
+  /**
+   * The model, effort and speed of the new chat each run opens. A schedule in an existing
+   * conversation has none: it runs on whatever that conversation runs on.
+   */
+  model: modelSelectionSchema.nullable().optional(),
   /** A single time; exclusive with `cron`. */
   at: scheduleAtSchema,
   /** A repeating time; exclusive with `at`. */
@@ -93,13 +100,18 @@ const oneTiming = (value: { at?: string | undefined; cron?: string | undefined }
 
 export const scheduleInputSchema = z
   .strictObject(scheduleFields)
-  .refine(oneTiming, { message: 'Give either a time (at) or a repetition (cron)', path: ['at'] });
+  .refine(oneTiming, { message: 'Give either a time (at) or a repetition (cron)', path: ['at'] })
+  .refine((value) => !value.sessionId || !value.model, {
+    message: "A schedule in an existing conversation uses that conversation's model",
+    path: ['model'],
+  });
 
 /** Changes to a schedule; setting `at` clears `cron` and the other way round. */
 export const schedulePatchSchema = z.strictObject({
   name: scheduleFields.name.optional(),
   instruction: scheduleFields.instruction.optional(),
   sessionId: scheduleFields.sessionId.optional(),
+  model: scheduleFields.model,
   at: scheduleFields.at,
   cron: scheduleFields.cron,
   timeZone: timeZoneSchema.optional(),
@@ -113,6 +125,8 @@ export const scheduleRecordSchema = z.strictObject({
   instruction: z.string(),
   /** Null: each run opens a new chat of the panel. */
   sessionId: z.uuid().nullable(),
+  /** What that new chat runs on; absent, it starts as any new chat does. */
+  model: modelSelectionSchema.optional(),
   at: z.string().optional(),
   cron: z.string().optional(),
   timeZone: z.string(),
@@ -151,11 +165,14 @@ export const gatewaySettingsSchema = z.strictObject({
   timeZone: z.string(),
   /** `host` while nobody chose one: the zone of the machine the gateway runs on. */
   timeZoneSource: z.enum(['setting', 'host']),
+  /** The protection the last new chat started with, which the next one offers first. */
+  newChatProtection: protectionModeSchema.optional(),
 });
 
 export const gatewaySettingsPatchSchema = z.strictObject({
   // A name sets it; null goes back to the machine's own zone.
-  timeZone: timeZoneSchema.nullable(),
+  timeZone: timeZoneSchema.nullable().optional(),
+  newChatProtection: protectionModeSchema.optional(),
 });
 
 export type ScheduleRun = z.infer<typeof scheduleRunSchema>;

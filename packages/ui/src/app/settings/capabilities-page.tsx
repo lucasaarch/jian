@@ -21,33 +21,28 @@ import { useActions } from '../../lib/workspace';
 const isEffort = (value: string): value is ReasoningEffort =>
   efforts.some((effort) => effort.value === value);
 
-/** Each activity in a few words; what it falls back to is the web's longer hint to explain. */
-const said: Record<Exclude<Role, 'channel'>, string> = {
-  conversation: 'Chats, the API and channels, unless a chat picks its own.',
+/** Each activity in a few words. A chat's own model is chosen in the chat, and remembered there. */
+const said: Partial<Record<Role, string>> = {
+  channel: 'Conversations on WhatsApp, Telegram and other channels, which have no model menu.',
   compaction: 'Summing up a long conversation.',
   image: 'Drawing images.',
-  vision: 'Reading images the conversation model cannot.',
-  audio: 'Voice notes and audio files.',
+  audio: 'Understanding voice notes and audio files.',
   speech: 'Spoken replies.',
 };
 
-/** The activities a default is chosen for: every one but channels, which follow conversations. */
-const shownRoles = roles.filter((role) => role.key !== 'channel');
+/** What runs apart from the conversation's own model, which reads images and documents itself. */
+const shownRoles = roles.filter((role) => role.key !== 'conversation');
 
 /**
- * The defaults while the models are read: each activity is known already, named and said as it
- * will be, and only its menu waits.
+ * The capabilities while the models are read: each is known already, named and said as it will
+ * be, and only its menu waits.
  */
-export function ModelDefaultsWaiting() {
+export function CapabilitiesWaiting() {
   return (
-    <SettingsPageSkeleton label="Loading model defaults…">
-      <SettingsGroup title="Activities" note="A chat can still pick its own">
+    <SettingsPageSkeleton label="Loading capabilities…">
+      <SettingsGroup title="Capabilities" note="Chats keep their own model">
         {shownRoles.map((role) => (
-          <SettingsRow
-            key={role.key}
-            title={role.label}
-            description={said[role.key as Exclude<Role, 'channel'>]}
-          >
+          <SettingsRow key={role.key} title={role.label} description={said[role.key]}>
             <Skeleton className="h-8 w-36 rounded-lg" />
           </SettingsRow>
         ))}
@@ -57,17 +52,16 @@ export function ModelDefaultsWaiting() {
 }
 
 /**
- * The model every agent uses for each activity, unless a conversation picks its own, a line
- * each with the same model and effort menus the composer has; optional activities can be
- * switched off. Each choice is saved as it is made. Channels follow the conversation model.
+ * The models for what a conversation's own model does not do, a line each with the same model and
+ * effort menus the composer has; optional ones can be switched off. Each choice is saved as it is
+ * made. A chat's model is not here: a new chat starts with what the last one started with.
  */
-export function ModelDefaultsPage() {
+export function CapabilitiesPage() {
   const { api, busy } = useActions();
-  const { catalog, configured, hasOpenAIKey, values, change, separateChannel } =
-    useModelDefaults(api);
+  const { catalog, configured, hasOpenAIKey, values, change } = useModelDefaults(api);
 
   return (
-    <SettingsGroup title="Activities" note="A chat can still pick its own">
+    <SettingsGroup title="Capabilities" note="Chats keep their own model">
       {shownRoles.map((role) => (
         <ActivityRow
           key={role.key}
@@ -78,15 +72,10 @@ export function ModelDefaultsPage() {
           busy={busy}
           change={change}
           note={
-            role.key === 'conversation' && separateChannel
-              ? 'A separate channel default is saved; changing this model replaces it.'
-              : role.key === 'image' &&
-                  !values.image.disabled &&
-                  !values.image.modelId &&
-                  !hasOpenAIKey
-                ? // Only while nothing draws: once a Gemini or xAI model is chosen, no key is missing.
-                  'Needs an OpenAI API key, Gemini or xAI under Providers.'
-                : undefined
+            role.key === 'image' && !values.image.disabled && !values.image.modelId && !hasOpenAIKey
+              ? // Only while nothing draws: once a Gemini or xAI model is chosen, no key is missing.
+                'Needs an OpenAI API key, Gemini or xAI under Providers.'
+              : undefined
           }
         />
       ))}
@@ -139,7 +128,7 @@ function ActivityRow({
       title={role.label}
       description={
         <>
-          {said[role.key as Exclude<Role, 'channel'>]}
+          {said[role.key]}
           {note && <span className="block text-ink/80">{note}</span>}
           {list?.stale && (
             <span role="status" className="block text-bad">

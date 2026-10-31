@@ -24,7 +24,7 @@ By the HTTP status:
 - **401 / 403** — the key or token was refused: missing, wrong, revoked, or without access to
   that model. Fixed under **Providers**.
 - **404** — the model does not exist for that account, or the address is wrong. Fixed under
-  **Model defaults** (another model) or **Providers** (the address of a server).
+  **Capabilities** (another model) or **Providers** (the address of a server).
 - **413** — the file is too large. Files go up to 16 MB.
 - **429** — rate limit or quota: too many requests, or the free allowance is spent. It passes
   with time, or with a paid plan, or with another model or provider for that activity.
@@ -34,7 +34,7 @@ By the HTTP status:
 Other messages you may see:
 
 - "Provider key is not configured" — no provider is set for that activity: **Providers**,
-  then **Model defaults**.
+  then **Capabilities**.
 - "blocked" or "private address" on a server the owner runs — its origin must be allowed in
   \`JIAN_ALLOW_PRIVATE_ORIGINS\`.
 - "Stopped: nothing came back … for 5 minutes" — a model or tool hung; the completed steps
@@ -51,7 +51,7 @@ Other messages you may see:
 
 1. What failed, in one sentence, naming the thing: "The voice note could not be transcribed."
 2. Why, from the error: "Groq refused the file type."
-3. What fixes it, and where: "Choose Gemini for Incoming audio under Model defaults, or send
+3. What fixes it, and where: "Choose Gemini for Incoming audio under Capabilities, or send
    it as text."
 
 In a chat, keep it that short. With the owner in the panel, give the exact error text too,

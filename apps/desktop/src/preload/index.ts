@@ -14,6 +14,7 @@ const bridge: DesktopBridge = {
     state: () => ipcRenderer.invoke('browser:state'),
     open: () => ipcRenderer.send('browser:open'),
     select: (pageId) => ipcRenderer.send('browser:select', pageId),
+    adopt: (sessionId) => ipcRenderer.send('browser:adopt', sessionId),
     close: (pageId) => ipcRenderer.send('browser:close', pageId),
     navigate: (url) => ipcRenderer.invoke('browser:navigate', url),
     command: (command) => ipcRenderer.send('browser:command', command),

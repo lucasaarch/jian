@@ -64,6 +64,17 @@ export function chatAt(href: string): { profileId: string; sessionId: string } |
   }
 }
 
+/** The agent an address belongs to, with or without a chat open in it. */
+export function profileAt(href: string): string | undefined {
+  const match = /^\/agents\/([^/?#]+)/.exec(href);
+  if (!match?.[1]) return undefined;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return undefined;
+  }
+}
+
 export function forget(gatewayId: string): void {
   places.delete(gatewayId);
   try {

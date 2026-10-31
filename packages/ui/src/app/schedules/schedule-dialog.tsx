@@ -1,11 +1,13 @@
 'use client';
 
 import { MessageSquarePlus } from 'lucide-react';
+import { Suspense } from 'react';
 import { marks, NEW_CHAT } from '../../components/schedules/conversation-marks';
 import type { Choice } from '../../components/schedules/conversations';
 import { useScheduleDraft } from '../../components/schedules/draft';
 import { ranOnce } from '../../components/schedules/list';
-import { Action, Overlay, SelectField, TextArea, TextField } from '../../kit';
+import { SessionModel } from '../../components/sessions/model-picker';
+import { Action, Overlay, SelectField, Skeleton, TextArea, TextField } from '../../kit';
 import type { GatewayApi, Schedule, ScheduleInput } from '../../lib/api';
 import { inZone } from '../../lib/time';
 import { SchedulePills } from './schedule-row';
@@ -16,7 +18,7 @@ import { ScheduleWhen } from './schedule-when';
 const NEW = 'new';
 
 type FormProps = {
-  api: Pick<GatewayApi, 'scheduleHistory'>;
+  api: GatewayApi;
   profileId: string;
   /** The schedule to configure; a new one without it. */
   schedule?: Schedule | undefined;
@@ -155,6 +157,29 @@ function ScheduleForm({
         searchable
         onValueChange={(value) => draft.setSessionId(value === NEW ? null : value)}
       />
+      {draft.sessionId ? (
+        <p className="-mt-3 text-xs text-muted">
+          Runs with this conversation's model, effort and protection.
+        </p>
+      ) : (
+        <div className="grid gap-1.5">
+          <span className="text-[13px] font-medium text-ink">Model</span>
+          <Suspense fallback={<Skeleton className="h-8 w-48 rounded-lg" />}>
+            <SessionModel
+              api={api}
+              profileId={profileId}
+              channel={false}
+              draftModel={draft.model}
+              onDraftChange={draft.setModel}
+              saved={() => {}}
+              menuAlign="start"
+            />
+          </Suspense>
+          <p className="text-xs text-muted">
+            Each run opens a new chat on Auto: nobody is there to approve at that hour.
+          </p>
+        </div>
+      )}
       <ScheduleWhen draft={draft} />
       {schedule && (
         <ScheduleRuns

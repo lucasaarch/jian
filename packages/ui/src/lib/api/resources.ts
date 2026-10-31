@@ -106,6 +106,10 @@ export const resourceCalls = (client: Client) => ({
       }),
     ),
   settings: () => result(client.GET('/v1/settings')),
+  updateSettings: (body: {
+    timeZone?: string | null;
+    newChatProtection?: 'ask' | 'auto' | 'full';
+  }) => result(client.PUT('/v1/settings', { body })),
   runSchedule: (profileId: string, scheduleId: string) =>
     result(
       client.POST('/v1/profiles/{profileId}/schedules/{scheduleId}/run', {

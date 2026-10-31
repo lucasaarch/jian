@@ -51,6 +51,10 @@ export const openBrowserInspector = (pageId: string) => useCrew.getState().brows
 export const syncBrowserInspector = (pages: BrowserPageTab[]) =>
   useCrew.getState().syncBrowser(pages);
 export const openInspector = () => useCrew.getState().reopen();
+export const adoptInspector = (sessionId: string) => useCrew.getState().adopt(sessionId);
+/** Whether the Inspector already holds this browser tab, from before or saved. */
+export const inspectorHasBrowserPage = (pageId: string) =>
+  useCrew.getState().tabs.some((tab) => tab.kind === 'browser' && tab.pageId === pageId);
 /** Open or closed, as a key does it. A host with nothing it could offer stays closed. */
 export const toggleInspector = () => {
   const crew = useCrew.getState();
@@ -146,6 +150,7 @@ export function InspectorHost({
   browser,
   openBrowser,
   closeBrowser,
+  adoptBrowser,
   wholePanel = false,
 }: {
   children: ReactNode;
@@ -153,6 +158,7 @@ export function InspectorHost({
   wholePanel?: boolean;
   browser?: ReactNode;
   openBrowser?: () => void;
+  adoptBrowser?: (sessionId: string) => void;
   /** Closes the page behind a browser tab. */
   closeBrowser?: (pageId: string) => void;
 }) {
@@ -172,9 +178,9 @@ export function InspectorHost({
   const drag = useRef<{ x: number; width: number } | null>(null);
   const id = useId();
   useEffect(() => {
-    useCrew.setState({ openBrowser });
-    return () => useCrew.setState({ openBrowser: undefined });
-  }, [openBrowser]);
+    useCrew.setState({ openBrowser, adoptBrowser });
+    return () => useCrew.setState({ openBrowser: undefined, adoptBrowser: undefined });
+  }, [openBrowser, adoptBrowser]);
   useLayoutEffect(() => {
     const element = root.current;
     if (!element) return;

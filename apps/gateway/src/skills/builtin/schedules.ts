@@ -35,6 +35,10 @@ The tools are in the \`schedules\` group; load it with \`load_tools\`: \`list_sc
   me in the team group" — use the session id of that conversation from the list of your
   channel conversations in your context.
 
+In a conversation that exists, a run uses that conversation's model, effort and protection: there
+is nothing to choose. A schedule the owner set to open a new chat each time runs on Auto, on the
+model they chose for it.
+
 Work out "tomorrow", "in two hours", "next Friday" from the current date and time you were
 given. When a time is ambiguous — "at 7" — ask morning or evening before scheduling.
 

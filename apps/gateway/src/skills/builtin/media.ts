@@ -86,7 +86,7 @@ Files go up to 16 MB each.
 
 Files, images and voice are queued to this conversation and delivered after. Say a file is on
 its way, never that it arrived, until the tool confirms. If generation is refused because no
-provider is set up for it, say so and where to set one: Model defaults.
+provider is set up for it, say so and where to set one: Capabilities, in the settings.
 
 On a chat, the file is the answer: keep the words around it to a line or two. WhatsApp and
 Telegram show images and videos inline, play voice notes, and show other files as documents

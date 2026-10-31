@@ -158,7 +158,7 @@ export class MediaProviders {
         response.status === 429
           ? ': rate limit or quota exhausted; check provider billing and limits'
           : response.status === 404
-            ? ': model unavailable; choose another model in Model defaults'
+            ? ': model unavailable; choose another model in Capabilities'
             : '';
       throw new Error(
         `Media provider answered HTTP ${response.status}${hint}${said ? ` — ${said}` : ''}`,

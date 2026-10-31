@@ -27,7 +27,7 @@ const PROTECTION_RANK: Record<ProtectionMode, number> = { ask: 0, auto: 1, full:
  */
 export type ConversationChange = {
   protection?: ProtectionMode;
-  /** Null goes back to the gateway's Model defaults. */
+  /** Null goes back to the gateway's Capabilities. */
   model?: ModelSelection | null;
   /** Asked for without a model: it applies to whichever model the conversation runs on. */
   effort?: ReasoningEffort;

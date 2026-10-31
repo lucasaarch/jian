@@ -36,7 +36,12 @@ type RunSubmitter = {
 
 /** Where a schedule that names no conversation runs: a new chat of the panel each time. */
 type Chats = {
-  scheduledChat(profileId: string, id: string, title: string): Promise<Session>;
+  scheduledChat(
+    profileId: string,
+    id: string,
+    title: string,
+    model?: Schedule['model'],
+  ): Promise<Session>;
 };
 
 /** The way a run reaches a person when its conversation is a chat on a channel. */
@@ -103,6 +108,7 @@ export class Schedules {
         name: data.name,
         instruction: data.instruction,
         sessionId: data.sessionId,
+        ...(data.model ? { model: data.model } : {}),
         ...(data.at ? { at: new Date(data.at).toISOString() } : {}),
         ...(data.cron ? { cron: data.cron.trim() } : {}),
         timeZone: data.timeZone,
@@ -138,13 +144,22 @@ export class Schedules {
               ...(current.at ? { at: current.at } : {}),
               ...(current.cron ? { cron: current.cron } : {}),
             };
-      const { at: _at, cron: _cron, nextRunAt: _next, ...kept } = current;
+      const { at: _at, cron: _cron, nextRunAt: _next, model: wasModel, ...kept } = current;
+      const sessionId = patch.sessionId === undefined ? current.sessionId : patch.sessionId;
+      if (sessionId && patch.model)
+        throw new GatewayError(
+          400,
+          "A schedule in an existing conversation uses that conversation's model",
+        );
+      // Moved into a conversation, it runs on that conversation's model and no longer on its own.
+      const model = sessionId ? undefined : patch.model === undefined ? wasModel : patch.model;
       const merged = {
         ...kept,
         ...(patch.name ? { name: patch.name } : {}),
         ...(patch.instruction ? { instruction: patch.instruction } : {}),
         // Null is a choice of its own: a new chat each time.
         ...(patch.sessionId === undefined ? {} : { sessionId: patch.sessionId }),
+        ...(model ? { model } : {}),
         ...(patch.timeZone ? { timeZone: patch.timeZone } : {}),
         ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
         ...timing,
@@ -293,8 +308,14 @@ export class Schedules {
     // the chat this time already opened.
     const sessionId =
       schedule.sessionId ??
-      (await this.sessions.scheduledChat(schedule.profileId, stableUuid(requestKey), schedule.name))
-        .id;
+      (
+        await this.sessions.scheduledChat(
+          schedule.profileId,
+          stableUuid(requestKey),
+          schedule.name,
+          schedule.model,
+        )
+      ).id;
     const run = await this.runs.submit(schedule.profileId, sessionId, {
       text: scheduledText(schedule),
       requestKey,

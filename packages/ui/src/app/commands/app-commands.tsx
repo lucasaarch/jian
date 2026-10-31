@@ -44,7 +44,7 @@ const pages: { id: string; title: string; keywords: string[]; icon: ReactNode }[
   },
   {
     id: 'models',
-    title: 'Model defaults',
+    title: 'Capabilities',
     keywords: ['model', 'effort', 'default'],
     icon: <Cpu size={15} />,
   },

@@ -166,6 +166,103 @@ describe('schedules', () => {
     expect(after).toMatchObject({ nextRunAt: '2026-09-25T11:00:00.000Z', lastRunId: run?.id });
   });
 
+  it('opens its new chat on the model, effort and speed it was given, always on Auto', async () => {
+    const f = await setup();
+    const provider = await f.services.providers.createProvider({
+      name: 'OpenAI',
+      kind: 'openai',
+      secret: 'synthetic-openai-key-1234567890',
+    });
+    const model = {
+      providerId: provider.id,
+      modelId: 'gpt-4.1-mini',
+      reasoningEffort: 'high' as const,
+      fast: true,
+    };
+    const schedule = await f.services.schedules.create(
+      f.profile.id,
+      {
+        name: 'Morning summary',
+        instruction: 'Send me a summary of yesterday.',
+        sessionId: null,
+        model,
+        cron: '0 8 * * *',
+        timeZone: zone,
+      },
+      'owner',
+    );
+    expect(schedule.model).toEqual(model);
+    expect((await f.services.schedules.list(f.profile.id))[0]?.model).toEqual(model);
+
+    f.at('2026-09-24T08:00:10-03:00');
+    await f.services.schedules.fireDue();
+
+    const [run] = await f.scheduledRuns();
+    if (!run) throw new Error('No run started');
+    const chat = await f.services.sessions.session(f.profile.id, run.sessionId);
+    expect(chat.model).toEqual(model);
+    expect(chat.protection).toBe('auto');
+  });
+
+  it('inherits everything from a conversation that exists, and takes no model of its own', async () => {
+    const f = await setup();
+    const provider = await f.services.providers.createProvider({
+      name: 'OpenAI',
+      kind: 'openai',
+      secret: 'synthetic-openai-key-1234567890',
+    });
+    const chatModel = { providerId: provider.id, modelId: 'gpt-4.1-mini' };
+    const other = { providerId: provider.id, modelId: 'gpt-4.1' };
+    const session = await f.services.sessions.createSession(f.profile.id, { title: 'Work' });
+    await f.services.sessions.setModel(f.profile.id, session.id, { model: chatModel });
+    const base = {
+      name: 'Check',
+      instruction: 'Check the deployment.',
+      cron: '0 8 * * *',
+      timeZone: zone,
+    };
+
+    await expect(
+      f.services.schedules.create(
+        f.profile.id,
+        { ...base, sessionId: session.id, model: other },
+        'owner',
+      ),
+    ).rejects.toThrow("that conversation's model");
+
+    const inChat = await f.services.schedules.create(
+      f.profile.id,
+      { ...base, sessionId: session.id },
+      'owner',
+    );
+    await expect(
+      f.services.schedules.update(f.profile.id, inChat.id, { model: other }),
+    ).rejects.toThrow("that conversation's model");
+
+    f.at('2026-09-24T08:00:10-03:00');
+    await f.services.schedules.fireDue();
+    const [run] = await f.scheduledRuns();
+    expect(run?.sessionId).toBe(session.id);
+    const after = await f.services.sessions.session(f.profile.id, session.id);
+    expect(after.model).toEqual(chatModel);
+    // The chat keeps asking first: a schedule does not change how a conversation is protected.
+    expect(after.protection).toBe('ask');
+
+    // A schedule moved into a conversation leaves its own model behind.
+    const own = await f.services.schedules.create(
+      f.profile.id,
+      { ...base, name: 'Own', sessionId: null, model: other },
+      'owner',
+    );
+    const moved = await f.services.schedules.update(f.profile.id, own.id, {
+      sessionId: session.id,
+    });
+    expect(moved.model).toBeUndefined();
+    expect(
+      (await f.services.schedules.list(f.profile.id)).find((item) => item.id === own.id)?.model,
+    ).toBeUndefined();
+  });
+
   it('opens a new chat of the panel each time it runs when it names no conversation', async () => {
     const f = await setup();
     await f.services.schedules.create(
