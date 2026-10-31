@@ -16,7 +16,10 @@ import { DrawerOptions } from './options';
 import { DrawerSkeleton } from './parts';
 import { type Pull, PullView } from './pull-view';
 
-type DrawerApi = Pick<GatewayApi, 'githubPull' | 'githubIssue' | 'mergeGithubPull'>;
+type DrawerApi = Pick<
+  GatewayApi,
+  'githubPull' | 'githubIssue' | 'mergeGithubPull' | 'updateGithubPullBranch'
+>;
 
 /** How often an open pull request is read again while it is followed, in ms. */
 const OPEN_PULL_MS = 15_000;
