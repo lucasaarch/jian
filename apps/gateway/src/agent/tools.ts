@@ -29,6 +29,7 @@ import type { Schedules } from '../schedules/service.js';
 import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions/port.js';
 import type { Sessions } from '../sessions/service.js';
 import { findSkill } from '../skills/builtin/index.js';
+import { type WebAccess, webResearch, webResearchFor } from '../skills/builtin/web-research.js';
 import { skillTools } from '../skills/tools.js';
 import type { SshKeys } from '../ssh/service.js';
 import type { Stats } from '../stats/service.js';
@@ -112,6 +113,8 @@ export function profileTools(
   remoteTarget?: string,
   /** The MCP servers the run reaches; the skills it may load follow them. */
   servers: readonly McpServer[] = [],
+  /** What it can do with web pages, which the skill about them and the Inspector go by. */
+  web: WebAccess = { browser: false, inspects: true, subagent: Boolean(run.subagent) },
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -315,10 +318,15 @@ export function profileTools(
             execute: async ({ runId }) => services.work?.cancelInConversation(run, runId),
           }),
           open_in_inspector: tool({
-            description:
-              "Bring something to the owner's Inspector, the panel beside this conversation, and focus its tab: a GitHub pull request or issue, one of this conversation's subagents, or the browser (desktop app only). Do it when they ask, or when watching it would help them, as when you start a subagent they care about or open a pull request for them to review. It shows nothing if they are looking at another conversation.",
+            description: `Bring something to the owner's Inspector, the panel beside this conversation, and focus its tab: a GitHub pull request or issue, or one of this conversation's subagents${web.browser ? ', or the browser' : ''}. Do it when they ask, or when watching it would help them, as when you start a subagent they care about or open a pull request for them to review. It shows nothing if they are looking at another conversation.`,
             inputSchema: inspectorFocusInputSchema,
-            execute: async (input) => services.work?.focusInspector(run, input),
+            execute: async (input) => {
+              // Nothing would happen in the panel, and the owner would be told otherwise.
+              if (input.kind === 'browser' && !web.browser) {
+                throw new GatewayError(409, 'This conversation has no browser beside it.');
+              }
+              return services.work?.focusInspector(run, input);
+            },
           }),
           spawn_subagent: tool({
             description:
@@ -445,7 +453,8 @@ export function profileTools(
           throw new GatewayError(404, 'Skill not found');
         }
 
-        return skill;
+        // The owner's own skill of that name is theirs as they wrote it.
+        return skill === webResearch ? webResearchFor(web) : skill;
       },
     }),
 
@@ -797,7 +806,7 @@ export const TOOL_GROUPS = {
   },
   web: {
     summary:
-      'search the web, read pages, inspect website designs and interactions with screenshots, DOM, styles and assets, and use the desktop browser the owner watches',
+      'search the web and read pages; where this conversation allows, inspect website designs and interactions with screenshots, DOM, styles and assets, and use the browser the owner watches',
     tools: ['web_search', 'fetch_url', 'inspect_page', 'browser_control'],
   },
   conversations: {

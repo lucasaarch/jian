@@ -4134,7 +4134,7 @@ export interface operations {
                              * @default shell
                              * @enum {string}
                              */
-                            kind: "shell" | "computer" | "update";
+                            kind: "shell" | "computer" | "update" | "browser";
                             command: string | null;
                             cwd: string | null;
                             timeoutMs: number;
@@ -4158,6 +4158,15 @@ export interface operations {
                             };
                             update?: {
                                 version: string;
+                            };
+                            browser?: {
+                                /** @enum {string} */
+                                operation: "act" | "inspect" | "check";
+                                /** Format: uuid */
+                                profileId: string;
+                                /** Format: uuid */
+                                sessionId: string;
+                                input: unknown;
                             };
                             env?: {
                                 [key: string]: string;
@@ -4388,6 +4397,17 @@ export interface operations {
                     update?: {
                         from: string;
                         to: string;
+                    };
+                    browser?: {
+                        /** @constant */
+                        notShowing?: true;
+                        error?: string;
+                        acted?: unknown;
+                        capture?: {
+                            screenshot: string;
+                            archive: string;
+                            snapshot: unknown;
+                        };
                     };
                 };
             };

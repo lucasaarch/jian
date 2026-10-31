@@ -19,6 +19,16 @@ const BACKOFF_CEILING_MS = 60_000;
 
 /** Runs a task: Computer Use on this screen, or a command in this machine's shell. */
 export async function executeTask(task: RemoteTask): Promise<RemoteResult> {
+  // The app's own worker answers these itself. The gateway sends them only to one that says so.
+  if (task.kind === 'browser') {
+    return {
+      taskId: task.id,
+      exitCode: 1,
+      stdout: '',
+      stderr: 'This machine has no browser to act in.',
+      timedOut: false,
+    };
+  }
   if (task.kind === 'computer') {
     const { executeComputerTask } = await import('./computer/index.ts');
     return executeComputerTask(task);

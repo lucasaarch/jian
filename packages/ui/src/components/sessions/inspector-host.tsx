@@ -29,6 +29,7 @@ import { githubItemOf } from '../../lib/github-links';
 import { usePhone } from '../../lib/phone';
 import { type BrowserPageTab, type InspectorTab, useCrew } from '../../lib/stores/crew';
 import { MIN_CHAT_WIDTH, useLayout } from '../../lib/stores/layout';
+import { watchSize } from '../../lib/watch-size';
 
 /** The conversation's browser brought forward, or opened if it has none yet. */
 export const showBrowser = () => {
@@ -210,13 +211,12 @@ export function InspectorHost({
       setSidebar(nav ? nav.getBoundingClientRect().width : 0);
     };
     measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
+    const unwatch = watchSize(measure, element);
     // The sidebar changes size without this element changing. Its new width is on the page only
     // after the store's change has been drawn.
     const stop = useLayout.subscribe(() => requestAnimationFrame(measure));
     return () => {
-      observer.disconnect();
+      unwatch();
       stop();
     };
   }, []);

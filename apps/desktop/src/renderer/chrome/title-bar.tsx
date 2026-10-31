@@ -2,7 +2,7 @@ import {
   openInspector,
   SidebarBar,
   useInspectorShowing,
-  useWelcomeShowing,
+  useStageShowing,
   WindowControls,
 } from '@jian/ui';
 import { PanelRight } from 'lucide-react';
@@ -24,7 +24,7 @@ const idle = () => () => {};
  */
 export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
   const mac = desktop().platform === 'darwin';
-  const welcoming = useWelcomeShowing();
+  const staged = useStageShowing();
   const inspecting = useInspectorShowing();
   const memory = gateway ? navigationFor(gateway.id) : undefined;
   // Read to follow the navigation, so back and forward come alive as it moves.
@@ -60,8 +60,8 @@ export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
       {/* Behind everything, so it is only a place to hold the window by: what is drawn over it
           and can be pressed is left out of the drag by the app's styles. */}
       <div aria-hidden="true" className={`${drag} absolute inset-x-0 top-0 h-(--title-bar)`} />
-      {/* Nothing to put away, search or go back to while the Welcome is up: only the window's own. */}
-      {!welcoming && (
+      {/* Nothing to put away, search or go back to while the onboarding is up: only the window's own. */}
+      {!staged && (
         <header className="absolute top-0 left-0 z-30 flex h-(--title-bar) select-none">
           <SidebarBar
             // Room for the traffic lights, which macOS draws over this end of the bar.
@@ -80,7 +80,7 @@ export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
           />
         </header>
       )}
-      {!welcoming && !inspecting && (
+      {!staged && !inspecting && (
         <button
           type="button"
           aria-label="Open inspector"

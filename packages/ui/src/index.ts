@@ -10,6 +10,7 @@ export {
   isMac,
   useCommands,
 } from './app/commands/registry';
+export { CODE_RELOADED } from './app/failed';
 export type { GatewayActions, GatewayInfo } from './app/gateway-connection';
 export { ReloadCurtain, reloadApp } from './app/reload';
 export type { ThisComputer } from './app/settings/machines-page';
@@ -57,7 +58,7 @@ export * from './kit';
 export { agentSettingsPath, newChatPath } from './lib/navigation';
 export { useGatewayOnline } from './lib/query/online';
 export { forgetGatewayCache } from './lib/query/persist';
-export { useWelcomeShowing } from './lib/stores/onboarding';
+export { useStageShowing } from './lib/stores/onboarding';
 export { useProfileId } from './lib/workspace';
 export { connectGateway, type GatewayConnection } from './platform/gateway';
 export {

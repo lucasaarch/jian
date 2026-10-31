@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { MCPClient } from '@ai-sdk/mcp';
 import {
+  GATEWAY_SESSION_CHANNEL,
+  JIAN_DESKTOP_CLIENT,
   LEARNING_SESSION_CHANNEL,
   type ModelConfig,
   type Run,
@@ -49,6 +51,7 @@ import {
   cavemanMode,
   type PonytailMode,
   ponytailMode,
+  readLastClient,
 } from '../sessions/repository.js';
 import { findSkill } from '../skills/builtin/index.js';
 import type { WebSearch } from '../web/service.js';
@@ -107,7 +110,7 @@ export type RuntimeServices = ToolServices & {
   providers?: Pick<Providers, 'selectedModel'> &
     Partial<Pick<Providers, 'modelDefaults' | 'loadCapabilities'>>;
   media?: Pick<Media, 'prepare' | 'tools'>;
-  web?: Pick<WebSearch, 'tools'>;
+  web?: Pick<WebSearch, 'tools' | 'browserFor' | 'access'>;
   learning?: Pick<Learning, 'consider'>;
   objectives?: Pick<ObjectiveContinuation, 'continueAfter'>;
 };
@@ -129,6 +132,24 @@ const LEARNING_TOOLS = new Set([
 ]);
 /** A look back is short: a few reads and a write or two. */
 const LEARNING_STEPS = 8;
+
+/**
+ * Whether a call reaches the owner's computer, which asks for their approval like any action
+ * there. A tool can say at the last moment, when that depends on where they are looking.
+ */
+async function actsOnComputer(
+  definition: { metadata?: unknown },
+  input: unknown,
+  callId: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const metadata = definition.metadata as { nativeBrowser?: boolean } | undefined;
+  if (!metadata?.nativeBrowser) return false;
+  const { actsHere } = definition as {
+    actsHere?: (input: unknown, callId: string, signal?: AbortSignal) => Promise<boolean>;
+  };
+  return actsHere ? actsHere(input, callId, signal) : true;
+}
 
 export class AgentRuntime {
   private controllers = new Map<string, AbortController>();
@@ -425,8 +446,24 @@ export class AgentRuntime {
         ? this.services.remote &&
           remotePlace(profileId, session.remoteMachineId, this.services.remote)
         : localPlace(profileId, gitAccess);
+      const browser =
+        run.subagent || !this.services.web
+          ? null
+          : await this.services.web.browserFor(
+              session.channel === GATEWAY_SESSION_CHANNEL &&
+                (await readLastClient(this.services.store.db, profileId, session.id)) ===
+                  JIAN_DESKTOP_CLIENT,
+              session.remoteMachineId,
+            );
       const tools: ToolSet = {
-        ...profileTools(this.services, run, gitAccess, session.remoteMachineId, skillServers),
+        ...profileTools(
+          this.services,
+          run,
+          gitAccess,
+          session.remoteMachineId,
+          skillServers,
+          this.services.web?.access(run, browser),
+        ),
         ...(!learning && this.options.github && gitPlace
           ? githubGitTools({
               github: this.options.github,
@@ -460,12 +497,15 @@ export class AgentRuntime {
             0,
           );
         }),
-        ...this.services.web?.tools(run, async () =>
-          Boolean(
-            (await this.services.providers?.loadCapabilities?.(config))?.inputModalities.includes(
-              'image',
+        ...this.services.web?.tools(
+          run,
+          async () =>
+            Boolean(
+              (await this.services.providers?.loadCapabilities?.(config))?.inputModalities.includes(
+                'image',
+              ),
             ),
-          ),
+          browser,
         ),
         compact_context: tool({
           description:
@@ -480,6 +520,8 @@ export class AgentRuntime {
           },
         }),
       };
+      // Only the panel has an Inspector to bring something to; a channel's chat does not.
+      if (session.channel !== GATEWAY_SESSION_CHANNEL) delete tools.open_in_inspector;
       if (defaults?.image === 'disabled') delete tools.generate_image;
       if (defaults?.speech === 'disabled') {
         delete tools.generate_speech;
@@ -580,7 +622,7 @@ export class AgentRuntime {
               // what waits for approval has not started, and the timeline must not say it did.
               const kind = mcpToolNames.includes(name)
                 ? mcpActionKind(definition)
-                : (definition.metadata as { nativeBrowser?: boolean } | undefined)?.nativeBrowser
+                : (await actsOnComputer(definition, input, options.toolCallId, options.abortSignal))
                   ? 'machine'
                   : actionKind(name, input);
 

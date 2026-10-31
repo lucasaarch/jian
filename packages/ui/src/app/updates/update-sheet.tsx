@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { type ReactNode, useLayoutEffect, useRef, useState } from 'react';
 import { Action, Overlay, Progress } from '../../kit';
 import { useAppearance } from '../../lib/appearance';
+import { watchSize } from '../../lib/watch-size';
 import type { AppUpdate } from './app-update';
 import { ReleaseDetails } from './release-details';
 import { checked, headline, remaining, size } from './update-copy';
@@ -182,9 +183,7 @@ function Measured({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     const node = inner.current;
     if (!node || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => setHeight(node.offsetHeight));
-    observer.observe(node);
-    return () => observer.disconnect();
+    return watchSize(() => setHeight(node.offsetHeight), node);
   }, []);
   return (
     <motion.div

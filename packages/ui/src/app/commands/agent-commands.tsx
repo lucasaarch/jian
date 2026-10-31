@@ -34,7 +34,7 @@ import { type AppCommand, useCommands } from './registry';
  * What can be done with the agents of the gateway open: the open agent's places, a new chat
  * with it, another agent to switch to, one to create. `current` is undefined while no agent is
  * open — an empty gateway — and only creating one or meeting Jian again is offered then; none of
- * this is offered while the Welcome is already up.
+ * this is offered while the onboarding is already up.
  */
 export function useAgentCommands({
   profiles,

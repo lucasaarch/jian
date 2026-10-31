@@ -3,9 +3,10 @@ import type { Remote } from './service.js';
 
 /**
  * Contract allows ~400 KiB stdout + 50 KiB stderr. Default Fastify bodyLimit is 256 KiB,
- * which produced HTTP 413 and left workers retrying forever. Match the schema with headroom.
+ * which produced HTTP 413 and left workers retrying forever. Match the schema with headroom. A
+ * page brought back from a browser, with its picture and its export, is the largest of them.
  */
-const REMOTE_RESULT_BODY_LIMIT = 512 * 1024;
+const REMOTE_RESULT_BODY_LIMIT = 48 * 1024 * 1024;
 
 export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remote }): void {
   app.get('/v1/remote/machines', async () => deps.remote.list());

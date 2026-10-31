@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode, useLayoutEffect, useRef } from 'react';
+import { watchSize } from '../../lib/watch-size';
 
 /**
  * The composer, or a channel's agent toolbar, floating over the end of the conversation on a
@@ -27,14 +28,12 @@ export function ConversationDock({ children }: { children: ReactNode }) {
       chat.style.setProperty('--tray-height', `${tray?.offsetHeight ?? 0}px`);
       if (view && atEnd) view.scrollTop = view.scrollHeight;
     };
-    const observer = new ResizeObserver(measure);
+    const unwatch = watchSize(measure, element, ...(tray ? [tray] : []));
 
-    observer.observe(element);
-    if (tray) observer.observe(tray);
     measure();
 
     return () => {
-      observer.disconnect();
+      unwatch();
       chat.style.removeProperty('--dock-height');
       chat.style.removeProperty('--tray-height');
     };

@@ -96,7 +96,7 @@ export function ProvidersPage() {
 
 /** Shared connection controls keep first-run and Settings on the same authentication flows. */
 /**
- * Every provider to connect. `tiles` lays them two to a line, for the Welcome, where the whole
+ * Every provider to connect. `tiles` lays them two to a line, for the onboarding, where the whole
  * choice has to fit on one screen; settings keeps them as one list under its title.
  */
 export function ProviderConnections({ tiles = false }: { tiles?: boolean }) {

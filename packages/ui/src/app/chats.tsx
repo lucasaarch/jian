@@ -22,12 +22,12 @@ import { ChatsLoading } from './chats-loading';
 import { useAgentCommands } from './commands/agent-commands';
 import { ChatCommands } from './commands/chat-commands';
 import { ReadFailed } from './failed';
+import { Onboarding } from './onboarding';
+import { Farewell } from './onboarding/farewell';
+import { StageHandoff } from './onboarding/handoff';
+import { rememberWelcome, Welcome, welcomed } from './onboarding/welcome';
 import { PhoneBar } from './phone-bar';
 import { LoadingMark } from './reload';
-import { Welcome } from './welcome';
-import { Farewell } from './welcome/farewell';
-import { Greeting, greeted, rememberGreeting } from './welcome/greeting';
-import { WelcomeHandoff } from './welcome/handoff';
 
 /** How long the mark covers the window for a gateway that does not answer, in milliseconds. */
 const LOADING_PATIENCE = 15_000;
@@ -39,24 +39,24 @@ const LOADING_PATIENCE = 15_000;
  * draws over the sidebar's top — the web's bar; a native host draws its own title bar instead.
  */
 export function ChatsApp({
-  greet = false,
+  welcomes = false,
   header,
 }: {
   /**
-   * Greets the owner on opening, landing on a new chat: an app that is launched. A page's address
+   * Welcomes the owner on opening, landing on a new chat: an app that is launched. A page's address
    * may name what it was opened for, so a browser goes straight there.
    */
-  greet?: boolean;
+  welcomes?: boolean;
   header?: ReactNode;
 }) {
-  const [welcomeAgent, setWelcomeAgent] = useState<Profile>();
+  const [onboardingAgent, setOnboardingAgent] = useState<Profile>();
   const adopt = useAdoptProfile();
   const onboarding = useOnboarding();
   const profileId = useProfileId();
   const read = useProfiles();
   const profiles = read.data;
   const lastProfile = useLastProfile((state) => state.profileId);
-  const [owed, setOwed] = useState(() => greet && !greeted());
+  const [owed, setOwed] = useState(() => welcomes && !welcomed());
   const known = profiles?.some((profile) => profile.id === profileId) ?? false;
   // Until an agent is open there is nothing to list, unless there is no agent at all.
   const loading = !profiles || (profiles.length > 0 && !known);
@@ -68,17 +68,17 @@ export function ChatsApp({
   const sidebar = !phone || (known && !opened);
   const main = !phone || !sidebar;
   useSavedLayout();
-  const finishWelcome = useCallback(
+  const finishOnboarding = useCallback(
     (profile: Profile) => {
-      adopt(profile, 'sessions?new&welcome');
-      setWelcomeAgent(undefined);
+      adopt(profile, 'sessions?new&arriving');
+      setOnboardingAgent(undefined);
       onboarding.finish();
     },
     [adopt, onboarding.finish],
   );
 
   const creating = onboarding.creating;
-  const welcoming =
+  const onboardingUp =
     Boolean(profiles) && (!onboarding.completed || onboarding.requested || creating);
   // Not known yet, with nothing kept from before. A failed read leaves it to the app, which says
   // so; a gateway that never answers does too in time, as the mark covers the way to another.
@@ -88,32 +88,32 @@ export function ChatsApp({
     return () => clearTimeout(timer);
   }, []);
   const booting = !profiles && !read.isError && patient;
-  const greeting =
-    owed && !welcoming
+  const welcomeBack =
+    owed && !onboardingUp
       ? (profiles?.find((profile) => profile.id === profileId) ??
         profiles?.find((profile) => profile.id === lastProfile) ??
         profiles?.[0])
       : undefined;
   // Coming back is only worth saying to someone with an agent to come back to.
   useEffect(() => {
-    if (owed && profiles && !greeting) {
-      rememberGreeting();
+    if (owed && profiles && !welcomeBack) {
+      rememberWelcome();
       setOwed(false);
     }
-  }, [owed, profiles, greeting]);
-  // Opened for something — a notification, the tray — while the greeting played: that place stays.
+  }, [owed, profiles, welcomeBack]);
+  // Opened for something — a notification, the tray — while the welcome played: that place stays.
   const openedOn = useRef(pathname);
   const location = useRef(pathname);
   location.current = pathname;
-  const finishGreeting = useCallback(
+  const finishWelcome = useCallback(
     (profile: Profile) => {
-      if (location.current === openedOn.current) adopt(profile, 'sessions?new&welcome');
+      if (location.current === openedOn.current) adopt(profile, 'sessions?new&arriving');
       setOwed(false);
     },
     [adopt],
   );
   const departed = onboarding.departed;
-  const staged = welcoming || booting || Boolean(greeting) || Boolean(departed);
+  const staged = onboardingUp || booting || Boolean(welcomeBack) || Boolean(departed);
   const setShowing = onboarding.setShowing;
   const createAgent = onboarding.create;
   useAgentCommands({
@@ -128,19 +128,19 @@ export function ChatsApp({
   }, [staged, setShowing]);
 
   return (
-    <WelcomeHandoff
+    <StageHandoff
       welcome={
         departed ? (
           <Farewell agent={departed} done={onboarding.seenOff} />
         ) : booting ? (
           <LoadingMark label="Loading agents" />
-        ) : greeting ? (
-          <Greeting profile={greeting} finish={finishGreeting} />
-        ) : welcoming ? (
-          <Welcome
-            saved={welcomeAgent}
-            onCreated={setWelcomeAgent}
-            finish={finishWelcome}
+        ) : welcomeBack ? (
+          <Welcome profile={welcomeBack} finish={finishWelcome} />
+        ) : onboardingUp ? (
+          <Onboarding
+            saved={onboardingAgent}
+            onCreated={setOnboardingAgent}
+            finish={finishOnboarding}
             creating={creating}
             cancel={onboarding.cancelCreating}
           />
@@ -170,7 +170,7 @@ export function ChatsApp({
           )}
         </ReadFailed>
       </div>
-    </WelcomeHandoff>
+    </StageHandoff>
   );
 }
 

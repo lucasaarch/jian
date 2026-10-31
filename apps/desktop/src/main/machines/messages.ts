@@ -1,3 +1,4 @@
+import type { RemoteBrowserParams, RemoteBrowserResult } from '@jian/contracts';
 import type { WorkerTarget } from './sharing';
 
 /** What the main process tells the machines process. */
@@ -7,7 +8,9 @@ export type ToWorkers =
   | { type: 'start'; gatewayId: string; target: WorkerTarget }
   | { type: 'stop'; gatewayId: string }
   /** The app quits: every worker says goodbye, then the process answers `stopped`. */
-  | { type: 'stopAll' };
+  | { type: 'stopAll' }
+  /** What the browser made of a `browser` request. */
+  | { type: 'browser-answer'; id: string; answer: RemoteBrowserResult };
 
 /** What the machines process tells the main process. */
 export type FromWorkers =
@@ -17,7 +20,9 @@ export type FromWorkers =
   /** An agent on that gateway began using this computer: a command, or the screen. */
   | { type: 'using'; gatewayId: string; kind: 'shell' | 'computer' }
   /** What it was doing is over. */
-  | { type: 'done'; gatewayId: string };
+  | { type: 'done'; gatewayId: string }
+  /** The gateway wants the browser beside a conversation; only the main process has it. */
+  | { type: 'browser'; id: string; gatewayId: string; params: RemoteBrowserParams };
 
 /** Handed to the machines process as it starts. */
 export type WorkersSetup = {

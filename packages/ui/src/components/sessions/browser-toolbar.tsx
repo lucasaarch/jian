@@ -85,6 +85,28 @@ function ImportCookies({
 }
 
 /** Back, forward, reload, the address and the rest behind a menu, all at the address's height. */
+type Clearing = 'history' | 'cookies' | 'cache';
+
+/** What each kind of clearing asks before it happens: none can be taken back. */
+const CLEARING: Record<Clearing, { title: string; detail: string; done: string }> = {
+  history: {
+    title: 'Clear browsing history',
+    detail: "This forgets the recent sites of this agent's browser, in all its conversations.",
+    done: 'Browsing history cleared',
+  },
+  cookies: {
+    title: 'Clear cookies',
+    detail: "This signs this agent's browser out of every site, in all its conversations.",
+    done: 'Cookies cleared',
+  },
+  cache: {
+    title: 'Clear cache',
+    detail:
+      "This removes what this agent's browser saved to load sites faster. Pages load slower for a while.",
+    done: 'Cache cleared',
+  },
+};
+
 export function BrowserToolbar({
   url,
   enabled,
@@ -123,9 +145,13 @@ export function BrowserToolbar({
   const [sources, setSources] = useState<CookieSource[]>([]);
   const [importing, setImporting] = useState<CookieSource>();
   const label = useId();
-  const [clearingCookies, setClearingCookies] = useState(false);
+  const [clearing, setClearing] = useState<Clearing>();
+  // Kept while the dialog fades out, so its words do not change on the way.
+  const lastClearing = useRef<Clearing>('cookies');
+  if (clearing) lastClearing.current = clearing;
+  const shownClearing = CLEARING[lastClearing.current];
   useEffect(() => setAddress(url), [url]);
-  const clear = async (what: 'history' | 'cookies' | 'cache', done: string) => {
+  const clear = async (what: Clearing, done: string) => {
     try {
       await onClear(what);
       toast.success(done);
@@ -243,25 +269,13 @@ export function BrowserToolbar({
                 Open in default browser
               </MenuEntry>
               <MenuDivider />
-              <MenuEntry
-                icon={<History size={14} />}
-                onClick={() => void clear('history', 'Browsing history cleared')}
-                danger
-              >
+              <MenuEntry icon={<History size={14} />} onClick={() => setClearing('history')} danger>
                 Clear browsing history
               </MenuEntry>
-              <MenuEntry
-                icon={<Trash2 size={14} />}
-                onClick={() => setClearingCookies(true)}
-                danger
-              >
+              <MenuEntry icon={<Trash2 size={14} />} onClick={() => setClearing('cookies')} danger>
                 Clear cookies
               </MenuEntry>
-              <MenuEntry
-                icon={<Database size={14} />}
-                onClick={() => void clear('cache', 'Cache cleared')}
-                danger
-              >
+              <MenuEntry icon={<Database size={14} />} onClick={() => setClearing('cache')} danger>
                 Clear cache
               </MenuEntry>
               {sources.length > 0 && <MenuDivider />}
@@ -279,30 +293,28 @@ export function BrowserToolbar({
         </Menu.Portal>
       </Menu.Root>
       <Overlay
-        open={clearingCookies}
-        onOpenChange={setClearingCookies}
-        title="Clear cookies"
+        open={clearing !== undefined}
+        onOpenChange={(open) => !open && setClearing(undefined)}
+        title={shownClearing.title}
         size="form"
       >
         <div className="grid gap-5 p-7">
           <header className="grid gap-1.5 pr-6">
-            <h2 className="text-lg font-semibold tracking-tight">Clear cookies</h2>
-            <p className="text-sm leading-relaxed text-muted">
-              This signs this agent's browser out of every site, in all its conversations.
-            </p>
+            <h2 className="text-lg font-semibold tracking-tight">{shownClearing.title}</h2>
+            <p className="text-sm leading-relaxed text-muted">{shownClearing.detail}</p>
           </header>
           <div className="flex justify-end gap-2">
-            <Action tone="quiet" onClick={() => setClearingCookies(false)}>
+            <Action tone="quiet" onClick={() => setClearing(undefined)}>
               Cancel
             </Action>
             <Action
               tone="danger"
               onClick={() => {
-                setClearingCookies(false);
-                void clear('cookies', 'Cookies cleared');
+                if (clearing) void clear(clearing, CLEARING[clearing].done);
+                setClearing(undefined);
               }}
             >
-              Clear cookies
+              {shownClearing.title}
             </Action>
           </div>
         </div>

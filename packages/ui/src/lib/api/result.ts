@@ -54,13 +54,16 @@ function message(status: number, detail: Detail | undefined): string {
   return detail?.error ?? `The request could not be completed (${status}).`;
 }
 
+/** The gateway answered, and the answer was a refusal or a failure. */
+export class GatewayAnswer extends Error {}
+
 export async function result<T>(
   request: Promise<{ data?: T; error?: unknown; response: Response }>,
 ): Promise<T> {
   const { data, error, response } = await request;
 
   if (!response.ok || data === undefined) {
-    throw new Error(message(response.status, error as Detail | undefined));
+    throw new GatewayAnswer(message(response.status, error as Detail | undefined));
   }
 
   return data;

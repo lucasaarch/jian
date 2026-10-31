@@ -13,6 +13,7 @@ import { claimLinks } from './links';
 import { localCredentials } from './local/credentials';
 import { LocalGateway } from './local/process';
 import { looksAt } from './looking';
+import { browserAnswer } from './machines/browser-answer';
 import { MachineFile } from './machines/entries';
 import { logMachines, UtilityWorkerHost } from './machines/host';
 import { thisComputer } from './machines/identity';
@@ -124,6 +125,17 @@ const machines: ComputerSharing = new ComputerSharing({
       else using.delete(gatewayId);
       bridge.machinesUsing(usingNow());
     },
+    browser: (gatewayId, params) =>
+      browserAnswer(
+        browser,
+        gatewayId,
+        params,
+        // A window out of sight shows nothing, whatever it was last on.
+        () =>
+          showing && window?.isVisible()
+            ? { gatewayId: showing.gatewayId, sessionId: showing.chat?.sessionId }
+            : null,
+      ),
   }),
   setting: machineFile,
   gateways: () =>

@@ -37,7 +37,7 @@ export function AgentHero({
   name: string;
   avatar?: string | null;
   summary?: string;
-  /** Only the first-run hero shares its position across the Welcome and the new chat. */
+  /** Only the first-run hero shares its position across the onboarding and the new chat. */
   handoffId?: string;
   /** What a hero being written shows, dimmed, before anything is typed; it then follows each key. */
   blank?: { name: string; summary: string };

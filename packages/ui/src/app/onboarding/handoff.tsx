@@ -11,7 +11,7 @@ const settle = [0.23, 1, 0.32, 1] as const;
  * settles over it as the app steps back; leaving, it fades while the shared hero travels into the
  * chat. The departing surface stops accepting input.
  */
-export function WelcomeHandoff({ welcome, children }: { welcome: ReactNode; children: ReactNode }) {
+export function StageHandoff({ welcome, children }: { welcome: ReactNode; children: ReactNode }) {
   const id = useId();
   const { still } = useAppearance();
   return (

@@ -19,7 +19,7 @@ export type IdentityDraft = {
   avatar: string | null;
 };
 
-export function WelcomeIdentity({
+export function OnboardingIdentity({
   draft,
   change,
   busy,

@@ -12,10 +12,10 @@ import { useCreateProfile } from '../../lib/create-profile';
 import { usePhone } from '../../lib/phone';
 import { queries } from '../../lib/query/profile';
 import { ProviderConnections } from '../settings/providers-page';
-import { WelcomeChannels } from './channels';
+import { OnboardingChannels } from './channels';
 import { ExistingAgent } from './existing-agent';
-import { type IdentityDraft, WelcomeIdentity } from './identity';
-import { WelcomeIntro } from './intro';
+import { type IdentityDraft, OnboardingIdentity } from './identity';
+import { OnboardingIntro } from './intro';
 import { readChat, Scene, SceneColumn, Stage } from './stage';
 
 type Step = 'intro' | 'models' | 'identity' | 'channels' | 'arrival';
@@ -28,7 +28,7 @@ const titles: Record<Step, string> = {
 };
 
 /** Server facts decide what is left to do. Only the unsaved form and the current scene are local. */
-export function Welcome({
+export function Onboarding({
   saved,
   onCreated,
   finish,
@@ -141,7 +141,7 @@ export function Welcome({
             <AnimatePresence mode="wait" initial={false}>
               <Scene key={step} title={titles[step]} hiddenTitle={step === 'intro'} still={still}>
                 {step === 'intro' && (
-                  <WelcomeIntro
+                  <OnboardingIntro
                     still={still}
                     begin={() => {
                       if (!connected) setModelsVisited(true);
@@ -181,7 +181,7 @@ export function Welcome({
                       }}
                     />
                   ) : (
-                    <WelcomeIdentity
+                    <OnboardingIdentity
                       draft={draft}
                       change={setDraft}
                       busy={busy}
@@ -190,7 +190,7 @@ export function Welcome({
                     />
                   ))}
                 {step === 'channels' && saved && server && (
-                  <WelcomeChannels profileId={saved.id} finish={() => setStep('arrival')} />
+                  <OnboardingChannels profileId={saved.id} finish={() => setStep('arrival')} />
                 )}
                 {step === 'arrival' && saved && (
                   <Arrival profile={saved} still={still} finish={finish} />

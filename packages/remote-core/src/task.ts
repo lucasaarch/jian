@@ -4,10 +4,12 @@ import type { RemoteTask } from '@jian/contracts';
 export type TaskSummary =
   | { kind: 'computer'; action?: string; at?: string; key?: string; chars?: number }
   | { kind: 'shell'; command: string; cwd?: string }
-  | { kind: 'update'; version: string };
+  | { kind: 'update'; version: string }
+  | { kind: 'browser'; operation?: string };
 
 /** What a task is, in a few words for the log: the command, or the screen action. */
 export function describeTask(task: RemoteTask): TaskSummary {
+  if (task.kind === 'browser') return { kind: 'browser', operation: task.browser?.operation };
   if (task.kind === 'update') return { kind: 'update', version: task.update?.version ?? 'latest' };
   if (task.kind === 'computer') {
     const { action, coordinate, key, text } = task.computer ?? {};

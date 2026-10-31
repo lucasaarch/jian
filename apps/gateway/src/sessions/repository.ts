@@ -188,6 +188,32 @@ export async function ponytailMode(
   return row?.mode ?? 'full';
 }
 
+/** Which app the owner last wrote from in this conversation; null for all but the desktop one. */
+export async function setLastClient(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  client: string | null,
+): Promise<void> {
+  await db
+    .update(sessions)
+    .set({ lastClient: client })
+    .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)));
+}
+
+export async function readLastClient(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ lastClient: sessions.lastClient })
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)))
+    .limit(1);
+  return row?.lastClient ?? null;
+}
+
 export async function setPonytailMode(
   db: Queryable,
   profileId: string,

@@ -1,9 +1,12 @@
 'use client';
 
+import type { GatewaySettings } from '@jian/contracts';
+import { useQueryClient } from '@tanstack/react-query';
 import { Check, ShieldCheck, ShieldHalf, ShieldOff } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import type { GatewayApi, ProtectionMode, Session } from '../../lib/api';
+import { keys } from '../../lib/query/keys';
 import { Menu, type MenuAlign } from './model-menu';
 
 const modes: Array<{
@@ -39,6 +42,7 @@ export function SessionProtection({
   onDraftChange,
   align,
   saved,
+  remembers = false,
 }: {
   api: GatewayApi;
   profileId: string;
@@ -48,7 +52,18 @@ export function SessionProtection({
   onDraftChange?: (protection: ProtectionMode) => void;
   align?: MenuAlign;
   saved?: () => void;
+  /** A composer's: what the owner picks here is also where their next new chat starts. */
+  remembers?: boolean;
 }) {
+  const client = useQueryClient();
+  // Worth having, not worth failing over: a gateway from before this answers no.
+  const remember = async (protection: ProtectionMode) => {
+    if (!remembers) return;
+    client.setQueryData<GatewaySettings>(keys.settings, (known) =>
+      known ? { ...known, newChatProtection: protection } : known,
+    );
+    await api.updateSettings({ newChatProtection: protection }).catch(() => {});
+  };
   const [open, setOpen] = useState(false);
   const [chosen, setChosen] = useState<ProtectionMode>();
   const [busy, setBusy] = useState(false);
@@ -60,13 +75,17 @@ export function SessionProtection({
   const choose = async (next: ProtectionMode) => {
     setOpen(false);
     if (next === value) return;
-    if (!session) return onDraftChange?.(next);
+    if (!session) {
+      onDraftChange?.(next);
+      return void remember(next);
+    }
 
     const previous = value;
     setChosen(next);
     setBusy(true);
     try {
       await api.setSessionProtection(profileId, session.id, next);
+      await remember(next);
       saved?.();
     } catch (error) {
       setChosen(previous);

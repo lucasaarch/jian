@@ -12,7 +12,7 @@ const settle = [0.23, 1, 0.32, 1] as const;
  * follows the window's height as well as its width, so the whole of it fits without a scroll in
  * a short window as in a tall one.
  */
-export function WelcomeIntro({ still, begin }: { still: boolean; begin: () => void }) {
+export function OnboardingIntro({ still, begin }: { still: boolean; begin: () => void }) {
   return (
     <div className="grid justify-items-center gap-[clamp(1rem,4.5dvh,2.5rem)] text-center">
       <div

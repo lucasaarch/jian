@@ -1,8 +1,15 @@
 import type { Run } from '@jian/contracts';
 import type { Tool } from 'ai';
-import { expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { describe, expect, it, vi } from 'vitest';
 import { remoteTools } from '../src/agent/remote-tools.js';
+import { profileTools } from '../src/agent/tools.js';
 import { createApp } from '../src/app.js';
+import { readLastClient } from '../src/sessions/repository.js';
+import { type WebAccess, webResearchFor } from '../src/skills/builtin/web-research.js';
+import { remoteTasks } from '../src/storage/schema.js';
+import { BrowserNotShowing, machineBrowser } from '../src/web/machine-browser.js';
+import { WebSearch } from '../src/web/service.js';
 import { testServices } from './helpers/services.js';
 
 it('lets every agent use every machine, and runs a task through the worker', async () => {
@@ -640,4 +647,304 @@ it('accepts a large remote result that previously hit the default 256 KiB body l
   } finally {
     await app.close();
   }
+});
+
+/** A worker that answers the next browser task as the given app would. */
+const answersBrowser = async (
+  services: Awaited<ReturnType<typeof testServices>>,
+  machine: { id: string; token: string },
+  browser: Record<string, unknown>,
+) => {
+  const headers = ['darwin-arm64', 'browser-v1'] as const;
+  let polled: Awaited<ReturnType<typeof services.remote.poll>> = { task: null };
+  for (let attempt = 0; attempt < 40 && !polled.task; attempt++) {
+    polled = await services.remote.poll(machine.id, `Bearer ${machine.token}`, ...headers);
+    if (!polled.task) await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  if (!polled.task) throw new Error('Worker did not receive the browser task');
+  await services.remote.complete(machine.id, polled.task.id, `Bearer ${machine.token}`, {
+    taskId: polled.task.id,
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+    timedOut: false,
+    browser,
+  });
+  return polled.task;
+};
+const scope = {
+  profileId: '11111111-1111-4111-8111-111111111111',
+  sessionId: '22222222-2222-4222-8222-222222222222',
+};
+
+it('finds only an online app for the browser, and only the machine a conversation aims at', async () => {
+  const services = await testServices();
+  const app = await services.remote.create({ name: 'Studio' });
+  const cli = await services.remote.create({ name: 'Server' });
+  await expect(services.remote.browserMachines()).resolves.toEqual([]);
+
+  await services.remote.poll(cli.id, `Bearer ${cli.token}`, 'linux-x64', 'computer-linux-v1');
+  await expect(services.remote.browserMachines()).resolves.toEqual([]);
+
+  await services.remote.poll(app.id, `Bearer ${app.token}`, 'darwin-arm64', 'browser-v1');
+  await expect(services.remote.browserMachines()).resolves.toEqual([
+    { id: app.id, name: 'Studio' },
+  ]);
+  await expect(services.remote.browserMachines(cli.id)).resolves.toEqual([]);
+});
+
+it('drives the app’s browser through the machine, and keeps no page in the task’s row', async () => {
+  const services = await testServices();
+  const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+  const app = await services.remote.create({ name: 'Studio' });
+  await services.remote.poll(app.id, `Bearer ${app.token}`, 'darwin-arm64', 'browser-v1');
+  const browser = machineBrowser(services.remote);
+  const screenshot = Buffer.from('synthetic picture');
+
+  const acting = browser.act(
+    { action: 'read' } as never,
+    { ...scope, profileId: owner.id },
+    new AbortController().signal,
+  );
+  const task = await answersBrowser(services, app, {
+    acted: {
+      url: 'https://example.com/',
+      title: 'Example',
+      viewport: { width: 800, height: 600 },
+      visible: true,
+      screenshot: screenshot.toString('base64'),
+    },
+  });
+
+  expect(task).toMatchObject({
+    kind: 'browser',
+    browser: { operation: 'act', profileId: owner.id, sessionId: scope.sessionId },
+  });
+  await expect(acting).resolves.toMatchObject({ url: 'https://example.com/', screenshot });
+  const [row] = await services.store.db
+    .select({ result: remoteTasks.result })
+    .from(remoteTasks)
+    .where(eq(remoteTasks.id, task.id));
+  expect(row?.result).not.toHaveProperty('browser');
+});
+
+it('moves on from an app looking elsewhere, and says so when none is looking', async () => {
+  const services = await testServices();
+  const owner = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+  const app = await services.remote.create({ name: 'Studio' });
+  await services.remote.poll(app.id, `Bearer ${app.token}`, 'darwin-arm64', 'browser-v1');
+
+  const acting = machineBrowser(services.remote).act(
+    { action: 'read' } as never,
+    { ...scope, profileId: owner.id },
+    new AbortController().signal,
+  );
+  const refused = expect(acting).rejects.toBeInstanceOf(BrowserNotShowing);
+  await answersBrowser(services, app, { notShowing: true });
+  await refused;
+});
+
+it('offers browser_control on a server only once an app can be reached', async () => {
+  const services = await testServices();
+  const web = new WebSearch(
+    services.store,
+    undefined as never,
+    fetch,
+    machineBrowser(services.remote),
+  );
+  const run = { id: 'r', profileId: scope.profileId, sessionId: scope.sessionId } as Run;
+  await expect(web.browserFor(true)).resolves.toBeNull();
+  expect(web.tools(run, false, await web.browserFor(true))).not.toHaveProperty('browser_control');
+
+  const app = await services.remote.create({ name: 'Studio' });
+  await services.remote.poll(app.id, `Bearer ${app.token}`, 'darwin-arm64', 'browser-v1');
+
+  expect(web.tools(run, false, await web.browserFor(true))).toHaveProperty('browser_control');
+  // The same app, open and online, offers nothing to a conversation had anywhere else.
+  await expect(web.browserFor(false)).resolves.toBeNull();
+  expect(web.tools(run, false, await web.browserFor(false))).not.toHaveProperty('browser_control');
+  // A browser that may be out of reach is never offered without having been looked for.
+  expect(web.tools(run)).not.toHaveProperty('browser_control');
+});
+
+it('remembers whether the owner last wrote from the desktop app, whichever came last', async () => {
+  const services = await testServices();
+  const owner = await services.profiles.createProfile({
+    name: 'Atlas',
+    instructions: 'Help.',
+    model: { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  } as never);
+  const session = await services.sessions.createGatewaySession(owner.id, {});
+  const token = 'synthetic-client-admin-token-32-chars';
+  const app = createApp({ ...services, token, logger: false });
+  const write = (requestKey: string, headers: Record<string, string> = {}) =>
+    app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${owner.id}/sessions/${session.id}/messages`,
+      headers: { authorization: `Bearer ${token}`, ...headers },
+      payload: { text: 'Hello', requestKey },
+    });
+  const last = () => readLastClient(services.store.db, owner.id, session.id);
+
+  try {
+    expect(await last()).toBeNull();
+    await write('from-the-app', { 'x-jian-client': 'desktop' });
+    expect(await last()).toBe('desktop');
+    await write('from-the-web');
+    expect(await last()).toBeNull();
+    // Any other value is nobody: only the app's own word counts.
+    await write('from-elsewhere', { 'x-jian-client': 'something' });
+    expect(await last()).toBeNull();
+  } finally {
+    await app.close();
+  }
+});
+
+it('never gives a subagent the browser, on a server or in a desktop app', async () => {
+  const services = await testServices();
+  const app = await services.remote.create({ name: 'Studio' });
+  await services.remote.poll(app.id, `Bearer ${app.token}`, 'darwin-arm64', 'browser-v1');
+  const run = { id: 'r', profileId: scope.profileId, sessionId: scope.sessionId } as Run;
+  const subagent = { ...run, subagent: { parentRunId: 'p' } } as unknown as Run;
+
+  // On a server it still studies pages, with the gateway's own Chromium.
+  const server = new WebSearch(
+    services.store,
+    undefined as never,
+    fetch,
+    machineBrowser(services.remote),
+  );
+  const reached = await server.browserFor(true);
+  expect(server.tools(run, false, reached)).toHaveProperty('browser_control');
+  const served = server.tools(subagent, false, reached);
+  expect(served).not.toHaveProperty('browser_control');
+  expect(served.inspect_page).toMatchObject({ metadata: { nativeBrowser: false } });
+
+  // A desktop app's gateway has no other browser, so there is nothing left to study pages with.
+  const own = { act: async () => ({}), inspect: async () => ({}) } as never;
+  const desktop = new WebSearch(services.store, undefined as never, fetch, own);
+  expect(desktop.tools(run)).toHaveProperty('browser_control');
+  expect(desktop.tools(run)).toHaveProperty('inspect_page');
+  expect(desktop.tools(subagent)).not.toHaveProperty('browser_control');
+  expect(desktop.tools(subagent)).not.toHaveProperty('inspect_page');
+});
+
+type Focus = { execute: (input: unknown) => Promise<unknown> };
+
+describe('what each run is told it can do with the web', () => {
+  const skill = (access: WebAccess) => webResearchFor(access).instructions;
+
+  it('never sends a run after a browser it does not have', () => {
+    const panel = skill({ browser: false, inspects: true, subagent: false });
+    expect(panel).not.toContain('`browser_control`');
+    expect(panel).not.toContain('reusePage');
+    expect(panel).toContain('inspect_page');
+
+    const inApp = skill({ browser: true, inspects: true, subagent: false });
+    expect(inApp).toContain('`browser_control`');
+    expect(inApp).toContain('reusePage');
+
+    const onServer = skill({ browser: false, inspects: true, subagent: true });
+    expect(onServer).not.toContain('`browser_control`');
+    expect(onServer).toContain('`inspect_page`');
+
+    const inLocalGateway = skill({ browser: false, inspects: false, subagent: true });
+    expect(inLocalGateway).not.toContain('inspect_page');
+    expect(inLocalGateway).not.toContain('browser_control');
+    expect(inLocalGateway).toContain('agent that started you');
+  });
+
+  it('answers a shared artifact according to who is reading it', async () => {
+    const services = await testServices();
+    const own = { act: async () => ({}), inspect: async () => ({}) } as never;
+    const desktop = new WebSearch(services.store, undefined as never, fetch, own);
+    const artifact = 'https://claude.ai/artifact/atlas';
+    const main = { id: 'r', profileId: scope.profileId, sessionId: scope.sessionId } as Run;
+    const sub = { ...main, subagent: { parentRunId: 'p' } } as unknown as Run;
+
+    const forMain = await desktop.read(artifact, 0, undefined, desktop.access(main));
+    expect(forMain.text).toContain('inspect_page');
+
+    const forSubagent = await desktop.read(artifact, 0, undefined, desktop.access(sub));
+    expect(forSubagent.text).not.toContain('inspect_page');
+    expect(forSubagent.text).toContain('agent that started you');
+  });
+
+  it('refuses to focus a browser the conversation does not have, instead of doing nothing', async () => {
+    const services = await testServices();
+    const focusInspector = vi.fn(async () => ({ ok: true }));
+    const run = {
+      id: 'r',
+      profileId: scope.profileId,
+      sessionId: scope.sessionId,
+      profile: { skills: [], disabledSkills: [] },
+    } as unknown as Run;
+    const tools = (browser: boolean) =>
+      profileTools(
+        { ...services, work: { focusInspector } } as never,
+        run,
+        undefined,
+        undefined,
+        [],
+        {
+          browser,
+          inspects: true,
+          subagent: false,
+        },
+      );
+    const focus = (browser: boolean, kind: string) =>
+      (tools(browser).open_in_inspector as unknown as Focus).execute({ kind });
+
+    await expect(focus(false, 'browser')).rejects.toMatchObject({ statusCode: 409 });
+    expect(focusInspector).not.toHaveBeenCalled();
+    await focus(true, 'browser');
+    expect(focusInspector).toHaveBeenCalledOnce();
+    expect(tools(false).open_in_inspector?.description).not.toContain('browser');
+  });
+
+  it('loads the skill for this run, and leaves an owner’s own of that name alone', async () => {
+    const services = await testServices();
+    const load = (skills: unknown[]) => {
+      const run = {
+        id: 'r',
+        profileId: scope.profileId,
+        sessionId: scope.sessionId,
+        profile: { skills, disabledSkills: [], capabilities: {} },
+      } as unknown as Run;
+      const execute = profileTools(services as never, run, undefined, undefined, [], {
+        browser: false,
+        inspects: false,
+        subagent: true,
+      }).load_skill?.execute as (input: { name: string }) => Promise<{ instructions: string }>;
+      return execute({ name: 'web-research' });
+    };
+
+    expect((await load([])).instructions).toContain('agent that started you');
+    const own = { name: 'web-research', description: 'Mine', instructions: 'As I wrote it.' };
+    expect((await load([own])).instructions).toBe('As I wrote it.');
+  });
+});
+
+it('asks for approval only when the study reaches the owner’s computer', async () => {
+  const services = await testServices();
+  const inspected = { screenshot: new Uint8Array([1]), archive: new Uint8Array([2]), snapshot: {} };
+  let watching = false;
+  const inspect = vi.fn(async () => inspected);
+  const browser = {
+    reaches: async () => true,
+    watching: async () => watching,
+    act: vi.fn(),
+    inspect,
+  };
+  const web = new WebSearch(services.store, undefined as never, fetch, browser as never);
+  const run = { id: 'r', profileId: scope.profileId, sessionId: scope.sessionId } as Run;
+  const tool = web.tools(run, false, browser as never).inspect_page as unknown as {
+    actsHere: (input: unknown, callId: string) => Promise<boolean>;
+  };
+
+  await expect(tool.actsHere({ url: 'https://example.test' }, 'away')).resolves.toBe(false);
+  // A page already open is only there, whoever is looking: the app answers for it.
+  await expect(tool.actsHere({ reusePage: true }, 'reuse')).resolves.toBe(true);
+  watching = true;
+  await expect(tool.actsHere({ url: 'https://example.test' }, 'here')).resolves.toBe(true);
 });

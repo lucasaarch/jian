@@ -31,6 +31,7 @@ import { Stats } from './stats/service.js';
 import type { Store } from './storage/database.js';
 import { Subscriptions } from './subscriptions/service.js';
 import { Work } from './tasks/service.js';
+import { machineBrowser } from './web/machine-browser.js';
 import { WebSearch } from './web/service.js';
 
 export type Services = {
@@ -122,6 +123,7 @@ export function buildServices({
   // What the agent says in a chat of the panel reaches the owner's devices as it settles.
   lifecycle.useNotices(push);
 
+  const remote = new Remote(store, clock, undefined, gatewayVault);
   const services = {
     profiles,
     providers,
@@ -129,7 +131,13 @@ export function buildServices({
     projects,
     memories,
     media,
-    web: new WebSearch(store, gatewayVault, fetcher ?? createSafeFetch().fetch, nativeBrowser),
+    // A desktop app's own gateway asks its app; a server asks an app that is one of its machines.
+    web: new WebSearch(
+      store,
+      gatewayVault,
+      fetcher ?? createSafeFetch().fetch,
+      nativeBrowser ?? machineBrowser(remote),
+    ),
     // Stamped into the image at build time; a gateway run from source has none.
     releases: new ReleaseNotes(
       store,
@@ -172,7 +180,7 @@ export function buildServices({
     gatewayVault,
     sshKeys: new SshKeys(store, gatewayVault),
     mcp: new McpServers(store, gatewayVault, clock),
-    remote: new Remote(store, clock, undefined, gatewayVault),
+    remote,
     push,
   };
 

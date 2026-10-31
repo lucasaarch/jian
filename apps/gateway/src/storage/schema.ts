@@ -130,7 +130,10 @@ export const remoteTasks = pgTable(
       .references(() => remoteMachines.id, { onDelete: 'cascade' }),
     /** The agent's profile; none when the owner asked from the panel. */
     profileId: uuid('profile_id').references(() => profiles.id, { onDelete: 'cascade' }),
-    kind: text('kind').$type<'shell' | 'computer' | 'update'>().notNull().default('shell'),
+    kind: text('kind')
+      .$type<'shell' | 'computer' | 'update' | 'browser'>()
+      .notNull()
+      .default('shell'),
     command: text('command').notNull().default(''),
     cwd: text('cwd'),
     /** Computer-use params when kind is computer; the target release when kind is update. */
@@ -299,6 +302,9 @@ export const sessions = pgTable(
     projectId: uuid('project_id'),
     // A deleted machine stays as the session target so work never silently falls back to local.
     remoteMachineId: uuid('remote_machine_id'),
+    // Which app the owner last wrote here from; every run in the session goes by it, whatever
+    // started that run. Empty for anything but the desktop app.
+    lastClient: text('last_client'),
     // Set on the session a pair of agents shares; the peer never reads it.
     peerProfileId: uuid('peer_profile_id').references(() => profiles.id, { onDelete: 'set null' }),
     // On a channel conversation: 'direct' or 'group', kept here so it outlives its contact.

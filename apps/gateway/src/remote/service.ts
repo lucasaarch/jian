@@ -1,9 +1,13 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
+  REMOTE_BROWSER_CAPABILITY,
   REMOTE_SYSTEM_MAX_LENGTH,
+  type RemoteBrowserParams,
+  type RemoteBrowserResult,
   type RemoteComputerParams,
   type RemoteMachineUpdate,
   type RemoteUpdateParams,
+  remoteBrowserParamsSchema,
   remoteCommandSchema,
   remoteComputerCommandSchema,
   remoteComputerParamsSchema,
@@ -46,6 +50,8 @@ function machineCanUpdate(machine: { capabilities: string[] | null }): boolean {
 
 /** A worker that runs a shell task with a secret environment it neither logs nor echoes. */
 const SECRET_ENV_CAPABILITY = 'shell-secret-env-v1';
+/** A page can take a while to load and settle; the browser's own limit is 45 seconds. */
+const BROWSER_TIMEOUT_MS = 60_000;
 
 /** Where a task's secret environment waits, encrypted, until its worker claims it. */
 const secretEnvKey = (taskId: string) => `remote-task-env:${taskId}`;
@@ -62,6 +68,7 @@ type TaskResult = {
   timedOut: boolean;
   computer?: unknown;
   update?: { from: string; to: string };
+  browser?: RemoteBrowserResult;
 };
 
 const UI_STATES = new Set(['unlocked', 'locked', 'display_asleep', 'unknown'] as const);
@@ -260,6 +267,56 @@ export class Remote {
     return this.vault;
   }
 
+  /**
+   * The machines that can drive the browser beside a conversation, most recently heard from
+   * first: apps that are online, or only the one a conversation is aimed at.
+   */
+  async browserMachines(targetMachineId?: string) {
+    const rows = await this.store.db.select().from(remoteMachines);
+    const now = this.clock();
+
+    return rows
+      .filter(
+        (machine) =>
+          (machine.capabilities ?? []).includes(REMOTE_BROWSER_CAPABILITY) &&
+          present(machine.lastSeenAt, now) &&
+          (!targetMachineId || machine.id === targetMachineId),
+      )
+      .sort((a, b) => (b.lastSeenAt?.getTime() ?? 0) - (a.lastSeenAt?.getTime() ?? 0))
+      .map((machine) => ({ id: machine.id, name: machine.name }));
+  }
+
+  /**
+   * Asks a machine's app to act in the browser beside a conversation. What it brings back can run
+   * to megabytes, and only this caller needs it: it does not stay in the task's row.
+   */
+  async executeBrowser(
+    profileId: string,
+    machineId: string,
+    params: RemoteBrowserParams,
+    signal?: AbortSignal,
+  ) {
+    const data = remoteBrowserParamsSchema.parse(params);
+    this.requireCurrent(await this.machine(machineId));
+    const taskId = randomUUID();
+    const result = await this.waitForTask(
+      profileId,
+      machineId,
+      {
+        kind: 'browser',
+        command: '',
+        cwd: null,
+        payload: data,
+        timeoutMs: BROWSER_TIMEOUT_MS,
+      },
+      signal,
+      taskId,
+    );
+    const { browser, ...kept } = result;
+    await this.store.db.update(remoteTasks).set({ result: kept }).where(eq(remoteTasks.id, taskId));
+    return { ...kept, browser };
+  }
+
   async executeComputer(
     profileId: string,
     machineId: string,
@@ -356,10 +413,10 @@ export class Remote {
     profileId: string | null,
     machineId: string,
     task: {
-      kind: 'shell' | 'computer' | 'update';
+      kind: 'shell' | 'computer' | 'update' | 'browser';
       command: string;
       cwd: string | null;
-      payload: RemoteComputerParams | Record<string, unknown> | null;
+      payload: RemoteComputerParams | RemoteBrowserParams | Record<string, unknown> | null;
       timeoutMs: number;
     },
     signal?: AbortSignal,
@@ -512,6 +569,23 @@ export class Remote {
           cwd: null,
           timeoutMs: claimed.timeoutMs,
           update: parsed.data,
+        },
+      };
+    }
+    if (kind === 'browser') {
+      const parsed = remoteBrowserParamsSchema.safeParse(claimed.payload);
+      if (!parsed.success) {
+        await this.failClaimed(claimed.id, 'Invalid browser payload');
+        return { task: null };
+      }
+      return {
+        task: {
+          id: claimed.id,
+          kind: 'browser' as const,
+          command: null,
+          cwd: null,
+          timeoutMs: claimed.timeoutMs,
+          browser: parsed.data,
         },
       };
     }

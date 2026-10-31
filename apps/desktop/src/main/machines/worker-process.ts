@@ -7,6 +7,13 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  REMOTE_BROWSER_CAPABILITY,
+  type RemoteBrowserParams,
+  type RemoteBrowserResult,
+  type RemoteResult,
+  type RemoteTask,
+} from '@jian/contracts';
+import {
   createLogger,
   createWorkerState,
   detectCapabilities,
@@ -74,7 +81,8 @@ async function start(gatewayId: string, target: WorkerTarget): Promise<void> {
   workers.set(gatewayId, worker);
   log.info('Worker starting', { version, machine: target.machineId });
 
-  capabilities ??= detectCapabilities();
+  // This worker is an app's: it has the browser beside the conversations to offer as well.
+  capabilities ??= detectCapabilities().then((found) => [...found, REMOTE_BROWSER_CAPABILITY]);
   const offered = await capabilities;
   if (workers.get(gatewayId) !== worker) return;
   worker.done = runWorker({
@@ -86,6 +94,8 @@ async function start(gatewayId: string, target: WorkerTarget): Promise<void> {
     uiState: () => uiState(),
     // The window shows while an agent uses this computer: each task says when it starts and ends.
     execute: async (task) => {
+      // In plain sight in the Inspector, with nothing on the rest of the screen to warn of.
+      if (task.kind === 'browser' && task.browser) return askBrowser(gatewayId, task);
       send({ type: 'using', gatewayId, kind: task.kind === 'computer' ? 'computer' : 'shell' });
       try {
         return await executeTask(task);
@@ -99,6 +109,20 @@ async function start(gatewayId: string, target: WorkerTarget): Promise<void> {
   }).catch((error: unknown) => {
     log.error('Worker ended', { error: error instanceof Error ? error.message : String(error) });
   });
+}
+
+/** What the main process has been asked and has not answered yet, by task. */
+const browserAnswers = new Map<string, (answer: RemoteBrowserResult) => void>();
+
+/** The browser lives in the main process: a task for it goes there and its answer comes back. */
+async function askBrowser(gatewayId: string, task: RemoteTask): Promise<RemoteResult> {
+  const params = task.browser as RemoteBrowserParams;
+  const browser = await new Promise<RemoteBrowserResult>((resolve) => {
+    browserAnswers.set(task.id, resolve);
+    send({ type: 'browser', id: task.id, gatewayId, params });
+  }).finally(() => browserAnswers.delete(task.id));
+
+  return { taskId: task.id, exitCode: 0, stdout: '', stderr: '', timedOut: false, browser };
 }
 
 /** Stops polling, lets the poll under way finish, then tells the gateway it is offline. */
@@ -148,6 +172,9 @@ port.on('message', ({ data }: { data: ToWorkers }) => {
     case 'stop':
       void stop(data.gatewayId);
       return;
+    case 'browser-answer':
+      browserAnswers.get(data.id)?.(data.answer);
+      break;
     case 'stopAll':
       void Promise.all([...workers.keys()].map(stop)).then(() => {
         send({ type: 'stopped' });

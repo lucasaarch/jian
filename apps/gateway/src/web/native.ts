@@ -13,8 +13,14 @@ type Port = {
 };
 type Scope = { profileId: string; sessionId: string };
 
-/** The browser beside the owner's conversation; only a desktop app's own gateway has one. */
+/** The browser beside the owner's conversation, in a desktop app. */
 export type NativeBrowser = {
+  /** Whether it can be reached now. Without this it always can: it is this gateway's own app. */
+  reaches?(): Promise<boolean>;
+  /** Whether the owner is watching this conversation there. Without this they always count. */
+  watching?(scope: Scope, signal?: AbortSignal): Promise<boolean>;
+  /** The same browser, for a conversation aimed at one machine. */
+  aimedAt?(machineId: string): NativeBrowser;
   inspect(
     input: PageInspectionInput,
     scope: Scope,
@@ -28,6 +34,17 @@ export type NativeBrowser = {
 };
 
 type Reply = NativeBrowserReply<InspectionCapture['snapshot']>;
+
+/** The pictures and exports travel as base64; here they are bytes again. */
+export const decodeCapture = (capture: NonNullable<Reply['capture']>): InspectionCapture => ({
+  screenshot: Buffer.from(capture.screenshot, 'base64'),
+  archive: Buffer.from(capture.archive, 'base64'),
+  snapshot: capture.snapshot,
+});
+export const decodeActed = (acted: NonNullable<Reply['acted']>): BrowserActionResult<Buffer> => ({
+  ...acted,
+  screenshot: acted.screenshot ? Buffer.from(acted.screenshot, 'base64') : null,
+});
 
 /** A local gateway asks its own Electron parent, never a caller-supplied browser endpoint. */
 export function nativeBrowser(port: Port): NativeBrowser {
@@ -79,19 +96,12 @@ export function nativeBrowser(port: Port): NativeBrowser {
     inspect: async (input, scope, signal) => {
       const { capture } = await ask('browser:inspect', input, scope, signal);
       if (!capture) throw new Error('The native browser returned no inspection');
-      return {
-        screenshot: Buffer.from(capture.screenshot, 'base64'),
-        archive: Buffer.from(capture.archive, 'base64'),
-        snapshot: capture.snapshot,
-      };
+      return decodeCapture(capture);
     },
     act: async (input, scope, signal) => {
       const { acted } = await ask('browser:act', input, scope, signal);
       if (!acted) throw new Error('The native browser returned no result');
-      return {
-        ...acted,
-        screenshot: acted.screenshot ? Buffer.from(acted.screenshot, 'base64') : null,
-      };
+      return decodeActed(acted);
     },
   };
 }

@@ -270,44 +270,6 @@ const model = {
   fast: true,
 };
 
-it('leaves its protection for the next new chat, once its first message has gone', async () => {
-  const updateSettings = vi.fn(async () => ({}));
-  chosen.protection = 'full';
-  await render({
-    createGatewaySession: vi.fn(async () => session) as never,
-    renameSession: vi.fn(async () => session) as never,
-    send: vi.fn(async () => ({ id: 'run' })) as never,
-    setSessionModel: vi.fn(async () => session) as never,
-    setSessionProtection: vi.fn(async () => session) as never,
-    updateSettings: updateSettings as never,
-  });
-  await flush();
-  await act(async () => applyChoices());
-  await type('Plan the release');
-  await press();
-  await flush();
-
-  expect(updateSettings).toHaveBeenCalledWith({ newChatProtection: 'full' });
-});
-
-it('leaves the protection as it was when the message did not reach the gateway', async () => {
-  const updateSettings = vi.fn(async () => ({}));
-  chosen.protection = 'full';
-  await render({
-    createGatewaySession: vi.fn(async () => {
-      throw new Error('No gateway.');
-    }) as never,
-    updateSettings: updateSettings as never,
-  });
-  await flush();
-  await act(async () => applyChoices());
-  await type('Plan the release');
-  await press();
-  await flush();
-
-  expect(updateSettings).not.toHaveBeenCalled();
-});
-
 it('starts from the protection the last new chat left', async () => {
   chosen.model = undefined;
   chosen.protection = undefined;

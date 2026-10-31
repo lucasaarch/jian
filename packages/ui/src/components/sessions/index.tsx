@@ -230,6 +230,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                                   }}
                                 />
                                 <SessionProtection
+                                  remembers
                                   key={`composer-protection-${active.id}`}
                                   api={api}
                                   profileId={profile.id}

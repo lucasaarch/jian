@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { GATEWAY_SESSION_CHANNEL, githubFixConflictsInputSchema } from '@jian/contracts';
+import {
+  GATEWAY_SESSION_CHANNEL,
+  githubFixConflictsInputSchema,
+  JIAN_CLIENT_HEADER,
+  JIAN_DESKTOP_CLIENT,
+} from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import type { Coordination } from '../coordination/service.js';
 import { GatewayError } from '../core/errors.js';
@@ -147,6 +152,9 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
       reply.code(202).send(
         await deps.runs.submit(request.params.profileId, request.params.sessionId, request.body, {
           ownerMessage: true,
+          ...(request.headers[JIAN_CLIENT_HEADER] === JIAN_DESKTOP_CLIENT
+            ? { client: JIAN_DESKTOP_CLIENT }
+            : {}),
         }),
       ),
   );

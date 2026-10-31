@@ -106,7 +106,42 @@ export const remoteUpdateParamsSchema = z.strictObject({
   version: z.string().regex(/^(latest|\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?)$/),
 });
 
-export const remoteTaskKindSchema = z.enum(['shell', 'computer', 'update']);
+export const remoteTaskKindSchema = z.enum(['shell', 'computer', 'update', 'browser']);
+
+/**
+ * Says a request comes from the desktop app, which signs it on its way out. Only that app has a
+ * browser beside the conversation; the web panel and the channels never send this.
+ */
+export const JIAN_CLIENT_HEADER = 'x-jian-client';
+export const JIAN_DESKTOP_CLIENT = 'desktop';
+
+/** What a worker says when the browser beside the conversations is its to drive: the app's. */
+export const REMOTE_BROWSER_CAPABILITY = 'browser-v1';
+
+/**
+ * An action in the browser beside one conversation, in the app that is this machine. The input
+ * goes as it is: the app validates it again, as it does what its own gateway asks.
+ */
+export const remoteBrowserParamsSchema = z.strictObject({
+  // `check` only asks whether the owner is watching; nothing happens in the browser.
+  operation: z.enum(['act', 'inspect', 'check']),
+  profileId: z.uuid(),
+  sessionId: z.uuid(),
+  input: z.unknown(),
+});
+
+/**
+ * What the app answered. `notShowing` is a refusal before anything happened: the owner is not
+ * looking at that conversation, so nothing may be done where they cannot watch it.
+ */
+export const remoteBrowserResultSchema = z.strictObject({
+  notShowing: z.literal(true).optional(),
+  error: z.string().max(2000).optional(),
+  acted: z.unknown().optional(),
+  capture: z
+    .strictObject({ screenshot: z.string(), archive: z.string(), snapshot: z.unknown() })
+    .optional(),
+});
 
 export const remoteTaskSchema = z.strictObject({
   id: z.uuid(),
@@ -116,6 +151,7 @@ export const remoteTaskSchema = z.strictObject({
   timeoutMs: z.number().int(),
   computer: remoteComputerParamsSchema.optional(),
   update: remoteUpdateParamsSchema.optional(),
+  browser: remoteBrowserParamsSchema.optional(),
   /**
    * A shell task's secret environment, such as a credential the command needs: added to that
    * command alone. A worker that advertises `shell-secret-env-v1` never logs it and masks its
@@ -147,6 +183,7 @@ export const remoteResultSchema = z.strictObject({
   computer: remoteComputerResultSchema.optional(),
   /** The releases an update task went from and to; the worker restarts after posting it. */
   update: z.strictObject({ from: z.string(), to: z.string() }).optional(),
+  browser: remoteBrowserResultSchema.optional(),
 });
 
 /** What updating a machine came to, for the owner in the panel and for an agent. */
@@ -163,6 +200,8 @@ export const remoteMachineDeleteSchema = z.strictObject({ id: z.uuid() });
 export type RemoteMachine = z.infer<typeof remoteMachineSchema>;
 export type RemoteCommand = z.infer<typeof remoteCommandSchema>;
 export type RemoteComputerParams = z.infer<typeof remoteComputerParamsSchema>;
+export type RemoteBrowserParams = z.infer<typeof remoteBrowserParamsSchema>;
+export type RemoteBrowserResult = z.infer<typeof remoteBrowserResultSchema>;
 export type RemoteComputerCommand = z.infer<typeof remoteComputerCommandSchema>;
 /** A task as the gateway hands it to a worker. */
 export type RemoteTask = z.infer<typeof remoteTaskSchema>;

@@ -3662,7 +3662,8 @@
                           "enum": [
                             "shell",
                             "computer",
-                            "update"
+                            "update",
+                            "browser"
                           ]
                         },
                         "command": {
@@ -3782,6 +3783,37 @@
                           },
                           "required": [
                             "version"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "browser": {
+                          "type": "object",
+                          "properties": {
+                            "operation": {
+                              "type": "string",
+                              "enum": [
+                                "act",
+                                "inspect",
+                                "check"
+                              ]
+                            },
+                            "profileId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "sessionId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "input": {}
+                          },
+                          "required": [
+                            "operation",
+                            "profileId",
+                            "sessionId",
+                            "input"
                           ],
                           "additionalProperties": false
                         },
@@ -4164,6 +4196,39 @@
                       "from",
                       "to"
                     ],
+                    "additionalProperties": false
+                  },
+                  "browser": {
+                    "type": "object",
+                    "properties": {
+                      "notShowing": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "error": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "acted": {},
+                      "capture": {
+                        "type": "object",
+                        "properties": {
+                          "screenshot": {
+                            "type": "string"
+                          },
+                          "archive": {
+                            "type": "string"
+                          },
+                          "snapshot": {}
+                        },
+                        "required": [
+                          "screenshot",
+                          "archive",
+                          "snapshot"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "additionalProperties": false
                   }
                 },

@@ -1,5 +1,6 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { RemoteBrowserParams, RemoteBrowserResult } from '@jian/contracts';
 import { app, powerSaveBlocker, type UtilityProcess, utilityProcess } from 'electron';
 import type { FromWorkers, ToWorkers } from './messages';
 import type { WorkerHost, WorkerTarget } from './sharing';
@@ -39,6 +40,8 @@ export class UtilityWorkerHost implements WorkerHost {
       refused(gatewayId: string): void;
       /** An agent on the gateway began or ended using this computer; null when it ended. */
       using(gatewayId: string, kind: 'shell' | 'computer' | null): void;
+      /** The gateway wants the browser beside a conversation. */
+      browser(gatewayId: string, params: RemoteBrowserParams): Promise<RemoteBrowserResult>;
     },
   ) {}
 
@@ -97,6 +100,13 @@ export class UtilityWorkerHost implements WorkerHost {
       }
       if (message.type === 'using') this.events.using(message.gatewayId, message.kind);
       if (message.type === 'done') this.events.using(message.gatewayId, null);
+      if (message.type === 'browser') {
+        const { id } = message;
+        void this.events
+          .browser(message.gatewayId, message.params)
+          .catch((failure: unknown): RemoteBrowserResult => ({ error: String(failure) }))
+          .then((answer) => child.postMessage({ type: 'browser-answer', id, answer }));
+      }
     });
     child.on('spawn', () => {
       this.failures = 0;

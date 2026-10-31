@@ -127,7 +127,7 @@ afterEach(() => {
 async function mount(
   cache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } }),
   extra?: ReactNode,
-  greet = false,
+  welcomes = false,
 ) {
   const node = document.createElement('div');
   document.body.append(node);
@@ -139,7 +139,7 @@ async function mount(
   await act(async () => {
     root.render(
       <QueryClientProvider client={cache}>
-        <ChatsApp greet={greet} />
+        <ChatsApp welcomes={welcomes} />
         {extra}
       </QueryClientProvider>,
     );
@@ -295,7 +295,7 @@ for (const mode of ['local', 'server'] as const) {
     }
     await act(async () => new Promise((resolve) => setTimeout(resolve, 550)));
     await settle();
-    expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&welcome`);
+    expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&arriving`);
     expect(document.body.textContent).toContain('First conversation');
     expect(cache.getQueryData<Profile[]>(keys.profiles)?.map((item) => item.name)).toEqual([
       'Mira',
@@ -371,7 +371,7 @@ it('keeps a created agent when opening its chat fails and retries only the hando
 });
 
 const wait = (ms: number) => act(async () => new Promise((resolve) => setTimeout(resolve, ms)));
-const greetingLasts = 1_900;
+const welcomeLasts = 1_900;
 
 it('holds the mark until the agents are known, without drawing the app behind it', async () => {
   useOnboarding.setState({ completed: true });
@@ -404,8 +404,8 @@ it('greets on launch, lands on a new chat, and does not greet again in that wind
   expect(document.body.textContent).toContain('Welcome back.');
   expect(document.body.textContent).toContain(`${profile.name} has been waiting for you.`);
 
-  await wait(greetingLasts);
-  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&welcome`);
+  await wait(welcomeLasts);
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&arriving`);
   expect(document.body.textContent).toContain('First conversation');
 
   first.unmount();
@@ -413,29 +413,29 @@ it('greets on launch, lands on a new chat, and does not greet again in that wind
   expect(document.body.textContent).not.toContain('Welcome back.');
 });
 
-it('keeps a place asked for while the greeting played', async () => {
+it('keeps a place asked for while the welcome played', async () => {
   useOnboarding.setState({ completed: true });
   agents = [profile];
   memoryNavigation.go(`/agents/${profile.id}/sessions`);
   await mount(undefined, undefined, true);
 
   await act(async () => memoryNavigation.go(`/agents/${profile.id}/sessions/from-a-notification`));
-  await wait(greetingLasts);
+  await wait(welcomeLasts);
 
   expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions/from-a-notification`);
   expect(document.body.textContent).toContain('First conversation');
 });
 
-it('does not let a chat that cannot be read hold the greeting', async () => {
+it('does not let a chat that cannot be read hold the welcome', async () => {
   useOnboarding.setState({ completed: true });
   agents = [profile];
   api.activities.mockRejectedValue(new Error('Gateway unavailable'));
   await mount(undefined, undefined, true);
 
-  await wait(greetingLasts);
+  await wait(welcomeLasts);
 
   expect(document.body.textContent).not.toContain('Welcome back.');
-  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&welcome`);
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&arriving`);
 });
 
 it('does not greet an owner with no agent, nor after they create their first', async () => {
@@ -466,7 +466,7 @@ it('makes another agent in the identity scene, skipping what only a first run as
   expect(document.body.textContent).toContain('This is the beginning.');
 
   await wait(550);
-  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&welcome`);
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new&arriving`);
   expect(useOnboarding.getState().creating).toBe(false);
   // In the list as soon as it exists, and still there after the list is read again.
   expect(cache.getQueryData<Profile[]>(keys.profiles)?.map((item) => item.name)).toContain('Mira');

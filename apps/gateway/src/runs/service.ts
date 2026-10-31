@@ -36,6 +36,7 @@ import {
   parseCavemanMode,
   parsePonytailMode,
   setCavemanMode,
+  setLastClient,
   setPonytailMode,
   setSessionModel,
   setSessionObjective,
@@ -198,6 +199,9 @@ export class Runs {
       }
 
       const session = await this.sessions.session(profileId, sessionId, tx);
+      if (options.ownerMessage) {
+        await setLastClient(tx, profileId, sessionId, options.client ?? null);
+      }
       if (session.channel === TASK_SESSION_CHANNEL && !subagent) {
         throw new GatewayError(403, 'Subagent sessions cannot receive direct messages');
       }

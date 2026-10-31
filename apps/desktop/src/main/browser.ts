@@ -106,6 +106,9 @@ const pageSummary = (page: BrowserPage): BrowserPageSummary => {
  * The browser beside a conversation: each has its own tabs, and none reaches another's. Separate
  * from the app's origin, preload and secrets.
  */
+/** Whose browser, and for which conversation. A gateway's own app leaves out which gateway. */
+export type BrowserScope = { gatewayId?: string; profileId: string; sessionId: string };
+
 export class JianBrowser {
   private conversations = new Map<string, Conversation>();
   private current?: Conversation;
@@ -716,12 +719,16 @@ export class JianBrowser {
    * that page fail its own work and frees the queue for what comes next.
    */
   private work<T>(
-    scope: { profileId: string; sessionId: string },
+    scope: BrowserScope,
     signal: AbortSignal | undefined,
     choose: (conversation: Conversation) => BrowserPage | undefined,
     run: (page: BrowserPage, shown: boolean, deadline: AbortSignal) => Promise<T>,
   ): Promise<T> {
-    const conversation = this.conversationFor('local', scope.profileId, scope.sessionId);
+    const conversation = this.conversationFor(
+      scope.gatewayId ?? 'local',
+      scope.profileId,
+      scope.sessionId,
+    );
     const page =
       choose(conversation) ??
       conversation.pages.find((candidate) => candidate.id === conversation.agentPageId) ??
@@ -772,7 +779,7 @@ export class JianBrowser {
   }
 
   act(
-    scope: { profileId: string; sessionId: string },
+    scope: BrowserScope,
     raw: unknown,
     signal?: AbortSignal,
   ): Promise<BrowserActionResult<Buffer>> {
@@ -819,7 +826,7 @@ export class JianBrowser {
   }
 
   inspect(
-    scope: { profileId: string; sessionId: string },
+    scope: BrowserScope,
     raw: PageInspectionInput,
     signal?: AbortSignal,
   ): Promise<InspectionCapture> {

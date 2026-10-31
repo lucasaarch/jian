@@ -603,6 +603,13 @@
       "when": 1793490000000,
       "tag": "0085_schedule-model",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1793490060000,
+      "tag": "0086_session-last-client",
+      "breakpoints": true
     }
   ]
 }

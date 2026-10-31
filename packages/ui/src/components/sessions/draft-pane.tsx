@@ -1,6 +1,5 @@
 'use client';
 
-import type { GatewaySettings } from '@jian/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
@@ -61,7 +60,7 @@ export function DraftPane({
 }) {
   const client = useQueryClient();
   const pane = useRef<HTMLElement>(null);
-  const arriving = useSearchParams().has('welcome');
+  const arriving = useSearchParams().has('arriving');
   const { still } = useAppearance();
   useEffect(() => {
     if (!arriving) return;
@@ -99,20 +98,6 @@ export function DraftPane({
     };
   }, []);
   const words = draftKey(profile.id);
-
-  /**
-   * This chat's protection is where the next one starts. Worth having, not worth failing over: a
-   * gateway from before this answers no, and the message has gone regardless. Its model was
-   * remembered when it was picked.
-   */
-  const remember = () => {
-    if (protection !== (settings?.newChatProtection ?? 'ask')) {
-      client.setQueryData<GatewaySettings>(keys.settings, (known) =>
-        known ? { ...known, newChatProtection: protection } : known,
-      );
-      void api.updateSettings({ newChatProtection: protection }).catch(() => {});
-    }
-  };
 
   /** Everything the chat needs, under a message already on screen. */
   const start = async (message: Sending) => {
@@ -166,7 +151,6 @@ export function DraftPane({
       adoptInspector(session.id);
       opened(session.id);
       sent();
-      remember();
     } catch (failure) {
       if (!here.current) return;
       setSending({
@@ -252,6 +236,7 @@ export function DraftPane({
                 profileId={profile.id}
                 draft={protection}
                 onDraftChange={setProtection}
+                remembers
               />
               <SessionModel
                 api={api}

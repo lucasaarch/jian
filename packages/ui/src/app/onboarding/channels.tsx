@@ -12,7 +12,13 @@ import { ChannelAddDialog } from '../customize/channel-add-dialog';
 import { ChannelPairing } from '../customize/channel-pairing';
 
 /** A channel may exist even when pairing fails; read it again before offering another create. */
-export function WelcomeChannels({ profileId, finish }: { profileId: string; finish: () => void }) {
+export function OnboardingChannels({
+  profileId,
+  finish,
+}: {
+  profileId: string;
+  finish: () => void;
+}) {
   const client = useQueryClient();
   const api = panelApi();
   const channels = useQuery(queries.channels(profileId));

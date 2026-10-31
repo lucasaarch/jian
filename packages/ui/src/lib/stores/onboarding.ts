@@ -7,11 +7,11 @@ export type DepartedAgent = { name: string; avatar?: string | null; summary?: st
 type Onboarding = {
   completed: boolean;
   requested: boolean;
-  /** A new agent is being made in the Welcome's own scene. Never kept. */
+  /** A new agent is being made in the onboarding's own scene. Never kept. */
   creating: boolean;
   /** An agent just deleted, being seen off. Never kept. */
   departed?: DepartedAgent & { then: () => void };
-  /** The Welcome is on screen now, so a host can put its own chrome away. Never kept. */
+  /** The onboarding is on screen now, so a host can put its own chrome away. Never kept. */
   showing: boolean;
   show: () => void;
   create: () => void;
@@ -46,5 +46,5 @@ export const useOnboarding = create<Onboarding>()(
   ),
 );
 
-/** Whether the Welcome is on screen, for a host's own chrome to step aside. */
-export const useWelcomeShowing = () => useOnboarding((state) => state.showing);
+/** Whether the onboarding is on screen, for a host's own chrome to step aside. */
+export const useStageShowing = () => useOnboarding((state) => state.showing);

@@ -89,7 +89,7 @@ export function GatewayPanel({
     // chats: it opens at once, and still reads while the gateway cannot be reached.
     <QueryProvider keep={{ key: gateway.id, release: desktop().version }}>
       <NavigationProvider navigation={navigation}>
-        <ChatsApp greet />
+        <ChatsApp welcomes />
         {slots.start && createPortal(<AgentsWorking />, slots.start)}
         {slots.end && createPortal(<SubscriptionMeter />, slots.end)}
         <AppSettings

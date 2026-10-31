@@ -16,6 +16,8 @@ import type { RunAction } from './action.js';
 export type SubmitOptions = {
   /** Set only by the authenticated owner-facing message route. */
   ownerMessage?: boolean;
+  /** The app an owner's message came from, when it is one that says so. */
+  client?: string;
   channelMessage?: Message['channelMessage'];
   continuationOf?: string;
   activity?: 'conversation' | 'channel';

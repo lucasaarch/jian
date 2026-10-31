@@ -11,7 +11,7 @@ export function isClaudeArtifact(url: string): boolean {
 }
 
 const UNAVAILABLE =
-  'The Claude artifact content did not load. It may require sign-in, access approval, or a browser challenge, which a server cannot complete. Inspect it with inspect_page in the Jian desktop app, where the owner can complete them; use Computer Use on a connected machine; or ask the owner to attach an export of the artifact.';
+  'The Claude artifact content did not load. It may require sign-in, access approval, or a browser challenge, which a server cannot complete. The owner can complete them in a conversation in the Jian desktop app; otherwise use Computer Use on a connected machine; or ask the owner to attach an export of the artifact.';
 
 export async function readClaudeArtifact(url: string, fetcher: typeof fetch, signal: AbortSignal) {
   try {

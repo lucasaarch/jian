@@ -8,7 +8,7 @@ import {
   ReloadCurtain,
   searchChats,
   ThemeSync,
-  useWelcomeShowing,
+  useStageShowing,
 } from '@jian/ui';
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserInspector } from './chrome/browser-panel';
@@ -41,7 +41,7 @@ export function App() {
 
 function Window() {
   const { gateways, loaded } = useGateways();
-  const welcoming = useWelcomeShowing();
+  const staged = useStageShowing();
   const { current, select } = useSelectedGateway(gateways);
   // The settings page open, or none while they are closed; they reopen where they were left.
   const [settingsPage, setSettingsPage] = useState<string>();
@@ -111,9 +111,9 @@ function Window() {
     >
       <TitleBar gateway={current} />
       {/* Layout containment makes this area the box the panel's fixed pieces are placed in. */}
-      <BrowserInspector hidden={settings.open || connecting || welcoming}>
+      <BrowserInspector hidden={settings.open || connecting || staged}>
         <div
-          className={`flex min-h-0 min-w-0 flex-1 flex-col [contain:layout] ${welcoming ? 'z-10' : ''}`}
+          className={`flex min-h-0 min-w-0 flex-1 flex-col [contain:layout] ${staged ? 'z-10' : ''}`}
         >
           {current?.status === 'incompatible' ? (
             <Incompatible gateway={current} />
@@ -124,7 +124,7 @@ function Window() {
       </BrowserInspector>
       {/* Always in its place, a stage drawn over it: taking it away would move everything above
           the moment a stage came or went. Under one it is out of reach of the keyboard too. */}
-      <div className="contents" inert={welcoming}>
+      <div className="contents" inert={staged}>
         <StatusBar
           gateway={
             <GatewayPicker

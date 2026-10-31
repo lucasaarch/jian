@@ -773,6 +773,7 @@ try {
   );
   await page.getByLabel('Browser options', { exact: true }).click();
   await page.getByRole('menuitem', { name: 'Clear browsing history' }).click();
+  await page.getByRole('button', { name: 'Clear browsing history', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('section[aria-label="Recents"]'));
   assert.equal(await page.getByRole('region', { name: 'Favorites' }).count(), 1);
   const blankTab = await app.evaluate(

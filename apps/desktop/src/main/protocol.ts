@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { JIAN_CLIENT_HEADER, JIAN_DESKTOP_CLIENT } from '@jian/contracts';
 import { net, protocol } from 'electron';
 import type { GatewayStore } from './gateways/store';
 
@@ -57,6 +58,7 @@ async function forward(
   const headers = new Headers(request.headers);
   for (const name of DROPPED_REQUEST) headers.delete(name);
   headers.set('authorization', `Bearer ${store.token(gateway)}`);
+  headers.set(JIAN_CLIENT_HEADER, JIAN_DESKTOP_CLIENT);
 
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
   try {
