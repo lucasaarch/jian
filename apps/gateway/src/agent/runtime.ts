@@ -462,10 +462,9 @@ export class AgentRuntime {
         }),
         ...this.services.web?.tools(run, async () =>
           Boolean(
-            !defaults?.vision &&
-              (await this.services.providers?.loadCapabilities?.(config))?.inputModalities.includes(
-                'image',
-              ),
+            (await this.services.providers?.loadCapabilities?.(config))?.inputModalities.includes(
+              'image',
+            ),
           ),
         ),
         compact_context: tool({

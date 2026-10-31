@@ -178,7 +178,7 @@ const APPROVAL_NOTICE =
  * looks as if the gateway never received anything, and the owner hunts in the wrong place.
  */
 const NO_MODEL_NOTICE =
-  '⚠️ I received your message, but I cannot answer yet: no AI model is set up for me. My owner can choose one in the gateway panel, under Model defaults. Send your message again after that.';
+  '⚠️ I received your message, but I cannot answer yet: no AI model is set up for me. My owner can choose one in the gateway panel, under Capabilities. Send your message again after that.';
 
 /** One notice per chat in this window, so a person who writes five times is told once. */
 const NO_MODEL_NOTICE_MS = 10 * 60_000;

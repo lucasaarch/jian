@@ -13,6 +13,7 @@ import { verify } from './gateways/verify';
 import { localLogPath } from './local/log';
 import type { ComputerSharing } from './machines/sharing';
 import { notificationsOn, setNotifications } from './preferences';
+import { showingFrom } from './showing';
 
 /** The calls the window may make; each one checks what it is given, as from any other caller. */
 export function serveBridge(deps: {
@@ -137,15 +138,4 @@ export function serveBridge(deps: {
     machinesUsing: (uses) => send('machines:using', uses),
     open: (target) => send('window:open', target),
   };
-}
-
-/** Where the window says it is, taken only in the shape the bridge defines. */
-function showingFrom(value: unknown): Showing | null {
-  if (!value || typeof value !== 'object') return null;
-  const { gatewayId, chat } = value as { gatewayId?: unknown; chat?: unknown };
-  if (typeof gatewayId !== 'string') return null;
-  const { profileId, sessionId } = (chat ?? {}) as { profileId?: unknown; sessionId?: unknown };
-  return typeof profileId === 'string' && typeof sessionId === 'string'
-    ? { gatewayId, chat: { profileId, sessionId } }
-    : { gatewayId };
 }

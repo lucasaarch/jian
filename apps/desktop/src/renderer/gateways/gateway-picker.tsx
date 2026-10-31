@@ -17,6 +17,9 @@ function Mark({ gateway }: { gateway: GatewaySummary }) {
   );
 }
 
+const badge =
+  'grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-on-accent';
+
 /**
  * The gateway in use, in the status bar: every one the app knows, how each stands and its
  * unread chats; switching shows its agents. Each one's details are in the app's settings.
@@ -52,7 +55,7 @@ export function GatewayPicker({
           <span className="truncate">{current?.name ?? 'No gateway'}</span>
           {/* Replies waiting on the gateways not shown, so none goes unseen. */}
           {unread > 0 && (
-            <span className="rounded-full bg-accent px-1.5 text-[10px] font-semibold leading-4 text-on-accent">
+            <span className={badge}>
               {unread}
               <span className="sr-only"> unread elsewhere</span>
             </span>
@@ -71,7 +74,17 @@ export function GatewayPicker({
           <PickerRow
             key={gateway.id}
             leading={<Mark gateway={gateway} />}
-            label={gateway.unread > 0 ? `${gateway.name} · ${gateway.unread} unread` : gateway.name}
+            label={gateway.name}
+            {...(gateway.unread > 0
+              ? {
+                  trailing: (
+                    <span className={badge}>
+                      {gateway.unread}
+                      <span className="sr-only"> unread</span>
+                    </span>
+                  ),
+                }
+              : {})}
             {...(detail ? { detail } : {})}
             selected={gateway.id === current?.id}
             onPick={close(() => select(gateway.id))}

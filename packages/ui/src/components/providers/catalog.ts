@@ -110,13 +110,6 @@ export const roles = [
     tools: false,
   },
   {
-    key: 'vision',
-    label: 'Image analysis',
-    hint: 'When selected, analyzes incoming images. Otherwise the conversation model sees them directly when supported; Gemini is the fallback.',
-    runtime: true,
-    tools: true,
-  },
-  {
     key: 'audio',
     label: 'Incoming audio',
     hint: 'Voice notes and audio files share this model. Gemini also describes relevant sounds; Whisper, from OpenAI, Groq or your own server, transcribes the speech.',

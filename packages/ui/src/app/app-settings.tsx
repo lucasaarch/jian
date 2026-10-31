@@ -188,10 +188,10 @@ function gatewayPages({ info, actions }: GatewaySettings): SettingsPage[] {
     },
     {
       id: 'models',
-      label: 'Model defaults',
+      label: 'Capabilities',
       icon: <Cpu size={15} />,
       group,
-      keywords: ['model', 'effort', 'default', 'channel', 'conversation'],
+      keywords: ['model', 'audio', 'voice', 'speech', 'image', 'channel', 'compaction', 'defaults'],
     },
     {
       id: 'integrations',

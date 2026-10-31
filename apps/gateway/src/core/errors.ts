@@ -15,7 +15,7 @@ export class NoModelAvailable extends GatewayError {
   constructor() {
     super(
       409,
-      'No model is available. Connect a provider under Providers, or choose a model under Model defaults.',
+      'No model is available. Connect a provider under Providers, or choose a model under Capabilities.',
     );
   }
 }

@@ -15,6 +15,7 @@ import type {
   RunApproval,
   RunProgress,
   RunQuestion,
+  Schedule,
   SessionObjective,
   Skill,
   Subagent,
@@ -490,6 +491,8 @@ export const schedules = pgTable(
       .references(() => profiles.id, { onDelete: 'cascade' }),
     // Null: each run opens a new chat of the panel.
     sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'cascade' }),
+    // What that new chat runs on; a conversation that exists has its own.
+    model: jsonb('model').$type<NonNullable<Schedule['model']>>(),
     name: text('name').notNull(),
     instruction: text('instruction').notNull(),
     at: timestamp('at', { withTimezone: true }),

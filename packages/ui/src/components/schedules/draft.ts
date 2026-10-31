@@ -22,6 +22,7 @@ export function useScheduleDraft(schedule: Schedule | undefined, zone: string) {
   const [instruction, setInstruction] = useState(schedule?.instruction ?? '');
   // A new schedule runs in a new chat each time until another conversation is chosen.
   const [sessionId, setSessionId] = useState<string | null>(schedule ? schedule.sessionId : null);
+  const [model, setModel] = useState<Schedule['model']>(schedule?.model);
   const [kind, setKind] = useState<'once' | 'repeat'>(schedule?.cron ? 'repeat' : 'once');
   const [at, setAt] = useState(
     schedule?.at
@@ -43,6 +44,8 @@ export function useScheduleDraft(schedule: Schedule | undefined, zone: string) {
     name: name.trim(),
     instruction: instruction.trim(),
     sessionId,
+    // Only a new chat each time has one: an existing conversation runs on its own.
+    ...(sessionId ? {} : { model: model ?? null }),
     timeZone,
     enabled: schedule?.enabled ?? true,
     ...(kind === 'once' ? { at: zonedToIso(at, timeZone) } : { cron }),
@@ -56,6 +59,8 @@ export function useScheduleDraft(schedule: Schedule | undefined, zone: string) {
     setInstruction,
     sessionId,
     setSessionId,
+    model,
+    setModel,
     kind,
     setKind,
     at,

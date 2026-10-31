@@ -76,12 +76,15 @@ export function PickerRow({
   leading,
   label,
   detail,
+  trailing,
   selected,
   onPick,
   onSettings,
   settingsLabel,
 }: {
   leading?: ReactNode;
+  /** At the row's far end, in the room its settings button would have. */
+  trailing?: ReactNode;
   label: string;
   detail?: string;
   selected: boolean;
@@ -102,6 +105,9 @@ export function PickerRow({
           <span className="truncate">{label}</span>
           {detail && <span className="truncate text-xs text-muted">{detail}</span>}
         </span>
+        {trailing && (
+          <span className="absolute top-1/2 right-2.5 -translate-y-1/2">{trailing}</span>
+        )}
       </button>
       {onSettings && (
         <button

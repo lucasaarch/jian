@@ -47,10 +47,10 @@ function toSelection(value: RoleValue): ModelSelection | 'disabled' | null {
 }
 
 /**
- * The installation's model per activity, as the owner edits it. What was never saved starts at
+ * The installation's model per capability, as the owner edits it. What was never saved starts at
  * the preferred model, so the first change saves a complete set. A choice is final: it is saved
- * at once, and the next save waits for it. Changing the conversation model moves the channel
- * model with it, since the screens offer one choice for both.
+ * at once, and the next save waits for it. The conversation's own is not edited here: a new chat
+ * writes it, and each save passes on the latest.
  */
 export function useModelDefaults(api: GatewayApi) {
   const catalog = useModelCatalog();
@@ -81,40 +81,37 @@ export function useModelDefaults(api: GatewayApi) {
 
   const refresh = useRefresh();
   const latest = useRef(values);
+  const current = useRef(catalog.modelDefaults);
+  current.current = catalog.modelDefaults;
 
   const { schedule, flush } = useAutosave(async () => {
     try {
       await api.setModelDefaults(
         Object.fromEntries(
-          roles.map((role) => [role.key, toSelection(latest.current[role.key])]),
+          roles.map((role) => [
+            role.key,
+            role.key === 'conversation'
+              ? current.current.conversation
+              : toSelection(latest.current[role.key]),
+          ]),
         ) as ModelDefaultsInput,
       );
-      toast.success('Model defaults saved.', { id: 'model-defaults-autosave' });
+      toast.success('Capabilities saved.', { id: 'model-defaults-autosave' });
       void refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'The defaults could not be saved.', {
+      toast.error(error instanceof Error ? error.message : 'That could not be saved.', {
         id: 'model-defaults-autosave',
       });
     }
   });
 
   const change = (role: Role, patch: Partial<RoleValue>) => {
-    const updated = { ...latest.current[role], ...patch };
-    const next = {
-      ...latest.current,
-      [role]: updated,
-      ...(role === 'conversation' ? { channel: updated } : {}),
-    };
+    const next = { ...latest.current, [role]: { ...latest.current[role], ...patch } };
 
     latest.current = next;
     setValues(next);
     schedule(0);
   };
 
-  // A channel model saved apart from the conversation one, which the next change will replace.
-  const separateChannel =
-    JSON.stringify(toSelection(values.channel)) !==
-    JSON.stringify(toSelection(values.conversation));
-
-  return { catalog, configured, hasOpenAIKey, values, change, flush, separateChannel };
+  return { catalog, configured, hasOpenAIKey, values, change, flush };
 }

@@ -1,8 +1,14 @@
-import { type GatewaySettings, gatewaySettingsPatchSchema } from '@jian/contracts';
-import { eq } from 'drizzle-orm';
+import {
+  type GatewaySettings,
+  gatewaySettingsPatchSchema,
+  protectionModeSchema,
+} from '@jian/contracts';
+import { eq, inArray } from 'drizzle-orm';
 import { gatewayTimeZone } from '../core/time-zone.js';
 import type { Store } from '../storage/database.js';
 import { gatewaySettings } from '../storage/schema.js';
+
+const NEW_CHAT_PROTECTION = 'newChatProtection';
 
 /** Settings of the whole installation: what every profile shares, such as its time zone. */
 export class Settings {
@@ -12,21 +18,23 @@ export class Settings {
   ) {}
 
   async read(): Promise<GatewaySettings> {
-    // The environment wins without deleting a previously saved value, so removing the variable
-    // restores the old setting during a rollback.
-    if (this.configuredTimeZone) {
-      return { timeZone: this.configuredTimeZone, timeZoneSource: 'setting' };
-    }
-    const [row] = await this.store.db
+    const rows = await this.store.db
       .select()
       .from(gatewaySettings)
-      .where(eq(gatewaySettings.key, 'timeZone'))
-      .limit(1);
-    const chosen = typeof row?.value === 'string' ? row.value : undefined;
+      .where(inArray(gatewaySettings.key, ['timeZone', NEW_CHAT_PROTECTION]));
+    const value = (key: string) => rows.find((row) => row.key === key)?.value;
+    const protection = protectionModeSchema.safeParse(value(NEW_CHAT_PROTECTION));
+    const newChat = protection.success ? { newChatProtection: protection.data } : {};
+    // The environment wins without deleting a previously saved value, so removing the var
+    // restores the old setting during a rollback.
+    if (this.configuredTimeZone) {
+      return { timeZone: this.configuredTimeZone, timeZoneSource: 'setting', ...newChat };
+    }
+    const chosen = value('timeZone');
 
-    return chosen
-      ? { timeZone: chosen, timeZoneSource: 'setting' }
-      : { timeZone: gatewayTimeZone(), timeZoneSource: 'host' };
+    return typeof chosen === 'string'
+      ? { timeZone: chosen, timeZoneSource: 'setting', ...newChat }
+      : { timeZone: gatewayTimeZone(), timeZoneSource: 'host', ...newChat };
   }
 
   /** The zone agents read the time in and schedules default to. */
@@ -35,20 +43,24 @@ export class Settings {
   }
 
   async update(input: unknown) {
-    const { timeZone } = gatewaySettingsPatchSchema.parse(input);
-
+    const { timeZone, newChatProtection } = gatewaySettingsPatchSchema.parse(input);
     if (timeZone === null) {
       await this.store.db.delete(gatewaySettings).where(eq(gatewaySettings.key, 'timeZone'));
-    } else {
-      await this.store.db
-        .insert(gatewaySettings)
-        .values({ key: 'timeZone', value: timeZone })
-        .onConflictDoUpdate({
-          target: gatewaySettings.key,
-          set: { value: timeZone, updatedAt: new Date() },
-        });
+    } else if (timeZone !== undefined) {
+      await this.write('timeZone', timeZone);
     }
+    if (newChatProtection) await this.write(NEW_CHAT_PROTECTION, newChatProtection);
 
     return this.read();
+  }
+
+  private async write(key: string, value: string) {
+    await this.store.db
+      .insert(gatewaySettings)
+      .values({ key, value })
+      .onConflictDoUpdate({
+        target: gatewaySettings.key,
+        set: { value, updatedAt: new Date() },
+      });
   }
 }

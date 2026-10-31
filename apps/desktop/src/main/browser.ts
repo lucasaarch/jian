@@ -23,6 +23,7 @@ import { type CookieSourceId, cookieSources, importCookies } from './browser-coo
 import { allowed, inspectContents, pageKey } from './browser-inspect';
 import { addressFrom, BrowserPlaces } from './browser-places';
 import { BrowserPointer } from './browser-pointer';
+import { BrowserTabsFile, type SavedConversation } from './browser-tabs';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const rejectOnAbort = (signal: AbortSignal) =>
@@ -122,6 +123,9 @@ export class JianBrowser {
   private readonly places = new BrowserPlaces(() =>
     join(app.getPath('userData'), 'browser-places.json'),
   );
+  private readonly saved = new BrowserTabsFile(() =>
+    join(app.getPath('userData'), 'browser-tabs.json'),
+  );
   constructor(
     private readonly window: () => BrowserWindow | undefined,
     private readonly limits: BrowserLimits = LIMITS,
@@ -168,12 +172,56 @@ export class JianBrowser {
       error: page?.error,
     };
   }
+  /** What is saved is what could come back: a conversation, with something open in it. */
+  private savedTabs(): SavedConversation[] {
+    return [...this.conversations.values()].flatMap((conversation) =>
+      conversation.sessionId && conversation.pages.length
+        ? [
+            {
+              key: conversation.key,
+              scope: conversation.scope,
+              sessionId: conversation.sessionId,
+              activeId: conversation.activeId,
+              agentPageId: conversation.agentPageId,
+              pages: conversation.pages.map(({ id, url, title }) => ({ id, url, title })),
+            },
+          ]
+        : [],
+    );
+  }
+  private restoreTabs() {
+    for (const saved of this.saved.read()) {
+      const conversation: Conversation = {
+        key: saved.key,
+        scope: saved.scope,
+        sessionId: saved.sessionId,
+        pages: [],
+        focus: 0,
+        ...(saved.activeId ? { activeId: saved.activeId } : {}),
+        ...(saved.agentPageId ? { agentPageId: saved.agentPageId } : {}),
+      };
+      for (const { id, url, title } of saved.pages)
+        conversation.pages.push({ ...this.blankPage(conversation), id, url, title });
+      this.conversations.set(saved.key, conversation);
+    }
+  }
+  /** A new chat became this conversation: its tabs are this conversation's now. */
+  private adopt(sessionId: string) {
+    const conversation = this.current;
+    if (!conversation || conversation.sessionId) return;
+    this.conversations.delete(conversation.key);
+    conversation.sessionId = sessionId;
+    conversation.key = `${conversation.scope}:${sessionId}`;
+    this.conversations.set(conversation.key, conversation);
+  }
   private changed() {
+    this.saved.save(() => this.savedTabs());
     const window = this.window();
     if (window && !window.isDestroyed()) window.webContents.send('browser:changed', this.state());
   }
   private changedIn(page: BrowserPage) {
     if (page.conversation === this.current) this.changed();
+    else this.saved.save(() => this.savedTabs());
   }
 
   private conversationFor(
@@ -193,12 +241,13 @@ export class JianBrowser {
   private shownConversation() {
     return this.conversationFor(
       this.place?.gatewayId ?? 'local',
-      this.place?.chat?.profileId,
+      // Known on a new chat too: its logins are this agent's, and its tabs may become a chat's.
+      this.place?.chat?.profileId ?? this.place?.profileId,
       this.place?.chat?.sessionId,
     );
   }
-  private addPage(conversation: Conversation) {
-    const page: BrowserPage = {
+  private blankPage(conversation: Conversation): BrowserPage {
+    return {
       id: randomUUID(),
       conversation,
       url: '',
@@ -208,15 +257,23 @@ export class JianBrowser {
       usedAt: Date.now(),
       keepUntil: 0,
     };
+  }
+  private addPage(conversation: Conversation) {
+    const page = this.blankPage(conversation);
     conversation.pages.push(page);
     return page;
   }
 
   showing(place: Showing | null) {
     const before = this.current;
+    const wasIn = this.place?.chat?.sessionId;
     this.place = place;
     const next = place ? this.shownConversation() : undefined;
-    if (next === before) return;
+    if (next === before) {
+      // The same tabs, adopted by the chat they became: the panel is waiting to hear it.
+      if (place?.chat?.sessionId !== wasIn) this.changed();
+      return;
+    }
     const shown = this.shownPage();
     if (shown) shown.tip = this.pointer.position;
     this.detach();
@@ -506,7 +563,9 @@ export class JianBrowser {
     try {
       await this.live(page).webContents.loadURL(url);
     } catch (error) {
-      page.error = error instanceof Error ? error.message : 'The page could not be opened';
+      // Another load took over, as this one does a tab still coming back: nothing went wrong.
+      if ((error as { code?: string }).code !== 'ERR_ABORTED')
+        page.error = error instanceof Error ? error.message : 'The page could not be opened';
     }
     this.layout(this.bounds);
     this.changed();
@@ -549,6 +608,12 @@ export class JianBrowser {
     ipcMain.on('browser:open', (event) => {
       trusted(event);
       this.open();
+    });
+    this.restoreTabs();
+    app.on('before-quit', () => this.saved.flush());
+    ipcMain.on('browser:adopt', (event, sessionId: unknown) => {
+      trusted(event);
+      if (typeof sessionId === 'string') this.adopt(sessionId);
     });
     ipcMain.on('browser:select', (event, pageId: unknown) => {
       trusted(event);

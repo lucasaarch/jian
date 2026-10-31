@@ -605,8 +605,68 @@ it('discovers voices for the profile speech provider instead of its conversation
   expect(JSON.stringify(result)).not.toContain('shimmer');
 });
 
-it('recovers an auxiliary image analysis after temporary provider overload', async () => {
-  const f = await mediaFixture();
+const answered = async (tool: unknown, input: unknown) =>
+  (
+    tool as { execute: (i: unknown, o: object) => Promise<{ text: string; attached?: string }> }
+  ).execute(input, { toolCallId: 'look', messages: [] });
+
+const readsImages = (reads: string[]) =>
+  new ModelCatalog(async () =>
+    Response.json({
+      openai: {
+        models: {
+          'test-vision': {
+            limit: { context: 128000, output: 8192 },
+            modalities: { input: reads, output: ['text'] },
+          },
+        },
+      },
+    }),
+  );
+
+const imageRun = async (f: Awaited<ReturnType<typeof mediaFixture>>) => {
+  await f.incoming('What color?', 'look', [{ mimeType: 'image/png', data: png }]);
+  const [contact] = await f.channels.contacts(f.profile.id);
+  if (!contact) throw new Error('Missing contact');
+  await f.channels.approveContact(f.profile.id, contact.id);
+  const [run] = await f.services.runs.recent(f.profile.id);
+  if (!run) throw new Error('Missing run');
+  return run;
+};
+
+it('calls no other model for an image the conversation model cannot read, and says so', async () => {
+  const f = await mediaFixture(readsImages(['text']));
+  const provider = await f.services.providers.createProvider({
+    name: 'Gemini',
+    kind: 'google',
+    secret: 'synthetic-google-key-1234567890',
+  });
+  // Saved before this went away: it is not used, or paid for, any more.
+  await f.services.providers.setModelDefaults({
+    vision: { providerId: provider.id, modelId: 'gemini-flash-latest' },
+  });
+  const run = await imageRun(f);
+  const called = vi.fn(async () => Response.json({}));
+  const media = new Media(f.services.store, f.services.providers, f.services.gatewayVault, called);
+  const messages: ModelMessage[] = [{ role: 'user', content: run.input }];
+
+  await media.prepare(messages, run, AbortSignal.timeout(1000));
+
+  expect(called).not.toHaveBeenCalled();
+  expect(JSON.stringify(messages)).toContain("conversation's model cannot read it");
+  expect(JSON.stringify(messages)).toContain('Do not pretend');
+  const id = mediaIdsIn(run.input)[0];
+  const looked = await answered(media.tools(run).analyze_media, {
+    mediaId: id,
+    question: 'What color?',
+  });
+  expect(looked.text).toContain("conversation's model cannot read it");
+  expect(looked.attached).toBeUndefined();
+  expect(called).not.toHaveBeenCalled();
+});
+
+it('shows an image to the conversation model itself, whatever was once saved for vision', async () => {
+  const f = await mediaFixture(readsImages(['text', 'image']));
   const provider = await f.services.providers.createProvider({
     name: 'Gemini',
     kind: 'google',
@@ -615,39 +675,40 @@ it('recovers an auxiliary image analysis after temporary provider overload', asy
   await f.services.providers.setModelDefaults({
     vision: { providerId: provider.id, modelId: 'gemini-flash-latest' },
   });
-  await f.incoming('What color?', 'overload', [{ mimeType: 'image/png', data: png }]);
-  const [contact] = await f.channels.contacts(f.profile.id);
-  if (!contact) throw new Error('Missing contact');
-  await f.channels.approveContact(f.profile.id, contact.id);
-  const [run] = await f.services.runs.recent(f.profile.id);
-  if (!run) throw new Error('Missing run');
-  let overloaded = true;
-  const media = new Media(
-    f.services.store,
-    f.services.providers,
-    f.services.gatewayVault,
-    async (_url, options) => {
-      const body = JSON.parse(String(options?.body));
-      expect(body.contents[0].parts).toContainEqual({
-        inlineData: { mimeType: 'image/png', data: png },
-      });
-      if (overloaded) {
-        overloaded = false;
-        return Response.json(
-          { error: { code: 503, message: 'High demand', status: 'UNAVAILABLE' } },
-          { status: 503 },
-        );
-      }
-      return Response.json({
-        candidates: [
-          { content: { role: 'model', parts: [{ text: 'A blue square.' }] }, finishReason: 'STOP' },
-        ],
-        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 4, totalTokenCount: 14 },
-      });
-    },
-  );
+  const run = await imageRun(f);
+  const called = vi.fn(async () => Response.json({}));
+  const media = new Media(f.services.store, f.services.providers, f.services.gatewayVault, called);
   const messages: ModelMessage[] = [{ role: 'user', content: run.input }];
-  await media.prepare(messages, run, AbortSignal.timeout(10000));
-  expect(JSON.stringify(messages)).toContain('A blue square.');
-  expect(JSON.stringify(messages)).not.toContain('could not be read');
+
+  await media.prepare(messages, run, AbortSignal.timeout(1000));
+
+  expect(called).not.toHaveBeenCalled();
+  expect(JSON.stringify(messages)).toContain(png);
+
+  const id = mediaIdsIn(run.input)[0] as string;
+  const tool = media.tools(run).analyze_media as unknown as {
+    toModelOutput: (options: { output: unknown }) => Promise<{
+      type: string;
+      value: Array<{ type: string; data?: string; mediaType?: string }>;
+    }>;
+  };
+  const looked = await answered(tool, { mediaId: id, question: 'What color?' });
+  expect(looked.attached).toBe(id);
+  const shown = await tool.toModelOutput({ output: looked });
+  expect(shown.type).toBe('content');
+  expect(shown.value[1]).toEqual({ type: 'image-data', data: png, mediaType: 'image/png' });
+  expect(called).not.toHaveBeenCalled();
+});
+
+it('will not show a conversation what belongs to another one', async () => {
+  const f = await mediaFixture(readsImages(['text', 'image']));
+  const run = await imageRun(f);
+  const id = mediaIdsIn(run.input)[0] as string;
+  const other = await f.services.sessions.createSession(f.profile.id, { title: 'Other' });
+  const stranger = { ...run, sessionId: other.id };
+  const media = new Media(f.services.store, f.services.providers, f.services.gatewayVault, fetch);
+
+  await expect(
+    answered(media.tools(stranger).analyze_media, { mediaId: id, question: 'What is it?' }),
+  ).rejects.toThrow('not part of this conversation');
 });

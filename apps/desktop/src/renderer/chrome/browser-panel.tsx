@@ -4,6 +4,7 @@ import {
   browserPageOfInspector,
   conversationOfInspector,
   InspectorHost,
+  inspectorHasBrowserPage,
   onInspectorMoved,
   openBrowserInspector,
   syncBrowserInspector,
@@ -26,6 +27,7 @@ const initial: BrowserState = {
 
 const openNativeBrowser = () => desktop().browser.open();
 const closeNativeBrowser = (pageId: string) => desktop().browser.close(pageId);
+const adoptNativeBrowser = (sessionId: string) => desktop().browser.adopt(sessionId);
 
 /** One shared inspector: browser, PRs and subagents use the same glass, tabs and resize handle. */
 export function BrowserInspector({
@@ -40,10 +42,17 @@ export function BrowserInspector({
     const follow = (state: BrowserState) => {
       // The app and the main process change conversation in turn: what is about another waits.
       if (conversationOfInspector() !== state.sessionId) return;
-      syncBrowserInspector(state.pages);
       const key = state.sessionId ?? '';
+      const known = seen.current.get(key);
+      // Tabs saved from before are the owner's choice as they left it, not a request to look.
+      const fresh =
+        known === undefined &&
+        Boolean(state.activePageId) &&
+        !inspectorHasBrowserPage(state.activePageId ?? '') &&
+        state.focus > 0;
+      syncBrowserInspector(state.pages);
       // Asked to look: a new tab, or an agent acting. Otherwise the owner's choice of tab stands.
-      if (state.activePageId && state.focus !== seen.current.get(key))
+      if (state.activePageId && (fresh || (known !== undefined && state.focus !== known)))
         openBrowserInspector(state.activePageId);
       seen.current.set(key, state.focus);
       const chosen = browserPageOfInspector();
@@ -79,6 +88,7 @@ export function BrowserInspector({
       wholePanel
       openBrowser={openNativeBrowser}
       closeBrowser={closeNativeBrowser}
+      adoptBrowser={adoptNativeBrowser}
     >
       {children}
     </InspectorHost>

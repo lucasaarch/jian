@@ -38,6 +38,10 @@ type Crew = {
   syncBrowser: (pages: BrowserPageTab[]) => void;
   reopen: () => void;
   toggleFull: () => void;
+  /** A new chat became this conversation, which takes over its Inspector as it stands. */
+  adopt: (sessionId: string) => void;
+  /** The host's way to hand its browser over with it. */
+  adoptBrowser?: (sessionId: string) => void;
   select: (key: string) => void;
   remove: (key: string) => void;
   close: () => void;
@@ -55,13 +59,49 @@ const selected = (tab?: InspectorTab) => ({
  * conversation: nothing of an Inspector is drawn or loaded while its conversation is not open.
  */
 type Kept = Pick<Crew, 'tabs' | 'opened' | 'full' | 'following' | 'last' | 'item'>;
-const kept = new Map<string, Kept>();
+const SAVED = 'jian-inspector';
 const KEPT_CONVERSATIONS = 50;
+const isTab = (tab: unknown) =>
+  Boolean(tab) &&
+  typeof (tab as InspectorTab).key === 'string' &&
+  ['agent', 'github', 'browser'].includes((tab as InspectorTab).kind);
+
+/** Storage is the owner's but may hold an older shape: what does not read is left out. */
+function readKept(): Map<string, Kept> {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(SAVED) ?? '{}');
+    return new Map(
+      Object.entries(saved as Record<string, Kept>).filter(
+        ([, value]) => Array.isArray(value?.tabs) && value.tabs.every(isTab),
+      ),
+    );
+  } catch {
+    return new Map();
+  }
+}
+let keptRead: Map<string, Kept> | undefined;
+const kept = () => {
+  keptRead ??= readKept();
+  return keptRead;
+};
+let writing: ReturnType<typeof setTimeout> | undefined;
+const write = () => {
+  clearTimeout(writing);
+  // Dragging tabs around writes once: a whole object for each change would be wasted.
+  writing = setTimeout(() => {
+    try {
+      localStorage.setItem(SAVED, JSON.stringify(Object.fromEntries(kept())));
+    } catch {
+      // No storage: they are kept for this visit.
+    }
+  }, 300);
+};
 const keep = (sessionId: string | undefined, state: Kept) => {
   if (!sessionId) return;
-  kept.delete(sessionId);
+  const all = kept();
+  all.delete(sessionId);
   if (state.tabs.length)
-    kept.set(sessionId, {
+    all.set(sessionId, {
       tabs: state.tabs,
       opened: state.opened,
       full: state.full,
@@ -69,10 +109,11 @@ const keep = (sessionId: string | undefined, state: Kept) => {
       last: state.last,
       item: state.item,
     });
-  for (const oldest of kept.keys()) {
-    if (kept.size <= KEPT_CONVERSATIONS) break;
-    kept.delete(oldest);
+  for (const oldest of all.keys()) {
+    if (all.size <= KEPT_CONVERSATIONS) break;
+    all.delete(oldest);
   }
+  write();
 };
 const EMPTY: Kept = {
   tabs: [],
@@ -82,7 +123,7 @@ const EMPTY: Kept = {
   last: undefined,
   item: undefined,
 };
-const restored = (sessionId: string): Kept => kept.get(sessionId) ?? EMPTY;
+const restored = (sessionId: string): Kept => kept().get(sessionId) ?? EMPTY;
 const browserTabKey = (pageId: string) => `browser:${pageId}`;
 export const useCrew = create<Crew>()((set, get) => ({
   agents: [],
@@ -90,6 +131,12 @@ export const useCrew = create<Crew>()((set, get) => ({
   opened: false,
   full: false,
   toggleFull: () => set((state) => ({ full: !state.full })),
+  adopt: (sessionId) => {
+    const state = get();
+    if (state.sessionId) return;
+    keep(sessionId, state);
+    state.adoptBrowser?.(sessionId);
+  },
   show: (sessionId, agents) => {
     const state = get();
     if (state.sessionId === sessionId) {
@@ -201,3 +248,15 @@ export const useCrew = create<Crew>()((set, get) => ({
     set({ sessionId: undefined, agents: [], opener: undefined, ...EMPTY });
   },
 }));
+
+// Whatever changes in the conversation on screen is what the owner returns to.
+useCrew.subscribe((state, previous) => {
+  if (!state.sessionId || state.sessionId !== previous.sessionId) return;
+  if (
+    state.tabs !== previous.tabs ||
+    state.opened !== previous.opened ||
+    state.full !== previous.full ||
+    state.following !== previous.following
+  )
+    keep(state.sessionId, state);
+});

@@ -6927,7 +6927,10 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         } | "disabled") | null;
-                        /** @default disabled */
+                        /**
+                         * @description Deprecated and unused: the conversation model reads images itself. Accepted so that older clients can still save.
+                         * @default disabled
+                         */
                         vision: ({
                             /** Format: uuid */
                             providerId: string;
@@ -7108,7 +7111,10 @@ export interface operations {
                         fast?: boolean;
                         voiceName?: string;
                     } | "disabled") | null;
-                    /** @default disabled */
+                    /**
+                     * @description Deprecated and unused: the conversation model reads images itself. Accepted so that older clients can still save.
+                     * @default disabled
+                     */
                     vision?: ({
                         /** Format: uuid */
                         providerId: string;
@@ -7202,7 +7208,10 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         } | "disabled") | null;
-                        /** @default disabled */
+                        /**
+                         * @description Deprecated and unused: the conversation model reads images itself. Accepted so that older clients can still save.
+                         * @default disabled
+                         */
                         vision: ({
                             /** Format: uuid */
                             providerId: string;
@@ -18753,6 +18762,15 @@ export interface operations {
                         instruction: string;
                         /** Format: uuid */
                         sessionId: string | null;
+                        model?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                            voiceName?: string;
+                        };
                         at?: string;
                         cron?: string;
                         timeZone: string;
@@ -18868,6 +18886,15 @@ export interface operations {
                     instruction: string;
                     /** Format: uuid */
                     sessionId: string | null;
+                    model?: {
+                        /** Format: uuid */
+                        providerId: string;
+                        modelId: string;
+                        /** @enum {string} */
+                        reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
+                        voiceName?: string;
+                    } | null;
                     /** Format: date-time */
                     at?: string;
                     cron?: string;
@@ -18893,6 +18920,15 @@ export interface operations {
                         instruction: string;
                         /** Format: uuid */
                         sessionId: string | null;
+                        model?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                            voiceName?: string;
+                        };
                         at?: string;
                         cron?: string;
                         timeZone: string;
@@ -19019,6 +19055,15 @@ export interface operations {
                         instruction: string;
                         /** Format: uuid */
                         sessionId: string | null;
+                        model?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                            voiceName?: string;
+                        };
                         at?: string;
                         cron?: string;
                         timeZone: string;
@@ -19135,6 +19180,15 @@ export interface operations {
                     instruction?: string;
                     /** Format: uuid */
                     sessionId?: string | null;
+                    model?: {
+                        /** Format: uuid */
+                        providerId: string;
+                        modelId: string;
+                        /** @enum {string} */
+                        reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                        fast?: boolean;
+                        voiceName?: string;
+                    } | null;
                     /** Format: date-time */
                     at?: string;
                     cron?: string;
@@ -19159,6 +19213,15 @@ export interface operations {
                         instruction: string;
                         /** Format: uuid */
                         sessionId: string | null;
+                        model?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                            voiceName?: string;
+                        };
                         at?: string;
                         cron?: string;
                         timeZone: string;
@@ -20259,6 +20322,8 @@ export interface operations {
                         timeZone: string;
                         /** @enum {string} */
                         timeZoneSource: "setting" | "host";
+                        /** @enum {string} */
+                        newChatProtection?: "ask" | "auto" | "full";
                     };
                 };
             };
@@ -20355,7 +20420,9 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    timeZone: string | null;
+                    timeZone?: string | null;
+                    /** @enum {string} */
+                    newChatProtection?: "ask" | "auto" | "full";
                 };
             };
         };
@@ -20370,6 +20437,8 @@ export interface operations {
                         timeZone: string;
                         /** @enum {string} */
                         timeZoneSource: "setting" | "host";
+                        /** @enum {string} */
+                        newChatProtection?: "ask" | "auto" | "full";
                     };
                 };
             };
