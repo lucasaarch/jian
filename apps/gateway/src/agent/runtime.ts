@@ -356,11 +356,11 @@ export class AgentRuntime {
       } else if (config.providerId) {
         providerKey = await this.options.gatewayVault?.read(providerSecret(config.providerId));
 
-        if (!providerKey) {
+        if (!providerKey && config.provider !== 'openai-compatible') {
           throw new Error('Provider key is not configured');
         }
 
-        secrets.add(providerKey);
+        if (providerKey) secrets.add(providerKey);
       }
 
       if (config.apiKeyEnv) {

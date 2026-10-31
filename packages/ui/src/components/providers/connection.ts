@@ -65,7 +65,7 @@ export function secretHint(entry: ProviderEntry, configured: Provider | undefine
 }
 
 export const addressHint =
-  'Where its API is, up to /v1 — for a Whisper container beside the gateway, http://whisper:8000/v1. A private address must be allowed in JIAN_ALLOW_PRIVATE_ORIGINS.';
+  'Ollama: http://localhost:11434/v1 when the gateway runs on the same machine, or http://host.docker.internal:11434/v1 from Docker. A private address must be allowed in JIAN_ALLOW_PRIVATE_ORIGINS.';
 
 /**
  * The provider to register from what the owner entered, or what is missing. Registering
