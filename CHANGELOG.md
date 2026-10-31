@@ -4,6 +4,33 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.1.4 — 2026-10-30
+
+The window's buttons work on Windows and Linux, what you are writing survives leaving the page, and renaming a chat works, in a dialog. Dependencies with known vulnerabilities are patched.
+
+### The desktop app
+
+* **The window's buttons work on Windows and Linux:** minimize, maximize and close did nothing when clicked, as each click failed on its way to the app. They now act, on the first click.
+* **Their size and colour:** they are as small as the bar's other buttons, and close takes the same grey when pointed at, no longer red.
+
+### Conversations
+
+* **What you are writing is kept:** the words in a composer stay when you go to another page, or close the window, one draft for each conversation and one for each agent's new chat. Sending clears them, and a new chat that could not be created keeps them. Files attached are not kept. Deleting a chat forgets its draft, and signing out forgets them all.
+* **Renaming a chat works:** Rename, in a chat's menu, closed the moment it opened. It now opens a dialog with the name chosen to type over, and stays open if the name could not be saved.
+
+### The panel
+
+* **The agent picker shows names alone:** the summary under each agent's name is gone.
+
+### Security
+
+* **Dependencies patched:** the gateway, the web panel, the desktop app and the packages they share move to versions without the vulnerabilities Dependabot had open.
+
+### Upgrading
+
+* From 1.1.3, recreate the gateway and web containers with the 1.1.4 images, or follow the `latest` tags. No migration runs, and nothing changes for a machine's worker.
+* The desktop app updates itself to this release. On Windows and Linux an app on an earlier release could not be closed from its window: quit it from the icon in the notification area.
+
 ## 1.1.3 — 2026-10-30
 
 Messages appear the moment they are sent, and one that fails stays to be sent again. The desktop app notifies when an agent finishes, asks or waits on you. A ring beside each conversation's protection shows how full its context is, with a Compact now. Listener wake-ups stay out of the chat, and the app reaches Linux.
