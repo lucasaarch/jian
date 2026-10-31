@@ -9,12 +9,28 @@ import type { MCPClient } from '@ai-sdk/mcp';
 import { mcpSchema } from '@jian/contracts';
 import type { ToolSet } from 'ai';
 import { expect, it } from 'vitest';
+import { z } from 'zod';
 import { mcpActionKind } from '../src/agent/guard.js';
-import { connectMcpTools } from '../src/agent/mcp.js';
+import { connectMcpTools, omitEmptyOptionalArguments } from '../src/agent/mcp.js';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { createSafeFetch } from '../src/security/outbound.js';
 import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
+
+it('omits empty values only for optional MCP arguments', () => {
+  const schema = z.object({
+    query: z.string().optional(),
+    required: z.string(),
+    nested: z.object({ cursor: z.string().optional() }),
+  });
+
+  expect(
+    omitEmptyOptionalArguments(
+      { query: '', required: '', nested: { cursor: '' }, untouched: '' },
+      schema,
+    ),
+  ).toEqual({ required: '', nested: {}, untouched: '' });
+});
 
 it.each([false, true])(
   'sends a server tool to the model only after the agent loads it (large catalog: %s)',
