@@ -155,6 +155,10 @@ function fakeApi(overrides: Partial<GitHubPull> = {}) {
     ),
     githubPull: vi.fn(async () => ({ ...pull, ...overrides })),
     githubIssue: vi.fn(async () => issue),
+    updateGithubPullBranch: vi.fn(async () => ({
+      updated: true as const,
+      message: 'Branch update queued.',
+    })),
     mergeGithubPull: vi.fn(async () => ({
       merged: true as const,
       sha: 'c'.repeat(40),
@@ -375,6 +379,19 @@ it('offers to fix conflicts in the place of merging and of the line about them',
   );
   // The drawer stays open on the pull request while the agent works.
   expect(drawer()).not.toBeNull();
+});
+
+it('offers to update a branch that is behind its base and refreshes its status', async () => {
+  const api = fakeApi({ mergeable: 'behind' });
+
+  await render(<Markdown text={pullUrl} />, api, { merges: true });
+  await openCard();
+
+  expect(element.textContent).not.toContain('This branch is behind the base branch.');
+  expect(button('Update branch')).toBeDefined();
+  await act(async () => button('Update branch')?.click());
+  expect(api.updateGithubPullBranch).toHaveBeenCalledWith('octo-example', 'site', 7, head);
+  expect(api.mergeGithubPull).not.toHaveBeenCalled();
 });
 
 it('fixes conflicts in a conversation answered in a messaging app', async () => {

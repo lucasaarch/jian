@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { Sparkles } from 'lucide-react';
+import { RefreshCw, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Action } from '../../../kit';
@@ -13,7 +13,7 @@ import { Byline, Section, Written } from './parts';
 import { Changes, Checks, Reviews } from './pull-sections';
 
 export type Pull = Pick<GitHubPull, 'owner' | 'repo' | 'number'>;
-type MergeApi = Pick<GatewayApi, 'mergeGithubPull'>;
+type MergeApi = Pick<GatewayApi, 'mergeGithubPull' | 'updateGithubPullBranch'>;
 
 const mergeable: Record<GitHubPull['mergeable'], { note: string; colour: string }> = {
   clean: { note: 'Ready to merge.', colour: 'text-good' },
@@ -52,7 +52,9 @@ export function PullView({
   const [confirming, setConfirming] = useState<GitHubMergeMethod>();
   const [busy, setBusy] = useState(false);
   const [fixing, setFixing] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const open = pull.state === 'open';
+  const behind = open && pull.mergeable === 'behind';
   const fixable = open && pull.mergeable === 'conflicts' && Boolean(fixConflicts);
   const merging = open && merges && pull.mergeable !== 'conflicts';
   const state = pull.draft
@@ -84,6 +86,26 @@ export function PullView({
     }
   };
 
+  const updateBranch = async () => {
+    setUpdating(true);
+    const key = keys.githubItem('pull', pull.owner, pull.repo, pull.number);
+    try {
+      const result = await api.updateGithubPullBranch(
+        pull.owner,
+        pull.repo,
+        pull.number,
+        pull.head.sha,
+      );
+      toast.success(result.message);
+      await client.invalidateQueries({ queryKey: key });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'GitHub could not update the branch.');
+      await client.invalidateQueries({ queryKey: key });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const fix = async () => {
     if (!fixConflicts) return;
     setFixing(true);
@@ -112,13 +134,23 @@ export function PullView({
           <span className="sr-only">from</span>
           <code className={branch}>{pull.head.ref}</code>
         </p>
-        {open && !fixable && <p className={`text-xs ${state.colour}`}>{state.note}</p>}
-        {(fixable || merging) && (
+        {open && !fixable && !behind && <p className={`text-xs ${state.colour}`}>{state.note}</p>}
+        {(fixable || merging || behind) && (
           <div className="flex flex-wrap items-center gap-2 pt-1">
             {fixable ? (
               <Action tone="outline" size="small" busy={fixing} onClick={() => void fix()}>
                 {!fixing && <Sparkles size={13} aria-hidden="true" />}
                 Fix merge conflicts
+              </Action>
+            ) : behind ? (
+              <Action
+                tone="outline"
+                size="small"
+                busy={updating}
+                onClick={() => void updateBranch()}
+              >
+                {!updating && <RefreshCw size={13} aria-hidden="true" />}
+                Update branch
               </Action>
             ) : (
               <MergeButton pull={pull} merge={setConfirming} />

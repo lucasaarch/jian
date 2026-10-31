@@ -36,6 +36,8 @@ import {
   githubMergeInputSchema,
   githubMergeResultSchema,
   githubPullSchema,
+  githubUpdateBranchInputSchema,
+  githubUpdateBranchResultSchema,
 } from './github-items.js';
 import {
   githubConnectedRepositorySchema,
@@ -249,6 +251,15 @@ export const operations: Operation[] = [
     params: githubItemParamsSchema,
     body: githubMergeInputSchema,
     response: githubMergeResultSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/integrations/github/pulls/:owner/:repo/:number/update-branch',
+    operationId: 'updateGithubPullBranch',
+    access: 'admin',
+    params: githubItemParamsSchema,
+    body: githubUpdateBranchInputSchema,
+    response: githubUpdateBranchResultSchema,
   },
   {
     method: 'GET',

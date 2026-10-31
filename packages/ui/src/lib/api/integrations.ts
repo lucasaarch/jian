@@ -36,6 +36,13 @@ export const integrationCalls = (client: Client) => ({
   // At most 20 at a time; each answers in order, unreachable when the App cannot see it.
   resolveGithubLinks: (urls: string[]) =>
     result(client.POST('/v1/integrations/github/links', { body: { urls } })),
+  updateGithubPullBranch: (owner: string, repo: string, number: number, expectedHeadSha: string) =>
+    result(
+      client.POST('/v1/integrations/github/pulls/{owner}/{repo}/{number}/update-branch', {
+        params: { path: { owner, repo, number } },
+        body: { expectedHeadSha },
+      }),
+    ),
   // The head the owner saw goes with it: GitHub refuses if the branch moved since.
   mergeGithubPull: (
     owner: string,

@@ -369,6 +369,27 @@ export class GitHubItems {
     );
   }
 
+  async updateBranch(ref: Ref, expectedHeadSha: string) {
+    const response = await this.request(
+      ref,
+      `/repos/${ref.owner}/${ref.repo}/pulls/${ref.number}/update-branch`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ expected_head_sha: expectedHeadSha }),
+      },
+    );
+
+    if ([403, 404, 422].includes(response.status)) {
+      throw new GatewayError(409, await refusal(response));
+    }
+    if (!response.ok && response.status !== 202) {
+      throw new GatewayError(502, `GitHub answered ${response.status} to a branch update.`);
+    }
+
+    this.remember(ref);
+    return { updated: true as const, message: 'GitHub accepted the branch update.' };
+  }
+
   async merge(
     ref: Ref,
     input: { method: GitHubMergeMethod; expectedHeadSha: string; profileId?: string },
