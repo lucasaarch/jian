@@ -4,6 +4,64 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.2.0 — 2026-10-31
+
+The desktop app has a browser beside each conversation that you and your agent can both use, a new chat starts by choosing what it works on, and an agent's settings and schedules now open over the chat. Servers, machine workers and the app all need to move to 1.2 together.
+
+### The browser
+
+* **A browser beside each conversation:** The desktop app now has a browser in the Inspector. Each conversation has its own tabs and can't reach another's, and logins are kept per agent.
+* **Your agent can use it:** It opens pages, clicks and types with its own pointer, in the page you're watching or off screen when you're somewhere else.
+* **On a server gateway too:** An agent on a server drives that same browser through your desktop app, but only while you have the conversation on screen and your last message came from the app. The web panel, channels and subagents never get it.
+* **Agents can study any site:** They get a screenshot, the DOM, computed styles and the resources the page loaded, on a server or on the desktop. A server uses its own Chromium for this when you aren't watching.
+* **Tabs, favorites and recents:** A new tab offers search, favorites and recents, per agent. The browser's menu takes screenshots, does a hard reload and clears history, cookies or cache, asking first. On macOS you can import cookies from your everyday browser.
+
+### The Inspector
+
+* **It opens empty:** It shows what it can open, with a plus button beside its tabs. Closing it doesn't lose them, and it can take the chat's whole area. Cmd+Shift+B toggles it, or Ctrl+Shift+B on Windows and Linux.
+* **It lasts:** Each chat's Inspector survives closing the app, and what you opened in a new chat carries over to the chat it becomes. You can resize it and it keeps that size.
+* **Pull requests:** They split into Overview, Checks, Changes and Reviews, and a branch that's behind can be updated from there.
+
+### Starting a chat
+
+* **Choose what a new chat works on:** Above the composer you can start from scratch, or pick folders on this computer or GitHub repositories, one or several. A repository can run in the cloud, on a machine that's online, or on this computer in a folder you choose.
+* **Folders stay on your computer:** A server reaches them through your machine and never takes folders from its own disk. The web panel offers repositories alone. Picking repositories doesn't limit what the agent's GitHub access can reach.
+* **Recent replaces Projects:** The sidebar mixes chats with a folder per project, joined by name, and a cloud marks chats that run elsewhere.
+* **First messages appear at once:** The chat is made behind your message. If the gateway fails, the message stays on screen so you can retry or change it, and it's kept until the gateway has it.
+* **Your choices stick:** Picking a model, effort, speed or protection in a composer makes it the preference for new chats. Chats you already have stay as they are.
+* **Model defaults is now Capabilities:** It holds what has no menu in a chat: channels, compaction, image generation, audio and speech. The conversation's own model now reads images and documents, with no second model called.
+
+### Conversations
+
+* **Reactions:** Point at a message to react with an emoji, reply or copy it. Your agent can react too, and on Telegram and WhatsApp the reaction shows up in the chat itself.
+* **Pinned chats:** Pin the ones you keep going back to.
+* **Lists:** Shift+Enter continues a list in the composer.
+* **Subagents always run on Auto.**
+* **MCP tools:** A long result is kept whole and your agent reads it page by page. Empty optional arguments are no longer sent to the tool.
+
+### Agents and schedules
+
+* **Agent settings are an overlay:** Activity, Identity, Skills, Memories and Channels all live there. Customize is gone and the Overview is now Activity. Older addresses open the matching overlay.
+* **Schedules are an overlay too:** The list runs down the side, with the open schedule beside it. A schedule that opens a new chat chooses its model and runs on Auto. One in an existing conversation inherits everything from it.
+* **A welcome when you open the app:** Your agent greets you and you land in a new chat.
+* **Making and deleting agents:** Creating one now uses the onboarding's own scene in place of a dialog, and deleting one gets a farewell. The status bar stays put under all of these.
+
+### The panel
+
+* **Command palette:** It's grouped now. It opens the browser and a new tab, makes the Inspector full screen, pins, renames and deletes the open chat, and shows the onboarding. Destructive commands are red, and deleting a chat asks first.
+* **Layout:** The sidebar is resizable. The chat keeps a minimum width, and where the sidebar and the Inspector can't both fit, the Inspector takes the chat's place.
+* **Keyboard:** Keymaps have a settings page, and the app's shortcuts keep working while a page in the browser has focus.
+* **Ollama:** It's a provider of its own now, with its logo. The key is optional and is used for Ollama Cloud. The address is the server root, usually `http://localhost:11434`, and a private address must be allowed in `JIAN_ALLOW_PRIVATE_ORIGINS`.
+* **Release notes:** They're shorter and can show pictures you can zoom, and they no longer scroll sideways.
+* **Error screen:** It stops blaming the gateway for problems in the app, and recovers by itself when the gateway answers again or the code is replaced.
+
+### Upgrading
+
+* **Migrations 0081 to 0087 run at startup.** They add the Ollama provider, message reactions, held channel references, pinned chats, a schedule's model, a conversation's last client and its workspace.
+* **Update your servers.** Recreate the gateway and web containers with the 1.2.0 images, or follow the `latest` tags. The desktop app on 1.2 works only with gateways on 1.2 and shows the mismatch on any other. This computer's gateway moves with the app.
+* **Update each machine's worker.** A 1.1 worker shows Update needed in Machines and can't serve agents on a 1.2 gateway until it's updated. Update in Machines does it for a worker installed with npm. On any other, run `jian-remote update` on that computer.
+* The desktop app updates itself to this release.
+
 ## 1.1.4 — 2026-10-30
 
 The window's buttons work on Windows and Linux, what you're writing survives leaving the page, and you can rename chats again, in a dialog. Dependencies with known vulnerabilities are patched.
