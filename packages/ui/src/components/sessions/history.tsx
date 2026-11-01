@@ -1,9 +1,10 @@
 'use client';
 
-import { STREAM_OPENED_EVENT } from '@jian/contracts';
+import { MESSAGES_PAGE, STREAM_OPENED_EVENT } from '@jian/contracts';
 import { onlineManager } from '@tanstack/react-query';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { Action } from '../../kit/action';
 import type {
   CodeDiff,
   GatewayApi,
@@ -21,6 +22,7 @@ import { useCrew } from '../../lib/stores/crew';
 import { forgetLanded, landed, useOutbox } from '../../lib/stores/outbox';
 import { useReconnect } from '../../lib/stores/reconnect';
 import { plainText } from '../ui/markdown';
+import { FilePath } from './code-change';
 import { Confetti } from './confetti';
 import { ConversationMap } from './conversation-map';
 import { CrewCards, placeCrew, reportOf } from './crew';
@@ -41,6 +43,9 @@ import { TroubleCard } from './trouble';
  * Who answers a message: the agent, or — on a question this profile carried to another agent —
  * that agent, whose run is kept in its own profile.
  */
+/** How close to the top of the conversation, in px, reading further back begins. */
+const EARLIER_WITHIN_PX = 400;
+
 const answers = (message: Message) =>
   message.call ? message.role === 'user' : message.role === 'assistant';
 const turnOf = (message: Message) => message.call?.runId ?? message.runId;
@@ -77,7 +82,9 @@ function RunChangesSummary({
               aria-label={`${step.diff.path}, ${step.diff.additions} added, ${step.diff.deletions} removed`}
               onClick={(event) => onOpen(step, event.currentTarget)}
             >
-              <span className="run-change-summary-path">{step.diff.path}</span>
+              <span className="run-change-summary-path">
+                <FilePath path={step.diff.path} />
+              </span>
               <span className="run-change-summary-counts" aria-hidden="true">
                 <i>+{step.diff.additions}</i> <b>−{step.diff.deletions}</b>
               </span>
@@ -129,11 +136,15 @@ type DisplayMessage = {
 
 /**
  * Channel comments arrive in pieces, but in the panel they are one Markdown answer. Keep turns,
- * tool activity, and messages with their own purpose as visible boundaries.
+ * tool activity, and messages with their own purpose as visible boundaries. Joining must never
+ * lose anything, so what sits between two lines also divides them: an agent made there, and a
+ * card that takes the place of the line it asked with and of nothing else.
  */
 function groupMessages(
   messages: Message[],
   placed: Map<string, ReturnType<typeof placeSteps>>,
+  crewBefore: Map<string, Subagent[]>,
+  asks: Map<string, { approval?: RunApproval; question?: RunQuestion }>,
 ): DisplayMessage[] {
   const groups: DisplayMessage[] = [];
 
@@ -164,6 +175,11 @@ function groupMessages(
         !runId ||
         next.runId !== runId ||
         activity?.length ||
+        crewBefore.has(next.id) ||
+        ((asks.get(runId)?.approval || asks.get(runId)?.question) &&
+          !messages
+            .slice(lastIndex + 2)
+            .some((later) => later.runId === runId && later.role === 'assistant')) ||
         /\[(?:Attached media: |File not opened, it was not sent to you: [^\]]*?media ID )[0-9a-f-]{36}/.test(
           previous.content + next.content,
         )
@@ -180,7 +196,13 @@ function groupMessages(
       message:
         sources.length === 1
           ? first
-          : { ...first, content: sources.map((source) => source.content).join('\n\n') },
+          : {
+              ...first,
+              content: sources.map((source) => source.content).join('\n\n'),
+              ...(sources.some((source) => source.reactions?.length)
+                ? { reactions: sources.flatMap((source) => source.reactions ?? []) }
+                : {}),
+            },
       lastMessage: previous,
       index,
       lastIndex,
@@ -189,6 +211,29 @@ function groupMessages(
   }
 
   return groups;
+}
+
+/**
+ * What was just read, joined to what is already known. A new line pushes the oldest out of the
+ * latest page, and it stays: the reader has it on screen, and earlier pages end right above it.
+ * What was read that does not meet what is known starts over, since keeping both would hide a
+ * gap in the conversation behind what looks like a whole one.
+ */
+export function joinHistory<Item extends { id: string }>(known: Item[], latest: Item[]): Item[] {
+  const first = latest[0];
+  if (!first) return [];
+  const meets = known.findIndex((item) => item.id === first.id);
+
+  return meets < 0 ? latest : [...known.slice(0, meets), ...latest];
+}
+
+/** What a read says of each turn it asked about, over what was known of the others. */
+function overTurns<Value>(known: Map<string, Value>, asked: string[], read: [string, Value][]) {
+  const next = new Map(known);
+  for (const turn of asked) next.delete(turn);
+  for (const [turn, value] of read) next.set(turn, value);
+
+  return next;
 }
 
 export function History({
@@ -334,6 +379,14 @@ export function History({
   const [loading, setLoading] = useState(!kept);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  // The last read of the tools failed: the conversation on screen may lack them.
+  const [toolsUnread, setToolsUnread] = useState(false);
+  // The last read failed altogether: what is on screen stays, but may be behind.
+  const [behind, setBehind] = useState(false);
+  // How reading further back went, and whether the beginning was reached.
+  const [earlier, setEarlier] = useState<'idle' | 'reading' | 'failed'>('idle');
+  const [atBeginning, setAtBeginning] = useState(false);
+  const readingEarlier = useRef(false);
   const isRunning = running(run);
   const crewPlacement = useMemo(
     () => placeCrew(subagents, messages.filter(answers)),
@@ -358,7 +411,11 @@ export function History({
       ]),
     );
   }, [messages, tools, callTools]);
-  const shownMessages = useMemo(() => groupMessages(messages, placed), [messages, placed]);
+  const shownMessages = useMemo(
+    () => groupMessages(messages, placed, crewPlacement.before, asks),
+    [messages, placed, crewPlacement, asks],
+  );
+  const hasEarlier = !atBeginning && messages.length >= MESSAGES_PAGE;
   // A turn under way keeps the tools since its last line for its working line at the end.
   const trailing = (live: Run, known: Map<string, ToolStep[]>) => {
     const place = placed.get(live.id);
@@ -375,75 +432,112 @@ export function History({
     if (revision) follow();
   }, [revision, follow]);
 
+  /**
+   * The tools of a page of messages, asked for by that page's own turns, so an old page never
+   * lacks them. The other agent's tools are read where it worked: its own session, in its profile.
+   */
+  const readTurns = async (page: Message[], under?: string) => {
+    const turns = [
+      ...new Set([
+        ...page.flatMap((message) => (message.runId ? [message.runId] : [])),
+        ...(under ? [under] : []),
+      ]),
+    ];
+    const calls = new Map<string, { profileId: string; sessionId: string; runs: string[] }>();
+    for (const { call } of page) {
+      if (!call) continue;
+      const place = `${call.profileId}/${call.sessionId}`;
+      const known = calls.get(place) ?? { ...call, runs: [] };
+      known.runs.push(call.runId);
+      calls.set(place, known);
+    }
+    const [timeline, worked] = await Promise.all([
+      api.timeline
+        ? api.timeline(profileId, sessionId, turns).catch(() => undefined)
+        : Promise.resolve(undefined),
+      api.timeline
+        ? Promise.all(
+            [...calls.values()].map((call) =>
+              api.timeline?.(call.profileId, call.sessionId, call.runs).catch(() => undefined),
+            ),
+          )
+        : Promise.resolve([]),
+    ]);
+    const steps = (timeline ?? []).map((item): [string, ToolStep[]] => [item.runId, item.steps]);
+    const asked = (timeline ?? []).flatMap((item) =>
+      item.approval || item.question
+        ? [
+            [item.runId, { approval: item.approval, question: item.question }] as [
+              string,
+              { approval?: RunApproval; question?: RunQuestion },
+            ],
+          ]
+        : [],
+    );
+
+    return {
+      turns,
+      callTurns: [...calls.values()].flatMap((call) => call.runs),
+      steps,
+      asked,
+      called: worked
+        .flatMap((item) => item ?? [])
+        .map((item): [string, ToolStep[]] => [item.runId, item.steps]),
+      unread:
+        Boolean(api.timeline) &&
+        (timeline === undefined || worked.some((item) => item === undefined)),
+      toolsRead: timeline !== undefined,
+      callsRead: worked.every((item) => item !== undefined),
+    };
+  };
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry and revision explicitly restart the read.
   useEffect(() => {
     let stopped = false;
     const read = async () => {
       try {
-        const [history, activities, members, timeline, children] = await Promise.all([
+        const [history, activities, members, children] = await Promise.all([
           api.messages(profileId, sessionId),
           api.activities(profileId),
           group && api.people ? api.people(profileId, sessionId) : [],
-          api.timeline ? api.timeline(profileId, sessionId).catch(() => undefined) : undefined,
           api.conversationSubagents?.(profileId, sessionId) ?? [],
         ]);
-        // The other agent's tools are read where it worked: its own session, in its profile.
-        const places = [
-          ...new Map(
-            history.flatMap((message) =>
-              message.call
-                ? [[`${message.call.profileId}/${message.call.sessionId}`, message.call]]
-                : [],
-            ),
-          ).values(),
-        ];
-        const worked =
-          api.timeline && places.length
-            ? await Promise.all(
-                places.map((call) =>
-                  api.timeline?.(call.profileId, call.sessionId).catch(() => undefined),
-                ),
-              )
-            : [];
-        if (stopped) return;
-        // What a part that could not be read leaves as it was.
-        const nextCallTools = worked.every((item) => item !== undefined)
-          ? worked.flat().map((item): [string, ToolStep[]] => [item.runId, item.steps])
-          : [...callTools];
-        const nextTools = timeline
-          ? timeline.map((item): [string, ToolStep[]] => [item.runId, item.steps])
-          : [...tools];
-        const nextAsks = timeline
-          ? timeline.flatMap((item) =>
-              item.approval || item.question
-                ? [
-                    [item.runId, { approval: item.approval, question: item.question }] as [
-                      string,
-                      { approval?: RunApproval; question?: RunQuestion },
-                    ],
-                  ]
-                : [],
-            )
-          : [...asks];
         const lastRun = activities
           .filter((activity) => activity.sessionId === sessionId)
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
           .at(-1);
-        setCallTools(new Map(nextCallTools));
-        setTools(new Map(nextTools));
-        setAsks(new Map(nextAsks));
-        setMessages(history);
+        const read = await readTurns(history, lastRun?.id);
+        if (stopped) return;
+        // A reload the owner asked for starts from what the gateway says now, and nothing else.
+        const fresh = answered.current !== reloads;
+        // What a part that could not be read leaves as it was.
+        if (read.toolsRead) {
+          setTools((known) => overTurns(fresh ? new Map() : known, read.turns, read.steps));
+          setAsks((known) => overTurns(fresh ? new Map() : known, read.turns, read.asked));
+        }
+        if (read.callsRead) {
+          setCallTools((known) =>
+            overTurns(fresh ? new Map() : known, read.callTurns, read.called),
+          );
+        }
+        setMessages((known) => joinHistory(fresh ? [] : known, history));
+        if (fresh) {
+          setAtBeginning(false);
+          setEarlier('idle');
+        }
         setSubagents(children);
         setPeople(new Map(members.map((person) => [person.id, person])));
         setRun(lastRun);
         setError('');
+        setBehind(false);
+        setToolsUnread(read.unread);
         shown.current = true;
         answered.current = reloads;
         keep({
           messages: history,
-          tools: nextTools,
-          asks: nextAsks,
-          callTools: nextCallTools,
+          tools: read.toolsRead ? read.steps : [...tools],
+          asks: read.toolsRead ? read.asked : [...asks],
+          callTools: read.callsRead ? read.called : [...callTools],
           subagents: children,
           people: members,
           ...(lastRun ? { run: lastRun } : {}),
@@ -452,6 +546,7 @@ export function History({
         if (stopped) return;
         const said =
           failure instanceof Error ? failure.message : 'The history could not be loaded.';
+        if (shown.current) setBehind(true);
         if (!shown.current) setError(said);
         // What is on screen stays, but a reload the owner asked for does not fail in silence.
         else if (answered.current !== reloads) {
@@ -467,6 +562,48 @@ export function History({
       stopped = true;
     };
   }, [api, profileId, sessionId, retry, revision, reloads, group, heard]);
+
+  // Further back in the conversation: its page, with that page's tools, above what is shown.
+  const scrolledFrom = useRef<{ top: number; height: number }>(undefined);
+  const readEarlier = async () => {
+    const oldest = messages[0];
+    if (!oldest || readingEarlier.current) return;
+    readingEarlier.current = true;
+    setEarlier('reading');
+    try {
+      const page = await api.messages(profileId, sessionId, oldest.id);
+      const shownIds = new Set(messages.map((message) => message.id));
+      // A gateway that cannot page answers its latest messages again: nothing new, so stop.
+      const fresh = page.filter((message) => !shownIds.has(message.id));
+      const read = await readTurns(fresh);
+      const view = scroller.current;
+      if (view) scrolledFrom.current = { top: view.scrollTop, height: view.scrollHeight };
+      if (read.toolsRead) {
+        setTools((known) => overTurns(known, read.turns, read.steps));
+        setAsks((known) => overTurns(known, read.turns, read.asked));
+      }
+      if (read.callsRead) setCallTools((known) => overTurns(known, read.callTurns, read.called));
+      if (read.unread) setToolsUnread(true);
+      setMessages((known) => [...fresh, ...known]);
+      if (page.length < MESSAGES_PAGE || !fresh.length) setAtBeginning(true);
+      setEarlier('idle');
+    } catch {
+      setEarlier('failed');
+    } finally {
+      readingEarlier.current = false;
+    }
+  };
+
+  // The reader stays on the line they were reading as earlier ones appear above it. Set outright
+  // rather than added to: a browser that anchors scrolling has already moved it by some amount.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages growing is what this answers.
+  useLayoutEffect(() => {
+    const from = scrolledFrom.current;
+    const view = scroller.current;
+    if (!from || !view) return;
+    scrolledFrom.current = undefined;
+    view.scrollTop = from.top + view.scrollHeight - from.height;
+  }, [messages, scroller]);
 
   // The gateway back in reach: what was said meanwhile, read at once. Nothing was heard while
   // the stream was down to ask for it.
@@ -615,9 +752,30 @@ export function History({
         aria-busy={loading}
         onScroll={(event) => {
           onScroll(event.currentTarget);
+          // Before the reader reaches the top, so a long scroll back does not stop at each page.
+          if (
+            event.currentTarget.scrollTop < EARLIER_WITHIN_PX &&
+            hasEarlier &&
+            earlier === 'idle'
+          ) {
+            void readEarlier();
+          }
         }}
       >
         <div className="message-list">
+          {!loading && hasEarlier && (
+            <div className="history-earlier">
+              {earlier === 'failed' && <p>Earlier messages could not be read.</p>}
+              <Action
+                tone="quiet"
+                size="small"
+                busy={earlier === 'reading'}
+                onClick={() => void readEarlier()}
+              >
+                Show earlier messages
+              </Action>
+            </div>
+          )}
           {loading ? (
             <HistorySkeleton />
           ) : messages.length ? (
@@ -867,6 +1025,18 @@ export function History({
               setLoading(true);
               setRetry((value) => value + 1);
             }}
+          />
+        )}
+        {!loading && !error && (toolsUnread || (behind && onlineManager.isOnline())) && (
+          <TroubleCard
+            title={behind ? 'This conversation may be out of date' : 'Some tools could not be read'}
+            detail={
+              behind
+                ? 'The latest read failed, so what is shown may be missing what happened since.'
+                : 'The tools could not be read, so some of what the agent did may be missing here.'
+            }
+            action="Try again"
+            onAction={() => setRetry((value) => value + 1)}
           />
         )}
         {/* The dots already say the agent is working; the card speaks only when a turn went wrong. */}

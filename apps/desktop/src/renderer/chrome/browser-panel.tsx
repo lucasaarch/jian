@@ -289,7 +289,10 @@ export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
         onImportCookies={(source, scope) => desktop().browser.importCookies(source, scope)}
       />
       {(error || state.error) && (
-        <p role="alert" className="border-b border-glass-edge px-4 py-3 text-xs text-bad">
+        <p
+          role="alert"
+          className="border-b border-glass-edge px-(--inspector-inset) py-3 text-xs text-bad"
+        >
           {error || state.error}
         </p>
       )}

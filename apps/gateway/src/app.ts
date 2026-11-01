@@ -41,7 +41,6 @@ import type { Skills } from './skills/service.js';
 import { registerSshRoutes } from './ssh/routes.js';
 import { registerStatsRoutes } from './stats/routes.js';
 import type { Store } from './storage/database.js';
-import { registerSubscriptionRoutes } from './subscriptions/routes.js';
 import { registerWorkRoutes } from './tasks/routes.js';
 import { registerWebRoutes } from './web/routes.js';
 
@@ -162,7 +161,6 @@ export function createApp(
     registerMemoryRoutes(routes, options);
     registerStatsRoutes(routes, options);
     registerScheduleRoutes(routes, options);
-    registerSubscriptionRoutes(routes, options);
     registerWorkRoutes(routes, options);
     registerSettingsRoutes(routes, options);
     registerMediaRoutes(routes, options);

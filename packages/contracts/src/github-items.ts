@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { codeDiffSchema } from './records.js';
+import { codeDiffSchema, fileLinesSchema } from './records.js';
 
 /**
  * Pull requests and issues the agent links to, read through the installation's GitHub App. Only
@@ -70,6 +70,21 @@ export const githubPullFileSchema = z.strictObject({
   /** Absent when GitHub gives no patch: a binary file, or one too large to show. */
   diff: codeDiffSchema.optional(),
 });
+
+/**
+ * One file of a pull request at the commit its diff came from. The path becomes part of a GitHub
+ * address, so a segment that would walk out of the repository's contents is refused here.
+ */
+export const githubPullFileQuerySchema = z.strictObject({
+  path: z
+    .string()
+    .min(1)
+    .max(4096)
+    .refine((path) => path.split('/').every((part) => part && part !== '.' && part !== '..')),
+  sha: z.string().regex(/^[0-9a-f]{40,64}$/),
+});
+
+export const githubPullFileLinesSchema = z.strictObject({ lines: fileLinesSchema });
 
 export const githubPullSchema = z.strictObject({
   owner: githubOwnerSchema,
@@ -150,6 +165,9 @@ export const githubLinkSummarySchema = z.union([
   z.strictObject({ url: z.string().max(1000), reachable: z.literal(false) }),
 ]);
 
+/** A pull request the agent linked in a conversation, the latest first. */
+export const sessionPullSchema = z.strictObject({ url: z.url().max(1000) });
+
 export const githubUpdateBranchInputSchema = z.strictObject({
   /** Refuse to update if the head changed since the pull request was displayed. */
   expectedHeadSha: z.string().regex(/^[0-9a-f]{40}$/),
@@ -185,6 +203,7 @@ export const githubMergeResultSchema = z.strictObject({
 });
 
 export type GitHubPull = z.infer<typeof githubPullSchema>;
+export type GitHubPullFileLines = z.infer<typeof githubPullFileLinesSchema>;
 export type GitHubIssue = z.infer<typeof githubIssueSchema>;
 export type GitHubLinkSummary = z.infer<typeof githubLinkSummarySchema>;
 export type GitHubCheck = z.infer<typeof githubCheckSchema>;

@@ -28,13 +28,18 @@ function affected(event: GatewayEvent, profileId: string): QueryKey[] {
   // A step taken, a turn ended, a context compacted: each moves how full the context is.
   if (type === 'run.progress') return [keys.activities(profileId), keys.contexts(profileId)];
   if (type.startsWith('run.') || type.startsWith('session.')) {
-    return [keys.activities(profileId), keys.sessions(profileId), keys.contexts(profileId)];
+    return [
+      keys.activities(profileId),
+      keys.sessions(profileId),
+      keys.contexts(profileId),
+      // What the agent said may have linked a pull request.
+      keys.sessionPulls(profileId),
+    ];
   }
   if (type.startsWith('profile.')) return [keys.profiles];
   if (type.startsWith('memory.')) return [keys.memories(profileId)];
   // The agent writes schedules too, and every run changes when one ran last.
   if (type.startsWith('schedule.')) return [keys.schedules(profileId)];
-  if (type.startsWith('subscription.')) return [keys.subscriptions(profileId)];
   // A merge made in another tab or window: its references and drawer read it again.
   if (type === 'github.pull.merged') {
     return [

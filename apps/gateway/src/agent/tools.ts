@@ -37,7 +37,6 @@ import type { SshKeys } from '../ssh/service.js';
 import type { Stats } from '../stats/service.js';
 import type { Store } from '../storage/database.js';
 import { artifacts, checkpoints } from '../storage/schema.js';
-import type { Subscriptions } from '../subscriptions/service.js';
 import type { Work } from '../tasks/service.js';
 import { AskUserPause } from './ask-user.js';
 import { remoteTools } from './remote-tools.js';
@@ -100,7 +99,6 @@ export type ToolServices = {
   store: Store;
   decisions?: Pick<Decisions, 'ask' | 'judge'>;
   schedules?: Pick<Schedules, 'list' | 'create' | 'update' | 'remove'>;
-  subscriptions?: Pick<Subscriptions, 'list' | 'create' | 'update' | 'remove'>;
   settings?: { timeZone(): Promise<string> };
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
   work?: Pick<Work, 'spawnInConversation' | 'cancelInConversation' | 'focusInspector'>;
@@ -405,8 +403,6 @@ export function profileTools(
           services.settings ? services.settings.timeZone() : Promise.resolve(gatewayTimeZone()),
         )
       : {}),
-
-    ...(services.subscriptions ? subscriptionTools(services.subscriptions, run) : {}),
 
     forget_memory: tool({
       description:
@@ -758,16 +754,6 @@ export const TOOL_GROUPS = {
       'do something later or on a repetition — reminders, daily summaries, recurring checks — and list, change, pause (switch off without deleting), resume or delete them',
     tools: ['list_schedules', 'create_schedule', 'update_schedule', 'delete_schedule'],
   },
-  subscriptions: {
-    summary:
-      'listen for GitHub CI finishing or a pull request merging by polling for state changes (optional webhook), and wake this conversation when they fire',
-    tools: [
-      'list_subscriptions',
-      'create_subscription',
-      'update_subscription',
-      'delete_subscription',
-    ],
-  },
   skills: {
     summary:
       'write, rewrite and remove your own skills: routines you follow the same way each time',
@@ -983,159 +969,6 @@ function scheduleTools(
       description: 'Delete a schedule for good. To pause one instead, switch it off.',
       inputSchema: z.object({ id: z.string().uuid() }),
       execute: async ({ id }) => schedules.remove(run.profileId, id),
-    }),
-  };
-}
-
-function subscriptionTools(subscriptions: NonNullable<ToolServices['subscriptions']>, run: Run) {
-  return {
-    list_subscriptions: tool({
-      description:
-        'List this profile’s event subscriptions: what they listen for, which conversation they wake, whether they are on, next poll, and when they expire.',
-      inputSchema: z.object({}),
-      execute: async () => subscriptions.list(run.profileId),
-    }),
-    create_subscription: tool({
-      description:
-        'Watch a GitHub pull request for CI finishing or the PR closing/merging. The gateway polls GitHub on an interval and wakes this conversation only when that state changes (not every tick) — no webhook setup required, and unchanged polls stay silent. Listeners expire (default 1 hour; set durationSeconds for 30 minutes / 1 hour / 1 day). An open session objective is blocked while Listening waits and reopened on a real wake. Optionally returns a webhookSecret if you later want a faster path.',
-      inputSchema: z.object({
-        name: z.string().min(1).max(80),
-        instruction: z.string().min(1).max(4000),
-        sessionId: z.string().uuid().optional(),
-        owner: z.string().min(1).max(100),
-        repo: z.string().min(1).max(100),
-        pullNumber: z
-          .number()
-          .int()
-          .positive()
-          .describe('Pull request number to watch (required for polling CI or merge state).'),
-        checkName: z
-          .string()
-          .min(1)
-          .max(200)
-          .optional()
-          .describe('Optional check run name filter, e.g. "Check".'),
-        pollIntervalSeconds: z
-          .number()
-          .int()
-          .min(15)
-          .max(3600)
-          .optional()
-          .describe('Seconds between polls. Default 30.'),
-        durationSeconds: z
-          .number()
-          .int()
-          .min(300)
-          .max(604_800)
-          .optional()
-          .describe(
-            'How long to keep watching from now. Default 3600 (1 hour). Examples: 1800 (30 minutes), 86400 (1 day).',
-          ),
-        events: z
-          .array(z.enum(['check_suite.completed', 'pull_request.closed']))
-          .min(1)
-          .max(8),
-        enabled: z.boolean().optional(),
-      }),
-      execute: async ({
-        sessionId,
-        owner,
-        repo,
-        events,
-        pullNumber,
-        checkName,
-        pollIntervalSeconds,
-        durationSeconds,
-        enabled,
-        ...rest
-      }) =>
-        subscriptions.create(
-          run.profileId,
-          {
-            ...rest,
-            sessionId: sessionId ?? run.sessionId,
-            source: 'github',
-            filter: {
-              owner,
-              repo,
-              events,
-              pullNumber,
-              ...(checkName ? { checkName } : {}),
-              ...(pollIntervalSeconds !== undefined ? { pollIntervalSeconds } : {}),
-            },
-            ...(durationSeconds !== undefined ? { durationSeconds } : {}),
-            enabled: enabled ?? true,
-          },
-          'agent',
-        ),
-    }),
-    update_subscription: tool({
-      description:
-        'Change a subscription’s name, instruction, filter, session, enabled flag, or duration (extends expiresAt from now).',
-      inputSchema: z.object({
-        id: z.string().uuid(),
-        name: z.string().min(1).max(80).optional(),
-        instruction: z.string().min(1).max(4000).optional(),
-        sessionId: z.string().uuid().optional(),
-        owner: z.string().min(1).max(100).optional(),
-        repo: z.string().min(1).max(100).optional(),
-        pullNumber: z.number().int().positive().optional(),
-        checkName: z.string().min(1).max(200).optional(),
-        pollIntervalSeconds: z.number().int().min(15).max(3600).optional(),
-        durationSeconds: z
-          .number()
-          .int()
-          .min(300)
-          .max(604_800)
-          .optional()
-          .describe('Reset how long to keep watching from now (e.g. 1800, 3600, 86400).'),
-        events: z
-          .array(z.enum(['check_suite.completed', 'pull_request.closed']))
-          .min(1)
-          .max(8)
-          .optional(),
-        enabled: z.boolean().optional(),
-      }),
-      execute: async ({
-        id,
-        owner,
-        repo,
-        events,
-        pullNumber,
-        checkName,
-        pollIntervalSeconds,
-        ...patch
-      }) => {
-        const touchingFilter =
-          owner !== undefined ||
-          repo !== undefined ||
-          events !== undefined ||
-          pullNumber !== undefined ||
-          checkName !== undefined ||
-          pollIntervalSeconds !== undefined;
-        if (touchingFilter) {
-          if (!owner || !repo || !events?.length) {
-            throw new GatewayError(400, 'A filter patch needs owner, repo and events together');
-          }
-          return subscriptions.update(run.profileId, id, {
-            ...patch,
-            filter: {
-              owner,
-              repo,
-              events,
-              ...(pullNumber !== undefined ? { pullNumber } : {}),
-              ...(checkName !== undefined ? { checkName } : {}),
-              ...(pollIntervalSeconds !== undefined ? { pollIntervalSeconds } : {}),
-            },
-          });
-        }
-        return subscriptions.update(run.profileId, id, patch);
-      },
-    }),
-    delete_subscription: tool({
-      description: 'Delete an event subscription. To pause one instead, switch it off.',
-      inputSchema: z.object({ id: z.string().uuid() }),
-      execute: async ({ id }) => subscriptions.remove(run.profileId, id),
     }),
   };
 }

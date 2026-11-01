@@ -458,7 +458,12 @@ export const TOOL_DISPLAY_CHARS = 16_000;
 export const sessionChangesQuerySchema = z.strictObject({
   /** Omit to list changes; supply a listed path to read its current diff against HEAD. */
   path: z.string().min(1).max(4096).optional(),
+  /** With a path: also the file as it is now, to show the lines its diff leaves out. */
+  whole: z.literal('true').optional(),
 });
+
+/** A file line by line, each cut as a diff's lines are, for the lines a diff leaves out. */
+export const fileLinesSchema = z.array(z.string().max(520)).max(100_000);
 
 export const sessionChangeSchema = z.strictObject({
   path: z.string().min(1).max(4096),
@@ -474,6 +479,8 @@ export const sessionChangeSchema = z.strictObject({
     'typechanged',
   ]),
   diff: codeDiffSchema.optional(),
+  /** The file as it is now, when asked for. */
+  lines: fileLinesSchema.optional(),
   /** Why this file has no textual diff (binary, size, symlink, or metadata-only change). */
   unavailable: z.string().max(500).optional(),
 });

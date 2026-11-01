@@ -103,6 +103,16 @@
     width: calc(100% + 2 * var(--chat-gutter));
     margin-inline: calc(-1 * var(--chat-gutter));
   }
+  /* The crew's cards reach the bubble's edges; its heading is a line of text, and reads with the
+     agent's name and words above and below it. */
+  .message-list .chat-line.theirs > .crew > .crew-head {
+    padding-inline: var(--chat-gutter);
+  }
+  /* Above the first message shown: the way further back, and what happened when it was tried. */
+  .history-earlier {
+    @apply mb-4 flex flex-col items-center gap-1 text-xs;
+    color: var(--muted);
+  }
   /* A conversation has no header: its one control floats round in the top corner, over the
      conversation. One with no bar at the bottom keeps its badges in the bottom corner, where the
      composer would show them, since a host's own buttons take the top one. */
@@ -142,62 +152,46 @@
   .session-objective-note {
     color: var(--warn);
   }
-  /* As wide as what it lists, unlike the objective's column of text. */
-  .model-menu.session-listeners-popup {
+  /* The pull requests in the badge's list. Named with the model menu, whose rule for its lists would
+     otherwise put back their padding and margin. The negative margins take the rows' padding back,
+     so a row's text lines up with the title, and long lists scroll inside it. */
+  .model-menu.session-pulls-popup {
     @apply gap-1 p-3 leading-snug;
-    width: max-content;
   }
-  /* Each listener in the badge's list: what it is, what it watches, how it stands, and a cross
-     to stop it, shown on hover where there is a pointer and always on a touch screen.
-     Named with the model menu, whose rule for its lists would otherwise put back their padding
-     and margin. The negative margins take the rows' padding back, so a row's text lines up with
-     the title and its highlight is the only thing reaching past it. */
-  .model-menu > .session-listeners {
-    @apply -mx-1.5 -mb-1.5 grid list-none gap-0.5 p-0 text-xs;
+  .model-menu > .session-pulls {
+    @apply -mx-1.5 -mb-1.5 grid max-h-80 list-none gap-0.5 overflow-y-auto p-0 text-xs;
     color: var(--muted);
   }
-  .session-listeners > li {
-    @apply relative min-w-0 rounded-lg p-1.5 transition-colors;
+  .session-pull {
+    @apply flex w-full min-w-0 items-start gap-2 rounded-lg p-1.5 text-left transition-colors;
   }
-  /* Opening the popover focuses the first cross, so only a keyboard's focus lights a row: a plain
-     focus would leave the first one lit with no pointer on it. */
-  .session-listeners > li:hover,
-  .session-listeners > li:has(:focus-visible) {
+  a.session-pull:hover,
+  button.session-pull:hover,
+  .session-pull:focus-visible {
     background: var(--glass-press);
   }
-  .session-listener-text {
-    @apply grid min-w-0 gap-0.5;
+  .session-pull-mark {
+    @apply mt-0.5 shrink-0;
+    color: var(--good);
   }
-  /* The cross floats over the name's row, which alone keeps room for it: a hidden button must not
-     hold empty space beside the rows under it. */
-  .session-listener-name {
-    @apply truncate pr-6 text-[13px] font-medium;
-    color: var(--ink);
-  }
-  .session-listener-target {
-    @apply truncate font-mono text-[11.5px];
-  }
-  .session-listener-meta {
-    @apply mt-1 flex flex-wrap items-center gap-x-2 gap-y-1;
-  }
-  .session-listener-stop {
-    @apply absolute right-1 top-1 grid size-6 place-items-center rounded-md opacity-0 transition-opacity;
+  .session-pull-mark[data-state="draft"] {
     color: var(--muted);
   }
-  .session-listeners > li:hover .session-listener-stop,
-  .session-listener-stop:focus-visible {
-    @apply opacity-100;
+  .session-pull-mark[data-state="merged"] {
+    color: var(--merged);
   }
-  .session-listener-stop:hover {
+  .session-pull-mark[data-state="closed"] {
     color: var(--bad);
   }
-  .session-listener-stop:disabled {
-    @apply cursor-default opacity-40;
+  .session-pull-text {
+    @apply grid min-w-0 flex-1;
   }
-  @media (hover: none) {
-    .session-listener-stop {
-      @apply opacity-100;
-    }
+  .session-pull-title {
+    @apply truncate;
+    color: var(--ink);
+  }
+  .session-pull-number {
+    @apply shrink-0 font-mono tabular-nums;
   }
   /* A channel's conversation has, where a chat has its composer, its agent settings: whether
      the agent answers this contact, and on which model. Same column, same box, no text. */
@@ -208,7 +202,7 @@
     @apply mx-auto mb-1.5 flex w-full min-w-0 justify-end px-1;
     max-width: var(--chat-column);
   }
-  /* No objective and nobody listening: no row at all over the box. */
+  /* No badge to show: no row at all over the box. */
   .agent-toolbar-context:not(:has(.session-badges > *)) {
     @apply hidden;
   }

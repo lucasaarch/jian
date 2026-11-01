@@ -176,7 +176,7 @@ export function BrowserToolbar({
   })();
   return (
     <form
-      className="flex shrink-0 items-center gap-2 border-b border-glass-edge pt-1 pr-1 pb-3 pl-3"
+      className="flex shrink-0 items-center gap-2 border-b border-glass-edge px-(--inspector-inset) pt-1 pb-3"
       onSubmit={(event) => {
         event.preventDefault();
         onNavigate(address);

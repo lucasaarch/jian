@@ -61,6 +61,44 @@ it('keeps what the agent said before a tool apart from what it says after', asyn
   expect(finished.output).toBe('Saved: deploy at 21:00.');
 });
 
+it('writes the line that announces a tool before the tool starts', async () => {
+  const { services, profile, session, run } = await fixture();
+  let step = 0;
+  const model = mockModel({
+    doGenerate: async () =>
+      step++ === 0
+        ? {
+            content: [
+              { type: 'text', text: 'Saving the deploy time now.' },
+              {
+                type: 'tool-call',
+                toolCallId: 'save-time',
+                toolName: 'remember',
+                input: JSON.stringify({
+                  key: 'deploy',
+                  content: 'Deploy at 21:00',
+                  expectedVersion: 0,
+                }),
+              },
+            ],
+            finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+            usage,
+            warnings: [],
+          }
+        : answer('Saved: deploy at 21:00.'),
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const said = (await services.sessions.messages(profile.id, session.id)).find(
+    (message) => message.content === 'Saving the deploy time now.',
+  );
+  const [timeline] = await services.sessions.timeline(profile.id, session.id);
+  const started = timeline?.steps.find((item) => item.toolCallId === 'save-time')?.startedAt;
+
+  expect(said && started && Date.parse(said.createdAt) <= Date.parse(started)).toBe(true);
+});
+
 it('recovers an empty final response without repeating completed actions', async () => {
   const { services, profile, run } = await fixture();
   let step = 0;

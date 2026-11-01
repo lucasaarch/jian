@@ -1,19 +1,21 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Sparkles } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { ArrowRight, Copy, RefreshCw, Sparkles } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Action, Segmented } from '../../../kit';
 import type { GatewayApi, GitHubMergeMethod, GitHubPull } from '../../../lib/api';
+import { date } from '../../../lib/format';
 import { keys } from '../../../lib/query/keys';
-import { InspectorBody, InspectorHeader } from '../inspector';
+import { FileFilter, WrapSwitch } from '../diff-controls';
+import { barButton, InspectorBody } from '../inspector';
 import { MergeButton, MergeConfirm } from './merge';
-import { Byline, CheckMark, Section, Written } from './parts';
-import { ChangeBar, Changes, Checks, checksStanding, Reviews } from './pull-sections';
+import { CheckMark, Person, StatePill, Written } from './parts';
+import { Changes, Checks, checksStanding, Reviews } from './pull-sections';
 
 export type Pull = Pick<GitHubPull, 'owner' | 'repo' | 'number'>;
-type MergeApi = Pick<GatewayApi, 'mergeGithubPull' | 'updateGithubPullBranch'>;
+type PullApi = Pick<GatewayApi, 'githubPullFile' | 'mergeGithubPull' | 'updateGithubPullBranch'>;
 
 const mergeable: Record<GitHubPull['mergeable'], { note: string; colour: string }> = {
   clean: { note: 'Ready to merge.', colour: 'text-good' },
@@ -26,43 +28,60 @@ const mergeable: Record<GitHubPull['mergeable'], { note: string; colour: string 
   unknown: { note: 'Checking whether it can merge…', colour: 'text-muted' },
 };
 
-type PullTab = 'overview' | 'checks' | 'changes' | 'reviews';
+type PullTab = 'changes' | 'description' | 'checks' | 'reviews';
 /** The tab each pull request was left on, for as long as the panel is open. */
 const lastTab = new Map<string, PullTab>();
-
-/** A figure of the overview, which is also the way to the tab with all of it. */
-function Glance({ label, go, children }: { label: string; go: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={go}
-      className="grid min-w-0 gap-1.5 rounded-xl border border-glass-edge p-3 text-left transition-colors hover:bg-glass-hover"
-    >
-      <span className="text-xs text-muted">{label}</span>
-      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-medium text-ink">
-        {children}
-      </span>
-    </button>
-  );
-}
 
 const branch =
   'min-w-0 truncate rounded-md bg-ink/6 px-1.5 py-0.5 font-mono text-[11.5px] text-ink';
 
 /**
- * A pull request: where it stands, its branches, whether it can merge and what to do about it,
- * then its description, checks, changes and reviews. A branch in conflict offers the agent's way
- * to settle it in the place of merging and of the line saying so.
+ * What goes in the Inspector's top line for a pull request: where it stands, and from which branch
+ * into which. Only what is in the line changes as it loads, so its close keeps the keyboard.
+ */
+export function PullBar({ pull }: { pull: GitHubPull }) {
+  return (
+    <>
+      <StatePill state={pull.state} draft={pull.draft} />
+      <p className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-muted">
+        <code className={branch}>{pull.head.ref}</code>
+        <ArrowRight size={12} aria-hidden="true" className="shrink-0" />
+        <span className="sr-only">into</span>
+        <code className={`${branch} shrink-0`}>{pull.base.ref}</code>
+      </p>
+    </>
+  );
+}
+
+/** What the checks tab says of them, so where they stand reads without opening it. */
+const checksNames = {
+  passing: 'All checks passed',
+  failing: 'Checks failing',
+  pending: 'Checks running',
+} as const;
+
+/**
+ * A pull request: where it stands and its branches in one line, its title, whether it can merge
+ * and what to do about it, then its changes, description, checks and reviews. Its head is kept
+ * short, since everything it takes comes off the diffs under it. A branch in conflict offers the
+ * agent's way to settle it in the place of merging and of the line saying so.
  */
 export function PullView({
   api,
   pull,
+  url,
+  wrap,
+  setWrap,
   profileId,
   merges,
   fixConflicts,
 }: {
-  api: MergeApi;
+  api: PullApi;
   pull: GitHubPull;
+  url: string;
+  /** How the drawer's diffs read: it holds this, since it says so to all of them. */
+  wrap: boolean;
+  setWrap: (wrap: boolean) => void;
   profileId: string;
   /** The panel answers this chat itself, so it merges from here. */
   merges: boolean;
@@ -74,10 +93,25 @@ export function PullView({
   const [fixing, setFixing] = useState(false);
   const [updating, setUpdating] = useState(false);
   const itemId = `${pull.owner}/${pull.repo}#${pull.number}`;
-  const [tab, setTabState] = useState<PullTab>(lastTab.get(itemId) ?? 'overview');
+  const [tab, setTabState] = useState<PullTab>(lastTab.get(itemId) ?? 'changes');
+  const [filter, setFilter] = useState('');
   const setTab = (next: PullTab) => {
     lastTab.set(itemId, next);
     setTabState(next);
+  };
+  const where = `${pull.owner}/${pull.repo} #${pull.number}`;
+  const words = filter.trim().toLowerCase();
+  const filtering = Boolean(words);
+  const shownFiles = words
+    ? pull.files.filter((file) => file.path.toLowerCase().includes(words))
+    : pull.files;
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Link copied.');
+    } catch {
+      toast.error('The link could not be copied.');
+    }
   };
   const checks = checksStanding(pull.checks.runs);
   const reviews = pull.reviews;
@@ -149,101 +183,116 @@ export function PullView({
 
   return (
     <>
-      <InspectorHeader title={pull.title}>
-        <Byline
-          state={pull.state}
-          draft={pull.draft}
-          login={pull.author?.login}
-          at={pull.createdAt}
-        />
-        <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
-          <code className={branch}>{pull.base.ref}</code>
-          <span aria-hidden="true">←</span>
-          <span className="sr-only">from</span>
-          <code className={branch}>{pull.head.ref}</code>
-        </p>
-        {open && !fixable && !behind && <p className={`text-xs ${state.colour}`}>{state.note}</p>}
-        {(fixable || merging || behind) && (
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            {fixable ? (
-              <Action tone="outline" size="small" busy={fixing} onClick={() => void fix()}>
-                {!fixing && <Sparkles size={13} aria-hidden="true" />}
-                Fix merge conflicts
-              </Action>
-            ) : behind ? (
-              <Action
-                tone="outline"
-                size="small"
-                busy={updating}
-                onClick={() => void updateBranch()}
+      <div className="shrink-0">
+        <div className="grid gap-1.5 px-(--inspector-inset) pb-1.5">
+          <div className="flex min-w-0 items-start gap-1">
+            <h2 className="min-w-0 text-[15px] leading-snug font-semibold tracking-tight text-ink">
+              {pull.title}{' '}
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                title={where}
+                className="font-normal text-muted transition-colors hover:text-ink"
               >
-                {!updating && <RefreshCw size={13} aria-hidden="true" />}
-                Update branch
-              </Action>
-            ) : (
-              <MergeButton pull={pull} merge={setConfirming} />
-            )}
+                #{pull.number}
+              </a>
+            </h2>
+            <button
+              type="button"
+              aria-label="Copy link"
+              className={`${barButton} -mt-1`}
+              onClick={() => void copyLink()}
+            >
+              <Copy size={13} aria-hidden="true" />
+            </button>
           </div>
-        )}
-      </InspectorHeader>
-      <div className="shrink-0 border-b border-glass-edge px-5 py-2.5">
-        <Segmented
-          label="Pull request"
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'overview', label: 'Overview' },
-            {
-              value: 'checks',
-              label: pull.checks.runs.length
-                ? `Checks ${checks.passed}/${pull.checks.runs.length}`
-                : 'Checks',
-            },
-            { value: 'changes', label: `Changes ${pull.changedFiles}` },
-            { value: 'reviews', label: `Reviews ${reviews.latest.length}` },
-          ]}
-        />
+          {open && (
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              {!fixable && !behind && <p className={`text-xs ${state.colour}`}>{state.note}</p>}
+              {(fixable || merging || behind) && (
+                <div className="ml-auto flex items-center gap-2">
+                  {fixable ? (
+                    <Action tone="outline" size="small" busy={fixing} onClick={() => void fix()}>
+                      {!fixing && <Sparkles size={13} aria-hidden="true" />}
+                      Fix merge conflicts
+                    </Action>
+                  ) : behind ? (
+                    <Action
+                      tone="outline"
+                      size="small"
+                      busy={updating}
+                      onClick={() => void updateBranch()}
+                    >
+                      {!updating && <RefreshCw size={13} aria-hidden="true" />}
+                      Update branch
+                    </Action>
+                  ) : (
+                    <MergeButton pull={pull} merge={setConfirming} />
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="overflow-x-auto border-b border-glass-edge px-(--inspector-inset) pb-1.5">
+          <Segmented
+            flat
+            label="Pull request"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'changes', label: 'Changes', count: pull.changedFiles },
+              { value: 'description', label: 'Description' },
+              pull.checks.runs.length
+                ? {
+                    value: 'checks',
+                    label: checksNames[checks.state],
+                    icon: <CheckMark state={checks.state} size={13} />,
+                    count: `${checks.passed}/${pull.checks.runs.length}`,
+                  }
+                : { value: 'checks', label: 'Checks' },
+              { value: 'reviews', label: 'Reviews', count: reviews.latest.length },
+            ]}
+          />
+        </div>
       </div>
+      {tab === 'changes' && (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-glass-edge px-(--inspector-inset) py-1.5">
+          <span className="flex shrink-0 gap-1.5 text-xs text-muted">
+            {filtering ? `${shownFiles.length} of ` : ''}
+            {pull.changedFiles} {pull.changedFiles === 1 ? 'file' : 'files'}
+            <span className="font-mono text-good">+{pull.additions}</span>
+            <span className="font-mono text-bad">−{pull.deletions}</span>
+          </span>
+          <FileFilter value={filter} onChange={setFilter} className="min-w-32" />
+          <WrapSwitch wrap={wrap} setWrap={setWrap} />
+        </div>
+      )}
       {/* One tab at a time is drawn: a large diff costs nothing until it is asked for. */}
       <InspectorBody key={tab}>
-        {tab === 'overview' && (
-          <>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-2 px-5 pt-4 pb-4">
-              <Glance label="Checks" go={() => setTab('checks')}>
-                {pull.checks.runs.length ? (
-                  <>
-                    <CheckMark state={checks.state} size={13} />
-                    {checks.passed}/{pull.checks.runs.length} passed
-                  </>
-                ) : (
-                  'None reported'
-                )}
-              </Glance>
-              <Glance label="Changes" go={() => setTab('changes')}>
-                <span className="font-mono text-good">+{pull.additions}</span>
-                <span className="font-mono text-bad">−{pull.deletions}</span>
-                <ChangeBar additions={pull.additions} deletions={pull.deletions} />
-              </Glance>
-              <Glance label="Reviews" go={() => setTab('reviews')}>
-                {reviews.approved || reviews.changesRequested
-                  ? [
-                      reviews.approved ? `${reviews.approved} approved` : '',
-                      reviews.changesRequested ? `${reviews.changesRequested} changes` : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')
-                  : reviews.latest.length
-                    ? `${reviews.latest.length} commented`
-                    : 'None yet'}
-              </Glance>
-            </div>
-            <Section title="Description">
-              <Written text={pull.body} none="No description." />
-            </Section>
-          </>
+        {tab === 'changes' && (
+          <Changes
+            pull={pull}
+            files={shownFiles}
+            filter={filter.trim()}
+            reviewScope={`pull:${itemId}`}
+            readLines={(path) =>
+              api
+                .githubPullFile(pull.owner, pull.repo, pull.number, path, pull.head.sha)
+                .then((file) => file.lines)
+            }
+          />
+        )}
+        {tab === 'description' && (
+          <section aria-label="Description" className="grid gap-2 px-(--inspector-inset) py-3">
+            <p className="text-xs text-muted">
+              <Person login={pull.author?.login} /> · {date(pull.createdAt)}
+            </p>
+            <Written text={pull.body} none="No description." />
+          </section>
         )}
         {tab === 'checks' && <Checks runs={pull.checks.runs} />}
-        {tab === 'changes' && <Changes pull={pull} />}
         {tab === 'reviews' && <Reviews reviews={reviews.latest} />}
       </InspectorBody>
       <MergeConfirm

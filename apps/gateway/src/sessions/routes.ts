@@ -6,6 +6,7 @@ import {
   JIAN_DESKTOP_CLIENT,
 } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import type { Coordination } from '../coordination/service.js';
 import { GatewayError } from '../core/errors.js';
 import type { ProfileParams, SessionParams } from '../http/params.js';
@@ -29,6 +30,7 @@ type SessionRouteServices = {
       | 'overview'
       | 'react'
       | 'timeline'
+      | 'pullRequests'
       | 'changes'
       | 'context'
       | 'markRead'
@@ -142,9 +144,16 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
     },
   );
 
-  app.get<{ Params: SessionParams }>(
+  app.get<{ Params: SessionParams; Querystring: { before?: string } }>(
     '/v1/profiles/:profileId/sessions/:sessionId/messages',
-    async (request) => deps.sessions.messages(request.params.profileId, request.params.sessionId),
+    async (request) =>
+      deps.sessions.messages(
+        request.params.profileId,
+        request.params.sessionId,
+        undefined,
+        undefined,
+        request.query.before,
+      ),
   );
 
   app.post<{ Params: SessionParams }>(
@@ -177,8 +186,19 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
   );
 
   app.get<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/pull-requests',
+    async (request) =>
+      deps.sessions.pullRequests(request.params.profileId, request.params.sessionId),
+  );
+
+  app.get<{ Params: SessionParams; Querystring: { runs?: string } }>(
     '/v1/profiles/:profileId/sessions/:sessionId/timeline',
-    async (request) => deps.sessions.timeline(request.params.profileId, request.params.sessionId),
+    async (request) =>
+      deps.sessions.timeline(
+        request.params.profileId,
+        request.params.sessionId,
+        request.query.runs?.split(',').filter((id) => z.uuid().safeParse(id).success),
+      ),
   );
 
   app.get<{ Params: SessionParams }>(

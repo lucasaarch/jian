@@ -20,7 +20,7 @@ import { MarkdownLinks } from '../ui/markdown';
 export { GitHubDrawer } from './github-drawer/drawer';
 
 type LinksApi = Pick<GatewayApi, 'resolveGithubLinks'>;
-type Reachable = Extract<GitHubLinkSummary, { reachable: true }>;
+export type Reachable = Extract<GitHubLinkSummary, { reachable: true }>;
 type State = Reachable['state'];
 
 /**
@@ -52,15 +52,25 @@ const issueMarks: Record<Shown, LucideIcon> = {
  * A link to a pull request or an issue, as a reference: its mark, coloured by where it stands,
  * and its number. The rest is a hover away; clicking follows it in the drawer.
  */
+/** A draft is told apart only while it is open: one merged or closed is simply that. */
+export const shownOf = (summary: Reachable): Shown =>
+  summary.draft && summary.state === 'open' ? 'draft' : summary.state;
+
+export const standingOf = (summary: Reachable) =>
+  shownOf(summary) === 'draft' ? 'Draft' : stateNames[summary.state];
+
+export const stateMark = (summary: Reachable) =>
+  (summary.kind === 'pull' ? pullMarks : issueMarks)[shownOf(summary)];
+
 function GitHubCard({ summary, href }: { summary: Reachable; href: string }) {
   const open = useCrew((state) => state.open);
   const close = useCrew((state) => state.close);
   const following = useCrew((state) => state.following);
   const item: GitHubItem = { ...summary, url: href };
   const followed = following === itemKey(item);
-  const shown: Shown = summary.draft && summary.state === 'open' ? 'draft' : summary.state;
-  const Mark = (summary.kind === 'pull' ? pullMarks : issueMarks)[shown];
-  const standing = shown === 'draft' ? 'Draft' : stateNames[summary.state];
+  const shown = shownOf(summary);
+  const Mark = stateMark(summary);
+  const standing = standingOf(summary);
   const where = `${summary.owner}/${summary.repo} #${summary.number}`;
 
   return (
@@ -79,16 +89,9 @@ function GitHubCard({ summary, href }: { summary: Reachable; href: string }) {
   );
 }
 
-function GitHubLink({
-  href,
-  label,
-  load,
-}: {
-  href: string;
-  label: string;
-  load: (url: string) => Promise<GitHubLinkSummary>;
-}) {
-  const { data } = useQuery({
+/** What GitHub says of a link, shared by everywhere it is shown, and kept current while it is. */
+export function useLinkSummary(href: string, load: (url: string) => Promise<GitHubLinkSummary>) {
+  return useQuery({
     queryKey: keys.githubLink(href),
     queryFn: () => load(href),
     staleTime: CARD_STALE_MS,
@@ -98,6 +101,18 @@ function GitHubLink({
       return summary?.reachable && summary.state === 'open' ? CARD_STALE_MS : false;
     },
   });
+}
+
+function GitHubLink({
+  href,
+  label,
+  load,
+}: {
+  href: string;
+  label: string;
+  load: (url: string) => Promise<GitHubLinkSummary>;
+}) {
+  const { data } = useLinkSummary(href, load);
 
   if (data?.reachable) return <GitHubCard summary={data} href={href} />;
   // Until it is known, and for good when the App cannot see it, the link stays a link.

@@ -37,7 +37,7 @@ it('accepts agent-friendly schedule times that Zod used to reject', () => {
     timeZone: zone,
   };
 
-  // Bare ISO without offset — the failure mode from the Listening workaround screenshot.
+  // Bare ISO without offset, which an agent has been seen to send.
   expect(scheduleInputSchema.parse({ ...base, at: '2026-10-20T05:10:00' }).at).toBe(
     '2026-10-20T05:10:00Z',
   );

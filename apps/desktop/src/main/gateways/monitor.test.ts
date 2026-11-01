@@ -74,3 +74,32 @@ it.each([
   await looked(monitor, 'online');
   expect(monitor.summaries()[0]?.reason).toBeUndefined();
 });
+
+it('keeps the real reason when a look is cut off by the app closing its own connections', async () => {
+  monitor = new GatewayMonitor(store as never, '1.2.0', { changed: vi.fn(), noticed: vi.fn() });
+  monitor.watch(gateway as never);
+  await vi.waitFor(() => expect(monitor?.summaries()[0]?.status).toBe('online'));
+
+  answering = false;
+  failure = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+  monitor.refresh('harbor');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await looked(monitor, 'offline');
+  expect(monitor.summaries()[0]?.reason).toBe('No answer in 8 seconds');
+
+  // Reconnect closes the connections under the look in flight: nothing was learned from that.
+  failure = new Error('net::ERR_ABORTED');
+  monitor.refresh('harbor');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(monitor.summaries()[0]?.reason).toBe('No answer in 8 seconds');
+
+  // Twice in a row is no longer the app's own doing, and is said as it is.
+  monitor.refresh('harbor');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(monitor.summaries()[0]?.reason).toBe('net::ERR_ABORTED');
+
+  answering = true;
+  monitor.refresh('harbor');
+  await vi.waitFor(() => expect(monitor?.summaries()[0]?.status).toBe('online'));
+  expect(monitor.summaries()[0]?.reason).toBeUndefined();
+});

@@ -10,27 +10,20 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { MenuDivider, MenuEntry, MenuToggle, menuPopup } from '../../../kit/menu';
+import { MenuDivider, MenuEntry, menuPopup } from '../../../kit/menu';
 import { barButton } from '../inspector';
 
 /**
- * What can be done with the item the drawer follows, behind one button: how its diffs read, its
+ * What can be done with the item the drawer follows, behind one button: its
  * parts folded or opened at once, reading it again, and reaching it on GitHub.
  */
 export function DrawerOptions({
   url,
-  diffs,
-  wrap,
-  setWrap,
   folded,
   fold,
   refresh,
 }: {
   url: string;
-  /** Whether it shows code changes, which wrapping lines is about. */
-  diffs: boolean;
-  wrap: boolean;
-  setWrap: (wrap: boolean) => void;
   /** Whether everything was last asked to fold, so the entry offers the other way. */
   folded: boolean;
   fold: (open: boolean) => void;
@@ -53,14 +46,6 @@ export function DrawerOptions({
       <Menu.Portal>
         <Menu.Positioner side="bottom" align="end" sideOffset={6} className="z-50">
           <Menu.Popup className={`${menuPopup} min-w-52`}>
-            {diffs && (
-              <>
-                <MenuToggle checked={wrap} onCheckedChange={setWrap}>
-                  Word wrap
-                </MenuToggle>
-                <MenuDivider />
-              </>
-            )}
             {folded ? (
               <MenuEntry icon={<ChevronsUpDown size={14} />} onClick={() => fold(true)}>
                 Expand all

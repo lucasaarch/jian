@@ -1,3 +1,33 @@
+/** How long a tool waits to be heard of, in ms, before it runs anyway: order is not worth a hang. */
+const HEARD_WITHIN_MS = 5_000;
+
+/**
+ * Holds a tool until the loop reading the stream has heard of its call. The model's words and its
+ * calls arrive in one stream, but a call starts as it passes through the SDK, ahead of that
+ * reader, which would write the line that announces the tool after the tool had already run.
+ */
+export class ToolCalls {
+  private readonly heard = new Set<string>();
+  private readonly waiting = new Map<string, () => void>();
+
+  hear(id: string): void {
+    this.heard.add(id);
+    this.waiting.get(id)?.();
+    this.waiting.delete(id);
+  }
+
+  async heardOf(id: string): Promise<void> {
+    if (this.heard.has(id)) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await new Promise<void>((resolve) => {
+      this.waiting.set(id, resolve);
+      timer = setTimeout(resolve, HEARD_WITHIN_MS);
+    });
+    clearTimeout(timer);
+    this.waiting.delete(id);
+  }
+}
+
 /**
  * Releases an answer a paragraph at a time, while it is still being written.
  *

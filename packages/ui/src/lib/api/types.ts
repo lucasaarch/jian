@@ -59,7 +59,6 @@ export type MediaUpload = RequestBody<'uploadMedia'>;
 export type ScheduleInput = RequestBody<'createSchedule'>;
 export type SchedulePatch = RequestBody<'updateSchedule'>;
 export type Schedule = JsonResponse<'listSchedules', 200>[number];
-export type Subscription = JsonResponse<'listSubscriptions', 200>[number];
 export type ProfilePatch = RequestBody<'updateProfile'>;
 export type NewChannel = RequestBody<'createChannel'>;
 export type ChannelPatch = RequestBody<'updateChannel'>;

@@ -168,7 +168,7 @@ export function CrewDrawer({
             <Elapsed agent={agent} className="font-mono text-xs tabular-nums" />
           </p>
         </InspectorHeader>
-        <InspectorBody className="grid content-start gap-3 px-5 pt-4 [&_.chat-line]:mb-0">
+        <InspectorBody className="grid content-start gap-3 px-(--inspector-inset) pt-4 [&_.chat-line]:mb-0">
           {error && <p className="text-[13px] text-bad">{error}</p>}
           {displayed.map((message, index) => (
             <div key={message.id}>

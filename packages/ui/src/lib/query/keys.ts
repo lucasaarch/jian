@@ -38,6 +38,8 @@ export const keys = {
     ['profile', profileId, 'context', sessionId] as const,
   sessionTimeline: (profileId: string, sessionId: string) =>
     ['profile', profileId, 'timeline', sessionId] as const,
+  sessionPulls: (profileId: string, sessionId?: string) =>
+    ['profile', profileId, 'pulls', ...(sessionId ? [sessionId] : [])] as const,
   sessionChanges: (profileId: string, sessionId: string, path?: string) =>
     ['profile', profileId, 'changes', sessionId, ...(path ? [path] : [])] as const,
   schedules: (profileId: string) => ['profile', profileId, 'schedules'] as const,
@@ -49,7 +51,6 @@ export const keys = {
   channelQr: (profileId: string, channelId: string) =>
     ['profile', profileId, 'channels', channelId, 'qr'] as const,
   codexLogin: ['providers', 'openai', 'oauth'] as const,
-  subscriptions: (profileId: string) => ['profile', profileId, 'subscriptions'] as const,
   builtinSkills: (profileId: string) => ['profile', profileId, 'builtin-skills'] as const,
   stats: (profileId: string, days: number) => ['profile', profileId, 'stats', days] as const,
   activityCalendar: (profileId: string, zone: string) =>

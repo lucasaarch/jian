@@ -24,7 +24,6 @@ import { remoteControl } from './remote-control.js';
 import { schedules } from './schedules.js';
 import { skillCreator } from './skill-creator.js';
 import { sshKeys, sshKeysFor } from './ssh-keys.js';
-import { subscriptions } from './subscriptions.js';
 import { caveman } from './vendored/caveman.js';
 import { discernmentNudge } from './vendored/discernment-nudge.js';
 import { ponytailSkills } from './vendored/ponytail.js';
@@ -48,7 +47,6 @@ const ALWAYS: readonly Skill[] = [
   memoryKeeping,
   conversations,
   schedules,
-  subscriptions,
   skillCreator,
   media,
   sshKeys,

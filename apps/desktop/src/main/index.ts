@@ -22,6 +22,7 @@ import { ComputerSharing } from './machines/sharing';
 import { Notifier } from './notify';
 import { notificationsOn } from './preferences';
 import { handleScheme, registerScheme } from './protocol';
+import { lockHolder, whenHolderLeft } from './single-instance';
 import { createTray, resourcesDir } from './tray';
 import { type TrayState, trayMenu } from './tray-menu';
 import { appUpdates } from './updates/electron';
@@ -38,18 +39,19 @@ if (!holdsLock()) app.exit(0);
 
 /**
  * From source, a rebuild restarts the app while the old process still stops its gateway and
- * holds the lock: the new one waits for it, up to 15 seconds, instead of leaving at once. It
- * blocks, as nothing else may start before the lock is decided.
+ * holds the lock: the new one waits for it to leave, instead of leaving at once. Windows keeps
+ * no link to read who holds it, so there it can only ask until the lock is free.
  */
 function holdsLock(): boolean {
-  if (app.requestSingleInstanceLock()) return true;
-  if (app.isPackaged) return false;
-  const pause = new Int32Array(new SharedArrayBuffer(4));
-  for (let waited = 0; waited < 15_000; waited += 250) {
-    Atomics.wait(pause, 0, 0, 250);
-    if (app.requestSingleInstanceLock()) return true;
+  if (app.isPackaged) return app.requestSingleInstanceLock();
+  if (process.platform === 'win32') {
+    return whenHolderLeft({
+      holder: () => (app.requestSingleInstanceLock() ? undefined : process.pid),
+      alive: () => true,
+    });
   }
-  return false;
+  whenHolderLeft({ holder: () => lockHolder(app.getPath('userData')) });
+  return app.requestSingleInstanceLock();
 }
 
 registerScheme();
@@ -209,6 +211,8 @@ claimLinks();
 app.on('window-all-closed', () => {});
 let local: LocalGateway | undefined;
 let stopped = false;
+/** How long the app gets to close its windows and end once all it runs has stopped, in ms. */
+const QUIT_WITHIN_MS = 3_000;
 let stopping: Promise<void> | undefined;
 // The app's own gateway is stopped before the app ends, so its database closes cleanly, and
 // this computer's workers tell their gateways it went offline. Once, whoever asks first: a quit,
@@ -223,7 +227,13 @@ app.on('before-quit', (event) => {
   quitting = true;
   if (stopped) return;
   event.preventDefault();
-  void stopAll().finally(() => app.quit());
+  void stopAll().finally(() => {
+    app.quit();
+    // Everything is stopped by now, so nothing is lost by leaving outright. A quit that went
+    // nowhere, as when the page is reloading while it closes, would otherwise leave a window with
+    // no gateway behind it, holding the lock against the next launch.
+    setTimeout(() => app.exit(0), QUIT_WITHIN_MS).unref();
+  });
 });
 app.on('activate', () => open());
 

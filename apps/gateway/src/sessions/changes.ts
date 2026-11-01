@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { lstat, readlink, realpath } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { SessionChange, SessionChanges } from '@jian/contracts';
-import { fileDiff } from '../agent/diff.js';
+import { fileDiff, fileLines } from '../agent/diff.js';
 import { commandEnvironment } from '../agent/shell.js';
 import { confine, confined, openToRead } from '../agent/workspace.js';
 import { workspaceHome, workspaceTemp } from '../agent/workspace-home.js';
@@ -66,7 +66,11 @@ function changedFiles(status: string): SessionChange[] {
  * Read the checkout, never refresh its index or run repository-supplied hooks, filters or diff
  * drivers. A request cannot supply a command, revision, checkout path or arbitrary file path.
  */
-export async function checkoutChanges(checkout: string, path?: string): Promise<SessionChanges> {
+export async function checkoutChanges(
+  checkout: string,
+  path?: string,
+  whole = false,
+): Promise<SessionChanges> {
   const root = await realpath(await confine(checkout, 'read')).catch(() => {
     throw new GatewayError(409, 'This conversation has no checkout yet.');
   });
@@ -212,7 +216,8 @@ export async function checkoutChanges(checkout: string, path?: string): Promise<
     before = original.stdout;
   }
   const diff = fileDiff(file.path, before, after);
+  const lines = whole && file.status !== 'deleted' ? fileLines(after) : undefined;
   return diff
-    ? { files: [{ ...file, diff }], truncated: false }
+    ? { files: [{ ...file, diff, ...(lines ? { lines } : {}) }], truncated: false }
     : unavailable('No text diff is available; the contents may match or exceed comparison limits.');
 }

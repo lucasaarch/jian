@@ -19,6 +19,12 @@ const TIMEOUT_MS = 8_000;
  */
 const MISSED_EVERY_MS = 3_000;
 
+/**
+ * How Chromium ends a request whose connection this app closed, as Reconnect does. Our own time
+ * limit reads as a TimeoutError instead, so this says nothing about the gateway.
+ */
+const cutOff = (error: unknown) => error instanceof Error && error.message === 'net::ERR_ABORTED';
+
 /** What a failed look found, short enough for the row in the gateway list. */
 function reasonOf(error: unknown): string {
   if (error instanceof Error && error.name === 'TimeoutError') {
@@ -45,6 +51,8 @@ type Watch = {
   timer?: NodeJS.Timeout;
   /** Looks in a row that failed, while it still reads as answering. */
   missed?: number;
+  /** The last look was cut off, and left the standing as it was. Once: twice is not our doing. */
+  cut?: boolean;
   /** A look is under way; `again` asks for another as soon as it ends. */
   looking?: boolean;
   again?: boolean;
@@ -130,10 +138,16 @@ export class GatewayMonitor {
       await this.read(gateway, watch);
       watch.missed = 0;
       watch.reason = undefined;
+      watch.cut = false;
     } catch (error) {
-      watch.reason = reasonOf(error);
-      watch.missed = (watch.missed ?? 0) + 1;
-      if (watch.status !== 'online' || watch.missed > 1) watch.status = 'offline';
+      if (cutOff(error) && !watch.cut) {
+        watch.cut = true;
+      } else {
+        watch.cut = false;
+        watch.reason = reasonOf(error);
+        watch.missed = (watch.missed ?? 0) + 1;
+        if (watch.status !== 'online' || watch.missed > 1) watch.status = 'offline';
+      }
     } finally {
       watch.looking = false;
     }

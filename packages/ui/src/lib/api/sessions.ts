@@ -54,10 +54,11 @@ export const sessionCalls = (client: Client) => ({
         body: { title },
       }),
     ),
-  messages: (profileId: string, sessionId: string) =>
+  /** The conversation's latest messages, or the page just before one of them. */
+  messages: (profileId: string, sessionId: string, before?: string) =>
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/messages', {
-        params: { path: { profileId, sessionId } },
+        params: { path: { profileId, sessionId }, query: before ? { before } : {} },
       }),
     ),
   deleteSession: (profileId: string, sessionId: string) =>
@@ -135,17 +136,39 @@ export const sessionCalls = (client: Client) => ({
         params: { path: { profileId, sessionId } },
       }),
     ),
-  timeline: (profileId: string, sessionId: string) =>
+  /** The pull requests the agent linked in a conversation, however long ago. */
+  sessionPulls: (profileId: string, sessionId: string) =>
     result(
-      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/timeline', {
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/pull-requests', {
         params: { path: { profileId, sessionId } },
       }),
     ),
-  /** A project's working-tree changes; pass a listed path to read that file's diff. */
-  sessionChanges: (profileId: string, sessionId: string, path?: string): Promise<SessionChanges> =>
+  /** The tools of the turns named, however old; with none named, of the latest turns. */
+  timeline: (profileId: string, sessionId: string, runs?: string[]) =>
+    result(
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/timeline', {
+        params: {
+          path: { profileId, sessionId },
+          query: runs?.length ? { runs: runs.join(',') } : {},
+        },
+      }),
+    ),
+  /**
+   * A project's working-tree changes; pass a listed path to read that file's diff, and `whole` for
+   * the file as it is now beside it.
+   */
+  sessionChanges: (
+    profileId: string,
+    sessionId: string,
+    path?: string,
+    whole?: boolean,
+  ): Promise<SessionChanges> =>
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/changes', {
-        params: { path: { profileId, sessionId }, ...(path ? { query: { path } } : {}) },
+        params: {
+          path: { profileId, sessionId },
+          ...(path ? { query: { path, ...(whole ? { whole: 'true' as const } : {}) } } : {}),
+        },
       }),
     ),
   people: (profileId: string, sessionId: string) =>

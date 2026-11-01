@@ -17,7 +17,7 @@ const standings: Record<Standing | 'draft', { name: string; tone: StatusTone }> 
 };
 
 /** Where a pull request or an issue stands, in GitHub's own colours. A draft is its own word. */
-function StatePill({ state, draft = false }: { state: Standing; draft?: boolean }) {
+export function StatePill({ state, draft = false }: { state: Standing; draft?: boolean }) {
   const { name, tone } = standings[draft && state === 'open' ? 'draft' : state];
   return <StatusPill tone={tone}>{name}</StatusPill>;
 }
@@ -60,7 +60,7 @@ export function Byline({
   );
 }
 
-const line = 'group -mx-2.5 flex h-9 min-w-0 items-center gap-2.5 rounded-lg px-2.5 text-[13px]';
+const line = 'group -mx-1.5 flex h-9 min-w-0 items-center gap-2.5 rounded-lg px-1.5 text-[13px]';
 
 /**
  * A line of a part that may open on GitHub: the whole line is the link, lit as it is pointed at,
@@ -130,7 +130,7 @@ export function Section({
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen(!open)}
-        className="group flex w-full items-center gap-1.5 px-5 rounded-md py-1 text-left text-[13px] font-medium text-ink outline-none"
+        className="group flex w-full items-center gap-1.5 px-(--inspector-inset) rounded-md py-1 text-left text-[13px] font-medium text-ink outline-none"
       >
         {title}
         <FoldChevron
@@ -144,7 +144,7 @@ export function Section({
         )}
       </button>
       <Fold open={open} id={id}>
-        <div className="grid min-w-0 gap-2 px-5 pt-2">{children}</div>
+        <div className="grid min-w-0 gap-2 px-(--inspector-inset) pt-2">{children}</div>
       </Fold>
     </section>
   );
@@ -167,24 +167,31 @@ export function CheckMark({ state, size = 14 }: { state: CheckState; size?: numb
 const bar = 'block rounded-md bg-ink/7 animate-pulse motion-reduce:animate-none';
 
 /**
- * The drawer's shape while GitHub answers: the title, where it stands, its branches, then its
- * description, so the item fills in where its parts will be.
+ * The drawer's shape while GitHub answers: the title, the tabs, then a file per row, so the item
+ * fills in where its parts will be.
  */
 export function DrawerSkeleton() {
   return (
-    <div role="status" aria-label="Reading it from GitHub" className="grid gap-6 px-5 pt-2">
-      <div className="grid gap-2.5">
-        <span className={`${bar} h-4.5 w-[88%]`} />
-        <span className={`${bar} h-4.5 w-[55%]`} />
-        <span className="flex items-center gap-2 pt-1">
-          <span className={`${bar} h-5 w-12 rounded-full`} />
-          <span className={`${bar} h-3 w-36`} />
+    <div role="status" aria-label="Reading it from GitHub" className="grid gap-3 pt-2">
+      <div className="grid gap-3 px-(--inspector-inset)">
+        <span className={`${bar} h-4.5 w-[72%]`} />
+        <span className="flex items-center gap-4">
+          {['w-16', 'w-20', 'w-28', 'w-14'].map((width) => (
+            <span key={width} className={`${bar} h-3 ${width}`} />
+          ))}
         </span>
-        <span className={`${bar} h-5 w-[62%]`} />
+        <span className={`${bar} h-8 w-full rounded-lg`} />
       </div>
-      <div className="grid gap-2.5">
-        {['92%', '78%', '85%', '40%'].map((width) => (
-          <span key={width} className={`${bar} h-3`} style={{ width }} />
+      <div className="grid">
+        {['62%', '78%', '48%', '70%'].map((width) => (
+          <span
+            key={width}
+            className="flex items-center gap-2 border-b border-glass-edge px-(--inspector-inset) py-2.5"
+          >
+            <span className={`${bar} size-3.5 shrink-0`} />
+            <span className={`${bar} h-3`} style={{ width }} />
+            <span className={`${bar} ml-auto size-4 shrink-0`} />
+          </span>
         ))}
       </div>
     </div>

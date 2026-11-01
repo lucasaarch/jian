@@ -14,6 +14,11 @@ export function registerIntegrationRoutes(
     items.pull(request.params),
   );
 
+  app.get<{ Params: ItemParams }>(
+    '/v1/integrations/github/pulls/:owner/:repo/:number/file',
+    (request) => items.pullFile(request.params, request.query),
+  );
+
   app.post<{
     Params: ItemParams;
     Body: { expectedHeadSha: string };

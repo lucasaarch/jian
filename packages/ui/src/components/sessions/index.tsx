@@ -31,10 +31,10 @@ import { DraftPane } from './draft-pane';
 import { GitHubDrawer, GitHubLinks } from './github';
 import { History } from './history';
 import { InspectorLayout } from './inspector-host';
-import { SessionListeners } from './listeners';
 import { SessionModel } from './model-picker';
 import { SessionObjective } from './objective';
 import { SessionProtection } from './protection-menu';
+import { SessionPulls } from './session-pulls';
 
 const isGateway = (session: Session) => session.channel === GATEWAY_SESSION_CHANNEL;
 /**
@@ -154,11 +154,11 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   const contact = contacts.find(
     (item) => item.sessionId === active.id && item.profileId === profile.id,
   );
-  // Where the conversation's objective stands and what it listens for, beside where it runs.
+  // The pull requests the agent sent and where the objective stands, beside where it runs.
   const badges = () => (
     <span className="session-badges">
+      <SessionPulls api={api} profileId={profile.id} sessionId={active.id} />
       {active.objective && <SessionObjective objective={active.objective} />}
-      <SessionListeners api={api} profileId={profile.id} sessionId={active.id} />
     </span>
   );
   const waits = activities.find((run) => run.sessionId === active.id && run.status === 'waiting');

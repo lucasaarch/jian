@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { recordEvent } from '../src/core/events.js';
+import { insertMessage } from '../src/sessions/repository.js';
 import { events } from './helpers/rows.js';
 import { testServices } from './helpers/services.js';
 
@@ -394,6 +396,218 @@ it('opens a stream with no cursor from now, telling where to resume and only wha
     clearTimeout(limit);
     controller.abort();
   }
+});
+
+describe('reading a long conversation', () => {
+  const lines = (read: { json: () => { content: string }[] }) =>
+    read.json().map((message) => message.content);
+
+  it('pages back through its messages, in order, with none lost or repeated', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const run = await services.runs.submit(profile.id, session.id, {
+      text: 'Hi',
+      requestKey: 'long',
+    });
+
+    await services.lifecycle.claim(run.id, profile.id, 'worker');
+    for (let line = 0; line < 105; line++) {
+      await services.lifecycle.say(profile.id, run.id, 'worker', `line ${line}`);
+    }
+
+    const url = `/v1/profiles/${profile.id}/sessions/${session.id}/messages`;
+    const latest = await app.inject({ url, headers });
+    const page = latest.json<{ id: string }[]>();
+    const older = await app.inject({ url: `${url}?before=${page[0]?.id}`, headers });
+
+    expect(page).toHaveLength(100);
+    expect(lines(latest)[0]).toBe('line 5');
+    expect(lines(older)).toEqual(['Hi', ...[0, 1, 2, 3, 4].map((line) => `line ${line}`)]);
+  });
+
+  it('refuses to page from a message of another conversation', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const asked = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const other = await services.sessions.createSession(profile.id, { channel: 'api' });
+    await services.runs.submit(profile.id, other.id, { text: 'Private', requestKey: 'other' });
+    const [foreign] = await services.sessions.messages(profile.id, other.id);
+
+    const read = await app.inject({
+      url: `/v1/profiles/${profile.id}/sessions/${asked.id}/messages?before=${foreign?.id}`,
+      headers,
+    });
+
+    expect(read.statusCode).toBe(404);
+  });
+
+  it('keeps messages written in the same millisecond in the order they were written', async () => {
+    const { services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const at = '2026-10-29T10:00:00.000Z';
+
+    for (let line = 0; line < 20; line++) {
+      await insertMessage(services.store.db, {
+        id: randomUUID(),
+        profileId: profile.id,
+        sessionId: session.id,
+        role: 'assistant',
+        content: `line ${line}`,
+        createdAt: at,
+      });
+    }
+
+    const read = await services.sessions.messages(profile.id, session.id);
+
+    expect(read.map((message) => message.content)).toEqual(
+      Array.from({ length: 20 }, (_, line) => `line ${line}`),
+    );
+  });
+
+  const toolRun = async (
+    services: Awaited<ReturnType<typeof setup>>['services'],
+    profileId: string,
+    sessionId: string,
+    key: string,
+  ) => {
+    const run = await services.runs.submit(profileId, sessionId, { text: 'Hi', requestKey: key });
+    await services.lifecycle.claim(run.id, profileId, 'worker');
+    await services.lifecycle.checkpoint(profileId, run.id, 'worker', {
+      phase: 'tool-started',
+      toolName: 'read_file',
+      toolCallId: `call-${key}`,
+      input: {},
+    });
+    await services.lifecycle.finish(profileId, run.id, 'worker', 'completed', 'Done');
+    return run.id;
+  };
+
+  it('reads the tools of the turns it names, however old', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const ids: string[] = [];
+
+    for (let index = 0; index < 52; index++) {
+      ids.push(await toolRun(services, profile.id, session.id, `turn-${index}`));
+    }
+
+    const read = await app.inject({
+      url: `/v1/profiles/${profile.id}/sessions/${session.id}/timeline?runs=${ids[0]},${ids[1]}`,
+      headers,
+    });
+
+    expect(read.json().map((item: { runId: string }) => item.runId)).toEqual(ids.slice(0, 2));
+  });
+
+  it('names no turn of another conversation in a timeline', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const asked = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const other = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const foreign = await toolRun(services, profile.id, other.id, 'foreign');
+
+    const read = await app.inject({
+      url: `/v1/profiles/${profile.id}/sessions/${asked.id}/timeline?runs=${foreign}`,
+      headers,
+    });
+
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toEqual([]);
+  });
+});
+
+describe('the pull requests an agent sent in a conversation', () => {
+  const pr = (number: number, tail = '') => `https://github.com/acme/harbor/pull/${number}${tail}`;
+
+  const conversation = async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const url = `/v1/profiles/${profile.id}/sessions/${session.id}/pull-requests`;
+    const write = (
+      role: 'user' | 'assistant',
+      content: string,
+      second: number,
+      sessionId = session.id,
+    ) =>
+      insertMessage(services.store.db, {
+        id: randomUUID(),
+        profileId: profile.id,
+        sessionId,
+        role,
+        content,
+        createdAt: new Date(Date.UTC(2026, 9, 29, 10, 0, second)).toISOString(),
+      });
+
+    return { app, services, profile, session, url, write };
+  };
+
+  const read = async (app: FastifyInstance, url: string) =>
+    (await app.inject({ url, headers })).json().map((item: { url: string }) => item.url);
+
+  it('lists each once, the latest first, however it was linked', async () => {
+    const { app, url, write } = await conversation();
+
+    await write('assistant', `Opened [the fix](${pr(1)}).`, 1);
+    await write('assistant', `See ${pr(2, '/files')} and ${pr(1, '#discussion_r1')}.`, 2);
+    await write('assistant', `Rebased ${pr(2)}.`, 3);
+
+    expect(await read(app, url)).toEqual([pr(2), pr(1)]);
+  });
+
+  it('finds them however far back in the conversation they were sent', async () => {
+    const { app, url, write } = await conversation();
+
+    await write('assistant', `Opened ${pr(7)}.`, 0);
+    for (let line = 0; line < 105; line++) {
+      await write('assistant', `Line ${line}.`, 1);
+    }
+
+    expect(await read(app, url)).toEqual([pr(7)]);
+  });
+
+  it('counts only what the agent wrote', async () => {
+    const { app, url, write } = await conversation();
+
+    await write('user', `Please look at ${pr(1)}.`, 1);
+
+    expect(await read(app, url)).toEqual([]);
+  });
+
+  it('leaves out issues and what only looks like a pull request', async () => {
+    const { app, url, write } = await conversation();
+
+    await write(
+      'assistant',
+      [
+        'https://github.com/acme/harbor/issues/9',
+        'https://example.test/acme/harbor/pull/9',
+        'https://github.com/acme/harbor/pulls',
+        'https://github.com/acme/harbor/pull/123456789',
+      ].join(' '),
+      1,
+    );
+
+    expect(await read(app, url)).toEqual([]);
+  });
+
+  it('keeps to its own conversation', async () => {
+    const { app, services, profile, url, write } = await conversation();
+    const other = await services.sessions.createSession(profile.id, { channel: 'api' });
+
+    await write('assistant', `Opened ${pr(1)}.`, 1, other.id);
+
+    expect(await read(app, url)).toEqual([]);
+  });
+
+  it('refuses a caller with no token', async () => {
+    const { app, url } = await conversation();
+
+    expect((await app.inject({ url })).statusCode).toBe(401);
+  });
 });
 
 it('tells a stream which conversation an event concerns, and leaves its weight to the feed', async () => {

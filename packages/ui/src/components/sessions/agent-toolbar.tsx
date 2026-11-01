@@ -11,7 +11,7 @@ import { SessionProtection } from './protection-menu';
 /**
  * Where a chat has its composer, a channel's conversation has its settings: whether the agent
  * answers this contact, and on which model. A contact not yet approved, or a channel paused,
- * says so beside them; the objective and the listeners sit above, as they do over a composer.
+ * says so beside them; its badges sit above, as they do over a composer.
  */
 export function AgentToolbar({
   api,
@@ -41,7 +41,7 @@ export function AgentToolbar({
 
   return (
     <section className="agent-toolbar" aria-label="Agent settings for this conversation">
-      {/* Above the box at its right, as over the composer: the objective and the listeners. */}
+      {/* Above the box at its right, as over the composer: the conversation's badges. */}
       {badges && <div className="agent-toolbar-context">{badges}</div>}
       <div className="agent-toolbar-box">
         {/* No Compact here: what is written in a channel's conversation can reach its contact,

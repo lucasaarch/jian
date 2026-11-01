@@ -1,5 +1,6 @@
 /** The glass kit: the pieces the app is drawn with, and the web as it moves to them. */
 export { Action, type ActionTone } from './action';
+export { CheckBox } from './checkbox';
 export { type Command, CommandPalette, type PaletteLabels } from './command-palette';
 export { ConfirmDialog } from './confirm-dialog';
 export { DateTimeField, TimeField } from './date-time-field';

@@ -290,7 +290,6 @@ describe('the skills every profile carries', () => {
         'jian-configuration',
         'activity',
         'schedules',
-        'subscriptions',
         'media',
       ]),
     );

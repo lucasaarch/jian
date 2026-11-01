@@ -19,6 +19,8 @@ const MAX_EDIT_LENGTH = MAX_DIFF_LINES * 2;
 const DIFF_TIMEOUT_MS = 100;
 /** A line longer than this is shown cut: a minified bundle would be one enormous row. */
 const LINE_CHARS = 500;
+/** Lines of one file handed over to read beside its diff. */
+const MAX_FILE_LINES = 100_000;
 /** Bytes of text kept across all lines of one diff. */
 const MAX_DIFF_BYTES = 200_000;
 /** A file larger than this is not diffed at all: the comparison would cost more than it shows. */
@@ -61,6 +63,20 @@ const languages: Record<string, string> = {
   hpp: 'cpp',
   cs: 'csharp',
 };
+
+const clipped = (line: string) =>
+  line.length > LINE_CHARS ? `${line.slice(0, LINE_CHARS)} …` : line;
+
+/**
+ * A file line by line, read the way a diff of it is: Windows endings as lines, long lines cut the
+ * same, so a line reads the same in both. Undefined past what is worth handing over.
+ */
+export function fileLines(text: string): string[] | undefined {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  // A last newline ends the last line; it does not start another.
+  if (lines.at(-1) === '') lines.pop();
+  return lines.length > MAX_FILE_LINES ? undefined : lines.map(clipped);
+}
 
 const languageOf = (path: string) => languages[path.split('.').pop()?.toLowerCase() ?? ''];
 
@@ -142,8 +158,7 @@ function boundedDiff(path: string, raw: RawHunk[], created: boolean): CodeDiff {
       if (mark === '+') additions += 1;
       if (mark === '-') deletions += 1;
 
-      const full = line.slice(1);
-      const text = full.length > LINE_CHARS ? `${full.slice(0, LINE_CHARS)} …` : full;
+      const text = clipped(line.slice(1));
       const fits = kept < MAX_DIFF_LINES && bytes + text.length <= MAX_DIFF_BYTES;
 
       if (fits) {

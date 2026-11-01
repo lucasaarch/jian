@@ -8,7 +8,7 @@ import {
   type SessionObjective,
   TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
-import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, like, lt, or, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { messages, type SessionWorkspace, sessions } from '../storage/schema.js';
 import { sanitizeObjectiveText } from './objective.js';
@@ -355,21 +355,67 @@ export async function findMessage(
   return row ? toMessage(row) : null;
 }
 
+type MessageCursor = { createdAt: Date; seq: number };
+
+/** Where a message of this conversation stands; nothing for one that is not of it. */
+export async function messageCursor(
+  db: Queryable,
+  sessionId: string,
+  messageId: string,
+): Promise<MessageCursor | undefined> {
+  const [cursor] = await db
+    .select({ createdAt: messages.createdAt, seq: messages.seq })
+    .from(messages)
+    .where(and(eq(messages.sessionId, sessionId), eq(messages.id, messageId)))
+    .limit(1);
+
+  return cursor;
+}
+
+/**
+ * What the agent wrote in a conversation that mentions a pull request, the latest first, in the
+ * whole of it. An agent's words are its own lines and, in a conversation with another agent, that
+ * agent's replies; what the owner wrote is left out.
+ */
+export async function listPullMentions(db: Queryable, sessionId: string): Promise<string[]> {
+  const rows = await db
+    .select({ content: messages.content })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        or(eq(messages.role, 'assistant'), isNotNull(messages.call)),
+        like(messages.content, '%github.com/%/pull/%'),
+      ),
+    )
+    .orderBy(desc(messages.createdAt), desc(messages.seq));
+
+  return rows.map((row) => row.content);
+}
+
 export async function listSessionMessages(
   db: Queryable,
   sessionId: string,
   limit: number,
   after?: string,
+  before?: MessageCursor,
 ): Promise<Message[]> {
   const rows = await db
     .select()
     .from(messages)
     .where(
-      after
-        ? and(eq(messages.sessionId, sessionId), gt(messages.createdAt, new Date(after)))
-        : eq(messages.sessionId, sessionId),
+      and(
+        eq(messages.sessionId, sessionId),
+        after ? gt(messages.createdAt, new Date(after)) : undefined,
+        before
+          ? or(
+              lt(messages.createdAt, before.createdAt),
+              and(eq(messages.createdAt, before.createdAt), lt(messages.seq, before.seq)),
+            )
+          : undefined,
+      ),
     )
-    .orderBy(desc(messages.createdAt), desc(messages.id))
+    .orderBy(desc(messages.createdAt), desc(messages.seq))
     .limit(limit);
 
   return rows.map(toMessage).reverse();

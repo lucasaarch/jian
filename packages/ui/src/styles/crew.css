@@ -162,6 +162,12 @@
   }
 }
 
+/* One edge for everything in the Inspector: its tabs, its bars, what they show, on either side. A
+   surface here takes its side padding from this, or it stops lining up with the rest. */
+:root {
+  --inspector-inset: 0.5rem;
+}
+
 /* The width arrives as a variable, not an inline width, so the phone layout below can replace it
    without !important. */
 .inspector-host {
@@ -182,8 +188,12 @@
   display: none;
 }
 
-/* The shared host owns glass, border and sizing; content drawers remain plain inside it. */
+/* The shared host owns glass, border and sizing; content drawers remain plain inside it. The filter
+   goes too: over the host's translucent glass it lays that glass down a second time, and the
+   content reads lighter than the tabs above it. */
 [data-inspector-host] .crew-drawer {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   position: static;
   inset: auto;
   flex: 1;
@@ -195,7 +205,16 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  animation: none;
+  /* Turning to another tab fades it in: the host stays, so nothing slides. */
+  animation: viewer-fade 200ms ease-out;
+}
+/* Each state of the Changes tab eases in as it replaces the last: the outline, then the file. A
+   read that changes nothing replaces nothing, so it moves nothing. */
+.changes-state > * {
+  animation: history-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.changes-fade {
+  animation: viewer-fade 200ms ease-out;
 }
 @media (max-width: 760px) {
   .inspector-host {

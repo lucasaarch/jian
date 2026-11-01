@@ -9,8 +9,10 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { checkpoints, runs } from '../storage/schema.js';
 
-/** How many recent turns a timeline covers; older answers show without their tools. */
+/** How many recent turns a timeline covers when it is not told which. */
 const TIMELINE_RUNS = 50;
+/** How many turns one read may name: more than a page of messages can belong to. */
+const NAMED_RUNS = 200;
 const phases = [
   'tool-started',
   'step-completed',
@@ -48,7 +50,11 @@ export async function sessionTimeline(
   db: Queryable,
   profileId: string,
   sessionId: string,
+  /** The turns to read, however old; only those of this conversation are ever read. */
+  runIds?: string[],
 ): Promise<RunTimeline[]> {
+  if (runIds && !runIds.length) return [];
+
   const recent = await db
     .select({
       id: runs.id,
@@ -57,9 +63,15 @@ export async function sessionTimeline(
       question: runs.question,
     })
     .from(runs)
-    .where(and(eq(runs.profileId, profileId), eq(runs.sessionId, sessionId)))
+    .where(
+      and(
+        eq(runs.profileId, profileId),
+        eq(runs.sessionId, sessionId),
+        runIds ? inArray(runs.id, runIds.slice(0, NAMED_RUNS)) : undefined,
+      ),
+    )
     .orderBy(desc(runs.createdAt))
-    .limit(TIMELINE_RUNS);
+    .limit(runIds ? NAMED_RUNS : TIMELINE_RUNS);
 
   if (!recent.length) return [];
 

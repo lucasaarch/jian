@@ -177,7 +177,7 @@ export function MessageReactions({
     <div className="message-reactions" role="status" aria-label="Message reactions">
       {reactions.map((reaction) => (
         <span
-          key={reaction.actor}
+          key={`${reaction.actor}:${reaction.emoji}`}
           className="reaction-badge"
           role="img"
           title={`${agentName} reacted ${reaction.emoji}`}

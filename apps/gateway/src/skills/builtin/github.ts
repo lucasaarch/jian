@@ -61,8 +61,6 @@ gateway's own machine, or the machine it targets. It reaches the same repositori
 
 - **Not a checkout.** Use the server for what lives on GitHub: issues, reviews, pull requests,
   runs, alerts, and small file edits.
-- **Not a wait.** To be told when checks finish or a pull request closes, use
-  \`create_subscription\` instead of asking again and again.
 
 ## Acting
 

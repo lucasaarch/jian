@@ -10,10 +10,14 @@ export function Segmented<T extends string>({
   value,
   options,
   onChange,
+  flat = false,
 }: {
   label: string;
   value: T;
-  options: { value: T; label: string; icon?: ReactNode }[];
+  /** `count` follows its name, quieter: how many of it there are. */
+  options: { value: T; label: string; icon?: ReactNode; count?: ReactNode }[];
+  /** No box around the choices: tabs at the head of a panel, where the box only costs room. */
+  flat?: boolean;
   onChange: (value: T, event: { x: number; y: number }) => void;
 }) {
   return (
@@ -21,7 +25,11 @@ export function Segmented<T extends string>({
       aria-label={label}
       value={[value]}
       // As wide as its choices, wherever it stands: a row of tabs does not stretch across a page.
-      className="inline-flex w-fit gap-0.5 rounded-lg border border-glass-edge bg-glass-hover p-0.5"
+      className={
+        flat
+          ? 'inline-flex w-fit gap-0.5'
+          : 'inline-flex w-fit gap-0.5 rounded-lg border border-glass-edge bg-glass-hover p-0.5'
+      }
     >
       {options.map((option) => (
         <Toggle
@@ -32,6 +40,7 @@ export function Segmented<T extends string>({
         >
           {option.icon}
           {option.label}
+          {option.count !== undefined && <span className="text-muted">{option.count}</span>}
         </Toggle>
       ))}
     </ToggleGroup>

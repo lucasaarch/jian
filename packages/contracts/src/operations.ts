@@ -35,9 +35,12 @@ import {
   githubLinksInputSchema,
   githubMergeInputSchema,
   githubMergeResultSchema,
+  githubPullFileLinesSchema,
+  githubPullFileQuerySchema,
   githubPullSchema,
   githubUpdateBranchInputSchema,
   githubUpdateBranchResultSchema,
+  sessionPullSchema,
 } from './github-items.js';
 import {
   githubConnectedRepositorySchema,
@@ -134,12 +137,6 @@ import {
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
 import { skillImportSchema } from './skills.js';
 import { sshKeyCreateSchema, sshKeySchema } from './ssh.js';
-import {
-  subscriptionDeliverySchema,
-  subscriptionInputSchema,
-  subscriptionPatchSchema,
-  subscriptionRecordSchema,
-} from './subscriptions.js';
 import { webSearchInputSchema, webSearchStatusSchema } from './web.js';
 import { conversationSubagentSchema } from './work.js';
 
@@ -185,6 +182,18 @@ export const streamCursorSchema = z.strictObject({
 });
 
 export const STREAM_OPENED_EVENT = 'stream.opened';
+
+/** How many messages one read of a conversation returns, newest first to be read. */
+export const MESSAGES_PAGE = 100;
+
+/** The page before a message of the conversation; absent, the conversation's latest messages. */
+export const messagePageSchema = z.strictObject({ before: z.uuid().optional() });
+
+/**
+ * The turns to read the tools of, comma-separated, however old; absent, the latest turns. A list,
+ * so a reader asks for exactly the turns it shows, and a page of messages never lacks its tools.
+ */
+export const timelineQuerySchema = z.strictObject({ runs: z.string().max(8_000).optional() });
 
 export const operations: Operation[] = [
   {
@@ -304,6 +313,15 @@ export const operations: Operation[] = [
     access: 'admin',
     params: githubItemParamsSchema,
     response: githubPullSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/integrations/github/pulls/:owner/:repo/:number/file',
+    operationId: 'getGithubPullFile',
+    access: 'admin',
+    params: githubItemParamsSchema,
+    query: githubPullFileQuerySchema,
+    response: githubPullFileLinesSchema,
   },
   {
     method: 'POST',
@@ -1136,6 +1154,13 @@ export const operations: Operation[] = [
     response: sessionRecordSchema,
   },
   {
+    method: 'GET',
+    path: `${session}/pull-requests`,
+    operationId: 'listSessionPullRequests',
+    access: 'admin',
+    response: z.array(sessionPullSchema),
+  },
+  {
     method: 'POST',
     path: `${session}/github/fix-conflicts`,
     operationId: 'fixGithubConflicts',
@@ -1164,6 +1189,7 @@ export const operations: Operation[] = [
     path: `${session}/messages`,
     operationId: 'listMessages',
     access: 'admin',
+    query: messagePageSchema,
     response: z.array(messageRecordSchema),
   },
   {
@@ -1180,6 +1206,7 @@ export const operations: Operation[] = [
     path: `${session}/timeline`,
     operationId: 'listSessionTimeline',
     access: 'admin',
+    query: timelineQuerySchema,
     response: z.array(runTimelineSchema),
   },
   {
@@ -1261,60 +1288,6 @@ export const operations: Operation[] = [
     access: 'admin',
     params: z.strictObject({ profileId: z.uuid(), scheduleId: z.uuid() }),
     response: z.array(scheduleRunSchema),
-  },
-  {
-    method: 'GET',
-    path: `${profile}/subscriptions`,
-    operationId: 'listSubscriptions',
-    access: 'admin',
-    response: z.array(subscriptionRecordSchema),
-  },
-  {
-    method: 'POST',
-    path: `${profile}/subscriptions`,
-    operationId: 'createSubscription',
-    access: 'admin',
-    body: subscriptionInputSchema,
-    response: subscriptionRecordSchema,
-    status: 201,
-  },
-  {
-    method: 'PATCH',
-    path: `${profile}/subscriptions/:subscriptionId`,
-    operationId: 'updateSubscription',
-    access: 'admin',
-    params: z.strictObject({ profileId: z.uuid(), subscriptionId: z.uuid() }),
-    body: subscriptionPatchSchema,
-    response: subscriptionRecordSchema,
-  },
-  {
-    method: 'DELETE',
-    path: `${profile}/subscriptions/:subscriptionId`,
-    operationId: 'deleteSubscription',
-    access: 'admin',
-    params: z.strictObject({ profileId: z.uuid(), subscriptionId: z.uuid() }),
-    response: subscriptionRecordSchema,
-  },
-  {
-    method: 'GET',
-    path: `${profile}/subscriptions/:subscriptionId/deliveries`,
-    operationId: 'listSubscriptionDeliveries',
-    access: 'admin',
-    params: z.strictObject({ profileId: z.uuid(), subscriptionId: z.uuid() }),
-    response: z.array(subscriptionDeliverySchema),
-  },
-  {
-    method: 'POST',
-    path: '/v1/hooks/github/:subscriptionId',
-    operationId: 'githubSubscriptionWebhook',
-    access: 'webhook',
-    params: z.strictObject({ subscriptionId: z.uuid() }),
-    // Body is the raw GitHub payload; verification uses X-Hub-Signature-256.
-    body: z.record(z.string(), z.unknown()),
-    response: z.strictObject({
-      accepted: z.boolean(),
-      runId: z.uuid().optional(),
-    }),
   },
   {
     method: 'GET',

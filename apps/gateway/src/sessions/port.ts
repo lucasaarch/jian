@@ -9,6 +9,7 @@ export interface SessionReader {
     sessionId: string,
     limit?: number,
     after?: string,
+    before?: string,
   ): Promise<Message[]>;
   uncompactedMessages(
     profileId: string,

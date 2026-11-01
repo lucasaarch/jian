@@ -47,6 +47,22 @@ const diffOf = async (dir: string, path: string) => {
 };
 
 describe('current project checkout changes', () => {
+  it('hands over the file as it is now only when asked, and no file for a deleted one', async () => {
+    const dir = repository();
+    writeFileSync(join(dir, 'modified.txt'), 'one\r\ntwo\n');
+    unlinkSync(join(dir, 'deleted.txt'));
+
+    expect((await checkoutChanges(dir, 'modified.txt')).files[0]?.lines).toBeUndefined();
+    const whole = await checkoutChanges(dir, 'modified.txt', true);
+    expect(sessionChangesSchema.safeParse(whole).success).toBe(true);
+    expect(whole.files[0]?.lines).toEqual(['one', 'two']);
+    expect((await checkoutChanges(dir, 'deleted.txt', true)).files[0]?.lines).toBeUndefined();
+    // The route takes the same path as a diff: a file not changed is still not readable.
+    await expect(checkoutChanges(dir, '../outside.txt', true)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+  });
+
   it('lists staged, unstaged, deleted, renamed and untracked files; diffs current contents against HEAD without writes', async () => {
     const dir = repository();
     writeFileSync(join(dir, 'modified.txt'), 'staged\n');

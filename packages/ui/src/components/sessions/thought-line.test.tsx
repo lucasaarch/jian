@@ -80,7 +80,7 @@ it('keeps every tool call, its input, and its output folded inside the activity'
   expect(element.querySelector('.thought-head')?.getAttribute('aria-expanded')).toBe('false');
   const call = element.querySelector<HTMLDetailsElement>('.thought-tool');
   expect(call?.open).toBe(false);
-  expect(call?.textContent).toContain('{"command":"pwd"}');
+  expect(call?.textContent).toContain('pwd');
   expect(call?.textContent).toContain('/workspace');
 });
 

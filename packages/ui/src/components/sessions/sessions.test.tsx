@@ -11,7 +11,6 @@ import { Sessions } from '.';
 vi.mock('../../lib/workspace', () => ({ useRefresh: () => vi.fn() }));
 
 vi.mock('./history', () => ({ History: () => <div>History</div> }));
-vi.mock('./listeners', () => ({ SessionListeners: () => null }));
 vi.mock('./model-picker', () => ({ SessionModel: () => null }));
 
 const roots: ReturnType<typeof createRoot>[] = [];

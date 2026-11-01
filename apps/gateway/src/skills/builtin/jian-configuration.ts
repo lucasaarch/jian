@@ -45,6 +45,9 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   it what new chats start with.
 - **The Inspector**, beside the conversation, holds pull requests, subagents and, in the desktop
   app, the browser.
+- **The conversation's badges**, where it runs, show its objective and how many pull requests
+  you linked in it. That one opens the list of them with how each stands, and each
+  opens in the Inspector.
 
 The installation time zone is set with \`JIAN_TIME_ZONE\` in the gateway environment and takes effect
 after a restart; there is no setting for it. For an actual failure, also read \`handling-errors\`;

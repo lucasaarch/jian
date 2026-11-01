@@ -29,7 +29,6 @@ import { Settings } from './settings/service.js';
 import { SshKeys } from './ssh/service.js';
 import { Stats } from './stats/service.js';
 import type { Store } from './storage/database.js';
-import { Subscriptions } from './subscriptions/service.js';
 import { Work } from './tasks/service.js';
 import { machineBrowser } from './web/machine-browser.js';
 import { WebSearch } from './web/service.js';
@@ -51,7 +50,6 @@ export type Services = {
   stats: Stats;
   subscriptionUsage: SubscriptionUsageReader;
   schedules: Schedules;
-  subscriptions: Subscriptions;
   settings: Settings;
   lifecycle: RunLifecycle;
   contexts: Contexts;
@@ -164,15 +162,6 @@ export function buildServices({
     ),
     subscriptionUsage,
     schedules: new Schedules(store, profiles, sessions, runs, clock),
-    subscriptions: new Subscriptions(
-      store,
-      profiles,
-      sessions,
-      runs,
-      vault,
-      clock,
-      fetcher ?? createSafeFetch().fetch,
-    ),
     settings,
     lifecycle,
     contexts: new Contexts(store, runs, sessions, settings, decisions.judge),

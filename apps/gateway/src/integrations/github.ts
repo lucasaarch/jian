@@ -654,6 +654,7 @@ export class GitHubIntegrations {
         authorization: `Bearer ${token}`,
         'x-github-api-version': API_VERSION,
         ...(init.body ? { 'content-type': 'application/json' } : {}),
+        ...Object.fromEntries(new Headers(init.headers)),
       },
       signal: init.signal ?? AbortSignal.timeout(15_000),
     });

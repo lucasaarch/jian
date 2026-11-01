@@ -34,9 +34,8 @@ import type { StartupStage } from './startup.js';
 import type { Store } from './storage/database.js';
 
 /**
- * How often due schedules and Listening polls are looked for, in milliseconds. A schedule set
- * for 08:00 starts within this much of it; every worker looks, and a schedule starts once
- * however many do. Subscriptions poll GitHub on their own interval, checked on this tick.
+ * How often due schedules are looked for, in milliseconds. A schedule set for 08:00 starts within
+ * this much of it; every worker looks, and a schedule starts once however many do.
  */
 const SCHEDULE_TICK_MS = 15_000;
 
@@ -176,10 +175,6 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
   services.sessions.useReactionDelivery((tx, session, message, emoji, runId) =>
     channels.queueReaction(tx, session, message, emoji, runId),
   );
-  // A matching GitHub event (poll or optional webhook) wakes the subscribed session the same way.
-  services.subscriptions.useDeliveries(channels);
-  // Private repositories are polled with the connected account's installation token.
-  services.subscriptions.useGithub(outbound.fetch, github);
 
   // Deleting a profile disconnects its channels first, inside the same transaction: a WhatsApp
   // socket a worker still holds open has to be told, not just left to find out from a missing row.
@@ -245,9 +240,6 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
           void services.schedules
             .fireDue()
             .catch(() => console.error('jian: schedules could not be started; will retry'));
-          void services.subscriptions
-            .pollDue()
-            .catch(() => console.error('jian: subscription poll failed; will retry'));
         }, SCHEDULE_TICK_MS);
         scheduleTimer.unref();
       }

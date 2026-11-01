@@ -7,21 +7,26 @@
    off the page in either theme, with each theme's own syntax colours. Long lines scroll inside
    the card, never the page. */
 @layer components {
+  /* A question's card and rows, so the two read alike in a conversation. One column, not left to
+     `auto`: it would grow to the widest path and push the counts out. */
   .run-change-summary {
-    @apply glass mb-3 grid w-full min-w-0 gap-1.5 rounded-2xl p-3;
+    @apply glass mb-3 grid w-full min-w-0 grid-cols-1 gap-3 rounded-2xl p-4;
   }
   .run-change-summary-title {
     @apply text-xs font-medium;
     color: var(--muted);
   }
   .run-change-summary ul {
-    @apply grid gap-1;
+    @apply m-0 grid min-w-0 list-none grid-cols-1 gap-2 p-0;
   }
   .run-change-summary button {
-    @apply flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-glass-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink/30;
+    @apply glass flex w-full min-w-0 items-center gap-3 rounded-full px-3 py-2.5 text-left transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink/30;
+  }
+  .run-change-summary button:hover {
+    background: var(--glass-hover);
   }
   .run-change-summary-path {
-    @apply min-w-0 flex-1 truncate font-mono text-xs;
+    @apply flex min-w-0 flex-1 font-mono text-xs;
     color: var(--ink);
   }
   .run-change-summary-counts {
@@ -59,12 +64,12 @@
     @apply glass min-w-0 overflow-hidden rounded-2xl;
     color: var(--diff-ink);
   }
+  /* The rule is always there and only fades, so folding never moves the card by its pixel. */
   .code-diff-head {
-    @apply flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left font-mono text-[12.5px];
+    @apply flex w-full min-w-0 items-center gap-2 border-b border-transparent px-3 py-2 text-left font-mono text-[12.5px] transition-colors duration-300;
     color: var(--diff-ink);
   }
   .code-diff-head[aria-expanded="true"] {
-    @apply border-b;
     border-color: var(--diff-rule);
   }
   .code-diff-head .code-change-counts .added {
@@ -81,7 +86,14 @@
     @apply -rotate-90;
   }
   .code-diff-path {
+    @apply flex min-w-0;
+  }
+  .code-diff-dir {
     @apply min-w-0 truncate;
+    color: var(--diff-dim, var(--muted));
+  }
+  .code-diff-file {
+    @apply shrink-0;
   }
   .code-diff-body {
     @apply overflow-x-auto;
@@ -89,25 +101,57 @@
   .code-diff-lines {
     @apply min-w-max font-mono text-[12.5px] leading-[1.65];
   }
-  .code-diff-hunk {
-    @apply whitespace-pre px-3 py-1;
-    background: color-mix(in srgb, var(--ink) 4%, transparent);
+  /* What a diff leaves out: a bar between changes, with arrows to bring its lines in. */
+  .code-diff-gap {
+    @apply mx-2 my-1.5 flex min-w-0 items-stretch gap-0.5 font-sans text-xs;
+    color: var(--diff-dim);
+  }
+  .code-diff-gap-arrows {
+    @apply grid shrink-0 auto-rows-fr gap-0.5;
+  }
+  .code-diff-gap-arrows button {
+    @apply flex min-h-6 w-7 items-center justify-center transition-colors first:rounded-tl-lg last:rounded-bl-lg focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink/30;
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+  }
+  .code-diff-gap-arrows button:hover {
+    background: color-mix(in srgb, var(--ink) 12%, transparent);
+    color: var(--diff-ink);
+  }
+  .code-diff-gap-label {
+    @apply flex min-w-0 flex-1 items-center rounded-lg px-3 py-1.5;
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+  }
+  .code-diff-gap-arrows + .code-diff-gap-label {
+    @apply rounded-l-none;
+  }
+  .code-diff-gap[aria-busy="true"] {
+    @apply opacity-60;
+  }
+  /* What changed inside a line replaced by another, a step stronger than the line's own band. */
+  .code-diff-line[data-kind="add"] .code-diff-changed {
+    background: color-mix(in srgb, var(--good) 22%, transparent);
+  }
+  .code-diff-line[data-kind="del"] .code-diff-changed {
+    background: color-mix(in srgb, var(--bad) 28%, transparent);
+  }
+  .code-diff-kind {
+    @apply shrink-0 text-[10px] font-semibold tracking-wide;
     color: var(--diff-dim);
   }
   .code-diff-line {
     @apply grid;
-    grid-template-columns: 3rem 3rem 1.5rem minmax(0, 1fr);
+    /* Room for five digits and the gap to the code, so every file's code starts at the same place. */
+    grid-template-columns: 3.25rem minmax(0, 1fr);
   }
   .code-diff-number {
-    @apply select-none pr-2 text-right tabular-nums;
+    @apply select-none pr-3 text-right tabular-nums;
     color: #6e7681;
   }
-  .code-diff-sign {
-    @apply select-none text-center;
-    color: var(--diff-dim);
-  }
+  /* The row's size, not the page's for inline code: it would sit higher than its line number. */
   .code-diff-line code {
     @apply whitespace-pre pr-4;
+    font-size: inherit;
+    line-height: inherit;
   }
   /* Word wrap, where a place asks for it: long lines fold under themselves, no sideways scroll. */
   [data-wrap] .code-diff-lines {
@@ -117,17 +161,68 @@
     @apply whitespace-pre-wrap;
     overflow-wrap: anywhere;
   }
+  /* The owner turning wrap on or off: the lines reflow at once, so they fade in as they settle. Two
+     names for one motion, since only a change of name starts an animation again. */
+  .crew-drawer[data-wrap] .code-diff-lines {
+    animation: diff-wrapped 220ms ease-out;
+  }
+  .crew-drawer:not([data-wrap]) .code-diff-lines {
+    animation: diff-unwrapped 220ms ease-out;
+  }
+  /* A diff laid into its panel: no card, its rows reaching both edges and parted by rules, its
+     lines coloured by what happened to them, with the mark at the edge to read them by. */
+  .code-diff-row {
+    @apply flex min-w-0 items-center;
+  }
+  .code-diff[data-flat] {
+    @apply rounded-none border-0 border-b border-glass-edge;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .code-diff[data-flat] .code-diff-row {
+    @apply gap-2;
+    padding-right: var(--inspector-inset);
+  }
+  .code-diff[data-flat] .code-diff-head {
+    @apply min-w-0 flex-1 border-0;
+    padding-left: var(--inspector-inset);
+  }
+  .code-diff[data-flat] .code-diff-body {
+    @apply border-t;
+    border-color: var(--diff-rule);
+  }
+  .code-diff[data-flat] .code-change-counts {
+    @apply ml-0;
+  }
+  .code-diff[data-flat] .code-diff-line[data-kind="add"] {
+    background: color-mix(in srgb, var(--good) 13%, transparent);
+    box-shadow: inset 3px 0 0 var(--good);
+  }
+  .code-diff[data-flat] .code-diff-line[data-kind="del"] {
+    background: color-mix(in srgb, var(--bad) 13%, transparent);
+    box-shadow: inset 3px 0 0 var(--bad);
+  }
+  .code-diff[data-flat] .code-diff-line[data-kind="del"] code {
+    @apply opacity-100;
+  }
+  /* A file with no diff to show, in the same row. */
+  .code-diff-unshown {
+    @apply m-0 flex min-w-0 items-center gap-2 border-b border-glass-edge py-2 font-mono text-[12.5px];
+    padding-inline: var(--inspector-inset);
+  }
   /* Added lines sit on a lighter band; removed ones fade, so the new code reads first. */
   .code-diff-line[data-kind="add"] {
     background: rgb(255 255 255 / 0.07);
   }
-  .code-diff-line[data-kind="add"] .code-diff-sign {
+  .code-diff-line[data-kind="add"] .code-diff-number {
     color: #7ee787;
   }
   .code-diff-line[data-kind="del"] code {
     @apply opacity-50;
   }
-  .code-diff-line[data-kind="del"] .code-diff-sign {
+  .code-diff-line[data-kind="del"] .code-diff-number {
     color: #ffa198;
   }
   .code-diff-cut {
@@ -143,13 +238,13 @@
     & .code-diff-number {
       color: #8c959f;
     }
-    & .code-diff-line[data-kind="add"] {
+    &:not([data-flat]) .code-diff-line[data-kind="add"] {
       background: rgb(0 0 0 / 0.045);
     }
-    & :is(.code-diff-line[data-kind="add"] .code-diff-sign, .code-change-counts .added) {
+    & :is(.code-diff-line[data-kind="add"] .code-diff-number, .code-change-counts .added) {
       color: #1a7f37;
     }
-    & :is(.code-diff-line[data-kind="del"] .code-diff-sign, .code-change-counts .removed) {
+    & :is(.code-diff-line[data-kind="del"] .code-diff-number, .code-change-counts .removed) {
       color: #cf222e;
     }
   }
@@ -210,5 +305,16 @@
     & .code-block-line::before {
       color: #8c959f;
     }
+  }
+}
+
+@keyframes diff-wrapped {
+  from {
+    opacity: 0.35;
+  }
+}
+@keyframes diff-unwrapped {
+  from {
+    opacity: 0.35;
   }
 }

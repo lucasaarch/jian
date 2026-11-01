@@ -57,7 +57,7 @@ or an approval; a later reply starts or resumes one.
 ## What it can do
 
 Conversations and memory; files and media; a shell and code work; GitHub, X and MCP tools; connected
-computers, including their screens; schedules, and listening for GitHub events; subagents and
+computers, including their screens; schedules; subagents and
 agents working together. In the desktop app, a browser sits beside each conversation, for the owner
 and the agent alike. Each conversation has a protection setting: Ask first, Auto or Full access.
 

@@ -1,6 +1,6 @@
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { patchDiff } from '../src/agent/diff.js';
 import { createApp } from '../src/app.js';
 import { GitHubIntegrations } from '../src/integrations/github.js';
@@ -17,7 +17,7 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
-type Answer = { status?: number; body: unknown };
+type Answer = { status?: number; body?: unknown; raw?: string; headers?: Record<string, string> };
 
 /**
  * A gateway with one connected account, `octo-example`, and a GitHub that answers from `routes`
@@ -68,6 +68,9 @@ async function gateway(routes: Record<string, Answer | ((init?: RequestInit) => 
     const route = routes[`${method} ${path}`];
     const answer = typeof route === 'function' ? route(init) : route;
 
+    if (answer?.raw !== undefined) {
+      return new Response(answer.raw, { status: answer.status ?? 200, headers: answer.headers });
+    }
     return answer
       ? Response.json(answer.body, { status: answer.status ?? 200 })
       : Response.json({ message: 'Not Found' }, { status: 404 });
@@ -561,4 +564,66 @@ it('links each review to its page, and the cards read what the drawer just read'
   expect((await card()).state).toBe('open');
   expect((await drawer()).state).toBe('closed');
   expect((await card()).state).toBe('closed');
+});
+
+describe('reading a file of a pull request', () => {
+  const route = `/v1/integrations/github/pulls/octo-example/site/7/file`;
+  const read = (app: FastifyInstance, path: string, sha = head, auth = headers) =>
+    app.inject({
+      method: 'GET',
+      url: route,
+      query: { path, sha },
+      headers: auth,
+    });
+
+  it('reads the version the diff came from, as raw text cut into lines', async () => {
+    let accept: string | null = null;
+    const { app, asked } = await gateway({
+      [`GET ${base}/contents/src/a%20page.ts?ref=${head}`]: (init) => {
+        accept = new Headers(init?.headers).get('accept');
+        return { raw: `one\r\n${'x'.repeat(600)}\n` };
+      },
+    });
+
+    const response = await read(app, 'src/a page.ts');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ lines: ['one', `${'x'.repeat(500)} …`] });
+    expect(accept).toBe('application/vnd.github.raw+json');
+    expect(asked.at(-1)?.authorization).toBe('Bearer synthetic-installation-token');
+  });
+
+  it('refuses a caller with no token', async () => {
+    const { app, asked } = await gateway({});
+
+    expect((await read(app, 'a.ts', head, {} as typeof headers)).statusCode).toBe(401);
+    expect(asked).toEqual([]);
+  });
+
+  it('never lets a path or a revision reach another GitHub address', async () => {
+    const { app, asked } = await gateway({});
+
+    for (const path of ['../../../user', 'src/../../secrets', './a.ts', 'a//b.ts', '/a.ts']) {
+      expect((await read(app, path)).statusCode).toBe(400);
+    }
+    expect((await read(app, 'a.ts', 'main&x=1')).statusCode).toBe(400);
+    expect(asked).toEqual([]);
+  });
+
+  it('says so for a file too large, declared or not, a binary one and a missing one', async () => {
+    const big = 'y'.repeat(1_000_001);
+    const { app } = await gateway({
+      [`GET ${base}/contents/declared.txt?ref=${head}`]: {
+        raw: 'short',
+        headers: { 'content-length': '2000000' },
+      },
+      [`GET ${base}/contents/big.txt?ref=${head}`]: { raw: big },
+      [`GET ${base}/contents/image.bin?ref=${head}`]: { raw: 'a\0b' },
+    });
+
+    expect((await read(app, 'declared.txt')).statusCode).toBe(413);
+    expect((await read(app, 'big.txt')).statusCode).toBe(413);
+    expect((await read(app, 'image.bin')).statusCode).toBe(415);
+    expect((await read(app, 'missing.txt')).statusCode).toBe(404);
+  });
 });

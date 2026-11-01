@@ -266,36 +266,32 @@ it('opens the pull request in folding sections, and merges with the chosen metho
   await openCard();
 
   expect(drawer()?.getAttribute('aria-label')).toBe('octo-example/site #7');
-  expect(title()?.textContent).toBe('Add the pricing page');
+  expect(title()?.textContent).toBe('Add the pricing page #7');
   expect(drawer()?.textContent).toContain('pricing-page');
-  // The author is a link to their profile, and the pull request opens on GitHub from the top.
-  expect(drawer()?.querySelector('a[href="https://github.com/river-example"]')?.textContent).toBe(
-    'river-example',
-  );
-  expect(drawer()?.querySelector(`a[href="${pullUrl}"]`)?.textContent).toBe('octo-example/site #7');
+  // The pull request opens on GitHub from its number, with where it is said on hover.
+  const number = drawer()?.querySelector(`a[href="${pullUrl}"]`);
+  expect(number?.textContent).toBe('#7');
+  expect(number?.getAttribute('title')).toBe('octo-example/site #7');
   // Its close is at hand, and the keyboard is on it; reading again is among its options.
   expect(document.activeElement?.getAttribute('aria-label')).toBe('Close');
   expect(drawer()?.querySelector('[aria-label="Refresh"]')).toBeNull();
 
-  // It opens on the overview: the description, and what the other tabs hold at a glance.
   const pullTab = (label: string) =>
     [...(drawer()?.querySelectorAll('button') ?? [])].find((item) =>
       item.textContent?.startsWith(label),
     );
-  expect(section('Description')?.textContent).toContain('pricing page.');
-  expect(pullTab('Checks')?.textContent).toBe('Checks 1/2');
-  expect(pullTab('Changes')?.textContent).toBe('Changes 1');
-  expect(pullTab('Reviews')?.textContent).toBe('Reviews 1');
-  // Only the tab in front is drawn: a diff costs nothing until it is asked for.
-  expect(drawer()?.querySelector('.code-diff-path')).toBeNull();
+  // It opens on what changed, with no overview to read past.
+  expect(pullTab('Overview')).toBeUndefined();
+  expect(drawer()?.querySelector('.code-diff-path')?.textContent).toBe('app/pricing.tsx');
+  expect(section('Description')).toBeFalsy();
+  expect(pullTab('Checks')?.textContent).toContain('1/2');
+  expect(pullTab('Changes')?.textContent).toBe('Changes1');
+  expect(pullTab('Reviews')?.textContent).toBe('Reviews1');
 
   await act(async () => pullTab('Checks')?.click());
   expect(drawer()?.textContent).toContain('3m 12s');
   expect(drawer()?.textContent).toContain('1 passed');
-  expect(section('Description')).toBeFalsy();
-
-  await act(async () => pullTab('Changes')?.click());
-  expect(drawer()?.querySelector('.code-diff-path')?.textContent).toBe('app/pricing.tsx');
+  expect(drawer()?.querySelector('.code-diff-path')).toBeNull();
 
   // A review opens where it was written.
   await act(async () => pullTab('Reviews')?.click());
@@ -303,7 +299,12 @@ it('opens the pull request in folding sections, and merges with the chosen metho
   expect(review?.textContent).toContain('sky-example');
   expect(review?.textContent).toContain('Approved');
 
-  await act(async () => pullTab('Overview')?.click());
+  // Who opened it and what they said, with the description.
+  await act(async () => pullTab('Description')?.click());
+  expect(section('Description')?.textContent).toContain('pricing page.');
+  expect(drawer()?.querySelector('a[href="https://github.com/river-example"]')?.textContent).toBe(
+    'river-example',
+  );
 
   // Mergeable, so merging is offered and fixing conflicts is not.
   expect(button('Fix merge conflicts')).toBeUndefined();
@@ -344,7 +345,7 @@ it('says why GitHub could not be read, and reads it again on asking', async () =
 
   await act(async () => button('Try again')?.click());
   await settled(() => Boolean(title()));
-  expect(title()?.textContent).toBe('Add the pricing page');
+  expect(title()?.textContent).toBe('Add the pricing page #7');
 });
 
 it('puts the drawer away on Escape', async () => {
@@ -435,11 +436,20 @@ it('opens an issue with its labels, assignees and comments', async () => {
   expect(button('Squash and merge')).toBeUndefined();
 });
 
-it('folds every part and diff at once from its options, and opens them again', async () => {
+/** Each pull request returns to the tab it was left on, for as long as the panel is open. */
+const frontChanges = () =>
+  act(async () =>
+    [...(drawer()?.querySelectorAll('button') ?? [])]
+      .find((item) => item.textContent?.startsWith('Changes'))
+      ?.click(),
+  );
+
+it('folds every diff at once from its options, and opens them again', async () => {
   await render(<Markdown text={pullUrl} />, fakeApi());
   await openCard();
+  await frontChanges();
   const expanded = () =>
-    [...(drawer()?.querySelectorAll('section button[aria-expanded]') ?? [])].map((item) =>
+    [...(drawer()?.querySelectorAll('.code-diff-head') ?? [])].map((item) =>
       item.getAttribute('aria-expanded'),
     );
   const entry = (name: string) =>
@@ -447,6 +457,7 @@ it('folds every part and diff at once from its options, and opens them again', a
       (item) => item.textContent?.trim() === name,
     );
 
+  expect(expanded().length).toBeGreaterThan(0);
   await act(async () =>
     drawer()?.querySelector<HTMLButtonElement>('[aria-label="Options"]')?.click(),
   );
@@ -458,4 +469,69 @@ it('folds every part and diff at once from its options, and opens them again', a
   );
   await act(async () => entry('Expand all')?.click());
   expect(expanded().every((state) => state === 'true')).toBe(true);
+});
+
+const filterField = () =>
+  drawer()?.querySelector<HTMLInputElement>('input[placeholder="Filter files"]');
+const typeFilter = (text: string) =>
+  act(async () => {
+    const input = filterField();
+    if (!input) throw new Error('No filter to type in');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, text);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+it('filters a pull request’s files and says how many it left', async () => {
+  await render(<Markdown text={pullUrl} />, fakeApi());
+  await openCard();
+  await frontChanges();
+
+  await typeFilter('PRICING');
+  expect(drawer()?.querySelector('.code-diff-path')?.textContent).toBe('app/pricing.tsx');
+  expect(drawer()?.textContent).toContain('1 of 1 file');
+
+  await typeFilter('nothing-like-this');
+  expect(drawer()?.querySelector('.code-diff-path')).toBeNull();
+  expect(drawer()?.textContent).toContain('No changed file matches');
+});
+
+it('wraps a pull request’s lines from a switch beside its filter, not from its options', async () => {
+  await render(<Markdown text={pullUrl} />, fakeApi());
+  await openCard();
+  await frontChanges();
+  const wrap = () =>
+    drawer()?.querySelector<HTMLElement>('[role="switch"][aria-label="Wrap lines"]');
+
+  expect(drawer()?.hasAttribute('data-wrap')).toBe(false);
+  await act(async () => wrap()?.click());
+  expect(drawer()?.hasAttribute('data-wrap')).toBe(true);
+
+  await act(async () =>
+    drawer()?.querySelector<HTMLButtonElement>('[aria-label="Options"]')?.click(),
+  );
+  expect(document.body.textContent).not.toContain('Word wrap');
+});
+
+it('offers the filter and the switch only with the changes in front', async () => {
+  await render(<Markdown text={pullUrl} />, fakeApi());
+  await openCard();
+  const tab = [...(drawer()?.querySelectorAll('button') ?? [])].find((item) =>
+    item.textContent?.startsWith('Description'),
+  );
+
+  await act(async () => tab?.click());
+
+  expect(filterField()).toBeFalsy();
+  expect(drawer()?.querySelector('[role="switch"]')).toBeNull();
+});
+
+it('marks a pull request’s file as reviewed, folding it away', async () => {
+  await render(<Markdown text={pullUrl} />, fakeApi());
+  await openCard();
+  await frontChanges();
+
+  await act(async () => drawer()?.querySelector<HTMLElement>('[role="checkbox"]')?.click());
+
+  expect(drawer()?.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('true');
+  expect(drawer()?.querySelector('.code-diff-head')?.getAttribute('aria-expanded')).toBe('false');
 });

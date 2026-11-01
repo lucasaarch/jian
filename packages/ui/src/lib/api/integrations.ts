@@ -37,6 +37,12 @@ export const integrationCalls = (client: Client) => ({
         params: { path: { owner, repo, number } },
       }),
     ),
+  githubPullFile: (owner: string, repo: string, number: number, path: string, sha: string) =>
+    result(
+      client.GET('/v1/integrations/github/pulls/{owner}/{repo}/{number}/file', {
+        params: { path: { owner, repo, number }, query: { path, sha } },
+      }),
+    ),
   githubIssue: (owner: string, repo: string, number: number) =>
     result(
       client.GET('/v1/integrations/github/issues/{owner}/{repo}/{number}', {

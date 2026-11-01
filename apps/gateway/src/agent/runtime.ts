@@ -82,7 +82,7 @@ import {
 import { guardrail } from './guardrail.js';
 import { availableNote, connectMcpTools, type McpEntry, unavailableNote } from './mcp.js';
 import { MCP_ERROR_UNSAID, mcpErrorText, mcpOutcomeUncertain } from './mcp-errors.js';
-import { Narrator } from './narrator.js';
+import { Narrator, ToolCalls } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
@@ -617,6 +617,7 @@ export class AgentRuntime {
           : undefined;
 
       const guarded: ToolSet = {};
+      const toolCalls = new ToolCalls();
       // Serializing tool execution prevents another effect from starting after one remote outcome is uncertain.
       let toolQueue: Promise<void> = Promise.resolve();
 
@@ -642,6 +643,13 @@ export class AgentRuntime {
             await previous;
 
             try {
+              // What the model said before this call is written first, so the conversation
+              // and the channels read in the order things happened. An approved action runs
+              // ahead of the stream, which will never tell of it.
+              if (approvedCallId !== options.toolCallId) {
+                await toolCalls.heardOf(options.toolCallId);
+              }
+
               if (externalUncertain) {
                 throw new Error('External tool outcome is uncertain');
               }
@@ -1284,6 +1292,9 @@ export class AgentRuntime {
             progress.thinking();
             break;
           case 'tool-call':
+            await narrator.endStep(true).catch(() => {});
+            progress.draft(narrator.draft);
+            toolCalls.hear(part.toolCallId);
             progress.usingTool(part.toolName);
             work.push({ id: part.toolCallId, name: part.toolName });
             break;

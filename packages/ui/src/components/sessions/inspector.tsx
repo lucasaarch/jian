@@ -17,9 +17,12 @@ export function InspectorBar({
   children,
   options,
   closer,
+  spread = false,
 }: {
   children: ReactNode;
   options?: ReactNode;
+  /** What it holds takes the whole line, with nothing pushing the options to the end. */
+  spread?: boolean;
   /** Focused when the Inspector opens, so the keyboard is in it and Escape is at hand. */
   closer: RefObject<HTMLButtonElement | null>;
 }) {
@@ -27,23 +30,26 @@ export function InspectorBar({
   const hosted = useInspectorHosted();
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2 pr-[calc(var(--window-controls,0px)+0.375rem)] pl-5 text-muted">
+    <div className="flex h-10 shrink-0 items-center gap-2 pr-[calc(var(--window-controls,0px)+var(--inspector-inset))] pl-(--inspector-inset) text-muted">
       {children}
-      <span className="flex-1" />
-      <span className="flex items-center gap-0.5">
-        {options}
-        {!hosted && (
-          <button
-            ref={closer}
-            type="button"
-            aria-label="Close"
-            className={barButton}
-            onClick={close}
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
-        )}
-      </span>
+      {!spread && <span className="flex-1" />}
+      {/* Nothing to hold, it takes no place: an empty one would still cost the line its gap. */}
+      {(options || !hosted) && (
+        <span className="flex items-center gap-0.5">
+          {options}
+          {!hosted && (
+            <button
+              ref={closer}
+              type="button"
+              aria-label="Close"
+              className={barButton}
+              onClick={close}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          )}
+        </span>
+      )}
     </div>
   );
 }
@@ -51,7 +57,7 @@ export function InspectorBar({
 /** What the Inspector follows, by name, and what is said of it: it stays while its parts scroll. */
 export function InspectorHeader({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <header className="grid shrink-0 gap-3 border-b border-glass-edge px-5 pt-1 pb-5">
+    <header className="grid shrink-0 gap-3 border-b border-glass-edge px-(--inspector-inset) pt-1 pb-5">
       <h2 className="text-[17px] leading-snug font-semibold tracking-tight text-balance text-ink">
         {title}
       </h2>

@@ -11,7 +11,7 @@ import {
 import type { ReactNode } from 'react';
 import type { GitHubPull } from '../../../lib/api';
 import { date } from '../../../lib/format';
-import { FileDiff } from '../code-change';
+import { FileDiff, FilePath } from '../code-change';
 import { CheckMark, type CheckState, LinkLine, Quiet } from './parts';
 
 /** Diffs open at once when a pull request touches this many files or fewer. */
@@ -64,7 +64,7 @@ export function Checks({ runs }: { runs: Run[] }) {
   const ordered = [...runs].sort((a, b) => standing[checkState(a)] - standing[checkState(b)]);
 
   return (
-    <div className="grid gap-3 px-5 py-4">
+    <div className="grid gap-3 px-(--inspector-inset) py-4">
       {runs.length > 0 && (
         <PanelHead>
           <span className="text-good">{passed} passed</span>
@@ -101,57 +101,55 @@ export function Checks({ runs }: { runs: Run[] }) {
   );
 }
 
-/** How much of what changed was added and how much removed, at a glance. */
-export function ChangeBar({ additions, deletions }: { additions: number; deletions: number }) {
-  const total = additions + deletions;
+/**
+ * What the pull request changes, each file's diff laid into the panel, with a mark to say it has
+ * been looked at. The figures and the filter are the panel's own, above where this scrolls.
+ */
+export function Changes({
+  pull,
+  files,
+  filter,
+  reviewScope,
+  readLines,
+}: {
+  pull: GitHubPull;
+  files: GitHubPull['files'];
+  /** What the files were narrowed by, to say when it left none. */
+  filter: string;
+  reviewScope: string;
+  /** The file at the version these diffs came from. */
+  readLines: (path: string) => Promise<string[]>;
+}) {
   return (
-    <span
-      aria-hidden="true"
-      className="flex h-1.5 w-full max-w-40 overflow-hidden rounded-full bg-ink/8"
-    >
-      {total > 0 && (
-        <>
-          <span className="bg-good" style={{ width: `${(additions / total) * 100}%` }} />
-          <span className="bg-bad" style={{ width: `${(deletions / total) * 100}%` }} />
-        </>
+    <div className="grid grid-cols-1">
+      {files.map((file) =>
+        file.diff ? (
+          <FileDiff
+            key={file.path}
+            diff={file.diff}
+            open={pull.files.length <= OPEN_FILES}
+            flat
+            reviewScope={reviewScope}
+            readLines={file.status === 'removed' ? undefined : () => readLines(file.path)}
+          />
+        ) : (
+          <p key={file.path} className="code-diff-unshown">
+            <FilePath path={file.path} />
+            <span className="ml-auto shrink-0 font-sans text-xs text-muted">
+              No preview: binary or too large
+            </span>
+          </p>
+        ),
       )}
-    </span>
-  );
-}
-
-/** What the pull request changes: the lines it adds and removes, and each file's diff. */
-export function Changes({ pull }: { pull: GitHubPull }) {
-  return (
-    <div className="grid gap-3 px-5 py-4">
-      <PanelHead>
-        <span>
-          {pull.changedFiles} {pull.changedFiles === 1 ? 'file' : 'files'}
-        </span>
-        <span className="flex gap-2 font-mono">
-          <span className="text-good">+{pull.additions}</span>
-          <span className="text-bad">−{pull.deletions}</span>
-        </span>
-        <ChangeBar additions={pull.additions} deletions={pull.deletions} />
-      </PanelHead>
-      <div className="code-changes mb-0">
-        {pull.files.map((file) =>
-          file.diff ? (
-            <FileDiff key={file.path} diff={file.diff} open={pull.files.length <= OPEN_FILES} />
-          ) : (
-            <p
-              key={file.path}
-              className="flex min-w-0 items-center gap-2 rounded-lg border border-glass-edge px-3 py-2 font-mono text-[12.5px]"
-            >
-              <span className="min-w-0 truncate">{file.path}</span>
-              <span className="ml-auto shrink-0 font-sans text-xs text-muted">
-                No preview: binary or too large
-              </span>
-            </p>
-          ),
-        )}
-      </div>
+      {!files.length && (
+        <div className="px-(--inspector-inset) py-3">
+          <Quiet>No changed file matches “{filter}”.</Quiet>
+        </div>
+      )}
       {pull.filesTruncated && (
-        <Quiet>Only the first {pull.files.length} files are shown here.</Quiet>
+        <div className="px-(--inspector-inset) py-3">
+          <Quiet>Only the first {pull.files.length} files are shown here.</Quiet>
+        </div>
       )}
     </div>
   );
@@ -170,7 +168,7 @@ const verdicts: Record<Review['state'], { name: string; colour: string; Mark: Lu
 /** Each reviewer's latest word: their verdict, who, when; it opens where it was written. */
 export function Reviews({ reviews }: { reviews: Review[] }) {
   return (
-    <div className="grid gap-3 px-5 py-4">
+    <div className="grid gap-3 px-(--inspector-inset) py-4">
       {reviews.length ? (
         <ul className="grid gap-0.5">
           {reviews.map((review) => {

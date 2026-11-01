@@ -5,9 +5,11 @@ import type {
   GitHubMergeable,
   GitHubMergeMethod,
   GitHubPull,
+  GitHubPullFileLines,
 } from '@jian/contracts';
+import { githubPullFileQuerySchema } from '@jian/contracts';
 import { z } from 'zod';
-import { patchDiff } from '../agent/diff.js';
+import { fileLines, patchDiff } from '../agent/diff.js';
 import type { Clock } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -28,6 +30,8 @@ const BODY_CHARS = 20_000;
 const COMMENT_CHARS = 10_000;
 const COMMENTS = 30;
 const FILES = 100;
+/** A file past this is not read to show beside its diff, in bytes: as large as one is compared. */
+const FILE_BYTES = 1_000_000;
 /** A patch past this is not parsed: GitHub already leaves out the largest ones. */
 const PATCH_BYTES = 400_000;
 
@@ -321,6 +325,30 @@ export class GitHubItems {
     return read;
   }
 
+  /** One file at a commit, to show the lines its diff leaves out. Read raw, so nothing decodes it. */
+  async pullFile(ref: Ref, input: unknown): Promise<GitHubPullFileLines> {
+    const { path, sha } = githubPullFileQuerySchema.parse(input);
+    const address = path.split('/').map(encodeURIComponent).join('/');
+    const response = await this.request(
+      ref,
+      `/repos/${ref.owner}/${ref.repo}/contents/${address}?ref=${sha}`,
+      { headers: { accept: 'application/vnd.github.raw+json' } },
+    );
+
+    if (response.status === 404 || response.status === 403) {
+      throw new GatewayError(404, `GitHub has no such file in ${describe(ref)}.`);
+    }
+    if (!response.ok) {
+      throw new GatewayError(502, `GitHub answered ${response.status} for ${describe(ref)}.`);
+    }
+    const body = await upTo(response, FILE_BYTES);
+    if (!body) throw new GatewayError(413, 'This file is too large to display.');
+    if (body.includes(0)) throw new GatewayError(415, 'Binary files have no lines to show.');
+    const lines = fileLines(body.toString('utf8'));
+    if (!lines) throw new GatewayError(413, 'This file is too large to display.');
+    return { lines };
+  }
+
   async issue(ref: Ref): Promise<GitHubIssue> {
     const base = `/repos/${ref.owner}/${ref.repo}/issues/${ref.number}`;
     const issue = await this.read(ref, base, issueResponse);
@@ -612,6 +640,22 @@ export class GitHubItems {
     if (!response) throw unreachable(ref);
     return response;
   }
+}
+
+/** A body read no further than `bytes`: the size GitHub declares is not always there. */
+async function upTo(response: Response, bytes: number): Promise<Buffer | undefined> {
+  if (Number(response.headers.get('content-length') ?? 0) > bytes) {
+    await response.body?.cancel();
+    return undefined;
+  }
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  for await (const chunk of response.body ?? []) {
+    length += chunk.length;
+    if (length > bytes) return undefined;
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
 
 const describe = (ref: Ref) => `${ref.owner}/${ref.repo}#${ref.number}`;

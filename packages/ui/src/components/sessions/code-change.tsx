@@ -1,9 +1,12 @@
 'use client';
 
 import { ChevronDown, FileCode2 } from 'lucide-react';
-import { Fragment, useId, useState } from 'react';
+import { Fragment, useId, useMemo, useState } from 'react';
+import { CheckBox, Fold, Skeleton, SkeletonLine, SkeletonRegion } from '../../kit';
 import type { CodeDiff, ToolStep } from '../../lib/api';
+import { useFileReview } from '../../lib/stores/reviewed';
 import { highlightLines, type Segment } from '../ui/highlight';
+import { DiffGap, DiffLine, markChanges, useUnmodified } from './diff-lines';
 import { useFoldAll } from './fold-all';
 
 type Line = CodeDiff['hunks'][number]['lines'][number];
@@ -37,76 +40,180 @@ function Counts({ diff }: { diff: Pick<CodeDiff, 'additions' | 'deletions'> }) {
   );
 }
 
-const sign = { add: '+', del: '-', context: '' } as const;
+/** What kind of file it is, by its extension, as a tag beside its name: GO, TS, YAML. */
+function languageTag(path: string): string | undefined {
+  const name = path.split('/').at(-1) ?? '';
+  const extension = name.includes('.') ? name.split('.').at(-1) : undefined;
+  return extension && extension.length <= 4 ? extension.toUpperCase() : undefined;
+}
 
-/** One file's change, as a review tool shows it: line numbers on both sides and a gutter. */
-export function FileDiff({ diff, open: initiallyOpen }: { diff: CodeDiff; open: boolean }) {
-  const [open, setOpen] = useState(initiallyOpen);
+/** A path that may not fit: the folders give way, never the file's name; all of it is on hover. */
+export function FilePath({ path }: { path: string }) {
+  return (
+    <span className="code-diff-path" title={path}>
+      {path.includes('/') && (
+        <span className="code-diff-dir">{path.slice(0, path.lastIndexOf('/') + 1)}</span>
+      )}
+      <span className="code-diff-file">{path.split('/').at(-1)}</span>
+    </span>
+  );
+}
+
+/**
+ * One file's change, as a review tool shows it, with one column of line numbers: where a line is
+ * now, or where it was for a line that is gone, so the numbers can step back at a removal. `flat`
+ * lays it into the panel it is in, edge to edge, with no card around it. `reviewScope` offers to
+ * mark it as reviewed, which folds it away: a place, as a pull request, to remember that in.
+ * `readLines` reads the file as it is now, to bring in the lines the diff leaves out.
+ */
+export function FileDiff({
+  diff,
+  open: initiallyOpen,
+  flat = false,
+  reviewScope,
+  readLines,
+}: {
+  diff: CodeDiff;
+  open: boolean;
+  flat?: boolean;
+  reviewScope?: string;
+  readLines?: () => Promise<string[]>;
+}) {
+  const review = useFileReview(reviewScope, diff);
+  const [open, setOpen] = useState(initiallyOpen && !review.reviewed);
+  // Its code is drawn the first time it opens, then stays so the fold has something to move: a
+  // pull request of many files draws none of the ones never opened.
+  const [drawn, setDrawn] = useState(open);
+  if (open && !drawn) setDrawn(true);
   const body = useId();
   useFoldAll(setOpen);
+  const unmodified = useUnmodified(diff, readLines);
+  const painted = useMemo(
+    () =>
+      drawn
+        ? diff.hunks.map((hunk) => markChanges(hunk.lines, coloured(hunk.lines, diff.language)))
+        : [],
+    [drawn, diff.hunks, diff.language],
+  );
+  const kind = languageTag(diff.path);
 
   return (
-    <div className="code-diff">
-      <button
-        type="button"
-        className="code-diff-head"
-        aria-expanded={open}
-        aria-controls={body}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <ChevronDown size={14} className="code-diff-chevron" aria-hidden="true" />
-        <FileCode2 size={14} aria-hidden="true" />
-        <span className="code-diff-path">{diff.path}</span>
-        <Counts diff={diff} />
-      </button>
-      {open && (
-        <div className="code-diff-body" id={body}>
-          <div className="code-diff-lines">
-            {diff.hunks.map((hunk) => {
-              const segments = coloured(hunk.lines, diff.language);
-
-              return (
+    <div className="code-diff" data-flat={flat || undefined}>
+      <div className="code-diff-row">
+        <button
+          type="button"
+          className="code-diff-head"
+          aria-expanded={open}
+          aria-controls={body}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <ChevronDown size={14} className="code-diff-chevron" aria-hidden="true" />
+          {flat ? (
+            kind && <span className="code-diff-kind">{kind}</span>
+          ) : (
+            <FileCode2 size={14} aria-hidden="true" />
+          )}
+          <FilePath path={diff.path} />
+          <Counts diff={diff} />
+        </button>
+        {reviewScope && (
+          <CheckBox
+            checked={review.reviewed}
+            label={`Mark ${diff.path} as reviewed`}
+            onCheckedChange={(reviewed) => {
+              review.set(reviewed);
+              if (reviewed) setOpen(false);
+            }}
+          />
+        )}
+      </div>
+      <Fold open={open} id={body}>
+        {drawn && (
+          <div className="code-diff-body">
+            <div className="code-diff-lines">
+              {diff.hunks.map((hunk, at) => (
                 <Fragment key={`${hunk.oldStart}:${hunk.newStart}`}>
-                  <div className="code-diff-hunk">
-                    @@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
-                    {hunk.header ? ` ${hunk.header}` : ''}
-                  </div>
+                  <DiffGap index={at} unmodified={unmodified} />
                   {hunk.lines.map((line, index) => (
-                    <div
+                    <DiffLine
                       // biome-ignore lint/suspicious/noArrayIndexKey: a hunk's lines never reorder.
                       key={index}
-                      className="code-diff-line"
-                      data-kind={line.kind}
-                    >
-                      <span className="code-diff-number">{line.old ?? ''}</span>
-                      <span className="code-diff-number">{line.new ?? ''}</span>
-                      <span className="code-diff-sign" aria-hidden="true">
-                        {sign[line.kind]}
-                      </span>
-                      <code>
-                        {(segments[index] ?? []).map((segment, at) =>
-                          segment.className ? (
-                            // biome-ignore lint/suspicious/noArrayIndexKey: segments of a line never reorder.
-                            <span key={at} className={segment.className}>
-                              {segment.text}
-                            </span>
-                          ) : (
-                            segment.text
-                          ),
-                        )}
-                      </code>
-                    </div>
+                      line={line}
+                      segments={painted[at]?.[index] ?? []}
+                    />
                   ))}
                 </Fragment>
-              );
-            })}
+              ))}
+              <DiffGap index={diff.hunks.length} unmodified={unmodified} />
+            </div>
+            {diff.truncated && (
+              <p className="code-diff-cut">The rest of this change is too long to show here.</p>
+            )}
           </div>
-          {diff.truncated && (
-            <p className="code-diff-cut">The rest of this change is too long to show here.</p>
-          )}
-        </div>
-      )}
+        )}
+      </Fold>
     </div>
+  );
+}
+
+/** The lines a change is outlined with: how long each runs, and what happened to it. */
+const OUTLINE: { width: string; kind: CodeDiff['hunks'][number]['lines'][number]['kind'] }[] = [
+  { width: 'w-1/4', kind: 'context' },
+  { width: 'w-1/3', kind: 'context' },
+  { width: 'w-3/5', kind: 'context' },
+  { width: 'w-1/2', kind: 'del' },
+  { width: 'w-2/5', kind: 'del' },
+  { width: 'w-1/2', kind: 'add' },
+  { width: 'w-3/5', kind: 'add' },
+  { width: 'w-4/5', kind: 'context' },
+  { width: 'w-1/4', kind: 'context' },
+  { width: 'w-3/5', kind: 'context' },
+];
+
+/**
+ * A file's change still on its way, laid into the panel as the change will be, reaching past the
+ * body's inset the same way, so nothing moves when the code lands.
+ */
+export function DiffSkeleton() {
+  return (
+    <SkeletonRegion label="Loading diff…">
+      <div className="-mx-(--inspector-inset)">
+        <div className="code-diff" data-flat>
+          <div className="code-diff-row">
+            <div className="code-diff-head">
+              <Skeleton className="size-3.5 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <SkeletonLine className="w-3/5" />
+              </div>
+              <Skeleton className="h-3 w-10 shrink-0" />
+            </div>
+            <Skeleton className="size-4 shrink-0 rounded-[0.3rem]" />
+          </div>
+          <div className="code-diff-body">
+            <div className="font-mono text-[12.5px] leading-[1.65]">
+              <div className="code-diff-gap">
+                <span className="code-diff-gap-label">
+                  <SkeletonLine className="w-1/3" />
+                </span>
+              </div>
+              {OUTLINE.map(({ width, kind }, index) => (
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a fixed outline never reorders.
+                  key={index}
+                  className="code-diff-line"
+                  data-kind={kind}
+                >
+                  <span className="code-diff-number">
+                    <SkeletonLine className="ml-auto w-5" />
+                  </span>
+                  <SkeletonLine className={width} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </SkeletonRegion>
   );
 }
 

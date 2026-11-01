@@ -16,6 +16,13 @@ const conflicts: Record<string, string> = {
     'This model does not accept the selected reasoning effort.',
   'Reasoning effort is not catalogued for this model':
     'The reasoning levels of this model are not catalogued on this gateway.',
+  'Choose a conversation with one project to read its changes.':
+    'Choose a conversation with one project to read its changes.',
+  'Changes on remote machines are not available here yet.':
+    'Changes on remote machines are not available here yet.',
+  'This conversation has no checkout yet.': 'This conversation has no checkout yet.',
+  'This conversation has no git checkout at its project path.':
+    'This conversation has no git checkout at its project path.',
 };
 
 function message(status: number, detail: Detail | undefined): string {
@@ -25,6 +32,12 @@ function message(status: number, detail: Detail | undefined): string {
 
   if (status === 403) {
     return 'This action needs the host token.';
+  }
+
+  // The server's own answer for a route it does not know, and never one of the gateway's sentences:
+  // the panel is newer than the gateway it reaches, which is no fault of what was asked for.
+  if (status === 404 && detail?.error === 'Not Found') {
+    return 'This gateway does not have this yet. Update it to use it.';
   }
 
   if (status === 409) {
@@ -55,7 +68,14 @@ function message(status: number, detail: Detail | undefined): string {
 }
 
 /** The gateway answered, and the answer was a refusal or a failure. */
-export class GatewayAnswer extends Error {}
+export class GatewayAnswer extends Error {
+  readonly status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
+}
 
 export async function result<T>(
   request: Promise<{ data?: T; error?: unknown; response: Response }>,
@@ -63,7 +83,7 @@ export async function result<T>(
   const { data, error, response } = await request;
 
   if (!response.ok || data === undefined) {
-    throw new GatewayAnswer(message(response.status, error as Detail | undefined));
+    throw new GatewayAnswer(message(response.status, error as Detail | undefined), response.status);
   }
 
   return data;

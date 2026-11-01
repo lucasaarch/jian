@@ -15,11 +15,11 @@ import { InspectorContent } from '../inspector-host';
 import { IssueView } from './issue-view';
 import { DrawerOptions } from './options';
 import { DrawerSkeleton } from './parts';
-import { type Pull, PullView } from './pull-view';
+import { type Pull, PullBar, PullView } from './pull-view';
 
 type DrawerApi = Pick<
   GatewayApi,
-  'githubPull' | 'githubIssue' | 'mergeGithubPull' | 'updateGithubPullBranch'
+  'githubPull' | 'githubPullFile' | 'githubIssue' | 'mergeGithubPull' | 'updateGithubPullBranch'
 >;
 
 /** How often an open pull request is read again while it is followed, in ms. */
@@ -103,35 +103,39 @@ export function GitHubDrawer({
   const where = `${item.owner}/${item.repo} #${item.number}`;
   const url = `https://github.com/${item.owner}/${item.repo}/${isPull ? 'pull' : 'issues'}/${item.number}`;
 
+  const options = (
+    <DrawerOptions
+      url={url}
+      folded={fold?.open === false}
+      fold={(open) => setFold({ open, round: (fold?.round ?? 0) + 1 })}
+      refresh={() => void current.refetch()}
+    />
+  );
+
   return (
     <InspectorContent>
       <aside aria-label={where} data-wrap={wrap || undefined} className="crew-drawer">
-        <InspectorBar
-          closer={closer}
-          options={
-            <DrawerOptions
-              url={url}
-              diffs={isPull}
-              wrap={wrap}
-              setWrap={setWrap}
-              folded={fold?.open === false}
-              fold={(open) => setFold({ open, round: (fold?.round ?? 0) + 1 })}
-              refresh={() => void current.refetch()}
-            />
-          }
-        >
-          <GitHubLogo size={14} />
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            title="Open on GitHub"
-            className="flex min-w-0 items-center gap-1.5 font-mono text-xs transition-colors hover:text-ink"
-          >
-            <span className="truncate">{where}</span>
-            <ExternalLink size={12} aria-hidden="true" className="shrink-0" />
-          </a>
-        </InspectorBar>
+        <header className="shrink-0">
+          <InspectorBar closer={closer} options={options} spread={isPull && Boolean(pull.data)}>
+            {isPull && pull.data ? (
+              <PullBar pull={pull.data} />
+            ) : (
+              <>
+                <GitHubLogo size={14} />
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open on GitHub"
+                  className="flex min-w-0 items-center gap-1.5 font-mono text-xs transition-colors hover:text-ink"
+                >
+                  <span className="truncate">{where}</span>
+                  <ExternalLink size={12} aria-hidden="true" className="shrink-0" />
+                </a>
+              </>
+            )}
+          </InspectorBar>
+        </header>
         {/* The item's heading stays put; only its parts under it scroll. */}
         <FoldAllContext.Provider value={fold}>
           <div className="flex min-h-0 flex-1 flex-col">
@@ -139,6 +143,9 @@ export function GitHubDrawer({
               <PullView
                 api={api}
                 pull={pull.data}
+                url={url}
+                wrap={wrap}
+                setWrap={setWrap}
                 profileId={profileId}
                 merges={merges}
                 fixConflicts={fixConflicts}
@@ -146,7 +153,7 @@ export function GitHubDrawer({
             ) : !isPull && issue.data ? (
               <IssueView issue={issue.data} />
             ) : current.error ? (
-              <div className="grid justify-items-start gap-3 px-5 pt-2">
+              <div className="grid justify-items-start gap-3 px-(--inspector-inset) pt-2">
                 <p className="text-[13px] text-bad">
                   {current.error instanceof Error
                     ? current.error.message
@@ -158,7 +165,7 @@ export function GitHubDrawer({
               </div>
             ) : current.fetchStatus === 'paused' ? (
               // Reads wait while the gateway is away rather than fail; said, so it does not look stuck.
-              <p className="px-5 pt-2 text-[13px] text-muted">
+              <p className="px-(--inspector-inset) pt-2 text-[13px] text-muted">
                 Waiting for the gateway to answer. It opens as soon as it does.
               </p>
             ) : (

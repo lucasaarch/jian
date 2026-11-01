@@ -5,6 +5,7 @@ import {
   gatewaySessionInputSchema,
   gatewaySessionTargetSchema,
   LEARNING_SESSION_CHANNEL,
+  MESSAGES_PAGE,
   type Message,
   messageReactionInputSchema,
   type Profile,
@@ -31,6 +32,7 @@ import { messages, projects, remoteMachines, runs } from '../storage/schema.js';
 import { checkoutChanges } from './changes.js';
 import { objectiveAt, sanitizeObjectiveText } from './objective.js';
 import type { SessionStart } from './port.js';
+import { pullLinksIn } from './pull-links.js';
 import {
   deleteSession as deleteSessionRecord,
   findMessage,
@@ -40,10 +42,12 @@ import {
   insertMessage,
   insertSession,
   lastMessages,
+  listPullMentions,
   listSessionMessages,
   listSessions,
   listUncompactedMessages,
   markSessionRead,
+  messageCursor,
   renameSession,
   setGatewaySessionTarget,
   setSessionModel,
@@ -662,10 +666,17 @@ export class Sessions {
   }
 
   /** The tools the agent used in each recent turn here, for the owner's timeline. */
-  async timeline(profileId: string, sessionId: string) {
+  /** The pull requests the agent linked in this conversation, however long ago. */
+  async pullRequests(profileId: string, sessionId: string) {
     await this.session(profileId, sessionId);
 
-    return sessionTimeline(this.store.db, profileId, sessionId);
+    return pullLinksIn(await listPullMentions(this.store.db, sessionId));
+  }
+
+  async timeline(profileId: string, sessionId: string, runIds?: string[]) {
+    await this.session(profileId, sessionId);
+
+    return sessionTimeline(this.store.db, profileId, sessionId, runIds);
   }
 
   /** Current uncommitted files, not just the files a tool happened to edit in a recent turn. */
@@ -687,6 +698,7 @@ export class Sessions {
     return checkoutChanges(
       await projectCheckout(profileId, session.projectId, sessionId),
       query.path,
+      query.whole === 'true',
     );
   }
 
@@ -724,10 +736,19 @@ export class Sessions {
     );
   }
 
-  async messages(profileId: string, sessionId: string, limit = 100, after?: string) {
+  async messages(
+    profileId: string,
+    sessionId: string,
+    limit = MESSAGES_PAGE,
+    after?: string,
+    before?: string,
+  ) {
     await this.session(profileId, sessionId);
+    const cursor = before ? await messageCursor(this.store.db, sessionId, before) : undefined;
 
-    return listSessionMessages(this.store.db, sessionId, limit, after);
+    if (before && !cursor) throw new GatewayError(404, 'That message is not in this conversation');
+
+    return listSessionMessages(this.store.db, sessionId, limit, after, cursor);
   }
 
   async uncompactedMessages(

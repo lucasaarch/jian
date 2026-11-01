@@ -57,7 +57,15 @@ const NOT_TOOLS = new Set([
 const SELF_EVIDENT = new Set(['read_memories', 'load_skill', 'list_activities']);
 
 /** Names of what the panel used to have: a skill that says one sends the owner nowhere. */
-const GONE = [/\bOverview\b/, /\bCustomize\b/, /Model defaults/, /Gateway →/, /→ MCPs/];
+const GONE = [
+  /\bOverview\b/,
+  /\bCustomize\b/,
+  /Model defaults/,
+  /Gateway →/,
+  /→ MCPs/,
+  /\bListening\b/,
+  /listening for GitHub/,
+];
 
 describe('what the built-in skills say', () => {
   it('names only tools that exist', () => {
