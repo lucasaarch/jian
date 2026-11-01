@@ -1,0 +1,178 @@
+# Keeps what people write in English after it is opened: edited Issues, opened and edited pull
+# requests. The Issue triage translates an Issue as it opens.
+#
+# pull_request_target is what lets this write to a fork's pull request, and it hands the run a
+# secret. Nothing here may run or read the pull request's code: every checkout is pinned to the
+# workflow's own commit, and the title and body are read through the API, never expanded in an
+# expression.
+name: Translate
+run-name: ${{ format('translate:{0}:{1}', github.event_name, github.event.issue.number || github.event.pull_request.number || inputs.number) }}
+on:
+  issues:
+    types: [edited]
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited]
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: What the number is
+        type: choice
+        options: [issue, pull]
+        required: true
+      number:
+        description: Open public Issue or pull request number
+        type: string
+        required: true
+      dry_run:
+        description: Validate only when true; false asks the model and writes the translation
+        type: boolean
+        default: true
+        required: true
+
+permissions: {}
+# No cancelling, so a write is never cut in half. GitHub keeps only the latest pending run, so a
+# run of quick edits ends in the running one and the last.
+concurrency:
+  group: translate-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number || inputs.number }}
+  cancel-in-progress: false
+
+env:
+  TRANSLATE_REPOSITORY: ${{ github.repository }}
+  TRANSLATE_EVENT_NAME: ${{ github.event_name }}
+  TRANSLATE_REF: ${{ github.ref }}
+  TRANSLATE_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  TRANSLATE_ACTOR: ${{ github.actor }}
+  TRANSLATE_RUN_ID: ${{ github.run_id }}
+  TRANSLATE_RUN_ATTEMPT: ${{ github.run_attempt }}
+  SOURCE_SHA: ${{ github.workflow_sha }}
+
+jobs:
+  collect:
+    if: ${{ github.repository == 'lucasaarch/jian' && github.event.repository.private == false && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.run_attempt == 1 && (github.event_name == 'issues' && github.event.action == 'edited' && github.event.issue.user.type == 'User' && github.event.sender.type == 'User' && (github.event.changes.title || github.event.changes.body) || github.event_name == 'pull_request_target' && github.event.pull_request.user.type == 'User' && github.event.sender.type == 'User' && (github.event.action == 'opened' || github.event.changes.title || github.event.changes.body) || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    outputs:
+      ready: ${{ steps.collect.outputs.ready }}
+      context: ${{ steps.collect.outputs.context }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          token: ''
+      - name: Verify trusted scripts
+        run: |
+          set -euo pipefail
+          cd .github/scripts
+          sha256sum -c - <<'HASHES' > /dev/null
+          43f8dded9e93d7df3ae7a4dd8e6172f5398443b0a4e4c3b834254a03d209b46a  translate-core.mjs
+          ae0186793b7ad62b62792e10467ec2b8e89b8e32b843a4fdc27ed57139b79928  translate-run.mjs
+          61ed677903694403c4b7b87a265f127c3180800d2b962bfd781e65f98f59ccc0  translate-config.json
+          HASHES
+      - name: Collect verified public metadata
+        id: collect
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TRANSLATE_KIND: ${{ inputs.kind }}
+          TRANSLATE_NUMBER: ${{ inputs.number }}
+          TRANSLATE_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+        run: node .github/scripts/translate-run.mjs collect
+
+  infer:
+    name: Gemini translation
+    needs: collect
+    if: ${{ needs.collect.outputs.ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      issues: read
+      pull-requests: read
+    outputs:
+      ready: ${{ steps.generate.outputs.ready }}
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          token: ''
+      - name: Bootstrap trusted scripts
+        run: |
+          set -euo pipefail
+          test "$TRANSLATE_REPOSITORY" = 'lucasaarch/jian'
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          mkdir -m 700 "$RUNNER_TEMP/translate-source" "$RUNNER_TEMP/translate-proposal"
+          cd "$RUNNER_TEMP/translate-source"
+          for file in translate-core.mjs translate-run.mjs translate-config.json; do
+            curl --disable --fail --silent --show-error --proto '=https' --max-time 20 \
+              "https://raw.githubusercontent.com/lucasaarch/jian/$SOURCE_SHA/.github/scripts/$file" --output "$file"
+          done
+          sha256sum -c - <<'HASHES' > /dev/null
+          43f8dded9e93d7df3ae7a4dd8e6172f5398443b0a4e4c3b834254a03d209b46a  translate-core.mjs
+          ae0186793b7ad62b62792e10467ec2b8e89b8e32b843a4fdc27ed57139b79928  translate-run.mjs
+          61ed677903694403c4b7b87a265f127c3180800d2b962bfd781e65f98f59ccc0  translate-config.json
+          HASHES
+      - name: Generate translation
+        id: generate
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_API_TOKEN: ${{ github.token }}
+          TRANSLATE_CONTEXT: ${{ needs.collect.outputs.context }}
+        run: node "$RUNNER_TEMP/translate-source/translate-run.mjs" infer "$RUNNER_TEMP/translate-proposal/artifact.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: ${{ steps.generate.outputs.ready == 'true' }}
+        with:
+          name: translate-proposal
+          path: ${{ runner.temp }}/translate-proposal/artifact.json
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    needs: [collect, infer]
+    if: ${{ needs.infer.outputs.ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          token: ''
+      - name: Verify trusted scripts
+        run: |
+          set -euo pipefail
+          cd .github/scripts
+          sha256sum -c - <<'HASHES' > /dev/null
+          43f8dded9e93d7df3ae7a4dd8e6172f5398443b0a4e4c3b834254a03d209b46a  translate-core.mjs
+          ae0186793b7ad62b62792e10467ec2b8e89b8e32b843a4fdc27ed57139b79928  translate-run.mjs
+          61ed677903694403c4b7b87a265f127c3180800d2b962bfd781e65f98f59ccc0  translate-config.json
+          HASHES
+      - name: Prepare fresh directory
+        run: mkdir -m 700 "$RUNNER_TEMP/translate-proposal"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: translate-proposal
+          path: ${{ runner.temp }}/translate-proposal
+      - name: Write verified translation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TRANSLATE_CONTEXT: ${{ needs.collect.outputs.context }}
+        run: node .github/scripts/translate-run.mjs publish "$RUNNER_TEMP/translate-proposal"

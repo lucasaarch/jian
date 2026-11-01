@@ -15,6 +15,8 @@ test('CI and triage changes do not select product builds', () => {
     'quality',
   ]);
   assert.deepEqual(selected(['.github/scripts/issue-run.mjs']), ['quality', 'triage']);
+  assert.deepEqual(selected(['.github/scripts/translate-core.mjs']), ['quality', 'triage']);
+  assert.deepEqual(selected(['.github/workflows/translate.yml']), ['quality', 'triage']);
 });
 test('host-only changes stay scoped and shared UI reaches both hosts', () => {
   assert.deepEqual(selected(['packages/ui/src/kit/dialog.tsx']), ['desktop', 'ui', 'web']);

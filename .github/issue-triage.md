@@ -68,3 +68,37 @@ It is part of `pnpm check`, including hash-drift validation. Tests cover native
 organization metadata and complete publication for personal repositories without
 native fields. They use synthetic credentials and do not call Google or write to
 GitHub. A successful live Actions run is separate evidence from offline checks.
+
+## Translation after opening
+
+`translate.yml` keeps the rest of what people write in English: an Issue's title and body
+when they are edited, and a pull request's when it is opened or edited. It translates in
+place, as the triage does, and adds no comment, label or type. The original stays in the
+item's edit history.
+
+Only people's items are translated automatically: an app's pull request or Issue is left
+as it is, though an administrator may dispatch one by hand. `edited` runs only when the
+title or body changed. The workflow uses `pull_request_target` so it can write to a fork's
+pull request, and for that reason it never checks out pull request code: it reads the title
+and body through the API, and they are never expanded in a workflow expression. Writes made
+with `GITHUB_TOKEN` start no workflow, so a translation does not trigger another one.
+
+`translate-core.mjs` holds the masking and validation both workflows share, so the triage
+pins its hash too. Links, HTML and code are hidden from the model, as are references such
+as `#12`, mentions and a title's `[Bug]:` or `feat(ui):`. A `#12` the model wrote itself
+refuses the translation, and a mention it wrote is neutralized.
+
+Collection, inference and publication hold the same separate credentials as the triage.
+The translator has its own hourly and monthly generation limits in `translate-config.json`,
+counted from this month's runs, so a burst of edits cannot exhaust the triage's budget.
+Runs for different items can start together, so a burst may pass a limit by the few already
+running.
+
+A refusal leaves the text as it is and ends green, with its reason in the run's summary:
+possible secrets, text too large, the item changing mid-run, the budget, or a translation
+that failed validation. Anything that broke ends red. GitHub has no conditional write, so
+an edit landing between the last read and the write is overwritten and stays in the edit
+history.
+
+These events run from the default branch, so a successful live run is only possible after
+merging.

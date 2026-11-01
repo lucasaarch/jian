@@ -144,10 +144,10 @@ test('literal inference gate refuses blocked, dry, disabled, failed or inherited
     }
   }));
 
-test('literal anonymous bootstrap verifies all three pinned hashes before importing any code', () =>
+test('literal anonymous bootstrap verifies every pinned hash before importing any code', () =>
   fixture((dir) => {
     const body = script(step(jobs(source()).infer, 'Bootstrap trusted inference scripts'));
-    const files = ['issue-core.mjs', 'issue-run.mjs', 'issue-config.json'];
+    const files = ['issue-core.mjs', 'issue-run.mjs', 'translate-core.mjs', 'issue-config.json'];
     for (const file of files)
       assert.ok(
         body.includes(`${digest(readFileSync(join(root, '.github/scripts', file)))}  ${file}`),
@@ -162,7 +162,7 @@ test('literal anonymous bootstrap verifies all three pinned hashes before import
     writeFileSync(
       join(bin, 'curl'),
       // biome-ignore lint/suspicious/noTemplateCurlyInString: The fixture is a literal shell script.
-      '#!/bin/bash\nset -eu\nurl=""; output=""\nwhile [ "$#" -gt 0 ]; do\n case "$1" in https://*) url="$1";; --output) shift; output="$1";; --header|-H|-L|--location) exit 90;; esac\n shift\ndone\n[[ "$url" =~ ^https://raw.githubusercontent.com/lucasaarch/jian/[a-f0-9]{40}/.github/scripts/(issue-core.mjs|issue-run.mjs|issue-config.json)$ ]]\ncp "$FIXTURES/${url##*/}" "$output"\nprintf "%s\\n" "$url" >> "$CURL_LOG"\n',
+      '#!/bin/bash\nset -eu\nurl=""; output=""\nwhile [ "$#" -gt 0 ]; do\n case "$1" in https://*) url="$1";; --output) shift; output="$1";; --header|-H|-L|--location) exit 90;; esac\n shift\ndone\n[[ "$url" =~ ^https://raw.githubusercontent.com/lucasaarch/jian/[a-f0-9]{40}/.github/scripts/(issue-core.mjs|issue-run.mjs|translate-core.mjs|issue-config.json)$ ]]\ncp "$FIXTURES/${url##*/}" "$output"\nprintf "%s\\n" "$url" >> "$CURL_LOG"\n',
       { mode: 0o700 },
     );
     writeFileSync(join(bin, 'sha256sum'), '#!/bin/sh\nexec /usr/bin/shasum -a 256 "$@"\n', {
@@ -178,7 +178,7 @@ test('literal anonymous bootstrap verifies all three pinned hashes before import
     const good = runShell(body, dir, env);
     assert.equal(good.status, 0, good.stderr);
     assert.match(readFileSync(join(dir, 'output'), 'utf8'), /enabled=true\npublish_enabled=true/);
-    assert.equal(readFileSync(join(dir, 'curl-log'), 'utf8').trim().split('\n').length, 3);
+    assert.equal(readFileSync(join(dir, 'curl-log'), 'utf8').trim().split('\n').length, 4);
     for (const file of files) {
       rmSync(join(dir, 'issue-source'), { recursive: true, force: true });
       rmSync(join(dir, 'output'), { force: true });
@@ -296,7 +296,10 @@ test('old PR automation is removed and CI gate and essential jobs are unchanged'
   }
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   assert.ok(manifest.scripts.check.includes('pnpm test:triage'));
-  assert.equal(manifest.scripts['test:triage'], 'node --test .github/scripts/issue-*.test.mjs');
+  assert.equal(
+    manifest.scripts['test:triage'],
+    'node --test .github/scripts/issue-*.test.mjs .github/scripts/translate-*.test.mjs',
+  );
 });
 
 test('literal manual ID resolution is bounded, read-only and never logs source bodies', () =>

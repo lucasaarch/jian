@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "publishEnabled": true,
+  "repositories": ["lucasaarch/jian"],
+  "model": "gemini-3.5-flash-lite",
+  "apiVersion": "2026-03-10",
+  "maxPrimaryBytes": 4096,
+  "maxInputBytes": 32768,
+  "maxInputTokens": 8000,
+  "maxOutputTokens": 2048,
+  "maxOutputBytes": 16384,
+  "generationTimeoutSeconds": 60,
+  "countTimeoutSeconds": 30,
+  "githubReadAttempts": 3,
+  "maxHourlyGenerations": 10,
+  "maxMonthlyGenerations": 100
+}
