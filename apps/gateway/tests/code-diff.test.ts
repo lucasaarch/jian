@@ -87,6 +87,13 @@ describe('the diff of a file write', () => {
     expect(diff?.truncated).toBe(true);
   });
 
+  it('stops early when a bounded text file has thousands of different lines', () => {
+    const before = Array.from({ length: 5_000 }, (_, index) => `before ${index}`).join('\n');
+    const after = Array.from({ length: 5_000 }, (_, index) => `after ${index}`).join('\n');
+
+    expect(fileDiff('large.txt', before, after)).toBeUndefined();
+  });
+
   it('diffs a Windows file by its lines, not its line endings', () => {
     const diff = fileDiff('win.txt', 'one\r\ntwo\r\n', 'one\r\nTWO\r\n');
 

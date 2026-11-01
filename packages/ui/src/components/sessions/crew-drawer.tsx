@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import { HoverTip } from '../../kit/info-tip';
 import type { GatewayApi, Message, Profile, ToolStep } from '../../lib/api';
 import { useCrew } from '../../lib/stores/crew';
-import { CodeChanges } from './code-change';
 import { active, Elapsed, ModelNames, TierChip, useDrawerFocus } from './crew';
 import { barButton, InspectorBar, InspectorBody, InspectorHeader } from './inspector';
 import { InspectorContent } from './inspector-host';
@@ -96,12 +95,7 @@ export function CrewDrawer({
       : [];
   const placement = placeSteps(steps, displayed);
   const activity = (items: ToolStep[]) =>
-    items.length > 0 ? (
-      <>
-        <ThoughtLine working={false} steps={traceOf(items)} />
-        <CodeChanges steps={items} fresh />
-      </>
-    ) : undefined;
+    items.length > 0 ? <ThoughtLine working={false} steps={traceOf(items)} /> : undefined;
   const alreadySaid =
     agent.progress?.phase === 'writing' &&
     said.some((message) => message.content.trim() === agent.progress?.text.trim());

@@ -4,6 +4,7 @@ import { onlineManager } from '@tanstack/react-query';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type {
+  CodeDiff,
   GatewayApi,
   Message,
   Person,
@@ -19,7 +20,6 @@ import { useCrew } from '../../lib/stores/crew';
 import { forgetLanded, landed, useOutbox } from '../../lib/stores/outbox';
 import { useReconnect } from '../../lib/stores/reconnect';
 import { plainText } from '../ui/markdown';
-import { CodeChanges } from './code-change';
 import { Confetti } from './confetti';
 import { ConversationMap } from './conversation-map';
 import { CrewCards, placeCrew, reportOf } from './crew';
@@ -51,27 +51,59 @@ const endOf = (steps: ToolStep[]) =>
     .at(-1);
 
 /** Tools a turn used between two things it said, settled, with the files they changed. */
+function RunChangesSummary({
+  steps,
+  onOpen,
+}: {
+  steps: ToolStep[];
+  onOpen: (step: ToolStep & { diff: CodeDiff }, opener: HTMLButtonElement) => void;
+}) {
+  const files = new Map<string, ToolStep & { diff: CodeDiff }>();
+  for (const step of steps) {
+    if (step.status === 'done' && step.diff)
+      files.set(step.diff.path, step as ToolStep & { diff: CodeDiff });
+  }
+  if (!files.size) return null;
+
+  return (
+    <section className="run-change-summary" aria-label="Files changed in this run">
+      <p className="run-change-summary-title">Files changed</p>
+      <ul>
+        {[...files.values()].map((step) => (
+          <li key={`${step.toolCallId}:${step.diff.path}`}>
+            <button
+              type="button"
+              aria-label={`${step.diff.path}, ${step.diff.additions} added, ${step.diff.deletions} removed`}
+              onClick={(event) => onOpen(step, event.currentTarget)}
+            >
+              <span className="run-change-summary-path">{step.diff.path}</span>
+              <span className="run-change-summary-counts" aria-hidden="true">
+                <i>+{step.diff.additions}</i> <b>−{step.diff.deletions}</b>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function Worked({
   steps,
   startedAt,
   finishedAt = endOf(steps),
-  fresh,
 }: {
   steps: ToolStep[];
   startedAt?: string;
   finishedAt?: string;
-  fresh: boolean;
 }) {
   return (
-    <>
-      <ThoughtLine
-        working={false}
-        steps={traceOf(steps)}
-        startedAt={startedAt}
-        finishedAt={finishedAt}
-      />
-      <CodeChanges steps={steps} fresh={fresh} />
-    </>
+    <ThoughtLine
+      working={false}
+      steps={traceOf(steps)}
+      startedAt={startedAt}
+      finishedAt={finishedAt}
+    />
   );
 }
 
@@ -163,6 +195,7 @@ export function History({
   agent,
   agents = [],
   profileId,
+  projectId,
   sessionId,
   initialRun,
   revision = 0,
@@ -188,6 +221,7 @@ export function History({
       >
     >;
   profileId: string;
+  projectId?: string;
   onReply?: (message: Message) => void;
   agent?: Pick<Profile, 'name' | 'avatar'>;
   agents?: Pick<Profile, 'id' | 'name' | 'avatar'>[];
@@ -297,8 +331,6 @@ export function History({
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const isRunning = running(run);
-  // The turn being read now: its file changes open whole, older ones only when short.
-  const newest = messages.findLast((message) => message.runId)?.runId;
   const crewPlacement = useMemo(
     () => placeCrew(subagents, messages.filter(answers)),
     [subagents, messages],
@@ -436,8 +468,8 @@ export function History({
 
   // The drawer beside the conversation follows these agents from outside the history.
   useEffect(() => {
-    useCrew.getState().show(sessionId, subagents);
-  }, [sessionId, subagents]);
+    useCrew.getState().show(sessionId, subagents, projectId);
+  }, [sessionId, subagents, projectId]);
   useEffect(() => () => useCrew.getState().leave(sessionId), [sessionId]);
   // Opening or closing the drawer narrows or widens the conversation: the card the owner acted
   // on stays where it was. The store calls back before the layout changes, so the place it
@@ -615,6 +647,16 @@ export function History({
                 return { startedAt: about[0]?.createdAt, finishedAt: about.at(-1)?.createdAt };
               };
               const live = isRunning && run?.id === message.runId;
+              const finalRunMessage = Boolean(
+                run &&
+                  !isRunning &&
+                  run.status !== 'waiting' &&
+                  answering === run.id &&
+                  answers(message) &&
+                  !messages
+                    .slice(lastIndex + 1)
+                    .some((item) => answers(item) && turnOf(item) === run.id),
+              );
               const crew =
                 message.runId && !live && messages[lastIndex + 1]?.runId !== message.runId
                   ? (crewPlacement.tail.get(message.runId) ?? [])
@@ -645,7 +687,6 @@ export function History({
                     steps={steps}
                     startedAt={steps[0]?.startedAt ?? span(answering).startedAt}
                     finishedAt={steps.at(-1)?.finishedAt ?? span(answering).finishedAt}
-                    fresh={answering === newest}
                   />
                 ) : undefined;
 
@@ -732,11 +773,7 @@ export function History({
                   )}
                   {later?.length ? (
                     <div className="chat-line theirs work">
-                      <Worked
-                        steps={later}
-                        startedAt={lastMessage.createdAt}
-                        fresh={answering === newest}
-                      />
+                      <Worked steps={later} startedAt={lastMessage.createdAt} />
                     </div>
                   ) : null}
                   {unansweredSteps && message.runId && (
@@ -746,12 +783,26 @@ export function History({
                         steps={traceOf(unansweredSteps)}
                         {...span(message.runId)}
                       />
-                      <CodeChanges steps={unansweredSteps} fresh={message.runId === newest} />
                     </div>
                   )}
                   {crew.length > 0 && (
                     <div className="chat-line theirs">
                       <CrewCards agents={crew} />
+                    </div>
+                  )}
+                  {finalRunMessage && run && (
+                    <div className="chat-line theirs">
+                      <RunChangesSummary
+                        steps={tools.get(run.id) ?? []}
+                        onOpen={(step, opener) =>
+                          useCrew.getState().showChanges({
+                            runId: run.id,
+                            toolCallId: step.toolCallId,
+                            path: step.diff.path,
+                            opener,
+                          })
+                        }
+                      />
                     </div>
                   )}
                 </Fragment>

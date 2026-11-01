@@ -29,6 +29,7 @@ type SessionRouteServices = {
       | 'overview'
       | 'react'
       | 'timeline'
+      | 'changes'
       | 'context'
       | 'markRead'
     >;
@@ -178,6 +179,12 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
   app.get<{ Params: SessionParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId/timeline',
     async (request) => deps.sessions.timeline(request.params.profileId, request.params.sessionId),
+  );
+
+  app.get<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/changes',
+    async (request) =>
+      deps.sessions.changes(request.params.profileId, request.params.sessionId, request.query),
   );
 
   app.get<{ Params: SessionParams }>(

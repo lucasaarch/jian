@@ -36,6 +36,10 @@ export const keys = {
   contexts: (profileId: string) => ['profile', profileId, 'context'] as const,
   sessionContext: (profileId: string, sessionId: string) =>
     ['profile', profileId, 'context', sessionId] as const,
+  sessionTimeline: (profileId: string, sessionId: string) =>
+    ['profile', profileId, 'timeline', sessionId] as const,
+  sessionChanges: (profileId: string, sessionId: string, path?: string) =>
+    ['profile', profileId, 'changes', sessionId, ...(path ? [path] : [])] as const,
   schedules: (profileId: string) => ['profile', profileId, 'schedules'] as const,
   scheduleHistory: (profileId: string, scheduleId: string) =>
     ['profile', profileId, 'schedules', scheduleId, 'history'] as const,

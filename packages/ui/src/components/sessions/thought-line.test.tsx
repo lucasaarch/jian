@@ -23,7 +23,7 @@ const steps = [
   { key: 'b', text: 'Running a command', status: 'running' as const },
 ];
 
-it('settles into the time the work took, from its own timestamps, and folds its steps', () => {
+it('starts folded, settles into the time the work took, and can be opened by hand', () => {
   act(() =>
     root.render(
       <ThoughtLine
@@ -35,8 +35,11 @@ it('settles into the time the work took, from its own timestamps, and folds its 
     ),
   );
   const line = element.querySelector('.thought-line');
+  expect(line?.hasAttribute('data-open')).toBe(false);
+  expect(element.querySelector('.thought-head')?.getAttribute('aria-expanded')).toBe('false');
+
+  act(() => element.querySelector<HTMLButtonElement>('.thought-head')?.click());
   expect(line?.hasAttribute('data-open')).toBe(true);
-  expect(element.querySelector('.thought-head')?.getAttribute('aria-expanded')).toBe('true');
 
   // An old turn read again: the duration is the run's, not the time since this drew.
   act(() =>
@@ -53,10 +56,32 @@ it('settles into the time the work took, from its own timestamps, and folds its 
   expect(element.querySelector('[role="status"]')?.textContent).toBe(
     '2 tool calls · 1 minutes 12 seconds',
   );
-  expect(line?.hasAttribute('data-open')).toBe(false);
-
-  act(() => element.querySelector<HTMLButtonElement>('.thought-head')?.click());
   expect(line?.hasAttribute('data-open')).toBe(true);
+});
+
+it('keeps every tool call, its input, and its output folded inside the activity', () => {
+  act(() =>
+    root.render(
+      <ThoughtLine
+        working
+        steps={[
+          {
+            key: 'cmd',
+            text: 'Running a command',
+            status: 'done',
+            input: { text: '{"command":"pwd"}' },
+            output: { text: '/workspace' },
+          },
+        ]}
+      />,
+    ),
+  );
+
+  expect(element.querySelector('.thought-head')?.getAttribute('aria-expanded')).toBe('false');
+  const call = element.querySelector<HTMLDetailsElement>('.thought-tool');
+  expect(call?.open).toBe(false);
+  expect(call?.textContent).toContain('{"command":"pwd"}');
+  expect(call?.textContent).toContain('/workspace');
 });
 
 it('keeps a failed step in the trace with what went wrong', () => {
@@ -93,7 +118,9 @@ it('opens full highlighted error details on click instead of exposing a hover to
   );
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
-  await act(async () => element.querySelector<HTMLButtonElement>('.thought-note')?.click());
+  act(() => element.querySelector<HTMLButtonElement>('.thought-head')?.click());
+  act(() => element.querySelector<HTMLElement>('.thought-tool > summary')?.click());
+  await act(async () => element.querySelector<HTMLButtonElement>('button.thought-note')?.click());
   const dialog = document.querySelector('[role="dialog"]');
   expect(dialog?.textContent).toContain(message);
   expect(dialog?.textContent).toContain('Final detail.');

@@ -53,6 +53,9 @@ afterEach(() => {
 it('shows what an edit changed, line by line, numbered on each side', () => {
   act(() => root.render(<CodeChanges steps={[step({ diff })]} />));
 
+  const head = container.querySelector<HTMLButtonElement>('.code-diff-head');
+  expect(head?.getAttribute('aria-expanded')).toBe('false');
+  act(() => head?.click());
   expect(container.querySelector('.code-change')?.getAttribute('aria-label')).toBe(
     'Applied 1 edit',
   );
@@ -81,12 +84,13 @@ it('folds a file away and opens it again', () => {
   act(() => root.render(<CodeChanges steps={[step({ diff })]} />));
   const head = container.querySelector<HTMLButtonElement>('.code-diff-head');
 
+  expect(head?.getAttribute('aria-expanded')).toBe('false');
+  act(() => head?.click());
   expect(head?.getAttribute('aria-expanded')).toBe('true');
+  expect(container.querySelector('.code-diff-line')).not.toBeNull();
   act(() => head?.click());
   expect(head?.getAttribute('aria-expanded')).toBe('false');
   expect(container.querySelector('.code-diff-line')).toBeNull();
-  act(() => head?.click());
-  expect(container.querySelector('.code-diff-line')).not.toBeNull();
 });
 
 it('says a write made a file, and shows nothing for a step without a change', () => {

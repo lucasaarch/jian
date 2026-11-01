@@ -98,7 +98,7 @@
     max-width: calc(var(--chat-column) + 2 * var(--chat-gutter));
   }
   /* Cards share the user bubble's outer edges; prose keeps its aligned text column. */
-  .message-list .chat-line.theirs > :is(.decision-card, .code-changes, .crew),
+  .message-list .chat-line.theirs > :is(.decision-card, .code-changes, .crew, .run-change-summary),
   .message-list .chat-line.theirs > .markdown > .code-block {
     width: calc(100% + 2 * var(--chat-gutter));
     margin-inline: calc(-1 * var(--chat-gutter));

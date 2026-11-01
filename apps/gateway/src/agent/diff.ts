@@ -13,6 +13,10 @@ import { structuredPatch } from 'diff';
 const CONTEXT = 3;
 /** Diff lines kept for one write; past this the diff says it was cut. */
 export const MAX_DIFF_LINES = 400;
+/** Stop before comparisons become expensive: beyond this many edits we cannot show the full diff. */
+const MAX_EDIT_LENGTH = MAX_DIFF_LINES * 2;
+/** Bound the synchronous comparison even when the inputs are within the byte limit. */
+const DIFF_TIMEOUT_MS = 100;
 /** A line longer than this is shown cut: a minified bundle would be one enormous row. */
 const LINE_CHARS = 500;
 /** Bytes of text kept across all lines of one diff. */
@@ -89,7 +93,12 @@ export function fileDiff(
   if (old === next) return undefined;
   if (Buffer.byteLength(old) + Buffer.byteLength(next) > MAX_COMPARED_BYTES) return undefined;
 
-  const patch = structuredPatch(path, path, old, next, '', '', { context: CONTEXT });
+  const patch = structuredPatch(path, path, old, next, '', '', {
+    context: CONTEXT,
+    maxEditLength: MAX_EDIT_LENGTH,
+    timeout: DIFF_TIMEOUT_MS,
+  });
+  if (!patch) return undefined;
   const oldLines = old.split('\n');
 
   return boundedDiff(

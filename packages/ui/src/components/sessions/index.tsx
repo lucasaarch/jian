@@ -21,6 +21,7 @@ import { useRefresh } from '../../lib/workspace';
 import { useParams, useRouter, useSearchParams } from '../../platform/navigation';
 import type { SectionActions } from '../props';
 import { AgentToolbar } from './agent-toolbar';
+import { ChangesDrawer } from './changes-drawer';
 import { Composer } from './composer';
 import { ContextRing } from './context-ring';
 import { ModelNames, prettyModel } from './crew';
@@ -189,6 +190,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                       agents={profiles}
                       api={api}
                       profileId={profile.id}
+                      projectId={active.projectId ?? undefined}
                       sessionId={active.id}
                       revision={sent}
                       group={active.scope === 'group' || contact?.scope === 'group'}
@@ -296,6 +298,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                   </div>
                 </div>
                 <CrewDrawer api={api} profileId={profile.id} profile={profile} />
+                <ChangesDrawer api={api} profileId={profile.id} />
                 {/* Any conversation can have its agent settle a pull request's conflicts; merging
                   belongs to the panel's own chat, as a channel's approvals are left to it. */}
                 <GitHubDrawer

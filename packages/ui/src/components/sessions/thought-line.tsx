@@ -4,8 +4,13 @@ import { Check, ChevronDown, ListChecks, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { OrbState } from 'thinking-orbs';
 import { Overlay } from '../../kit/overlay';
+import type { CodeDiff } from '../../lib/api';
 import { CodeBlock } from '../ui/code-block';
 import { Markdown } from '../ui/markdown';
+import { FileDiff } from './code-change';
+
+// Display values have already been bounded and redacted at the timeline boundary.
+type ToolValue = { text?: string; truncated?: boolean };
 
 /** One line of the trace. A step that went wrong stays in it, marked, with what went wrong. */
 export type ThoughtStep = {
@@ -16,6 +21,9 @@ export type ThoughtStep = {
   note?: string;
   /** What went wrong, in full, as the tool or the server said it. */
   detail?: string;
+  input?: ToolValue;
+  output?: ToolValue;
+  diff?: CodeDiff;
 };
 
 function FailureDetail({ detail }: { detail: string }) {
@@ -113,18 +121,14 @@ export function ThoughtLine({
   /** When the work ended; a settled line without it ends at its last known moment. */
   finishedAt?: string | number;
 }) {
-  const [open, setOpen] = useState(working);
+  // Nothing opens itself, not even an in-progress run; each tool's details are independently folded.
+  const [open, setOpen] = useState(false);
   const [failure, setFailure] = useState<ThoughtStep>();
   const timer = useRef<HTMLSpanElement>(null);
   const trace = useId();
   const start = at(startedAt);
   const end = at(finishedAt);
   const seconds = (now: number) => (start === undefined ? 0 : Math.max(0, (now - start) / 1000));
-
-  // Open while it works, folded once it settles; the reader can still open it by hand.
-  useEffect(() => {
-    setOpen(working);
-  }, [working]);
 
   // The clock updates its own element without redrawing the streamed answer.
   // biome-ignore lint/correctness/useExhaustiveDependencies: seconds reads only `start`.
@@ -181,31 +185,58 @@ export function ThoughtLine({
           <ol>
             {steps.map((step) => (
               <li key={step.key} data-status={step.status}>
-                <span className="thought-mark" aria-hidden="true">
-                  {step.status === 'running' ? (
-                    <i className="thought-pulse" />
-                  ) : step.status === 'failed' ? (
-                    <X size={12} strokeWidth={2.6} />
-                  ) : (
-                    <Check size={12} strokeWidth={2.6} />
-                  )}
-                </span>
-                <span className="thought-step">{step.text}</span>
-                {step.note &&
-                  (step.detail ? (
-                    <button
-                      type="button"
-                      className="thought-note"
-                      data-detail
-                      aria-haspopup="dialog"
-                      aria-label={`${step.note}: ${step.text}`}
-                      onClick={() => setFailure(step)}
-                    >
-                      {step.note}
-                    </button>
-                  ) : (
-                    <span className="thought-note">{step.note}</span>
-                  ))}
+                <details className="thought-tool">
+                  <summary>
+                    <span className="thought-mark" aria-hidden="true">
+                      {step.status === 'running' ? (
+                        <i className="thought-pulse" />
+                      ) : step.status === 'failed' ? (
+                        <X size={12} strokeWidth={2.6} />
+                      ) : (
+                        <Check size={12} strokeWidth={2.6} />
+                      )}
+                    </span>
+                    <span className="thought-step">{step.text}</span>
+                    {step.note && <span className="thought-note">{step.note}</span>}
+                    <ChevronDown size={13} className="thought-tool-chevron" aria-hidden="true" />
+                  </summary>
+                  <div className="thought-tool-body">
+                    {step.input?.text !== undefined && (
+                      <section>
+                        <h4>Input</h4>
+                        <pre>{step.input.text}</pre>
+                        {step.input.truncated && (
+                          <p className="thought-truncated">Input truncated.</p>
+                        )}
+                      </section>
+                    )}
+                    {step.output?.text !== undefined && (
+                      <section>
+                        <h4>Output</h4>
+                        <pre>{step.output.text}</pre>
+                        {step.output.truncated && (
+                          <p className="thought-truncated">Output truncated.</p>
+                        )}
+                      </section>
+                    )}
+                    {step.diff && <FileDiff diff={step.diff} open={false} />}
+                    {step.note && step.detail && (
+                      <button
+                        type="button"
+                        className="thought-note"
+                        data-detail
+                        aria-haspopup="dialog"
+                        aria-label={`${step.note}: ${step.text}`}
+                        onClick={() => setFailure(step)}
+                      >
+                        {step.note}: show error details
+                      </button>
+                    )}
+                    {!step.input && !step.output && !step.diff && !step.detail && (
+                      <p className="thought-tool-empty">No input or output was recorded.</p>
+                    )}
+                  </div>
+                </details>
               </li>
             ))}
           </ol>

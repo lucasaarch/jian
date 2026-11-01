@@ -6,9 +6,6 @@ import type { CodeDiff, ToolStep } from '../../lib/api';
 import { highlightLines, type Segment } from '../ui/highlight';
 import { useFoldAll } from './fold-all';
 
-/** A diff shorter than this opens by itself even in an older turn: it costs a glance. */
-const SHORT = 40;
-
 type Line = CodeDiff['hunks'][number]['lines'][number];
 
 /**
@@ -124,9 +121,9 @@ function summaryOf(step: ToolStep & { diff: CodeDiff }) {
 /**
  * What a turn's file writes changed, below its Thought Line: one block per write, as the tool
  * reported it. Only writes that went through have a diff; a failed or refused one stays a line
- * in the trace. `fresh` opens short changes in the newest turn; larger changes always wait for a click.
+ * in the trace. Every change stays folded until the reader opens it.
  */
-export function CodeChanges({ steps, fresh = false }: { steps: ToolStep[]; fresh?: boolean }) {
+export function CodeChanges({ steps }: { steps: ToolStep[] }) {
   const changes = steps.filter(
     (step): step is ToolStep & { diff: CodeDiff } => step.status === 'done' && Boolean(step.diff),
   );
@@ -136,11 +133,9 @@ export function CodeChanges({ steps, fresh = false }: { steps: ToolStep[]; fresh
   return (
     <div className="code-changes">
       {changes.map((step) => {
-        const lines = step.diff.hunks.reduce((total, hunk) => total + hunk.lines.length, 0);
-
         return (
           <section key={step.toolCallId} className="code-change" aria-label={summaryOf(step)}>
-            <FileDiff diff={step.diff} open={lines <= (fresh ? SHORT : 12)} />
+            <FileDiff diff={step.diff} open={false} />
           </section>
         );
       })}
