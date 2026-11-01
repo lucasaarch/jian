@@ -1,5 +1,16 @@
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import {
+  bytes,
+  fingerprint,
+  protectionValid,
+  restoreTranslation,
+  safeOutput,
+  sanitizeProse,
+  sourceProse,
+  text,
+} from './translate-core.mjs';
+
+export { fingerprint, sanitizeProse };
 
 const freeze = (value) => {
   if (value && typeof value === 'object') {
@@ -34,18 +45,6 @@ const exact = (x, keys) =>
   record(x) && Object.keys(x).length === keys.length && keys.every((k) => Object.hasOwn(x, k));
 const positive = (x) => Number.isSafeInteger(x) && x > 0;
 const hex = (x, n) => typeof x === 'string' && new RegExp(`^[a-f0-9]{${n}}$`).test(x);
-const text = (x) =>
-  typeof x === 'string' &&
-  !Array.from(x).some((char) => {
-    const code = char.codePointAt(0);
-    return code <= 8 || code === 11 || code === 12 || (code >= 14 && code <= 31) || code === 127;
-  }) &&
-  x.isWellFormed();
-const bytes = (x) => Buffer.byteLength(x, 'utf8');
-const secret =
-  /-----BEGIN [A-Z ]*(?:PRIVATE KEY|CERTIFICATE)-----|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b|\bAIza[A-Za-z0-9_-]{30,}\b|\bsk-[A-Za-z0-9_-]{20,}\b|\bBearer\s+\S+|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|[a-z][a-z\d+.-]*:\/\/[^\s/:]+:[^\s/@]+@|(?:password|secret|api[_-]?key|access[_-]?token|authorization)["']?\s*[:=]\s*["']?[^\s"']+/i;
-const privateText =
-  /\b(?:confidential|private source code|internal.only|do not share|não compartilhar|confidencial)\b/i;
 const bot = (x) =>
   typeof x !== 'string' || !x || x.length > 100 || /\[bot\]$/i.test(x) || !/^[a-z\d-]+$/i.test(x);
 
@@ -100,130 +99,6 @@ export function eligibility(context, repo, issue) {
   )
     return blocked('OPEN_HUMAN_ISSUE_REQUIRED');
   return ready();
-}
-
-export function fingerprint(issue) {
-  if (!record(issue) || !text(issue.title) || !(issue.body == null || text(issue.body)))
-    return null;
-  return createHash('sha256')
-    .update(`${issue.title}\0${issue.body ?? ''}`, 'utf8')
-    .digest('hex');
-}
-
-export function sanitizeProse(raw) {
-  if (!text(raw) || bytes(raw) > 2 * 1024 * 1024) return blocked('INVALID_PROSE');
-  if (secret.test(raw) || privateText.test(raw)) return blocked('SENSITIVE_INPUT');
-  const lines = [],
-    source = raw.split(/\r?\n/);
-  let fence = null;
-  for (const line of source) {
-    const mark = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(line);
-    if (mark) {
-      if (!fence) {
-        fence = { char: mark[1][0], length: mark[1].length };
-        continue;
-      }
-      if (mark[1][0] === fence.char && mark[1].length >= fence.length && !mark[2].trim()) {
-        fence = null;
-        continue;
-      }
-    }
-    if (!fence && !/^(?:\s{4}|\t)/.test(line)) lines.push(line);
-  }
-  if (fence) return blocked('INCOMPLETE_CODE_BLOCK');
-  let prose = lines.join('\n');
-  if ((prose.match(/`/g) ?? []).length % 2) return blocked('INCOMPLETE_CODE_BLOCK');
-  prose = prose
-    .replace(/`+[^`]*`+/g, '')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/<[^>]*>/g, ' ')
-    // A reference definition has one destination and an optional quoted title. Tags such as
-    // '[Feature]: Pinned chats' are ordinary Issue titles, not Markdown link definitions.
-    .replace(
-      /^\s{0,3}\[[^\]\n]+\]:[ \t]*(?:<[^>\n]+>|[^\s<>]+)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?[ \t]*$/gm,
-      '',
-    )
-    .replace(/(?:https?:\/\/|www\.)[^\s]+/gi, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/[<>]/g, '')
-    .trim();
-  return prose ? { ...ready(), prose } : blocked('EMPTY_PROSE');
-}
-
-function sourceProse(raw) {
-  raw ??= '';
-  const safety = raw ? sanitizeProse(raw) : ready();
-  if ((safety.state !== 'ready' && safety.reason !== 'EMPTY_PROSE') || raw.includes('JIAN_KEEP_'))
-    return blocked('UNSAFE_TRANSLATION_SOURCE');
-  const chunks = [],
-    counts = new Map();
-  const keep = (value, block = false) => {
-    const hash = createHash('sha256').update(value).digest('hex').slice(0, 16),
-      n = counts.get(hash) ?? 0;
-    counts.set(hash, n + 1);
-    const token = `JIAN_KEEP_${hash}_${n}`;
-    chunks.push({ token, block, value });
-    return token;
-  };
-  const lines = raw.split('\n'),
-    output = [];
-  for (let i = 0; i < lines.length; i++) {
-    const opening = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(lines[i]);
-    if (opening) {
-      const start = i;
-      while (++i < lines.length) {
-        const closing = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(lines[i]);
-        if (
-          closing &&
-          closing[1][0] === opening[1][0] &&
-          closing[1].length >= opening[1].length &&
-          !closing[2].trim()
-        )
-          break;
-      }
-      if (i === lines.length) return blocked('INCOMPLETE_CODE_BLOCK');
-      output.push(keep(lines.slice(start, i + 1).join('\n'), true));
-    } else if (/^(?: {4}|\t)/.test(lines[i])) {
-      const start = i;
-      while (i + 1 < lines.length && /^(?: {4}|\t)/.test(lines[i + 1])) i++;
-      output.push(keep(lines.slice(start, i + 1).join('\n'), true));
-    } else output.push(lines[i]);
-  }
-  let masked = output
-    .join('\n')
-    .replace(/^\s{0,3}\[[^\]]+\]:[^\n]*$/gm, (value) => keep(value, true));
-  masked = masked.replace(
-    /`+[^`]*`+|!?\[[^\]]*\]\([^)]*\)|<[^>]*>|(?:https?:\/\/|www\.)[^\s]+|[<>]/gi,
-    (value) => keep(value),
-  );
-  const safe = masked ? sanitizeProse(masked) : { ...ready(), prose: '' };
-  if (safe.state !== 'ready') return safe;
-  return { ...safe, chunks, tokens: chunks.map(({ token, block }) => ({ token, block })) };
-}
-const protectionValid = (value, expected = []) => {
-  const tokens = value.match(/JIAN_KEEP_[a-f0-9]{16}_[0-9]+/g) ?? [];
-  return (
-    Array.isArray(expected) &&
-    tokens.length === expected.length &&
-    expected.every(
-      (x) =>
-        tokens.filter((t) => t === x.token).length === 1 &&
-        (!x.block || value.split('\n').includes(x.token)),
-    ) &&
-    !value.replace(/JIAN_KEEP_[a-f0-9]{16}_[0-9]+/g, '').includes('JIAN_KEEP_')
-  );
-};
-function restoreTranslation(value, raw, title = false) {
-  const source = sourceProse(raw);
-  if (source.state !== 'ready' || !protectionValid(value, source.tokens)) return null;
-  let restored = title ? value.replace(/@/g, '@\u200b') : escapeMarkdown(value);
-  for (const chunk of source.chunks)
-    restored = restored.replace(
-      title ? chunk.token : escapeMarkdown(chunk.token),
-      () => chunk.value,
-    );
-  return restored;
 }
 
 const snapshotKeys = ['repo', 'issueNumber', 'issueId', 'contentHash', 'workflowSha', 'runId'];
@@ -298,7 +173,7 @@ export function prepareInput(snapshot, candidates, catalog) {
     fingerprint(issue) !== snapshot.contentHash
   )
     return fail('INVALID_PRIMARY_INPUT');
-  const title = sourceProse(issue.title),
+  const title = sourceProse(issue.title, { title: true }),
     body = sourceProse(issue.body);
   if (title.state !== 'ready' || body.state !== 'ready') return fail('UNSAFE_PRIMARY_INPUT');
   if (bytes(title.prose) + bytes(body.prose) > config.maxPrimaryBytes)
@@ -404,25 +279,6 @@ const confidence = (x) => typeof x === 'number' && Number.isFinite(x) && x >= 0 
 const choice = (x, names) =>
   x === null ||
   (exact(x, ['name', 'confidence']) && names.includes(x.name) && confidence(x.confidence));
-const dottedTokens = (s) => s.match(/\b[\w-]+(?:\.[\w-]+)+\b/g) ?? [];
-// A scheme must begin at a word boundary; ordinary words such as "profile:" are safe prose.
-const safeOutput = (s, prose) => {
-  if (
-    !text(s) ||
-    !s.trim() ||
-    secret.test(s) ||
-    privateText.test(s) ||
-    /(?:[a-z][a-z\d+.-]*:\/\/|\b(?:mailto|javascript|data|file):|www\.|<|>|&(?:lt|gt|#\d+|#x[a-f\d]+);|\[[^\]]*\]\s*\()/im.test(
-      s,
-    )
-  )
-    return false;
-  const source =
-    record(prose) && text(prose.title) && text(prose.body)
-      ? dottedTokens(`${prose.title}\n${prose.body}`)
-      : [];
-  return dottedTokens(s).every((token) => source.includes(token));
-};
 const candidateOriginsValid = (os, input) =>
   Array.isArray(os) &&
   os.length <= config.maxCandidates &&
@@ -499,12 +355,6 @@ function proposalValid(p, input) {
     return false;
   return true;
 }
-const escapeMarkdown = (s) =>
-  s
-    .replace(/\\/g, '\\\\')
-    .replace(/([`*_[\]{}()#!|~])/g, '\\$1')
-    .replace(/@/g, '@\u200b')
-    .replace(/\r\n/g, '\n');
 function commentText(p) {
   if (!p.translation && !p.duplicates.length) return '';
   const parts = [`<!-- jian-issue-triage:${p.snapshot.contentHash} -->`];
@@ -533,8 +383,7 @@ export function validateProposal(raw, input) {
         input.candidates.some((c) => c.number === d.number),
     );
     if (
-      escapeMarkdown(proposal.translation.title).length +
-        escapeMarkdown(proposal.translation.body).length >
+      proposal.translation.title.length + proposal.translation.body.length >
         config.maxCommentCharacters ||
       commentText(proposal).length > config.maxCommentCharacters
     )
@@ -573,7 +422,7 @@ export function planEffects(proposal, current, candidates) {
     !Object.hasOwn(current, 'type')
   )
     return none();
-  const title = sourceProse(current.title),
+  const title = sourceProse(current.title, { title: true }),
     body = sourceProse(current.body);
   if (title.state !== 'ready' || body.state !== 'ready') return none();
   const input = {

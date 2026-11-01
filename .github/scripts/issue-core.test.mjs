@@ -31,6 +31,10 @@ const catalog = {
 const fixtureDir = mkdtempSync(join(tmpdir(), 'issue-core-test-'));
 after(() => rmSync(fixtureDir, { recursive: true, force: true }));
 copyFileSync(new URL('./issue-core.mjs', import.meta.url), join(fixtureDir, 'issue-core.mjs'));
+copyFileSync(
+  new URL('./translate-core.mjs', import.meta.url),
+  join(fixtureDir, 'translate-core.mjs'),
+);
 const checkedConfig = JSON.parse(readFileSync(new URL('./issue-config.json', import.meta.url)));
 writeFileSync(
   join(fixtureDir, 'issue-config.json'),
@@ -523,8 +527,6 @@ test('proposal JSON and complete rendered output have bounded UTF8/character siz
   blocked(core.validateProposal(p, i));
   const q = JSON.stringify(proposal());
   blocked(core.validateProposal(q + ' '.repeat(16385), input()));
-  p.translation.body = '*'.repeat(3500);
-  blocked(core.validateProposal(p, i));
 });
 test('effect planning fills only absent metadata and uses one additive Priority item', () => {
   const i = input(),
@@ -603,7 +605,7 @@ test('planner refuses stale content, malformed current metadata and changed dupl
     '',
   );
 });
-test('comment combines escaped translation and verified possible duplicates with deterministic marker', () => {
+test('comment combines a neutralized translation and verified possible duplicates with deterministic marker', () => {
   const original = snapshot({ title: 'Falha', body: 'O botão falha.' }),
     i = core.prepareInput(original, [candidate()], catalog),
     p = proposal(i);
@@ -625,7 +627,7 @@ test('comment combines escaped translation and verified possible duplicates with
     i.candidates,
   ).translationToSet;
   assert.ok(native.title.includes('@\u200beveryone'));
-  assert.ok(native.body.includes('\\_text\\_'));
+  assert.ok(native.body.includes('@\u200bmaintainer _text_ [brackets]'));
   assert.ok(!out.includes('@maintainer'));
   assert.equal(core.renderComment(validated.proposal, i), out);
   assert.equal(original.title, 'Falha');
@@ -864,7 +866,7 @@ for (const command of [
     }
   });
 }
-test('technical command and code text is preserved as escaped data rather than interpreted', () => {
+test('technical command and code text the model returns reaches the Issue as it was written', () => {
   const source = {
       title: 'Falha',
       body: 'sudo reboot, docker run alpine, npm install package e node issue-core.mjs são exemplos do problema.',
@@ -876,13 +878,13 @@ test('technical command and code text is preserved as escaped data rather than i
     ['docker run alpine', 'docker run alpine'],
     ['npm install package', 'npm install package'],
     ['node issue-core.mjs', 'node issue-core.mjs'],
-    ['node --eval "run()"', 'node --eval "run\\(\\)"'],
-    ['$(touch /tmp/nope)', '$\\(touch /tmp/nope\\)'],
+    ['node --eval "run()"', 'node --eval "run()"'],
+    ['$(touch /tmp/nope)', '$(touch /tmp/nope)'],
     ['const result = 3;', 'const result = 3;'],
-    ['function run() {}', 'function run\\(\\) \\{\\}'],
+    ['function run() {}', 'function run() {}'],
     ['    npm test', '    npm test'],
-    ['Use `npm test`.', 'Use \\`npm test\\`.'],
-    ['```\nnpm test\n```', '\\`\\`\\`\nnpm test\n\\`\\`\\`'],
+    ['Use `npm test`.', 'Use `npm test`.'],
+    ['```\nnpm test\n```', '```\nnpm test\n```'],
   ]) {
     p.translation = { title: 'Failure', body, sourceLanguage: 'pt', targetLanguage: 'en' };
     ready(core.validateProposal(p, i));
@@ -1046,4 +1048,88 @@ test('classification prefixes are prose while real Markdown reference definition
   );
   ready(result);
   assert.equal(result.prose, 'Useful context');
+});
+
+// What a translation must leave working: the template's structure, its title convention and the
+// references GitHub acts on.
+const translated = (source, translation) => {
+  const i = input(source),
+    p = proposal(i);
+  p.translation = { ...translation, sourceLanguage: 'pt', targetLanguage: 'en' };
+  return { i, p, checked: core.validateProposal(p, i) };
+};
+const written = (source, { i, p }) =>
+  core.planEffects(p, { ...issue(), ...source, repo: repoName }, i.candidates).translationToSet;
+const hidden = (i, value) => {
+  const token = i.protectedTokens.body.find(({ token }) => i.prose.body.includes(token));
+  return value.replace('TOKEN', token.token);
+};
+
+for (const [title, tag] of [
+  ['[Bug]: Falha ao salvar', '[Bug]:'],
+  ['[Feature]: Salvar', '[Feature]:'],
+  ['fix(ui): corrige o botão', 'fix(ui):'],
+  ['feat!: novo botão', 'feat!:'],
+]) {
+  test(`a title keeps ${tag} and shows the rest of it to the model`, () => {
+    const source = { title, body: 'O botão falha.' },
+      i = input(source);
+    assert.match(i.prose.title, /^JIAN_KEEP_[a-f0-9]{16}_0 \S/);
+    const [{ token }] = i.protectedTokens.title,
+      run = translated(source, { title: `${token} Save failure`, body: 'The button fails.' });
+    ready(run.checked);
+    assert.equal(written(source, run).title, `${tag} Save failure`);
+  });
+}
+
+test('a word before a colon that is no convention of this repository is translated', () => {
+  const i = input({ title: 'Erro: falha ao salvar', body: 'O botão falha.' });
+  assert.equal(i.prose.title, 'Erro: falha ao salvar');
+});
+
+test('headings, checkboxes, emphasis and tables reach the Issue as Markdown', () => {
+  const source = { title: 'Falha', body: '## Resumo\n\n- [ ] Rodei os testes\n- **Importante**' },
+    body = '## Summary\n\n- [ ] I ran the tests\n- **Important**\n\n| a | b |',
+    run = translated(source, { title: 'Failure', body });
+  ready(run.checked);
+  assert.equal(written(source, run).body, body);
+});
+
+test('references and mentions survive exactly and never reach the model', () => {
+  const body = 'Corrige #12 e lucasaarch/jian#34, como @maintainer pediu.',
+    source = { title: 'Falha', body },
+    i = input(source);
+  assert.doesNotMatch(i.prose.body, /#\d|@maintainer/);
+  const translation = i.prose.body
+    .replace('Corrige', 'Fixes')
+    .replace(' e ', ' and ')
+    .replace(', como', ', as')
+    .replace('pediu', 'asked');
+  const run = translated(source, { title: 'Failure', body: translation });
+  ready(run.checked);
+  assert.equal(
+    written(source, run).body,
+    'Fixes #12 and lucasaarch/jian#34, as @maintainer asked.',
+  );
+});
+
+test('a reference or mention the model made up neither closes an Issue nor notifies anyone', () => {
+  const source = { title: 'Falha', body: 'O botão falha.' };
+  blocked(translated(source, { title: 'Failure', body: 'Fixes #99.' }).checked);
+  const run = translated(source, { title: 'Failure', body: 'Ask @maintainer.' });
+  ready(run.checked);
+  assert.equal(written(source, run).body, 'Ask @\u200bmaintainer.');
+});
+
+test('a body sent with CRLF keeps its fenced code hidden as a block', () => {
+  const source = { title: 'Falha', body: 'O botão falha.\r\n\r\n```sh\r\nnpm test\r\n```' },
+    i = input(source);
+  assert.doesNotMatch(i.prose.body, /npm test/);
+  assert.equal(i.protectedTokens.body[0].block, true);
+  const run = translated(source, {
+    title: 'Failure',
+    body: hidden(i, 'The button fails.\n\nTOKEN'),
+  });
+  ready(run.checked);
+  assert.equal(written(source, run).body, 'The button fails.\n\n```sh\nnpm test\n```');
 });

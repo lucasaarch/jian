@@ -47,7 +47,9 @@ export function plan(paths, full = false) {
     if (path === 'apps/gateway/Dockerfile') enable('imageGateway');
     else if (path === 'apps/web/Dockerfile') enable('imageWeb');
     else if (
-      /^\.github\/(?:scripts\/issue-|workflows\/issue-triage\.yml|issue-triage\.md)/.test(path)
+      /^\.github\/(?:scripts\/(?:issue|translate)-|workflows\/(?:issue-triage|translate)\.yml|issue-triage\.md)/.test(
+        path,
+      )
     )
       enable('quality', 'triage');
     else if (path.startsWith('.github/') || path === '.gitignore' || path.startsWith('.husky/'))

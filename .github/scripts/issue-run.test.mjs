@@ -23,7 +23,7 @@ const context = {
 async function modules(t, enabled = true, nativeFields = true) {
   const dir = await mkdtemp(join(tmpdir(), 'issue-run-test-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  for (const name of ['issue-run.mjs', 'issue-core.mjs', 'issue-config.json'])
+  for (const name of ['issue-run.mjs', 'issue-core.mjs', 'translate-core.mjs', 'issue-config.json'])
     await cp(new URL(name, import.meta.url), join(dir, name));
   const config = JSON.parse(await readFile(join(dir, 'issue-config.json')));
   if (nativeFields)

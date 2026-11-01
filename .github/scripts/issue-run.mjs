@@ -12,6 +12,7 @@ import {
   sanitizeProse,
   validateProposal,
 } from './issue-core.mjs';
+import { finalText, request } from './translate-core.mjs';
 
 const workflow = '.github/workflows/issue-triage.yml';
 const generationStep = 'Generate Gemini proposal';
@@ -156,40 +157,6 @@ function githubURL(path) {
     return u.href;
   }
   fail('ROUTE_REFUSED');
-}
-async function request(url, options, transport, statuses, cap = 2 * 1024 * 1024) {
-  const u = new URL(url);
-  if (
-    u.protocol !== 'https:' ||
-    u.port ||
-    u.username ||
-    u.password ||
-    u.hash ||
-    !['api.github.com', 'generativelanguage.googleapis.com'].includes(u.hostname)
-  )
-    fail('ROUTE_REFUSED');
-  let response;
-  try {
-    response = await transport.fetch(u.href, { ...options, redirect: 'error' });
-  } catch {
-    fail('REQUEST_FAILED');
-  }
-  if (!statuses.includes(response.status)) {
-    await response.body?.cancel();
-    return { status: response.status, retryAfter: response.headers.get('retry-after') };
-  }
-  try {
-    let size = 0;
-    const chunks = [];
-    for await (const chunk of response.body) {
-      size += chunk.byteLength;
-      if (size > cap) fail('RESPONSE_LIMIT');
-      chunks.push(chunk);
-    }
-    return { status: response.status, data: JSON.parse(Buffer.concat(chunks).toString('utf8')) };
-  } catch {
-    fail('INVALID_RESPONSE');
-  }
 }
 function headers(token) {
   return {
@@ -757,55 +724,6 @@ function providerFailure(reason, response) {
   if (category) out.category = category[0];
   return out;
 }
-function toolContent(value) {
-  return (
-    value &&
-    typeof value === 'object' &&
-    Object.entries(value).some(
-      ([key, child]) =>
-        /^(?:thought|functionCall|functionResponse|executableCode|codeExecutionResult|toolCalls|tools)$/.test(
-          key,
-        ) || toolContent(child),
-    )
-  );
-}
-function finalText(data) {
-  if (toolContent(data)) fail('INVALID_RESPONSE');
-  if (
-    !record(data) ||
-    Object.keys(data).some(
-      (k) => !['candidates', 'usageMetadata', 'modelVersion', 'responseId'].includes(k),
-    ) ||
-    !Array.isArray(data.candidates) ||
-    data.candidates.length !== 1
-  )
-    fail('INVALID_RESPONSE');
-  const c = data.candidates[0];
-  if (
-    !record(c) ||
-    Object.keys(c).some(
-      (k) => !['content', 'finishReason', 'index', 'safetyRatings'].includes(k),
-    ) ||
-    c.finishReason !== 'STOP' ||
-    !exact(c.content, ['role', 'parts']) ||
-    c.content.role !== 'model' ||
-    !Array.isArray(c.content.parts) ||
-    c.content.parts.length !== 1
-  )
-    fail('INVALID_RESPONSE');
-  const p = c.content.parts[0];
-  if (
-    (!exact(p, ['text']) && !exact(p, ['text', 'thoughtSignature'])) ||
-    typeof p.text !== 'string' ||
-    Buffer.byteLength(p.text) > config.maxOutputBytes ||
-    (Object.hasOwn(p, 'thoughtSignature') &&
-      (typeof p.thoughtSignature !== 'string' ||
-        !p.thoughtSignature ||
-        Buffer.byteLength(p.thoughtSignature) > 16384))
-  )
-    fail('INVALID_RESPONSE');
-  return p.text;
-}
 export async function generateOnce(a, transport = createTransport(), key, githubReadToken) {
   if (!config.enabled && !a?.context?.dryRun) return result('DISABLED');
   let stage = 'validate_input';
@@ -905,7 +823,7 @@ export async function generateOnce(a, transport = createTransport(), key, github
       return failure;
     }
     stage = 'validate_proposal';
-    const text = finalText(response.data);
+    const text = finalText(response.data, config.maxOutputBytes);
     let proposal;
     try {
       proposal = JSON.parse(text);
