@@ -101,7 +101,8 @@ function ChannelSettings({
           : 'An HTTP endpoint for your own systems.';
 
   return (
-    <div className="grid w-full gap-5 p-7">
+    // One column as wide as the dialog: left to its content, a long address widens it.
+    <div className="grid w-full grid-cols-1 gap-5 p-7">
       <header className="grid gap-1.5 pr-6">
         <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
           <ChannelTitle type={channel.type} />

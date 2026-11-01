@@ -13,6 +13,9 @@ export type ChatRowProps = {
   /** Where it takes place: the app's own chat, or a channel's mark. A project's own chats leave
    * it out: their folder already says what they are. */
   icon?: ReactNode;
+  /** Under a folder: its name lines up with the folder's, and where the folder's mark is, a dot
+   * says how it stands while the pointer is on it. */
+  nested?: boolean;
   /** When it was last spoken in, as an ISO date. */
   at: string;
   selected: boolean;
@@ -66,13 +69,13 @@ export function ChatRow(props: ChatRowProps) {
       <ContextMenu.Root>
         <ContextMenu.Trigger
           render={<li />}
-          className="relative rounded-lg data-popup-open:bg-glass-hover"
+          className="group/row relative rounded-lg data-popup-open:bg-glass-hover"
         >
           <button
             type="button"
             onClick={props.open}
             aria-current={props.selected ? 'page' : undefined}
-            className={`flex h-8 w-full items-center gap-2 rounded-lg ${props.remote ? 'pr-17' : 'pr-12'} pl-2.5 text-left text-[13px] text-ink transition-colors hover:bg-glass-hover aria-[current=page]:bg-glass-press phone:h-10 phone:text-sm`}
+            className={`flex h-8 w-full items-center gap-2 rounded-lg ${props.remote ? 'pr-17' : 'pr-12'} ${props.nested ? 'pl-8.5' : 'pl-2.5'} text-left text-[13px] text-ink transition-colors hover:bg-glass-hover aria-[current=page]:bg-glass-press phone:h-10 phone:text-sm`}
           >
             {props.icon && (
               <span
@@ -84,6 +87,12 @@ export function ChatRow(props: ChatRowProps) {
             )}
             <span className="min-w-0 flex-1 truncate">{props.name}</span>
           </button>
+          {props.nested && (
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none absolute top-1/2 left-3.75 size-1.5 -translate-y-1/2 rounded-full opacity-0 transition-opacity group-hover/row:opacity-100 ${dot(props)}`}
+            />
+          )}
           <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-[11px] text-muted tabular-nums">
             {props.remote && (
               <Cloud size={13} className="mr-1.5 text-muted" role="img" aria-label="Remote" />
@@ -149,6 +158,12 @@ export function DeleteChatDialog({
 }
 
 /** At work, unread, or how long ago: the one that says the most. */
+/** How a chat stands, as the colour of its dot: the end of the row says the same in words. */
+function dot({ unread, working, selected }: ChatRowProps): string {
+  if (working) return 'bg-good';
+  return unread && !selected ? 'bg-accent' : 'bg-muted';
+}
+
 function Status({ at, unread, working, selected }: ChatRowProps) {
   if (working) {
     return (

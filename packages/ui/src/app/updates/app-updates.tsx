@@ -52,22 +52,34 @@ export function AppUpdates({ host }: { host: UpdatesHost }) {
   );
 }
 
-/**
- * A quiet word in the host's status bar once a release is waiting, which opens the sheet. It
- * says nothing while a release is only looked for or downloading.
- */
+/** What the status bar says of a release it knows of: nothing while none has been found. */
+function word(update: AppUpdate | undefined): { label: string; title: string } | undefined {
+  if (!update || !('release' in update) || !update.release) return undefined;
+  const { version } = update.release;
+  switch (update.status) {
+    case 'ready':
+      return { label: 'Update ready', title: `Jian ${version} is ready to install` };
+    case 'downloading':
+      return { label: 'Downloading update', title: `Downloading Jian ${version}` };
+    // A download that failed still leaves a release to get: the sheet says why and tries again.
+    default:
+      return { label: 'Update available', title: `Jian ${version} is available` };
+  }
+}
+
+/** A quiet word in the host's status bar once a release is known of, which opens the sheet. */
 export function UpdateBadge() {
   const { still } = useAppearance();
   const update = useAppUpdate((state) => state.update);
   const show = useAppUpdate((state) => state.show);
-  const waiting = update?.status === 'ready' || update?.status === 'manual' ? update : undefined;
+  const said = word(update);
   return (
     <AnimatePresence initial={false}>
-      {waiting && (
+      {said && (
         <motion.button
           type="button"
           onClick={() => show(false)}
-          title={`Jian ${waiting.release.version} is ${waiting.status === 'ready' ? 'ready to install' : 'available'}`}
+          title={said.title}
           className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-good/12 px-2.5 text-xs font-medium text-good transition-colors hover:bg-good/20"
           initial={still ? false : { opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -75,7 +87,7 @@ export function UpdateBadge() {
           transition={{ type: 'spring', stiffness: 420, damping: 30 }}
         >
           <span aria-hidden="true" className="size-1.5 rounded-full bg-good" />
-          {waiting.status === 'ready' ? 'Update ready' : 'Update available'}
+          {said.label}
         </motion.button>
       )}
     </AnimatePresence>

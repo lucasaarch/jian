@@ -37,10 +37,8 @@ export function ChatSearch({ profileId }: { profileId: string }) {
         // Beside each chat, where the sidebar lists it: its project, or its section.
         .flatMap((section) =>
           section.kind === 'recent'
-            ? section.items.flatMap((item) =>
-                item.kind === 'folder'
-                  ? item.sessions.map((session) => ({ session, where: item.name }))
-                  : [{ session: item.session, where: section.name }],
+            ? section.folders.flatMap((folder) =>
+                folder.sessions.map((session) => ({ session, where: folder.name })),
               )
             : section.sessions.map((session) => ({ session, where: section.name })),
         )

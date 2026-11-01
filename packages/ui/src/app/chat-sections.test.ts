@@ -26,12 +26,7 @@ const ids = (sessions: Session[]) => sessions.map((session) => session.id);
 const names = (sections: ReturnType<typeof chatSections>) =>
   sections.map((section) =>
     section.kind === 'recent'
-      ? [
-          section.name,
-          section.items.map((item) =>
-            item.kind === 'folder' ? [item.name, ids(item.sessions)] : item.session.id,
-          ),
-        ]
+      ? [section.name, section.folders.map((folder) => [folder.name, ids(folder.sessions)])]
       : [section.name, ids(section.sessions)],
   );
 
@@ -48,7 +43,36 @@ it('mixes chats and project folders in Recent, by when each was last spoken in',
   });
 
   expect(names(sections)).toEqual([
-    ['Recent', [['harbor', ['harbor-new']], 'loose', ['atlas', ['atlas-new', 'atlas-old']]]],
+    [
+      'Recent',
+      [
+        ['harbor', ['harbor-new']],
+        ['No project', ['loose']],
+        ['atlas', ['atlas-new', 'atlas-old']],
+      ],
+    ],
+  ]);
+});
+
+it('keeps chats on no project, or on one that is gone, in one folder apart from a namesake', () => {
+  const sections = chatSections({
+    projects: [project('p1', 'No project')],
+    channels: [],
+    sessions: [
+      chat('loose', 'gateway', '2026-10-22T00:00:00Z'),
+      chat('orphan', 'gateway', '2026-10-21T00:00:00Z', 'gone'),
+      chat('namesake', 'gateway', '2026-10-20T00:00:00Z', 'p1'),
+    ],
+  });
+
+  expect(names(sections)).toEqual([
+    [
+      'Recent',
+      [
+        ['No project', ['loose', 'orphan']],
+        ['No project', ['namesake']],
+      ],
+    ],
   ]);
 });
 
@@ -116,7 +140,7 @@ it('keeps a chat whose project was removed among the conversations', () => {
     sessions: [chat('orphan', 'gateway', '2026-10-20T00:00:00Z', 'gone')],
   });
 
-  expect(names(sections)).toEqual([['Recent', ['orphan']]]);
+  expect(names(sections)).toEqual([['Recent', [['No project', ['orphan']]]]]);
 });
 
 it('shows pinned chats once at the top and restores their date order when unpinned', () => {

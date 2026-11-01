@@ -12,10 +12,12 @@ const sizes = {
   // A room of pages lays its sidebar and page side by side, each filling the height.
   settings: `flex h-[min(44rem,calc(100dvh-6rem))] w-[min(60rem,calc(100vw-3rem))] overflow-hidden ${fullScreen}`,
   // A form rises from the bottom on a phone, where the thumb is, as tall as it needs.
-  // A form and a page scroll as one block: as a flex row, a long one would be held to the
-  // overlay's height and lose its bottom padding under what overflows it.
+  // A form scrolls as one block: as a flex row, a long one would be held to the overlay's height
+  // and lose its bottom padding under what overflows it.
   form: 'block scroll-inset max-h-[calc(100dvh-6rem)] w-[min(28rem,calc(100vw-3rem))] overflow-y-auto phone:top-auto phone:bottom-0 phone:left-0 phone:w-full phone:max-h-[calc(100dvh-env(safe-area-inset-top)-1rem)] phone:translate-0 phone:rounded-b-none phone:pb-[env(safe-area-inset-bottom)]',
-  page: `block scroll-inset max-h-[calc(100dvh-6rem)] w-[min(40rem,calc(100vw-3rem))] overflow-y-auto ${fullScreen}`,
+  // A page scrolls inside the pane, so what floats in its corners is placed from the pane's own
+  // edges: placed inside what scrolls, it would sit a scrollbar further from the right.
+  page: `flex flex-col max-h-[calc(100dvh-6rem)] w-[min(40rem,calc(100vw-3rem))] overflow-hidden ${fullScreen}`,
 };
 
 /**
@@ -29,6 +31,7 @@ export function Overlay({
   title,
   closeButton = true,
   size = 'settings',
+  corner,
   children,
 }: {
   open: boolean;
@@ -41,26 +44,46 @@ export function Overlay({
    * page of settings with no pages beside it.
    */
   size?: keyof typeof sizes;
+  /**
+   * What stays afloat at a `page`'s bottom corner however it is scrolled. The page leaves room
+   * after its end, so nothing stays under it.
+   */
+  corner?: ReactNode;
   children: ReactNode;
 }) {
-  const popup = useRef<HTMLDivElement>(null);
+  const page = useRef<HTMLDivElement>(null);
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/25 backdrop-blur-[3px] transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0" />
         <Dialog.Popup
-          ref={popup}
           // A page is read from its top: focus on its first link or its button at the end would
-          // open it scrolled down to it. A form and a room start on their first control.
-          {...(size === 'page' ? { initialFocus: popup } : {})}
+          // open it scrolled down to it, and focus here lets the keys scroll it. A form and a room
+          // start on their first control.
+          {...(size === 'page' ? { initialFocus: page } : {})}
           className={`glass-strong fixed top-1/2 left-1/2 z-50 ${sizes[size]} -translate-x-1/2 -translate-y-1/2 rounded-[1.375rem] text-ink outline-none transition-[opacity,scale] duration-200 data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0`}
         >
           <Dialog.Title className="sr-only">{title}</Dialog.Title>
-          {children}
+          {size === 'page' ? (
+            <div
+              ref={page}
+              tabIndex={-1}
+              className={`scroll-inset min-h-0 grow overflow-y-auto outline-none ${corner ? 'pb-14' : ''}`}
+            >
+              {children}
+            </div>
+          ) : (
+            children
+          )}
+          {corner && (
+            <div className="absolute right-3.5 bottom-3.5 z-10 phone:bottom-[max(0.875rem,env(safe-area-inset-bottom))]">
+              {corner}
+            </div>
+          )}
           {closeButton && (
             <Dialog.Close
               aria-label="Close"
-              className="absolute top-3.5 right-3.5 grid size-8 place-items-center rounded-full text-muted transition-colors hover:bg-glass-hover hover:text-ink phone:top-[calc(env(safe-area-inset-top)+0.875rem)]"
+              className={`absolute top-3.5 right-3.5 z-10 grid size-8 place-items-center rounded-full text-muted transition-colors hover:bg-glass-hover hover:text-ink phone:top-[calc(env(safe-area-inset-top)+0.875rem)] ${size === 'page' ? 'glass' : ''}`}
             >
               <X size={16} />
             </Dialog.Close>

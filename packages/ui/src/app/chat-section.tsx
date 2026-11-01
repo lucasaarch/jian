@@ -72,8 +72,8 @@ export function ChatSection({
 }
 
 /**
- * A project in the Projects section: its repository's name with GitHub's mark, opening onto its
- * chats beneath it on a guide, as a tree. Folded or not, the choice is kept.
+ * A folder of Recent, opening onto its chats beneath it. Folded or not, the choice is kept. Its
+ * way to start a chat shows only under the pointer: a folder just clicked keeps the focus.
  */
 export function WorkspaceFolder({
   id,
@@ -111,10 +111,8 @@ export function WorkspaceFolder({
         <NewChatButton {...newChat} />
       </div>
       <Fold open={!closed} id={list}>
-        {/* A guide down from the project's mark, and the chats beside it, their names under
-            the project's own. */}
-        <ul className="ml-4.5 flex min-w-0 flex-col gap-px border-l border-glass-edge pt-px pl-0.75 [&>li>button:first-child]:pl-3">
-          <Rows rows={rows} />
+        <ul className="flex min-w-0 flex-col gap-px pt-px">
+          <Rows rows={rows} nested />
         </ul>
       </Fold>
     </li>
@@ -128,7 +126,7 @@ function NewChatButton({ label, start }: { label: string; start: () => void }) {
       onClick={start}
       aria-label={label}
       title={label}
-      className="grid size-6 place-items-center rounded-md text-muted opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-glass-press hover:text-ink focus-visible:opacity-100"
+      className="grid size-6 place-items-center rounded-md text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:bg-glass-press hover:text-ink focus-visible:opacity-100"
     >
       <Plus size={13} />
     </button>
@@ -136,7 +134,7 @@ function NewChatButton({ label, start }: { label: string; start: () => void }) {
 }
 
 /** The first few rows, and a way to the rest. */
-function Rows({ rows }: { rows: ReactNode[] }) {
+function Rows({ rows, nested = false }: { rows: ReactNode[]; nested?: boolean }) {
   const [all, setAll] = useState(false);
   return (
     <>
@@ -146,7 +144,7 @@ function Rows({ rows }: { rows: ReactNode[] }) {
           <button
             type="button"
             onClick={() => setAll(!all)}
-            className="h-7 w-full rounded-lg px-2.5 text-left text-xs text-muted hover:bg-glass-hover hover:text-ink"
+            className={`h-7 w-full rounded-lg pr-2.5 ${nested ? 'pl-8.5' : 'pl-2.5'} text-left text-xs text-muted hover:bg-glass-hover hover:text-ink`}
           >
             {all ? 'Show less' : `Show ${rows.length - FIRST} more`}
           </button>

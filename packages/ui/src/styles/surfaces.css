@@ -104,15 +104,19 @@
     margin-inline: calc(-1 * var(--chat-gutter));
   }
   /* A conversation has no header: its one control floats round in the top corner, over the
-     conversation, and the badges of one with no bar at the bottom in the other. */
+     conversation. One with no bar at the bottom keeps its badges in the bottom corner, where the
+     composer would show them, since a host's own buttons take the top one. */
   .conversation-pane,
   .conversation-column {
     @apply relative;
   }
   .pane-badges {
-    @apply absolute top-3 z-10;
-    /* Clear of the window's own buttons where a host draws them over the top right. */
-    right: calc(var(--window-controls, 0px) + 0.75rem);
+    @apply absolute right-3 z-10;
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+  /* What the conversation leaves after its last message, as it does for a dock. */
+  .conversation-column:has(> .pane-badges .session-badges > *) {
+    --dock-height: 2.5rem;
   }
   /* The objective and the listeners are badges at the end of the row where the chat runs; what
      each one holds opens from it. */

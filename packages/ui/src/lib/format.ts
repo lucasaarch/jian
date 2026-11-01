@@ -14,6 +14,17 @@ export const date = (value?: string) =>
     : '—';
 
 /**
+ * A day with no time of its own, as a release's `2026-10-31`. Read in UTC, as a date with no time
+ * is parsed, so it stays that day west of Greenwich instead of the evening before.
+ */
+export const calendarDate = (value?: string) =>
+  value
+    ? new Intl.DateTimeFormat(LOCALE, { dateStyle: 'short', timeZone: 'UTC' }).format(
+        new Date(value),
+      )
+    : '—';
+
+/**
  * How long ago, in the fewest characters a list can carry: `now`, `5m`, `6h`, `9d`, `3w`, then
  * the date. Past four weeks a count of weeks says less than the day itself.
  */

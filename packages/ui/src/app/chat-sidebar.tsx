@@ -32,7 +32,7 @@ import { useParams, useRouter } from '../platform/navigation';
 import { useChatActions } from './chat-actions';
 import { ChatRow } from './chat-row';
 import { ChatSection, WorkspaceFolder } from './chat-section';
-import { channelKind, chatSections, lastAt, workspaceName } from './chat-sections';
+import { channelKind, chatSections, lastAt, NO_PROJECT, workspaceName } from './chat-sections';
 import { SidebarSkeleton } from './chats-loading';
 
 /** What a conversation is at a glance: the app's own chat, or the channel it came through. */
@@ -46,9 +46,10 @@ function conversationIcon(session: Session) {
 }
 
 /**
- * The chats of the agent in use, down the window's side: a new chat at the top, then Projects,
- * a folder for each, the chats in none, and each channel the agent is reached on. Put away, it
- * leaves the conversation the whole width; `data-chat-sidebar` tells the bar above it so.
+ * The chats of the agent in use, down the window's side: a new chat at the top, then Recent, a
+ * folder for each project and one for the chats on none, and each channel the agent is reached
+ * on. Put away, it leaves the conversation the whole width; `data-chat-sidebar` tells the bar
+ * above it so.
  */
 /**
  * The sidebar's edge, to drag or to move with the arrow keys; a double click gives back the
@@ -233,7 +234,7 @@ function AgentSidebar({ profileId }: { profileId: string }) {
         contacts,
         profiles,
       })}
-      {...(inProject ? {} : { icon: conversationIcon(session) })}
+      {...(inProject ? { nested: true } : { icon: conversationIcon(session) })}
       pinned={session.pinned}
       remote={isRemote(session)}
       pin={() => actions.pin(session)}
@@ -258,25 +259,24 @@ function AgentSidebar({ profileId }: { profileId: string }) {
         {chatSections({ sessions, projects, channels }).map((section) =>
           section.kind === 'recent' ? (
             <ChatSection key={section.id} id={section.id} name={section.name} empty="No chats yet">
-              {section.items.map((item) =>
-                item.kind === 'chat' ? (
-                  row(item.session, false)
-                ) : (
-                  <WorkspaceFolder
-                    key={item.id}
-                    id={item.id}
-                    name={item.name}
-                    rows={item.sessions.map((session) => row(session, true))}
-                    newChat={{
-                      label: `New chat in ${item.name}`,
-                      start: () => {
-                        startOn(choiceOfSession(item.sessions[0] as Session, projects, machine));
-                        router.push(newChatPath(profileId));
-                      },
-                    }}
-                  />
-                ),
-              )}
+              {section.folders.map((folder) => (
+                <WorkspaceFolder
+                  key={folder.id}
+                  id={folder.id}
+                  name={folder.name}
+                  rows={folder.sessions.map((session) => row(session, true))}
+                  newChat={{
+                    label:
+                      folder.id === NO_PROJECT
+                        ? 'New chat with no project'
+                        : `New chat in ${folder.name}`,
+                    start: () => {
+                      startOn(choiceOfSession(folder.sessions[0] as Session, projects, machine));
+                      router.push(newChatPath(profileId));
+                    },
+                  }}
+                />
+              ))}
             </ChatSection>
           ) : (
             <ChatSection key={section.id} id={section.id} name={section.name}>

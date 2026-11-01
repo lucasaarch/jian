@@ -170,7 +170,7 @@ describe('the app’s updates', () => {
     expect(updates.check).not.toHaveBeenCalled();
   });
 
-  it('keeps the status bar quiet until a release is waiting', async () => {
+  it('keeps the status bar quiet until a release is known of', async () => {
     const updates = fakeHost({ status: 'latest', version: '1.1.0', checkedAt: Date.now() });
     await render(
       <>
@@ -178,14 +178,16 @@ describe('the app’s updates', () => {
         <AppUpdates host={updates} />
       </>,
     );
-    expect(button('Update ready')).toBeUndefined();
+    expect(button('Update available')).toBeUndefined();
+    await updates.report({ status: 'available', version: '1.1.0', release });
+    expect(button('Update available')).toBeDefined();
     await updates.report({
       status: 'downloading',
       version: '1.1.0',
       release,
       progress: { percent: 10, transferred: 1, total: 10, bytesPerSecond: 1 },
     });
-    expect(button('Update ready')).toBeUndefined();
+    expect(button('Downloading update')).toBeDefined();
     await updates.report({ status: 'ready', version: '1.1.0', release });
     expect(button('Update ready')).toBeDefined();
   });

@@ -18,14 +18,15 @@ export function workspaceName(session: Session, projects: Project[]): string | u
   return names.length ? names.join(' + ') : undefined;
 }
 
-/** One line of Recent: a chat on nothing in particular, or a folder of the chats on one project. */
-type RecentItem =
-  | { kind: 'chat'; session: Session }
-  | { kind: 'folder'; id: string; name: string; sessions: Session[] };
+/** A folder of Recent: the chats on one project, or those on none. */
+type RecentFolder = { id: string; name: string; sessions: Session[] };
+
+/** The folder of the chats on no project, which a project's own name cannot be mistaken for. */
+export const NO_PROJECT = 'no-project:';
 
 export type ChatSection =
   | { id: 'pinned'; kind: 'pinned'; name: string; sessions: Session[] }
-  | { id: 'recent'; kind: 'recent'; name: string; items: RecentItem[] }
+  | { id: 'recent'; kind: 'recent'; name: string; folders: RecentFolder[] }
   | { id: ChannelKind; kind: 'channel'; channel: ChannelKind; name: string; sessions: Session[] };
 
 const channelSections: { channel: ChannelKind; name: string }[] = [
@@ -47,10 +48,9 @@ export const lastAt = (session: Session) => session.lastMessage?.at ?? session.c
 const newestFirst = (a: Session, b: Session) => lastAt(b).localeCompare(lastAt(a));
 
 /**
- * The sidebar's sections: Recent, the chats on nothing in particular among a folder for each
- * project that has chats, each by when it was last spoken in, a folder's chats likewise; then
- * each channel that is connected or has
- * conversations, in a fixed order, so a channel never moves while it is being read.
+ * The sidebar's sections: Recent, a folder for each project that has chats and one for the chats
+ * on none, each by when it was last spoken in, a folder's chats likewise; then each channel that
+ * is connected or has conversations, in a fixed order, so a channel never moves while it is read.
  */
 export function chatSections({
   sessions,
@@ -66,21 +66,18 @@ export function chatSections({
   const chats = sorted.filter((session) => session.channel === GATEWAY_SESSION_CHANNEL);
   const others = sorted.filter((session) => session.channel !== GATEWAY_SESSION_CHANNEL);
   // By name, so a folder and a repository of that name are one; newest first already, as `chats`.
-  const folders = new Map<string, Session[]>();
-  const items: RecentItem[] = [];
+  const byName = new Map<string, Session[]>();
+  const folders: RecentFolder[] = [];
   for (const session of chats) {
+    // A chat whose project is gone stays reachable among those on none.
     const name = workspaceName(session, projects);
-    if (!name) {
-      // A chat whose project is gone stays reachable here too.
-      items.push({ kind: 'chat', session });
-      continue;
-    }
-    const folder = folders.get(name);
+    const id = name ?? NO_PROJECT;
+    const folder = byName.get(id);
     if (folder) folder.push(session);
     else {
       const sessions = [session];
-      folders.set(name, sessions);
-      items.push({ kind: 'folder', id: name, name, sessions });
+      byName.set(id, sessions);
+      folders.push({ id, name: name ?? 'No project', sessions });
     }
   }
 
@@ -101,7 +98,7 @@ export function chatSections({
     ...(pinned.length
       ? [{ id: 'pinned' as const, kind: 'pinned' as const, name: 'Pinned', sessions: pinned }]
       : []),
-    { id: 'recent' as const, kind: 'recent' as const, name: 'Recent', items },
+    { id: 'recent' as const, kind: 'recent' as const, name: 'Recent', folders },
     ...byChannel,
   ];
 }

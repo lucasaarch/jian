@@ -58,13 +58,10 @@ export function SessionListeners({
   api,
   profileId,
   sessionId,
-  side = 'top',
 }: {
   api: Pick<GatewayApi, 'subscriptions' | 'stopSubscription'>;
   profileId: string;
   sessionId: string;
-  /** Above the composer at the bottom of the screen; below a header at the top. */
-  side?: 'top' | 'bottom';
 }) {
   const client = useQueryClient();
   const [stopping, setStopping] = useState<string>();
@@ -107,7 +104,7 @@ export function SessionListeners({
       <Popover.Portal>
         <Popover.Positioner
           className="select-positioner"
-          side={side}
+          side="top"
           align="end"
           sideOffset={8}
           positionMethod="fixed"

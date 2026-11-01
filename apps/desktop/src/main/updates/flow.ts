@@ -19,10 +19,10 @@ export interface Updater {
 }
 
 /** How often a running app looks, in ms. */
-export const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
+export const CHECK_EVERY_MS = 60 * 60 * 1000;
 /**
  * How soon it looks again after GitHub could not be reached, or had no update files yet, in ms:
- * both pass on their own, and six hours is long to stay behind for either.
+ * both pass on their own, and an hour is long to stay behind for either.
  */
 export const RETRY_MS = 30 * 60 * 1000;
 
@@ -74,7 +74,7 @@ export class UpdateFlow {
     return this.current;
   }
 
-  /** Checks now and keeps checking, every few hours and sooner after a passing failure. */
+  /** Checks now and keeps checking, every hour and sooner after a passing failure. */
   start(): void {
     if (!this.deps.updater || this.started) return;
     this.started = true;

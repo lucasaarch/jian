@@ -154,10 +154,10 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
     (item) => item.sessionId === active.id && item.profileId === profile.id,
   );
   // Where the conversation's objective stands and what it listens for, beside where it runs.
-  const badges = (side: 'top' | 'bottom' = 'top') => (
+  const badges = () => (
     <span className="session-badges">
-      {active.objective && <SessionObjective objective={active.objective} side={side} />}
-      <SessionListeners api={api} profileId={profile.id} sessionId={active.id} side={side} />
+      {active.objective && <SessionObjective objective={active.objective} />}
+      <SessionListeners api={api} profileId={profile.id} sessionId={active.id} />
     </span>
   );
   const waits = activities.find((run) => run.sessionId === active.id && run.status === 'waiting');
@@ -175,7 +175,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
               <div className="conversation-main">
                 <div className="conversation-column">
                   {/* A conversation without a bar at the bottom keeps its badges in the corner. */}
-                  {!docked(active) && <div className="pane-badges">{badges('bottom')}</div>}
+                  {!docked(active) && <div className="pane-badges">{badges()}</div>}
                   <div className="conversation-chat">
                     <div className="conversation-glass-top" aria-hidden="true">
                       <i />

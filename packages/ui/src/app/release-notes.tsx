@@ -7,7 +7,7 @@ import type { LoadedMedia } from '../components/sessions/media';
 import { MediaViewer } from '../components/sessions/viewer';
 import { Markdown, MarkdownImages, MarkdownLink } from '../components/ui/markdown';
 import { Action, Overlay, SettingsRow, Skeleton, StatusPill } from '../kit';
-import { date } from '../lib/format';
+import { calendarDate } from '../lib/format';
 import { panelApi } from '../lib/query/client';
 import { queries } from '../lib/query/profile';
 
@@ -26,7 +26,7 @@ function Notes({ notes, headed }: { notes: Note[]; headed: boolean }) {
           {headed && (
             <h3 className="flex items-baseline gap-2 text-sm font-semibold text-ink">
               {note.version}
-              <small className="font-normal text-muted">{date(note.date)}</small>
+              <small className="font-normal text-muted">{calendarDate(note.date)}</small>
             </h3>
           )}
           {headed && note.summary && <p className="text-sm">{note.summary}</p>}
@@ -126,6 +126,11 @@ function NotesOverlay({
       }}
       title={title}
       size="page"
+      corner={
+        <Action tone="primary" className="shadow-lg" onClick={() => onOpenChange(false)}>
+          Got it
+        </Action>
+      }
     >
       {/* One column as wide as the overlay: left to its content, a long line in a note widens it
           and the whole note goes sideways. */}
@@ -137,14 +142,6 @@ function NotesOverlay({
         <MarkdownImages.Provider value={images}>
           <Notes notes={notes} headed={headed} />
         </MarkdownImages.Provider>
-        {/* Afloat at the corner however long the notes run, and at their end once there. */}
-        <Action
-          tone="primary"
-          className="sticky bottom-5 justify-self-end shadow-lg phone:bottom-[max(1.25rem,env(safe-area-inset-bottom))]"
-          onClick={() => onOpenChange(false)}
-        >
-          Got it
-        </Action>
         {viewing && <MediaViewer items={[viewing]} start={0} close={() => setViewing(undefined)} />}
       </div>
     </Overlay>

@@ -256,7 +256,11 @@ void app.whenReady().then(async () => {
   });
   for (const gateway of store.list()) monitor.watch(gateway);
   // After sleep the gateways moved on without us; ask them at once rather than at the next tick.
-  powerMonitor.on('resume', () => monitor.refresh());
+  // Releases too: a timer does not run while the computer sleeps.
+  powerMonitor.on('resume', () => {
+    monitor.refresh();
+    void updates?.check();
+  });
 
   // From source the Dock shows Electron's icon; the packaged app has its own in the bundle.
   if (process.platform === 'darwin' && !app.isPackaged) {

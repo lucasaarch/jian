@@ -22,14 +22,7 @@ const label = {
  * The conversation's objective as a badge saying where it stands, beside where the chat runs.
  * The goal itself, and why it is blocked, open from it: they are often longer than a line.
  */
-export function SessionObjective({
-  objective,
-  side = 'top',
-}: {
-  objective: NonNullable<Session['objective']>;
-  /** Above the composer at the bottom of the screen; below a header at the top. */
-  side?: 'top' | 'bottom';
-}) {
+export function SessionObjective({ objective }: { objective: NonNullable<Session['objective']> }) {
   return (
     <Popover.Root>
       <Popover.Trigger
@@ -42,7 +35,7 @@ export function SessionObjective({
       <Popover.Portal>
         <Popover.Positioner
           className="select-positioner"
-          side={side}
+          side="top"
           align="end"
           sideOffset={8}
           positionMethod="fixed"

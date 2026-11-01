@@ -25,7 +25,7 @@ export function CopyLine({
   const { copied, failed, copy } = useCopy();
 
   return (
-    <div className="grid gap-1.5 px-3.5 py-2.5">
+    <div className="grid grid-cols-1 gap-1.5 px-3.5 py-2.5">
       <div className="flex items-center gap-3">
         <span className="shrink-0 text-[13px] text-ink">{label}</span>
         <span className="min-w-0 flex-1 truncate text-right font-mono text-[11px] text-muted">
