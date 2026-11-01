@@ -6,6 +6,7 @@ import type {
   ProjectChoice,
   ProtectionMode,
   RequestBody,
+  SessionChanges,
 } from './types';
 
 /**
@@ -141,7 +142,11 @@ export const sessionCalls = (client: Client) => ({
       }),
     ),
   /** A project's working-tree changes; pass a listed path to read that file's diff. */
-  sessionChanges: (profileId: string, sessionId: string, path?: string) =>
+  sessionChanges: (
+    profileId: string,
+    sessionId: string,
+    path?: string,
+  ): Promise<SessionChanges> =>
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/changes', {
         params: { path: { profileId, sessionId }, ...(path ? { query: { path } } : {}) },
