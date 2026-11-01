@@ -1,10 +1,11 @@
 'use client';
 
 import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
-import { Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
+import { History, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { conversationName } from '../../lib/conversation-name';
 import { useAgents, useContacts, useProjects, useSessions } from '../../lib/query/agent';
+import { useReconnect } from '../../lib/stores/reconnect';
 import { useParams } from '../../platform/navigation';
 import { useChatActions } from '../chat-actions';
 import { DeleteChatDialog, RenameDialog } from '../chat-row';
@@ -30,6 +31,15 @@ export function ChatCommands({ profileId }: { profileId: string }) {
     () =>
       session
         ? [
+            {
+              id: 'reload-chat',
+              group: 'Chats',
+              title: 'Reload chat',
+              detail: name,
+              keywords: ['conversation', 'history', 'messages', 'refresh', 'stuck'],
+              icon: <History size={15} />,
+              run: () => useReconnect.getState().reloadChat(),
+            },
             {
               id: 'pin-chat',
               group: 'Chats',

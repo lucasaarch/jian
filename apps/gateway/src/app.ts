@@ -17,6 +17,8 @@ import { registerPanelNotice } from './http/ui.js';
 import type { GitHubIntegrations } from './integrations/github.js';
 import { GitHubItems } from './integrations/github-items.js';
 import { registerIntegrationRoutes } from './integrations/routes.js';
+import type { XIntegration } from './integrations/x/integration.js';
+import { registerXRoutes } from './integrations/x/routes.js';
 import { registerMcpRoutes } from './mcp/routes.js';
 import { registerMediaRoutes } from './media/routes.js';
 import { registerMemoryRoutes } from './memories/routes.js';
@@ -52,6 +54,7 @@ export function createApp(
     providerModels?: ProviderModels;
     skills?: Skills;
     github?: GitHubIntegrations;
+    x?: XIntegration;
     channels?: Channels;
     whatsapp?: WhatsAppConnections;
     /** `local` for the gateway a desktop app runs, which serves no panel notice of its own. */
@@ -145,6 +148,7 @@ export function createApp(
         new GitHubItems(options.github, options.store),
       );
     }
+    if (options.x) registerXRoutes(routes, options.x);
     registerMetaRoutes(routes, options.mode ?? 'server');
     registerSecurityRoutes(routes, options);
     registerSshRoutes(routes, options);

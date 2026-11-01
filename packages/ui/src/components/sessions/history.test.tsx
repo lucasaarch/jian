@@ -2,6 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import type { GatewayApi, Run } from '../../lib/api';
+import { useReconnect } from '../../lib/stores/reconnect';
 import { CrewDrawer } from './crew-drawer';
 import { History } from './history';
 
@@ -656,4 +657,35 @@ it('keeps spawned agents before text written later when the streamed answer beco
     await act(async () => root.unmount());
     element.remove();
   }
+});
+
+it('reads the open chat again when it is asked to, keeping what it showed until then', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const said = (content: string) => ({
+    id: content,
+    profileId: 'profile-reload',
+    sessionId: 'chat-reload',
+    role: 'assistant' as const,
+    content,
+    createdAt: '2026-10-31T10:00:00.000Z',
+  });
+  let answer = 'First answer';
+  const messages = vi.fn(async () => [said(answer)]);
+  const api = { messages, activities: async () => [] } as unknown as GatewayApi;
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () =>
+    root.render(<History api={api} profileId="profile-reload" sessionId="chat-reload" />),
+  );
+  expect(host.textContent).toContain('First answer');
+  const before = messages.mock.calls.length;
+
+  answer = 'Newer answer';
+  await act(async () => useReconnect.getState().reloadChat());
+
+  expect(messages.mock.calls.length).toBe(before + 1);
+  expect(host.textContent).toContain('Newer answer');
+  await act(async () => root.unmount());
+  host.remove();
 });

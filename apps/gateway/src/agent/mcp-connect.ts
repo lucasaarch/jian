@@ -70,6 +70,29 @@ async function collect(
   return resolved;
 }
 
+/**
+ * How long a command has to answer, in ms. Its first run may be `npx -y` downloading it, and one
+ * killed halfway leaves nothing cached, so a short limit would fail the same way for ever.
+ */
+export const STDIO_START_MS = 60_000;
+
+/** How much of what a command says on stderr to hold, in characters. */
+const HELD = 8_000;
+/** How much of it reaches the owner, in characters: a status has room for 300 in all. */
+const LAST_WORDS = 220;
+
+/**
+ * The last thing a failed command said, without any value it was given. Redacted before it is cut,
+ * so a cut can never leave part of a value behind.
+ */
+function lastWords(said: string, env: Record<string, string>): string {
+  const clean = Object.values(env).reduce(
+    (text, value) => (value ? text.replaceAll(value, '[REDACTED]') : text),
+    said,
+  );
+  return clean.trim().replace(/\s+/g, ' ').slice(-LAST_WORDS);
+}
+
 export type McpConnection = {
   server: McpServer;
   vault: SecretReader;
@@ -96,16 +119,28 @@ export async function connectMcp(connection: McpConnection): Promise<MCPClient> 
   const env = connection.env ?? process.env;
 
   if (server.transport === 'stdio') {
-    return createNegotiatedMcpClient({
-      transport: stdioTransport({
-        command: server.command as string,
-        args: server.args,
-        env: await collect(server, 'env', server.env, vault, env),
-        signal: connection.lifetime ?? signal,
-      }),
-      initializationOptions: { signal, timeout: 15_000 },
-      maxRetries: 0,
-    });
+    const values = await collect(server, 'env', server.env, vault, env);
+    let said = '';
+    try {
+      return await createNegotiatedMcpClient({
+        transport: stdioTransport({
+          command: server.command as string,
+          args: server.args,
+          env: values,
+          signal: connection.lifetime ?? signal,
+          said: (text) => {
+            said = (said + text).slice(-HELD);
+          },
+        }),
+        initializationOptions: { signal, timeout: STDIO_START_MS },
+        maxRetries: 0,
+      });
+    } catch (error) {
+      // Only the command knows why it did not answer: a login it waits for, a package not found.
+      const words = lastWords(said, values);
+      const reason = error instanceof Error ? error.message : 'The command did not answer';
+      throw words ? new Error(`${reason}. The command said: ${words}`) : error;
+    }
   }
 
   const headers =

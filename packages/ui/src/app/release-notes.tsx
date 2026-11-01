@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { LoadedMedia } from '../components/sessions/media';
 import { MediaViewer } from '../components/sessions/viewer';
 import { Markdown, MarkdownImages, MarkdownLink } from '../components/ui/markdown';
-import { Action, Overlay, SettingsRow, Skeleton, StatusPill } from '../kit';
+import { Action, Overlay, OverlayActions, SettingsRow, Skeleton, StatusPill } from '../kit';
 import { calendarDate } from '../lib/format';
 import { panelApi } from '../lib/query/client';
 import { queries } from '../lib/query/profile';
@@ -126,22 +126,22 @@ function NotesOverlay({
       }}
       title={title}
       size="page"
-      corner={
-        <Action tone="primary" className="shadow-lg" onClick={() => onOpenChange(false)}>
-          Got it
-        </Action>
-      }
     >
       {/* One column as wide as the overlay: left to its content, a long line in a note widens it
           and the whole note goes sideways. */}
-      <div className="grid w-full grid-cols-1 gap-6 p-7 phone:p-5">
-        <header className="grid gap-1 pr-8">
+      <div className="grid w-full grid-cols-1 gap-6 p-7">
+        <header className="grid gap-1 pr-10">
           <h2 className="font-sans text-xl font-semibold tracking-tight">{title}</h2>
           {description && <p className="text-sm">{description}</p>}
         </header>
         <MarkdownImages.Provider value={images}>
           <Notes notes={notes} headed={headed} />
         </MarkdownImages.Provider>
+        <OverlayActions>
+          <Action tone="primary" onClick={() => onOpenChange(false)}>
+            Got it
+          </Action>
+        </OverlayActions>
         {viewing && <MediaViewer items={[viewing]} start={0} close={() => setViewing(undefined)} />}
       </div>
     </Overlay>

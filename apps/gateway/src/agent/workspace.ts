@@ -1,44 +1,37 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
-import { type FileHandle, mkdir, open, readlink, realpath } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { type FileHandle, mkdir, open, readlink, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
+import { onOwnerComputer, ownerComputer, workspaceHome, workspacesRoot } from './workspace-home.js';
 
 /**
- * Each profile with the shell switch on works in a directory of its own, and nowhere else.
+ * What an agent's commands and file tools may touch. Every agent of an installation shares one
+ * filesystem (see workspace-home.ts); what is held off here is the gateway, not other agents.
  *
- * The directory is the profile's `HOME`: its repositories, Git configuration, SSH keys and
- * per-user installs live there, and its `TMPDIR` too. Principal turns and conversation
- * subagents share this same workspace; Jian does not give a subagent a separate home or
- * forced Git worktree. Two mechanisms hold the line between *profiles*:
+ * On a server, the line is the shared directory, and two mechanisms hold it:
  *
- * - A command runs under `jian-sandbox`, which asks the kernel (Landlock) to allow writes in
- *   that directory only, reads of the system's tools besides, and nothing else — not another
- *   profile's directory, not the gateway's files, not the gateway's process in /proc. Landlock
- *   needs no privilege, so it works where user namespaces and a second container do not:
- *   Kubernetes, PaaS hosts, a container with no-new-privileges.
- * - The file tools, `send_file` and `save_file` run inside the gateway, not in a command, so
- *   the same line is checked here: the real path, symlinks resolved, and for a file actually
+ * - A command runs under `jian-sandbox`, which asks the kernel (Landlock) to allow writes in that
+ *   directory only, reads of the system's tools besides, and nothing else: not the gateway's
+ *   files, not the gateway's process in /proc. Landlock needs no privilege, so it works where
+ *   user namespaces and a second container do not: Kubernetes, PaaS hosts, a container with
+ *   no-new-privileges.
+ * - The file tools, `send_file` and `save_attachment` run inside the gateway, not in a command,
+ *   so the same line is checked here: the real path, symlinks resolved, and for a file actually
  *   opened, the path of the open descriptor.
  *
  * A kernel without Landlock (before 5.13, or with it left out of the LSM list) still gets the
- * separate directory and the checks on the file tools, but its commands are not confined; the
- * gateway says so in its log once. The network is not confined either way.
+ * checks on the file tools, but its commands are not confined; the gateway says so in its log
+ * once. The network is not confined either way.
+ *
+ * On a desktop, the local gateway works for the owner on the owner's own computer, and the file
+ * tools reach whatever the owner's user can, except Jian's own data: the database and credentials
+ * in the app's data directory. That refusal binds the file tools ONLY. Commands are not confined
+ * on a desktop, so a command can read those files, and they keep Jian's data from a careless or
+ * misled tool call rather than from a determined agent. Do not describe it as more than that.
  */
 
-/** A profile id names a directory, so it must be nothing but an id. */
-const PROFILE_ID = /^[0-9a-f-]{36}$/;
-
-/** Legacy path for older installs that kept per-run worker homes under `_workers/`. */
-export function workerWorkspacePath(profileId: string, workerId: string): string {
-  if (!PROFILE_ID.test(profileId) || !PROFILE_ID.test(workerId)) {
-    throw new Error('Invalid worker workspace id');
-  }
-  return join(workspacesRoot(), '_workers', profileId, workerId);
-}
-
-/** The system a profile may read: its programs, libraries and configuration. */
+/** The system a file tool on a server may read: its programs, libraries and configuration. */
 const SYSTEM = [
   '/usr',
   '/bin',
@@ -60,7 +53,7 @@ const SYSTEM = [
  */
 const COMMAND_READS = [...SYSTEM, '/proc', '/sys', '/dev'];
 
-/** The devices a shell writes to. /dev/shm is left out: it would be shared between profiles. */
+/** The devices a shell writes to. /dev/shm is left out: it is memory outside the shared directory. */
 const DEVICES = [
   '/dev/null',
   '/dev/zero',
@@ -71,33 +64,6 @@ const DEVICES = [
   '/dev/ptmx',
   '/dev/pts',
 ];
-
-/** Where the workspaces live; a volume should be mounted over it (or over the home above). */
-export function workspacesRoot(): string {
-  return resolve(process.env.JIAN_WORKSPACES || join(homedir(), 'workspaces'));
-}
-
-/** The profile's directory, created on first use and readable by this user alone. */
-export async function workspaceOf(profileId: string): Promise<string> {
-  if (!PROFILE_ID.test(profileId)) {
-    throw new Error('Invalid profile id');
-  }
-
-  const home = join(workspacesRoot(), profileId);
-
-  await mkdir(join(home, 'tmp'), { recursive: true, mode: 0o700 });
-
-  return realpath(home);
-}
-
-/** A project conversation's own checkout, which its instructions name and its clone defaults to. */
-export async function projectCheckout(
-  profileId: string,
-  projectId: string,
-  sessionId: string,
-): Promise<string> {
-  return join(await workspaceOf(profileId), 'projects', projectId, 'sessions', sessionId);
-}
 
 const inside = (path: string, root: string) => path === root || path.startsWith(`${root}${sep}`);
 
@@ -126,7 +92,7 @@ export type Access = 'read' | 'write';
 
 /**
  * The owner's folders the tool running now may reach, held for the length of its call so that every
- * check below sees them, whoever asks, and no other conversation of the profile does.
+ * check below sees them, whoever asks, and no other conversation does.
  */
 const openFolders = new AsyncLocalStorage<readonly string[]>();
 
@@ -140,48 +106,94 @@ export const reachableFolders = (): readonly string[] => openFolders.getStore() 
 /** What a chat's folders really are, since the checks compare real paths. */
 export const realFolders = (folders: readonly string[]) => Promise.all(folders.map(realOf));
 
-function assertWithin(real: string, home: string, access: Access, asked: string) {
+/**
+ * What the file tools refuse on a desktop, as real paths, or undefined on a server. Besides the
+ * app's data: the gateway's process and the app that started it, whose environment and memory on
+ * Linux hold the master key, and the descriptors the gateway itself has open, which on macOS are
+ * no symlink a real path would resolve.
+ */
+export async function jianData(): Promise<{ closed: string[]; open: string } | undefined> {
+  const local = ownerComputer();
+  if (!local) return undefined;
+
+  return {
+    closed: [
+      await realOf(local.appData),
+      `/proc/${process.pid}`,
+      `/proc/${process.ppid}`,
+      '/dev/fd',
+    ],
+    // What agents worked in before: earlier work and the paths recorded in it stay valid.
+    open: await realOf(workspacesRoot()),
+  };
+}
+
+async function assertWithin(real: string, access: Access, asked: string) {
+  const data = await jianData();
+
+  if (data) {
+    // The folder left open is checked on the real path, so a link in it leads nowhere closed.
+    if (!inside(real, data.open) && data.closed.some((root) => inside(real, root))) {
+      throw new Error(
+        `${asked} is Jian's own data (its database and credentials), which the file tools do not open. Everything else this computer's user can reach is open to them.`,
+      );
+    }
+    return;
+  }
+
+  const home = await workspaceHome();
   const allowed = [...(access === 'write' ? [home] : [home, ...SYSTEM]), ...reachableFolders()];
 
   if (!allowed.some((root) => inside(real, root))) {
     throw new Error(
       access === 'write'
-        ? `${asked} is outside your workspace. Write only under ${home}`
-        : `${asked} is outside your workspace. Read only under ${home}, or the system directories (${SYSTEM.join(', ')})`,
+        ? `${asked} is outside the directory the agents share. Write only under ${home}`
+        : `${asked} is outside the directory the agents share. Read only under ${home}, or the system directories (${SYSTEM.join(', ')})`,
     );
   }
 }
 
-/** The real path, refused when it leads out of what the profile may reach. */
-export async function confine(profileId: string, path: string, access: Access): Promise<string> {
-  const home = await workspaceOf(profileId);
+/** The real path, refused when it leads out of what the file tools may reach. */
+export async function confine(path: string, access: Access): Promise<string> {
   const real = await realOf(path);
 
-  assertWithin(real, home, access, path);
+  await assertWithin(real, access, path);
 
   return real;
 }
 
 /**
  * Checked again on the descriptor: a symlink swapped in after `confine` would otherwise send the
- * gateway to a file the profile may not touch. Where /proc is missing (a development machine
- * that is not Linux) the path check is all there is.
+ * gateway to a file it may not touch. Where /proc is missing, as on macOS, there is no asking a
+ * descriptor for its path, so the path is resolved again and must still be the same file: a swap
+ * undone in between can slip past that, which a desktop's unconfined commands could do anyway.
  */
-async function assertOpened(handle: FileHandle, profileId: string, access: Access, path: string) {
+async function assertOpened(handle: FileHandle, real: string, access: Access, path: string) {
   const opened = await readlink(`/proc/self/fd/${handle.fd}`).catch(() => undefined);
 
   if (opened !== undefined) {
-    assertWithin(opened, await workspaceOf(profileId), access, path);
+    await assertWithin(opened, access, path);
+    return;
+  }
+
+  const again = await realOf(real);
+
+  await assertWithin(again, access, path);
+
+  const [held, there] = await Promise.all([handle.stat(), stat(real)]);
+
+  if (again !== real || held.dev !== there.dev || held.ino !== there.ino) {
+    throw new Error(`${path} changed while it was being opened; try again`);
   }
 }
 
 /** Opens a file to read, only when it is within reach. The caller closes it. */
-export async function openToRead(profileId: string, path: string): Promise<FileHandle> {
-  const real = await confine(profileId, path, 'read');
+export async function openToRead(path: string): Promise<FileHandle> {
+  const real = await confine(path, 'read');
   const handle = await open(real, constants.O_RDONLY | constants.O_NOFOLLOW);
 
   try {
-    await assertOpened(handle, profileId, 'read', path);
+    await assertOpened(handle, real, 'read', path);
   } catch (error) {
     await handle.close();
     throw error;
@@ -191,16 +203,15 @@ export async function openToRead(profileId: string, path: string): Promise<FileH
 }
 
 /**
- * Writes a whole file inside the workspace, creating its folders. `exclusive` refuses a file
- * that already exists. The file is truncated only after the descriptor is known to be inside.
+ * Writes a whole file within reach, creating its folders. `exclusive` refuses a file that already
+ * exists. The file is truncated only after the descriptor is known to be within reach.
  */
 export async function writeInWorkspace(
-  profileId: string,
   path: string,
   data: string | Uint8Array,
   { exclusive = false }: { exclusive?: boolean } = {},
 ): Promise<string> {
-  const real = await confine(profileId, path, 'write');
+  const real = await confine(path, 'write');
 
   await mkdir(dirname(real), { recursive: true });
 
@@ -214,7 +225,7 @@ export async function writeInWorkspace(
   );
 
   try {
-    await assertOpened(handle, profileId, 'write', path);
+    await assertOpened(handle, real, 'write', path);
     await handle.truncate(0);
     await handle.writeFile(data);
   } finally {
@@ -241,7 +252,7 @@ export function sandboxAbi(): Promise<number> {
 
         if (abi < 1) {
           console.warn(
-            `Shell commands run without Landlock confinement: ${error ? `${path} is not available` : 'this kernel does not offer it'}. Each profile keeps its own directory, but a command can read what the gateway's user can.`,
+            `Shell commands run without Landlock confinement: ${error ? `${path} is not available` : 'this kernel does not offer it'}. The file tools still keep to the shared directory, but a command can read what the gateway's user can.`,
           );
         }
 
@@ -256,7 +267,8 @@ export function sandboxAbi(): Promise<number> {
 
 /**
  * The program and arguments that run `program` confined to `home`, or unchanged when this
- * kernel offers no confinement.
+ * kernel offers no confinement. On a desktop a command is never confined, whatever is installed:
+ * it runs as the owner, on the owner's work, and a helper found on the PATH must not change that.
  */
 export async function confined(
   home: string,
@@ -264,7 +276,7 @@ export async function confined(
   args: string[],
   extra: { readOnly?: string[]; writable?: string[] } = {},
 ): Promise<{ file: string; args: string[] }> {
-  if ((await sandboxAbi()) < 1) {
+  if (onOwnerComputer() || (await sandboxAbi()) < 1) {
     return { file: program, args };
   }
 

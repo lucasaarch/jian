@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
   mkdirSync,
   mkdtempSync,
@@ -14,12 +15,13 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { profileTools } from '../src/agent/tools.js';
 import { sandboxAbi } from '../src/agent/workspace.js';
+import { projectCheckout } from '../src/agent/workspace-home.js';
 import { Decisions } from '../src/decisions/service.js';
 import { testServices } from './helpers/services.js';
 
 const model = { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' };
 
-// Every profile of this file works under a throwaway root, never under the real home.
+// Every agent of this file works under a throwaway root, never under the real home.
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'jian-workspaces-')));
 const saved = {
   JIAN_WORKSPACES: process.env.JIAN_WORKSPACES,
@@ -88,7 +90,7 @@ async function toolsFor(allowShell: boolean) {
 
   const tools = profileTools({ ...services, decisions, store: services.store }, run);
 
-  return { tools, home: join(root, profile.id) };
+  return { tools, home: root };
 }
 
 const call = async (tool: unknown, input: unknown) =>
@@ -126,7 +128,7 @@ describe('running commands on the machine the gateway runs on', () => {
     expect(await sh(tools.run_command, 'exit 3')).toMatchObject({ exitCode: 3 });
   });
 
-  it('starts in the profile workspace, which is its home and holds its temporary files', async () => {
+  it('starts in the shared directory, which is its home and holds its temporary files', async () => {
     const { tools, home } = await toolsFor(true);
 
     expect(await sh(tools.run_command, 'pwd; echo "$HOME"; echo "$TMPDIR"')).toMatchObject({
@@ -169,37 +171,43 @@ describe('running commands on the machine the gateway runs on', () => {
   });
 
   it.skipIf(!kernelConfines)(
-    "keeps a command out of another profile's workspace and the gateway's process",
+    "lets two agents share files while a command stays out of the gateway's files and process",
     async () => {
       const mine = await toolsFor(true);
       const theirs = await toolsFor(true);
-      const secret = join(theirs.home, 'id_ed25519');
+      const beside = realpathSync(mkdtempSync(join(tmpdir(), 'jian-gateway-files-')));
+      const gatewayFile = join(beside, 'gateway-file');
 
-      await sh(theirs.tools.run_command, 'echo private > id_ed25519');
-      expect(readFileSync(secret, 'utf8')).toBe('private\n');
+      writeFileSync(gatewayFile, 'gateway');
 
-      // Its own workspace is open to it.
-      expect(await sh(mine.tools.run_command, 'echo mine > notes && cat notes')).toMatchObject({
+      // What one agent writes, another reads and changes.
+      await sh(theirs.tools.run_command, 'echo shared > landlock-notes');
+      expect(await sh(mine.tools.run_command, `cat ${join(root, 'landlock-notes')}`)).toMatchObject(
+        {
+          exitCode: 0,
+          stdout: 'shared\n',
+        },
+      );
+      expect(await sh(mine.tools.run_command, 'echo changed > landlock-notes')).toMatchObject({
         exitCode: 0,
-        stdout: 'mine\n',
       });
+      expect(readFileSync(join(root, 'landlock-notes'), 'utf8')).toBe('changed\n');
 
-      // Another profile's is not, neither to read nor to write, and not through a link.
-      expect((await sh(mine.tools.run_command, `cat ${secret}`)).exitCode).not.toBe(0);
+      // The gateway is not open: its files beside the directory, to read, to write, through a link.
+      expect((await sh(mine.tools.run_command, `cat ${gatewayFile}`)).exitCode).not.toBe(0);
+      expect((await sh(mine.tools.run_command, `echo x > ${beside}/planted`)).exitCode).not.toBe(0);
       expect(
-        (await sh(mine.tools.run_command, `echo x > ${theirs.home}/planted`)).exitCode,
-      ).not.toBe(0);
-      expect(
-        (await sh(mine.tools.run_command, `ln -s ${secret} link && cat link`)).stdout,
-      ).not.toContain('private');
+        (
+          await sh(
+            mine.tools.run_command,
+            `ln -sf ${gatewayFile} landlock-link && cat landlock-link`,
+          )
+        ).stdout,
+      ).not.toContain('gateway');
 
-      // Nor the gateway: its environment in /proc, and files beside the workspaces.
+      // Nor its environment in /proc.
       expect(
         (await sh(mine.tools.run_command, `cat /proc/${process.pid}/environ`)).exitCode,
-      ).not.toBe(0);
-      writeFileSync(join(root, 'gateway-file'), 'gateway');
-      expect(
-        (await sh(mine.tools.run_command, `cat ${join(root, 'gateway-file')}`)).exitCode,
       ).not.toBe(0);
 
       // The system's tools still run.
@@ -210,7 +218,7 @@ describe('running commands on the machine the gateway runs on', () => {
     },
   );
 
-  it('reads, writes and lists paths in the workspace', async () => {
+  it('reads, writes and lists paths in the shared directory', async () => {
     const { tools, home } = await toolsFor(true);
     const file = join(home, 'note.txt');
 
@@ -229,28 +237,63 @@ describe('running commands on the machine the gateway runs on', () => {
     });
   });
 
-  it("keeps the file tools in the workspace, links included, while the system's files stay readable", async () => {
+  it('shows two agents the same files, through the file tools as through a command', async () => {
     const mine = await toolsFor(true);
     const theirs = await toolsFor(true);
-    const secret = join(theirs.home, 'secret.txt');
+    const file = join(root, 'handoff.txt');
 
-    // A workspace is made on first use; neither profile has used one yet.
-    mkdirSync(mine.home, { recursive: true });
-    mkdirSync(theirs.home, { recursive: true });
-    writeFileSync(secret, 'private');
-    symlinkSync(secret, join(mine.home, 'link.txt'));
-
-    const read = (path: string) => call(mine.tools.read_file, { path, offset: 1, limit: 10 });
-
-    await expect(read(secret)).rejects.toThrow('outside your workspace');
-    await expect(read(join(mine.home, 'link.txt'))).rejects.toThrow('outside your workspace');
-    await expect(read('/proc/self/environ')).rejects.toThrow('outside your workspace');
+    await call(theirs.tools.write_file, { path: file, content: 'from one agent\n' });
     await expect(
-      call(mine.tools.write_file, { path: join(theirs.home, 'planted.txt'), content: 'x' }),
-    ).rejects.toThrow('outside your workspace');
-    await expect(call(mine.tools.list_directory, { path: theirs.home })).rejects.toThrow(
-      'outside your workspace',
+      call(mine.tools.read_file, { path: file, offset: 1, limit: 10 }),
+    ).resolves.toMatchObject({ content: '1\tfrom one agent' });
+    await call(mine.tools.write_file, { path: file, content: 'from another\n' });
+    expect(readFileSync(file, 'utf8')).toBe('from another\n');
+  });
+
+  it('keeps an earlier per-profile folder within reach, as a subfolder', async () => {
+    const { tools } = await toolsFor(true);
+    const earlier = join(root, '11111111-1111-4111-8111-111111111111', 'project');
+    const recorded = join(earlier, 'notes.txt');
+
+    mkdirSync(earlier, { recursive: true });
+    writeFileSync(recorded, 'kept');
+
+    await expect(
+      call(tools.read_file, { path: recorded, offset: 1, limit: 10 }),
+    ).resolves.toMatchObject({ content: '1\tkept' });
+  });
+
+  it('puts a new checkout in the shared directory, and keeps one an earlier version made', async () => {
+    const [profile, project, session] = [randomUUID(), randomUUID(), randomUUID()];
+
+    expect(await projectCheckout(profile, project, session)).toBe(
+      join(root, 'projects', project, 'sessions', session),
     );
+
+    const earlier = join(root, profile, 'projects', project, 'sessions', session);
+    mkdirSync(earlier, { recursive: true });
+
+    expect(await projectCheckout(profile, project, session)).toBe(earlier);
+  });
+
+  it("keeps the file tools in the shared directory, links included, while the system's files stay readable", async () => {
+    const { tools } = await toolsFor(true);
+    const beside = realpathSync(mkdtempSync(join(tmpdir(), 'jian-gateway-files-')));
+    const secret = join(beside, 'secret.txt');
+    const refused = 'outside the directory the agents share';
+
+    writeFileSync(secret, 'gateway');
+    symlinkSync(secret, join(root, 'link.txt'));
+
+    const read = (path: string) => call(tools.read_file, { path, offset: 1, limit: 10 });
+
+    await expect(read(secret)).rejects.toThrow(refused);
+    await expect(read(join(root, 'link.txt'))).rejects.toThrow(refused);
+    await expect(read('/proc/self/environ')).rejects.toThrow(refused);
+    await expect(
+      call(tools.write_file, { path: join(beside, 'planted.txt'), content: 'x' }),
+    ).rejects.toThrow(refused);
+    await expect(call(tools.list_directory, { path: beside })).rejects.toThrow(refused);
     await expect(read('/etc/hosts')).resolves.toMatchObject({ path: realpathSync('/etc/hosts') });
   });
 
@@ -268,7 +311,7 @@ describe('running commands on the machine the gateway runs on', () => {
 describe('working on code', () => {
   const workspace = async () => {
     const { tools, home } = await toolsFor(true);
-    const directory = join(home, 'project');
+    const directory = join(home, randomUUID());
     const file = join(directory, 'app.ts');
 
     mkdirSync(directory, { recursive: true });

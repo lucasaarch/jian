@@ -22,7 +22,7 @@ Copyright (c) 2026 DietrichGebert. Licensed under the MIT License.
 - Source: <https://github.com/DietrichGebert/ponytail>
 - Commit: `e3ba2aa6f1e6f0bc4d69eb09c9f0d0a93af56156`
 
-The six skill instructions were adapted to Jian's tools and runtime. Jian does not include
+Two of its skills were adapted and merged to Jian's tools and runtime. Jian does not include
 Ponytail's Codex or Claude hooks. The MIT permission notice follows:
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software

@@ -617,6 +617,13 @@
       "when": 1793490120000,
       "tag": "0087_session-workspace",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1793490180000,
+      "tag": "0088_x-integration",
+      "breakpoints": true
     }
   ]
 }

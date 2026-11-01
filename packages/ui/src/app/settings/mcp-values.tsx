@@ -96,10 +96,11 @@ export function McpValues({
         </div>
       )}
       <div className="flex items-start justify-between gap-4">
-        <small className="text-xs leading-snug text-muted">{hint}</small>
+        <small className="min-w-0 text-xs leading-snug text-muted">{hint}</small>
         <Action
-          tone="quiet"
+          tone="outline"
           size="small"
+          className="shrink-0"
           disabled={busy || list.length >= MAX_VALUE_ROWS}
           onClick={() => onChange([...list, blankValue()])}
         >

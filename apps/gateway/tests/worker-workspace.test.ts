@@ -15,8 +15,9 @@ import type { Run } from '@jian/contracts';
 import { afterAll, expect, it } from 'vitest';
 import { fileTools } from '../src/agent/files.js';
 import { shellTools } from '../src/agent/shell.js';
-import { prepareWorkerWorkspace, removeWorkerWorkspace } from '../src/agent/worker-workspace.js';
-import { sandboxAbi, workerWorkspacePath, workspaceOf } from '../src/agent/workspace.js';
+import { prepareWorkerWorkspace } from '../src/agent/worker-workspace.js';
+import { sandboxAbi } from '../src/agent/workspace.js';
+import { workspaceHome } from '../src/agent/workspace-home.js';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'jian-worker-')));
 const previous = process.env.JIAN_WORKSPACES;
@@ -39,8 +40,8 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-it('gives subagents the same profile workspace as the principal, not a separate worktree', async () => {
-  const home = await workspaceOf(profileId);
+it('gives subagents the directory every agent shares, not a separate worktree', async () => {
+  const home = await workspaceHome();
   const source = join(home, 'project');
   const sibling = join(home, 'sibling');
   mkdirSync(source);
@@ -69,11 +70,11 @@ it('gives subagents the same profile workspace as the principal, not a separate 
   await prepareWorkerWorkspace(second);
 
   // Same HOME for every worker id — no _workers/<run> directory is created.
-  expect(await workspaceOf(profileId)).toBe(home);
-  expect(existsSync(workerWorkspacePath(profileId, firstId))).toBe(false);
+  expect(await workspaceHome()).toBe(home);
+  expect(existsSync(join(home, '_workers'))).toBe(false);
   expect(existsSync(join(home, 'repos'))).toBe(false);
 
-  const tools = fileTools(profileId);
+  const tools = fileTools();
   await call(tools.read_file, { path: join(source, 'file.txt'), offset: 1, limit: 10 });
   await call(tools.write_file, { path: join(source, 'file.txt'), content: 'worker edit' });
   expect(readFileSync(join(source, 'file.txt'), 'utf8')).toBe('worker edit');
@@ -89,7 +90,7 @@ it('gives subagents the same profile workspace as the principal, not a separate 
     ]),
   });
 
-  const shell = shellTools(profileId, gitAccess).run_command;
+  const shell = shellTools(gitAccess).run_command;
   expect(await call(shell, { command: 'pwd', timeoutMs: 10_000 })).toMatchObject({
     exitCode: 0,
     stdout: `${home}\n`,
@@ -103,37 +104,31 @@ it('gives subagents the same profile workspace as the principal, not a separate 
   await prepareWorkerWorkspace(worker('44444444-4444-4444-8444-444444444444', [source]));
   rmSync(join(source, 'dirty.txt'));
 
+  // Outside the shared directory, whether named outright or through a link in it.
+  const outside = realpathSync(mkdtempSync(join(tmpdir(), 'jian-worker-outside-')));
   await expect(
-    prepareWorkerWorkspace(worker('55555555-5555-4555-8555-555555555555', [root])),
-  ).rejects.toThrow('inside this agent');
+    prepareWorkerWorkspace(worker('55555555-5555-4555-8555-555555555555', [outside])),
+  ).rejects.toThrow('inside the directory the agents share');
 
   const linked = join(home, 'linked');
-  symlinkSync(root, linked);
+  symlinkSync(outside, linked);
   await expect(
     prepareWorkerWorkspace(worker('66666666-6666-4666-8666-666666666666', [linked])),
-  ).rejects.toThrow('inside this agent');
-
-  // Legacy cleanup still removes old isolated worker homes if present.
-  const legacy = workerWorkspacePath(profileId, firstId);
-  mkdirSync(join(legacy, 'repos', '1'), { recursive: true });
-  writeFileSync(join(legacy, 'scratch.txt'), 'old');
-  await removeWorkerWorkspace(profileId, firstId, [source]);
-  expect(existsSync(legacy)).toBe(false);
-  expect(existsSync(source)).toBe(true);
+  ).rejects.toThrow('inside the directory the agents share');
+  rmSync(outside, { recursive: true, force: true });
 });
 
-it('lets Git SSH use the profile key from the shared workspace', async () => {
+it('lets Git SSH use a key from the shared directory', async () => {
   const owner = '88888888-8888-4888-8888-888888888888';
-  const home = await workspaceOf(owner);
+  const home = await workspaceHome();
   const ssh = join(home, '.ssh');
-  mkdirSync(ssh, { mode: 0o700 });
+  mkdirSync(ssh, { recursive: true, mode: 0o700 });
   writeFileSync(join(ssh, 'id_ed25519'), '-----BEGIN OPENSSH PRIVATE KEY-----\nsynthetic\n');
   writeFileSync(join(ssh, 'config'), 'Host bitbucket.org\n  User git\n');
   writeFileSync(join(ssh, 'known_hosts'), 'bitbucket.org synthetic-host-key\n');
   const runId = '99999999-9999-4999-8999-999999999999';
   const access = await prepareWorkerWorkspace(worker(runId, [], owner));
-  expect(existsSync(workerWorkspacePath(owner, runId))).toBe(false);
-  const shell = shellTools(owner, access).run_command;
+  const shell = shellTools(access).run_command;
   const config = (await call(shell, {
     command: 'eval "$GIT_SSH_COMMAND -G bitbucket.org"',
     timeoutMs: 10_000,
@@ -148,11 +143,10 @@ it('lets Git SSH use the profile key from the shared workspace', async () => {
     }),
   ).toMatchObject({ exitCode: 0, stdout: 'git@bitbucket.org:harbor-labs/ledger.git\n' });
   if ((await sandboxAbi()) > 0) {
-    // Profile isolation still holds: another profile's home is not writable.
-    const other = await workspaceOf(profileId);
+    // The line that holds is the gateway's: outside the shared directory is not writable.
     expect(
       await call(shell, {
-        command: `printf corrupted > '${join(other, 'planted.txt')}'`,
+        command: `printf corrupted > '${join(`${root}-beside`, 'planted.txt')}'`,
         timeoutMs: 10_000,
       }),
     ).not.toMatchObject({ exitCode: 0 });

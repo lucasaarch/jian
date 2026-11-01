@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { skillFields, skillFrom } from '../../components/skills/skill-fields';
-import { Action, Overlay, StatusPill, TextArea, TextField } from '../../kit';
+import { Action, Overlay, OverlayActions, StatusPill, TextArea, TextField } from '../../kit';
 import type { Skill } from '../../lib/api';
 import { SkillInstructions } from './skill-reading';
 
@@ -59,7 +59,7 @@ function SkillForm({
         onSave(skillFrom(new FormData(event.currentTarget), skill));
       }}
     >
-      <header className="grid gap-1.5 pr-6">
+      <header className="grid gap-1.5 pr-10">
         <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
           <span className="truncate">{skill ? skill.name : 'Create a skill'}</span>
           {source && <StatusPill>{source}</StatusPill>}
@@ -103,7 +103,7 @@ function SkillForm({
           onChange={(event) => setInstructions(event.target.value)}
         />
       )}
-      <div className="flex items-center gap-2">
+      <OverlayActions>
         {skill && onRemove && (
           <Action tone="danger" className="bg-bad/10" disabled={busy} onClick={onRemove}>
             Remove
@@ -123,7 +123,7 @@ function SkillForm({
         <Action tone="primary" type="submit" busy={busy}>
           {skill ? 'Save' : 'Create'}
         </Action>
-      </div>
+      </OverlayActions>
     </form>
   );
 }

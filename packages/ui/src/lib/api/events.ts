@@ -3,6 +3,13 @@ import { gatewayConnection } from '../../platform/gateway';
 export type GatewayEvent = { id: number; type: string; data?: unknown };
 
 /**
+ * How long a stream may say nothing before it is given up as dead, in ms. The gateway says
+ * something at least every 25 seconds. A connection lost without a word, as after a computer sleeps
+ * or a network changes, never fails by itself: only this notices it.
+ */
+const QUIET_MS = 60_000;
+
+/**
  * The panel authenticates with a cookie plus a custom header, which EventSource cannot send, so
  * the stream is read from a plain response body. The call resolves when the stream ends.
  *
@@ -16,18 +23,46 @@ export async function readEvents(
   signal: AbortSignal,
 ): Promise<void> {
   const { origin, headers, credentials } = gatewayConnection();
-  const response = await fetch(`${origin}/v1/profiles/${profileId}/events/stream?after=${after}`, {
-    headers,
-    credentials,
-    cache: 'no-store',
-    signal,
-  });
+  const quiet = new AbortController();
+  let reader: ReadableStreamDefaultReader<string> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const heard = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      quiet.abort();
+      void reader?.cancel().catch(() => {});
+    }, QUIET_MS);
+  };
 
-  if (!response.ok || !response.body) {
-    throw new Error('The event stream is not available.');
+  heard();
+  try {
+    const response = await fetch(
+      `${origin}/v1/profiles/${profileId}/events/stream?after=${after}`,
+      {
+        headers,
+        credentials,
+        cache: 'no-store',
+        signal: AbortSignal.any([signal, quiet.signal]),
+      },
+    );
+
+    if (!response.ok || !response.body) {
+      throw new Error('The event stream is not available.');
+    }
+
+    reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    await readBlocks(reader, after, onEvent, heard);
+  } finally {
+    clearTimeout(timer);
   }
+}
 
-  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+async function readBlocks(
+  reader: ReadableStreamDefaultReader<string>,
+  after: number,
+  onEvent: (event: GatewayEvent) => void,
+  heard: () => void,
+): Promise<void> {
   let buffer = '';
   let cursor = after;
 
@@ -37,6 +72,7 @@ export async function readEvents(
     if (done) {
       return;
     }
+    heard();
 
     const blocks = (buffer + value).split('\n\n');
     buffer = blocks.pop() ?? '';

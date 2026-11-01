@@ -8,8 +8,6 @@ const here = (machineId: string | null, ownGateway = false): ThisMachine => ({
   pickFolder: async () => null,
   machineId,
   ownGateway,
-  sharing: Boolean(machineId),
-  setSharing: () => {},
 });
 const repository = { name: 'acme/atlas', githubAccountId: 'account', githubRepositoryId: 7 };
 const api = () => ({ ensureProject: vi.fn(async () => ({ id: 'opened' }) as never) });

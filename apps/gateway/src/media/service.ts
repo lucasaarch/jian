@@ -534,7 +534,7 @@ export class Media {
       }),
       save_attachment: tool({
         description:
-          'Write an attachment of this conversation to an absolute path in your workspace, to open it with the machine tools.',
+          'Write an attachment of this conversation to an absolute path, to open it with the machine tools. The file tools refuse the same paths here.',
         inputSchema: z.object({
           mediaId: z.uuid(),
           path: z.string().min(1).max(4096),
@@ -819,9 +819,8 @@ export class Media {
 
     if (input.path !== undefined) {
       if (!isAbsolute(input.path)) throw new Error('Use an absolute path');
-      // Held to the profile's workspace, like the file tools: the gateway reads it, not a
-      // confined command.
-      const handle = await openToRead(run.profileId, input.path);
+      // Held to the same line as the file tools: the gateway reads it, not a confined command.
+      const handle = await openToRead(input.path);
       try {
         const info = await handle.stat();
         if (!info.isFile()) throw new Error('That path is not a file');
@@ -873,7 +872,7 @@ export class Media {
     const asset = await findMedia(this.store.db, run.profileId, mediaId);
     if (asset.sessionId !== run.sessionId)
       throw new Error('Media is not part of this conversation');
-    const saved = await writeInWorkspace(run.profileId, path, Buffer.from(asset.data, 'base64'), {
+    const saved = await writeInWorkspace(path, Buffer.from(asset.data, 'base64'), {
       exclusive: !overwrite,
     }).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'EEXIST')

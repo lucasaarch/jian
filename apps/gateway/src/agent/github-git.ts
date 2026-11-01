@@ -24,7 +24,7 @@ const input = z.object({
   path: checkoutPath
     .optional()
     .describe(
-      "The checkout. Default: this conversation's checkout in a project, otherwise a folder named after the repository in your workspace (on a machine, in its home).",
+      "The checkout. Default: this conversation's checkout in a project, otherwise a folder named after the repository where this gateway keeps clones (on a machine, in its home). The result names the path.",
     ),
   branch: branchName
     .optional()
@@ -116,7 +116,7 @@ export function githubGitTools(options: {
   return {
     [GITHUB_GIT]: tool({
       description:
-        'Clone, fetch, pull or push a GitHub repository with the access of the GitHub App the owner connected, where this conversation works: your workspace, or the machine it targets. Use it for every GitHub clone, fetch, pull and push, also when origin is an SSH URL; use git in the shell for everything local (status, branch, commit, diff, merge). Push needs branch.',
+        'Clone, fetch, pull or push a GitHub repository with the access of the GitHub App the owner connected, where this conversation works: the machine this gateway runs on, or the machine it targets. Use it for every GitHub clone, fetch, pull and push, also when origin is an SSH URL; use git in the shell for everything local (status, branch, commit, diff, merge). Push needs branch.',
       inputSchema: input,
       execute: async (call, { abortSignal }) => {
         // Before any token is minted for it.

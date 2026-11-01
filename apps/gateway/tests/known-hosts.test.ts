@@ -20,7 +20,7 @@ it('seeds GitHub’s published host keys into an empty known_hosts', async () =>
   const home = mkdtempSync(join(tmpdir(), 'jian-known-hosts-'));
   roots.push(home);
 
-  const path = await ensureTrustedKnownHosts(home);
+  const path = await ensureTrustedKnownHosts(join(home, 'ssh', 'known_hosts'));
   const text = readFileSync(path, 'utf8');
 
   for (const line of trustedKnownHostLines()) {
@@ -37,8 +37,8 @@ it('preserves operator-added hosts and does not duplicate seeded lines', async (
   const path = join(home, '.ssh', 'known_hosts');
   writeFileSync(path, 'bitbucket.org synthetic-host-key\n');
 
-  await ensureTrustedKnownHosts(home);
-  await ensureTrustedKnownHosts(home);
+  await ensureTrustedKnownHosts(path);
+  await ensureTrustedKnownHosts(path);
   const text = readFileSync(path, 'utf8');
 
   expect(text).toContain('bitbucket.org synthetic-host-key');

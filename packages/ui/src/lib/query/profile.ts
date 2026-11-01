@@ -36,6 +36,12 @@ export const queries = {
       staleTime: Number.POSITIVE_INFINITY,
     }),
   groups: () => queryOptions({ queryKey: keys.groups, queryFn: () => panelApi().groups() }),
+  /** The installation's X app and the accounts connected through it. */
+  xIntegration: () =>
+    queryOptions({
+      queryKey: keys.xIntegration,
+      queryFn: () => panelApi().xIntegration(),
+    }),
   /** The installation's GitHub App and the accounts it is installed on. */
   githubIntegration: () =>
     queryOptions({

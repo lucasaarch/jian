@@ -7,10 +7,9 @@ type Seen = { fiveHour: Window | null; weekly: Window | null; at: number };
 
 /**
  * Every answer Anthropic gives a subscription carries how much of its windows is used, in the
- * `anthropic-ratelimit-unified-*` headers that Claude Code itself reads for its limits. The
- * usage endpoint that would say so directly refuses a `claude setup-token` credential (429), so
- * this is how a gateway on such a token knows: from the last run that went through it. Kept in
- * memory, per provider; after a restart they come back with the next run.
+ * `anthropic-ratelimit-unified-*` headers. This is the only way a gateway knows: from the last
+ * real run that went through it, never a request made just to find out. Kept in memory, per
+ * provider; after a restart they come back with the next run.
  */
 const seen = new Map<string, Seen>();
 

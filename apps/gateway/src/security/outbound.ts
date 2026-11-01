@@ -53,7 +53,7 @@ export function isPublicAddress(address: string): boolean {
 }
 
 /** 127.0.0.0/8 and ::1, as written or mapped into IPv6: this computer itself. */
-function isLoopbackAddress(address: string): boolean {
+export function isLoopbackAddress(address: string): boolean {
   const parsed = parsedAddress(address);
   if (!parsed) return false;
   if (parsed instanceof ipaddr.IPv6 && parsed.isIPv4MappedAddress()) {

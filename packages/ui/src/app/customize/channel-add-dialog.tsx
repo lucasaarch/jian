@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState } from 'react';
 import { verifyTokenOf } from '../../components/channels/meta-credentials';
-import { Action, Overlay, Segmented, TextField } from '../../kit';
+import { Action, Overlay, OverlayActions, Segmented, TextField } from '../../kit';
 import type { ChannelType, NewChannel } from '../../lib/api';
 import { MetaLimits } from './channel-meta';
 import { ChannelTitle } from './channel-title';
@@ -96,7 +96,7 @@ function AddForm({
 
   return (
     <form className="grid w-full gap-5 p-7" onSubmit={(event) => void submit(event)}>
-      <header className="grid gap-1.5 pr-6">
+      <header className="grid gap-1.5 pr-10">
         <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
           <ChannelTitle type={type} />
         </h2>
@@ -144,7 +144,7 @@ function AddForm({
           {error}
         </p>
       )}
-      <div className="flex items-center gap-2">
+      <OverlayActions>
         <span className="flex-1" />
         <Action tone="quiet" onClick={close}>
           Cancel
@@ -152,7 +152,7 @@ function AddForm({
         <Action tone="primary" type="submit" busy={busy}>
           {type === 'whatsapp-business' ? 'Create callback URL' : 'Connect'}
         </Action>
-      </div>
+      </OverlayActions>
     </form>
   );
 }

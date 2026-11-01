@@ -2,7 +2,6 @@
 
 import { KeyRound } from 'lucide-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 import {
   behind,
   type Machine,
@@ -12,7 +11,7 @@ import {
   useMachineUpdate,
   versionLine,
 } from '../../components/remote/machines';
-import { Action, Overlay, SettingsRow, StatusPill, SwitchControl } from '../../kit';
+import { Action, Overlay, OverlayActions, SettingsRow, StatusPill } from '../../kit';
 import type { GatewayApi } from '../../lib/api';
 import { CopyCommand } from './copy-command';
 
@@ -37,28 +36,6 @@ function MachinePills({ machine, version }: { machine: Machine; version: string 
   );
 }
 
-/** Agents using the computer the app runs on, or not: shown at once, saved by the app. */
-export type Sharing = { sharing: boolean; setSharing: (on: boolean) => Promise<void> };
-
-/** The switch that lets agents use this computer: it moves at once, and back if refused. */
-export function SharingSwitch({ sharing, setSharing }: Sharing) {
-  const [asked, setAsked] = useState<boolean>();
-
-  return (
-    <SwitchControl
-      label="Let agents use this computer"
-      checked={asked ?? sharing}
-      onCheckedChange={(on) => {
-        setAsked(on);
-        // Refused, it moves back, and says why it did.
-        void setSharing(on)
-          .catch(() => toast.error('Could not change whether agents may use this computer.'))
-          .finally(() => setAsked(undefined));
-      }}
-    />
-  );
-}
-
 /**
  * One connected computer, a line: its name, whether it answers and whether it must be updated.
  * Everything else — how it stands, its release, updating it, its credentials, removing it — is
@@ -78,7 +55,7 @@ export function MachineRow({
   api: GatewayApi;
   machine: Machine;
   /** Given for the computer the app runs on. */
-  ours?: Sharing | undefined;
+  ours?: boolean;
   /** This gateway's release, when it has one. */
   version: string | undefined;
   /** Another action on the machines is running. */
@@ -104,7 +81,6 @@ export function MachineRow({
           </span>
         }
       >
-        {ours && <SharingSwitch {...ours} />}
         <Action
           tone="outline"
           size="small"
@@ -158,7 +134,7 @@ function MachineSettings({
 
   return (
     <div className="grid w-full gap-5 p-7">
-      <header className="grid gap-2 pr-6">
+      <header className="grid gap-2 pr-10">
         <h2 className="truncate text-lg font-semibold tracking-tight">{machine.name}</h2>
         <span className="flex flex-wrap items-center gap-1.5">
           <MachinePills machine={machine} version={version} />
@@ -189,7 +165,7 @@ function MachineSettings({
           {update.error}
         </p>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <OverlayActions>
         {!managed && (
           <>
             <Action tone="danger" className="bg-bad/10" disabled={busy} onClick={onRemove}>
@@ -221,7 +197,7 @@ function MachineSettings({
             Update
           </Action>
         )}
-      </div>
+      </OverlayActions>
     </div>
   );
 }

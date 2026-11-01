@@ -23,6 +23,21 @@ it('leaves the page alone when nothing floats, or what floats is elsewhere', () 
   expect(coversPage(page)).toBe(false);
 });
 
+it('steps aside for a notice drawn over the page, and not for one beside it', () => {
+  const notice = (box: Partial<DOMRect>) => {
+    const element = document.createElement('li');
+    element.setAttribute('data-sonner-toast', '');
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(box as DOMRect);
+    document.body.append(element);
+  };
+
+  notice({ left: 10, top: 20, right: 400, bottom: 90 });
+  expect(coversPage(page)).toBe(false);
+
+  notice({ left: 600, top: 20, right: 1000, bottom: 140 });
+  expect(coversPage(page)).toBe(true);
+});
+
 it('steps aside for a list that opens over the page', () => {
   floating('menu', { left: 800, top: 140, right: 1000, bottom: 400 });
 

@@ -137,11 +137,11 @@ it('resizes from its edge, keeps the size, and gives the chat the room it needs'
     // An Inspector beside it leaves the chat its minimum: the sidebar stops short of that.
     const inspector = document.createElement('aside');
     inspector.setAttribute('data-inspector-host', '');
-    Object.defineProperty(inspector, 'offsetWidth', { value: 1350 });
+    Object.defineProperty(inspector, 'offsetWidth', { value: 1300 });
     document.body.append(inspector);
     try {
       await press('ArrowRight');
-      expect(useLayout.getState().sidebarWidth).toBe(2000 - 1350 - MIN_CHAT_WIDTH);
+      expect(useLayout.getState().sidebarWidth).toBe(2000 - 1300 - MIN_CHAT_WIDTH);
     } finally {
       inspector.remove();
     }

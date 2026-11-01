@@ -3,12 +3,15 @@ import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { events, runs } from '../storage/schema.js';
 
+/** How many events one read returns at most. */
+export const EVENTS_PAGE = 100;
+
 /** Everything a profile recorded after a cursor, oldest first, so a client can resume. */
 export async function readEvents(
   db: Queryable,
   profileId: string,
   after: number,
-  limit = 100,
+  limit = EVENTS_PAGE,
 ): Promise<GatewayEvent[]> {
   const rows = await db
     .select()

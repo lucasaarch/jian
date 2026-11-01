@@ -11,11 +11,13 @@ import {
   buildLinuxServiceUnit,
   canInstallLinuxSystemUnit,
   chooseLinuxServiceScope,
+  LINUX_START_COMMANDS,
   linuxServiceKind,
   linuxUserBusAvailable,
 } from '../src/linux-service.ts';
 import { isPidAlive, readWorkerLockPid } from '../src/lock.ts';
 import { serviceKindForPlatform } from '../src/service.ts';
+import { readEmbeddedVersion } from '../src/worker-script.ts';
 
 const scriptPath = fileURLToPath(new URL('../dist/jian-remote.mjs', import.meta.url));
 
@@ -191,6 +193,8 @@ test('buildLinuxServiceUnit targets default.target for user and multi-user for s
   });
   assert.match(systemUnit, /WantedBy=multi-user\.target/);
   assert.match(systemUnit, /Environment="HOME=\/root"/);
+  // systemd never unquotes this one: with quotes it refuses the whole unit as a bad setting.
+  assert.match(systemUnit, /^WorkingDirectory=\/root$/m);
   assert.doesNotMatch(systemUnit, /^User=/m);
 
   const systemAsUser = buildLinuxServiceUnit({
@@ -208,4 +212,19 @@ test('shellCommandForPlatform prefers an absolute Unix shell', () => {
   assert.equal(shellCommandForPlatform('win32'), 'powershell.exe');
   assert.match(shellCommandForPlatform('linux'), /^\/bin\/(sh|bash)$/);
   assert.match(shellCommandForPlatform('darwin'), /^\/bin\/(sh|bash)$/);
+});
+
+test('reads the release from the stamped line, not from the pattern the bundle also holds', () => {
+  const bundle = [
+    "  const match = /export const PACKAGE_VERSION = '([^']+)'/.exec(scriptSource);",
+    "export const PACKAGE_VERSION = '1.2.0';",
+  ].join('\n');
+
+  assert.equal(readEmbeddedVersion(bundle), '1.2.0');
+  assert.equal(readEmbeddedVersion('no stamp here'), 'unknown');
+});
+
+test('brings the unit up with a start of its own, whose refusal is seen', () => {
+  assert.ok(LINUX_START_COMMANDS.every((command) => !command.includes('--now')));
+  assert.equal(LINUX_START_COMMANDS.at(-1)?.[0], 'start');
 });

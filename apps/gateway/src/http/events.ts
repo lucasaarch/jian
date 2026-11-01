@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
-import { readEvents, readProgress } from '../core/event-feed.js';
+import { EVENTS_PAGE, readEvents, readProgress } from '../core/event-feed.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { Store } from '../storage/database.js';
 
@@ -75,6 +75,8 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
           return;
         }
 
+        let behind = false;
+
         try {
           // Close slow consumers instead of buffering an unbounded event history.
           if (reply.raw.writableLength > 256 * 1024) {
@@ -125,10 +127,18 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
           if (events.length === 0) {
             reply.raw.write(': heartbeat\n\n');
           }
+
+          // A full page means more is waiting: a client catching up reads on at once, or it would
+          // hear of new events only after a wake or a wait for every hundred old ones.
+          behind = events.length === EVENTS_PAGE;
         } catch {
           reply.raw.end();
 
           return;
+        }
+
+        if (behind) {
+          return pump();
         }
 
         await Promise.race([

@@ -1,3 +1,6 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -11,5 +14,8 @@ export default defineConfig({
     minWorkers: 1,
     testTimeout: 20_000,
     hookTimeout: 30_000,
+    // A run writes keys to the agents' directory and prunes them from it. Without this, a test file
+    // naming no root of its own would do that in `~/workspaces`, a developer's real gateway's default.
+    env: { JIAN_WORKSPACES: mkdtempSync(join(tmpdir(), 'jian-test-workspaces-')) },
   },
 });

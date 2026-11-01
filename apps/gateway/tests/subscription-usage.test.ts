@@ -4,6 +4,7 @@ import { afterEach, expect, it } from 'vitest';
 import {
   claudeLimits,
   forgetClaudeLimits,
+  limitsKey,
   recordClaudeLimits,
 } from '../src/providers/claude-limits.js';
 import { resolveModel } from '../src/providers/models.js';
@@ -13,7 +14,7 @@ import { testServices } from './helpers/services.js';
 // What runs said of the windows is kept per process; each test starts from none.
 afterEach(() => forgetClaudeLimits());
 
-it('reads Codex weekly and Claude subscription windows without exposing credentials', async () => {
+it('reads Codex weekly window without exposing credentials', async () => {
   const services = await testServices();
   const token = `x.${Buffer.from(
     JSON.stringify({
@@ -21,31 +22,18 @@ it('reads Codex weekly and Claude subscription windows without exposing credenti
     }),
   ).toString('base64url')}.x`;
   await services.providers.configureCodexProvider('{"access_token":"synthetic"}');
-  await services.providers.createProvider({
-    name: 'Claude',
-    kind: 'anthropic',
-    credential: 'subscription',
-    secret: 'sk-ant-oat-synthetic-test-only',
-  });
   const seen: string[] = [];
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const authorization = new Headers(init?.headers).get('authorization');
     seen.push(url);
     expect(authorization).toMatch(/^Bearer /);
-    return Response.json(
-      url.includes('wham')
-        ? {
-            rate_limit: {
-              primary_window: { used_percent: 32, reset_at: 1_800_000_000 },
-              secondary_window: { used_percent: 61 },
-            },
-          }
-        : {
-            five_hour: { utilization: 18, resets_at: '2027-01-15T12:00:00Z' },
-            seven_day: { utilization: 47 },
-          },
-    );
+    return Response.json({
+      rate_limit: {
+        primary_window: { used_percent: 32, reset_at: 1_800_000_000 },
+        secondary_window: { used_percent: 61 },
+      },
+    });
   }) as typeof fetch;
   const reader = new SubscriptionUsageReader(
     services.providers,
@@ -63,17 +51,11 @@ it('reads Codex weekly and Claude subscription windows without exposing credenti
       fiveHour: null,
       weekly: { usedPercent: 32 },
     },
-    {
-      provider: 'claude',
-      status: 'available',
-      fiveHour: { usedPercent: 18 },
-      weekly: { usedPercent: 47 },
-    },
   ]);
   expect(result[0]?.weekly?.resetsAt).toBe('2027-01-15T08:00:00.000Z');
   expect(JSON.stringify(result)).not.toContain('synthetic');
   await reader.read();
-  expect(seen).toHaveLength(2);
+  expect(seen).toHaveLength(1);
 });
 
 it('reports an unavailable window instead of inventing zero after endpoint failure', async () => {
@@ -171,5 +153,59 @@ it('leaves out a Claude window whose reset has passed since the last run', async
   expect(claudeLimits('claude-provider', now)).toEqual({
     fiveHour: null,
     weekly: { usedPercent: 50, resetsAt: new Date(now + 3_600_000).toISOString() },
+  });
+});
+
+it('never makes a request just to learn Claude limits, and knows them only from a real answer', async () => {
+  const services = await testServices();
+  const provider = await services.providers.createProvider({
+    name: 'Claude',
+    kind: 'anthropic',
+    credential: 'subscription',
+    secret: 'sk-ant-oat-synthetic-test-only',
+  });
+  const calls: string[] = [];
+  const reader = new SubscriptionUsageReader(services.providers, services.gatewayVault, (async (
+    input: RequestInfo | URL,
+  ) => {
+    calls.push(String(input));
+    return new Response('{}');
+  }) as typeof fetch);
+
+  expect((await reader.read())[0]?.status).toBe('unavailable');
+  expect(calls).toEqual([]);
+
+  recordClaudeLimits(
+    limitsKey(provider.id),
+    new Headers({ 'anthropic-ratelimit-unified-7d-utilization': '0.5' }),
+  );
+  const later = new SubscriptionUsageReader(
+    services.providers,
+    services.gatewayVault,
+    (async () => new Response('{}')) as typeof fetch,
+  );
+
+  expect((await later.read())[0]).toMatchObject({
+    status: 'available',
+    weekly: { usedPercent: 50 },
+  });
+});
+
+it('counts a subscription saved before the owner was asked which it is', async () => {
+  const services = await testServices();
+  const provider = await services.providers.createProvider({
+    name: 'Claude',
+    kind: 'anthropic',
+    secret: 'sk-ant-oat-synthetic-test-only',
+  });
+  recordClaudeLimits(
+    limitsKey(provider.id),
+    new Headers({ 'anthropic-ratelimit-unified-5h-utilization': '0.25' }),
+  );
+  const reader = new SubscriptionUsageReader(services.providers, services.gatewayVault, fetch);
+
+  expect((await reader.read())[0]).toMatchObject({
+    provider: 'claude',
+    fiveHour: { usedPercent: 25 },
   });
 });

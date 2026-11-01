@@ -46,11 +46,11 @@ load the ones you will call with \`load_mcp_tools\`. Searches that work:
 ## Clone, fetch, pull and push: \`github_git\`
 
 For work on files with tests and builds, check the repository out and work there. \`github_git\`
-clones, fetches, pulls and pushes with the App's access, where this conversation works: your
-workspace, or the machine it targets. It reaches the same repositories as the server.
+clones, fetches, pulls and pushes with the App's access, where this conversation works: the
+gateway's own machine, or the machine it targets. It reaches the same repositories as the server.
 
 - Always use it for those four on GitHub, also when origin is an SSH URL. Plain \`git clone\` or
-  \`git push\` in the shell has only the installation's SSH keys, and fails without one.
+  \`git push\` in the shell depends on an SSH key that host accepts, and fails without one.
 - Everything local stays with \`git\` in the shell: status, branch, commit, diff, merge, rebase.
 - \`push\` needs \`branch\`. \`force: true\` pushes with a lease, and only when the owner asked.
 - A pull fast-forwards; pass \`rebase: true\` when the branches diverged.

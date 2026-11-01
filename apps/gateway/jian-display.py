@@ -89,7 +89,7 @@ def main(argv):
     parent = os.getpid()
     deadline = time.monotonic() + seconds
     try:
-        # HOME is already the profile workspace. Never fall back to shared /tmp.
+        # HOME is already the directory agents share. Never fall back to shared /tmp.
         with tempfile.TemporaryDirectory(prefix=".jian-display-", dir=Path.home()) as directory, ExitStack() as cleanup:
             # Stop children before deleting their authority/runtime directory, including
             # startup failures and signals before the command has been launched.

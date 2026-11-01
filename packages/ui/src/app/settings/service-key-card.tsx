@@ -1,7 +1,15 @@
 'use client';
 
 import { type FormEvent, useState } from 'react';
-import { Action, ConfirmDialog, Overlay, SettingsRow, StatusPill, TextField } from '../../kit';
+import {
+  Action,
+  ConfirmDialog,
+  Overlay,
+  OverlayActions,
+  SettingsRow,
+  StatusPill,
+  TextField,
+} from '../../kit';
 import { date } from '../../lib/format';
 
 type Status = { configured: boolean; updatedAt?: string };
@@ -119,7 +127,7 @@ function ServiceForm<S extends Status>({
 
   return (
     <form className="grid w-full gap-5 p-7" onSubmit={submit}>
-      <header className="grid gap-1.5 pr-6">
+      <header className="grid gap-1.5 pr-10">
         <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
           {service.vendor}
           {configured && <StatusPill tone="good">Connected</StatusPill>}
@@ -141,7 +149,7 @@ function ServiceForm<S extends Status>({
         value={key}
         onChange={(event) => setKey(event.target.value)}
       />
-      <div className="flex items-center gap-2">
+      <OverlayActions>
         {configured && (
           <Action tone="danger" className="bg-bad/10" disabled={busy} onClick={disconnect}>
             Disconnect
@@ -154,7 +162,7 @@ function ServiceForm<S extends Status>({
         <Action tone="primary" type="submit" busy={busy} disabled={!key.trim()}>
           {configured ? 'Replace' : 'Connect'}
         </Action>
-      </div>
+      </OverlayActions>
     </form>
   );
 }

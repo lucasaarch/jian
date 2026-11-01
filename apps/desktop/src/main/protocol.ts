@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { JIAN_CLIENT_HEADER, JIAN_DESKTOP_CLIENT } from '@jian/contracts';
 import { net, protocol } from 'electron';
 import type { GatewayStore } from './gateways/store';
+import { releasing } from './release-body';
 
 /**
  * The window loads from jian://app, and reaches each gateway under jian://app/gateway/<id>: one
@@ -61,11 +62,15 @@ async function forward(
   headers.set(JIAN_CLIENT_HEADER, JIAN_DESKTOP_CLIENT);
 
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+  const gone = new AbortController();
   try {
     const response = await net.fetch(`${gateway.url}${path}${url.search}`, {
       method: request.method,
       headers,
       body: hasBody ? request.body : null,
+      // The window's own fetch says no-store, which does not cross this hop by itself.
+      cache: 'no-store',
+      signal: gone.signal,
       // A streamed request body must say it may be read while the response starts.
       ...(hasBody ? { duplex: 'half' } : {}),
       redirect: 'manual',
@@ -73,7 +78,7 @@ async function forward(
     // The window keeps no cookie of any gateway: the token is the only credential.
     const answered = new Headers(response.headers);
     answered.delete('set-cookie');
-    return new Response(response.body, {
+    return new Response(response.body && releasing(response.body, () => gone.abort()), {
       status: response.status,
       statusText: response.statusText,
       headers: answered,

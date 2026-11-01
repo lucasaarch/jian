@@ -8,7 +8,7 @@ import {
   savedDraft,
 } from '../../components/channels/message-draft';
 import type { SectionActions } from '../../components/props';
-import { Action, Overlay, TextArea, TextField } from '../../kit';
+import { Action, Overlay, OverlayActions, TextArea, TextField } from '../../kit';
 import type { Channel } from '../../lib/api';
 import { useAgent } from '../../lib/query/agent';
 
@@ -79,7 +79,7 @@ function MessagesForm({
         if (saved) close();
       }}
     >
-      <header className="grid gap-1.5 pr-6">
+      <header className="grid gap-1.5 pr-10">
         <h2 className="text-lg font-semibold tracking-tight">Messages</h2>
         <p className="text-sm leading-relaxed text-muted">
           What the agent sends here to ask for approval or an answer.
@@ -116,7 +116,7 @@ function MessagesForm({
           {error}
         </p>
       )}
-      <div className="flex items-center gap-2">
+      <OverlayActions>
         <Action tone="outline" disabled={busy} onClick={() => setDraft(defaultDraft())}>
           Reset to defaults
         </Action>
@@ -127,7 +127,7 @@ function MessagesForm({
         <Action tone="primary" type="submit" busy={busy}>
           Save
         </Action>
-      </div>
+      </OverlayActions>
     </form>
   );
 }

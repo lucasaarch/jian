@@ -17,6 +17,7 @@ import type {
 import { subscribe } from '../../lib/events';
 import { useCrew } from '../../lib/stores/crew';
 import { forgetLanded, landed, useOutbox } from '../../lib/stores/outbox';
+import { useReconnect } from '../../lib/stores/reconnect';
 import { plainText } from '../ui/markdown';
 import { CodeChanges } from './code-change';
 import { Confetti } from './confetti';
@@ -135,6 +136,8 @@ export function History({
   /** Runs a turn that failed again, where the conversation can be answered from the panel. */
   retryRun?: (run: Run) => Promise<unknown>;
 }) {
+  // Asked for from the palette: what is on screen stays while it is read again.
+  const reloads = useReconnect((state) => state.chat);
   // Read before: shown at once, and read again behind it.
   const { kept, keep } = useKeptHistory(profileId, sessionId);
   const [messages, setMessages] = useState<Awaited<ReturnType<GatewayApi['messages']>>>(
@@ -347,7 +350,7 @@ export function History({
     return () => {
       stopped = true;
     };
-  }, [api, profileId, sessionId, retry, revision, group, heard]);
+  }, [api, profileId, sessionId, retry, revision, reloads, group, heard]);
 
   // The gateway back in reach: what was said meanwhile, read at once. Nothing was heard while
   // the stream was down to ask for it.

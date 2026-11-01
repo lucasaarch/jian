@@ -12,19 +12,29 @@ import {
 } from '../../components/integrations/github-actions';
 import { useGithubOutcome } from '../../components/integrations/github-outcome';
 import { GitHubLogo } from '../../components/ui';
-import { Action, Overlay, SettingsGroup, SettingsRow, StatusPill } from '../../kit';
+import {
+  Action,
+  Overlay,
+  OverlayActions,
+  SettingsGroup,
+  SettingsRow,
+  SettingsRowSkeleton,
+  StatusPill,
+} from '../../kit';
 import type { GatewayApi } from '../../lib/api';
 import { keys } from '../../lib/query/keys';
 import { useReportFailure } from '../../lib/query/notify';
 import { queries } from '../../lib/query/profile';
 import { ExternalAction } from './integration-parts';
+import { XRow } from './x-card';
 
 type App = NonNullable<GithubIntegration['app']>;
 
 /**
- * The apps agents reach through the gateway, a line each: GitHub, connected or not. Connecting
- * registers Jian's App the first time and an account after; once one is in, Configure holds the
- * accounts, the way to add another and anything GitHub still has to grant.
+ * The apps agents reach through the gateway, a line each: GitHub and X, connected or not, among
+ * those this gateway can do.
+ * Connecting GitHub registers Jian's App the first time and an account after; once one is in,
+ * Configure holds the accounts, the way to add another and anything GitHub still has to grant.
  */
 export function AppsCard({ api }: { api: GatewayApi }) {
   const { data: integration, isPending: loading } = useReportFailure(
@@ -42,54 +52,56 @@ export function AppsCard({ api }: { api: GatewayApi }) {
   const missing = integration?.missingPermissions ?? [];
   const attention =
     Boolean(app) && (integration?.permissionsVerified === false || missing.length > 0);
-  // GitHub registers the App only for a gateway it can send the owner back to.
-  const blocked = !app && !loading && !integration?.callbackUrl;
+  // GitHub registers the App only for a gateway it can send the owner back to, and what a gateway
+  // cannot do, or did not say it can, is not offered at all.
+  const github = Boolean(app || integration?.callbackUrl);
+  const x = useQuery(queries.xIntegration());
+  if (!github && !x.data?.callbackUrl) {
+    return loading || x.isPending ? (
+      <SettingsGroup title="Apps">
+        <SettingsRowSkeleton pill />
+      </SettingsGroup>
+    ) : null;
+  }
 
   return (
     <>
       <SettingsGroup title="Apps">
-        <SettingsRow
-          title={
-            <span className="flex items-center gap-2">
-              <GitHubLogo size={14} />
-              GitHub
-              {accounts.length > 0 && <StatusPill tone="good">Connected</StatusPill>}
-              {attention && <StatusPill tone="warn">Needs attention</StatusPill>}
-            </span>
-          }
-          {...(blocked
-            ? {
-                description: (
-                  <>
-                    Set <code className="font-mono">JIAN_PUBLIC_URL</code> to this gateway's public
-                    HTTPS address to connect it.
-                  </>
-                ),
-              }
-            : {})}
-        >
-          {app && accounts.length > 0 ? (
-            <Action
-              tone="outline"
-              size="small"
-              aria-label="Configure GitHub"
-              onClick={() => setOpen(true)}
-            >
-              Configure
-            </Action>
-          ) : (
-            <Action
-              tone="outline"
-              size="small"
-              aria-label="Connect GitHub"
-              busy={registering || installations.connecting}
-              disabled={loading || blocked}
-              onClick={() => void (app ? installations.connect() : register())}
-            >
-              Connect
-            </Action>
-          )}
-        </SettingsRow>
+        {github && (
+          <SettingsRow
+            title={
+              <span className="flex items-center gap-2">
+                <GitHubLogo size={14} />
+                GitHub
+                {accounts.length > 0 && <StatusPill tone="good">Connected</StatusPill>}
+                {attention && <StatusPill tone="warn">Needs attention</StatusPill>}
+              </span>
+            }
+          >
+            {app && accounts.length > 0 ? (
+              <Action
+                tone="outline"
+                size="small"
+                aria-label="Configure GitHub"
+                onClick={() => setOpen(true)}
+              >
+                Configure
+              </Action>
+            ) : (
+              <Action
+                tone="outline"
+                size="small"
+                aria-label="Connect GitHub"
+                busy={registering || installations.connecting}
+                disabled={loading}
+                onClick={() => void (app ? installations.connect() : register())}
+              >
+                Connect
+              </Action>
+            )}
+          </SettingsRow>
+        )}
+        <XRow api={api} />
       </SettingsGroup>
       <Overlay open={open} onOpenChange={setOpen} title="GitHub" size="form">
         {integration && app && (
@@ -119,7 +131,7 @@ function GitHubSettings({
 }) {
   return (
     <div className="grid w-full gap-5 p-7">
-      <header className="grid gap-1.5 pr-6">
+      <header className="grid gap-1.5 pr-10">
         <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
           <GitHubLogo size={18} />
           GitHub
@@ -147,7 +159,7 @@ function GitHubSettings({
           </li>
         ))}
       </ul>
-      <div className="flex items-center gap-2">
+      <OverlayActions>
         <Action tone="outline" busy={connecting} onClick={() => void connect()}>
           <Plus size={14} />
           Connect another account
@@ -156,7 +168,7 @@ function GitHubSettings({
         <Action tone="quiet" onClick={close}>
           Close
         </Action>
-      </div>
+      </OverlayActions>
     </div>
   );
 }

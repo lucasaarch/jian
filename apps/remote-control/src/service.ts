@@ -7,6 +7,7 @@ import { args, parseCliInvocation } from './args.ts';
 import {
   buildLinuxServiceUnit,
   canInstallLinuxSystemUnit,
+  LINUX_START_COMMANDS,
   type LinuxServiceScope,
   linuxServiceKind,
   linuxUserUnitPath,
@@ -166,7 +167,7 @@ async function startService(script = installedScript): Promise<Started> {
       }
       await writeFile(LINUX_SYSTEM_UNIT_PATH, unitBody, { mode: 0o644 });
       await writeLinuxServiceScope('system');
-      for (const command of [['daemon-reload'], ['enable', '--now', LINUX_SERVICE_UNIT]]) {
+      for (const command of LINUX_START_COMMANDS) {
         const result = spawnSync('systemctl', command, { stdio: 'inherit' });
         if (result.status !== 0) {
           throw new Error('Could not install/start Jian Remote with systemd (system unit)');
@@ -194,7 +195,7 @@ async function startService(script = installedScript): Promise<Started> {
         // leave system unit; user scope marker wins for this CLI
       }
     }
-    for (const command of [['daemon-reload'], ['enable', '--now', LINUX_SERVICE_UNIT]]) {
+    for (const command of LINUX_START_COMMANDS) {
       const result = spawnSync('systemctl', ['--user', ...command], { stdio: 'inherit' });
       if (result.status !== 0) {
         throw new Error(

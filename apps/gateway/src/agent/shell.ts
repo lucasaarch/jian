@@ -4,7 +4,8 @@ import { isAbsolute, join } from 'node:path';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { fileTools } from './files.js';
-import { confine, confined, reachableFolders, workspaceOf } from './workspace.js';
+import { confine, confined, reachableFolders } from './workspace.js';
+import { onOwnerComputer, workspaceHome, workspaceTemp } from './workspace-home.js';
 
 /**
  * Running commands on the machine the gateway runs on, with the file tools beside them.
@@ -14,13 +15,16 @@ import { confine, confined, reachableFolders, workspaceOf } from './workspace.js
  * runtime puts a guard in front of each action that changes the machine (see guard.ts); it is a
  * second opinion, not a boundary.
  *
- * The boundary is the profile's workspace (see workspace.ts): a command starts there, with it as
- * `HOME` and `TMPDIR`, confined by Landlock to it and to the system's tools. It also starts
- * without the gateway's environment, which holds the database DSN, the keyring and the host
+ * On a server, the boundary is the directory every agent shares (see workspace.ts): a command
+ * starts there, with it as `HOME`, confined by Landlock to it and to the system's tools. It also
+ * starts without the gateway's environment, which holds the database DSN, the keyring and the host
  * token: a test run from a project would otherwise pick them up — a database test aimed at the
  * gateway's own PostgreSQL. The two cover each other: Landlock keeps the gateway's files and
  * /proc closed, and the allow-list keeps its secrets out of the command, even where Landlock is
  * missing.
+ *
+ * On a desktop there is no such boundary: a command runs as the owner, with the owner's home, and
+ * only the allow-list stands between it and the gateway's secrets. It can read Jian's data on disk.
  */
 
 /** Long enough for a build, short enough that a run does not die waiting on a hung command. */
@@ -50,25 +54,51 @@ const PASSED = new Set([
 ]);
 
 /**
+ * A desktop's owner reaches their Git hosts through their own SSH agent. On a server there is no
+ * owner's agent to find, and it is a door out of the sandbox if the gateway happens to have one.
+ */
+const PASSED_ON_OWNER_COMPUTER = new Set(['SSH_AUTH_SOCK']);
+
+/**
  * The environment a command starts with: an allow-list, so a variable added to the gateway later
- * stays out by default, with the home, temporary directory and per-user install paths moved
- * into the profile's workspace. `NODE_ENV` is left out on purpose — the gateway's `production`
- * would make a project's install skip its dev dependencies.
+ * stays out by default. `NODE_ENV` is left out on purpose — the gateway's `production` would make
+ * a project's install skip its dev dependencies.
+ *
+ * On a server the per-user install paths move into the shared directory. On a desktop they stay
+ * the owner's: an `NPM_CONFIG_PREFIX` or a `GOPATH` of Jian's would silently change where the
+ * owner's own tools install, and a PATH with their bin folders removed would hide those tools.
  */
 export function commandEnvironment(
-  home: string,
+  { home, temp }: { home: string; temp: string },
   source: NodeJS.ProcessEnv = process.env,
   gitSshCommand?: string,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
+  const owner = onOwnerComputer();
 
   for (const [name, value] of Object.entries(source)) {
-    if (value !== undefined && (PASSED.has(name) || name.startsWith('LC_'))) {
+    if (
+      value !== undefined &&
+      (PASSED.has(name) || name.startsWith('LC_') || (owner && PASSED_ON_OWNER_COMPUTER.has(name)))
+    ) {
       env[name] = value;
     }
   }
 
-  // The image puts the gateway's own per-user bin folders on PATH; the profile's replace them.
+  if (owner) {
+    const path = (source.PATH ?? '/usr/local/bin:/usr/bin:/bin').split(':').filter(Boolean);
+
+    return {
+      ...env,
+      HOME: home,
+      TMPDIR: temp,
+      ...(gitSshCommand ? { GIT_SSH_COMMAND: gitSshCommand } : {}),
+      // After the owner's own order: an app started from the Dock has a short PATH to add to.
+      PATH: [...new Set([...path, join(home, '.local', 'bin'), join(home, 'go', 'bin')])].join(':'),
+    };
+  }
+
+  // The image puts the gateway's own per-user bin folders on PATH; the shared ones replace them.
   const gatewayHome = source.HOME;
   const system = (source.PATH ?? '/usr/local/bin:/usr/bin:/bin')
     .split(':')
@@ -77,7 +107,7 @@ export function commandEnvironment(
   return {
     ...env,
     HOME: home,
-    TMPDIR: join(home, 'tmp'),
+    TMPDIR: temp,
     GOPATH: join(home, 'go'),
     NPM_CONFIG_PREFIX: join(home, '.local'),
     ...(gitSshCommand
@@ -109,21 +139,22 @@ function surrenderFirst(pid: number | undefined): void {
   void writeFile(`/proc/${pid}/oom_score_adj`, '1000').catch(() => {});
 }
 
+const RUN_COMMAND = {
+  server:
+    'Run a command on the machine this gateway runs on and read what it printed. It starts in the directory every agent of this installation shares, which is also $HOME, and can write only there. Other agents work in it too: keep to a folder for your task. Prefer a single command over a shell pipeline you cannot inspect. Anything destructive needs the owner to have asked for it in this conversation.',
+  owner:
+    "Run a command on the owner's computer, as the owner, and read what it printed. It starts in this chat's first folder, or in their home, which is also $HOME. Nothing confines it, so it can change anything of theirs: touch only what the task needs. Prefer a single command over a shell pipeline you cannot inspect. Anything destructive needs the owner to have asked for it in this conversation.",
+};
+
 export function shellTools(
-  profileId: string,
-  gitAccess: {
-    readOnly: string[];
-    writable: string[];
-    sshCommand?: string;
-  } = {
+  gitAccess: { readOnly: string[]; writable: string[]; sshCommand?: string } = {
     readOnly: [],
     writable: [],
   },
 ): ToolSet {
   return {
     run_command: tool({
-      description:
-        'Run a command on the machine this gateway runs on and read what it printed. It starts in your workspace, which is also $HOME, and can write only there. Prefer a single command over a shell pipeline you cannot inspect. Anything destructive needs the owner to have asked for it in this conversation.',
+      description: onOwnerComputer() ? RUN_COMMAND.owner : RUN_COMMAND.server,
       inputSchema: z.object({
         command: z.string().trim().min(1).max(4000),
         cwd: absolute.optional(),
@@ -137,10 +168,9 @@ export function shellTools(
             stderr: 'SSH keys must be managed with the SSH key tools, not ssh-keygen.',
           };
         }
-        const home = await workspaceOf(profileId);
-        const directory = cwd
-          ? await confine(profileId, cwd, 'read')
-          : (reachableFolders()[0] ?? home);
+        const home = await workspaceHome();
+        const temp = await workspaceTemp();
+        const directory = cwd ? await confine(cwd, 'read') : (reachableFolders()[0] ?? home);
         const shell = await confined(home, '/bin/sh', ['-c', command], gitAccess);
 
         return new Promise((resolvePromise) => {
@@ -149,7 +179,7 @@ export function shellTools(
             shell.args,
             {
               cwd: directory,
-              env: commandEnvironment(home, process.env, gitAccess.sshCommand),
+              env: commandEnvironment({ home, temp }, process.env, gitAccess.sshCommand),
               timeout: timeoutMs,
               maxBuffer: MAX_OUTPUT * 4,
               encoding: 'utf8',
@@ -170,6 +200,6 @@ export function shellTools(
       },
     }),
 
-    ...fileTools(profileId),
+    ...fileTools(),
   };
 }

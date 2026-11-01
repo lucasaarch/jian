@@ -3,7 +3,7 @@
 import { type ReactNode, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { draftOf, type McpDraft, serverOf } from '../../components/integrations/mcp-draft';
-import { Action, Overlay, Segmented, TextField } from '../../kit';
+import { Action, Overlay, OverlayActions, Segmented, TextField } from '../../kit';
 import type { GatewayApi, McpServer, McpValue } from '../../lib/api';
 import { McpValues } from './mcp-values';
 
@@ -108,7 +108,7 @@ function McpForm({
         onSave(serverOf(draft, secretSaved));
       }}
     >
-      <header className="grid gap-1 pr-6">
+      <header className="grid gap-1 pr-10">
         <h2 className="text-lg font-semibold tracking-tight">
           {server ? server.name : 'Add an MCP server'}
         </h2>
@@ -130,7 +130,7 @@ function McpForm({
         hint={
           draft.transport === 'http'
             ? 'The gateway reaches it at an HTTP endpoint.'
-            : 'The gateway runs it, with the privileges of whoever started the gateway.'
+            : 'The gateway runs it where the gateway runs, with the privileges of whoever started it. It cannot open a browser on a server, so a command that signs in that way never answers.'
         }
       >
         <Segmented
@@ -138,7 +138,7 @@ function McpForm({
           value={draft.transport}
           options={[
             { value: 'http', label: 'HTTP endpoint' },
-            { value: 'stdio', label: 'A command on this machine' },
+            { value: 'stdio', label: 'A command on the gateway' },
           ]}
           onChange={(transport) => change({ transport, auth: 'none' })}
         />
@@ -229,7 +229,7 @@ function McpForm({
           {error}
         </p>
       )}
-      <div className="flex items-center gap-2">
+      <OverlayActions>
         {server && onRemove && (
           <Action tone="danger" className="bg-bad/10" disabled={busy} onClick={onRemove}>
             Remove
@@ -252,7 +252,7 @@ function McpForm({
         <Action tone="primary" type="submit" busy={busy}>
           {server ? 'Save' : 'Add server'}
         </Action>
-      </div>
+      </OverlayActions>
     </form>
   );
 }

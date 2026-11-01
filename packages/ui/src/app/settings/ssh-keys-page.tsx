@@ -7,6 +7,7 @@ import {
   Action,
   ConfirmDialog,
   Overlay,
+  OverlayActions,
   SettingsGroup,
   SettingsPageSkeleton,
   SettingsRow,
@@ -170,7 +171,7 @@ function NewKey({
         <PublicKey title={title} sshKey={created} done={() => close(false)} />
       ) : (
         <form onSubmit={submit} className="grid w-full gap-5 p-7">
-          <header className="grid gap-1 pr-6">
+          <header className="grid gap-1 pr-10">
             <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
             <p className="text-sm text-muted">
               The gateway makes an Ed25519 key and keeps its private part encrypted.
@@ -185,14 +186,14 @@ function NewKey({
             required
             autoComplete="off"
           />
-          <div className="flex justify-end gap-2">
+          <OverlayActions>
             <Action tone="quiet" onClick={() => close(false)}>
               Cancel
             </Action>
             <Action tone="primary" type="submit" busy={busy} disabled={!name.trim()}>
               Create key
             </Action>
-          </div>
+          </OverlayActions>
         </form>
       )}
     </Overlay>
@@ -203,7 +204,7 @@ function NewKey({
 function PublicKey({ title, sshKey, done }: { title: string; sshKey: SshKey; done: () => void }) {
   return (
     <div className="grid w-full gap-5 p-7">
-      <header className="grid gap-1 pr-6">
+      <header className="grid gap-1 pr-10">
         <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
         <p className="text-sm text-muted">
           Add this public key to the Git or SSH service that should trust your agents.
@@ -211,11 +212,11 @@ function PublicKey({ title, sshKey, done }: { title: string; sshKey: SshKey; don
       </header>
       <CopyCommand value={sshKey.publicKey} label="Copy public key" />
       <p className="font-mono text-xs text-muted">{sshKey.fingerprint}</p>
-      <div className="flex justify-end">
+      <OverlayActions>
         <Action tone="primary" onClick={done}>
           Done
         </Action>
-      </div>
+      </OverlayActions>
     </div>
   );
 }

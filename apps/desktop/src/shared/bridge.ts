@@ -140,6 +140,8 @@ export interface DesktopBridge {
   removeGateway(id: string): Promise<void>;
   /** A new host token for a gateway that refused the saved one, checked before it is kept. */
   replaceToken(id: string, token: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Asks a gateway at once instead of at its next look; the app's own one tries to start again. */
+  reconnectGateway(id: string): void;
   onGatewaysChanged(listener: (gateways: GatewaySummary[]) => void): () => void;
   onOpen(listener: (target: OpenTarget) => void): () => void;
   /** The app's own gateway: start it again now, or show the folder with its log. */
@@ -163,17 +165,11 @@ export interface DesktopBridge {
     onMaximized(listener: (maximized: boolean) => void): () => void;
   };
   setOpenAtLogin(open: boolean): Promise<void>;
-  /**
-   * This computer as a machine on the app's server gateways, so agents there can use its shell
-   * and Computer Use. One switch for the whole computer, on by default; turned off, every worker
-   * stops and the records stay on the gateways. The app's own gateway never has one.
-   */
   /** Asks the owner for a folder of this computer; null when they cancel. */
   pickFolder(): Promise<string | null>;
   machines: {
     /** This computer's machine on a gateway: its id there, once registered, and whether agents may use it. */
-    state(gatewayId: string): Promise<{ machineId: string | null; sharing: boolean }>;
-    setSharing(on: boolean): Promise<void>;
+    state(gatewayId: string): Promise<{ machineId: string | null }>;
     onChanged(listener: () => void): () => void;
     /** What agents are doing on this computer now; empty while nothing is. */
     using(): Promise<MachineUse[]>;

@@ -1,7 +1,7 @@
 'use client';
 
 import type { IngressSecret } from '../../components/channels/connect';
-import { Action, Overlay, StatusPill } from '../../kit';
+import { Action, Overlay, OverlayActions, StatusPill } from '../../kit';
 import { CopyLine, listBox } from './channel-copy-line';
 import { ChannelTitle } from './channel-title';
 
@@ -25,7 +25,7 @@ export function ChannelSecretDialog({
         // One column as wide as the dialog: left to its content, a long address widens it and the
         // whole dialog scrolls sideways.
         <div className="grid w-full grid-cols-1 gap-5 p-7">
-          <header className="grid gap-1.5 pr-6">
+          <header className="grid gap-1.5 pr-10">
             <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
               <ChannelTitle type="api" />
               <StatusPill tone="good">Connected</StatusPill>
@@ -39,12 +39,12 @@ export function ChannelSecretDialog({
             <CopyLine label="Webhook URL" value={secret.url} />
             <CopyLine label="Channel token" value={secret.token} secret />
           </div>
-          <div className="flex items-center gap-2">
+          <OverlayActions>
             <span className="flex-1" />
             <Action tone="primary" onClick={() => onOpenChange(false)}>
               Done
             </Action>
-          </div>
+          </OverlayActions>
         </div>
       )}
     </Overlay>

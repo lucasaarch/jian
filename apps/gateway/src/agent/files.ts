@@ -4,7 +4,8 @@ import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { fileDiff } from './diff.js';
-import { confine, confined, openToRead, workspaceOf, writeInWorkspace } from './workspace.js';
+import { confine, confined, jianData, openToRead, writeInWorkspace } from './workspace.js';
+import { workspaceHome } from './workspace-home.js';
 
 /**
  * Reading, searching and changing files on the machine the gateway runs on, shaped for working
@@ -16,9 +17,9 @@ import { confine, confined, openToRead, workspaceOf, writeInWorkspace } from './
  * edit would be computed against text that is no longer there. Both are checked here, where the
  * write happens, rather than asked of the model.
  *
- * They run inside the gateway, not in a confined command, so each path is held to the profile's
- * workspace here (see workspace.ts): writes only inside it, reads inside it or in the system's
- * directories.
+ * They run inside the gateway, not in a confined command, so each path is checked here (see
+ * workspace.ts). On a server: writes only in the directory the agents share, reads there or in the
+ * system's directories. On a desktop: anything but Jian's own data.
  */
 
 /** Lines a read returns when it names no limit: a whole source file, rarely a whole log. */
@@ -56,8 +57,8 @@ const clip = (text: string) =>
   text.length > MAX_OUTPUT ? `${text.slice(0, MAX_OUTPUT)}\n… output cut` : text;
 
 /** The file as it is now, refused when it is not text this tool can safely rewrite. */
-async function textOf(profileId: string, file: string) {
-  const handle = await openToRead(profileId, file);
+async function textOf(file: string) {
+  const handle = await openToRead(file);
 
   try {
     const info = await handle.stat();
@@ -83,8 +84,8 @@ async function textOf(profileId: string, file: string) {
 }
 
 /** A search runs confined like a command, so a link inside the tree cannot lead it out. */
-async function run(profileId: string, command: string, args: string[]) {
-  const home = await workspaceOf(profileId);
+async function run(command: string, args: string[]) {
+  const home = await workspaceHome();
   const search = await confined(home, command, args);
 
   return new Promise<{ code: number | string; stdout: string; stderr: string }>((done) => {
@@ -101,7 +102,27 @@ async function run(profileId: string, command: string, args: string[]) {
   });
 }
 
-export function fileTools(profileId: string): ToolSet {
+/**
+ * A search of a folder holding Jian's own data would walk into it, since nothing confines a search
+ * on a desktop. Its lines all begin with the path they came from, because the target is absolute,
+ * so what came from there leaves here, whichever of the two programs answered. Neither follows a
+ * link it meets on the way, so a real path prefix is enough.
+ */
+async function withoutJianData(lines: string[]): Promise<string[]> {
+  const data = await jianData();
+  if (!data) return lines;
+
+  return lines.filter((line) => {
+    const path = line.startsWith('Binary file ') ? line.slice('Binary file '.length) : line;
+
+    return (
+      path.startsWith(`${data.open}${sep}`) ||
+      !data.closed.some((root) => path.startsWith(`${root}${sep}`))
+    );
+  });
+}
+
+export function fileTools(): ToolSet {
   // What this run read, and the modification time it saw: the proof an edit needs.
   const seen = new Map<string, number>();
 
@@ -128,9 +149,9 @@ export function fileTools(profileId: string): ToolSet {
     seen.set(file, (await stat(file)).mtimeMs);
   };
 
-  /** The path as the owner knows it: inside the workspace, from its root. */
+  /** The path as the owner knows it: inside `HOME`, from there. */
   const shown = async (file: string) => {
-    const home = await workspaceOf(profileId);
+    const home = await workspaceHome();
     const inside = relative(home, file);
 
     return inside && !inside.startsWith(`..${sep}`) && !isAbsolute(inside) ? inside : file;
@@ -146,8 +167,8 @@ export function fileTools(profileId: string): ToolSet {
         limit: z.number().int().min(1).max(10_000).default(READ_LINES),
       }),
       execute: async ({ path, offset, limit }) => {
-        const file = await confine(profileId, path, 'read');
-        const { text, mtime } = await textOf(profileId, file);
+        const file = await confine(path, 'read');
+        const { text, mtime } = await textOf(file);
         const lines = text.split('\n');
 
         // A final newline is how files end, not an extra empty line to show.
@@ -186,11 +207,11 @@ export function fileTools(profileId: string): ToolSet {
           .max(50),
       }),
       execute: async ({ path, edits }) => {
-        const file = await confine(profileId, path, 'write');
+        const file = await confine(path, 'write');
 
         await assertCurrent(file);
 
-        const { text } = await textOf(profileId, file);
+        const { text } = await textOf(file);
         const crlf = text.includes('\r\n');
         let next = text;
         let replacements = 0;
@@ -227,7 +248,7 @@ export function fileTools(profileId: string): ToolSet {
           replacements += edit.replaceAll ? found : 1;
         }
 
-        await writeInWorkspace(profileId, file, next);
+        await writeInWorkspace(file, next);
         await remember(file);
 
         // A few numbered lines around the first change, so the result can be checked in place.
@@ -252,7 +273,7 @@ export function fileTools(profileId: string): ToolSet {
         'Create a file, or replace one completely; missing folders are created. To change part of a file use edit_file instead. An existing file must have been read in this run.',
       inputSchema: z.object({ path: absolute, content: z.string().max(MAX_WRITE) }),
       execute: async ({ path, content }) => {
-        const file = await confine(profileId, path, 'write');
+        const file = await confine(path, 'write');
 
         await assertCurrent(file);
         // What was there, so the owner sees the change and not only the new file. One that
@@ -263,12 +284,12 @@ export function fileTools(profileId: string): ToolSet {
           () => false,
         );
         const before = existed
-          ? await textOf(profileId, file).then(
+          ? await textOf(file).then(
               (current) => current.text,
               () => null,
             )
           : undefined;
-        await writeInWorkspace(profileId, file, content);
+        await writeInWorkspace(file, content);
         await remember(file);
         const diff = before === null ? undefined : fileDiff(await shown(file), before, content);
 
@@ -285,7 +306,7 @@ export function fileTools(profileId: string): ToolSet {
         limit: z.number().int().min(1).max(1000).default(MAX_MATCHES),
       }),
       execute: async ({ pattern, path, limit }) => {
-        const root = await confine(profileId, path, 'read');
+        const root = await confine(path, 'read');
         const found: Array<{ path: string; mtime: number }> = [];
 
         for await (const entry of glob(pattern, {
@@ -294,7 +315,7 @@ export function fileTools(profileId: string): ToolSet {
         })) {
           const file = resolve(root, entry);
           // A link in the tree may point out of reach; it is left out rather than listed.
-          const reachable = await confine(profileId, file, 'read').then(
+          const reachable = await confine(file, 'read').then(
             () => true,
             () => false,
           );
@@ -332,10 +353,10 @@ export function fileTools(profileId: string): ToolSet {
         limit: z.number().int().min(1).max(2000).default(MAX_MATCHES),
       }),
       execute: async ({ pattern, path, glob: only, ignoreCase, contextLines, output, limit }) => {
-        const target = await confine(profileId, path, 'read');
+        const target = await confine(path, 'read');
         const mode = output === 'files' ? ['-l'] : output === 'count' ? ['-c'] : ['-n'];
 
-        let result = await run(profileId, 'rg', [
+        let result = await run('rg', [
           '--no-heading',
           '--color',
           'never',
@@ -352,7 +373,7 @@ export function fileTools(profileId: string): ToolSet {
         // Without ripgrep, grep answers the same question, minus .gitignore.
         // Confined, a missing program is the helper's exit 127 rather than ENOENT.
         if (result.code === 'ENOENT' || result.code === 127) {
-          result = await run(profileId, 'grep', [
+          result = await run('grep', [
             '-rE',
             ...mode,
             ...(ignoreCase ? ['-i'] : []),
@@ -370,7 +391,7 @@ export function fileTools(profileId: string): ToolSet {
           throw new Error(result.stderr.trim() || `Search failed (${result.code})`);
         }
 
-        const lines = result.stdout.split('\n').filter(Boolean);
+        const lines = await withoutJianData(result.stdout.split('\n').filter(Boolean));
 
         return {
           matches: clip(lines.slice(0, limit).join('\n')),
@@ -383,7 +404,7 @@ export function fileTools(profileId: string): ToolSet {
       description: 'List what is in a directory on the machine this gateway runs on.',
       inputSchema: z.object({ path: absolute }),
       execute: async ({ path }) => {
-        const directory = await confine(profileId, path, 'read');
+        const directory = await confine(path, 'read');
         const entries = await readdir(directory, { withFileTypes: true });
 
         return {

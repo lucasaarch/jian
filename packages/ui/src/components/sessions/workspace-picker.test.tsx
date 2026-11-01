@@ -28,8 +28,6 @@ const here = (fields: Partial<ThisMachine> = {}): ThisMachine => ({
   pickFolder: vi.fn(async () => '/work/atlas'),
   machineId: 'this-machine',
   ownGateway: false,
-  sharing: true,
-  setSharing: vi.fn(),
   ...fields,
 });
 
@@ -106,7 +104,7 @@ it('offers a browser only the repositories: it cannot reach the computer it runs
   await view.press('Project');
 
   expect(view.button('This Machine')).toBeUndefined();
-  expect(view.button('Cloud')).toBeDefined();
+  expect(view.button('Remote Gateway')).toBeDefined();
 });
 
 it('offers an app on its own gateway only this computer, with no place to choose', async () => {
@@ -116,7 +114,7 @@ it('offers an app on its own gateway only this computer, with no place to choose
   await view.press('Project');
   // Straight to its folders, with nothing to pick between first.
   expect(view.button('This Machine')).toBeUndefined();
-  expect(view.button('Cloud')).toBeUndefined();
+  expect(view.button('Remote Gateway')).toBeUndefined();
   expect(view.button('Open folder…')).toBeDefined();
   expect(view.button('Start from scratch')).toBeDefined();
 
@@ -144,7 +142,7 @@ it('keeps a folder picked once in This Machine’s list, and starts on it', asyn
 it('picks several repositories with Select multiple, and one closes the list otherwise', async () => {
   const view = await show({});
   await view.press('Project');
-  await view.press('Cloud');
+  await view.press('Remote Gateway');
   await act(async () => document.querySelector<HTMLElement>('[role="switch"]')?.click());
   await view.press('acme/atlas');
   await view.press('acme/harbor');
@@ -182,7 +180,7 @@ it('lists the cloud, online machines other than this one, and this one by a fold
   expect(view.button('Sleeping')).toBeUndefined();
   expect(view.button('This one')).toBeUndefined();
 
-  await view.press('This Machine…');
+  await view.press('This Machine');
   expect(machine.pickFolder).toHaveBeenCalledOnce();
   expect(view.seen.choice).toMatchObject({ place: { kind: 'here', cloneInto: '/work/atlas' } });
 });
@@ -198,21 +196,9 @@ it('stays where it was when the folder dialog is cancelled', async () => {
     },
   });
   await view.press('Local');
-  await view.press('This Machine…');
-
-  expect(view.seen.choice).toMatchObject({ place: { kind: 'cloud' } });
-});
-
-it('asks to share this computer before offering its folders on a server', async () => {
-  const setSharing = vi.fn();
-  const view = await show({ machine: here({ machineId: null, sharing: false, setSharing }) });
-  await view.press('Project');
   await view.press('This Machine');
 
-  expect(view.button('Open folder…')).toBeUndefined();
-  expect(document.body.textContent).toContain('shared');
-  await act(async () => document.querySelector<HTMLElement>('[role="switch"]')?.click());
-  expect(setSharing).toHaveBeenCalledWith(true);
+  expect(view.seen.choice).toMatchObject({ place: { kind: 'cloud' } });
 });
 
 it('offers only a start from scratch and the workspaces, with nothing to search', async () => {

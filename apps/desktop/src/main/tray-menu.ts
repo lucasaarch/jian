@@ -10,13 +10,11 @@ export type TrayState = {
    * Whether agents may use this computer; undefined while the app knows no server gateway, as
    * the app's own gateway never has a machine and the switch would change nothing.
    */
-  sharing: boolean | undefined;
 };
 
 export type TrayActions = {
   /** Shows the window, taken where the target says when there is one. */
   open(target?: OpenTarget): void;
-  setSharing(on: boolean): void;
   quit(): void;
 };
 
@@ -49,17 +47,6 @@ export function trayMenu(state: TrayState, actions: TrayActions): MenuItemConstr
         click: () => actions.open({ gatewayId: gateway.id }),
       }),
     ),
-    ...(state.sharing === undefined
-      ? []
-      : [
-          { type: 'separator' } as const,
-          {
-            label: 'Let Agents Use This Computer',
-            type: 'checkbox' as const,
-            checked: state.sharing,
-            click: () => actions.setSharing(!state.sharing),
-          },
-        ]),
     { type: 'separator' },
     { label: 'Settings…', click: () => actions.open({ sheet: 'settings' }) },
     { label: 'Check for Updates…', click: () => actions.open({ sheet: 'updates' }) },

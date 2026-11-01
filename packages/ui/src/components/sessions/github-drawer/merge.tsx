@@ -3,7 +3,7 @@
 import { Menu } from '@base-ui/react/menu';
 import { Check, ChevronDown, GitMerge } from 'lucide-react';
 import { useState } from 'react';
-import { Action, Overlay } from '../../../kit';
+import { Action, Overlay, OverlayActions } from '../../../kit';
 import { MenuEntry, menuPopup } from '../../../kit/menu';
 import type { GitHubMergeMethod, GitHubPull } from '../../../lib/api';
 
@@ -95,7 +95,7 @@ export function MergeConfirm({
       size="form"
     >
       <div className="grid w-full gap-5 p-7">
-        <header className="grid gap-1.5 pr-6">
+        <header className="grid gap-1.5 pr-10">
           <h2 className="text-lg font-semibold tracking-tight">
             {methodNames[shown].action} #{pull.number}?
           </h2>
@@ -103,14 +103,14 @@ export function MergeConfirm({
             {pull.head.ref} lands on {pull.base.ref} {methodNames[shown].detail}.
           </p>
         </header>
-        <div className="flex items-center justify-end gap-2">
+        <OverlayActions>
           <Action tone="quiet" disabled={busy} onClick={close}>
             Cancel
           </Action>
           <Action tone="primary" busy={busy} onClick={() => method && merge(method)}>
             {methodNames[shown].action}
           </Action>
-        </div>
+        </OverlayActions>
       </div>
     </Overlay>
   );

@@ -11,6 +11,10 @@ import type { WhatsAppConnections } from './channels/whatsapp/connections.js';
 import { WhatsAppBusinessChannel } from './channels/whatsapp-business.js';
 import { Coordination } from './coordination/service.js';
 import { GitHubIntegrations } from './integrations/github.js';
+import { XClient } from './integrations/x/client.js';
+import { XIntegration } from './integrations/x/integration.js';
+import { XTokens } from './integrations/x/tokens.js';
+import { XTools } from './integrations/x/tools.js';
 import { moveMcpSecrets } from './mcp/move-secrets.js';
 import { ModelCatalog } from './providers/catalog-source.js';
 import { CodexLogin } from './providers/codex/login.js';
@@ -99,6 +103,8 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
     outbound.fetch,
     Date.now,
   );
+  const x = new XIntegration(store, gatewayVault, options.publicUrl, outbound.fetch);
+  const xTokens = new XTokens(store, gatewayVault, (reader) => x.app(reader), outbound.fetch);
   // The store rides along: several consumers read records no single area owns.
   const services = {
     ...buildServices({
@@ -182,6 +188,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
   const runtime = new AgentRuntime(services, undefined, {
     gatewayVault,
     github,
+    x: new XTools(x, new XClient(xTokens, outbound.fetch), services.media, store),
     ...(mcpLogins ? { mcpOAuth: mcpLogins.provider } : {}),
     codexLogin,
     outbound,
@@ -199,6 +206,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
       ? createApp({
           ...services,
           github,
+          x,
           codexLogin,
           providerModels,
           skills,
@@ -225,7 +233,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
       await services.providers.migrateLegacyOllamaConnection();
       // Secrets of the MCP servers migration 0071 made the installation's; nothing once done.
       await moveMcpSecrets(store, vault, gatewayVault);
-      // SSH keys that still live only as files in an agent's workspace; nothing once imported.
+      // SSH keys that still live only as files in an earlier per-agent folder; nothing once imported.
       await importWorkspaceSshKeys(store, gatewayVault);
       stage = 'queue';
       await queue?.start();

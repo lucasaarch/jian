@@ -14,8 +14,6 @@ const DESCRIPTION =
 
 const search = (tools: string) => `# Searching the web and reading pages
 
-# Searching the web and reading pages
-
 ${tools}
 
 ## Whether to search
@@ -51,7 +49,7 @@ Use \`inspect_page\` for any public website, including shared artifacts and desi
 ${where} Choose the viewport to inspect desktop and mobile layouts.
 
 Look at the screenshot, which comes back with the result; \`analyze_media\` shows it again by its media ID. Text alone cannot show a design. Save the ZIP
-with \`save_attachment\` and unpack it in your workspace: \`inspection.json\` contains frame
+with \`save_attachment\` and unpack it in a folder for this task: \`inspection.json\` contains frame
 indexes, selectors, element bounds, computed styles and asset URLs; \`frames/*.html\` contains
 the rendered DOM; \`resources/*\` contains the publicly served HTML, scripts, CSS, fonts and
 images, mapped by URL and MIME type in the manifest. These resources are not the private

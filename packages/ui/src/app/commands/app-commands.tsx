@@ -12,6 +12,7 @@ import {
   PanelLeft,
   PanelRight,
   Plug,
+  RefreshCw,
   RotateCcw,
   Settings2,
   Sun,
@@ -19,6 +20,7 @@ import {
 import { type ReactNode, useMemo } from 'react';
 import { toggleInspector, toggleInspectorFull } from '../../components/sessions/inspector-host';
 import { useThemeChoice } from '../../components/shell/theme';
+import { reconnectGateway } from '../../lib/stores/reconnect';
 import { reloadApp } from '../reload';
 import { toggleSidebar } from '../sidebar-bar';
 import { type AppCommand, useCommands } from './registry';
@@ -71,9 +73,13 @@ const pages: { id: string; title: string; keywords: string[]; icon: ReactNode }[
 
 /**
  * The commands of the app around the chats, in every host: its settings and their pages, the
- * sidebar, the theme. `openSettings` opens the overlay, on `page` when one is named.
+ * sidebar, the theme, reaching the gateway again. `openSettings` opens the overlay, on `page` when
+ * one is named. A host that watches its gateways itself passes `reconnect` to look at once too.
  */
-export function useAppCommands(openSettings: (page?: string) => void): void {
+export function useAppCommands(
+  openSettings: (page?: string) => void,
+  reconnect?: () => void,
+): void {
   const { theme, setTheme } = useThemeChoice();
   const commands = useMemo<AppCommand[]>(() => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -133,6 +139,17 @@ export function useAppCommands(openSettings: (page?: string) => void): void {
         run: () => setTheme(next),
       },
       {
+        id: 'reconnect-gateway',
+        group: 'Gateway',
+        title: 'Reconnect to gateway',
+        keywords: ['force', 'retry', 'refresh', 'connection', 'server', 'offline', 'stuck'],
+        icon: <RefreshCw size={15} />,
+        run: () => {
+          reconnect?.();
+          reconnectGateway();
+        },
+      },
+      {
         id: 'reload',
         group: 'App',
         title: 'Reload app',
@@ -141,6 +158,6 @@ export function useAppCommands(openSettings: (page?: string) => void): void {
         run: reloadApp,
       },
     ];
-  }, [theme, setTheme, openSettings]);
+  }, [theme, setTheme, openSettings, reconnect]);
   useCommands('app', commands);
 }

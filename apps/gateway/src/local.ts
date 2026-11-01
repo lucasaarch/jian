@@ -22,8 +22,16 @@ type ParentPort = {
 
 const config = z
   .object({
-    /** Where the database and the agents' workspaces live; the app's data directory. */
+    /**
+     * Jian's own folder for this gateway: its database, its SSH keys, and the workspaces of earlier
+     * versions. Its being set is what tells the gateway it runs on the owner's computer.
+     */
     JIAN_LOCAL_DIR: z.string().min(1),
+    /**
+     * The app's whole data directory, which the file tools refuse. Required: without it a gateway
+     * would run on the owner's home with its credentials in reach of them.
+     */
+    JIAN_APP_DATA: z.string().min(1),
     JIAN_API_TOKEN: z.string().min(32),
     /** One 32-byte key, base64: the app keeps it in the system's keychain. */
     JIAN_MASTER_KEY: z.string().regex(/^[A-Za-z0-9+/]{43}=$/),
@@ -48,8 +56,6 @@ if (!config.success) {
 
 const dir = config.data.JIAN_LOCAL_DIR;
 await mkdir(join(dir, 'database'), { recursive: true });
-// The agents' workspaces stay with the rest of the app's data, not in the owner's home.
-process.env.JIAN_WORKSPACES ||= join(dir, 'workspaces');
 
 const parentPort = (process as { parentPort?: ParentPort }).parentPort;
 const gateway = await createGateway({

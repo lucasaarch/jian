@@ -1,16 +1,12 @@
 import type { Skill } from '@jian/contracts';
 
-/**
- * Offered only to a profile with self-management on: without it the tools it describes do not
- * exist.
- */
 export const managingYourself: Skill = {
   name: 'managing-yourself',
   description:
     'Use before changing your own identity or creating a profile: when each is the right place, and what the owner expects.',
   instructions: `# Changing yourself
 
-The owner let this profile manage itself. The tools are in the \`self\` group; load it with
+You can change your own identity. The tools are in the \`self\` group; load it with
 \`load_tools\`: \`read_identity\`, \`update_identity\`, \`create_profile\`.
 
 Identity is who you are: role, tone, goals and boundaries. Facts belong in memory

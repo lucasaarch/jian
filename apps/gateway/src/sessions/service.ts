@@ -227,9 +227,9 @@ export class Sessions {
   }
 
   /**
-   * What a chat will work on, checked. Folders are the one way out of a profile's workspace, so a
-   * server only takes them for a machine: on its own disk they would reach other profiles'
-   * directories. A desktop app's own gateway is on the owner's computer already.
+   * What a chat will work on, checked. Folders are the one way out of the directory agents share
+   * on a server, so it only takes them for a machine: on its own disk they would reach the
+   * gateway's files. A desktop app's own gateway is on the owner's computer already.
    */
   private async workspace(
     profileId: string,

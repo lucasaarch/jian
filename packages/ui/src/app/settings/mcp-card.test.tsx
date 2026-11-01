@@ -82,12 +82,14 @@ it('removes a server only once its name is typed, saving the list without it', a
   expect(confirm?.disabled).toBe(true);
   expect(view.replaceMcpServers).not.toHaveBeenCalled();
 
-  const field = confirm?.closest('form')?.querySelector('input');
+  const field = confirm?.closest('[role="dialog"]')?.querySelector('input');
   await view.type(field, 'atlas_docs');
   await act(async () => confirm?.click());
 
   expect(view.replaceMcpServers).toHaveBeenCalledWith([tickets]);
 });
+
+const dialog = () => document.querySelector('[role="dialog"]');
 
 it('adds a server to the end of the list the gateway keeps', async () => {
   const view = await render();
@@ -97,7 +99,9 @@ it('adds a server to the end of the list the gateway keeps', async () => {
   const [name, url] = [...(form?.querySelectorAll('input') ?? [])];
   await view.type(name, 'lantern_notes');
   await view.type(url, 'https://notes.example.test/mcp');
-  await act(async () => form?.querySelector<HTMLButtonElement>('button[type="submit"]')?.click());
+  await act(async () =>
+    dialog()?.querySelector<HTMLButtonElement>('button[type="submit"]')?.click(),
+  );
 
   expect(view.replaceMcpServers).toHaveBeenCalledWith([
     docs,

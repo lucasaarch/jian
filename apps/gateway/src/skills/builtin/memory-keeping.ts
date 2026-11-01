@@ -57,7 +57,8 @@ Two entries about one subject, or that only make sense together, can be linked w
 mentions it. A recalled entry marked \`recalledWith\` came through such a link. Link a
 person to the project they run, a decision to the constraint behind it. Do not link
 everything to everything: a link that is not needed spends room that a relevant entry would
-have used. Recall follows one link, never a chain.
+have used. Recall follows one link, never a chain. \`unlink_memories\` takes a link away when two
+entries stop belonging together.
 
 ## Tidying
 

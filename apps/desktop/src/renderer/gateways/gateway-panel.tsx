@@ -65,10 +65,8 @@ export function GatewayPanel({
       pickFolder: () => desktop().pickFolder(),
       machineId: thisComputer?.machineId ?? null,
       ownGateway: gateway.local,
-      sharing: thisComputer?.sharing ?? false,
-      setSharing: (on) => void desktop().machines.setSharing(on),
     }),
-    [thisComputer?.machineId, thisComputer?.sharing, gateway.local],
+    [thisComputer?.machineId, gateway.local],
   );
   useGatewayOnline(
     gateway.status !== 'offline' && !(gateway.status === 'connecting' && !gateway.url),

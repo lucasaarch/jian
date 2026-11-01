@@ -1,14 +1,14 @@
 import type { Skill } from '@jian/contracts';
 
-/** Offered with the workspace shell skills: every agent may use every connected machine. */
 export const remoteControl: Skill = {
   name: 'remote-control',
   description:
     'Use when asked to control a computer the owner connected under Machines: run commands there, drive the screen (click, type, scroll), take a screenshot, or copy files to or from that machine.',
   instructions: `# Machines
 
-The owner connects computers in the panel under **Machines**. Each machine has a worker
-that polls this gateway over HTTPS. Every agent may use every connected machine, for shell
+The owner connects computers in the panel under **Machines**. A desktop app connected to this
+gateway is one of them by itself, listed as This computer, for as long as the app is open. Each
+machine has a worker that polls this gateway over HTTPS. Every agent may use every connected machine, for shell
 and computer use alike. Commands and GUI actions run as the
 logged-in local user — full local privileges, not a sandbox.
 
@@ -35,7 +35,7 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
 - \`pull_remote_file\` — read a remote path into conversation media (size-capped).
 - \`push_remote_file\` — write UTF-8 or base64 bytes to a remote path (size-capped).
 
-Gateway \`files\` / \`shell\` tools act on the **gateway host** (your workspace), not the remote
+Gateway \`files\` / \`shell\` tools act on the **gateway host**, not the remote
 PC. For work on the remote computer, use the remote tools. Do not claim a remote action
 succeeded unless the tool result confirms it (exit code, stdout, or \`ok: true\`).
 
@@ -50,7 +50,7 @@ succeeded unless the tool result confirms it (exit code, stdout, or \`ok: true\`
    other tool refuses it until \`update_remote_machine\` brings it up to date.
    Computer use needs capability \`computer-macos-v1\`, \`computer-linux-v1\`, or
    \`computer-windows-v1\` (updated Jian Remote on that OS).
-2. Say one short line before a slow or visible action ("Opening Calculator on Mark.").
+2. Say one short line before a slow or visible action ("Opening Calculator on the Studio Mac.").
 3. For GUI work: \`remote_computer\` with \`action: screenshot\` first, then click/type using
    those image coordinates; screenshot again after meaningful UI changes — not after every
    keystroke. Prefer \`run_remote_command\` when a CLI exists.
@@ -61,9 +61,10 @@ succeeded unless the tool result confirms it (exit code, stdout, or \`ok: true\`
 
 ## After reboot
 
-The installer registers a per-user auto-start: Windows Task Scheduler **ONLOGON**, macOS
-LaunchAgent, or Linux \`systemd --user\`. After a reboot the worker starts when that user
-signs in. Until then the machine stays offline in the panel.
+The installer registers an auto-start: Windows Task Scheduler **ONLOGON**, macOS LaunchAgent, or
+Linux \`systemd --user\`, or a system unit on a server with no user session. After a reboot a
+per-user worker starts when that user signs in, and until then the machine stays offline in the
+panel. A desktop app's own machine comes and goes with the app.
 
 ## Limits
 

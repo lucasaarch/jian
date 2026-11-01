@@ -1,12 +1,47 @@
-import { Picker, PickerAction, PickerRow } from '@jian/ui';
-import { Laptop, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { HoverTip, Picker, PickerAction, PickerRow, reconnectGateway } from '@jian/ui';
+import { Laptop, Plus, RefreshCw } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { type GatewaySummary, STATUS_SAID } from '../../shared/bridge';
+import { desktop } from '../desktop';
 import { STATUS_DOT } from './status';
 
-/** Said under a gateway only when it is not connected: connected is what the dot already says. */
+/**
+ * Said under a gateway only when there is something to read: connected is what the dot already
+ * says, and one not answering has its way to reconnect beside it.
+ */
 function detailOf(gateway: GatewaySummary): string | undefined {
-  return gateway.status === 'online' ? undefined : STATUS_SAID[gateway.status];
+  return gateway.status === 'online' || gateway.status === 'offline'
+    ? undefined
+    : STATUS_SAID[gateway.status];
+}
+
+/** How long the button turns after a click, in ms: the answer comes through the gateway's status. */
+const TRYING_MS = 1_200;
+
+/** Asks a gateway that is not answering again now, and the panel open on it to read everything. */
+function Reconnect({ gateway, open }: { gateway: GatewaySummary; open: boolean }) {
+  const [trying, setTrying] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const label = `Reconnect to ${gateway.name}`;
+  return (
+    <HoverTip tip={label}>
+      <button
+        type="button"
+        aria-label={label}
+        disabled={trying}
+        onClick={() => {
+          desktop().reconnectGateway(gateway.id);
+          if (open) reconnectGateway();
+          setTrying(true);
+          timer.current = setTimeout(() => setTrying(false), TRYING_MS);
+        }}
+        className="absolute top-1/2 right-1.5 grid size-7 -translate-y-1/2 place-items-center rounded-lg text-muted transition-colors hover:bg-glass-press hover:text-ink"
+      >
+        <RefreshCw size={14} className={trying ? 'animate-spin' : ''} aria-hidden="true" />
+      </button>
+    </HoverTip>
+  );
 }
 
 function Mark({ gateway }: { gateway: GatewaySummary }) {
@@ -70,12 +105,13 @@ export function GatewayPicker({
     >
       {gateways.map((gateway) => {
         const detail = detailOf(gateway);
+        const away = gateway.status === 'offline';
         return (
           <PickerRow
             key={gateway.id}
             leading={<Mark gateway={gateway} />}
             label={gateway.name}
-            {...(gateway.unread > 0
+            {...(gateway.unread > 0 && !away
               ? {
                   trailing: (
                     <span className={badge}>
@@ -86,6 +122,9 @@ export function GatewayPicker({
                 }
               : {})}
             {...(detail ? { detail } : {})}
+            {...(away
+              ? { action: <Reconnect gateway={gateway} open={gateway.id === current?.id} /> }
+              : {})}
             selected={gateway.id === current?.id}
             onPick={close(() => select(gateway.id))}
           />

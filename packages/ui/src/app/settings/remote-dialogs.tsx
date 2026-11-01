@@ -2,13 +2,13 @@
 
 import { type FormEvent, type ReactNode, useRef, useState } from 'react';
 import type { Machine, Reveal } from '../../components/remote/machines';
-import { Action, Overlay, TextField } from '../../kit';
+import { Action, Overlay, OverlayActions, TextField } from '../../kit';
 import { CopyCommand } from './copy-command';
 
 /** The top of a dialog of these pages: what it is, and what it does. */
 function DialogHeader({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <header className="grid gap-1 pr-6">
+    <header className="grid gap-1 pr-10">
       <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
       <p className="text-sm text-muted">{children}</p>
     </header>
@@ -73,14 +73,14 @@ export function AddMachine({
             {error}
           </p>
         )}
-        <div className="flex justify-end gap-2">
+        <OverlayActions>
           <Action tone="quiet" onClick={close}>
             Cancel
           </Action>
           <Action tone="primary" type="submit" busy={busy} disabled={!name.trim()}>
             Create machine
           </Action>
-        </div>
+        </OverlayActions>
       </form>
     </Overlay>
   );
@@ -126,11 +126,11 @@ export function RevealCommand({
           <code className="font-mono text-ink">jian-remote status</code> says how it stands and{' '}
           <code className="font-mono text-ink">jian-remote logs</code> what it did.
         </p>
-        <div className="flex justify-end">
+        <OverlayActions>
           <Action tone="primary" onClick={onClose}>
             Done
           </Action>
-        </div>
+        </OverlayActions>
       </div>
     </Overlay>
   );
@@ -162,14 +162,14 @@ export function RotateCredentials({
           Issues a new worker token and invalidates the current one. The machine stays registered;
           you get its install command again, with the new token, to run on that computer.
         </DialogHeader>
-        <div className="flex justify-end gap-2">
+        <OverlayActions>
           <Action tone="quiet" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Action>
           <Action tone="primary" busy={busy} onClick={rotate}>
             Rotate credentials
           </Action>
-        </div>
+        </OverlayActions>
       </div>
     </Overlay>
   );

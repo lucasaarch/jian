@@ -39,7 +39,7 @@
 /* The chat sidebar's width, which the bar above it matches. */
 :root {
   /* The owner's width where it fits: a narrow window keeps the chat's minimum beside it. */
-  --sidebar-width: clamp(12.5rem, var(--sidebar-chosen, 16rem), max(12.5rem, calc(100vw - 25rem)));
+  --sidebar-width: clamp(16rem, var(--sidebar-chosen, 16rem), max(16rem, calc(100vw - 25rem)));
 }
 
 /* Something above the chat sidebar that lines up with it, only while a sidebar is on screen:

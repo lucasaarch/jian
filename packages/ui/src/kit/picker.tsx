@@ -81,6 +81,7 @@ export function PickerRow({
   onPick,
   onSettings,
   settingsLabel,
+  action,
 }: {
   leading?: ReactNode;
   /** At the row's far end, in the room its settings button would have. */
@@ -91,6 +92,8 @@ export function PickerRow({
   onPick: () => void;
   onSettings?: () => void;
   settingsLabel?: string;
+  /** A button of its own at the row's end, beside the row's button rather than inside it. */
+  action?: ReactNode;
 }) {
   return (
     <li className="group relative">
@@ -119,6 +122,7 @@ export function PickerRow({
           <Settings2 size={15} />
         </button>
       )}
+      {action}
     </li>
   );
 }

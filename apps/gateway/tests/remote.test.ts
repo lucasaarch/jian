@@ -1045,27 +1045,25 @@ describe('what a chat works on', () => {
 
 describe('the folders a tool can reach', () => {
   it('reaches a chat’s folder only while its tool runs, and no further', async () => {
-    const services = await testServices();
-    const owner = await services.profiles.createProfile({ name: 'Atlas', instructions: 'Help.' });
     const folder = mkdtempSync(join(tmpdir(), 'jian-folder-'));
     const beside = mkdtempSync(join(tmpdir(), 'jian-beside-'));
     const [real] = await realFolders([folder]);
 
     try {
-      await expect(confine(owner.id, join(folder, 'notes.md'), 'write')).rejects.toThrow(/outside/);
+      await expect(confine(join(folder, 'notes.md'), 'write')).rejects.toThrow(/outside/);
       await expect(
-        withFolders([real as string], () => confine(owner.id, join(folder, 'notes.md'), 'write')),
+        withFolders([real as string], () => confine(join(folder, 'notes.md'), 'write')),
       ).resolves.toContain('notes.md');
       await expect(
-        withFolders([real as string], () => confine(owner.id, join(beside, 'x'), 'read')),
+        withFolders([real as string], () => confine(join(beside, 'x'), 'read')),
       ).rejects.toThrow(/outside/);
       // A way out through a link in the folder is the link's target, which is not within reach.
       symlinkSync(beside, join(folder, 'out'));
       await expect(
-        withFolders([real as string], () => confine(owner.id, join(folder, 'out', 'x'), 'read')),
+        withFolders([real as string], () => confine(join(folder, 'out', 'x'), 'read')),
       ).rejects.toThrow(/outside/);
       // Over: the next call, for any conversation of this agent, has nothing open.
-      await expect(confine(owner.id, join(folder, 'notes.md'), 'read')).rejects.toThrow(/outside/);
+      await expect(confine(join(folder, 'notes.md'), 'read')).rejects.toThrow(/outside/);
     } finally {
       rmSync(folder, { recursive: true, force: true });
       rmSync(beside, { recursive: true, force: true });

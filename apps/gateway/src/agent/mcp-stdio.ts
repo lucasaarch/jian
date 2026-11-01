@@ -13,6 +13,8 @@ export function stdioTransport(options: {
   args: readonly string[];
   env: Record<string, string>;
   signal: AbortSignal;
+  /** What the command says on stderr, as it says it. */
+  said?: (text: string) => void;
 }): MCPTransport {
   let child: ReturnType<typeof spawn> | undefined;
   let buffer = '';
@@ -35,7 +37,8 @@ export function stdioTransport(options: {
       child.on('close', () => transport.onclose?.());
 
       // Diagnostics belong on stderr by the protocol's own rule; they are not messages.
-      child.stderr?.on('data', () => undefined);
+      child.stderr?.setEncoding('utf8');
+      child.stderr?.on('data', (chunk: string) => options.said?.(chunk));
 
       child.stdout?.setEncoding('utf8');
       child.stdout?.on('data', (chunk: string) => {

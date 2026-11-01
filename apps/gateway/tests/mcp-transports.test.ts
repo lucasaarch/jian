@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { mcpValueSecret } from '../src/agent/mcp-connect.js';
+import { connectMcp, mcpValueSecret } from '../src/agent/mcp-connect.js';
 import { testServices } from './helpers/services.js';
 
 /** A server that answers the handshake over stdin and stdout, as a real one does. */
@@ -112,6 +112,30 @@ describe('the ways an MCP server can be reached', () => {
 
     expect(status.reachable).toBe(false);
     expect(status.error).toContain('JIAN_MCP_ABSENT');
+  });
+
+  it('says why a command did not answer, in its words and without what it was given', async () => {
+    const script =
+      "console.error('no token, opening the browser with ' + process.env.CLIENT_SECRET); setInterval(() => {}, 1000);";
+    const failure = await connectMcp({
+      server: {
+        name: 'waits',
+        transport: 'stdio',
+        command: process.execPath,
+        args: ['-e', script],
+        env: [{ name: 'CLIENT_SECRET' }],
+      } as never,
+      vault: { read: async () => 'synthetic-secret' },
+      fetcher: fetch,
+      signal: AbortSignal.timeout(1_000),
+    }).then(
+      () => '',
+      (error: Error) => error.message,
+    );
+
+    expect(failure).toContain('no token, opening the browser');
+    expect(failure).toContain('[REDACTED]');
+    expect(failure).not.toContain('synthetic-secret');
   });
 
   it('refuses OAuth on a command server, which has no browser to send anyone to', async () => {

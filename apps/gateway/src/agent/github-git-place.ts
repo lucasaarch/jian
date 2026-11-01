@@ -5,7 +5,8 @@ import { GatewayError } from '../core/errors.js';
 import type { Remote } from '../remote/service.js';
 import { withGitConfig } from './github-git-command.js';
 import { commandEnvironment } from './shell.js';
-import { confine, confined, workspaceOf } from './workspace.js';
+import { confine, confined, reachableFolders } from './workspace.js';
+import { cloneRoot, workspaceHome, workspaceTemp } from './workspace-home.js';
 
 /** Long enough for a clone of an ordinary repository; the worker channel allows no more. */
 const TIMEOUT_MS = 120_000;
@@ -18,7 +19,7 @@ type GitOutcome = {
   timedOut: boolean;
 };
 
-/** Where a conversation's git runs: the gateway's workspace, or the machine it targets. */
+/** Where a conversation's git runs: the gateway's own machine, or the machine it targets. */
 export type GitPlace = {
   /** In words, for what the agent reads. */
   name: string;
@@ -41,27 +42,30 @@ const clip = (text: string) =>
     : text;
 
 /**
- * The gateway's workspace, under the shell tool's rules: confined to the profile's directory,
- * without the gateway's environment, with the installation's SSH keys for everything else.
+ * The gateway's own machine, under the shell tool's rules: the same reach, without the gateway's
+ * environment, with the installation's SSH keys for everything else. A relative path starts in the
+ * chat's first folder, or where this host keeps clones.
  */
-export function localPlace(
-  profileId: string,
-  gitAccess: { readOnly: string[]; writable: string[]; sshCommand?: string },
-): GitPlace {
+export function localPlace(gitAccess: {
+  readOnly: string[];
+  writable: string[];
+  sshCommand?: string;
+}): GitPlace {
   return {
-    name: "this gateway's workspace",
+    name: 'the machine this gateway runs on',
     async checkout(path, fallback, clone) {
-      const home = await workspaceOf(profileId);
-      const target = await confine(profileId, resolve(home, path ?? fallback), 'write');
+      const base = reachableFolders()[0] ?? (await cloneRoot());
+      const target = await confine(resolve(base, path ?? fallback), 'write');
 
       if (clone) await mkdir(dirname(target), { recursive: true, mode: 0o700 });
       return target;
     },
     async git(args, config = [], signal) {
-      const home = await workspaceOf(profileId);
+      const home = await workspaceHome();
+      const temp = await workspaceTemp();
       const command = await confined(home, 'git', args, gitAccess);
       const env = withGitConfig(
-        commandEnvironment(home, process.env, gitAccess.sshCommand),
+        commandEnvironment({ home, temp }, process.env, gitAccess.sshCommand),
         config,
       );
 

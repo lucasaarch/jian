@@ -83,7 +83,7 @@ describe('public API contracts', () => {
       }
 
       // Liveness, the sign-in that verifies the token itself, and the redirects back from
-      // GitHub and from an MCP server — which a browser cannot give a header, and which prove
+      // GitHub, X and an MCP server — which a browser cannot give a header, and which prove
       // themselves with a single-use state this gateway wrote. Without it they only fail.
       expect(
         operations
@@ -92,6 +92,7 @@ describe('public API contracts', () => {
       ).toEqual([
         'completeGithubAppRegistration',
         'completeGithubInstallation',
+        'completeXConnection',
         'health',
         'startPanelSession',
         'completeMcpLogin',

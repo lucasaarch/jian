@@ -33,48 +33,9 @@ Do not apply these coding rules to unrelated conversation.`,
 const ponytailReview: Skill = {
   name: 'ponytail-review',
   description:
-    'Use for a read-only review of a code diff focused on unnecessary complexity and what can be removed.',
+    'Use for a read-only review of a code diff or a whole repository, focused on unnecessary complexity and what can be removed.',
   origin,
-  instructions: `Review the diff for over-engineering only. Read the code and its callers before judging. Report one finding per line with file and line, what to cut and the simpler replacement. Look for reinvented standard-library or platform features, unnecessary dependencies, dead flexibility and single-use abstractions. Do not apply fixes. Do not call safety checks, error handling or regression tests bloat. If nothing can be cut, say "Lean already. Ship." Do not invent a savings number.`,
+  instructions: `Review for over-engineering only, without editing. Read the code and its callers before judging. Rank findings by useful reduction: dead code, speculative configuration, one-implementation abstractions, wrappers that only delegate, dependencies the standard library or native platform replaces, and duplicated logic. For each, give the location, what to remove and what replaces it. Preserve security, validation, error handling, accessibility and required behavior; never call those excess. If nothing is worth removing, say so.`,
 };
 
-const ponytailAudit: Skill = {
-  name: 'ponytail-audit',
-  description:
-    'Use for a read-only whole-repository audit of over-engineering, ranked by the largest useful simplifications.',
-  origin,
-  instructions: `Scan the repository for unnecessary complexity. Rank findings by useful reduction: dead code, speculative configuration, one-implementation abstractions, wrappers that only delegate, dependencies replaced by the standard library or native platform, and duplicated logic. Give the location, what to remove and what replaces it. Do not edit. Preserve security, validation, error handling, accessibility and tests. Say "Lean already. Ship." if nothing is worth cutting. Do not claim measured savings without a baseline.`,
-};
-
-const ponytailDebt: Skill = {
-  name: 'ponytail-debt',
-  description:
-    'Use to list deliberate ponytail: shortcuts in a codebase, with each ceiling and the trigger to revisit it.',
-  origin,
-  instructions: `Use search_files or run_command to find comment markers matching (#|//) ?ponytail:, excluding dependencies and build output. Report each marker by file and line, its simplification, ceiling and upgrade trigger. Mark entries without a trigger as "no-trigger". End with the marker count and no-trigger count. This is read-only; write a ledger only if the owner asks.`,
-};
-
-const ponytailGain: Skill = {
-  name: 'ponytail-gain',
-  description:
-    'Use when asked about Ponytail benchmark results; distinguish published measurements from this repository.',
-  origin,
-  instructions: `Report only the published Ponytail benchmark, never a made-up saving for this repository. The Ponytail 4.10.0 README reports an agentic evaluation across 12 feature tasks (Haiku 4.5, n=4): mean 54% less code, 22% fewer tokens, 20% lower cost and 27% less time versus its no-skill baseline. These numbers are not guaranteed for Jian or this repository. Cite the upstream benchmark at https://github.com/DietrichGebert/ponytail/tree/e3ba2aa6f1e6f0bc4d69eb09c9f0d0a93af56156/benchmarks and mention its limited sample and model. Do not claim actual local savings without a paired measurement.`,
-};
-
-const ponytailHelp: Skill = {
-  name: 'ponytail-help',
-  description:
-    'Use when asked which Ponytail skills are available in Jian and how to enable or disable them.',
-  origin,
-  instructions: `Ponytail is automatically available for coding work when the built-in skill is enabled for this agent. The owner can turn it off under Skills. In one conversation, exact standalone commands /ponytail lite, /ponytail full, /ponytail ultra and /ponytail off change the mode until another command; /ponytail returns to full. Companion skills can be loaded with load_skill: ponytail-review for a diff, ponytail-audit for the repository, ponytail-debt for shortcut markers, and ponytail-gain for upstream benchmark information. Jian does not run upstream Codex or Claude hooks.`,
-};
-
-export const ponytailSkills: readonly Skill[] = [
-  ponytail,
-  ponytailReview,
-  ponytailAudit,
-  ponytailDebt,
-  ponytailGain,
-  ponytailHelp,
-];
+export const ponytailSkills: readonly Skill[] = [ponytail, ponytailReview];

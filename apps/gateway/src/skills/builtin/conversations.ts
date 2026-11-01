@@ -3,7 +3,7 @@ import type { Skill } from '@jian/contracts';
 export const conversations: Skill = {
   name: 'conversations',
   description:
-    'Use when a task involves another of your conversations: finding something said elsewhere, passing a message to another chat or group, or reading what was sent to this session.',
+    'Use when a task involves another of your conversations: finding something said elsewhere, passing a message to another chat or group, reading what was sent to this session, or showing the owner something in the Inspector.',
   instructions: `# Your conversations
 
 Every place you are reached is its own conversation, with its own history: the gateway
@@ -39,5 +39,14 @@ note written into a text message arrives as text — never do that.
 - Say you sent it only after the tool returns.
 
 To ask a contact something and bring the answer back here, see \`owner-and-contacts\`. To send
-something later, or every day, see \`schedules\`.`,
+something later, or every day, see \`schedules\`.
+
+## Showing, not telling
+
+- \`open_in_inspector\` (the \`tasks\` group) brings a pull request, an issue or one of this
+  conversation's subagents to the panel beside the conversation, when they ask or when watching it
+  would help. It shows nothing while they have another conversation open.
+- \`react_to_message\` answers a message with one emoji. Be selective: a reaction to everything
+  means nothing. On WhatsApp and Telegram it appears in the chat itself.
+- \`throw_confetti\` is for a real celebration, or when asked.`,
 };

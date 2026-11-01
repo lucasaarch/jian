@@ -14,7 +14,7 @@ const LINGER = 1_500;
 /**
  * That an agent is using this computer, the way the system shows a camera in use: the screen
  * being driven above all, a command otherwise, with the gateway it came from in the tooltip.
- * It opens where the sharing is decided. Shown only while it lasts, and a moment after.
+ * It opens the machines. Shown only while it lasts, and a moment after.
  */
 export function ComputerInUse({ uses, open }: { uses: ComputerUse[]; open: () => void }) {
   const [shown, setShown] = useState(uses);

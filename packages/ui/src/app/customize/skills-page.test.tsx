@@ -95,7 +95,7 @@ it('removes a skill of its own only once its name is typed', async () => {
   const confirm = view.button('Remove skill') as HTMLButtonElement | undefined;
   expect(confirm?.disabled).toBe(true);
 
-  await view.type(confirm?.closest('form')?.querySelector('input'), 'concise');
+  await view.type(confirm?.closest('[role="dialog"]')?.querySelector('input'), 'concise');
   await act(async () => confirm?.click());
 
   expect(updateProfile).toHaveBeenCalledWith(profile.id, {

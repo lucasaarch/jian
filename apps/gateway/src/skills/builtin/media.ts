@@ -14,15 +14,18 @@ can send you a file, and you can send one back in any conversation.
 Each attachment comes inside the message as \`[Attached media: <id>]\`. Before your turn the
 gateway prepares it:
 
-- an **image** you see directly when your model reads images, or as a description written by
-  the image-analysis model;
-- a **voice note or audio** as a transcript with notes on the sounds;
-- a **PDF** as its text, read by your model or the analysis model;
+- an **image** you see directly, when this conversation's model reads images;
+- a **voice note or audio** as a transcript with notes on the sounds, by the Incoming audio model;
+- a **PDF** directly, when this conversation's model reads PDFs;
 - a **Word, Excel, PowerPoint or OpenDocument file** as its text; a spreadsheet as one table
   per sheet, cells separated by tabs;
 - a **text file** — code, CSV, JSON, Markdown, HTML, pasted text — as its content.
 
 A document is cut after about a hundred thousand characters, and you are told when it was.
+
+An image or PDF this conversation's model cannot read is not read at all, and no second model is
+called to read it for you. The message says so. Do not pretend to have seen it: say the owner can
+pick a model that reads it, in the composer.
 
 Anything else — an old \`.doc\` or \`.xls\`, a ZIP, a video — is kept with its name, but its
 content is not read for you. With the machine tools, save it with \`save_attachment\` and open

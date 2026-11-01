@@ -161,7 +161,7 @@ export function QuestionCard({
   const answering = !answered && !chat && Boolean(onAnswer);
 
   return (
-    <Card chip="Question" tone={answered ? 'good' : 'neutral'} title={question.prompt}>
+    <Card chip="Question" tone="neutral" title={question.prompt}>
       {choices.length > 0 && (
         <ul className="decision-options" aria-label="Choices">
           {choices.map((choice) => {

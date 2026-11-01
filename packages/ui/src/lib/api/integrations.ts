@@ -20,6 +20,16 @@ export const integrationCalls = (client: Client) => ({
         params: { path: { accountId } },
       }),
     ),
+  xIntegration: () => result(client.GET('/v1/integrations/x')),
+  saveXApp: (body: { clientId: string; clientSecret: string }) =>
+    result(client.PUT('/v1/integrations/x/app', { body })),
+  startXConnection: () => result(client.POST('/v1/integrations/x/connect')),
+  disconnectXAccount: (accountId: string) =>
+    result(
+      client.DELETE('/v1/integrations/x/accounts/{accountId}', {
+        params: { path: { accountId } },
+      }),
+    ),
   // Read as the installation on the repository's account; one it cannot see is a 404.
   githubPull: (owner: string, repo: string, number: number) =>
     result(

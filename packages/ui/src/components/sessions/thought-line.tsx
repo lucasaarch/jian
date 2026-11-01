@@ -220,8 +220,8 @@ export function ThoughtLine({
         size="page"
       >
         {failure?.detail && (
-          <div className="grid min-w-0 gap-4 p-6">
-            <header className="grid gap-1 pr-8">
+          <div className="grid min-w-0 gap-4 p-7">
+            <header className="grid gap-1 pr-10">
               <span className="text-xs font-medium text-bad">{failure.note}</span>
               <h2 className="text-lg font-semibold">{failure.text}</h2>
               <p className="text-sm text-muted">The full error returned by the tool.</p>

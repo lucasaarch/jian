@@ -1,7 +1,7 @@
 'use client';
 
 import { Markdown } from '../../components/ui/markdown';
-import { Action, Overlay, StatusPill } from '../../kit';
+import { Action, Overlay, OverlayActions, StatusPill } from '../../kit';
 import type { BuiltinSkill } from '../../lib/api';
 
 /** A skill's instructions as the agent reads them, rendered. */
@@ -33,7 +33,7 @@ export function SkillReading({
     <Overlay open={open} onOpenChange={onOpenChange} title={skill?.name ?? 'Skill'} size="page">
       {skill && (
         <div className="grid w-full gap-5 p-7">
-          <header className="grid gap-1.5 pr-6">
+          <header className="grid gap-1.5 pr-10">
             <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
               {skill.name}
               <StatusPill>Built-in</StatusPill>
@@ -42,12 +42,12 @@ export function SkillReading({
             <p className="text-sm leading-relaxed text-muted">{skill.description}</p>
           </header>
           <SkillInstructions text={skill.instructions} />
-          <div className="flex items-center gap-2">
+          <OverlayActions>
             <span className="flex-1" />
             <Action tone="quiet" onClick={() => onOpenChange(false)}>
               Close
             </Action>
-          </div>
+          </OverlayActions>
         </div>
       )}
     </Overlay>

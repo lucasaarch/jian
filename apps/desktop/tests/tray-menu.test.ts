@@ -22,10 +22,9 @@ const server: GatewaySummary = {
 /** The menu for a state, and what clicking its items asked of the app. */
 function menu(state: Partial<TrayState>) {
   const opened: (OpenTarget | undefined)[] = [];
-  const shared: boolean[] = [];
   const items = trayMenu(
-    { gateways: [local, server], showing: null, sharing: undefined, ...state },
-    { open: (target) => opened.push(target), setSharing: (on) => shared.push(on), quit: () => {} },
+    { gateways: [local, server], showing: null, ...state },
+    { open: (target) => opened.push(target), quit: () => {} },
   );
   const item = (label: string) => {
     const found = items.find((entry) => entry.label?.startsWith(label));
@@ -33,7 +32,7 @@ function menu(state: Partial<TrayState>) {
     return found;
   };
   const click = (label: string) => (item(label).click as () => void)();
-  return { item, click, opened, shared, labels: items.map((entry) => entry.label) };
+  return { item, click, opened, labels: items.map((entry) => entry.label) };
 }
 
 describe('the tray menu', () => {
@@ -64,13 +63,5 @@ describe('the tray menu', () => {
       expect(tray.item('New Chat').enabled).toBe(false);
       expect(tray.item('Search Chats').enabled).toBe(false);
     }
-  });
-
-  it('turns sharing off from on, and is left out while it would change nothing', () => {
-    expect(menu({ sharing: undefined }).labels).not.toContain('Let Agents Use This Computer');
-    const on = menu({ sharing: true });
-    expect(on.item('Let Agents Use This Computer').checked).toBe(true);
-    on.click('Let Agents Use This Computer');
-    expect(on.shared).toEqual([false]);
   });
 });

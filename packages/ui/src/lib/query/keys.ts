@@ -12,6 +12,7 @@ export const keys = {
   subscriptionUsage: ['subscription-usage'] as const,
   sshKeys: ['ssh-keys'] as const,
   groups: ['groups'] as const,
+  xIntegration: ['integrations', 'x'] as const,
   githubIntegration: ['integrations', 'github'] as const,
   githubRepositories: ['integrations', 'github', 'repositories'] as const,
   githubLink: (url: string) => ['integrations', 'github', 'links', url] as const,

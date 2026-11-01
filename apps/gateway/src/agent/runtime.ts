@@ -90,8 +90,9 @@ import { reason, toolFailure } from './tool-failure.js';
 import { deferTools, groupMates, profileTools, type ToolServices } from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
 import { markSteering, outsideContent } from './untrusted.js';
-import { prepareProfileGitAccess, prepareWorkerWorkspace } from './worker-workspace.js';
-import { projectCheckout, realFolders, withFolders } from './workspace.js';
+import { prepareGitAccess, prepareWorkerWorkspace } from './worker-workspace.js';
+import { realFolders, withFolders } from './workspace.js';
+import { projectCheckout, sessionCheckouts } from './workspace-home.js';
 
 /**
  * How long a model call or a tool may go without a sign of life before the turn is given up.
@@ -439,7 +440,7 @@ export class AgentRuntime {
       const skillServers = learning ? installed : servers;
       const baseAccess = run.subagent
         ? await prepareWorkerWorkspace(run, this.services.sshKeys)
-        : await prepareProfileGitAccess(run.profileId, this.services.sshKeys);
+        : await prepareGitAccess(this.services.sshKeys);
       // A subagent works on what its conversation works on. On a machine the folders are that
       // machine's, reached through it: only here do they widen what this process may touch.
       const conversation = run.subagent
@@ -453,11 +454,11 @@ export class AgentRuntime {
         : await realFolders(conversation.folders ?? []);
       const gitAccess = { ...baseAccess, writable: [...baseAccess.writable, ...folders] };
       // GitHub git runs where the conversation works; one that targets a machine never falls
-      // back to the gateway's workspace.
+      // back to the gateway's own.
       const gitPlace = session.remoteMachineId
         ? this.services.remote &&
           remotePlace(profileId, session.remoteMachineId, this.services.remote)
-        : localPlace(profileId, gitAccess);
+        : localPlace(gitAccess);
       const browser =
         run.subagent || !this.services.web
           ? null
@@ -467,6 +468,11 @@ export class AgentRuntime {
                   JIAN_DESKTOP_CLIENT,
               session.remoteMachineId,
             );
+      const checkouts =
+        session.projectIds?.length && !session.remoteMachineId
+          ? await sessionCheckouts(profileId, session.id)
+          : undefined;
+      const xTools = !learning && this.options.x ? await this.options.x.for(run) : {};
       const tools: ToolSet = {
         ...profileTools(
           this.services,
@@ -475,6 +481,7 @@ export class AgentRuntime {
           session.remoteMachineId,
           skillServers,
           this.services.web?.access(run, browser),
+          Object.keys(xTools).length > 0,
         ),
         ...(!learning && this.options.github && gitPlace
           ? githubGitTools({
@@ -495,9 +502,9 @@ export class AgentRuntime {
                     checkoutOf: (name: string) =>
                       session.cloneInto
                         ? `${session.cloneInto}/${name}`
-                        : session.remoteMachineId
-                          ? name
-                          : `projects/sessions/${session.id}/${name}`,
+                        : checkouts
+                          ? `${checkouts}/${name}`
+                          : name,
                   }
                 : {}),
               place: gitPlace,
@@ -505,6 +512,7 @@ export class AgentRuntime {
               lend: (secret) => secrets.add(secret),
             })
           : {}),
+        ...xTools,
         ...this.services.media?.tools(run, async (usage) => {
           await account(
             {

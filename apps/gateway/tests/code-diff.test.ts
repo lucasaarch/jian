@@ -126,7 +126,7 @@ describe('a file write in a turn', () => {
     });
     const session = await services.sessions.createGatewaySession(profile.id, {});
     await services.sessions.setProtection(profile.id, session.id, { protection: 'full' });
-    const directory = join(root, profile.id, 'app');
+    const directory = join(root, 'app');
     const file = join(directory, 'retry.ts');
     mkdirSync(directory, { recursive: true });
     writeFileSync(file, 'const backoff = 100;\nexport { backoff };\n');

@@ -1,9 +1,15 @@
-import { type QueryKey, useQueryClient } from '@tanstack/react-query';
+import { onlineManager, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { GatewayEvent } from '../api/events';
 import { publish } from '../events';
+import { useReconnect } from '../stores/reconnect';
 import { panelApi } from './client';
 import { keys } from './keys';
+
+/** How long to wait before opening a dropped stream again, in ms, try after try. */
+const AGAIN_MS = [1_000, 2_000, 5_000];
+/** A stream that lasted this long, in ms, was working: the next drop starts the waits over. */
+const STEADY_MS = 30_000;
 
 /**
  * What an event makes stale. A turn changes the conversations and the work in progress; the
@@ -42,13 +48,21 @@ function affected(event: GatewayEvent, profileId: string): QueryKey[] {
  */
 export function useEventStream(profileId: string) {
   const client = useQueryClient();
+  const connection = useReconnect((state) => state.connection);
 
+  // Asked to reconnect: what was missed while the stream was down is read again.
+  useEffect(() => {
+    if (connection > 0) void client.invalidateQueries();
+  }, [connection, client]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new connection the owner asked for opens the stream again.
   useEffect(() => {
     const controller = new AbortController();
     const pending = new Map<string, QueryKey>();
     let cursor = 0;
-    let reconnect: ReturnType<typeof setTimeout>;
+    let reconnect: ReturnType<typeof setTimeout> | undefined;
     let flush: ReturnType<typeof setTimeout>;
+    let drops = 0;
 
     const invalidate = (event: GatewayEvent) => {
       const stale = affected(event, profileId);
@@ -63,6 +77,8 @@ export function useEventStream(profileId: string) {
     };
 
     const listen = async () => {
+      const opened = Date.now();
+      reconnect = undefined;
       try {
         await panelApi().events(
           profileId,
@@ -78,17 +94,25 @@ export function useEventStream(profileId: string) {
         // A stream ends on shutdown, on a lost network or when the session expires.
       }
 
-      if (!controller.signal.aborted) {
-        reconnect = setTimeout(() => void listen(), 5000);
-      }
+      if (controller.signal.aborted) return;
+      drops = Date.now() - opened >= STEADY_MS ? 0 : drops + 1;
+      reconnect = setTimeout(() => void listen(), AGAIN_MS[Math.min(drops, AGAIN_MS.length - 1)]);
     };
 
     void listen();
 
+    // The gateway seen answering again: no reason to wait for the next try.
+    const stopWatching = onlineManager.subscribe((online) => {
+      if (!online || reconnect === undefined) return;
+      clearTimeout(reconnect);
+      void listen();
+    });
+
     return () => {
+      stopWatching();
       controller.abort();
       clearTimeout(reconnect);
       clearTimeout(flush);
     };
-  }, [client, profileId]);
+  }, [client, profileId, connection]);
 }

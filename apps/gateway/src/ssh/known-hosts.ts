@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 
 /**
- * Published SSH host keys the gateway seeds into each profile's known_hosts.
+ * Published SSH host keys the gateway seeds into the known_hosts it owns.
  *
  * GitHub keys match https://api.github.com/meta (`ssh_keys`) and the entries documented at
  * https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints.
@@ -30,14 +30,14 @@ export function trustedKnownHostLines(
 }
 
 /**
- * Ensure the profile's known_hosts contains every trusted host key. Existing lines stay;
- * only missing entries are appended so operator-added hosts are preserved.
+ * Ensure this known_hosts contains every trusted host key. Existing lines stay; only missing
+ * entries are appended so operator-added hosts are preserved. Never pass it the owner's own file:
+ * Jian does not write to a desktop owner's `~/.ssh`.
  */
 export async function ensureTrustedKnownHosts(
-  home: string,
+  path: string,
   hosts: Readonly<Record<string, readonly string[]>> = TRUSTED_SSH_HOST_KEYS,
 ): Promise<string> {
-  const path = join(home, '.ssh', 'known_hosts');
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
 
   let existing = '';

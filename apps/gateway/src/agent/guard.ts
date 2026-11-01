@@ -1,5 +1,6 @@
 import type { ProtectionMode, RunApproval } from '@jian/contracts';
 import { isChatChannel } from '../channels/kinds.js';
+import { X_ACTION_KINDS, xActionTitle } from '../integrations/x/catalog/index.js';
 
 /**
  * Where an action lands: a change on the machine, a change in an outside service the owner
@@ -22,6 +23,7 @@ const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
   send_session_message: 'message',
   message_contact: 'message',
   ask_agent: 'message',
+  ...X_ACTION_KINDS,
 };
 
 /**
@@ -213,6 +215,28 @@ const PLAIN: Record<
   },
 };
 
+/** A tool of X's, of which there are too many to word by hand: its own summary, and its words. */
+function xPlain(toolName: string, input: unknown) {
+  if (!X_ACTION_KINDS[toolName]) return undefined;
+
+  const args = (input ?? {}) as Record<string, unknown>;
+  const said = Object.entries(args)
+    .filter(([name, value]) => name !== 'account' && typeof value === 'string' && value.trim())
+    .slice(0, 3)
+    .map(([name, value]) => (name === 'text' ? String(value) : `${name}: ${String(value)}`));
+  // A thread goes out whole on one approval, so all of it is shown, not only its first post.
+  const rest = Array.isArray(args.thread)
+    ? args.thread.map((post: { text?: unknown }) => String(post?.text ?? '(media)'))
+    : [];
+  const detail = [...said, ...rest].join('\n');
+
+  return {
+    title: xActionTitle(toolName, (input as { account?: unknown } | null)?.account),
+    detail,
+    confirm: 'Approve',
+  };
+}
+
 /**
  * Where a call to one of the gateway's own tools lands. GitHub git changes the machine when it
  * brings commits in, and GitHub itself when it pushes them out.
@@ -236,7 +260,7 @@ export function plainDescription(
   call: Pick<PausedCall, 'toolName' | 'kind' | 'input'>,
   service?: { server: string; tool: string },
 ) {
-  const known = PLAIN[call.toolName]?.(call.input);
+  const known = PLAIN[call.toolName]?.(call.input) ?? xPlain(call.toolName, call.input);
   const title =
     known?.title ?? (service ? `Use ${service.server}'s ${service.tool}` : KINDS[call.kind]);
   const detail = known

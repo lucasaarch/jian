@@ -15,13 +15,13 @@ import {
 } from '../../kit';
 import { useActions } from '../../lib/workspace';
 import { AddMachine, RevealCommand, RotateCredentials } from './remote-dialogs';
-import { MachineRow, type Sharing, SharingSwitch } from './remote-machine-row';
+import { MachineRow } from './remote-machine-row';
 
 /**
  * The computer an app runs on, as that app knows it: its machine on this gateway once the app
  * registered it, and whether agents may use it. Given only by a host that is such an app.
  */
-export type ThisComputer = Sharing & { machineId: string | null };
+export type ThisComputer = { machineId: string | null };
 
 /** A couple of machines' shape: a name with how it stands, and Configure. */
 const MachineRowsWaiting = () => <SettingsRowsSkeleton count={2} pill />;
@@ -88,24 +88,22 @@ export function MachinesPage({ thisComputer }: { thisComputer?: ThisComputer | u
       >
         {remote.loading && !failure && <MachineRowsWaiting />}
         {thisComputer && !ours && (
-          // Not on this gateway yet: the app registers it as soon as it can, or does not while off.
+          // Not on this gateway yet: the app registers it as soon as it can.
           <SettingsRow
             title={
               <span className="flex items-center gap-2">
                 This computer
-                {thisComputer.sharing && <StatusPill>Connecting</StatusPill>}
+                <StatusPill>Connecting</StatusPill>
               </span>
             }
-          >
-            <SharingSwitch sharing={thisComputer.sharing} setSharing={thisComputer.setSharing} />
-          </SettingsRow>
+          />
         )}
         {machines.map((machine) => (
           <MachineRow
             key={machine.id}
             api={api}
             machine={machine}
-            ours={machine === ours ? thisComputer : undefined}
+            ours={machine === ours}
             version={remote.version}
             busy={remote.busy}
             onUpdated={remote.refresh}

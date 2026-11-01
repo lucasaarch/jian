@@ -68,6 +68,9 @@ export class LocalGateway {
       env: {
         ...process.env,
         JIAN_LOCAL_DIR: join(app.getPath('userData'), 'gateway'),
+        // All of it, not only the gateway's folder: the app's credentials and the browser's logins
+        // sit beside that folder, and agents work in the owner's home around them.
+        JIAN_APP_DATA: app.getPath('userData'),
         JIAN_API_TOKEN: this.credentials.token,
         JIAN_MASTER_KEY: this.credentials.masterKey,
         PORT: String(port),

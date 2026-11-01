@@ -23,7 +23,7 @@ from the rest is a bug.
 | Field | `TextField`, `TextArea`, `SelectField`, `DateTimeField`, `RowInput` |
 | On and off, or one of a few | `SwitchControl`, `Toggle`, `Segmented` |
 | List that opens | `Picker`, `MenuEntry`, `MenuDivider`, `menuPopup` |
-| Anything over the page | `Overlay`, `ConfirmDialog` |
+| Anything over the page | `Overlay`, `OverlayActions`, `ConfirmDialog` |
 | Room of pages with a list | `Overlay` with `SettingsLayout`, `SettingsGroup`, `SettingsRow` |
 | Waiting | `Skeleton`, `SkeletonRegion`, `SettingsPageSkeleton`, `Progress` |
 | State or a hint | `StatusPill`, `InfoTip`, `HoverTip` |
@@ -51,6 +51,12 @@ Use the kit's own phone width with the `phone:` variant, or `usePhone` in code.
   agent settings and schedules are all an `Overlay` with `SettingsLayout`: copy that, and keep its
   `closeButton={false}`, since the layout has its own way back.
 - **Overlay sizes.** `settings` for a room of pages, `form` for one form, `page` for a page to read.
+- **An overlay's actions float.** Put a form's or page's buttons in `OverlayActions`, never in a row
+  at the end of the content: they stay at the pane's bottom corners however it scrolls, a submit button
+  still submits its form, and the close button floats the same way. A `flex-1` span separates left
+  from right.
+- **Everything in a form or page lines up.** Pad its content with `p-7`, which is where the floating
+  actions and the close button stand, and give its header `pr-10` to clear the close button.
 - **Destructive actions are red and ask first.** `danger` on the `MenuEntry`, `danger` on the
   command, and `ConfirmDialog` before it happens. Pass `phrase` when what is lost matters most,
   which makes the owner type a name.

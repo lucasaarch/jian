@@ -11,12 +11,6 @@ export interface WorkerHost {
   stopAll(): Promise<void>;
 }
 
-/** Where the computer-wide switch is kept. */
-export interface SharingSetting {
-  sharing(): boolean;
-  setSharing(on: boolean): Promise<void>;
-}
-
 /** A gateway the app knows, and whether it answers now. */
 export type GatewayStanding = { gateway: GatewayAccess; online: boolean };
 
@@ -25,8 +19,8 @@ const RETRY_MS = 60_000;
 
 /**
  * This computer as a machine on every server gateway the app knows: registered and its worker
- * running while the computer-wide switch is on and the gateway answers; stopped when the switch
- * goes off, the gateway goes away or leaves the app. The records stay on the gateways.
+ * running while the gateway answers; stopped when the gateway goes away or leaves the app. The
+ * records stay on the gateways.
  */
 export class ComputerSharing {
   /** Each gateway with a worker starting or running; the object itself tells one start apart. */
@@ -36,19 +30,18 @@ export class ComputerSharing {
   /** When each gateway last refused its worker's token. */
   private readonly refusals = new Map<string, number>();
   private retry?: ReturnType<typeof setTimeout>;
-  /** Nothing runs before the switch and the saved machines are read. */
+  /** Nothing runs before the saved machines are read. */
   private ready = false;
 
   constructor(
     private readonly deps: {
       registry: MachineRegistry;
       host: WorkerHost;
-      setting: SharingSetting;
       gateways: () => GatewayStanding[];
-      /** A machine id or the switch changed: the window asks again. */
+      /** A machine id changed: the window asks again. */
       changed: () => void;
       log: (message: string) => void;
-      /** Resolves once the switch and the saved machines are read. */
+      /** Resolves once the saved machines are read. */
       loaded: Promise<void>;
       now?: () => number;
     },
@@ -60,36 +53,17 @@ export class ComputerSharing {
     });
   }
 
-  state(gatewayId: string): { machineId: string | null; sharing: boolean } {
+  state(gatewayId: string): { machineId: string | null } {
     const local = this.deps.gateways().some((g) => g.gateway.id === gatewayId && g.gateway.local);
-    return {
-      machineId: local ? null : this.deps.registry.machineId(gatewayId),
-      sharing: this.sharing(),
-    };
+    return { machineId: local ? null : this.deps.registry.machineId(gatewayId) };
   }
 
-  /** The computer-wide switch: whether agents may use this computer. */
-  sharing(): boolean {
-    return this.deps.setting.sharing();
-  }
-
-  async setSharing(on: boolean): Promise<void> {
-    // Written before the file was read, the switch would overwrite the machines saved there.
-    await this.deps.loaded;
-    if (this.deps.setting.sharing() === on) return;
-    await this.deps.setting.setSharing(on);
-    this.deps.changed();
-    this.sync();
-  }
-
-  /** Brings the running workers in line with the switch and how each gateway stands. */
+  /** Brings the running workers in line with how each gateway stands. */
   sync(): void {
     if (!this.ready) return;
     const wanted = new Map<string, GatewayAccess>();
-    if (this.deps.setting.sharing()) {
-      for (const { gateway, online } of this.deps.gateways()) {
-        if (online && !gateway.local && gateway.url) wanted.set(gateway.id, gateway);
-      }
+    for (const { gateway, online } of this.deps.gateways()) {
+      if (online && !gateway.local && gateway.url) wanted.set(gateway.id, gateway);
     }
     for (const id of [...this.runs.keys()]) {
       if (!wanted.has(id)) this.halt(id);

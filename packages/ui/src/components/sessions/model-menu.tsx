@@ -29,14 +29,17 @@ export type MenuAlign = 'start' | 'end';
 /** Where a menu opens: above, as the composer sits at the bottom of the screen; or below. */
 type MenuSide = 'top' | 'bottom';
 
-/** A popup that opens beside its trigger, above it unless told otherwise. */
+/**
+ * A popup that opens beside its trigger, above it unless told otherwise, running to the right from
+ * its start unless there is no room for that.
+ */
 export function Menu({
   label,
   trigger,
   disabled,
   open,
   onOpenChange,
-  align = 'end',
+  align = 'start',
   side = 'top',
   children,
 }: {

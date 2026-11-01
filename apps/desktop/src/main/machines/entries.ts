@@ -3,11 +3,8 @@ import { join } from 'node:path';
 import { app } from 'electron';
 import { seal, unseal, VAULT_MISSING, vaultAvailable } from '../gateways/store';
 import type { MachineEntries, MachineEntry } from './registry';
-import type { SharingSetting } from './sharing';
 
 type Saved = {
-  /** The computer-wide switch: whether agents on the app's server gateways may use it. */
-  sharing: boolean;
   /** By gateway id: this computer's machine there, its worker token sealed as host tokens are. */
   machines: Record<string, { machineId: string; sealedToken: string }>;
 };
@@ -33,8 +30,8 @@ const unsealInTime = (sealed: string) =>
  * switch, on until the owner turns it off, and each machine's worker token, sealed by the
  * operating system's vault, opened once on load and held in memory.
  */
-export class MachineFile implements MachineEntries, SharingSetting {
-  private saved: Saved = { sharing: true, machines: {} };
+export class MachineFile implements MachineEntries {
+  private saved: Saved = { machines: {} };
   private readonly tokens = new Map<string, string>();
   private writing: Promise<void> = Promise.resolve();
 
@@ -42,11 +39,10 @@ export class MachineFile implements MachineEntries, SharingSetting {
     try {
       const parsed = JSON.parse(await readFile(file(), 'utf8')) as Partial<Saved> | null;
       this.saved = {
-        sharing: parsed?.sharing !== false,
         machines: typeof parsed?.machines === 'object' && parsed.machines ? parsed.machines : {},
       };
     } catch {
-      this.saved = { sharing: true, machines: {} };
+      this.saved = { machines: {} };
     }
     let resealed = false;
     for (const [gatewayId, machine] of Object.entries(this.saved.machines)) {
@@ -63,15 +59,6 @@ export class MachineFile implements MachineEntries, SharingSetting {
       }
     }
     if (resealed) await this.save();
-  }
-
-  sharing(): boolean {
-    return this.saved.sharing;
-  }
-
-  async setSharing(on: boolean): Promise<void> {
-    this.saved.sharing = on;
-    await this.save();
   }
 
   get(gatewayId: string): MachineEntry | undefined {

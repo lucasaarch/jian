@@ -16,7 +16,8 @@ type Panels = {
 
 /** What a conversation needs to read as one. The sidebar and the Inspector give way to it. */
 export const MIN_CHAT_WIDTH = 400;
-export const MIN_SIDEBAR_WIDTH = 200;
+/** Its default: `--sidebar-width` in kit.css says the same, in rem. */
+export const MIN_SIDEBAR_WIDTH = 256;
 export const MAX_SIDEBAR_WIDTH = 420;
 
 type Layout = Panels & {

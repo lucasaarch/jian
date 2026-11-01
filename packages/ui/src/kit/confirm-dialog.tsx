@@ -2,7 +2,7 @@
 
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { Action } from './action';
-import { Overlay } from './overlay';
+import { Overlay, OverlayActions } from './overlay';
 
 /**
  * Asks before something that cannot be taken back. With a `phrase` the action stays off until it
@@ -50,7 +50,7 @@ export function ConfirmDialog({
           if (matches && !busy) run();
         }}
       >
-        <header className="grid gap-1.5 pr-6">
+        <header className="grid gap-1.5 pr-10">
           <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
           <div className="text-sm leading-relaxed text-muted">{children}</div>
         </header>
@@ -69,7 +69,7 @@ export function ConfirmDialog({
             />
           </div>
         )}
-        <div className="flex justify-end gap-2">
+        <OverlayActions>
           <Action tone="quiet" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Action>
@@ -82,7 +82,7 @@ export function ConfirmDialog({
           >
             {action}
           </Action>
-        </div>
+        </OverlayActions>
       </form>
     </Overlay>
   );

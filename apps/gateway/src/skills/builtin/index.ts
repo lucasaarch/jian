@@ -1,7 +1,9 @@
 import type { McpServer, Profile, Skill } from '@jian/contracts';
 import { isGitHubIntegrationServer } from '../../agent/github-mcp.js';
+import { onOwnerComputer } from '../../agent/workspace-home.js';
 import { aboutJian } from './about-jian.js';
 import { activity } from './activity.js';
+import { approvals } from './approvals.js';
 import { channelReplies } from './channel-replies.js';
 import { codingWork } from './coding-work.js';
 import { conversations } from './conversations.js';
@@ -11,7 +13,7 @@ import { handlingErrors } from './handling-errors.js';
 import { jevJudgment } from './jev-judgment.js';
 import { jianConfiguration } from './jian-configuration.js';
 import { longRunningWork } from './long-running-work.js';
-import { machineTools } from './machine-tools.js';
+import { machineTools, machineToolsFor } from './machine-tools.js';
 import { managingContext } from './managing-context.js';
 import { managingYourself } from './managing-yourself.js';
 import { mcpServers } from './mcp-servers.js';
@@ -21,13 +23,14 @@ import { ownerAndContacts } from './owner-and-contacts.js';
 import { remoteControl } from './remote-control.js';
 import { schedules } from './schedules.js';
 import { skillCreator } from './skill-creator.js';
-import { sshKeys } from './ssh-keys.js';
+import { sshKeys, sshKeysFor } from './ssh-keys.js';
 import { subscriptions } from './subscriptions.js';
 import { caveman } from './vendored/caveman.js';
 import { discernmentNudge } from './vendored/discernment-nudge.js';
 import { ponytailSkills } from './vendored/ponytail.js';
 import { webResearch } from './web-research.js';
 import { workingWithAgents } from './working-with-agents.js';
+import { x } from './x.js';
 
 /**
  * Skills every profile carries without importing anything. They ship with the gateway rather
@@ -40,6 +43,7 @@ const ALWAYS: readonly Skill[] = [
   jianConfiguration,
   activity,
   ownerAndContacts,
+  approvals,
   channelReplies,
   memoryKeeping,
   conversations,
@@ -60,6 +64,7 @@ const ALWAYS: readonly Skill[] = [
   remoteControl,
   ...ponytailSkills,
   webResearch,
+  x,
   // Starts switched off on a new profile (OPT_IN_SKILLS); the owner turns it on in Skills.
   discernmentNudge,
 ];
@@ -75,10 +80,20 @@ export const builtinSkillNames: ReadonlySet<string> = new Set(
   [...ALWAYS, ...MCP, github].map((skill) => skill.name),
 );
 
+/**
+ * The two whose truth depends on the host, not on the run. Swapped here rather than at `load_skill`
+ * so the panel shows the owner what the agent is told, on either host.
+ */
+function forThisHost(skill: Skill): Skill {
+  if (skill === machineTools) return machineToolsFor(onOwnerComputer());
+  if (skill === sshKeys) return sshKeysFor(onOwnerComputer());
+  return skill;
+}
+
 /** `servers` are the MCP servers a run reaches: the installation's, and any lent to it. */
 export function builtinSkills(servers: readonly McpServer[]): readonly Skill[] {
   return [
-    ...ALWAYS,
+    ...ALWAYS.map(forThisHost),
     ...(servers.length ? MCP : []),
     ...(servers.some(isGitHubIntegrationServer) ? [github] : []),
   ];

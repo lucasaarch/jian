@@ -2,23 +2,18 @@ import type { ProviderRecord, SubscriptionUsage } from '@jian/contracts';
 import { z } from 'zod';
 import type { GatewayVault } from '../security/gateway-vault.js';
 import { claudeLimits, limitsKey } from './claude-limits.js';
-import {
-  anthropicCredential,
-  subscriptionFetch,
-  subscriptionHeaders,
-} from './claude-subscription.js';
+import { anthropicCredential } from './claude-subscription.js';
 import type { CodexLogin } from './codex/login.js';
 import { accountHeaders } from './codex/model.js';
 import { providerSecret } from './service.js';
 
 const windowSchema = z.object({
   used_percent: z.number().finite().nonnegative().optional(),
-  utilization: z.number().finite().nonnegative().optional(),
   resets_at: z.union([z.string(), z.number()]).nullish(),
   reset_at: z.union([z.string(), z.number()]).nullish(),
 });
 
-function windowOf(value: unknown, field: 'used_percent' | 'utilization') {
+function windowOf(value: unknown, field: 'used_percent') {
   const parsed = windowSchema.safeParse(value);
   if (!parsed.success) return null;
   const usedPercent = parsed.data[field];
@@ -73,83 +68,60 @@ export class SubscriptionUsageReader {
 
   private async load(): Promise<SubscriptionUsage[]> {
     const providers = (await this.providers.providers()).filter((provider) => !provider.revokedAt);
-    const subscribed = providers.filter(
-      (provider) =>
-        provider.authMode === 'codex' ||
-        (provider.kind === 'anthropic' &&
-          anthropicCredential(provider.credential, provider.apiKeyEnv, undefined) ===
-            'subscription'),
-    );
+    const subscribed: ProviderRecord[] = [];
+    for (const provider of providers) {
+      if (provider.authMode === 'codex') {
+        subscribed.push(provider);
+      } else if (provider.kind === 'anthropic') {
+        // Saved before the owner was asked which it is: only the credential itself can tell.
+        const secret = provider.credential ? undefined : await this.secretOf(provider);
+        if (anthropicCredential(provider.credential, provider.apiKeyEnv, secret) === 'subscription')
+          subscribed.push(provider);
+      }
+    }
 
     return Promise.all(
       subscribed.map(async (provider): Promise<SubscriptionUsage> => {
-        const kind = provider.authMode === 'codex' ? 'codex' : 'claude';
-        const read = await this.readOne(provider, kind);
-        if (read.status === 'available' || kind === 'codex') return read;
-        // Anthropic's usage endpoint refuses a `claude setup-token` credential; the windows
-        // its last answers carried say the same, as of the last run.
+        if (provider.authMode === 'codex') return this.readCodex(provider);
+        // Only what a real answer said: its headers carry the windows. No request is ever made
+        // just to learn them, so a gateway that has not run on Claude since it started knows none.
         const seen = claudeLimits(limitsKey(provider.id), this.clock());
-        return seen ? { provider: kind, status: 'available', ...seen } : read;
+        return seen ? { provider: 'claude', status: 'available', ...seen } : unavailable('claude');
       }),
     );
   }
 
-  private async readOne(
-    provider: ProviderRecord,
-    kind: 'codex' | 'claude',
-  ): Promise<SubscriptionUsage> {
+  private secretOf(provider: ProviderRecord): Promise<string | undefined> {
+    return provider.apiKeyEnv
+      ? Promise.resolve(process.env[provider.apiKeyEnv])
+      : this.vault.read(providerSecret(provider.id));
+  }
+
+  private async readCodex(provider: ProviderRecord): Promise<SubscriptionUsage> {
     try {
-      const token =
-        kind === 'codex'
-          ? await this.codexLogin?.accessToken(provider.id)
-          : provider.apiKeyEnv
-            ? process.env[provider.apiKeyEnv]
-            : await this.vault.read(providerSecret(provider.id));
-      if (!token) return unavailable(kind);
-      const codexHeaders = kind === 'codex' ? accountHeaders(token) : null;
-      if (codexHeaders && !codexHeaders['ChatGPT-Account-ID']) return unavailable(kind);
-      const request = kind === 'claude' ? await subscriptionFetch(this.fetcher) : this.fetcher;
-      const response = await request(
-        kind === 'codex'
-          ? 'https://chatgpt.com/backend-api/wham/usage'
-          : 'https://api.anthropic.com/api/oauth/usage',
-        {
-          headers:
-            kind === 'codex'
-              ? {
-                  authorization: `Bearer ${token}`,
-                  ...codexHeaders,
-                  accept: 'application/json',
-                }
-              : {
-                  authorization: `Bearer ${token}`,
-                  ...subscriptionHeaders(),
-                  accept: 'application/json',
-                },
-          signal: AbortSignal.timeout(8_000),
+      const token = await this.codexLogin?.accessToken(provider.id);
+      if (!token) return unavailable('codex');
+      const codexHeaders = accountHeaders(token);
+      if (!codexHeaders['ChatGPT-Account-ID']) return unavailable('codex');
+      const response = await this.fetcher('https://chatgpt.com/backend-api/wham/usage', {
+        headers: {
+          authorization: `Bearer ${token}`,
+          ...codexHeaders,
+          accept: 'application/json',
         },
-      );
-      if (!response.ok) return unavailable(kind);
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) return unavailable('codex');
       const body = z.record(z.string(), z.unknown()).safeParse(await response.json());
-      if (!body.success) return unavailable(kind);
-      const windows =
-        kind === 'codex'
-          ? z.object({ primary_window: z.unknown() }).safeParse(body.data.rate_limit)
-          : z.object({ five_hour: z.unknown(), seven_day: z.unknown() }).safeParse(body.data);
-      if (!windows.success) return unavailable(kind);
-      const fiveHour =
-        kind === 'codex'
-          ? null
-          : windowOf((windows.data as { five_hour: unknown }).five_hour, 'utilization');
-      const weekly =
-        kind === 'codex'
-          ? windowOf((windows.data as { primary_window: unknown }).primary_window, 'used_percent')
-          : windowOf((windows.data as { seven_day: unknown }).seven_day, 'utilization');
-      return fiveHour || weekly
-        ? { provider: kind, status: 'available', fiveHour, weekly }
-        : unavailable(kind);
+      if (!body.success) return unavailable('codex');
+      const windows = z.object({ primary_window: z.unknown() }).safeParse(body.data.rate_limit);
+      if (!windows.success) return unavailable('codex');
+      const weekly = windowOf(windows.data.primary_window, 'used_percent');
+      return weekly
+        ? { provider: 'codex', status: 'available', fiveHour: null, weekly }
+        : unavailable('codex');
     } catch {
-      return unavailable(kind);
+      return unavailable('codex');
     }
   }
 }

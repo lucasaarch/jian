@@ -3,7 +3,7 @@ import type { Skill } from '@jian/contracts';
 export const activity: Skill = {
   name: 'activity',
   description:
-    'Use when asked what you did, how many tokens or tools you used, what a run cost, or for Overview activity and usage details.',
+    'Use when asked what you did, how many tokens or tools you used, what a run cost, or for your activity and usage details.',
   instructions: `# Your activity and usage
 
 Load the activity tool group with load_tools.
@@ -16,10 +16,11 @@ Load the activity tool group with load_tools.
 These tools read only this profile's activity. Metered cost is an estimate from recorded
 tokens and known prices. Subscription tokens are usage, not money spent. The activity
 response also includes provider-reported subscription windows, shared by all agents on this
-installation: Codex reports weekly usage; Claude reports five-hour and weekly usage. Those
-windows come from experimental private endpoints:
-when a window says unavailable, do not present it as zero or infer it from local tokens.
+installation: Codex reports weekly usage from an experimental private endpoint; Claude reports
+five-hour and weekly usage only with its answers, so it stays unavailable until a run on Claude
+since the gateway started. When a window says unavailable, do not present it as zero or infer it
+from local tokens.
 
-The owner sees an Overview in the panel; use the tools when the question needs the full
+The owner sees this under Activity in your agent settings; use the tools when the question needs the full
 figures or a specific run. State the period and distinguish unknown prices from zero cost.`,
 };

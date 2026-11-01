@@ -6,7 +6,7 @@ import {
   type Run,
 } from '@jian/contracts';
 import { and, eq, inArray } from 'drizzle-orm';
-import { projectCheckout, workspaceOf } from '../agent/workspace.js';
+import { onOwnerComputer, projectCheckout, workspaceHome } from '../agent/workspace-home.js';
 import { listConversations } from '../channels/repository.js';
 import type { Judge } from '../decisions/service.js';
 import { findMemories, searchMemories, withLinks } from '../memories/repository.js';
@@ -170,12 +170,12 @@ export class Contexts {
     const previous = earlier.at(-1);
     let workerGuidance: string | undefined;
     if (worker) {
-      const home = await workspaceOf(run.profileId);
+      const home = await workspaceHome();
       const repositories = worker.repositories ?? [];
       workerGuidance = [
         `You are ${JSON.stringify(worker.name)}, an ephemeral ${worker.role} worker for one task.`,
         `Identity and working approach: ${worker.identity}`,
-        `Your workspace is ${home} — the same profile workspace as the principal agent (same HOME, cwd roots and repository checkouts). ${repositories.length ? `Named repository roots for this assignment: ${repositories.join(', ')}.` : 'Use repositories under this workspace as needed.'} Other profiles' workspaces remain unreachable. If this assignment needs a separate checkout, create a normal git worktree inside the project yourself; Jian does not give you an isolated workspace.`,
+        `Your $HOME is ${home}, the same as the principal agent's (same cwd roots and repository checkouts), and every agent of this installation shares these files, so they may change while you work; touch only what the assignment names. ${repositories.length ? `Named repository roots for this assignment: ${repositories.join(', ')}.` : onOwnerComputer() ? "Use the repositories the brief names; this is the owner's own computer." : 'Use repositories under this directory as needed.'} If this assignment needs a separate checkout, create a normal git worktree inside the project yourself; Jian does not give you an isolated copy.`,
         'Work only on the assignment in your opening message. Your parent conversation is not in this context; use the brief and available tools. Do not create tasks or spawn another subagent. Report verified outcomes and exact blockers in your final response.',
         'Your final response is a factual report to the principal agent, not a message to the owner.',
       ].join('\n\n');

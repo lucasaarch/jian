@@ -6,6 +6,7 @@ import type {
   OpenTarget,
   Showing,
 } from '../shared/bridge';
+import { LOCAL_GATEWAY_ID } from '../shared/bridge';
 import type { GatewayMonitor } from './gateways/monitor';
 import { parseGatewayUrl } from './gateways/rules';
 import { type GatewayStore, VAULT_MISSING, vaultAvailable } from './gateways/store';
@@ -47,6 +48,11 @@ export function serveBridge(deps: {
   });
   ipcMain.handle('gateways:list', () => monitor.summaries());
   ipcMain.on('local:retry', () => deps.retryLocal());
+  ipcMain.on('gateways:reconnect', (_event, id: unknown) => {
+    if (typeof id !== 'string') return;
+    if (id === LOCAL_GATEWAY_ID) deps.retryLocal();
+    monitor.refresh(id);
+  });
   ipcMain.handle('local:restart', () => deps.restartLocal());
   ipcMain.handle('dialog:pickFolder', async () => {
     const window = deps.window();
@@ -138,7 +144,6 @@ export function serveBridge(deps: {
     machines.state(String(gatewayId ?? '')),
   );
   ipcMain.handle('machines:using', () => deps.using());
-  ipcMain.handle('machines:setSharing', (_event, on: boolean) => machines.setSharing(on === true));
 
   return {
     changed: () => send('gateways:changed', monitor.summaries()),

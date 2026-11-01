@@ -19,6 +19,7 @@ import { assertFound, GatewayError } from '../core/errors.js';
 import { gatewayTimeZone } from '../core/time-zone.js';
 import type { Decisions, Question } from '../decisions/service.js';
 import type { Outreach } from '../errands/port.js';
+import { X_TOOL_GROUPS } from '../integrations/x/catalog/index.js';
 import { sameSubject } from '../memories/duplicates.js';
 import type { MemoryWriter } from '../memories/port.js';
 import type { PeerAgents } from '../peers/port.js';
@@ -30,6 +31,7 @@ import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions
 import type { Sessions } from '../sessions/service.js';
 import { findSkill } from '../skills/builtin/index.js';
 import { type WebAccess, webResearch, webResearchFor } from '../skills/builtin/web-research.js';
+import { x, xFor } from '../skills/builtin/x.js';
 import { skillTools } from '../skills/tools.js';
 import type { SshKeys } from '../ssh/service.js';
 import type { Stats } from '../stats/service.js';
@@ -115,6 +117,8 @@ export function profileTools(
   servers: readonly McpServer[] = [],
   /** What it can do with web pages, which the skill about them and the Inspector go by. */
   web: WebAccess = { browser: false, inspects: true, subagent: Boolean(run.subagent) },
+  /** Whether this run has X's tools, which the skill about them goes by. */
+  xConnected = false,
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -153,7 +157,7 @@ export function profileTools(
 
     create_ssh_key: tool({
       description:
-        'Create an Ed25519 SSH key through Jian, shared by every agent of the installation. It is in your workspace from the next run. Never use ssh-keygen or create SSH keys through the shell.',
+        'Create an Ed25519 SSH key through Jian, shared by every agent of the installation. Git can use it from your next run. Never use ssh-keygen or create SSH keys through the shell.',
       inputSchema: z.object({ name: z.string().trim().min(1).max(80) }),
       execute: async ({ name }) => services.sshKeys.create({ name }),
     }),
@@ -330,7 +334,7 @@ export function profileTools(
           }),
           spawn_subagent: tool({
             description:
-              'Start a scoped subagent in this conversation for a focused assignment. Give it the objective and necessary context in the brief, and media IDs for needed images; it does not inherit this conversation. It uses the same profile workspace as you (same HOME and checkouts). The call returns when queued, and the result is delivered here when it finishes. Set tier to light, standard or deep for how much model the work needs, or leave it out to let Decisions pick from the brief; each tier runs on a model the installation offers, subscriptions first.',
+              'Start a scoped subagent in this conversation for a focused assignment. Give it the objective and necessary context in the brief, and media IDs for needed images; it does not inherit this conversation. It works on the same files as you (same HOME and checkouts), which every agent of this installation shares. The call returns when queued, and the result is delivered here when it finishes. Set tier to light, standard or deep for how much model the work needs, or leave it out to let Decisions pick from the brief; each tier runs on a model the installation offers, subscriptions first.',
             inputSchema: conversationSubagentInputSchema,
             execute: async (input, options) =>
               services.work?.spawnInConversation(run, input, options.toolCallId),
@@ -454,7 +458,9 @@ export function profileTools(
         }
 
         // The owner's own skill of that name is theirs as they wrote it.
-        return skill === webResearch ? webResearchFor(web) : skill;
+        if (skill === webResearch) return webResearchFor(web);
+        if (skill === x) return xFor({ connected: xConnected, subagent: Boolean(run.subagent) });
+        return skill;
       },
     }),
 
@@ -665,9 +671,9 @@ export function profileTools(
     }),
   });
 
-  // Workspace-confined shell and files are always available, and so is every connected
+  // The shell and the file tools are always available, and so is every connected
   // machine; a conversation aimed at one machine works there instead of locally.
-  if (!remoteTarget) Object.assign(tools, shellTools(run.profileId, gitAccess));
+  if (!remoteTarget) Object.assign(tools, shellTools(gitAccess));
   if (services.remote) {
     Object.assign(tools, remoteTools(run, services.remote, services.store, remoteTarget));
   }
@@ -843,6 +849,7 @@ export const TOOL_GROUPS = {
     summary: 'read and version your own identity, and create profiles',
     tools: ['read_identity', 'update_identity', 'create_profile'],
   },
+  ...X_TOOL_GROUPS,
 } as const;
 
 type ToolGroup = keyof typeof TOOL_GROUPS;

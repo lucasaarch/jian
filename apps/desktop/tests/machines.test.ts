@@ -215,19 +215,12 @@ function recordingHost(): WorkerHost & { running: Map<string, WorkerTarget> } {
   };
 }
 
-function sharingWith(gateways: { gateway: GatewayAccess; online: boolean }[], on = true) {
+function sharingWith(gateways: { gateway: GatewayAccess; online: boolean }[]) {
   const gateway = fakeGateway();
   const host = recordingHost();
-  let sharing = on;
   const computer = new ComputerSharing({
     registry: registryFor(gateway, memoryEntries()),
     host,
-    setting: {
-      sharing: () => sharing,
-      setSharing: async (value) => {
-        sharing = value;
-      },
-    },
     gateways: () => gateways,
     changed: () => {},
     log: () => {},
@@ -254,7 +247,7 @@ describe('this computer’s workers', () => {
     });
     expect(gateway.requests.every((request) => !request.includes('127.0.0.1'))).toBe(true);
     expect(computer.state('local').machineId).toBeNull();
-    expect(computer.state('gw-1')).toEqual({ machineId: 'machine-1', sharing: true });
+    expect(computer.state('gw-1')).toEqual({ machineId: 'machine-1' });
   });
 
   it('wait while a gateway does not answer', async () => {
@@ -264,17 +257,6 @@ describe('this computer’s workers', () => {
 
     expect(host.running.size).toBe(0);
     expect(gateway.requests).toEqual([]);
-  });
-
-  it('all stop when the switch goes off, and the machines stay on the gateways', async () => {
-    const { computer, host, gateway } = sharingWith([{ gateway: server, online: true }]);
-    computer.sync();
-    await settle();
-    await computer.setSharing(false);
-
-    expect(host.running.size).toBe(0);
-    expect(gateway.machines.size).toBe(1);
-    expect(computer.state('gw-1')).toEqual({ machineId: 'machine-1', sharing: false });
   });
 
   it('start again on a new token when the gateway refused the old one', async () => {

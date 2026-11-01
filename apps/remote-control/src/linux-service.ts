@@ -152,6 +152,16 @@ export async function resolveLinuxInstallScope(): Promise<LinuxServiceScope> {
   return chooseLinuxServiceScope({ preferSystem: false });
 }
 
+/**
+ * How the unit comes up, each step its own command: `enable --now` can answer 0 even though the
+ * start it asked for was refused, which would report a worker running that never started.
+ */
+export const LINUX_START_COMMANDS = [
+  ['daemon-reload'],
+  ['enable', LINUX_SERVICE_UNIT],
+  ['start', LINUX_SERVICE_UNIT],
+];
+
 export function buildLinuxServiceUnit({
   script,
   scope,
@@ -181,7 +191,9 @@ export function buildLinuxServiceUnit({
     'RestartSec=3',
     // System units do not inherit the installing shell's HOME; pin it so config stays findable.
     `Environment=${quote(`HOME=${home}`)}`,
-    `WorkingDirectory=${quote(home)}`,
+    // Taken whole and never unquoted, unlike the lines above: quotes make it a relative path, and
+    // systemd then refuses the entire unit as a bad setting. `%` is the one character it expands.
+    `WorkingDirectory=${home.replaceAll('%', '%%')}`,
   ];
   if (scope === 'system' && uid !== 0) {
     let name: string | undefined = username;

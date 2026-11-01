@@ -68,7 +68,7 @@ it('forgets a memory only once the owner confirms it', async () => {
   expect(confirm?.disabled).toBe(true);
   expect(forget).not.toHaveBeenCalled();
 
-  const field = confirm?.closest('form')?.querySelector('input');
+  const field = confirm?.closest('[role="dialog"]')?.querySelector('input');
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
       field,

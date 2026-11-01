@@ -16,9 +16,6 @@ export type ThisMachine = {
   machineId: string | null;
   /** The gateway runs on this computer itself, so it needs no machine to reach it. */
   ownGateway: boolean;
-  /** Whether agents on a server may use this computer at all. */
-  sharing: boolean;
-  setSharing: (on: boolean) => void;
 };
 
 const Context = createContext<ThisMachine | undefined>(undefined);

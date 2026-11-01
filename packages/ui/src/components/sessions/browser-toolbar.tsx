@@ -21,7 +21,15 @@ import {
 } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Action, MenuDivider, MenuEntry, menuPopup, Overlay, RowInput } from '../../kit';
+import {
+  Action,
+  MenuDivider,
+  MenuEntry,
+  menuPopup,
+  Overlay,
+  OverlayActions,
+  RowInput,
+} from '../../kit';
 
 type CookieSource = { id: string; name: string };
 
@@ -56,7 +64,7 @@ function ImportCookies({
       size="form"
     >
       <div className="grid gap-5 p-7">
-        <header className="grid gap-1.5 pr-6">
+        <header className="grid gap-1.5 pr-10">
           <h2 className="text-lg font-semibold tracking-tight">
             Import cookies from {source?.name}
           </h2>
@@ -66,7 +74,7 @@ function ImportCookies({
             access first.
           </p>
         </header>
-        <div className="flex flex-wrap justify-end gap-2">
+        <OverlayActions>
           <Action tone="quiet" onClick={close} disabled={busy}>
             Cancel
           </Action>
@@ -78,7 +86,7 @@ function ImportCookies({
               Only {host}
             </Action>
           )}
-        </div>
+        </OverlayActions>
       </div>
     </Overlay>
   );
@@ -299,11 +307,11 @@ export function BrowserToolbar({
         size="form"
       >
         <div className="grid gap-5 p-7">
-          <header className="grid gap-1.5 pr-6">
+          <header className="grid gap-1.5 pr-10">
             <h2 className="text-lg font-semibold tracking-tight">{shownClearing.title}</h2>
             <p className="text-sm leading-relaxed text-muted">{shownClearing.detail}</p>
           </header>
-          <div className="flex justify-end gap-2">
+          <OverlayActions>
             <Action tone="quiet" onClick={() => setClearing(undefined)}>
               Cancel
             </Action>
@@ -316,7 +324,7 @@ export function BrowserToolbar({
             >
               {shownClearing.title}
             </Action>
-          </div>
+          </OverlayActions>
         </div>
       </Overlay>
       <ImportCookies

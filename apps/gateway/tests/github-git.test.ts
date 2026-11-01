@@ -12,7 +12,7 @@ import { plainDescription } from '../src/agent/guard.js';
 import { ruleVerdict } from '../src/agent/guardrail.js';
 import { redactOutput } from '../src/agent/results.js';
 import { AgentRuntime } from '../src/agent/runtime.js';
-import { workspaceOf } from '../src/agent/workspace.js';
+import { workspaceHome } from '../src/agent/workspace-home.js';
 import { GitHubIntegrations } from '../src/integrations/github.js';
 import {
   gatewaySecrets,
@@ -138,9 +138,11 @@ async function github({ registered = true, accounts = true } = {}) {
     instructions: 'Help.',
     model,
   });
-  const home = await workspaceOf(profile.id);
+  // Agents share one directory, so each test takes its own for its checkouts not to meet.
+  process.env.JIAN_WORKSPACES = join(root, randomUUID());
+  const home = await workspaceHome();
   const lent = new Set<string>();
-  const tools = (place = localPlace(profile.id, { readOnly: [], writable: [] })) =>
+  const tools = (place = localPlace({ readOnly: [], writable: [] })) =>
     githubGitTools({
       github: integrations,
       profileId: profile.id,
@@ -550,7 +552,7 @@ describe('github_git under protection', () => {
   it('pushes without asking in full access', async () => {
     const fixture = await github();
     const checkout = await branch(fixture);
-    // The conversation is the same agent's: its workspace already holds the checkout.
+    // The conversation is the same agent's, and the directory already holds the checkout.
     const { services, profile, integrations, repositories } = fixture;
     const session = await services.sessions.createSession(profile.id, {
       title: 'Work',

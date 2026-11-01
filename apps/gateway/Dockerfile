@@ -127,7 +127,7 @@ RUN case "${TARGETARCH}" in \
  && chmod 755 /usr/local/bin/caveman-proxy
 COPY --from=ghcr.io/astral-sh/uv:0.12.18 /uv /uvx /usr/local/bin/
 RUN corepack enable
-# The helper that confines each agent command to its profile's workspace with Landlock. It is
+# The helper that confines each agent command to the directory agents share with Landlock. It is
 # built here, where the C toolchain already is, so it matches this image's libc and architecture.
 COPY --from=display-build /out/Xvfb /usr/local/bin/Xvfb
 COPY apps/gateway/jian-display.py /usr/local/bin/jian-display

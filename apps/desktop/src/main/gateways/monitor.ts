@@ -13,6 +13,11 @@ import type { GatewayStore, StoredGateway } from './store';
 const EVERY_MS = 15_000;
 const OFFLINE_EVERY_MS = 20_000;
 const TIMEOUT_MS = 8_000;
+/**
+ * How soon a gateway that was answering is asked again after one look failed, in ms. One missed
+ * look is a passing thing on a real network, and calling the gateway away holds the window's reads.
+ */
+const MISSED_EVERY_MS = 3_000;
 
 /** Something new in a conversation the app may announce: a reply, a message, or a request. */
 export type Notice = News & {
@@ -28,6 +33,8 @@ type Watch = {
   /** What each agent's conversations held at the last look; an agent not in it was never read. */
   known: Map<string, AgentKnown>;
   timer?: NodeJS.Timeout;
+  /** Looks in a row that failed, while it still reads as answering. */
+  missed?: number;
   /** A look is under way; `again` asks for another as soon as it ends. */
   looking?: boolean;
   again?: boolean;
@@ -109,8 +116,10 @@ export class GatewayMonitor {
     watch.looking = true;
     try {
       await this.read(gateway, watch);
+      watch.missed = 0;
     } catch {
-      watch.status = 'offline';
+      watch.missed = (watch.missed ?? 0) + 1;
+      if (watch.status !== 'online' || watch.missed > 1) watch.status = 'offline';
     } finally {
       watch.looking = false;
     }
@@ -121,8 +130,13 @@ export class GatewayMonitor {
       void this.look(id);
       return;
     }
-    const every =
-      watch.status === 'online' || watch.status === 'incompatible' ? EVERY_MS : OFFLINE_EVERY_MS;
+    const every = watch.missed
+      ? watch.status === 'online'
+        ? MISSED_EVERY_MS
+        : OFFLINE_EVERY_MS
+      : watch.status === 'online' || watch.status === 'incompatible'
+        ? EVERY_MS
+        : OFFLINE_EVERY_MS;
     watch.timer = setTimeout(() => void this.look(id), every);
   }
 

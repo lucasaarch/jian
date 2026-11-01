@@ -70,7 +70,7 @@
     @apply flex w-full items-start gap-2.5 rounded-full px-3 py-2.5 text-left text-[13px] leading-snug transition-colors;
     color: var(--ink);
   }
-  button.decision-option {
+  .decision-option {
     @apply glass;
   }
   button.decision-option:hover:not(:disabled) {
@@ -79,18 +79,17 @@
   button.decision-option:disabled {
     @apply cursor-default opacity-60;
   }
+  /* Answered, the rows stay as they were and stop answering: what was not chosen fades. */
   .decision-option[data-muted] {
-    color: var(--muted);
+    opacity: 0.45;
   }
-  /* A ring until chosen; the chosen one fills with the check. */
+  /* A ring until chosen; the chosen one holds a green check. */
   .decision-mark {
     @apply mt-px grid h-4 w-4 shrink-0 place-items-center rounded-full border;
     border-color: color-mix(in srgb, var(--ink) 28%, transparent);
   }
   .decision-option[data-chosen] .decision-mark {
-    background: var(--good);
-    border-color: var(--good);
-    color: var(--canvas);
+    color: var(--good);
   }
   .decision-option-text {
     @apply min-w-0 flex-1 break-words;

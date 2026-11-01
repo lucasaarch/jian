@@ -257,10 +257,10 @@ it('sends a file the agent writes once, with its caption, however often the call
   await expect(
     send.execute({ content: 'x', name: 'report.pdf' }, { ...call, toolCallId: 'pdf' }),
   ).rejects.toThrow('not a text format');
-  // Paths outside the workspace and system read roots are rejected (allowShell no longer gates this).
+  // Paths outside the shared directory and system read roots are rejected.
   await expect(
     send.execute({ path: '/var/jian-not-allowed' }, { ...call, toolCallId: 'path' }),
-  ).rejects.toThrow(/outside your workspace/i);
+  ).rejects.toThrow(/outside the directory the agents share/i);
   expect(f.services.media.tools(f.run).save_attachment).toBeDefined();
 });
 
@@ -279,18 +279,18 @@ it('saves an attachment to disk and sends a file from it when the machine is on'
   process.env.JIAN_WORKSPACES = folder;
 
   try {
-    const path = join(folder, f.profile.id, 'in', 'photos.zip');
+    const path = join(folder, 'in', 'photos.zip');
 
-    // Outside the profile's workspace the gateway neither writes nor reads for it.
+    // Outside the directory the agents share, the gateway neither writes nor reads for them.
     await expect(
       tools.save_attachment?.execute?.(
-        { mediaId, path: join(folder, 'elsewhere.zip'), overwrite: false },
+        { mediaId, path: join(`${folder}-beside`, 'elsewhere.zip'), overwrite: false },
         { ...call, toolCallId: 'outside' },
       ),
-    ).rejects.toThrow('outside your workspace');
+    ).rejects.toThrow('outside the directory the agents share');
     await expect(
       tools.send_file?.execute?.({ path: '/proc/self/environ' }, { ...call, toolCallId: 'env' }),
-    ).rejects.toThrow('outside your workspace');
+    ).rejects.toThrow('outside the directory the agents share');
 
     await tools.save_attachment?.execute?.(
       { mediaId, path, overwrite: false },

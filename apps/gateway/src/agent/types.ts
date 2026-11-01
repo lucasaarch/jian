@@ -1,6 +1,6 @@
 import type { OAuthClientProvider } from '@ai-sdk/mcp';
 import type { ModelConfig, Run } from '@jian/contracts';
-import type { LanguageModel } from 'ai';
+import type { LanguageModel, ToolSet } from 'ai';
 import type { GitHubIntegrations } from '../integrations/github.js';
 import type { CodexLogin } from '../providers/codex/login.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
@@ -40,6 +40,8 @@ export interface RuntimeOptions {
    * (`github_git`), each scoped to what the conversation reaches.
    */
   github?: Pick<GitHubIntegrations, 'mcpAccess' | 'gitAccess'>;
+  /** The tools of an agent with an X account; none for a subagent or an agent without one. */
+  x?: { for(run: Run): Promise<ToolSet> };
   codexLogin?: Pick<CodexLogin, 'accessToken'>;
   outbound?: ReturnType<typeof createSafeFetch>;
   storeArtifact?: (

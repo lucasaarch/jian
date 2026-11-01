@@ -1,4 +1,4 @@
-import { Action, Overlay, TextField } from '@jian/ui';
+import { Action, Overlay, OverlayActions, TextField } from '@jian/ui';
 import { ShieldCheck } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
@@ -71,14 +71,14 @@ export function AddGateway({
           <ShieldCheck size={14} />
           The token stays in this computer’s keychain and never reaches the window.
         </p>
-        <div className="flex justify-end gap-2">
+        <OverlayActions>
           <Action tone="quiet" onClick={() => onOpenChange(false)}>
             Cancel
           </Action>
           <Action tone="primary" type="submit" busy={busy}>
             Connect
           </Action>
-        </div>
+        </OverlayActions>
       </form>
     </Overlay>
   );

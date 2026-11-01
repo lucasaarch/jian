@@ -1,30 +1,27 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { eq, or } from 'drizzle-orm';
-import { workspacesRoot } from '../agent/workspace.js';
 import { GATEWAY_SCOPE, type GatewayVault } from '../security/gateway-vault.js';
 import type { Store } from '../storage/database.js';
 import { sshKeys } from '../storage/schema.js';
-import { directory, sshKeySecret } from './service.js';
+import { earlierKeyDirectories } from './keys-directory.js';
+import { sshKeySecret } from './service.js';
 
 type Metadata = { id?: unknown; name?: unknown; fingerprint?: unknown; createdAt?: unknown };
 
 const children = async (path: string) => readdir(path, { withFileTypes: true }).catch(() => []);
 
 /**
- * Keys made before they belonged to the installation lived only as files in one agent's
- * workspace, `~/.ssh/jian/<id>/`. This takes each into the table and the gateway vault under the
- * id it already had, once: a key already there — by id, or the same public key made in another
- * workspace — is skipped, so a second start imports nothing. The files stay; each run's sync
- * owns them from now on. Returns how many keys were imported.
+ * Keys made before they belonged to the installation lived only as files in one agent's old
+ * folder, `<root>/<profileId>/.ssh/jian/<id>/`. This takes each into the table and the gateway
+ * vault under the id it already had, once: a key already there — by id, or the same public key
+ * made in another folder — is skipped, so a second start imports nothing. The files stay until the
+ * key is removed: see `SshKeys.prune`. Returns how many keys were imported.
  */
 export async function importWorkspaceSshKeys(store: Store, vault: GatewayVault): Promise<number> {
   let imported = 0;
 
-  for (const workspace of await children(workspacesRoot())) {
-    if (!workspace.isDirectory()) continue;
-    const root = directory(join(workspacesRoot(), workspace.name));
-
+  for (const root of await earlierKeyDirectories()) {
     for (const entry of await children(root)) {
       if (!entry.isDirectory()) continue;
       const folder = join(root, entry.name);

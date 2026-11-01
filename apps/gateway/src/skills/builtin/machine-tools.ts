@@ -1,20 +1,23 @@
 import type { Skill } from '@jian/contracts';
 
-export const machineTools: Skill = {
-  name: 'machine-tools',
-  description:
-    'Use before running commands or installing anything: what the machine has, how to install more without root, logins and keys, and the limits of a command.',
-  instructions: `# The machine you run commands on
+const PER_AGENT = `Memories, conversations, skills and the browser's logins stay per agent. Files do not.`;
 
-Commands run with \`run_command\`, in the \`shell\` tool group: load it with \`load_tools\`
+const SERVER_FILES = `Commands run with \`run_command\`, in the \`shell\` tool group: load it with \`load_tools\`
 first. They run on the machine the gateway runs on, as whoever started it.
 
-You work in a workspace of your own: a directory that is your \`$HOME\`, where a command
-starts and where \`$TMPDIR\` points. Keep repositories, logins and installs there. A command
-may write only in it and read only it and the system's tools (\`/usr\`, \`/etc\` and the
-like); another profile's workspace and the gateway's files are refused, by the kernel where
-it supports it. \`/tmp\` is not yours: use \`$TMPDIR\`. The file tools, \`send_file\` and
-\`save_attachment\` follow the same line.
+Every agent of this installation works in one shared directory. It is your \`$HOME\`, a command
+starts there, and \`$TMPDIR\` is its \`tmp\` folder. ${PER_AGENT} So other agents' work is in
+here, and they can read and overwrite yours:
+
+- Keep each task in a folder of its own, such as \`~/tasks/invoice-export\`. Do not assume you are
+  alone in \`~\`, and do not clean up, rename or overwrite what you did not create.
+- Folders named by a long id hold the work of earlier versions. Leave them where they are: old
+  conversations point into them.
+- \`$TMPDIR\` is shared too: make your own folder there with \`mktemp -d\`. \`/tmp\` is not yours.
+
+A command may write only in this directory and read only it and the system's tools (\`/usr\`,
+\`/etc\` and the like); the gateway's files and process are refused, by the kernel where it
+supports it. The file tools, \`send_file\` and \`save_attachment\` follow the same line.
 
 A command does not inherit the gateway's environment: it gets \`PATH\`, \`HOME\`, the locale
 and a few install paths, and nothing else — no \`DATABASE_URL\`, no \`NODE_ENV\`, no keys.
@@ -25,10 +28,43 @@ Check where you are: \`echo $JIAN_TOOLBOX\`. If it prints \`1\` you are in the J
 what follows holds. Otherwise the gateway runs directly on the owner's machine: find what
 exists with \`command -v <tool>\`, and install nothing there unless the owner asks.
 
-## Already installed in the image
+`;
+
+const OWNER_FILES = `Commands run with \`run_command\`, in the \`shell\` tool group: load it with \`load_tools\`
+first. They run on the owner's own computer, as the owner.
+
+\`$HOME\` is the owner's real home. A command starts there, or in this chat's first folder when it
+has one. \`$TMPDIR\` is a folder of Jian's in the system's temporary directory. Every agent of this
+installation shares these files. ${PER_AGENT}
+
+- What is here is the owner's own. Touch only what the task needs, and never delete, move or
+  overwrite something of theirs that nobody asked you to.
+- Do not change \`~/.ssh\`, \`~/.gitconfig\` or any other dotfile unless the owner asks for exactly
+  that. Jian keeps what it needs elsewhere.
+- A new clone with no folder chosen goes under \`~/Jian\`, which \`github_git\` does by default. Keep
+  your own work there too, in a folder for each task, rather than loose in \`~\`.
+- Do not assume you are alone: another agent may be working in the same folder.
+
+The file tools, \`send_file\` and \`save_attachment\` reach anything the owner's user can, with one
+exception: Jian's own data, the app's data folder with its database and credentials. They refuse
+it, through a link too, and say so. Its old \`workspaces\` folder stays open, with earlier work.
+
+Nothing confines a command here: it can reach all that the owner's user can, the network included,
+and the refusal above does not stop it. That calls for care, and is no way around a refusal: never
+read Jian's own data through a command.
+
+A command does not inherit the gateway's environment: it gets \`PATH\`, \`HOME\`, the locale and the
+owner's SSH agent, and nothing else — no \`NODE_ENV\`, no keys of the gateway's. When a project
+needs a variable, set it in the command itself.
+
+Find what exists with \`command -v <tool>\`, and install nothing here unless the owner asks.
+
+`;
+
+const IMAGE = `## Already installed in the image
 
 - Runtimes: Node 24 with npm, pnpm and yarn (through corepack); Python 3 with pip, venv and
-  \`uv\`/\`uvx\`; Go.
+  \`uv\`/\`uvx\`; Go; Rust with \`cargo\`, \`rustfmt\` and \`clippy\`.
 - Git and the network: \`git\`, \`ssh\`, \`scp\`, \`curl\`, \`wget\`, \`rsync\`. GitHub's
   API is reached through its MCP server (\`github\` skill), not a CLI.
 - Text: \`rg\` (ripgrep), \`fd\`, \`jq\`, \`sed\`, \`awk\`, \`grep\`, \`diff\`, \`patch\`, \`tree\`,
@@ -65,10 +101,12 @@ The hard lifetime is 110 seconds including startup; set \`run_command.timeoutMs\
 the wrapper limit. Exit 124 means timeout, 125 means setup/server failure; other exit
 codes come from the command. This is not a persistent interactive GUI session.
 
-## Installing more
+`;
 
-You are the user \`node\`, without root and without \`sudo\`. Your workspace lives on a
-volume that survives a new image, so install there:
+const SERVER_INSTALLS = `## Installing more
+
+You are the user \`node\`, without root and without \`sudo\`. The shared directory lives on a
+volume that survives a new image, so install there. What you install is there for every agent:
 
 - Node: \`npm install -g <pkg>\` (lands in \`~/.local\`).
 - Python tools: \`uv tool install <pkg>\`. A project: \`uv venv\`, then \`uv pip install\`. A
@@ -80,7 +118,9 @@ There is no \`apt\`. When a task needs a system package, look for a static binar
 per-user build first; if there is none, tell the owner which package, so it can be added to
 the image. Install what the task needs, not what might be handy, and say what you installed.
 
-## Logins and keys
+`;
+
+const SERVER_LOGINS = `## Logins and keys
 
 - The shell's \`git\` reaches private repositories with the installation's SSH keys only. For
   GitHub, when the owner connected it, clone, fetch, pull and push with \`github_git\`
@@ -88,12 +128,31 @@ the image. Install what the task needs, not what might be handy, and say what yo
 - SSH keys: create them with the SSH key tools (\`ssh-keys\` skill), not \`ssh-keygen\`. The
   gateway points \`git\` at those identities and seeds GitHub’s host keys in
   \`~/.ssh/known_hosts\`.
-- Git needs \`git config --global user.name\` and \`user.email\` before a commit.
+- Git needs \`user.name\` and \`user.email\` before a commit. Set them in the repository with
+  \`git config\`, not \`--global\`: \`~/.gitconfig\` is every agent's.
 
-All of them persist in your workspace, and no other profile can read them. Never print a token, a password or a private key
-into the conversation, and never send one anywhere the owner did not ask.
+All of them persist in the shared directory, where every agent can read them. Never print a
+token, a password or a private key into the conversation, and never send one anywhere the owner
+did not ask.
 
-## Limits of a command
+`;
+
+const OWNER_LOGINS = `## Logins and keys
+
+- The owner's own Git and SSH setup applies to your commands: their \`~/.gitconfig\`, their
+  \`~/.ssh/config\`, their keys and their SSH agent. Use it; do not change it.
+- For GitHub, when the owner connected it, clone, fetch, pull and push with \`github_git\`
+  (\`github\` skill), which lends the GitHub App's access to that one command.
+- SSH keys of the installation: create them with the SSH key tools (\`ssh-keys\` skill), not
+  \`ssh-keygen\`. The gateway keeps them in Jian's own data, away from \`~/.ssh\`, and points
+  \`git\` at them alongside the owner's.
+
+Never print a token, a password or a private key into the conversation, and never send one
+anywhere the owner did not ask.
+
+`;
+
+const LIMITS = `## Limits of a command
 
 - A command stops after at most two minutes (\`timeoutMs\`, 30 seconds unless you raise it).
 - Output past about 60,000 characters is cut.
@@ -109,5 +168,19 @@ sees what it will do and decides, and the turn carries on with their answer. Mak
 exactly as you mean it, because what is approved is that call. When the answer says nobody
 here may approve, say what you would run and do not try to reach the same effect another way.
 
-For reading and changing code, load the \`coding-work\` skill.`,
+For reading and changing code, load the \`coding-work\` skill.`;
+
+/** What is true where the run is: the two hosts share neither the files nor the rules on them. */
+export const machineTools: Skill = {
+  name: 'machine-tools',
+  description:
+    'Use before running commands or installing anything: what the machine has, how to install more without root, logins and keys, and the limits of a command.',
+  instructions: `# The machine you run commands on\n\n${SERVER_FILES}${IMAGE}${SERVER_INSTALLS}${SERVER_LOGINS}${LIMITS}`,
 };
+
+const onOwnerComputer: Skill = {
+  ...machineTools,
+  instructions: `# The computer you run commands on\n\n${OWNER_FILES}${OWNER_LOGINS}${LIMITS}`,
+};
+
+export const machineToolsFor = (owner: boolean): Skill => (owner ? onOwnerComputer : machineTools);

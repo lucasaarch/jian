@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
+import { recordEvent } from '../src/core/events.js';
 import { events } from './helpers/rows.js';
 import { testServices } from './helpers/services.js';
 
@@ -270,6 +271,44 @@ describe('HTTP services', () => {
     expect(resumed[0].type).toBe('profile.updated');
     expect((await app.inject({ url: `${url}/events?after=-1`, headers })).statusCode).toBe(400);
   });
+});
+
+it('hands over a long backlog at once, with no wait between its pages', async () => {
+  const { app, services } = await setup();
+  const profile = await services.profiles.createProfile(input);
+  // More than two pages, none of them waking the stream once it is open.
+  for (let name = 0; name < 240; name++) {
+    await services.store.transaction(profile.id, (tx) =>
+      recordEvent(tx, Date.now, profile.id, 'profile.touched', { name }),
+    );
+  }
+  const newest = (await events(services.store, profile.id, 0, 1_000)).at(-1);
+  assert.ok(newest, 'The backlog must have events');
+
+  const url = await app.listen({ host: '127.0.0.1', port: 0 });
+  const controller = new AbortController();
+  const limit = setTimeout(() => controller.abort(), 5_000);
+
+  try {
+    const response = await fetch(`${url}/v1/profiles/${profile.id}/events/stream?after=0`, {
+      headers,
+      signal: controller.signal,
+    });
+    assert.ok(response.body, 'SSE response must have a body');
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    let data = '';
+
+    while (!data.includes(`id: ${newest.id}\n`)) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      data += value;
+    }
+
+    expect(data).toContain(`id: ${newest.id}\n`);
+  } finally {
+    clearTimeout(limit);
+    controller.abort();
+  }
 });
 
 it('streams committed events over HTTP and resumes after a cursor', async () => {

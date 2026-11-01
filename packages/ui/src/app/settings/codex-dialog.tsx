@@ -3,7 +3,7 @@
 import { type ReactNode, useState } from 'react';
 import type { SectionActions } from '../../components/props';
 import { useCodexLogin } from '../../components/providers/use-codex-login';
-import { Action, Overlay, StatusPill } from '../../kit';
+import { Action, Overlay, OverlayActions, StatusPill } from '../../kit';
 import type { Provider } from '../../lib/api';
 import { CodexCodeDialog } from './codex-code-dialog';
 import { ProviderTitle } from './provider-title';
@@ -78,14 +78,14 @@ export function CodexDialog({
     <>
       <Overlay open={open} onOpenChange={onOpenChange} title="Codex" size="form">
         <div className="grid w-full gap-5 p-7">
-          <header className="grid gap-1.5 pr-6">
+          <header className="grid gap-1.5 pr-10">
             <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
               <ProviderTitle kind="openai">Codex</ProviderTitle>
               {codex && <StatusPill tone="good">Connected</StatusPill>}
             </h2>
             <p className="text-sm leading-relaxed text-muted">{state}</p>
           </header>
-          <div className="flex items-center gap-2">
+          <OverlayActions>
             {codex && (
               <Action
                 tone="danger"
@@ -103,7 +103,7 @@ export function CodexDialog({
             <Action tone="primary" busy={busy || pending} onClick={signIn}>
               {codex ? 'Sign in again' : 'Sign in'}
             </Action>
-          </div>
+          </OverlayActions>
         </div>
       </Overlay>
       {code && codeShown && (

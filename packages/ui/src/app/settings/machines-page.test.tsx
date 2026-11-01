@@ -95,18 +95,8 @@ it('removes a machine only once its name is typed', async () => {
 
 const other = { ...machine, id: '1d2e3f40-5a6b-4c7d-8e9f-0a1b2c3d4e5f', name: 'Build box' };
 
-it('lists the computer the app runs on first, with its switch and without its credentials', async () => {
-  let refuse!: (reason: Error) => void;
-  const setSharing = vi.fn(
-    () =>
-      new Promise<void>((_resolve, reject) => {
-        refuse = reject;
-      }),
-  );
-  await render(
-    { remoteMachines: async () => [other, machine] },
-    { machineId: machine.id, sharing: true, setSharing },
-  );
+it('lists the computer the app runs on first, with no switch and without its credentials', async () => {
+  await render({ remoteMachines: async () => [other, machine] }, { machineId: machine.id });
   const rows = [...document.querySelectorAll('button[aria-label^="Configure"]')].map((item) =>
     item.getAttribute('aria-label'),
   );
@@ -115,14 +105,7 @@ it('lists the computer the app runs on first, with its switch and without its cr
   // What it is, at a glance: its system as its worker reported it, and its architecture.
   expect(document.body.textContent).toContain('macOS 27.2 · arm64');
 
-  const toggle = () =>
-    document.querySelector<HTMLElement>('[aria-label="Let agents use this computer"]');
-  await act(async () => toggle()?.click());
-  // Off at once, while the app is asked; back on when it refuses.
-  expect(toggle()?.getAttribute('aria-checked')).toBe('false');
-  expect(setSharing).toHaveBeenCalledWith(false);
-  await act(async () => refuse(new Error('Could not save.')));
-  expect(toggle()?.getAttribute('aria-checked')).toBe('true');
+  expect(document.querySelector('[role="switch"]')).toBeNull();
 
   // The app keeps it registered and holds its token: neither is offered for it.
   await act(async () => button('Configure Studio Mac')?.click());
@@ -131,10 +114,7 @@ it('lists the computer the app runs on first, with its switch and without its cr
 });
 
 it('says this computer is connecting before the app has registered it', async () => {
-  await render(
-    { remoteMachines: async () => [other] },
-    { machineId: null, sharing: true, setSharing: vi.fn(async () => {}) },
-  );
+  await render({ remoteMachines: async () => [other] }, { machineId: null });
 
   expect(document.body.textContent).toContain('This computer');
   expect(document.body.textContent).toContain('Connecting');

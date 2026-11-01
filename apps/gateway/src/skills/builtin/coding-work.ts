@@ -1,6 +1,5 @@
 import type { Skill } from '@jian/contracts';
 
-/** Offered with the shell: it describes the file and command tools that only exist then. */
 export const codingWork: Skill = {
   name: 'coding-work',
   description:
@@ -52,7 +51,7 @@ it changed since you read it. That is protecting someone else's change: read it 
   connected GitHub (\`github\` skill); everything local stays with \`git\`.
 - Issues, pull requests, reviews and runs go through GitHub's MCP server: the one the GitHub
   integration attaches when the owner connected an account (\`github\` skill), or one the
-  owner configured under Gateway → Integrations → MCPs. Search and load its tools first, and load
+  owner configured under Settings → Integrations. Search and load its tools first, and load
   \`github-mcp\` before create/update issue or PR calls (milestones, labels, common 422s).
   There is no \`gh\` in the image.
 

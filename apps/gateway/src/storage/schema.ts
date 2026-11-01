@@ -215,7 +215,7 @@ export const mcpSecretMoves = pgTable(
 
 /**
  * The installation's SSH keys, shared by every agent. The private half is in the gateway vault
- * as `ssh-key:<id>`; each run writes the keys into the workspace that uses them.
+ * as `ssh-key:<id>`; each run writes the keys where git finds them on this host.
  */
 export const sshKeys = pgTable(
   'ssh_keys',
@@ -252,6 +252,35 @@ export const githubInstallationStates = pgTable('github_installation_states', {
     .$type<'installation' | 'registration'>()
     .notNull()
     .default('installation'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt,
+});
+
+/**
+ * An X account connected through the installation's own developer app. Tokens live in the gateway
+ * vault, under the row's id: what is here is what the panel may show.
+ */
+export const xAccounts = pgTable(
+  'x_accounts',
+  {
+    id: uuid('id').primaryKey(),
+    xUserId: text('x_user_id').notNull(),
+    handle: text('handle').notNull(),
+    name: text('name').notNull(),
+    status: text('status').$type<'connected' | 'needs_attention'>().notNull(),
+    /** What X granted, so a tool needing more can say to reconnect instead of failing oddly. */
+    scopes: jsonb('scopes').$type<string[]>().notNull().default([]),
+    connectedAt: timestamp('connected_at', { withTimezone: true }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [uniqueIndex('x_accounts_x_user_id').on(table.xUserId)],
+);
+
+/** One sign-in on its way through X's page: single-use, short-lived, kept only by its hash. */
+export const xConnectStates = pgTable('x_connect_states', {
+  hash: text('hash').primaryKey(),
+  verifier: text('verifier').notNull(),
+  returnTo: text('return_to').notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt,
 });

@@ -39,12 +39,14 @@ Other messages you may see:
   \`JIAN_ALLOW_PRIVATE_ORIGINS\`.
 - "Stopped: nothing came back … for 5 minutes" — a model or tool hung; the completed steps
   are saved.
-- A tool that is not there at all — the switch that enables it is off (Identity), or its
-  group is not loaded (\`load_tools\`).
+- A tool that is not there at all — its group is not loaded (\`load_tools\`), or this run does not
+  have it: a subagent has no browser or X tools, and a conversation outside the desktop app has no
+  browser.
 - A channel that does not deliver — check Channels in the panel; WhatsApp may need its QR
   code scanned again.
 - An MCP server that does not connect or needs sign-in — the owner can test or sign in under
-  Gateway → Integrations → MCPs.
+  Settings → Integrations.
+- An X call refused — see \`x\`: no credits, or an account to connect again.
 - Web search refused — check the Tavily key under Providers.
 
 ## What to say

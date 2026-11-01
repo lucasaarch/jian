@@ -1,6 +1,6 @@
 import type { McpServer, McpStatus } from '@jian/contracts';
 import { createSafeFetch } from '../security/outbound.js';
-import { connectMcp, MissingMcpValue, type SecretReader } from './mcp-connect.js';
+import { connectMcp, MissingMcpValue, type SecretReader, STDIO_START_MS } from './mcp-connect.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
 
@@ -36,7 +36,8 @@ export async function probeMcpServer(
       server,
       vault,
       fetcher: fetcher ?? (outbound?.fetch as typeof globalThis.fetch),
-      signal: AbortSignal.timeout(20_000),
+      // Its command may be starting for the first time; an address answers or it does not.
+      signal: AbortSignal.timeout(server.transport === 'stdio' ? STDIO_START_MS : 20_000),
       ...(server.auth === 'oauth'
         ? { authProvider: oauth?.(server.name, mcpOauthClient(server)) }
         : {}),

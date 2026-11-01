@@ -4,7 +4,7 @@ import { ContextMenu } from '@base-ui/react/context-menu';
 import { Cloud, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Spinner } from '../components/ui/spinner';
-import { Action, ConfirmDialog, Overlay, TextField } from '../kit';
+import { Action, ConfirmDialog, Overlay, OverlayActions, TextField } from '../kit';
 import { MenuEntry, menuPopup } from '../kit/menu';
 import { ago } from '../lib/format';
 
@@ -14,7 +14,7 @@ export type ChatRowProps = {
    * it out: their folder already says what they are. */
   icon?: ReactNode;
   /** Under a folder: its name lines up with the folder's, and where the folder's mark is, a dot
-   * says how it stands while the pointer is on it. */
+   * says how it stands while it is open or the pointer is on it. */
   nested?: boolean;
   /** When it was last spoken in, as an ISO date. */
   at: string;
@@ -90,7 +90,7 @@ export function ChatRow(props: ChatRowProps) {
           {props.nested && (
             <span
               aria-hidden="true"
-              className={`pointer-events-none absolute top-1/2 left-3.75 size-1.5 -translate-y-1/2 rounded-full opacity-0 transition-opacity group-hover/row:opacity-100 ${dot(props)}`}
+              className={`pointer-events-none absolute top-1/2 left-3.75 size-1.5 -translate-y-1/2 rounded-full transition-opacity ${props.selected ? '' : 'opacity-0 group-hover/row:opacity-100'} ${dot(props)}`}
             />
           )}
           <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-[11px] text-muted tabular-nums">
@@ -230,7 +230,7 @@ function RenameForm({
         if (saved) close();
       }}
     >
-      <h2 className="pr-6 text-lg font-semibold tracking-tight">Rename chat</h2>
+      <h2 className="pr-10 text-lg font-semibold tracking-tight">Rename chat</h2>
       <TextField
         label="Name"
         value={title}
@@ -238,14 +238,14 @@ function RenameForm({
         autoComplete="off"
         onChange={(event) => setTitle(event.target.value)}
       />
-      <div className="flex justify-end gap-2">
+      <OverlayActions>
         <Action tone="quiet" onClick={close}>
           Cancel
         </Action>
         <Action tone="primary" type="submit" busy={busy} disabled={!title.trim()}>
           Save
         </Action>
-      </div>
+      </OverlayActions>
     </form>
   );
 }

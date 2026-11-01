@@ -1,6 +1,7 @@
 # Jian
 
-Self-hosted agent gateway. One trusted owner per installation, isolation per profile.
+Self-hosted agent gateway. One trusted owner per installation. Memories, conversations and identity
+are per agent; files are shared.
 TypeScript on Node 24+, Fastify, PostgreSQL, pg-boss.
 
 ```text
@@ -51,6 +52,8 @@ make release VERSION=1.2.3   # only when asked; needs docs/releases/1.2.3.md
   `contracts-and-migrations` skill.
 - The agent is told only what it can do in that run: a tool, skill or reply never points at a tool
   the run does not have.
+- Built-in skills are what the agent believes about Jian. A change to a tool, a screen or how Jian
+  behaves updates the skill that describes it in the same work. Read the `built-in-skills` skill.
 - Biome formats and lints: two spaces, single quotes, semicolons, 100 columns. Keep modules small.
 
 **Tests and verification**

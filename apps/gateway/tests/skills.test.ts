@@ -275,10 +275,6 @@ describe('the skills every profile carries', () => {
       'coding-work',
       'ponytail',
       'ponytail-review',
-      'ponytail-audit',
-      'ponytail-debt',
-      'ponytail-gain',
-      'ponytail-help',
     ]) {
       expect(names([])).toContain(skill);
       expect(names([docs])).toContain(skill);

@@ -12,7 +12,6 @@ import {
   Laptop,
   Plus,
   Search,
-  Server,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
@@ -173,7 +172,6 @@ export function ProjectPicker({
       githubAccountId: item.accountId,
       githubRepositoryId: item.id,
     }));
-  const hereAvailable = machine && (machine.ownGateway || machine.sharing);
   // A desktop app's own gateway has nothing but this computer, so there is nothing to pick between.
   const only = !server && Boolean(machine);
   const place = only ? 'here' : opened;
@@ -295,53 +293,37 @@ export function ProjectPicker({
         value={inner}
         onChange={setInner}
       />
-      {place === 'here' && !hereAvailable ? (
-        <div className="grid gap-2 p-3">
-          <p className="text-[13px] leading-relaxed text-muted">
-            Agents on this gateway reach this computer's folders only while it is shared with them.
-          </p>
-          <div className="flex items-center justify-between gap-3">
-            <span>Share this computer</span>
-            <SwitchControl
-              checked={false}
-              onCheckedChange={(on) => machine?.setSharing(on)}
-              label="Share this computer"
-            />
-          </div>
+      <div className="p-1.5">
+        <MultipleRow on={multiple} onChange={setMultiple} />
+        <div className={divider} />
+        {/* A thin scrollbar out over the panel's padding, so it takes nothing from the rows. */}
+        <div className="-mr-1.5 grid max-h-60 gap-px overflow-y-auto [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-1.5">
+          {place === 'here'
+            ? shownFolders.map((path) => folderRow(path, path))
+            : shownRepositories.map(repositoryRow)}
+          {nothing && <p className="px-2.5 py-2 text-[13px] text-muted">{empty}</p>}
         </div>
-      ) : (
-        <div className="p-1.5">
-          <MultipleRow on={multiple} onChange={setMultiple} />
-          <div className={divider} />
-          {/* A thin scrollbar out over the panel's padding, so it takes nothing from the rows. */}
-          <div className="-mr-1.5 grid max-h-60 gap-px overflow-y-auto [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-1.5">
-            {place === 'here'
-              ? shownFolders.map((path) => folderRow(path, path))
-              : shownRepositories.map(repositoryRow)}
-            {nothing && <p className="px-2.5 py-2 text-[13px] text-muted">{empty}</p>}
-          </div>
-          {place === 'here' && (
-            <>
-              <div className={divider} />
-              <Row mark={<FolderOpen size={14} />} onClick={() => void openFolder()}>
-                Open folder…
+        {place === 'here' && (
+          <>
+            <div className={divider} />
+            <Row mark={<FolderOpen size={14} />} onClick={() => void openFolder()}>
+              Open folder…
+            </Row>
+            {only && (
+              <Row
+                mark={<Plus size={14} />}
+                chosen={choice.kind === 'scratch'}
+                onClick={() => {
+                  onChange(FROM_SCRATCH);
+                  close();
+                }}
+              >
+                Start from scratch
               </Row>
-              {only && (
-                <Row
-                  mark={<Plus size={14} />}
-                  chosen={choice.kind === 'scratch'}
-                  onClick={() => {
-                    onChange(FROM_SCRATCH);
-                    close();
-                  }}
-                >
-                  Start from scratch
-                </Row>
-              )}
-            </>
-          )}
-        </div>
-      )}
+            )}
+          </>
+        )}
+      </div>
     </motion.div>
   );
 
@@ -392,7 +374,7 @@ export function ProjectPicker({
                       onClick={openPlace('cloud')}
                       onHover={(row) => afterRest(() => openPlace('cloud')(row))}
                     >
-                      Cloud
+                      Remote Gateway
                     </Row>
                   )}
                 </div>
@@ -438,18 +420,13 @@ export function PlacePicker({
   const at = choice.place;
   const named =
     at.kind === 'cloud'
-      ? 'Cloud'
+      ? 'Remote Gateway'
       : at.kind === 'here'
         ? 'This Machine'
         : (machines.find((item) => item.id === at.id)?.name ?? 'A machine');
   const mark =
-    at.kind === 'cloud' ? (
-      <Cloud size={14} />
-    ) : at.kind === 'here' ? (
-      <Laptop size={14} />
-    ) : (
-      <Server size={14} />
-    );
+    // Whatever is not this computer is elsewhere, the gateway or another machine alike.
+    at.kind === 'here' ? <Laptop size={14} /> : <Cloud size={14} />;
   const put = (place: ChatPlace) => {
     onChange({ ...choice, place });
     setOpen(false);
@@ -490,12 +467,12 @@ export function PlacePicker({
               chosen={at.kind === 'cloud'}
               onClick={() => put({ kind: 'cloud' })}
             >
-              Cloud
+              Remote Gateway
             </Row>
             {others.map((item) => (
               <Row
                 key={item.id}
-                mark={<Server size={14} />}
+                mark={<Cloud size={14} />}
                 chosen={at.kind === 'machine' && at.id === item.id}
                 onClick={() => put({ kind: 'machine', id: item.id })}
               >
@@ -509,7 +486,7 @@ export function PlacePicker({
                 disabled={!machine.machineId}
                 onClick={() => void here()}
               >
-                {machine.machineId ? 'This Machine…' : 'This Machine (share it first)'}
+                {machine.machineId ? 'This Machine' : 'This Machine (connecting)'}
               </Row>
             )}
           </Popover.Popup>

@@ -3,7 +3,7 @@
 import { Check, Copy, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 import { Spinner } from '../../components/ui';
-import { Action, Overlay } from '../../kit';
+import { Action, Overlay, OverlayActions } from '../../kit';
 
 /**
  * The code the owner types on the OpenAI page, while the gateway waits for them to. It closes
@@ -42,7 +42,7 @@ export function CodexCodeDialog({
       size="form"
     >
       <div className="grid w-full gap-5 p-7">
-        <header className="grid gap-1.5 pr-6">
+        <header className="grid gap-1.5 pr-10">
           <h2 className="text-lg font-semibold tracking-tight">Sign in with ChatGPT</h2>
           <p className="text-sm leading-relaxed text-muted">
             Enter this code on the OpenAI page. This closes once ChatGPT connects.
@@ -70,7 +70,7 @@ export function CodexCodeDialog({
             {error}
           </p>
         )}
-        <div className="flex justify-end gap-2">
+        <OverlayActions>
           <Action tone="quiet" onClick={close}>
             Cancel
           </Action>
@@ -81,7 +81,7 @@ export function CodexCodeDialog({
             <ExternalLink size={15} />
             Open the OpenAI login
           </Action>
-        </div>
+        </OverlayActions>
       </div>
     </Overlay>
   );

@@ -3,9 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { materializeComputerHelperSources } from '@jian/remote-core/computer';
 import { configDir, installedScript } from './paths.ts';
 
-/** The release a worker script was stamped with, from the line its build keeps. */
+/**
+ * The release a worker script was stamped with, from the line its build keeps. Held to a whole
+ * line: the bundle holds this very pattern too, earlier, which would read as a release of `([^`.
+ */
 export function readEmbeddedVersion(scriptSource: string): string {
-  const match = /export const PACKAGE_VERSION = '([^']+)'/.exec(scriptSource);
+  const match = /^export const PACKAGE_VERSION = '([^']+)';?$/m.exec(scriptSource);
   return match?.[1] ?? 'unknown';
 }
 

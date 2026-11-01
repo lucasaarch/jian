@@ -12,7 +12,7 @@ import {
   secretLabel,
   staleLine,
 } from '../../components/providers/connection';
-import { Action, Overlay, Segmented, StatusPill, TextField } from '../../kit';
+import { Action, Overlay, OverlayActions, Segmented, StatusPill, TextField } from '../../kit';
 import type { Provider, ProviderModelList } from '../../lib/api';
 import { ProviderTitle } from './provider-title';
 
@@ -138,7 +138,7 @@ function ProviderForm({
 
   return (
     <form className="grid w-full gap-5 p-7" onSubmit={submit}>
-      <header className="grid gap-1.5 pr-6">
+      <header className="grid gap-1.5 pr-10">
         <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
           <ProviderTitle kind={entry.kind}>{name}</ProviderTitle>
           {configured && (
@@ -209,7 +209,7 @@ function ProviderForm({
           {error}
         </p>
       )}
-      <div className="flex items-center gap-2">
+      <OverlayActions>
         {/* A credential read from the gateway's environment is changed there, not here. */}
         {configured && !configured.apiKeyEnv && (
           <Action
@@ -228,7 +228,7 @@ function ProviderForm({
         <Action tone="primary" type="submit" busy={busy}>
           {configured ? 'Replace' : 'Connect'}
         </Action>
-      </div>
+      </OverlayActions>
     </form>
   );
 }

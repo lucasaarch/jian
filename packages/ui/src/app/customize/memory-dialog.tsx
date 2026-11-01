@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { MEMORY_CONTENT_LIMIT, type memoryActions } from '../../components/memories/memory-actions';
-import { Action, Overlay, TextArea } from '../../kit';
+import { Action, Overlay, OverlayActions, TextArea } from '../../kit';
 import type { Memory } from '../../lib/api';
 import { MemoryLinks } from './memory-links';
 
@@ -57,7 +57,7 @@ function MemoryForm({
         if (await actions.save(memory, trimmed)) onCancel();
       }}
     >
-      <header className="grid gap-1.5 pr-6">
+      <header className="grid gap-1.5 pr-10">
         <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
           <span className="truncate">{memory.key}</span>
         </h2>
@@ -82,7 +82,7 @@ function MemoryForm({
         unlink={(key) => void actions.unlink(memory, key)}
         follow={follow}
       />
-      <div className="flex items-center gap-2">
+      <OverlayActions>
         <Action
           tone="danger"
           className="bg-bad/10"
@@ -103,7 +103,7 @@ function MemoryForm({
         >
           Save
         </Action>
-      </div>
+      </OverlayActions>
     </form>
   );
 }

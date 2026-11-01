@@ -5,6 +5,7 @@ import {
   Action,
   ConfirmDialog,
   Overlay,
+  OverlayActions,
   SettingsGroup,
   SettingsRow,
   StatusPill,
@@ -134,7 +135,7 @@ function Credentials({
 
   return (
     <form className="grid w-full gap-5 p-7" onSubmit={replace}>
-      <header className="grid gap-1.5 pr-6">
+      <header className="grid gap-1.5 pr-10">
         <h2 className="truncate text-lg font-semibold tracking-tight">{gateway.name}</h2>
         <p className="text-sm leading-relaxed text-muted">
           A new host token, after rotating it on the server: the app checks it with the gateway
@@ -155,7 +156,7 @@ function Credentials({
           {error}
         </p>
       )}
-      <div className="flex items-center gap-2">
+      <OverlayActions>
         <Action tone="danger" className="bg-bad/10" disabled={replacing} onClick={remove}>
           Remove
         </Action>
@@ -166,7 +167,7 @@ function Credentials({
         <Action tone="primary" type="submit" busy={replacing} disabled={!token}>
           Replace
         </Action>
-      </div>
+      </OverlayActions>
     </form>
   );
 }

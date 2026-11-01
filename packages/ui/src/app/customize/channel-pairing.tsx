@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { states } from '../../components/channels/kinds';
 import { usePairing } from '../../components/channels/use-pairing';
-import { Action, Overlay, StatusPill } from '../../kit';
+import { Action, Overlay, OverlayActions, StatusPill } from '../../kit';
 import type { Channel, GatewayApi } from '../../lib/api';
 
 /**
@@ -69,7 +69,7 @@ function PairingStage({
 
   return (
     <div className="grid w-full gap-5 p-7">
-      <header className="grid gap-1.5 pr-6">
+      <header className="grid gap-1.5 pr-10">
         <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
           Connect WhatsApp
           {linked && <StatusPill tone="good">Connected</StatusPill>}
@@ -123,7 +123,7 @@ function PairingStage({
         Keep the QR code private. Anyone who writes arrives as a request: nothing is answered before
         you approve it.
       </p>
-      <div className="flex items-center gap-2">
+      <OverlayActions>
         <span className="flex-1" />
         <Action tone="quiet" onClick={close}>
           Close
@@ -135,7 +135,7 @@ function PairingStage({
               : 'Generate QR code'}
           </Action>
         )}
-      </div>
+      </OverlayActions>
     </div>
   );
 }

@@ -45,6 +45,7 @@ const child = spawn(executable, [entry], {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
     JIAN_LOCAL_DIR: data,
+    JIAN_APP_DATA: data,
     JIAN_API_TOKEN: randomBytes(24).toString('hex'),
     JIAN_MASTER_KEY: randomBytes(32).toString('base64'),
     PORT: String(port),

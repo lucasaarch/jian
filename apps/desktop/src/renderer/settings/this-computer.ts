@@ -1,15 +1,14 @@
 import type { ThisComputer } from '@jian/ui';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
 import { desktop } from '../desktop';
 
 /**
- * The computer the app runs on, as a machine of `gateway`: its id there once registered, and
- * whether agents may use it, followed as the main process changes either. None for the app's
- * own gateway, which already runs on this computer.
+ * The computer the app runs on, as a machine of `gateway`: its id there once registered, followed
+ * as the main process changes it. None for the app's own gateway, which already runs here.
  */
 export function useThisComputer(gateway: GatewaySummary): ThisComputer | undefined {
-  const [state, setState] = useState<{ machineId: string | null; sharing: boolean }>();
+  const [state, setState] = useState<{ machineId: string | null }>();
   const id = gateway.id;
 
   useEffect(() => {
@@ -27,7 +26,5 @@ export function useThisComputer(gateway: GatewaySummary): ThisComputer | undefin
     };
   }, [id, gateway.local]);
 
-  const setSharing = useCallback((on: boolean) => desktop().machines.setSharing(on), []);
-
-  return gateway.local || !state ? undefined : { ...state, setSharing };
+  return gateway.local || !state ? undefined : state;
 }

@@ -4,7 +4,7 @@ import { useId, useState } from 'react';
 import { channelUrl, kindName } from '../../components/channels/connect';
 import { waitingOn } from '../../components/channels/contacts';
 import type { SectionActions } from '../../components/props';
-import { Action, Overlay } from '../../kit';
+import { Action, Overlay, OverlayActions } from '../../kit';
 import type { Channel } from '../../lib/api';
 import { useAgent, useContacts } from '../../lib/query/agent';
 import { ChannelContacts } from './channel-contacts';
@@ -103,7 +103,7 @@ function ChannelSettings({
   return (
     // One column as wide as the dialog: left to its content, a long address widens it.
     <div className="grid w-full grid-cols-1 gap-5 p-7">
-      <header className="grid gap-1.5 pr-6">
+      <header className="grid gap-1.5 pr-10">
         <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
           <ChannelTitle type={channel.type} />
           <ChannelPills channel={channel} device={device} waiting={waitingOn(contacts, channel)} />
@@ -143,7 +143,7 @@ function ChannelSettings({
             })}
       />
       {!pending && <ChannelContacts channel={channel} actions={actions} />}
-      <div className="flex items-center gap-2">
+      <OverlayActions>
         <Action
           tone="danger"
           className="bg-bad/10"
@@ -166,7 +166,7 @@ function ChannelSettings({
             Complete setup
           </Action>
         )}
-      </div>
+      </OverlayActions>
       {channel.type !== 'api' && (
         <ChannelMessagesDialog
           open={wording}

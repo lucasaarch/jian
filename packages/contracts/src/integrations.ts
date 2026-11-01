@@ -65,3 +65,33 @@ export const githubConnectedRepositorySchema = githubRepositorySchema.extend({
 export type GitHubIntegrationAccount = z.infer<typeof githubIntegrationAccountSchema>;
 export type GitHubRepository = z.infer<typeof githubRepositorySchema>;
 export type GitHubConnectedRepository = z.infer<typeof githubConnectedRepositorySchema>;
+
+export const xAccountStatusSchema = z.enum(['connected', 'needs_attention']);
+
+export const xAccountSchema = z.strictObject({
+  id: z.uuid(),
+  userId: z.string().min(1),
+  handle: z.string().min(1),
+  name: z.string(),
+  status: xAccountStatusSchema,
+  /** What the gateway asks of an account today and this one was not granted. */
+  missingScopes: z.array(z.string()),
+  connectedAt: z.iso.datetime(),
+});
+
+/** The client secret is never here: `configured` is all the panel learns of it. */
+export const xIntegrationStatusSchema = z.strictObject({
+  configured: z.boolean(),
+  clientId: z.string().optional(),
+  callbackUrl: z.url().optional(),
+  accounts: z.array(xAccountSchema),
+});
+
+export const xAppInputSchema = z.strictObject({
+  clientId: z.string().trim().min(1).max(500),
+  clientSecret: z.string().trim().min(1).max(500),
+});
+
+export const xConnectSchema = z.strictObject({ url: z.url() });
+
+export type XIntegrationStatus = z.infer<typeof xIntegrationStatusSchema>;

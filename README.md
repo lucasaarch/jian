@@ -31,8 +31,8 @@ forward-moving shape: an agent with its own identity, connected to the person wh
   against, with a TypeScript SDK generated from the same document.
 - **A web panel** for profiles, usage, memories, skills, MCP servers and channels.
 
-Isolation is per profile. One installation serves one trusted owner; it is not a
-multi-tenant SaaS.
+Memories, conversations and identity are per agent; files are shared by every agent of an
+installation. One installation serves one trusted owner; it is not a multi-tenant SaaS.
 
 ## Clients
 

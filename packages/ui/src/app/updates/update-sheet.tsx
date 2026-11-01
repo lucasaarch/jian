@@ -2,7 +2,7 @@
 
 import { motion } from 'motion/react';
 import { type ReactNode, useLayoutEffect, useRef, useState } from 'react';
-import { Action, Overlay, Progress } from '../../kit';
+import { Action, Overlay, OverlayActions, Progress } from '../../kit';
 import { useAppearance } from '../../lib/appearance';
 import { watchSize } from '../../lib/watch-size';
 import type { AppUpdate } from './app-update';
@@ -37,7 +37,7 @@ export function UpdateSheet({
     <Overlay open={open} onOpenChange={onOpenChange} title="Software update" size="form">
       <Measured>
         <div className="grid gap-5 p-7">
-          <header className="flex items-start gap-4 pr-6" aria-live="polite">
+          <header className="flex items-start gap-4 pr-10" aria-live="polite">
             <UpdateEmblem update={update} />
             <motion.div
               key={title}
@@ -64,9 +64,9 @@ export function UpdateSheet({
                 {update.detail}
               </p>
             )}
-          <footer className="flex justify-end gap-2">
+          <OverlayActions>
             <Actions update={update} close={close} onCheck={onCheck} onInstall={onInstall} />
-          </footer>
+          </OverlayActions>
         </div>
       </Measured>
     </Overlay>

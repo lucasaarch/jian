@@ -1,4 +1,5 @@
 import { type Judge, noul } from '../decisions/service.js';
+import { readsFromX } from '../integrations/x/catalog/index.js';
 
 /** Above this probability outside content is marked as trying to steer the agent. */
 const STEERING_THRESHOLD = 0.7;
@@ -20,6 +21,7 @@ export function outsideContent(name: string, mcpToolNames: readonly string[]): b
     name === 'web_search' ||
     name === 'inspect_page' ||
     name === 'browser_control' ||
+    readsFromX(name) ||
     mcpToolNames.includes(name)
   );
 }

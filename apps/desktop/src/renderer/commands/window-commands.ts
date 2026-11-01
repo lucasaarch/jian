@@ -1,7 +1,8 @@
 import { type AppCommand, openUpdates, useAppCommands, useCommands } from '@jian/ui';
 import { ArrowLeftRight, RefreshCw, ServerCog } from 'lucide-react';
-import { createElement, useMemo } from 'react';
+import { createElement, useCallback, useMemo } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
+import { desktop } from '../desktop';
 
 /**
  * The commands of the window itself, whatever gateway is open: the app's shared ones, and what
@@ -22,7 +23,13 @@ export function useWindowCommands({
   connect: () => void;
   restartLocal: () => void;
 }): void {
-  useAppCommands(openSettings);
+  const id = current?.id;
+  useAppCommands(
+    openSettings,
+    useCallback(() => {
+      if (id) desktop().reconnectGateway(id);
+    }, [id]),
+  );
   const commands = useMemo<AppCommand[]>(
     () => [
       ...gateways

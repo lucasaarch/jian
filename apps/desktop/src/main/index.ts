@@ -137,7 +137,6 @@ const machines: ComputerSharing = new ComputerSharing({
             : null,
       ),
   }),
-  setting: machineFile,
   gateways: () =>
     monitor.summaries().flatMap((summary) => {
       const gateway = store.get(summary.id);
@@ -190,12 +189,7 @@ function open(target?: OpenTarget): void {
 
 /** What the tray's menu shows: the gateways, the one the window shows, the computer's switch. */
 function trayState(): TrayState {
-  const server = store.list().some((gateway) => !gateway.local);
-  return {
-    gateways: monitor.summaries(),
-    showing: showing?.gatewayId ?? null,
-    sharing: server ? machines.sharing() : undefined,
-  };
+  return { gateways: monitor.summaries(), showing: showing?.gatewayId ?? null };
 }
 
 // A second launch brings this one forward, at the place a jian:// link asked for if one did.
@@ -294,14 +288,6 @@ void app.whenReady().then(async () => {
     menu: () =>
       trayMenu(trayState(), {
         open,
-        setSharing: (on) =>
-          void machines
-            .setSharing(on)
-            .catch((error: unknown) =>
-              logMachines(`Sharing could not be changed: ${String(error)}`),
-            )
-            // Refused, the checkbox the click already ticked goes back to how it stands.
-            .finally(() => tray?.update()),
         quit: () => app.quit(),
       }),
     open: () => open(),
