@@ -7,12 +7,11 @@ import { STATUS_DOT } from './status';
 
 /**
  * Said under a gateway only when there is something to read: connected is what the dot already
- * says, and one not answering has its way to reconnect beside it.
+ * says. One not answering says why, since the dot alone leaves the owner guessing.
  */
 function detailOf(gateway: GatewaySummary): string | undefined {
-  return gateway.status === 'online' || gateway.status === 'offline'
-    ? undefined
-    : STATUS_SAID[gateway.status];
+  if (gateway.status === 'online') return undefined;
+  return gateway.status === 'offline' ? gateway.reason : STATUS_SAID[gateway.status];
 }
 
 /** How long the button turns after a click, in ms: the answer comes through the gateway's status. */

@@ -1,5 +1,6 @@
 'use client';
 
+import { STREAM_OPENED_EVENT } from '@jian/contracts';
 import { onlineManager } from '@tanstack/react-query';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -276,6 +277,8 @@ export function History({
   const [subagents, setSubagents] = useState<Subagent[]>(kept?.subagents ?? []);
   // Something is on screen: a failed read leaves it there rather than covering it with an error.
   const shown = useRef(Boolean(kept));
+  // The last reload the owner asked for that has had its outcome.
+  const answered = useRef(reloads);
   // Bumped by an event about this conversation, so it reads again the moment something happens.
   const [heard, setHeard] = useState(0);
   const [deciding, setDeciding] = useState(false);
@@ -292,7 +295,8 @@ export function History({
       if (
         !event.type.startsWith('run.') &&
         !event.type.startsWith('session.') &&
-        event.type !== 'conversation.subagent.spawned'
+        event.type !== 'conversation.subagent.spawned' &&
+        event.type !== STREAM_OPENED_EVENT
       )
         return;
       const about =
@@ -434,6 +438,7 @@ export function History({
         setRun(lastRun);
         setError('');
         shown.current = true;
+        answered.current = reloads;
         keep({
           messages: history,
           tools: nextTools,
@@ -444,8 +449,15 @@ export function History({
           ...(lastRun ? { run: lastRun } : {}),
         });
       } catch (failure) {
-        if (!stopped && !shown.current)
-          setError(failure instanceof Error ? failure.message : 'The history could not be loaded.');
+        if (stopped) return;
+        const said =
+          failure instanceof Error ? failure.message : 'The history could not be loaded.';
+        if (!shown.current) setError(said);
+        // What is on screen stays, but a reload the owner asked for does not fail in silence.
+        else if (answered.current !== reloads) {
+          answered.current = reloads;
+          toast.error(`This chat could not be reloaded: ${said}`);
+        }
       } finally {
         if (!stopped) setLoading(false);
       }

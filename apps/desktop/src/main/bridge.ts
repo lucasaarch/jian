@@ -1,4 +1,12 @@
-import { app, type BrowserWindow, dialog, ipcMain, type OpenDialogOptions, shell } from 'electron';
+import {
+  app,
+  type BrowserWindow,
+  dialog,
+  ipcMain,
+  type OpenDialogOptions,
+  session,
+  shell,
+} from 'electron';
 import type {
   AddGatewayResult,
   MachineUse,
@@ -51,7 +59,18 @@ export function serveBridge(deps: {
   ipcMain.on('gateways:reconnect', (_event, id: unknown) => {
     if (typeof id !== 'string') return;
     if (id === LOCAL_GATEWAY_ID) deps.retryLocal();
-    monitor.refresh(id);
+    const away = monitor.summaries().some((item) => item.id === id && item.status === 'offline');
+    if (!away) {
+      monitor.refresh(id);
+      return;
+    }
+    // Every request to a host shares one HTTP/2 connection, so a stuck one would answer this look
+    // as it answered the last. Only a restart used to clear it. This closes all of the app's
+    // connections, other gateways' included; their event streams reopen and resume by themselves.
+    void session.defaultSession
+      .closeAllConnections()
+      .catch(() => undefined)
+      .finally(() => monitor.refresh(id));
   });
   ipcMain.handle('local:restart', () => deps.restartLocal());
   ipcMain.handle('dialog:pickFolder', async () => {

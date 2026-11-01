@@ -352,6 +352,119 @@ it('streams committed events over HTTP and resumes after a cursor', async () => 
   }
 });
 
+it('opens a stream with no cursor from now, telling where to resume and only what follows', async () => {
+  const { app, services } = await setup();
+  const profile = await services.profiles.createProfile(input);
+  const newest = (await events(services.store, profile.id, 0)).at(-1);
+
+  assert.ok(newest, 'Profile creation must emit an event');
+
+  const url = await app.listen({ host: '127.0.0.1', port: 0 });
+  const controller = new AbortController();
+  const limit = setTimeout(() => controller.abort(), 5_000);
+
+  try {
+    const response = await fetch(`${url}/v1/profiles/${profile.id}/events/stream`, {
+      headers,
+      signal: controller.signal,
+    });
+
+    assert.ok(response.body, 'SSE response must have a body');
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    let data = '';
+
+    while (!data.includes('event: stream.opened')) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      data += value;
+    }
+    expect(data).toContain(`id: ${newest.id}\nevent: stream.opened`);
+
+    await services.profiles.updateProfile(profile.id, { expectedVersion: 1, name: 'Updated' });
+    while (!data.includes('event: profile.updated')) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      data += value;
+    }
+
+    expect(data).toContain('event: profile.updated');
+    expect(data).not.toContain('event: profile.created');
+    await reader.cancel();
+  } finally {
+    clearTimeout(limit);
+    controller.abort();
+  }
+});
+
+it('tells a stream which conversation an event concerns, and leaves its weight to the feed', async () => {
+  const { app, services } = await setup();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Hi',
+    requestKey: 'weight',
+  });
+  const heavy = 'synthetic tool input '.repeat(1_000);
+
+  await services.lifecycle.claim(run.id, profile.id, 'worker');
+  await services.lifecycle.checkpoint(profile.id, run.id, 'worker', {
+    phase: 'tool-started',
+    toolName: 'write_file',
+    input: { text: heavy },
+  });
+  await recordEvent(services.store.db, Date.now, profile.id, 'conversation.inspector.focus', {
+    sessionId: session.id,
+    kind: 'browser',
+  });
+
+  const url = await app.listen({ host: '127.0.0.1', port: 0 });
+  const controller = new AbortController();
+  const limit = setTimeout(() => controller.abort(), 5_000);
+
+  try {
+    const response = await fetch(`${url}/v1/profiles/${profile.id}/events/stream?after=0`, {
+      headers,
+      signal: controller.signal,
+    });
+
+    assert.ok(response.body, 'SSE response must have a body');
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    let data = '';
+
+    while (!data.includes('event: conversation.inspector.focus')) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      data += value;
+    }
+    await reader.cancel();
+
+    const frame = (type: string) => {
+      const line = data
+        .split('\n\n')
+        .find((block) => block.includes(`event: ${type}\n`))
+        ?.split('\n')
+        .find((part) => part.startsWith('data: '));
+      assert.ok(line, `The stream must tell ${type}`);
+      return JSON.parse(line.slice(6));
+    };
+
+    expect(data).not.toContain('synthetic tool input');
+    expect(frame('run.step')).toMatchObject({ type: 'run.step', runId: run.id, data: {} });
+    expect(frame('run.step').data).toEqual({});
+    expect(frame('run.started').data).toEqual({ sessionId: session.id });
+    expect(frame('conversation.inspector.focus').data).toEqual({
+      sessionId: session.id,
+      kind: 'browser',
+    });
+
+    const feed = await app.inject({ url: `/v1/profiles/${profile.id}/events`, headers });
+    expect(feed.body).toContain('synthetic tool input');
+  } finally {
+    clearTimeout(limit);
+    controller.abort();
+  }
+});
+
 it('streams an agent at work as it goes, without moving the cursor a client resumes from', async () => {
   const { app, services } = await setup();
   const profile = await services.profiles.createProfile(input);

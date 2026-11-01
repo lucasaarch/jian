@@ -45,6 +45,22 @@ async function open(status: GatewaySummary['status'], select = vi.fn()) {
 const reconnect = () =>
   document.querySelector<HTMLButtonElement>('[aria-label="Reconnect to harbor.example.test"]');
 
+it('says why a gateway is not answering', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  const current = { ...gateway('offline'), reason: 'No answer in 8 seconds' };
+  await act(async () =>
+    root?.render(
+      <GatewayPicker gateways={[current]} current={current} select={vi.fn()} connect={vi.fn()} />,
+    ),
+  );
+  await act(async () => document.querySelector<HTMLElement>('[aria-label="Gateway"]')?.click());
+
+  expect(document.body.textContent).toContain('No answer in 8 seconds');
+});
+
 it('offers to reconnect a gateway that is not answering, without choosing it again', async () => {
   const select = await open('offline');
 

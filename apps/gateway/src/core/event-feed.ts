@@ -1,5 +1,5 @@
 import type { GatewayEvent } from '@jian/contracts';
-import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { events, runs } from '../storage/schema.js';
 
@@ -28,6 +28,18 @@ export async function readEvents(
     data: row.data,
     createdAt: row.createdAt.toISOString(),
   }));
+}
+
+/** The cursor at the end of a profile's feed: 0 while it has recorded nothing. */
+export async function latestEventId(db: Queryable, profileId: string): Promise<number> {
+  const [row] = await db
+    .select({ id: events.id })
+    .from(events)
+    .where(eq(events.profileId, profileId))
+    .orderBy(desc(events.id))
+    .limit(1);
+
+  return row?.id ?? 0;
 }
 
 /** The runs of a profile at work now, with when their progress last changed. */
