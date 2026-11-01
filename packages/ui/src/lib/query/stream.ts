@@ -1,3 +1,4 @@
+import { STREAM_OPENED_EVENT } from '@jian/contracts';
 import { onlineManager, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { GatewayEvent } from '../api/events';
@@ -19,6 +20,10 @@ const STEADY_MS = 30_000;
 function affected(event: GatewayEvent, profileId: string): QueryKey[] {
   const { type } = event;
 
+  // Nothing before this was told, so what the screens read while it opened may have missed some.
+  if (type === STREAM_OPENED_EVENT) {
+    return [keys.activities(profileId), keys.sessions(profileId), keys.contexts(profileId)];
+  }
   if (type.startsWith('contact.') || type.startsWith('channel.')) return [keys.profile(profileId)];
   // A step taken, a turn ended, a context compacted: each moves how full the context is.
   if (type === 'run.progress') return [keys.activities(profileId), keys.contexts(profileId)];
@@ -59,7 +64,8 @@ export function useEventStream(profileId: string) {
   useEffect(() => {
     const controller = new AbortController();
     const pending = new Map<string, QueryKey>();
-    let cursor = 0;
+    // Unknown until the stream's first event: an opening is from now, not the whole feed.
+    let cursor: number | undefined;
     let reconnect: ReturnType<typeof setTimeout> | undefined;
     let flush: ReturnType<typeof setTimeout>;
     let drops = 0;

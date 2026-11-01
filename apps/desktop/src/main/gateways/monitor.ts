@@ -19,6 +19,14 @@ const TIMEOUT_MS = 8_000;
  */
 const MISSED_EVERY_MS = 3_000;
 
+/** What a failed look found, short enough for the row in the gateway list. */
+function reasonOf(error: unknown): string {
+  if (error instanceof Error && error.name === 'TimeoutError') {
+    return `No answer in ${TIMEOUT_MS / 1000} seconds`;
+  }
+  return error instanceof Error ? error.message : 'Not answering';
+}
+
 /** Something new in a conversation the app may announce: a reply, a message, or a request. */
 export type Notice = News & {
   gatewayId: string;
@@ -29,6 +37,8 @@ export type Notice = News & {
 type Watch = {
   status: GatewayStatus;
   version?: string;
+  /** What the last failed look found; gone once one succeeds. */
+  reason?: string;
   unread: number;
   /** What each agent's conversations held at the last look; an agent not in it was never read. */
   known: Map<string, AgentKnown>;
@@ -67,6 +77,7 @@ export class GatewayMonitor {
         status: watch?.status ?? 'connecting',
         ...(watch?.version ? { version: watch.version } : {}),
         ...(this.failures.has(gateway.id) ? { failure: this.failures.get(gateway.id) } : {}),
+        ...(watch?.status === 'offline' && watch.reason ? { reason: watch.reason } : {}),
         unread: watch?.unread ?? 0,
       };
     });
@@ -112,19 +123,22 @@ export class GatewayMonitor {
     if (!gateway || !watch) return;
     // The app's own gateway between launches of its process: it says when it listens again.
     if (!gateway.url) return;
-    const before = `${watch.status}:${watch.version}:${watch.unread}`;
+    const standing = () => `${watch.status}:${watch.version}:${watch.unread}:${watch.reason}`;
+    const before = standing();
     watch.looking = true;
     try {
       await this.read(gateway, watch);
       watch.missed = 0;
-    } catch {
+      watch.reason = undefined;
+    } catch (error) {
+      watch.reason = reasonOf(error);
       watch.missed = (watch.missed ?? 0) + 1;
       if (watch.status !== 'online' || watch.missed > 1) watch.status = 'offline';
     } finally {
       watch.looking = false;
     }
     if (this.watches.get(id) !== watch) return;
-    if (`${watch.status}:${watch.version}:${watch.unread}` !== before) this.events.changed();
+    if (standing() !== before) this.events.changed();
     if (watch.again) {
       watch.again = false;
       void this.look(id);
@@ -148,7 +162,13 @@ export class GatewayMonitor {
     });
 
     const health = await client.GET('/health');
-    if (!health.data) throw new Error('unreachable');
+    if (!health.data) {
+      throw new Error(
+        health.response.ok
+          ? 'Answered, but not as a Jian gateway'
+          : `Answered ${health.response.status}`,
+      );
+    }
     watch.version = health.data.version;
     if (!compatible(this.appVersion, watch.version)) {
       watch.status = 'incompatible';
@@ -160,7 +180,7 @@ export class GatewayMonitor {
       watch.status = 'unauthorized';
       return;
     }
-    if (!profiles.data) throw new Error('unreachable');
+    if (!profiles.data) throw new Error(`Answered ${profiles.response.status}`);
     watch.status = 'online';
 
     // It answers: that is settled. Reading the conversations reads every agent's lists, and

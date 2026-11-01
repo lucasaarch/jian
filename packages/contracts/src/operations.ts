@@ -173,6 +173,17 @@ export const cursorSchema = z.strictObject({
   after: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
 });
 
+/**
+ * Where a stream resumes. No default, unlike a page of the feed: absent means from now, and the
+ * stream opens with `STREAM_OPENED_EVENT`, whose id is the cursor to resume from. A stream says
+ * which conversation an event concerns, not its whole data; the paged feed has that.
+ */
+export const streamCursorSchema = z.strictObject({
+  after: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+});
+
+export const STREAM_OPENED_EVENT = 'stream.opened';
+
 export const operations: Operation[] = [
   {
     method: 'GET',
@@ -1418,7 +1429,7 @@ export const operations: Operation[] = [
     path: `${profile}/events/stream`,
     operationId: 'streamEvents',
     access: 'admin',
-    query: cursorSchema,
+    query: streamCursorSchema,
     response: z.string(),
     stream: true,
   },

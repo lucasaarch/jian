@@ -39,6 +39,8 @@ export type GatewaySummary = {
   version?: string;
   /** Why the app's own gateway could not start, in its last words, while it cannot. */
   failure?: string;
+  /** What the last look found, while it reads as not answering: a timeout, a status, a network error. */
+  reason?: string;
   /** Chats of the panel the agent wrote in since the owner last read them, across its agents. */
   unread: number;
 };

@@ -1,4 +1,6 @@
+import { STREAM_OPENED_EVENT } from '@jian/contracts';
 import { gatewayConnection } from '../../platform/gateway';
+
 /** One thing that happened on the gateway. `data` carries what the event is about, if anything. */
 export type GatewayEvent = { id: number; type: string; data?: unknown };
 
@@ -15,10 +17,11 @@ const QUIET_MS = 60_000;
  *
  * Durable events carry an id, and the stream resumes after the last one. A live update, such as
  * an agent's progress, carries none: it is passed on as it arrives and never moves the cursor.
+ * With no `after` the stream starts from now, and its first event gives the cursor.
  */
 export async function readEvents(
   profileId: string,
-  after: number,
+  after: number | undefined,
   onEvent: (event: GatewayEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
@@ -37,7 +40,7 @@ export async function readEvents(
   heard();
   try {
     const response = await fetch(
-      `${origin}/v1/profiles/${profileId}/events/stream?after=${after}`,
+      `${origin}/v1/profiles/${profileId}/events/stream${after === undefined ? '' : `?after=${after}`}`,
       {
         headers,
         credentials,
@@ -51,7 +54,7 @@ export async function readEvents(
     }
 
     reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-    await readBlocks(reader, after, onEvent, heard);
+    await readBlocks(reader, after ?? 0, onEvent, heard);
   } finally {
     clearTimeout(timer);
   }
@@ -97,7 +100,8 @@ async function readBlocks(
       if (!type) continue;
       if (id === undefined) {
         onEvent({ id: cursor, type, data });
-      } else if (id > cursor) {
+      } else if (id > cursor || type === STREAM_OPENED_EVENT) {
+        // A feed with nothing in it opens at 0, which is no later than the cursor but still told.
         cursor = id;
         onEvent({ id, type, data });
       }

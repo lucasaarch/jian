@@ -43,7 +43,7 @@ export function gatewaySettings(gateway: GatewaySummary): GatewaySettings {
       local: gateway.local,
       url: gateway.url,
       ...(gateway.version ? { version: gateway.version } : {}),
-      state: STATUS_SAID[gateway.status],
+      state: gateway.reason ?? STATUS_SAID[gateway.status],
     },
     actions: {
       replaceToken: (id, token) => desktop().replaceToken(id, token),

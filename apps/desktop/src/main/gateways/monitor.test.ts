@@ -1,9 +1,13 @@
 import { afterEach, expect, it, vi } from 'vitest';
 
 let answering = true;
+let failure: Error | number = new Error('net::ERR_CONNECTION_RESET');
 vi.mock('./fetch', () => ({
   timedFetch: () => async (input: Request | string) => {
-    if (!answering) throw new Error('unreachable');
+    if (!answering) {
+      if (typeof failure === 'number') return new Response('{}', { status: failure });
+      throw failure;
+    }
     const { pathname } = new URL(input instanceof Request ? input.url : input);
     return Response.json(pathname === '/health' ? { status: 'ok', version: '1.2.0' } : [], {
       headers: { 'content-type': 'application/json' },
@@ -41,4 +45,32 @@ it('takes one missed look for a passing thing, and two for a gateway away', asyn
 
   answering = true;
   await looked(monitor, 'online');
+});
+
+it.each([
+  [new Error('net::ERR_CONNECTION_RESET'), 'net::ERR_CONNECTION_RESET'],
+  [
+    new DOMException('The operation was aborted due to timeout', 'TimeoutError'),
+    'No answer in 8 seconds',
+  ],
+  [502, 'Answered 502'],
+])('says why a gateway reads as away, and forgets it once it answers: %s', async (cause, said) => {
+  const changed = vi.fn();
+  monitor = new GatewayMonitor(store as never, '1.2.0', { changed, noticed: vi.fn() });
+  monitor.watch(gateway as never);
+  await vi.waitFor(() => expect(monitor?.summaries()[0]?.status).toBe('online'));
+
+  answering = false;
+  failure = cause;
+  monitor.refresh('harbor');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  // One missed look is a passing thing, and nothing is said of it.
+  expect(monitor.summaries()[0]?.reason).toBeUndefined();
+
+  await looked(monitor, 'offline');
+  expect(monitor.summaries()[0]?.reason).toBe(said);
+
+  answering = true;
+  await looked(monitor, 'online');
+  expect(monitor.summaries()[0]?.reason).toBeUndefined();
 });
