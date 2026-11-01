@@ -1,4 +1,4 @@
-import { app, type BrowserWindow, ipcMain, shell } from 'electron';
+import { app, type BrowserWindow, dialog, ipcMain, type OpenDialogOptions, shell } from 'electron';
 import type {
   AddGatewayResult,
   MachineUse,
@@ -48,6 +48,14 @@ export function serveBridge(deps: {
   ipcMain.handle('gateways:list', () => monitor.summaries());
   ipcMain.on('local:retry', () => deps.retryLocal());
   ipcMain.handle('local:restart', () => deps.restartLocal());
+  ipcMain.handle('dialog:pickFolder', async () => {
+    const window = deps.window();
+    const options = { properties: ['openDirectory', 'createDirectory'] } as OpenDialogOptions;
+    const picked = await (window
+      ? dialog.showOpenDialog(window, options)
+      : dialog.showOpenDialog(options));
+    return picked.canceled ? null : (picked.filePaths[0] ?? null);
+  });
   // The folder, with the file chosen in it: the owner can open it, or send it on.
   ipcMain.on('local:openLog', () => shell.showItemInFolder(localLogPath()));
 

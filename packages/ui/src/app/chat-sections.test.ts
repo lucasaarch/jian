@@ -25,12 +25,17 @@ const project = (id: string, name: string) =>
 const ids = (sessions: Session[]) => sessions.map((session) => session.id);
 const names = (sections: ReturnType<typeof chatSections>) =>
   sections.map((section) =>
-    section.kind === 'projects'
-      ? [section.name, section.folders.map((folder) => [folder.project.name, ids(folder.sessions)])]
+    section.kind === 'recent'
+      ? [
+          section.name,
+          section.items.map((item) =>
+            item.kind === 'folder' ? [item.name, ids(item.sessions)] : item.session.id,
+          ),
+        ]
       : [section.name, ids(section.sessions)],
   );
 
-it('keeps each project with chats in a folder of Projects, the one spoken in last first', () => {
+it('mixes chats and project folders in Recent, by when each was last spoken in', () => {
   const sections = chatSections({
     projects: [project('p1', 'atlas'), project('p2', 'harbor'), project('p3', 'quiet')],
     channels: [],
@@ -43,14 +48,42 @@ it('keeps each project with chats in a folder of Projects, the one spoken in las
   });
 
   expect(names(sections)).toEqual([
+    ['Recent', [['harbor', ['harbor-new']], 'loose', ['atlas', ['atlas-new', 'atlas-old']]]],
+  ]);
+});
+
+it('keeps a folder and a repository of the same name in one folder', () => {
+  const sections = chatSections({
+    projects: [project('p1', 'acme/atlas')],
+    channels: [],
+    sessions: [
+      chat('on-repository', 'gateway', '2026-10-21T00:00:00Z', 'p1'),
+      { ...chat('on-folder', 'gateway', '2026-10-22T00:00:00Z'), folders: ['/work/atlas'] },
+    ],
+  });
+
+  expect(names(sections)).toEqual([['Recent', [['atlas', ['on-folder', 'on-repository']]]]]);
+});
+
+it('gives a chat on several projects a folder of its own, whichever order they came in', () => {
+  const sections = chatSections({
+    projects: [project('p1', 'acme/atlas'), project('p2', 'acme/harbor')],
+    channels: [],
+    sessions: [
+      { ...chat('both', 'gateway', '2026-10-22T00:00:00Z'), projectIds: ['p2', 'p1'] },
+      { ...chat('again', 'gateway', '2026-10-21T00:00:00Z'), projectIds: ['p1', 'p2'] },
+      chat('one', 'gateway', '2026-10-20T00:00:00Z', 'p1'),
+    ],
+  });
+
+  expect(names(sections)).toEqual([
     [
-      'Projects',
+      'Recent',
       [
-        ['harbor', ['harbor-new']],
-        ['atlas', ['atlas-new', 'atlas-old']],
+        ['atlas + harbor', ['both', 'again']],
+        ['atlas', ['one']],
       ],
     ],
-    ['Conversations', ['loose']],
   ]);
 });
 
@@ -69,7 +102,7 @@ it('shows a channel only when it is connected or has conversations', () => {
   });
 
   expect(names(sections)).toEqual([
-    ['Conversations', []],
+    ['Recent', []],
     ['WhatsApp', ['linked', 'business']],
     ['Telegram', []],
     ['API Server', ['script']],
@@ -83,7 +116,7 @@ it('keeps a chat whose project was removed among the conversations', () => {
     sessions: [chat('orphan', 'gateway', '2026-10-20T00:00:00Z', 'gone')],
   });
 
-  expect(names(sections)).toEqual([['Conversations', ['orphan']]]);
+  expect(names(sections)).toEqual([['Recent', ['orphan']]]);
 });
 
 it('shows pinned chats once at the top and restores their date order when unpinned', () => {
@@ -92,11 +125,9 @@ it('shows pinned chats once at the top and restores their date order when unpinn
   const input = { sessions: [old, recent], projects: [project('p1', 'atlas')], channels: [] };
   expect(names(chatSections(input))).toEqual([
     ['Pinned', ['old']],
-    ['Projects', [['atlas', ['recent']]]],
-    ['Conversations', []],
+    ['Recent', [['atlas', ['recent']]]],
   ]);
   expect(names(chatSections({ ...input, sessions: [{ ...old, pinned: false }, recent] }))).toEqual([
-    ['Projects', [['atlas', ['recent', 'old']]]],
-    ['Conversations', []],
+    ['Recent', [['atlas', ['recent', 'old']]]],
   ]);
 });

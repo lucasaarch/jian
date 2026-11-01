@@ -25,6 +25,7 @@ vi.mock('./model-picker', () => ({
     return null;
   },
 }));
+vi.mock('./workspace-picker', () => ({ ProjectPicker: () => null, PlacePicker: () => null }));
 vi.mock('./protection-menu', () => ({
   SessionProtection: ({
     draft,

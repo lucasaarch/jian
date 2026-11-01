@@ -6,6 +6,7 @@ import {
   NavigationProvider,
   QueryProvider,
   SubscriptionMeter,
+  type ThisMachine,
   useGatewayOnline,
 } from '@jian/ui';
 import { useMemo, useState, useSyncExternalStore } from 'react';
@@ -59,6 +60,16 @@ export function GatewayPanel({
   // the panel shows what it kept and waits for it. One still being reached is asked at once: a
   // read held until the first look would leave whatever was never kept loading meanwhile.
   const thisComputer = useThisComputer(gateway);
+  const thisMachine = useMemo<ThisMachine>(
+    () => ({
+      pickFolder: () => desktop().pickFolder(),
+      machineId: thisComputer?.machineId ?? null,
+      ownGateway: gateway.local,
+      sharing: thisComputer?.sharing ?? false,
+      setSharing: (on) => void desktop().machines.setSharing(on),
+    }),
+    [thisComputer?.machineId, thisComputer?.sharing, gateway.local],
+  );
   useGatewayOnline(
     gateway.status !== 'offline' && !(gateway.status === 'connecting' && !gateway.url),
   );
@@ -89,7 +100,7 @@ export function GatewayPanel({
     // chats: it opens at once, and still reads while the gateway cannot be reached.
     <QueryProvider keep={{ key: gateway.id, release: desktop().version }}>
       <NavigationProvider navigation={navigation}>
-        <ChatsApp welcomes />
+        <ChatsApp welcomes thisMachine={thisMachine} />
         {slots.start && createPortal(<AgentsWorking />, slots.start)}
         {slots.end && createPortal(<SubscriptionMeter />, slots.end)}
         <AppSettings

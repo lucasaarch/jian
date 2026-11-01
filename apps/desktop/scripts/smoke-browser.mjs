@@ -439,12 +439,19 @@ try {
       const { browser } = globalThis.nativeBrowserTest;
       return { visible: browser.view.getVisible(), bounds: browser.view.getBounds() };
     });
+  // The view leaves a frame after the picture is up, so nothing blinks between the two.
+  const viewGoes = async (message) => {
+    for (let tries = 0; tries < 50 && (await viewOf()).visible; tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.equal((await viewOf()).visible, false, message);
+  };
   await page.getByLabel('Browser options', { exact: true }).click();
   await page.getByRole('menuitem', { name: 'Copy current URL' }).waitFor();
   await page.waitForFunction(() =>
     document.querySelector('section[aria-label="Jian Browser"] img[src^="data:image"]'),
   );
-  assert.equal((await viewOf()).visible, false, 'The menu is not under the native view');
+  await viewGoes('The menu is not under the native view');
   await page.keyboard.press('Escape');
   await page.waitForFunction(
     () => !document.querySelector('section[aria-label="Jian Browser"] img[src^="data:image"]'),
@@ -456,7 +463,7 @@ try {
   await page.waitForFunction(() =>
     document.querySelector('section[aria-label="Jian Browser"] img[src^="data:image"]'),
   );
-  assert.equal((await viewOf()).visible, false, 'The overlay is not under the native view');
+  await viewGoes('The overlay is not under the native view');
   await page.evaluate(() => window.setPanelHidden(false));
   await page.waitForFunction(
     () => !document.querySelector('section[aria-label="Jian Browser"] img[src^="data:image"]'),

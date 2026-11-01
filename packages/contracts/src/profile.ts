@@ -307,6 +307,9 @@ export const profilePatchSchema = profileSchema.partial().extend({
   allowShell: z.boolean().optional(),
 });
 
+/** How many folders or repositories one conversation can work on at once. */
+export const MAX_WORKSPACE_ITEMS = 10;
+
 /** The channel of chats the owner starts with a profile through the panel. */
 export const GATEWAY_SESSION_CHANNEL = 'gateway';
 /** Where an agent reviews its own turns and says what it kept: one per profile. */
@@ -314,14 +317,25 @@ export const LEARNING_SESSION_CHANNEL = 'learning';
 export const TASK_SESSION_CHANNEL = 'task';
 
 /** A Gateway chat can be attached to a coding project; channel conversations never use this. */
+const sessionWorkspaceFields = {
+  /** Several repositories at once; a single one may also come as `projectId`. */
+  projectIds: z.array(z.uuid()).max(MAX_WORKSPACE_ITEMS).optional(),
+  /** Folders on the owner's computer, the machine's or this gateway's own. Never with projects. */
+  folders: z.array(z.string().min(1).max(4096).regex(/^\//)).max(MAX_WORKSPACE_ITEMS).optional(),
+  /** Where on the machine its repositories are cloned, chosen by the owner. */
+  cloneInto: z.string().min(1).max(4096).regex(/^\//).optional(),
+};
+
 export const gatewaySessionInputSchema = z.strictObject({
   projectId: z.uuid().optional(),
   remoteMachineId: z.uuid().nullable().optional(),
+  ...sessionWorkspaceFields,
 });
 
 export const gatewaySessionTargetSchema = z.strictObject({
   projectId: z.uuid().nullable(),
   remoteMachineId: z.uuid().nullable(),
+  ...sessionWorkspaceFields,
 });
 
 export const sessionSchema = z.strictObject({

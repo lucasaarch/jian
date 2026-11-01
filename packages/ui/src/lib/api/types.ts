@@ -6,7 +6,7 @@ type JsonResponse<
   S extends keyof operations[K]['responses'],
 > = operations[K]['responses'][S] extends { content: { 'application/json': infer T } } ? T : never;
 
-type RequestBody<K extends keyof operations> = operations[K] extends {
+export type RequestBody<K extends keyof operations> = operations[K] extends {
   requestBody: { content: { 'application/json': infer T } };
 }
   ? T

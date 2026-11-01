@@ -1,13 +1,19 @@
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Run } from '@jian/contracts';
 import type { Tool } from 'ai';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 import { remoteTools } from '../src/agent/remote-tools.js';
 import { profileTools } from '../src/agent/tools.js';
+import { confine, realFolders, withFolders } from '../src/agent/workspace.js';
 import { createApp } from '../src/app.js';
 import { readLastClient } from '../src/sessions/repository.js';
+import { Sessions } from '../src/sessions/service.js';
 import { type WebAccess, webResearchFor } from '../src/skills/builtin/web-research.js';
-import { remoteTasks } from '../src/storage/schema.js';
+import { projects, remoteTasks } from '../src/storage/schema.js';
 import { BrowserNotShowing, machineBrowser } from '../src/web/machine-browser.js';
 import { WebSearch } from '../src/web/service.js';
 import { testServices } from './helpers/services.js';
@@ -947,4 +953,122 @@ it('asks for approval only when the study reaches the owner’s computer', async
   await expect(tool.actsHere({ reusePage: true }, 'reuse')).resolves.toBe(true);
   watching = true;
   await expect(tool.actsHere({ url: 'https://example.test' }, 'here')).resolves.toBe(true);
+});
+
+describe('what a chat works on', () => {
+  const input = { name: 'Atlas', instructions: 'Help.' };
+  const folder = '/synthetic/projects/atlas';
+  const repository = async (
+    services: Awaited<ReturnType<typeof testServices>>,
+    profileId: string,
+    name: string,
+  ) => {
+    const id = randomUUID();
+    await services.store.db.insert(projects).values({
+      id,
+      profileId,
+      name: `acme/${name}`,
+      repositoryUrl: `https://github.com/acme/${name}`,
+    });
+    return { id };
+  };
+
+  it('keeps one repository as the project, and several apart', async () => {
+    const services = await testServices();
+    const owner = await services.profiles.createProfile(input);
+    const first = await repository(services, owner.id, 'atlas');
+    const second = await repository(services, owner.id, 'harbor');
+
+    const one = await services.sessions.createGatewaySession(owner.id, {
+      projectIds: [first.id],
+    });
+    expect(one.projectId).toBe(first.id);
+    expect(one.projectIds).toBeUndefined();
+
+    const both = await services.sessions.createGatewaySession(owner.id, {
+      projectIds: [first.id, second.id],
+    });
+    expect(both.projectId).toBeUndefined();
+    const read = await services.sessions.session(owner.id, both.id);
+    expect(read.projectIds).toEqual([first.id, second.id]);
+  });
+
+  it('refuses another agent’s repository among several', async () => {
+    const services = await testServices();
+    const owner = await services.profiles.createProfile(input);
+    const other = await services.profiles.createProfile({ ...input, name: 'Harbor' });
+    const theirs = await repository(services, other.id, 'harbor');
+
+    await expect(
+      services.sessions.createGatewaySession(owner.id, { projectIds: [theirs.id] }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('takes a server’s folders only for a machine, never for its own disk', async () => {
+    const services = await testServices();
+    const owner = await services.profiles.createProfile(input);
+    const machine = await services.remote.create({ name: 'Studio' });
+
+    await expect(
+      services.sessions.createGatewaySession(owner.id, { folders: [folder] }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    const session = await services.sessions.createGatewaySession(owner.id, {
+      folders: [folder],
+      remoteMachineId: machine.id,
+    });
+    expect((await services.sessions.session(owner.id, session.id)).folders).toEqual([folder]);
+  });
+
+  it('takes folders on a desktop app’s own gateway, and not mixed with repositories', async () => {
+    const services = await testServices();
+    const owner = await services.profiles.createProfile(input);
+    const local = new Sessions(services.store, services.profiles, Date.now, true);
+    const project = await repository(services, owner.id, 'atlas');
+
+    const session = await local.createGatewaySession(owner.id, { folders: [folder] });
+    expect(session.folders).toEqual([folder]);
+    await expect(
+      local.createGatewaySession(owner.id, { folders: [folder], projectIds: [project.id] }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('asks for a machine and repositories before a clone destination', async () => {
+    const services = await testServices();
+    const owner = await services.profiles.createProfile(input);
+
+    await expect(
+      services.sessions.createGatewaySession(owner.id, { cloneInto: folder }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
+describe('the folders a tool can reach', () => {
+  it('reaches a chat’s folder only while its tool runs, and no further', async () => {
+    const services = await testServices();
+    const owner = await services.profiles.createProfile({ name: 'Atlas', instructions: 'Help.' });
+    const folder = mkdtempSync(join(tmpdir(), 'jian-folder-'));
+    const beside = mkdtempSync(join(tmpdir(), 'jian-beside-'));
+    const [real] = await realFolders([folder]);
+
+    try {
+      await expect(confine(owner.id, join(folder, 'notes.md'), 'write')).rejects.toThrow(/outside/);
+      await expect(
+        withFolders([real as string], () => confine(owner.id, join(folder, 'notes.md'), 'write')),
+      ).resolves.toContain('notes.md');
+      await expect(
+        withFolders([real as string], () => confine(owner.id, join(beside, 'x'), 'read')),
+      ).rejects.toThrow(/outside/);
+      // A way out through a link in the folder is the link's target, which is not within reach.
+      symlinkSync(beside, join(folder, 'out'));
+      await expect(
+        withFolders([real as string], () => confine(owner.id, join(folder, 'out', 'x'), 'read')),
+      ).rejects.toThrow(/outside/);
+      // Over: the next call, for any conversation of this agent, has nothing open.
+      await expect(confine(owner.id, join(folder, 'notes.md'), 'read')).rejects.toThrow(/outside/);
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+      rmSync(beside, { recursive: true, force: true });
+    }
+  });
 });

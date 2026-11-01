@@ -65,6 +65,7 @@ const bridge: DesktopBridge = {
     close: () => ipcRenderer.send('window:close'),
     onMaximized: (listener) => listen<boolean>('window:maximized', listener),
   },
+  pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   machines: {
     state: (gatewayId) => ipcRenderer.invoke('machines:state', gatewayId),
     setSharing: (on) => ipcRenderer.invoke('machines:setSharing', on),

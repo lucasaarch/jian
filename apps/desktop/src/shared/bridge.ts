@@ -2,6 +2,8 @@
  * What the main process and the window say to each other. The window never sees a gateway's
  * token: it names gateways by id, and the main process signs every request on its way out.
  */
+
+import type { PagePicture } from './browser-pointer';
 import type { UpdatesBridge } from './updates';
 
 export type GatewayStatus =
@@ -111,7 +113,7 @@ export interface DesktopBridge {
     command(command: 'back' | 'forward' | 'reload' | 'hard-reload' | 'stop'): void;
     layout(bounds: { x: number; y: number; width: number; height: number }): void;
     /** The page as a picture, to hold in its place while something is drawn over it. */
-    snapshot(): Promise<string | null>;
+    snapshot(): Promise<PagePicture | null>;
     openExternal(): void;
     /** The keys that are the app's, so a page holding the keyboard passes them on. */
     shortcuts(bindings: string[]): void;
@@ -166,6 +168,8 @@ export interface DesktopBridge {
    * and Computer Use. One switch for the whole computer, on by default; turned off, every worker
    * stops and the records stay on the gateways. The app's own gateway never has one.
    */
+  /** Asks the owner for a folder of this computer; null when they cancel. */
+  pickFolder(): Promise<string | null>;
   machines: {
     /** This computer's machine on a gateway: its id there, once registered, and whether agents may use it. */
     state(gatewayId: string): Promise<{ machineId: string | null; sharing: boolean }>;

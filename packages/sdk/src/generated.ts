@@ -15102,6 +15102,9 @@ export interface operations {
                         projectId?: string;
                         /** Format: uuid */
                         remoteMachineId?: string;
+                        projectIds?: string[];
+                        folders?: string[];
+                        cloneInto?: string;
                         /** Format: uuid */
                         peerProfileId?: string;
                         /** @enum {string} */
@@ -15270,6 +15273,9 @@ export interface operations {
                         projectId?: string;
                         /** Format: uuid */
                         remoteMachineId?: string;
+                        projectIds?: string[];
+                        folders?: string[];
+                        cloneInto?: string;
                         /** Format: uuid */
                         peerProfileId?: string;
                         /** @enum {string} */
@@ -15647,6 +15653,9 @@ export interface operations {
                     projectId?: string;
                     /** Format: uuid */
                     remoteMachineId?: string | null;
+                    projectIds?: string[];
+                    folders?: string[];
+                    cloneInto?: string;
                 };
             };
         };
@@ -15670,6 +15679,9 @@ export interface operations {
                         projectId?: string;
                         /** Format: uuid */
                         remoteMachineId?: string;
+                        projectIds?: string[];
+                        folders?: string[];
+                        cloneInto?: string;
                         /** Format: uuid */
                         peerProfileId?: string;
                         /** @enum {string} */
@@ -15810,6 +15822,9 @@ export interface operations {
                     projectId: string | null;
                     /** Format: uuid */
                     remoteMachineId: string | null;
+                    projectIds?: string[];
+                    folders?: string[];
+                    cloneInto?: string;
                 };
             };
         };
@@ -15833,6 +15848,9 @@ export interface operations {
                         projectId?: string;
                         /** Format: uuid */
                         remoteMachineId?: string;
+                        projectIds?: string[];
+                        folders?: string[];
+                        cloneInto?: string;
                         /** Format: uuid */
                         peerProfileId?: string;
                         /** @enum {string} */
@@ -15993,6 +16011,9 @@ export interface operations {
                         projectId?: string;
                         /** Format: uuid */
                         remoteMachineId?: string;
+                        projectIds?: string[];
+                        folders?: string[];
+                        cloneInto?: string;
                         /** Format: uuid */
                         peerProfileId?: string;
                         /** @enum {string} */
@@ -16147,6 +16168,9 @@ export interface operations {
                         projectId?: string;
                         /** Format: uuid */
                         remoteMachineId?: string;
+                        projectIds?: string[];
+                        folders?: string[];
+                        cloneInto?: string;
                         /** Format: uuid */
                         peerProfileId?: string;
                         /** @enum {string} */
@@ -16307,6 +16331,9 @@ export interface operations {
                         projectId?: string;
                         /** Format: uuid */
                         remoteMachineId?: string;
+                        projectIds?: string[];
+                        folders?: string[];
+                        cloneInto?: string;
                         /** Format: uuid */
                         peerProfileId?: string;
                         /** @enum {string} */
@@ -16475,6 +16502,9 @@ export interface operations {
                         projectId?: string;
                         /** Format: uuid */
                         remoteMachineId?: string;
+                        projectIds?: string[];
+                        folders?: string[];
+                        cloneInto?: string;
                         /** Format: uuid */
                         peerProfileId?: string;
                         /** @enum {string} */
@@ -16636,6 +16666,9 @@ export interface operations {
                         projectId?: string;
                         /** Format: uuid */
                         remoteMachineId?: string;
+                        projectIds?: string[];
+                        folders?: string[];
+                        cloneInto?: string;
                         /** Format: uuid */
                         peerProfileId?: string;
                         /** @enum {string} */
@@ -17119,6 +17152,9 @@ export interface operations {
                         projectId?: string;
                         /** Format: uuid */
                         remoteMachineId?: string;
+                        projectIds?: string[];
+                        folders?: string[];
+                        cloneInto?: string;
                         /** Format: uuid */
                         peerProfileId?: string;
                         /** @enum {string} */
@@ -17545,6 +17581,9 @@ export interface operations {
                         projectId?: string;
                         /** Format: uuid */
                         remoteMachineId?: string;
+                        projectIds?: string[];
+                        folders?: string[];
+                        cloneInto?: string;
                         /** Format: uuid */
                         peerProfileId?: string;
                         /** @enum {string} */

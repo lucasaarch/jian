@@ -46,6 +46,7 @@ export function Composer({
   placeholder,
   draft = false,
   modelControl,
+  above,
   status,
   replyTo,
   onCancelReply,
@@ -61,6 +62,8 @@ export function Composer({
   placeholder?: string;
   draft?: boolean;
   modelControl?: ReactNode;
+  /** Lined up with the box, directly over it: what a new chat chooses before it starts. */
+  above?: ReactNode;
   /** Where the conversation's objective and listeners stand, at the end of the row above it. */
   status?: ReactNode;
 }) {
@@ -250,6 +253,7 @@ export function Composer({
           {error}
         </p>
       )}
+      {above}
       {status && <div className="composer-context">{status}</div>}
       <AnimatePresence initial={false}>
         {replyTo && (

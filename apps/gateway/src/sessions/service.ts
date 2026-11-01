@@ -47,6 +47,7 @@ import {
   setSessionObjective,
   setSessionPin,
   setSessionProtection,
+  workspaceOfSession,
   writeSessionSummary,
 } from './repository.js';
 
@@ -113,6 +114,8 @@ export class Sessions {
     private readonly store: Store,
     private readonly profiles: ProfileLookup,
     private readonly clock: Clock = Date.now,
+    /** This gateway runs on the owner's own computer: a desktop app's. */
+    private readonly ownComputer = false,
   ) {}
 
   /** Creates an owner chat without changing the singleton used by older clients. */
@@ -121,23 +124,16 @@ export class Sessions {
 
     return this.store.transaction(profileId, async (tx) => {
       await this.profiles.profile(profileId, tx);
-      if (data.projectId) {
-        const [project] = await tx
-          .select({ id: projects.id })
-          .from(projects)
-          .where(and(eq(projects.id, data.projectId), eq(projects.profileId, profileId)))
-          .limit(1);
-        assertFound(project, 'Project');
-      }
-      if (data.remoteMachineId) await this.assertMachine(data.remoteMachineId, tx);
+      const workspace = await this.workspace(profileId, data, tx);
 
       const session: Session = {
         id: randomUUID(),
         profileId,
         title: null,
         channel: GATEWAY_SESSION_CHANNEL,
-        ...(data.projectId ? { projectId: data.projectId } : {}),
+        ...(workspace.projectId ? { projectId: workspace.projectId } : {}),
         ...(data.remoteMachineId ? { remoteMachineId: data.remoteMachineId } : {}),
+        ...workspace.rest,
         protection: 'ask',
         createdAt: nowIso(this.clock),
       };
@@ -215,26 +211,69 @@ export class Sessions {
           'Wait for this conversation to finish before changing its target',
         );
       }
-      if (data.projectId) {
-        const [project] = await tx
-          .select({ id: projects.id })
-          .from(projects)
-          .where(and(eq(projects.id, data.projectId), eq(projects.profileId, profileId)))
-          .limit(1);
-        assertFound(project, 'Project');
-      }
-      if (data.remoteMachineId) await this.assertMachine(data.remoteMachineId, tx);
+      const workspace = await this.workspace(profileId, data, tx);
       return assertFound(
         await setGatewaySessionTarget(
           tx,
           profileId,
           sessionId,
-          data.projectId,
+          workspace.projectId,
           data.remoteMachineId,
+          workspaceOfSession(workspace.rest),
         ),
         'Session',
       );
     });
+  }
+
+  /**
+   * What a chat will work on, checked. Folders are the one way out of a profile's workspace, so a
+   * server only takes them for a machine: on its own disk they would reach other profiles'
+   * directories. A desktop app's own gateway is on the owner's computer already.
+   */
+  private async workspace(
+    profileId: string,
+    data: {
+      projectId?: string | null | undefined;
+      projectIds?: string[] | undefined;
+      folders?: string[] | undefined;
+      cloneInto?: string | undefined;
+      remoteMachineId?: string | null | undefined;
+    },
+    tx: Queryable,
+  ) {
+    const ids = [
+      ...new Set([...(data.projectId ? [data.projectId] : []), ...(data.projectIds ?? [])]),
+    ];
+    const folders = [...new Set(data.folders ?? [])];
+    if (folders.length && ids.length) {
+      throw new GatewayError(400, 'A chat works on folders or on repositories, not on both.');
+    }
+    if (folders.length && !data.remoteMachineId && !this.ownComputer) {
+      throw new GatewayError(400, 'Folders belong to a machine: this gateway has none of its own.');
+    }
+    if (data.cloneInto && (!data.remoteMachineId || !ids.length)) {
+      throw new GatewayError(400, 'A clone destination needs repositories and a machine.');
+    }
+    for (const id of ids) {
+      const [project] = await tx
+        .select({ id: projects.id })
+        .from(projects)
+        .where(and(eq(projects.id, id), eq(projects.profileId, profileId)))
+        .limit(1);
+      assertFound(project, 'Project');
+    }
+    if (data.remoteMachineId) await this.assertMachine(data.remoteMachineId, tx);
+
+    return {
+      // One repository keeps binding the chat to it, as it always has.
+      projectId: ids.length === 1 ? (ids[0] ?? null) : null,
+      rest: {
+        ...(ids.length > 1 ? { projectIds: ids } : {}),
+        ...(folders.length ? { folders } : {}),
+        ...(data.cloneInto ? { cloneInto: data.cloneInto } : {}),
+      },
+    };
   }
 
   /** Every agent may use every machine; a chat can only aim at one that exists. */

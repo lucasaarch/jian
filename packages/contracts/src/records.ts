@@ -33,6 +33,10 @@ export const sessionRecordSchema = sessionSchema.extend({
   pinned: z.boolean().optional(),
   projectId: uuid.optional(),
   remoteMachineId: uuid.optional(),
+  /** Set only with more than one repository; a single one is `projectId`. */
+  projectIds: z.array(uuid).optional(),
+  folders: z.array(z.string()).optional(),
+  cloneInto: z.string().optional(),
   // Only on the session a pair of agents shares: the profile on the other side of it. The
   // session belongs to this profile alone; the peer never reads it.
   peerProfileId: uuid.optional(),

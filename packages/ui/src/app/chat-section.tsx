@@ -1,8 +1,7 @@
 'use client';
 
-import { Plus } from 'lucide-react';
+import { Folder, FolderOpen, Plus } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
-import { GitHubLogo } from '../components/ui';
 import { Fold, FoldChevron } from '../kit';
 import { useLayout } from '../lib/stores/layout';
 
@@ -76,7 +75,7 @@ export function ChatSection({
  * A project in the Projects section: its repository's name with GitHub's mark, opening onto its
  * chats beneath it on a guide, as a tree. Folded or not, the choice is kept.
  */
-export function ProjectFolder({
+export function WorkspaceFolder({
   id,
   name,
   rows,
@@ -101,7 +100,7 @@ export function ProjectFolder({
           className="flex h-full min-w-0 flex-1 items-center gap-2 px-2.5 text-left text-[13px] text-ink"
         >
           <span className="grid size-4 shrink-0 place-items-center text-muted" aria-hidden="true">
-            <GitHubLogo size={13} />
+            {closed ? <Folder size={14} /> : <FolderOpen size={14} />}
           </span>
           <span className="truncate">{name}</span>
           <FoldChevron

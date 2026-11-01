@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
 import { type FileHandle, mkdir, open, readlink, realpath } from 'node:fs/promises';
@@ -123,8 +124,24 @@ async function realOf(path: string): Promise<string> {
 
 export type Access = 'read' | 'write';
 
+/**
+ * The owner's folders the tool running now may reach, held for the length of its call so that every
+ * check below sees them, whoever asks, and no other conversation of the profile does.
+ */
+const openFolders = new AsyncLocalStorage<readonly string[]>();
+
+/** Runs a tool with these folders within reach. They must be real paths: see `realFolders`. */
+export const withFolders = <T>(folders: readonly string[], work: () => T): T =>
+  openFolders.run(folders, work);
+
+/** The folders within reach now; a command starts in the first. */
+export const reachableFolders = (): readonly string[] => openFolders.getStore() ?? [];
+
+/** What a chat's folders really are, since the checks compare real paths. */
+export const realFolders = (folders: readonly string[]) => Promise.all(folders.map(realOf));
+
 function assertWithin(real: string, home: string, access: Access, asked: string) {
-  const allowed = access === 'write' ? [home] : [home, ...SYSTEM];
+  const allowed = [...(access === 'write' ? [home] : [home, ...SYSTEM]), ...reachableFolders()];
 
   if (!allowed.some((root) => inside(real, root))) {
     throw new Error(

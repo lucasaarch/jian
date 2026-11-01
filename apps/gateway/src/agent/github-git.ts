@@ -106,6 +106,8 @@ export function githubGitTools(options: {
   projectId?: string | null;
   /** Where a project conversation keeps its checkout, on the gateway. */
   projectCheckout?: string;
+  /** Where this conversation clones each of its repositories, when it says so. */
+  checkoutOf?: (name: string) => string;
   place: GitPlace;
   lend: (secret: string) => void;
 }): ToolSet {
@@ -129,7 +131,8 @@ export function githubGitTools(options: {
         lend(access.token);
 
         const clone = call.action === 'clone';
-        const fallback = options.projectCheckout ?? access.repository.split('/')[1] ?? 'checkout';
+        const name = access.repository.split('/')[1] ?? 'checkout';
+        const fallback = options.checkoutOf?.(name) ?? options.projectCheckout ?? name;
         const path = await place.checkout(call.path, fallback, clone);
         const urls = clone ? [] : await checkedOrigin(place, path, access.repository, access.url);
         const credential = credentialConfig({ token: access.token, httpsUrl: access.url, urls });

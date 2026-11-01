@@ -4,7 +4,7 @@ import { isAbsolute, join } from 'node:path';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { fileTools } from './files.js';
-import { confine, confined, workspaceOf } from './workspace.js';
+import { confine, confined, reachableFolders, workspaceOf } from './workspace.js';
 
 /**
  * Running commands on the machine the gateway runs on, with the file tools beside them.
@@ -138,7 +138,9 @@ export function shellTools(
           };
         }
         const home = await workspaceOf(profileId);
-        const directory = cwd ? await confine(profileId, cwd, 'read') : home;
+        const directory = cwd
+          ? await confine(profileId, cwd, 'read')
+          : (reachableFolders()[0] ?? home);
         const shell = await confined(home, '/bin/sh', ['-c', command], gitAccess);
 
         return new Promise((resolvePromise) => {

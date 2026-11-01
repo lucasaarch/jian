@@ -1,10 +1,11 @@
+import type { Session } from '@jian/contracts';
 import {
   GATEWAY_SESSION_CHANNEL,
   LEARNING_SESSION_CHANNEL,
   type McpServer,
   type Run,
 } from '@jian/contracts';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { projectCheckout, workspaceOf } from '../agent/workspace.js';
 import { listConversations } from '../channels/repository.js';
 import type { Judge } from '../decisions/service.js';
@@ -19,6 +20,34 @@ import { buildContext, rankMemories } from './build.js';
 import { judgeTurn } from './judgments.js';
 import type { ContextSource } from './port.js';
 import { toolHistoryByRun, withToolHistory } from './tool-history.js';
+
+/** What a chat works on beyond one project: told to the agent, since it is why it is here. */
+function workspaceGuidance(
+  session: Pick<Session, 'folders' | 'cloneInto' | 'remoteMachineId'>,
+  repositories: { name: string; url: string }[],
+): string {
+  const parts: string[] = [];
+  const list = (items: string[]) => items.map((item) => JSON.stringify(item)).join(', ');
+
+  if (session.folders?.length) {
+    parts.push(
+      session.remoteMachineId
+        ? `This conversation works on these folders of the owner's, on that machine: ${list(session.folders)}. Run commands there, with cwd set to the folder.`
+        : `This conversation works on these folders of the owner's, on this computer: ${list(session.folders)}. Your commands start in the first. Read and change files there with your usual tools, and touch nothing else of theirs.`,
+    );
+  }
+  if (repositories.length) {
+    parts.push(
+      `This conversation works on these repositories at once: ${list(repositories.map((item) => item.name))}. Clone, fetch, pull and push each with github_git, naming it; its default path is this conversation's own checkout of it.`,
+    );
+  }
+  if (session.cloneInto) {
+    parts.push(
+      `The owner chose where its repositories go on the machine: clone them under ${JSON.stringify(session.cloneInto)}, which github_git does by default.`,
+    );
+  }
+  return parts.join('\n\n');
+}
 
 export class Contexts {
   constructor(
@@ -159,8 +188,19 @@ export class Contexts {
     const gitWay = github
       ? ` Clone, fetch, pull and push it with github_git (repository ${github}), not git in the shell, which reaches GitHub only with SSH keys; use git in the shell for everything local.`
       : '';
+    const several =
+      !worker && session.projectIds?.length
+        ? await this.store.db
+            .select({ name: projects.name, url: projects.repositoryUrl })
+            .from(projects)
+            .where(
+              and(eq(projects.profileId, run.profileId), inArray(projects.id, session.projectIds)),
+            )
+        : [];
+    const workspace = worker ? '' : workspaceGuidance(session, several);
     const result = {
       ...built,
+      ...(workspace ? { system: `${built.system}\n\n${workspace}` } : {}),
       ...(project
         ? {
             system: session.remoteMachineId

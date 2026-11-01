@@ -125,7 +125,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
           key={asked ? search.toString() : 'idle'}
           api={api}
           profile={profile}
-          project={project && projects.some((item) => item.id === project) ? project : null}
+          project={projects.find((item) => item.id === project) ?? null}
           // The draft became this conversation; going back should not return to the draft.
           opened={(id) =>
             router.replace(agentPath(profile.id, `sessions/${encodeURIComponent(id)}`))

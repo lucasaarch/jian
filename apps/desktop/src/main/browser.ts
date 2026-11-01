@@ -18,6 +18,7 @@ import {
   WebContentsView,
 } from 'electron';
 import type { BrowserPageSummary, BrowserState, Showing } from '../shared/bridge';
+import type { PagePicture } from '../shared/browser-pointer';
 import { runBrowserAction } from './browser-control';
 import { type CookieSourceId, cookieSources, importCookies } from './browser-cookies';
 import { allowed, inspectContents, pageKey } from './browser-inspect';
@@ -550,12 +551,15 @@ export class JianBrowser {
     return Boolean(this.shownPage() && this.bounds.width > 0 && this.bounds.height > 0);
   }
   /** What the page looks like now, for the panel to hold while something is drawn over it. */
-  private async snapshot() {
+  private async snapshot(): Promise<PagePicture | null> {
     const contents = this.view?.webContents;
     if (!contents || contents.isDestroyed() || !this.visible()) return null;
     const image = await contents.capturePage().catch(() => null);
     return image && !image.isEmpty()
-      ? `data:image/jpeg;base64,${image.toJPEG(82).toString('base64')}`
+      ? {
+          image: `data:image/jpeg;base64,${image.toJPEG(82).toString('base64')}`,
+          pointer: this.pointer.shown,
+        }
       : null;
   }
   async navigate(raw: string) {

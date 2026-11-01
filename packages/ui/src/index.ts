@@ -59,6 +59,7 @@ export { agentSettingsPath, newChatPath } from './lib/navigation';
 export { useGatewayOnline } from './lib/query/online';
 export { forgetGatewayCache } from './lib/query/persist';
 export { useStageShowing } from './lib/stores/onboarding';
+export type { ThisMachine } from './lib/this-machine';
 export { useProfileId } from './lib/workspace';
 export { connectGateway, type GatewayConnection } from './platform/gateway';
 export {

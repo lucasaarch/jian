@@ -91,7 +91,7 @@ import { deferTools, groupMates, profileTools, type ToolServices } from './tools
 import type { ModelResolver, RuntimeOptions } from './types.js';
 import { markSteering, outsideContent } from './untrusted.js';
 import { prepareProfileGitAccess, prepareWorkerWorkspace } from './worker-workspace.js';
-import { projectCheckout } from './workspace.js';
+import { projectCheckout, realFolders, withFolders } from './workspace.js';
 
 /**
  * How long a model call or a tool may go without a sign of life before the turn is given up.
@@ -437,9 +437,21 @@ export class AgentRuntime {
       }
       // The skills a run offers follow the servers it has, GitHub's included.
       const skillServers = learning ? installed : servers;
-      const gitAccess = run.subagent
+      const baseAccess = run.subagent
         ? await prepareWorkerWorkspace(run, this.services.sshKeys)
         : await prepareProfileGitAccess(run.profileId, this.services.sshKeys);
+      // A subagent works on what its conversation works on. On a machine the folders are that
+      // machine's, reached through it: only here do they widen what this process may touch.
+      const conversation = run.subagent
+        ? await this.services.sessions.session(
+            profileId,
+            (await this.services.runs.run(profileId, run.subagent.parentRunId)).sessionId,
+          )
+        : session;
+      const folders = conversation.remoteMachineId
+        ? []
+        : await realFolders(conversation.folders ?? []);
+      const gitAccess = { ...baseAccess, writable: [...baseAccess.writable, ...folders] };
       // GitHub git runs where the conversation works; one that targets a machine never falls
       // back to the gateway's workspace.
       const gitPlace = session.remoteMachineId
@@ -476,6 +488,16 @@ export class AgentRuntime {
                       session.projectId,
                       session.id,
                     ),
+                  }
+                : {}),
+              ...(session.cloneInto || session.projectIds?.length
+                ? {
+                    checkoutOf: (name: string) =>
+                      session.cloneInto
+                        ? `${session.cloneInto}/${name}`
+                        : session.remoteMachineId
+                          ? name
+                          : `projects/sessions/${session.id}/${name}`,
                   }
                 : {}),
               place: gitPlace,
@@ -679,7 +701,7 @@ export class AgentRuntime {
               });
 
               try {
-                const raw = await execute(input, options);
+                const raw = await withFolders(folders, () => execute(input, options));
                 // A file write's diff is for the owner, not the agent: it goes to its own
                 // checkpoint, read by the timeline alone, and leaves the result before the
                 // result is bounded, so it can neither cost context nor push the result into an

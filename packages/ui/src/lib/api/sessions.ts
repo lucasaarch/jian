@@ -1,6 +1,12 @@
 import { type Client, profile } from './params';
 import { result } from './result';
-import type { MediaUpload, ModelSelection, ProjectChoice, ProtectionMode } from './types';
+import type {
+  MediaUpload,
+  ModelSelection,
+  ProjectChoice,
+  ProtectionMode,
+  RequestBody,
+} from './types';
 
 /**
  * Sessions, messages and execution history. Gateway chats are owner-written; channel
@@ -25,18 +31,12 @@ export const sessionCalls = (client: Client) => ({
         body: input,
       }),
     ),
-  createGatewaySession: (
-    profileId: string,
-    projectId?: string | null,
-    remoteMachineId?: string | null,
-  ) =>
+  /** A chat, and what it works on: see `workspaceInput`. */
+  createGatewaySession: (profileId: string, workspace: RequestBody<'createGatewaySession'> = {}) =>
     result(
       client.POST('/v1/profiles/{profileId}/gateway-sessions', {
         params: profile(profileId),
-        body: {
-          ...(projectId ? { projectId } : {}),
-          ...(remoteMachineId ? { remoteMachineId } : {}),
-        },
+        body: workspace,
       }),
     ),
   setSessionPin: (profileId: string, sessionId: string, pinned: boolean) =>
@@ -112,13 +112,12 @@ export const sessionCalls = (client: Client) => ({
   setGatewaySessionTarget: (
     profileId: string,
     sessionId: string,
-    projectId: string | null,
-    remoteMachineId: string | null,
+    target: RequestBody<'setGatewaySessionTarget'>,
   ) =>
     result(
       client.PUT('/v1/profiles/{profileId}/sessions/{sessionId}/target', {
         params: { path: { profileId, sessionId } },
-        body: { projectId, remoteMachineId },
+        body: target,
       }),
     ),
   upload: (profileId: string, sessionId: string, file: MediaUpload) =>

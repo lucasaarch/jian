@@ -610,6 +610,13 @@
       "when": 1793490060000,
       "tag": "0086_session-last-client",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1793490120000,
+      "tag": "0087_session-workspace",
+      "breakpoints": true
     }
   ]
 }

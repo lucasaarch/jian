@@ -3,9 +3,11 @@
 import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { AlarmClock, Bot, MessageSquare, SquarePen, Terminal } from 'lucide-react';
 import { type ReactNode, Suspense, useEffect, useRef } from 'react';
+import { choiceOfSession } from '../components/sessions/workspace-choice';
 import { TelegramLogo, WhatsAppLogo } from '../components/ui';
 import type { Session } from '../lib/api';
 import { conversationName } from '../lib/conversation-name';
+import { useGatewayMode } from '../lib/gateway-mode';
 import { agentPath, newChatPath } from '../lib/navigation';
 import { usePhone } from '../lib/phone';
 import {
@@ -23,12 +25,14 @@ import {
   MIN_SIDEBAR_WIDTH,
   useLayout,
 } from '../lib/stores/layout';
+import { useWorkspaces } from '../lib/stores/workspace-choice';
+import { useThisMachine } from '../lib/this-machine';
 import { unread } from '../lib/unread';
 import { useParams, useRouter } from '../platform/navigation';
 import { useChatActions } from './chat-actions';
 import { ChatRow } from './chat-row';
-import { ChatSection, ProjectFolder } from './chat-section';
-import { channelKind, chatSections, lastAt } from './chat-sections';
+import { ChatSection, WorkspaceFolder } from './chat-section';
+import { channelKind, chatSections, lastAt, workspaceName } from './chat-sections';
 import { SidebarSkeleton } from './chats-loading';
 
 /** What a conversation is at a glance: the app's own chat, or the channel it came through. */
@@ -198,6 +202,14 @@ function AgentSidebar({ profileId }: { profileId: string }) {
   const router = useRouter();
   const actions = useChatActions(profileId);
   const { sessionId: selected } = useParams<{ sessionId?: string }>();
+  const machine = useThisMachine();
+  const server = useGatewayMode() !== 'local';
+  const startOn = useWorkspaces((state) => state.startOn);
+  // A chat on a project, worked on anywhere but here. One on nothing in particular says nothing.
+  const isRemote = (session: Session) =>
+    server &&
+    Boolean(workspaceName(session, projects)) &&
+    session.remoteMachineId !== machine?.machineId;
 
   const parents = new Map(activities.map((run) => [run.id, run]));
   const working = new Set(
@@ -223,6 +235,7 @@ function AgentSidebar({ profileId }: { profileId: string }) {
       })}
       {...(inProject ? {} : { icon: conversationIcon(session) })}
       pinned={session.pinned}
+      remote={isRemote(session)}
       pin={() => actions.pin(session)}
       at={lastAt(session)}
       selected={session.id === selected}
@@ -243,28 +256,30 @@ function AgentSidebar({ profileId }: { profileId: string }) {
       <NewChat profileId={profileId} />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2 pb-4">
         {chatSections({ sessions, projects, channels }).map((section) =>
-          section.kind === 'projects' ? (
-            <ChatSection key={section.id} id={section.id} name={section.name}>
-              {section.folders.map(({ project, sessions }) => (
-                <ProjectFolder
-                  key={project.id}
-                  id={project.id}
-                  name={project.name}
-                  rows={sessions.map((session) => row(session, true))}
-                  newChat={{
-                    label: `New chat in ${project.name}`,
-                    start: () => router.push(newChatPath(profileId, project.id)),
-                  }}
-                />
-              ))}
+          section.kind === 'recent' ? (
+            <ChatSection key={section.id} id={section.id} name={section.name} empty="No chats yet">
+              {section.items.map((item) =>
+                item.kind === 'chat' ? (
+                  row(item.session, false)
+                ) : (
+                  <WorkspaceFolder
+                    key={item.id}
+                    id={item.id}
+                    name={item.name}
+                    rows={item.sessions.map((session) => row(session, true))}
+                    newChat={{
+                      label: `New chat in ${item.name}`,
+                      start: () => {
+                        startOn(choiceOfSession(item.sessions[0] as Session, projects, machine));
+                        router.push(newChatPath(profileId));
+                      },
+                    }}
+                  />
+                ),
+              )}
             </ChatSection>
           ) : (
-            <ChatSection
-              key={section.id}
-              id={section.id}
-              name={section.name}
-              {...(section.kind === 'conversations' ? { empty: 'No chats yet' } : {})}
-            >
+            <ChatSection key={section.id} id={section.id} name={section.name}>
               {section.sessions.map((session) => row(session, false))}
             </ChatSection>
           ),

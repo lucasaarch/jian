@@ -12,6 +12,7 @@ import { useEventStream } from '../lib/query/stream';
 import { useLastProfile } from '../lib/stores/last-profile';
 import { useSavedLayout } from '../lib/stores/layout';
 import { useOnboarding } from '../lib/stores/onboarding';
+import { type ThisMachine, ThisMachineProvider } from '../lib/this-machine';
 import { useActions, useAdoptProfile, useProfileId } from '../lib/workspace';
 import { usePathname, useRouter, useSearchParams } from '../platform/navigation';
 import { AgentOverlays } from './agent-overlays';
@@ -40,8 +41,11 @@ const LOADING_PATIENCE = 15_000;
  */
 export function ChatsApp({
   welcomes = false,
+  thisMachine,
   header,
 }: {
+  /** The computer the panel runs on, for a host that can reach it. */
+  thisMachine?: ThisMachine | undefined;
   /**
    * Welcomes the owner on opening, landing on a new chat: an app that is launched. A page's address
    * may name what it was opened for, so a browser goes straight there.
@@ -128,49 +132,51 @@ export function ChatsApp({
   }, [staged, setShowing]);
 
   return (
-    <StageHandoff
-      welcome={
-        departed ? (
-          <Farewell agent={departed} done={onboarding.seenOff} />
-        ) : booting ? (
-          <LoadingMark label="Loading agents" />
-        ) : welcomeBack ? (
-          <Welcome profile={welcomeBack} finish={finishWelcome} />
-        ) : onboardingUp ? (
-          <Onboarding
-            saved={onboardingAgent}
-            onCreated={setOnboardingAgent}
-            finish={finishOnboarding}
-            creating={creating}
-            cancel={onboarding.cancelCreating}
-          />
-        ) : null
-      }
-    >
-      <div className="relative flex h-(--app-height) overflow-hidden">
-        {sidebar && header}
-        <ReadFailed>
-          {sidebar && (
-            <ChatSidebar
-              {...(profileId && known ? { profileId } : {})}
-              loading={loading}
-              footer={<AgentPicker createAgent={createAgent} />}
+    <ThisMachineProvider value={thisMachine}>
+      <StageHandoff
+        welcome={
+          departed ? (
+            <Farewell agent={departed} done={onboarding.seenOff} />
+          ) : booting ? (
+            <LoadingMark label="Loading agents" />
+          ) : welcomeBack ? (
+            <Welcome profile={welcomeBack} finish={finishWelcome} />
+          ) : onboardingUp ? (
+            <Onboarding
+              saved={onboardingAgent}
+              onCreated={setOnboardingAgent}
+              finish={finishOnboarding}
+              creating={creating}
+              cancel={onboarding.cancelCreating}
             />
-          )}
-          {main && (
-            <div data-app-main className="min-w-0 flex-1">
-              <Chats phone={phone} createAgent={createAgent} />
-            </div>
-          )}
-          {/* Beside both: on a phone the sidebar opens them with no conversation on screen. */}
-          {profileId && known && (
-            <Suspense fallback={null}>
-              <AgentOverlays profileId={profileId} />
-            </Suspense>
-          )}
-        </ReadFailed>
-      </div>
-    </StageHandoff>
+          ) : null
+        }
+      >
+        <div className="relative flex h-(--app-height) overflow-hidden">
+          {sidebar && header}
+          <ReadFailed>
+            {sidebar && (
+              <ChatSidebar
+                {...(profileId && known ? { profileId } : {})}
+                loading={loading}
+                footer={<AgentPicker createAgent={createAgent} />}
+              />
+            )}
+            {main && (
+              <div data-app-main className="min-w-0 flex-1">
+                <Chats phone={phone} createAgent={createAgent} />
+              </div>
+            )}
+            {/* Beside both: on a phone the sidebar opens them with no conversation on screen. */}
+            {profileId && known && (
+              <Suspense fallback={null}>
+                <AgentOverlays profileId={profileId} />
+              </Suspense>
+            )}
+          </ReadFailed>
+        </div>
+      </StageHandoff>
+    </ThisMachineProvider>
   );
 }
 

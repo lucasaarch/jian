@@ -1,7 +1,7 @@
 'use client';
 
 import { ContextMenu } from '@base-ui/react/context-menu';
-import { Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
+import { Cloud, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Spinner } from '../components/ui/spinner';
 import { Action, ConfirmDialog, Overlay, TextField } from '../kit';
@@ -19,6 +19,8 @@ export type ChatRowProps = {
   unread: boolean;
   /** The agent is at work in it. */
   working: boolean;
+  /** Worked on somewhere other than this computer. */
+  remote?: boolean;
   open: () => void;
   /** Absent where the name is not the chat's own: a contact's, another agent's. */
   /** Whether the name was saved. */
@@ -70,7 +72,7 @@ export function ChatRow(props: ChatRowProps) {
             type="button"
             onClick={props.open}
             aria-current={props.selected ? 'page' : undefined}
-            className="flex h-8 w-full items-center gap-2 rounded-lg pr-12 pl-2.5 text-left text-[13px] text-ink transition-colors hover:bg-glass-hover aria-[current=page]:bg-glass-press phone:h-10 phone:text-sm"
+            className={`flex h-8 w-full items-center gap-2 rounded-lg ${props.remote ? 'pr-17' : 'pr-12'} pl-2.5 text-left text-[13px] text-ink transition-colors hover:bg-glass-hover aria-[current=page]:bg-glass-press phone:h-10 phone:text-sm`}
           >
             {props.icon && (
               <span
@@ -83,6 +85,9 @@ export function ChatRow(props: ChatRowProps) {
             <span className="min-w-0 flex-1 truncate">{props.name}</span>
           </button>
           <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-[11px] text-muted tabular-nums">
+            {props.remote && (
+              <Cloud size={13} className="mr-1.5 text-muted" role="img" aria-label="Remote" />
+            )}
             <Status {...props} />
           </span>
         </ContextMenu.Trigger>

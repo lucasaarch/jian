@@ -69,23 +69,23 @@ async function render(activities: Run[] = []) {
   return { host, heading, chats };
 }
 
-it('lists the projects as folders and the loose chats under their own heading', async () => {
+it('lists the projects as folders among the other chats, in Recent', async () => {
   const view = await render();
 
-  expect(view.heading('Projects')).toBeDefined();
-  expect(view.heading('atlas/harbor')).toBeDefined();
-  expect(view.heading('Conversations')).toBeDefined();
+  expect(view.heading('Recent')).toBeDefined();
+  expect(view.heading('harbor')).toBeDefined();
+  expect(view.heading('Projects')).toBeUndefined();
   expect(view.chats()).toEqual(['Release notes', 'Groceries']);
 });
 
 it('folds a project and remembers it', async () => {
   const view = await render();
 
-  await act(async () => view.heading('atlas/harbor')?.click());
+  await act(async () => view.heading('harbor')?.click());
 
   expect(view.chats()).toEqual(['Groceries']);
   expect(JSON.parse(window.localStorage.getItem('jian-layout') ?? '{}').closedSections).toEqual([
-    `project:${project.id}`,
+    'project:harbor',
   ]);
 });
 

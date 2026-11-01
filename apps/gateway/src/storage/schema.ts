@@ -271,6 +271,9 @@ export const modelDefaults = pgTable('model_defaults', {
 });
 
 /** Repositories belong to one profile; a chat can reference only that profile's project. */
+/** Absent on nearly every session: a chat with one repository or none needs nothing here. */
+export type SessionWorkspace = { projectIds?: string[]; folders?: string[]; cloneInto?: string };
+
 export const projects = pgTable(
   'projects',
   {
@@ -302,6 +305,8 @@ export const sessions = pgTable(
     projectId: uuid('project_id'),
     // A deleted machine stays as the session target so work never silently falls back to local.
     remoteMachineId: uuid('remote_machine_id'),
+    // What the chat works on beyond one project: its folders, or several repositories.
+    workspace: jsonb('workspace').$type<SessionWorkspace>(),
     // Which app the owner last wrote here from; every run in the session goes by it, whatever
     // started that run. Empty for anything but the desktop app.
     lastClient: text('last_client'),

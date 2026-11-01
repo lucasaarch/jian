@@ -78,6 +78,7 @@ export function buildServices({
   github,
   publicUrl,
   nativeBrowser,
+  mode,
 }: {
   store: Store;
   vault: Vault;
@@ -88,12 +89,14 @@ export function buildServices({
   timeZone?: string;
   github?: Pick<GitHubIntegrations, 'repository'>;
   nativeBrowser?: import('./web/native.js').NativeBrowser;
+  /** A desktop app's own gateway is on the owner's computer, which a server is not. */
+  mode?: 'server' | 'local';
   /** Where the panel is served, which push services are given as the sender. */
   publicUrl?: string;
 }): Services {
   const profiles = new Profiles(store, clock);
   const providers = new Providers(store, gatewayVault, clock, catalog);
-  const sessions = new Sessions(store, profiles, clock);
+  const sessions = new Sessions(store, profiles, clock, mode === 'local');
   const projects = new Projects(store, profiles, clock, github);
   const memories = new Memories(store, profiles, sessions, clock);
   const runs = new Runs(store, profiles, sessions, providers, clock);

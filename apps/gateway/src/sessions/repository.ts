@@ -10,7 +10,7 @@ import {
 } from '@jian/contracts';
 import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
-import { messages, sessions } from '../storage/schema.js';
+import { messages, type SessionWorkspace, sessions } from '../storage/schema.js';
 import { sanitizeObjectiveText } from './objective.js';
 
 type SessionRow = typeof sessions.$inferSelect;
@@ -33,6 +33,9 @@ function toSession(row: SessionRow): Session {
     channel: row.channel,
     ...(row.projectId ? { projectId: row.projectId } : {}),
     ...(row.remoteMachineId ? { remoteMachineId: row.remoteMachineId } : {}),
+    ...(row.workspace?.projectIds?.length ? { projectIds: row.workspace.projectIds } : {}),
+    ...(row.workspace?.folders?.length ? { folders: row.workspace.folders } : {}),
+    ...(row.workspace?.cloneInto ? { cloneInto: row.workspace.cloneInto } : {}),
     ...(row.peerProfileId ? { peerProfileId: row.peerProfileId } : {}),
     ...(row.scope ? { scope: row.scope } : {}),
     ...(row.summary ? { summary: row.summary } : {}),
@@ -65,6 +68,20 @@ function toMessage(row: MessageRow): Message {
   };
 }
 
+/** What goes in the column, or null for the usual chat with nothing beyond one project. */
+export function workspaceOfSession(
+  session: Pick<Session, 'projectIds' | 'folders' | 'cloneInto'>,
+): SessionWorkspace | null {
+  const { projectIds, folders, cloneInto } = session;
+  return projectIds?.length || folders?.length || cloneInto
+    ? {
+        ...(projectIds?.length ? { projectIds } : {}),
+        ...(folders?.length ? { folders } : {}),
+        ...(cloneInto ? { cloneInto } : {}),
+      }
+    : null;
+}
+
 export async function insertSession(db: Queryable, session: Session): Promise<void> {
   await db.insert(sessions).values({
     ...session,
@@ -77,6 +94,7 @@ export async function insertSession(db: Queryable, session: Session): Promise<vo
     objective: session.objective ?? null,
     projectId: session.projectId ?? null,
     remoteMachineId: session.remoteMachineId ?? null,
+    workspace: workspaceOfSession(session),
     readAt: session.readAt ? new Date(session.readAt) : null,
     createdAt: new Date(session.createdAt),
   });
@@ -528,10 +546,11 @@ export async function setGatewaySessionTarget(
   sessionId: string,
   projectId: string | null,
   remoteMachineId: string | null,
+  workspace: SessionWorkspace | null,
 ): Promise<Session | null> {
   const [row] = await db
     .update(sessions)
-    .set({ projectId, remoteMachineId })
+    .set({ projectId, remoteMachineId, workspace })
     .where(
       and(
         eq(sessions.id, sessionId),

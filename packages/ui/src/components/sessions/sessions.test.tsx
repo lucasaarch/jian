@@ -227,7 +227,7 @@ it('creates and titles a chat only when the first message is sent, then opens it
   await act(async () => send?.click());
 
   // No project and no remote machine were picked for the draft: it runs on the gateway.
-  expect(result.createGatewaySession).toHaveBeenCalledWith(profile.id, null, null);
+  expect(result.createGatewaySession).toHaveBeenCalledWith(profile.id, {});
   expect(result.renameSession).toHaveBeenCalledWith(
     profile.id,
     'new-gateway-chat',

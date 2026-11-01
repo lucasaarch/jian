@@ -1,11 +1,17 @@
 import { type WebContents, WebContentsView } from 'electron';
 import sprite from '../../../../packages/remote-core/native/jian-pointer.png?inline';
+import {
+  POINTER_ACTIVE_ALPHA,
+  POINTER_HOTSPOT,
+  POINTER_IDLE_ALPHA,
+  POINTER_SIZE,
+  type PointerAt,
+} from '../shared/browser-pointer';
 
-/** The sprite's canvas and where its tip is in it, as the Computer Use helpers draw it. */
-const SIZE = 60;
-const HOTSPOT = 12;
-const ACTIVE_ALPHA = 0.94;
-const IDLE_ALPHA = 0.18;
+const SIZE = POINTER_SIZE;
+const HOTSPOT = POINTER_HOTSPOT;
+const ACTIVE_ALPHA = POINTER_ACTIVE_ALPHA;
+const IDLE_ALPHA = POINTER_IDLE_ALPHA;
 
 /** How the sprite's page says what the mouse did: it is ours, and has no bridge of its own. */
 const MOUSE = 'jian-pointer-mouse:';
@@ -30,6 +36,7 @@ const INPUT = { mousemove: 'mouseMove', mousedown: 'mouseDown', mouseup: 'mouseU
 export class BrowserPointer {
   private view?: WebContentsView;
   private tip?: { x: number; y: number };
+  private dimmed = false;
   private idle?: NodeJS.Timeout;
   private origin = { x: 0, y: 0, width: 0, height: 0 };
 
@@ -44,6 +51,11 @@ export class BrowserPointer {
   /** Where it stands in the page, to come back to with its conversation. */
   get position() {
     return this.tip;
+  }
+
+  /** As it looks now, for a picture of the page to show it where it stands. */
+  get shown(): PointerAt | null {
+    return this.tip ? { ...this.tip, dimmed: this.dimmed } : null;
   }
 
   /**
@@ -133,6 +145,7 @@ export class BrowserPointer {
     clearTimeout(this.idle);
     const from = this.tip ?? { x: this.origin.width / 2, y: this.origin.height / 2 };
     view.setVisible(true);
+    this.dimmed = false;
     this.script(`document.querySelector('img').style.opacity=${ACTIVE_ALPHA}`);
     const distance = Math.hypot(to.x - from.x, to.y - from.y);
     const steps = Math.max(1, Math.min(28, Math.round(distance / 24)));
@@ -160,6 +173,7 @@ export class BrowserPointer {
   }
 
   private dim() {
+    this.dimmed = true;
     this.script(`document.querySelector('img').style.opacity=${IDLE_ALPHA}`);
   }
 

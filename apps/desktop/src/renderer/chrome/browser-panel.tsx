@@ -13,8 +13,21 @@ import {
 } from '@jian/ui';
 import { Camera, ExternalLink, RotateCw, Star, StarOff } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import pointerSprite from '../../../../../packages/remote-core/native/jian-pointer.png?inline';
 import type { BrowserPlaces, BrowserState } from '../../shared/bridge';
+import {
+  type PagePicture,
+  POINTER_ACTIVE_ALPHA,
+  POINTER_HOTSPOT,
+  POINTER_IDLE_ALPHA,
+  POINTER_SIZE,
+} from '../../shared/browser-pointer';
 import { desktop } from '../desktop';
+import { coversPage } from './page-cover';
+
+/** How long the picture stays under a page coming back, in milliseconds. */
+const PAGE_RETURN_MS = 80;
 
 const initial: BrowserState = {
   focus: 0,
@@ -98,17 +111,17 @@ export function BrowserInspector({
   );
 }
 
-/** Anything drawn where the page is: the native view cannot be under it, so a picture stands in. */
-const COVERS = '[role=dialog], [aria-modal=true], [role=menu], .reload-curtain';
 const AWAY = { x: 0, y: 0, width: 0, height: 0 };
 
 /** The browser's viewport and its bridge; the toolbar is the panel's, and the tabs the Inspector's. */
 export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
   const [state, setState] = useState(initial);
   const [error, setError] = useState('');
-  const [picture, setPicture] = useState<string>();
+  const [picture, setPicture] = useState<PagePicture>();
   const [places, setPlaces] = useState<BrowserPlaces>({ favorites: [], recents: [] });
   const covered = useRef(false);
+  const revealing = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(revealing.current), []);
   const blank = !state.url || state.url === 'about:blank';
   const readPlaces = useCallback(() => void desktop().browser.places().then(setPlaces), []);
   // Offered only while a page is in front: this panel is not there behind another tab.
@@ -199,22 +212,34 @@ export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
       desktop().browser.layout(AWAY);
       return;
     }
+    // The native page is painted over the window, so a picture stands in while something is drawn
+    // there. The two change places a frame apart, the one going only once the other is on screen:
+    // otherwise what shows between them is the empty panel, which reads as a blink.
     const cover = () => {
       if (covered.current) return;
       covered.current = true;
+      clearTimeout(revealing.current);
       void desktop()
         .browser.snapshot()
-        .then((shot) => {
+        .then(async (shot) => {
+          if (shot) {
+            const image = new Image();
+            image.src = shot.image;
+            await image.decode().catch(() => {});
+          }
           // Uncovered while the picture was taken: the page never left.
           if (!covered.current) return;
-          setPicture(shot ?? undefined);
-          desktop().browser.layout(AWAY);
+          flushSync(() => setPicture(shot ?? undefined));
+          requestAnimationFrame(() => {
+            if (covered.current) desktop().browser.layout(AWAY);
+          });
         });
     };
     const layout = () => {
-      if (hidden || document.querySelector(COVERS)) return cover();
-      covered.current = false;
       const rect = element.getBoundingClientRect();
+      if (hidden || coversPage(rect)) return cover();
+      const returning = covered.current;
+      covered.current = false;
       desktop().browser.layout({
         x: rect.x,
         y: rect.y,
@@ -222,9 +247,17 @@ export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
         width: state.activePageId && state.url && state.url !== 'about:blank' ? rect.width : 0,
         height: rect.height,
       });
-      setPicture(undefined);
+      // Under the page by now, and held a moment: it takes that long to come back on screen.
+      clearTimeout(revealing.current);
+      if (returning) revealing.current = setTimeout(() => setPicture(undefined), PAGE_RETURN_MS);
+      else setPicture(undefined);
     };
-    const covers = new MutationObserver(layout);
+    // On the next frame: what was just added has its place by then, and that is what is measured.
+    let measuring = 0;
+    const covers = new MutationObserver(() => {
+      cancelAnimationFrame(measuring);
+      measuring = requestAnimationFrame(layout);
+    });
     covers.observe(document.body, { childList: true, subtree: true });
     const observer = new ResizeObserver(layout);
     observer.observe(element);
@@ -233,6 +266,7 @@ export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
     return () => {
       observer.disconnect();
       covers.disconnect();
+      cancelAnimationFrame(measuring);
       window.removeEventListener('resize', layout);
     };
   }, [state.open, state.url, state.activePageId, hidden]);
@@ -259,9 +293,26 @@ export function BrowserPanel({ hidden = false }: { hidden?: boolean }) {
           {error || state.error}
         </p>
       )}
-      <div ref={viewport} className="relative min-h-0 flex-1">
+      <div ref={viewport} className="relative min-h-0 flex-1 overflow-hidden">
         {picture && (
-          <img src={picture} alt="" className="absolute inset-0 size-full object-cover" />
+          <>
+            <img src={picture.image} alt="" className="absolute inset-0 size-full object-cover" />
+            {/* The agent's pointer is a view of its own, which no picture of the page holds. */}
+            {picture.pointer && (
+              <img
+                src={pointerSprite}
+                alt=""
+                className="pointer-events-none absolute max-w-none"
+                style={{
+                  left: picture.pointer.x - POINTER_HOTSPOT,
+                  top: picture.pointer.y - POINTER_HOTSPOT,
+                  width: POINTER_SIZE,
+                  height: POINTER_SIZE,
+                  opacity: picture.pointer.dimmed ? POINTER_IDLE_ALPHA : POINTER_ACTIVE_ALPHA,
+                }}
+              />
+            )}
+          </>
         )}
         {blank && (
           <BrowserStart

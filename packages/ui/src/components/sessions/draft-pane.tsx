@@ -3,10 +3,16 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
-import type { GatewayApi, Message, Profile, ProtectionMode, Session } from '../../lib/api';
+import type { GatewayApi, Message, Profile, Project, ProtectionMode, Session } from '../../lib/api';
 import { useAppearance } from '../../lib/appearance';
 import { keys } from '../../lib/query/keys';
 import { draftKey, useDrafts } from '../../lib/stores/drafts';
+import {
+  FROM_SCRATCH,
+  useWorkspaces,
+  type WorkspaceChoice,
+} from '../../lib/stores/workspace-choice';
+import { useThisMachine } from '../../lib/this-machine';
 import { useSearchParams } from '../../platform/navigation';
 import { AgentHero } from './agent-hero';
 import { Composer } from './composer';
@@ -17,6 +23,8 @@ import { SessionModel } from './model-picker';
 import { SessionProtection } from './protection-menu';
 import { ThoughtLine } from './thought-line';
 import { TroubleCard } from './trouble';
+import { choiceOfProject, workspaceInput } from './workspace-choice';
+import { PlacePicker, ProjectPicker } from './workspace-picker';
 
 const openingTitle = (text: string, hasMedia: boolean) => {
   const opening = text.trim().replace(/\s+/g, ' ');
@@ -52,7 +60,7 @@ export function DraftPane({
   api: GatewayApi;
   profile: Profile;
   /** The project it starts in, as a project's own new-chat button asks. */
-  project: string | null;
+  project: Project | null;
   /** The draft became this conversation. */
   opened: (sessionId: string) => void;
   sent: () => void;
@@ -79,14 +87,49 @@ export function DraftPane({
   });
   // Where the last new chat started, until the owner chooses for this one.
   const protection = chosenProtection ?? settings?.newChatProtection ?? 'ask';
-  const created = useRef<Promise<Session> | null>(null);
-  const ensure = () => {
-    created.current ??= api.createGatewaySession(profile.id, project, null).catch((failure) => {
-      // Nothing was made, so trying again has to ask again.
-      created.current = null;
-      throw failure;
-    });
-    return created.current;
+  const machine = useThisMachine();
+  // Asked for by a folder's own new chat, or by the address; otherwise from scratch.
+  const [workspace, setWorkspace] = useState<WorkspaceChoice>(() => {
+    const asked = useWorkspaces.getState().takeNext();
+    if (asked) return asked;
+    return project ? choiceOfProject(project) : FROM_SCRATCH;
+  });
+  // A folder's own new chat, asked for while this draft is already open.
+  useEffect(
+    () =>
+      useWorkspaces.subscribe((state) => {
+        if (state.next) setWorkspace(useWorkspaces.getState().takeNext() ?? FROM_SCRATCH);
+      }),
+    [],
+  );
+  const created = useRef<{ made: Promise<Session>; workspace: WorkspaceChoice } | null>(null);
+  /**
+   * The chat, made once. A file attached first makes it before the owner has finished choosing, so
+   * a choice changed since is told to it now.
+   */
+  const ensure = async () => {
+    const ready = created.current;
+    if (ready) {
+      const session = await ready.made;
+      if (ready.workspace !== workspace) {
+        await api.setGatewaySessionTarget(profile.id, session.id, {
+          projectId: null,
+          remoteMachineId: null,
+          ...(await workspaceInput(api, profile.id, workspace, machine)),
+        });
+        ready.workspace = workspace;
+      }
+      return session;
+    }
+    const made = workspaceInput(api, profile.id, workspace, machine)
+      .then((input) => api.createGatewaySession(profile.id, input))
+      .catch((failure) => {
+        // Nothing was made, so trying again has to ask again.
+        created.current = null;
+        throw failure;
+      });
+    created.current = { made, workspace };
+    return made;
   };
   const [sending, setSending] = useState<Sending>();
   const [composerRound, setComposerRound] = useState(0);
@@ -228,6 +271,13 @@ export function DraftPane({
           key={composerRound}
           draft
           draftKey={words}
+          // Only here: what a chat works on is chosen once, and said in the sidebar after that.
+          above={
+            <div className="mb-1 flex flex-wrap items-center gap-1">
+              <ProjectPicker choice={workspace} onChange={setWorkspace} />
+              <PlacePicker choice={workspace} onChange={setWorkspace} />
+            </div>
+          }
           modelControl={
             <>
               <ContextRing profileId={profile.id} />
