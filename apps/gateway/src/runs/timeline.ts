@@ -2,6 +2,7 @@ import {
   codeDiffSchema,
   imageAspectSchema,
   type RunTimeline,
+  TOOL_DISPLAY_CHARS,
   type ToolStep,
 } from '@jian/contracts';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
@@ -19,6 +20,24 @@ const phases = [
   'tool-diff',
   'tool-completed',
 ];
+
+/** The database has already cut oversized JSON; never fetch the prompt or full artifacts. */
+function display(field: 'input' | 'output', value: string | null): Partial<ToolStep> {
+  if (value === null) return {};
+  let text = value;
+  if (value.length <= TOOL_DISPLAY_CHARS) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      text = typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
+    } catch {
+      // An old or already-cut checkpoint is still useful as display text.
+    }
+  }
+  return {
+    [field]: text.slice(0, TOOL_DISPLAY_CHARS),
+    ...(text.length > TOOL_DISPLAY_CHARS ? { [`${field}Truncated`]: true } : {}),
+  };
+}
 
 /**
  * The tools of each recent turn of a conversation, rebuilt from the checkpoints the runtime
@@ -51,13 +70,26 @@ export async function sessionTimeline(
       phase: sql<string>`${checkpoints.data}->>'phase'`,
       toolName: sql<string | null>`${checkpoints.data}->>'toolName'`,
       toolCallId: sql<string | null>`${checkpoints.data}->>'toolCallId'`,
-      // Only the ids: the results beside them can be large, and the timeline does not show them.
-      tools: sql<
-        string[] | null
-      >`jsonb_path_query_array(${checkpoints.data}, '$.tools[*].toolCallId')`,
+      // These fields were redacted at write time. Bound them in SQL, before they leave the DB.
+      input: sql<
+        string | null
+      >`left((${checkpoints.data}->'input')::text, ${TOOL_DISPLAY_CHARS + 1})`,
+      output: sql<
+        string | null
+      >`left((${checkpoints.data}->'result')::text, ${TOOL_DISPLAY_CHARS + 1})`,
+      tools: sql<Array<{ toolCallId: string; toolName: string; output: string | null }> | null>`(
+        select jsonb_agg(jsonb_build_object(
+          'toolCallId', item->>'toolCallId',
+          'toolName', item->>'toolName',
+          'output', left((item->'result')::text, ${TOOL_DISPLAY_CHARS + 1})
+        )) from jsonb_array_elements(
+          case when jsonb_typeof(${checkpoints.data}->'tools') = 'array'
+          then ${checkpoints.data}->'tools' else '[]'::jsonb end
+        ) as item
+      )`,
       reason: sql<
         string | null
-      >`coalesce(${checkpoints.data}->>'detail', ${checkpoints.data}->>'reason')`,
+      >`left(coalesce(${checkpoints.data}->>'detail', ${checkpoints.data}->>'reason'), ${TOOL_DISPLAY_CHARS})`,
       // Only a write's own diff checkpoint carries one; every other row reads null here.
       diff: sql<unknown>`${checkpoints.data}->'diff'`,
       // Only an image being drawn is asked for one; every other row reads null here.
@@ -98,6 +130,7 @@ export async function sessionTimeline(
         toolName: row.toolName,
         status: 'running',
         startedAt: row.at.toISOString(),
+        ...display('input', row.input),
         ...(aspect?.success ? { aspectRatio: aspect.data } : {}),
       });
       continue;
@@ -117,17 +150,21 @@ export async function sessionTimeline(
     if (row.phase === 'tool-completed') {
       const step = row.toolCallId ? steps.get(row.toolCallId) : undefined;
 
-      if (step?.status === 'running') {
-        Object.assign(step, { status: 'done', finishedAt: row.at.toISOString() });
+      if (step && step.toolName === row.toolName) {
+        Object.assign(step, display('output', row.output));
+        if (step.status === 'running') {
+          Object.assign(step, { status: 'done', finishedAt: row.at.toISOString() });
+        }
       }
       continue;
     }
 
     if (row.phase === 'step-completed') {
-      for (const toolCallId of row.tools ?? []) {
-        const step = steps.get(toolCallId);
-
-        if (step?.status === 'running') {
+      for (const result of row.tools ?? []) {
+        const step = steps.get(result.toolCallId);
+        if (!step || step.toolName !== result.toolName) continue;
+        Object.assign(step, display('output', result.output));
+        if (step.status === 'running') {
           Object.assign(step, { status: 'done', finishedAt: row.at.toISOString() });
         }
       }
@@ -136,7 +173,7 @@ export async function sessionTimeline(
 
     const step = row.toolCallId ? steps.get(row.toolCallId) : undefined;
 
-    if (step) {
+    if (step && step.toolName === row.toolName) {
       Object.assign(step, {
         status:
           row.phase === 'tool-failed'
@@ -145,7 +182,8 @@ export async function sessionTimeline(
               ? 'refused'
               : 'uncertain',
         finishedAt: row.at.toISOString(),
-        ...(row.reason ? { error: row.reason } : {}),
+        ...display('output', row.output),
+        ...(row.reason ? { error: row.reason.slice(0, TOOL_DISPLAY_CHARS) } : {}),
       });
     }
   }

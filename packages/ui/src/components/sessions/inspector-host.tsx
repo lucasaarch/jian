@@ -3,6 +3,7 @@
 import { Menu } from '@base-ui/react/menu';
 import {
   Bot,
+  FileCode2,
   GitPullRequest,
   Globe,
   type LucideIcon,
@@ -48,7 +49,7 @@ export const useBrowserOffer = () => ({
 export const toggleInspectorFull = () => {
   const crew = useCrew.getState();
   if (crew.opened) return crew.toggleFull();
-  if (!crew.tabs.length && !crew.openBrowser) return;
+  if (!crew.tabs.length && !crew.openBrowser && !crew.projectId) return;
   crew.reopen();
   if (!crew.full) crew.toggleFull();
 };
@@ -79,7 +80,7 @@ export const inspectorHasBrowserPage = (pageId: string) =>
 export const toggleInspector = () => {
   const crew = useCrew.getState();
   if (crew.opened) crew.close();
-  else if (crew.tabs.length || crew.openBrowser) crew.reopen();
+  else if (crew.tabs.length || crew.openBrowser || crew.projectId) crew.reopen();
 };
 export const conversationOfInspector = () => useCrew.getState().sessionId;
 /** The browser tab the Inspector has in front, for a host to bring its page there. */
@@ -186,6 +187,7 @@ export function InspectorHost({
   const following = useCrew((state) => state.following);
   const tabs = useCrew((state) => state.tabs);
   const agents = useCrew((state) => state.agents);
+  const projectId = useCrew((state) => state.projectId);
   const [target, setTarget] = useState<HTMLDivElement | null>(null);
   const [chosen, setChosen] = useState(savedWidth);
   const [area, setArea] = useState(0);
@@ -232,23 +234,37 @@ export function InspectorHost({
       localStorage.setItem(WIDTH_KEY, String(size));
     } catch {}
   };
-  const actions: InspectorAction[] = openBrowser
-    ? [
-        {
-          label: 'Browser',
-          description: 'Explore a website alongside your conversation',
-          icon: Globe,
-          run: openBrowser,
-        },
-      ]
-    : [];
+  const actions: InspectorAction[] = [
+    ...(openBrowser
+      ? [
+          {
+            label: 'Browser',
+            description: 'Explore a website alongside your conversation',
+            icon: Globe,
+            run: openBrowser,
+          },
+        ]
+      : []),
+    ...(projectId
+      ? [
+          {
+            label: 'Changes',
+            description: 'Review uncommitted changes in this project',
+            icon: FileCode2,
+            run: () => useCrew.getState().showChanges(),
+          },
+        ]
+      : []),
+  ];
   const shown = tabs.find((tab) => tab.key === following);
   const label = (tab: InspectorTab) =>
     tab.kind === 'browser'
       ? tab.title || tab.url || 'New tab'
       : tab.kind === 'github'
         ? `${tab.item.kind === 'pull' ? 'PR' : 'Issue'} #${tab.item.number}`
-        : (agents.find((agent) => agent.runId === tab.runId)?.name ?? 'Subagent');
+        : tab.kind === 'changes'
+          ? 'Changes'
+          : (agents.find((agent) => agent.runId === tab.runId)?.name ?? 'Subagent');
   const close = () => useCrew.getState().close();
   const closeTab = (tab: InspectorTab) => {
     if (tab.kind === 'browser') closeBrowser?.(tab.pageId);
@@ -374,6 +390,8 @@ export function InspectorHost({
                           <Globe size={13} />
                         ) : tab.kind === 'github' ? (
                           <GitPullRequest size={13} />
+                        ) : tab.kind === 'changes' ? (
+                          <FileCode2 size={13} />
                         ) : (
                           <Bot size={13} />
                         )}

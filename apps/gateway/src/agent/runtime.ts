@@ -1248,6 +1248,7 @@ export class AgentRuntime {
               phase: 'tool-completed',
               toolName: approved.toolName,
               toolCallId: approved.toolCallId,
+              result: redactOutput(outcome, secrets),
             });
           } catch (error) {
             if (externalUncertain) throw error;

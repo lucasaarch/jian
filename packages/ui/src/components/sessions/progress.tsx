@@ -4,7 +4,6 @@ import type { OrbState } from 'thinking-orbs';
 import type { Message, Profile, Run, ToolStep } from '../../lib/api';
 import { Markdown } from '../ui/markdown';
 import { RefineFrame } from '../ui/refine-frame';
-import { CodeChanges } from './code-change';
 import { drawnBox } from './media';
 import { ChatSpeaker } from './message';
 import { ThoughtLine, type ThoughtStep } from './thought-line';
@@ -130,6 +129,13 @@ export function traceOf(steps: ToolStep[]): ThoughtStep[] {
       text: `${label[0]?.toUpperCase()}${label.slice(1)}`,
       status: step.status === 'running' ? 'running' : failed ? 'failed' : 'done',
       ...(failed ? { note: failed, ...(step.error ? { detail: step.error } : {}) } : {}),
+      ...(step.input !== undefined
+        ? { input: { text: step.input, truncated: Boolean(step.inputTruncated) } }
+        : {}),
+      ...(step.output !== undefined
+        ? { output: { text: step.output, truncated: Boolean(step.outputTruncated) } }
+        : {}),
+      ...(step.diff ? { diff: step.diff } : {}),
     };
   });
 }
@@ -159,7 +165,6 @@ function LiveThought({
           finishedAt={writing ? (steps.at(-1)?.finishedAt ?? run.progress?.updatedAt) : undefined}
         />
       )}
-      <CodeChanges steps={steps} fresh />
       <ImageDrafts steps={steps} />
     </>
   );

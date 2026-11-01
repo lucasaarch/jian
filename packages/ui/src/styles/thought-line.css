@@ -70,12 +70,51 @@
     @apply mt-2.5;
   }
   .thought-trace li {
-    @apply flex min-w-0 items-center gap-2;
+    @apply min-w-0;
     color: var(--ink);
     animation: thought-rise 220ms var(--thought-ease);
   }
   .thought-trace li:not([data-status="running"]) {
     color: var(--muted);
+  }
+  .thought-tool > summary {
+    @apply flex min-w-0 cursor-pointer list-none items-center gap-2;
+  }
+  .thought-tool > summary::-webkit-details-marker {
+    display: none;
+  }
+  .thought-tool-chevron {
+    @apply ml-auto shrink-0 opacity-55 transition-transform;
+  }
+  .thought-tool[open] .thought-tool-chevron {
+    @apply rotate-180;
+  }
+  .thought-tool-body {
+    @apply ml-7 mt-2 grid min-w-0 gap-3;
+    color: var(--ink);
+  }
+  .thought-tool-body section {
+    @apply grid min-w-0 gap-1.5;
+  }
+  .thought-tool-body h4 {
+    @apply text-[10px] font-semibold uppercase tracking-wider;
+    color: var(--muted);
+  }
+  .thought-tool-body pre {
+    @apply max-h-72 overflow-auto rounded-xl bg-glass-press px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--ink);
+  }
+  .thought-truncated,
+  .thought-tool-empty {
+    @apply text-xs;
+    color: var(--muted);
+  }
+  .thought-tool-body .code-diff {
+    @apply w-full;
+  }
+  .thought-tool-body .thought-note[data-detail] {
+    @apply w-fit;
   }
   .thought-mark {
     @apply grid h-5 w-5 shrink-0 place-items-center;

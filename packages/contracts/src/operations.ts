@@ -103,6 +103,8 @@ import {
   runApprovalInputSchema,
   runRecordSchema,
   runTimelineSchema,
+  sessionChangesQuerySchema,
+  sessionChangesSchema,
   sessionContextSchema,
   sessionRecordSchema,
   sessionSummarySchema,
@@ -1168,6 +1170,14 @@ export const operations: Operation[] = [
     operationId: 'listSessionTimeline',
     access: 'admin',
     response: z.array(runTimelineSchema),
+  },
+  {
+    method: 'GET',
+    path: `${session}/changes`,
+    operationId: 'listSessionChanges',
+    access: 'admin',
+    query: sessionChangesQuerySchema,
+    response: sessionChangesSchema,
   },
   {
     method: 'GET',

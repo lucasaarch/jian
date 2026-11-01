@@ -7,6 +7,35 @@
    off the page in either theme, with each theme's own syntax colours. Long lines scroll inside
    the card, never the page. */
 @layer components {
+  .run-change-summary {
+    @apply glass mb-3 grid w-full min-w-0 gap-1.5 rounded-2xl p-3;
+  }
+  .run-change-summary-title {
+    @apply text-xs font-medium;
+    color: var(--muted);
+  }
+  .run-change-summary ul {
+    @apply grid gap-1;
+  }
+  .run-change-summary button {
+    @apply flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-glass-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink/30;
+  }
+  .run-change-summary-path {
+    @apply min-w-0 flex-1 truncate font-mono text-xs;
+    color: var(--ink);
+  }
+  .run-change-summary-counts {
+    @apply shrink-0 font-mono text-xs tabular-nums;
+    color: var(--muted);
+  }
+  .run-change-summary-counts i {
+    color: var(--good);
+  }
+  .run-change-summary-counts b {
+    color: var(--bad);
+    font-weight: 400;
+  }
+
   .code-changes {
     @apply mb-3 grid w-full min-w-0 gap-3;
   }

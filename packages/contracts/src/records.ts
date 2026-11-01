@@ -408,11 +408,6 @@ export const checkpointSchema = z.strictObject({
 export type Checkpoint = z.infer<typeof checkpointSchema>;
 
 /**
- * One tool the agent used during a turn, as the owner's timeline shows it: what it was, how long
- * it took and how it ended. `stopped` is a tool that started in a turn that ended before it came
- * back. What it received and returned stays in the run's checkpoints.
- */
-/**
  * What one file write changed, line by line, for the owner to read: git's hunks with each line
  * numbered on the side it belongs to. Bounded for reading (`truncated` says it was cut); the
  * agent never receives it.
@@ -457,6 +452,42 @@ export const codeDiffSchema = z.strictObject({
  */
 export const imageAspectSchema = z.enum(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']);
 
+/** Display text only; the complete, redacted values remain in the run's checkpoints. */
+export const TOOL_DISPLAY_CHARS = 16_000;
+
+export const sessionChangesQuerySchema = z.strictObject({
+  /** Omit to list changes; supply a listed path to read its current diff against HEAD. */
+  path: z.string().min(1).max(4096).optional(),
+});
+
+export const sessionChangeSchema = z.strictObject({
+  path: z.string().min(1).max(4096),
+  previousPath: z.string().max(4096).optional(),
+  status: z.enum([
+    'added',
+    'modified',
+    'deleted',
+    'renamed',
+    'copied',
+    'untracked',
+    'conflicted',
+    'typechanged',
+  ]),
+  diff: codeDiffSchema.optional(),
+  /** Why this file has no textual diff (binary, size, symlink, or metadata-only change). */
+  unavailable: z.string().max(500).optional(),
+});
+
+export const sessionChangesSchema = z.strictObject({
+  files: z.array(sessionChangeSchema).max(2000),
+  /** The list reached its display bound; do not present it as the whole checkout. */
+  truncated: z.boolean(),
+});
+
+export type SessionChange = z.infer<typeof sessionChangeSchema>;
+export type SessionChanges = z.infer<typeof sessionChangesSchema>;
+
+/** `stopped` means its turn ended before the tool came back. */
 export const toolStepSchema = z.strictObject({
   toolCallId: z.string(),
   toolName: z.string(),
@@ -464,6 +495,10 @@ export const toolStepSchema = z.strictObject({
   startedAt: timestamp,
   finishedAt: timestamp.optional(),
   error: z.string().optional(),
+  input: z.string().max(TOOL_DISPLAY_CHARS).optional(),
+  output: z.string().max(TOOL_DISPLAY_CHARS).optional(),
+  inputTruncated: z.boolean().optional(),
+  outputTruncated: z.boolean().optional(),
   /** What a file write changed, for the tools that write files. */
   diff: codeDiffSchema.optional(),
   /** The shape an image being drawn was asked for, so its frame takes it before it exists. */

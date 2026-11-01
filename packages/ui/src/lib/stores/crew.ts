@@ -11,10 +11,20 @@ export type GitHubItem = {
 export type InspectorTab =
   | { key: string; kind: 'agent'; runId: string }
   | { key: string; kind: 'github'; item: GitHubItem }
-  | { key: string; kind: 'browser'; pageId: string; title: string; url: string };
+  | { key: string; kind: 'browser'; pageId: string; title: string; url: string }
+  | {
+      key: string;
+      kind: 'changes';
+      sessionId: string;
+      projectId?: string;
+      runId?: string;
+      toolCallId?: string;
+      path?: string;
+    };
 export type BrowserPageTab = { id: string; title: string; url: string };
 type Crew = {
   sessionId?: string;
+  projectId?: string;
   agents: Subagent[];
   /** Whether the Inspector is on screen, which it can be with nothing in it. */
   opened: boolean;
@@ -29,7 +39,13 @@ type Crew = {
   tabs: InspectorTab[];
   /** The host's way to open its browser; absent where there is none. */
   openBrowser?: () => void;
-  show: (sessionId: string, agents: Subagent[]) => void;
+  show: (sessionId: string, agents: Subagent[], projectId?: string) => void;
+  showChanges: (target?: {
+    runId?: string;
+    toolCallId?: string;
+    path?: string;
+    opener?: HTMLElement | null;
+  }) => void;
   follow: (runId: string, opener?: HTMLElement | null) => void;
   open: (item: GitHubItem, opener?: HTMLElement | null) => void;
   /** Brings a browser tab to the front, the Inspector open around it. */
@@ -58,13 +74,13 @@ const selected = (tab?: InspectorTab) => ({
  * What each conversation had open, for when the owner comes back. Only these few words per
  * conversation: nothing of an Inspector is drawn or loaded while its conversation is not open.
  */
-type Kept = Pick<Crew, 'tabs' | 'opened' | 'full' | 'following' | 'last' | 'item'>;
+type Kept = Pick<Crew, 'tabs' | 'opened' | 'full' | 'following' | 'last' | 'item' | 'projectId'>;
 const SAVED = 'jian-inspector';
 const KEPT_CONVERSATIONS = 50;
 const isTab = (tab: unknown) =>
   Boolean(tab) &&
   typeof (tab as InspectorTab).key === 'string' &&
-  ['agent', 'github', 'browser'].includes((tab as InspectorTab).kind);
+  ['agent', 'github', 'browser', 'changes'].includes((tab as InspectorTab).kind);
 
 /** Storage is the owner's but may hold an older shape: what does not read is left out. */
 function readKept(): Map<string, Kept> {
@@ -108,6 +124,7 @@ const keep = (sessionId: string | undefined, state: Kept) => {
       following: state.following,
       last: state.last,
       item: state.item,
+      projectId: state.projectId,
     });
   for (const oldest of all.keys()) {
     if (all.size <= KEPT_CONVERSATIONS) break;
@@ -122,6 +139,7 @@ const EMPTY: Kept = {
   following: undefined,
   last: undefined,
   item: undefined,
+  projectId: undefined,
 };
 const restored = (sessionId: string): Kept => kept().get(sessionId) ?? EMPTY;
 const browserTabKey = (pageId: string) => `browser:${pageId}`;
@@ -137,15 +155,39 @@ export const useCrew = create<Crew>()((set, get) => ({
     keep(sessionId, state);
     state.adoptBrowser?.(sessionId);
   },
-  show: (sessionId, agents) => {
+  show: (sessionId, agents, projectId) => {
     const state = get();
     if (state.sessionId === sessionId) {
-      set({ agents });
+      set({ agents, projectId });
       return;
     }
     keep(state.sessionId, state);
-    set({ sessionId, agents, opener: undefined, ...restored(sessionId) });
+    set({ ...restored(sessionId), sessionId, agents, projectId, opener: undefined });
   },
+  showChanges: (target = {}) =>
+    set((state) => {
+      if (!state.sessionId) return state;
+      const key = `changes:${state.sessionId}`;
+      const existing = state.tabs.find((tab) => tab.key === key);
+      const tab: InspectorTab = {
+        key,
+        kind: 'changes',
+        sessionId: state.sessionId,
+        ...(state.projectId ? { projectId: state.projectId } : {}),
+        ...(target.runId ? { runId: target.runId } : {}),
+        ...(target.toolCallId ? { toolCallId: target.toolCallId } : {}),
+        ...(target.path ? { path: target.path } : {}),
+      };
+      return {
+        opened: true,
+        following: key,
+        item: undefined,
+        opener: target.opener,
+        tabs: existing
+          ? state.tabs.map((item) => (item.key === key ? tab : item))
+          : [...state.tabs, tab],
+      };
+    }),
   follow: (runId, opener) =>
     set((state) => ({
       opened: true,
@@ -245,7 +287,7 @@ export const useCrew = create<Crew>()((set, get) => ({
     const state = get();
     if (state.sessionId !== sessionId) return;
     keep(sessionId, state);
-    set({ sessionId: undefined, agents: [], opener: undefined, ...EMPTY });
+    set({ sessionId: undefined, projectId: undefined, agents: [], opener: undefined, ...EMPTY });
   },
 }));
 

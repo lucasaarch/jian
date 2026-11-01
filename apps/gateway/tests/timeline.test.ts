@@ -1,4 +1,6 @@
+import { TOOL_DISPLAY_CHARS } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
+import { redactOutput } from '../src/agent/results.js';
 import { testServices } from './helpers/services.js';
 
 async function setup() {
@@ -30,7 +32,7 @@ async function setup() {
 }
 
 describe("a conversation's tool timeline", () => {
-  it('shows each tool and how it ended, without its input, result or the prompt', async () => {
+  it('shows each tool with its own input and result, but never the prompt', async () => {
     const f = await setup();
     const first = await f.turn('first');
 
@@ -76,8 +78,85 @@ describe("a conversation's tool timeline", () => {
     ]);
     expect(timeline?.steps[1]?.error).toBe('exit 1');
     expect(JSON.stringify(timeline)).not.toContain('the whole prompt');
-    expect(JSON.stringify(timeline)).not.toContain('deploy jian');
-    expect(JSON.stringify(timeline)).not.toContain('hits');
+    expect(JSON.parse(timeline?.steps[0]?.input ?? 'null')).toEqual({ query: 'deploy jian' });
+    expect(JSON.parse(timeline?.steps[0]?.output ?? 'null')).toEqual({ hits: 3 });
+    expect(timeline?.steps[1]?.output).toBeUndefined();
+  });
+
+  it('bounds display values, retains redaction, and matches both the call id and tool name', async () => {
+    const f = await setup();
+    const turn = await f.turn('bounded');
+    const secret = 'synthetic-private-token';
+    await turn.write({
+      phase: 'tool-started',
+      toolName: 'fetch_url',
+      toolCallId: 'a',
+      input: redactOutput({ token: secret }, new Set([secret])),
+    });
+    await turn.write({
+      phase: 'tool-started',
+      toolName: 'run_command',
+      toolCallId: 'b',
+      input: { command: 'x'.repeat(TOOL_DISPLAY_CHARS * 2) },
+    });
+    await turn.write({
+      phase: 'step-completed',
+      prompt: 'PRIVATE PROMPT',
+      tools: [
+        { toolCallId: 'a', toolName: 'run_command', result: 'WRONG TOOL' },
+        { toolCallId: 'missing', toolName: 'fetch_url', result: 'WRONG CALL' },
+        {
+          toolCallId: 'b',
+          toolName: 'run_command',
+          result: 'x'.repeat(TOOL_DISPLAY_CHARS * 2),
+          input: 'PRIVATE EXTRA FIELD',
+        },
+      ],
+    });
+    await turn.write({
+      phase: 'tool-completed',
+      toolName: 'fetch_url',
+      toolCallId: 'a',
+      result: redactOutput({ token: secret }, new Set([secret])),
+    });
+    const [timeline] = await f.services.sessions.timeline(f.profile.id, f.session.id);
+    expect(timeline?.steps[0]).toMatchObject({
+      status: 'done',
+      input: expect.stringContaining('[REDACTED]'),
+      output: expect.stringContaining('[REDACTED]'),
+    });
+    expect(timeline?.steps[1]).toMatchObject({ inputTruncated: true, outputTruncated: true });
+    expect(timeline?.steps[1]?.input?.length).toBe(TOOL_DISPLAY_CHARS);
+    expect(timeline?.steps[1]?.output?.length).toBe(TOOL_DISPLAY_CHARS);
+    for (const excluded of [
+      secret,
+      'WRONG TOOL',
+      'WRONG CALL',
+      'PRIVATE PROMPT',
+      'PRIVATE EXTRA FIELD',
+    ]) {
+      expect(JSON.stringify(timeline)).not.toContain(excluded);
+    }
+  });
+
+  it('keeps a refused result without changing its failure status', async () => {
+    const f = await setup();
+    const turn = await f.turn('refused');
+    await turn.write({ phase: 'tool-started', toolName: 'external', toolCallId: 'a', input: null });
+    await turn.write({
+      phase: 'tool-refused',
+      toolName: 'external',
+      toolCallId: 'a',
+      reason: 'Denied',
+      result: { isError: true },
+    });
+    await turn.write({
+      phase: 'step-completed',
+      tools: [{ toolName: 'external', toolCallId: 'a', result: { isError: true } }],
+    });
+    const [timeline] = await f.services.sessions.timeline(f.profile.id, f.session.id);
+    expect(timeline?.steps[0]).toMatchObject({ status: 'refused', error: 'Denied', input: 'null' });
+    expect(JSON.parse(timeline?.steps[0]?.output ?? 'null')).toEqual({ isError: true });
   });
 
   it('keeps a tool running while its turn still is, and stays inside its profile', async () => {

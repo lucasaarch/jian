@@ -10,6 +10,7 @@ import {
   type Profile,
   type Session,
   type SessionObjective,
+  sessionChangesQuerySchema,
   sessionModelSchema,
   sessionObjectiveInputSchema,
   sessionPinSchema,
@@ -19,6 +20,7 @@ import {
   TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
 import { and, eq, inArray } from 'drizzle-orm';
+import { projectCheckout } from '../agent/workspace-home.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -26,6 +28,7 @@ import { sessionContext } from '../runs/context-usage.js';
 import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { messages, projects, remoteMachines, runs } from '../storage/schema.js';
+import { checkoutChanges } from './changes.js';
 import { objectiveAt, sanitizeObjectiveText } from './objective.js';
 import type { SessionStart } from './port.js';
 import {
@@ -663,6 +666,28 @@ export class Sessions {
     await this.session(profileId, sessionId);
 
     return sessionTimeline(this.store.db, profileId, sessionId);
+  }
+
+  /** Current uncommitted files, not just the files a tool happened to edit in a recent turn. */
+  async changes(profileId: string, sessionId: string, input: unknown = {}) {
+    const session = await this.session(profileId, sessionId);
+    const query = sessionChangesQuerySchema.parse(input);
+    if (!session.projectId || session.projectIds?.length) {
+      throw new GatewayError(409, 'Choose a conversation with one project to read its changes.');
+    }
+    if (session.remoteMachineId) {
+      throw new GatewayError(409, 'Changes on remote machines are not available here yet.');
+    }
+    const [project] = await this.store.db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, session.projectId), eq(projects.profileId, profileId)))
+      .limit(1);
+    assertFound(project, 'Project');
+    return checkoutChanges(
+      await projectCheckout(profileId, session.projectId, sessionId),
+      query.path,
+    );
   }
 
   /** How full this conversation's context is and what its turns have cost, for the owner. */
