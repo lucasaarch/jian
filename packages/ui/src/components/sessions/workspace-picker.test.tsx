@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MotionGlobalConfig } from 'motion/react';
 import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -36,9 +37,12 @@ const roots: (() => void)[] = [];
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   useWorkspaces.setState({ folders: [], next: undefined });
+  // The side list animates, and a frame left over after a test has no window to draw in.
+  MotionGlobalConfig.skipAnimations = true;
 });
 afterEach(() => {
   for (const unmount of roots.splice(0)) act(unmount);
+  MotionGlobalConfig.skipAnimations = false;
   document.body.innerHTML = '';
 });
 
