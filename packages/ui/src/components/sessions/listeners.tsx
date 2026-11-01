@@ -110,7 +110,7 @@ export function SessionListeners({
           positionMethod="fixed"
           collisionBoundary={[]}
         >
-          <Popover.Popup className="model-menu session-badge-popup">
+          <Popover.Popup className="model-menu session-badge-popup session-listeners-popup">
             <Popover.Title className="session-badge-title">Active listeners</Popover.Title>
             <ul className="session-listeners" aria-label="Active listeners">
               {items.map((item) => (

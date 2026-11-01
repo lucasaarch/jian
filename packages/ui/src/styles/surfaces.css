@@ -142,34 +142,46 @@
   .session-objective-note {
     color: var(--warn);
   }
+  /* As wide as what it lists, unlike the objective's column of text. */
+  .model-menu.session-listeners-popup {
+    @apply gap-1 p-3 leading-snug;
+    width: max-content;
+  }
   /* Each listener in the badge's list: what it is, what it watches, how it stands, and a cross
-     to stop it, shown on hover where there is a pointer and always on a touch screen. */
-  .session-listeners {
-    @apply -mx-2 grid list-none gap-0.5 p-0 text-xs;
+     to stop it, shown on hover where there is a pointer and always on a touch screen.
+     Named with the model menu, whose rule for its lists would otherwise put back their padding
+     and margin. The negative margins take the rows' padding back, so a row's text lines up with
+     the title and its highlight is the only thing reaching past it. */
+  .model-menu > .session-listeners {
+    @apply -mx-1.5 -mb-1.5 grid list-none gap-0.5 p-0 text-xs;
     color: var(--muted);
   }
   .session-listeners > li {
-    @apply flex min-w-0 items-start gap-2 rounded-lg px-2 py-2 transition-colors;
+    @apply relative min-w-0 rounded-lg p-1.5 transition-colors;
   }
+  /* Opening the popover focuses the first cross, so only a keyboard's focus lights a row: a plain
+     focus would leave the first one lit with no pointer on it. */
   .session-listeners > li:hover,
-  .session-listeners > li:focus-within {
+  .session-listeners > li:has(:focus-visible) {
     background: var(--glass-press);
   }
   .session-listener-text {
-    @apply grid min-w-0 flex-1 gap-1;
+    @apply grid min-w-0 gap-0.5;
   }
+  /* The cross floats over the name's row, which alone keeps room for it: a hidden button must not
+     hold empty space beside the rows under it. */
   .session-listener-name {
-    @apply truncate text-[13px] font-medium;
+    @apply truncate pr-6 text-[13px] font-medium;
     color: var(--ink);
   }
   .session-listener-target {
     @apply truncate font-mono text-[11.5px];
   }
   .session-listener-meta {
-    @apply flex flex-wrap items-center gap-x-2 gap-y-1;
+    @apply mt-1 flex flex-wrap items-center gap-x-2 gap-y-1;
   }
   .session-listener-stop {
-    @apply grid h-7 w-7 shrink-0 place-items-center rounded-md opacity-0 transition-opacity;
+    @apply absolute right-1 top-1 grid size-6 place-items-center rounded-md opacity-0 transition-opacity;
     color: var(--muted);
   }
   .session-listeners > li:hover .session-listener-stop,
