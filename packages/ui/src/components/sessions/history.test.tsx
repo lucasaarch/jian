@@ -341,6 +341,70 @@ it('keeps tool history visible when a failed run never wrote an answer', async (
   }
 });
 
+it('renders consecutive commentary as one Markdown answer', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const at = '2026-09-29T17:58:17Z';
+  const api = {
+    messages: async () => [
+      {
+        id: 'request',
+        profileId: 'profile',
+        sessionId: 'session',
+        runId: 'answer',
+        role: 'user' as const,
+        content: 'Describe bot mode.',
+        createdAt: at,
+      },
+      {
+        id: 'opening',
+        profileId: 'profile',
+        sessionId: 'session',
+        runId: 'answer',
+        role: 'assistant' as const,
+        content: 'In **Bots** mode, each bot could be a contact with:',
+        createdAt: '2026-09-29T17:58:18Z',
+      },
+      {
+        id: 'list',
+        profileId: 'profile',
+        sessionId: 'session',
+        runId: 'answer',
+        role: 'assistant' as const,
+        content: '- A name, avatar and description.\n- Its own instructions.',
+        createdAt: '2026-09-29T17:58:19Z',
+      },
+      {
+        id: 'closing',
+        profileId: 'profile',
+        sessionId: 'session',
+        runId: 'answer',
+        role: 'assistant' as const,
+        content: 'Each could use its own model and tools.',
+        createdAt: '2026-09-29T17:58:20Z',
+      },
+    ],
+    activities: async () => [],
+  };
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+
+  try {
+    await act(async () =>
+      root.render(<History api={api} profileId="profile" sessionId="session" />),
+    );
+
+    const answer = element.querySelector('.chat-line.theirs .chat-text');
+    expect(element.querySelectorAll('.chat-line.theirs')).toHaveLength(1);
+    expect(answer?.querySelector('strong')?.textContent).toBe('Bots');
+    expect(answer?.querySelectorAll('ul li')).toHaveLength(2);
+    expect(answer?.textContent).toContain('Each could use its own model and tools.');
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+
 it('lays a turn out in the order it happened, its working line at the end', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const working: Run = {

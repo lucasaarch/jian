@@ -87,6 +87,77 @@ const fallbacks = {
   cancelled: 'It stopped before it finished.',
 } as const;
 
+type DisplayMessage = {
+  message: Message;
+  lastMessage: Message;
+  index: number;
+  lastIndex: number;
+};
+
+/**
+ * Channel comments arrive in pieces, but in the panel they are one Markdown answer. Keep turns,
+ * tool activity, and messages with their own purpose as visible boundaries.
+ */
+function groupMessages(
+  messages: Message[],
+  placed: Map<string, ReturnType<typeof placeSteps>>,
+): DisplayMessage[] {
+  const groups: DisplayMessage[] = [];
+
+  for (let index = 0; index < messages.length; ) {
+    const first = messages[index];
+    if (!first) {
+      index += 1;
+      continue;
+    }
+
+    const sources = [first];
+    let previous = first;
+    let lastIndex = index;
+
+    while (lastIndex + 1 < messages.length) {
+      const next = messages[lastIndex + 1];
+      if (!next) break;
+      const runId = previous.runId;
+      const activity = runId ? placed.get(runId)?.after.get(previous.id) : undefined;
+
+      if (
+        previous.role !== 'assistant' ||
+        next.role !== 'assistant' ||
+        previous.call ||
+        next.call ||
+        previous.purpose ||
+        next.purpose ||
+        !runId ||
+        next.runId !== runId ||
+        activity?.length ||
+        /\[(?:Attached media: |File not opened, it was not sent to you: [^\]]*?media ID )[0-9a-f-]{36}/.test(
+          previous.content + next.content,
+        )
+      ) {
+        break;
+      }
+
+      sources.push(next);
+      previous = next;
+      lastIndex += 1;
+    }
+
+    groups.push({
+      message:
+        sources.length === 1
+          ? first
+          : { ...first, content: sources.map((source) => source.content).join('\n\n') },
+      lastMessage: previous,
+      index,
+      lastIndex,
+    });
+    index = lastIndex + 1;
+  }
+
+  return groups;
+}
+
 export function History({
   api,
   agent,
@@ -251,6 +322,7 @@ export function History({
       ]),
     );
   }, [messages, tools, callTools]);
+  const shownMessages = useMemo(() => groupMessages(messages, placed), [messages, placed]);
   // A turn under way keeps the tools since its last line for its working line at the end.
   const trailing = (live: Run, known: Map<string, ToolStep[]>) => {
     const place = placed.get(live.id);
@@ -505,7 +577,7 @@ export function History({
           {loading ? (
             <HistorySkeleton />
           ) : messages.length ? (
-            messages.map((message, index) => {
+            shownMessages.map(({ message, lastMessage, index, lastIndex }) => {
               const previous = messages[index - 1];
               // The tools a turn used before saying anything go above the first thing it said.
               const opensAnswer =
@@ -519,8 +591,8 @@ export function History({
               // The tools after this line, until the next: under it, where they happened. The
               // last stretch of a turn still at work belongs to its working line at the end.
               const later =
-                place && !(answering && under.has(answering) && place.last?.id === message.id)
-                  ? place.after.get(message.id)
+                place && !(answering && under.has(answering) && place.last?.id === lastMessage.id)
+                  ? place.after.get(lastMessage.id)
                   : undefined;
               const unansweredSteps =
                 message.role === 'user' &&
@@ -531,7 +603,7 @@ export function History({
                   (item) => item.role === 'assistant' && item.runId === message.runId,
                 ) &&
                 !messages
-                  .slice(index + 1)
+                  .slice(lastIndex + 1)
                   .some((item) => item.role === 'user' && item.runId === message.runId)
                   ? tools.get(message.runId)
                   : undefined;
@@ -544,7 +616,7 @@ export function History({
               };
               const live = isRunning && run?.id === message.runId;
               const crew =
-                message.runId && !live && messages[index + 1]?.runId !== message.runId
+                message.runId && !live && messages[lastIndex + 1]?.runId !== message.runId
                   ? (crewPlacement.tail.get(message.runId) ?? [])
                   : [];
               const beforeCrew = crewPlacement.before.get(message.id) ?? [];
@@ -557,7 +629,7 @@ export function History({
               const asking =
                 message.role === 'assistant' &&
                 !messages
-                  .slice(index + 1)
+                  .slice(lastIndex + 1)
                   .some((later) => later.runId === message.runId && later.role === 'assistant');
               const approval = asking && asked?.approval ? asked.approval : undefined;
               const question = asking && asked?.question ? asked.question : undefined;
@@ -662,7 +734,7 @@ export function History({
                     <div className="chat-line theirs work">
                       <Worked
                         steps={later}
-                        startedAt={message.createdAt}
+                        startedAt={lastMessage.createdAt}
                         fresh={answering === newest}
                       />
                     </div>
