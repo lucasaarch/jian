@@ -7,6 +7,7 @@ import {
   openUpdates,
   ReloadCurtain,
   searchChats,
+  settingsOf,
   ThemeSync,
   useStageShowing,
 } from '@jian/ui';
@@ -61,8 +62,13 @@ function Window() {
           else openUpdates({ check: true });
           return;
         }
-        if ('path' in target) openIn(target.gatewayId, target.path);
-        else if (target.panel === 'new-chat') openNewChat(target.gatewayId);
+        if ('path' in target) {
+          openIn(target.gatewayId, target.path);
+          // A settings address, as GitHub's and X's sign-ins link back with, opens that page over
+          // the panel too; the query stays with the panel, where the page reads its outcome.
+          const page = settingsOf(target.path.split(/[?#]/)[0] ?? '');
+          if (page !== undefined) openSettings(page || undefined);
+        } else if (target.panel === 'new-chat') openNewChat(target.gatewayId);
         else if (target.panel === 'search-chats') searchChats();
         select(target.gatewayId);
       }),

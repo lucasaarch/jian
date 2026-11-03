@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { GatewayApi } from '../../lib/api';
 import { keys } from '../../lib/query/keys';
-import { XRow } from './x-card';
+import { XCard } from './x-card';
 
 const success = vi.hoisted(() => vi.fn());
 vi.mock('sonner', () => ({ toast: { success, error: vi.fn() } }));
@@ -43,7 +43,7 @@ it('stays open after saving the app, says so, and offers to connect an account',
   await act(async () =>
     root?.render(
       <QueryClientProvider client={client}>
-        <XRow api={{ saveXApp } as unknown as GatewayApi} />
+        <XCard api={{ saveXApp } as unknown as GatewayApi} />
       </QueryClientProvider>,
     ),
   );
@@ -95,7 +95,7 @@ it('reads the accounts again when X sends the owner back, with no window focus t
   await act(async () =>
     root?.render(
       <QueryClientProvider client={client}>
-        <XRow api={{} as GatewayApi} />
+        <XCard api={{} as GatewayApi} />
       </QueryClientProvider>,
     ),
   );
@@ -122,7 +122,7 @@ it.each([
   await act(async () =>
     root?.render(
       <QueryClientProvider client={client}>
-        <XRow api={{} as GatewayApi} />
+        <XCard api={{} as GatewayApi} />
       </QueryClientProvider>,
     ),
   );

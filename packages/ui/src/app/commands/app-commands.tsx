@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Blocks,
   Cable,
   Cpu,
   Keyboard,
@@ -52,9 +53,15 @@ const pages: { id: string; title: string; keywords: string[]; icon: ReactNode }[
     icon: <Cpu size={15} />,
   },
   {
-    id: 'integrations',
-    title: 'Integrations',
-    keywords: ['github', 'mcp', 'web search', 'connect'],
+    id: 'apps',
+    title: 'Apps',
+    keywords: ['github', 'x', 'twitter', 'account', 'connect', 'integrations'],
+    icon: <Blocks size={15} />,
+  },
+  {
+    id: 'mcp-servers',
+    title: 'MCP servers',
+    keywords: ['mcp', 'server', 'tools', 'connect', 'integrations'],
     icon: <Cable size={15} />,
   },
   {

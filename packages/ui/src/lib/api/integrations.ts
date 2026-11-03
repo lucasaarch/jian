@@ -5,11 +5,11 @@ import type { GitHubMergeMethod, McpServer } from './types';
 export const integrationCalls = (client: Client) => ({
   githubIntegration: () => result(client.GET('/v1/integrations/github')),
   startGithubInstallation: (
-    // The Integrations page that started it; the gateway sends the owner back there.
+    // Where the gateway sends the owner back, which the panel opens as Apps.
     returnPath: GithubReturnPath,
   ) => result(client.POST('/v1/integrations/github/install', { body: { returnPath } })),
   startGithubAppRegistration: (
-    // The Integrations page that started it; the gateway sends the owner back there.
+    // Where the gateway sends the owner back, which the panel opens as Apps.
     returnPath: GithubReturnPath,
   ) => result(client.POST('/v1/integrations/github/manifest', { body: { returnPath } })),
   // Every connected account's, in one list; each item names the account it comes through.
@@ -83,4 +83,8 @@ export const integrationCalls = (client: Client) => ({
     result(client.POST('/v1/mcp-servers/{name}/check', { params: { path: { name } } })),
 });
 
+/**
+ * The old Integrations addresses, on purpose: every gateway, old or new, accepts only these, and
+ * both hosts open them as Apps. A new address here would break signing in through an older one.
+ */
 type GithubReturnPath = '/settings/integrations' | '/settings/integrations/github';

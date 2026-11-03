@@ -45,7 +45,7 @@ Other messages you may see:
 - A channel that does not deliver — check Channels in the panel; WhatsApp may need its QR
   code scanned again.
 - An MCP server that does not connect or needs sign-in — the owner can test or sign in under
-  Settings → Integrations.
+  Settings → MCP servers.
 - An X call refused — see \`x\`: no credits, or an account to connect again.
 - Web search refused — check the Tavily key under Providers.
 

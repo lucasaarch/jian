@@ -65,6 +65,8 @@ const GONE = [
   /→ MCPs/,
   /\bListening\b/,
   /listening for GitHub/,
+  // Settings → Integrations became Apps and MCP servers.
+  /\bIntegrations\b/,
 ];
 
 describe('what the built-in skills say', () => {

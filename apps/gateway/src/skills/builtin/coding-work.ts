@@ -51,7 +51,7 @@ it changed since you read it. That is protecting someone else's change: read it 
   connected GitHub (\`github\` skill); everything local stays with \`git\`.
 - Issues, pull requests, reviews and runs go through GitHub's MCP server: the one the GitHub
   integration attaches when the owner connected an account (\`github\` skill), or one the
-  owner configured under Settings → Integrations. Search and load its tools first, and load
+  owner configured under Settings → MCP servers. Search and load its tools first, and load
   \`github-mcp\` before create/update issue or PR calls (milestones, labels, common 422s).
   There is no \`gh\` in the image.
 

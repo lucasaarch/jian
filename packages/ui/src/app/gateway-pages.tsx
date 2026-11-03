@@ -1,18 +1,26 @@
 'use client';
 
+import { AppsPage, AppsWaiting } from './settings/apps-page';
 import { CapabilitiesPage, CapabilitiesWaiting } from './settings/capabilities-page';
-import { IntegrationsPage, IntegrationsWaiting } from './settings/integrations-page';
 import { MachinesPage, MachinesWaiting, type ThisComputer } from './settings/machines-page';
+import { McpServersPage, McpServersWaiting } from './settings/mcp-servers-page';
 import { ProvidersPage, ProvidersWaiting } from './settings/providers-page';
 import { SshKeysPage, SshKeysWaiting } from './settings/ssh-keys-page';
 
-export type GatewayPageId = 'providers' | 'models' | 'integrations' | 'ssh-keys' | 'machines';
+export type GatewayPageId =
+  | 'providers'
+  | 'models'
+  | 'apps'
+  | 'mcp-servers'
+  | 'ssh-keys'
+  | 'machines';
 
 /** Each page's shape while it is read, so the page lands where its skeleton stood. */
 export function GatewayPageWaiting({ page }: { page: GatewayPageId }) {
   if (page === 'providers') return <ProvidersWaiting />;
   if (page === 'models') return <CapabilitiesWaiting />;
-  if (page === 'integrations') return <IntegrationsWaiting />;
+  if (page === 'apps') return <AppsWaiting />;
+  if (page === 'mcp-servers') return <McpServersWaiting />;
   if (page === 'ssh-keys') return <SshKeysWaiting />;
   return <MachinesWaiting />;
 }
@@ -31,7 +39,8 @@ export function GatewayPage({
 }) {
   if (page === 'providers') return <ProvidersPage />;
   if (page === 'models') return <CapabilitiesPage />;
-  if (page === 'integrations') return <IntegrationsPage />;
+  if (page === 'apps') return <AppsPage />;
+  if (page === 'mcp-servers') return <McpServersPage />;
   if (page === 'ssh-keys') return <SshKeysPage />;
   return <MachinesPage thisComputer={thisComputer} />;
 }

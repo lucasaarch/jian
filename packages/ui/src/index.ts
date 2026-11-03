@@ -35,6 +35,7 @@ export {
   type UpdatesHost,
 } from './app/updates/app-update';
 export { AppUpdates, UpdateBadge } from './app/updates/app-updates';
+export { settingsOf } from './app/web-addresses';
 /** The web's panel: the app's chats behind a signed-in session, its overlays at addresses. */
 export { WebApp } from './app/web-app';
 export { type WindowActions, WindowControls } from './app/window-controls';

@@ -2,7 +2,7 @@ import { GatewayError } from '../../core/errors.js';
 
 /** An account that needs the owner: its grant is gone, and only connecting again brings it back. */
 export const reconnect = (handle: string) =>
-  `@${handle} is no longer connected to X. The owner has to connect it again in Settings > Integrations > X.`;
+  `@${handle} is no longer connected to X. The owner has to connect it again in Settings > Apps > X.`;
 
 /** The words the agent and the owner read: what happened and who can fix it, never a raw body. */
 export class XFailure extends GatewayError {}

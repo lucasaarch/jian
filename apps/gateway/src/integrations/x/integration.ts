@@ -20,6 +20,7 @@ import {
 import { accountLock, xAccountKey } from './tokens.js';
 
 const APP_KEY = 'x-app';
+/** The old Integrations address, which every panel opens: the new ones as Apps. */
 const RETURN_PATH = '/settings/integrations';
 
 /** Why connecting an account failed, as the panel is told in `?reason=`. */

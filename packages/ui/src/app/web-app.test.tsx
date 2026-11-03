@@ -99,14 +99,20 @@ const pressEscape = () =>
   );
 
 it('opens Settings on the page its address names, over the agent’s chats', async () => {
-  const host = await render('/settings/integrations');
+  const host = await render('/settings/apps');
 
-  expect(dialog()?.textContent).toContain('Gateway page integrations');
+  expect(dialog()?.textContent).toContain('Gateway page apps');
   expect(host.querySelector('[data-conversation]')).not.toBeNull();
   // One list: the web keeps no other gateway to tell its pages apart from.
   const nav = dialog()?.querySelector('nav[aria-label="Settings"]');
   expect(nav?.querySelectorAll('button').length).toBeGreaterThan(5);
   expect(nav?.textContent).not.toMatch(/^.*\bApp\b/);
+});
+
+it('opens Apps from the old Integrations addresses, which GitHub and X send the owner back to', async () => {
+  await render('/settings/integrations/github?github=installed');
+
+  expect(dialog()?.textContent).toContain('Gateway page apps');
 });
 
 it('keeps the address on the settings page open, and goes back to the chat on close', async () => {

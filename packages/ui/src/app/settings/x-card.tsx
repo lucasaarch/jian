@@ -16,7 +16,7 @@ import {
   ConfirmDialog,
   Overlay,
   OverlayActions,
-  SettingsRow,
+  SettingsCard,
   StatusPill,
   TextField,
 } from '../../kit';
@@ -29,11 +29,17 @@ const needsAttention = (account: XAccount) =>
   account.status === 'needs_attention' || account.missingScopes.length > 0;
 
 /**
- * X's line among the apps, on either kind of gateway: a desktop's own gets its address from the
- * app. It needs an address X accepts to send the owner back to, so a gateway without one says so
- * and offers nothing it could not finish.
+ * Whether this gateway offers X: it needs an address X accepts to send the owner back to, so a
+ * gateway without one, whatever the reason, offers nothing it could not finish.
  */
-export function XRow({ api }: { api: GatewayApi }) {
+export const xOffered = (integration: XIntegration | undefined) =>
+  Boolean(integration?.callbackUrl);
+
+/**
+ * X's card among the apps, on either kind of gateway: a desktop's own gets its address from the
+ * app.
+ */
+export function XCard({ api }: { api: GatewayApi }) {
   const { data: integration } = useQuery(queries.xIntegration());
   const accounts = useXAccounts(api);
   const [open, setOpen] = useState(false);
@@ -41,33 +47,31 @@ export function XRow({ api }: { api: GatewayApi }) {
   useXOutcome();
 
   const connected = integration?.accounts ?? [];
-  // A gateway that cannot do it, whatever the reason, does not offer it: AppsCard decides the same.
-  if (!integration?.callbackUrl) return null;
+  if (!integration || !xOffered(integration)) return null;
 
   return (
     <>
-      <SettingsRow
-        title={
-          <span className="flex items-center gap-2">
-            {/* The mark is the X of the name: written too, it would read twice. */}
-            <XLogo size={13} />
-            <span>
-              <span className="sr-only">X </span>MCP
-            </span>
+      <SettingsCard
+        icon={<XLogo size={14} />}
+        title="X"
+        status={
+          <>
             {connected.length > 0 && <StatusPill tone="good">Connected</StatusPill>}
             {connected.some(needsAttention) && <StatusPill tone="warn">Needs attention</StatusPill>}
-          </span>
+          </>
         }
-      >
-        <Action
-          tone="outline"
-          size="small"
-          aria-label={connected.length > 0 ? 'Configure X' : 'Connect X'}
-          onClick={() => setOpen(true)}
-        >
-          {connected.length > 0 ? 'Configure' : 'Connect'}
-        </Action>
-      </SettingsRow>
+        description="Post, read and search on X with your own developer app."
+        action={
+          <Action
+            tone="outline"
+            size="small"
+            aria-label={connected.length > 0 ? 'Configure X' : 'Connect X'}
+            onClick={() => setOpen(true)}
+          >
+            {connected.length > 0 ? 'Configure' : 'Connect'}
+          </Action>
+        }
+      />
       <Overlay open={open} onOpenChange={setOpen} title="X MCP" size="form">
         <XSettings
           api={api}

@@ -60,7 +60,10 @@ type GitHubInstallation = GitHubIntegrationAccount & {
   installationId: number;
 };
 
-/** A panel path, `/settings/integrations[/github]`; the route's schema has checked it. */
+/**
+ * A panel path, `/settings/integrations[/github]`, which the panel opens as Apps; the route's
+ * schema has checked it.
+ */
 export type GitHubReturnPath = string;
 
 /**
@@ -465,7 +468,8 @@ export class GitHubIntegrations {
           return pending;
         })
       : undefined;
-    // Without its state there is no telling which page started it; Integrations is where both live.
+    // Without its state there is no telling which page started it; this address, which the panel
+    // opens as Apps, is where both live.
     const origin =
       row?.returnOrigin ??
       (this.publicUrl
@@ -551,7 +555,7 @@ export class GitHubIntegrations {
     if (!(await this.config())) {
       throw new GatewayError(
         503,
-        'No GitHub App is connected to Jian. The owner can register one and connect an account under Integrations → GitHub; until then git reaches GitHub only with the SSH keys.',
+        'No GitHub App is connected to Jian. The owner can register one and connect an account under Settings → Apps → GitHub; until then git reaches GitHub only with the SSH keys.',
       );
     }
     const wanted = fullName.toLowerCase();
@@ -571,7 +575,7 @@ export class GitHubIntegrations {
     if (!accounts.length) {
       throw new GatewayError(
         503,
-        'The GitHub App is registered, but no GitHub account is connected. The owner can connect one under Integrations → GitHub.',
+        'The GitHub App is registered, but no GitHub account is connected. The owner can connect one under Settings → Apps → GitHub.',
       );
     }
     const owner = wanted.split('/')[0];
@@ -579,7 +583,7 @@ export class GitHubIntegrations {
     if (!account) {
       throw new GatewayError(
         404,
-        `The Jian GitHub App is not installed on ${fullName.split('/')[0]}, so it cannot reach ${fullName}. The owner can install it on that account from Integrations → GitHub and grant it the repository.`,
+        `The Jian GitHub App is not installed on ${fullName.split('/')[0]}, so it cannot reach ${fullName}. The owner can install it on that account from Settings → Apps → GitHub and grant it the repository.`,
       );
     }
     const repository = (await this.repositories(account.id)).find(
@@ -716,7 +720,7 @@ export class GitHubIntegrations {
 
   private async requireConfig() {
     const config = await this.config();
-    if (!config) throw new GatewayError(503, 'Register a GitHub App from Integrations first.');
+    if (!config) throw new GatewayError(503, 'Register a GitHub App from Settings → Apps first.');
     return config;
   }
 

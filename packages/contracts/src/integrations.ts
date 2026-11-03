@@ -30,9 +30,10 @@ export const githubIntegrationStatusSchema = z.strictObject({
 
 export const githubInstallSchema = z.strictObject({ url: z.url() });
 /**
- * Where GitHub sends the owner back: the gateway's Integrations page, or its GitHub details. The
- * gateway redirects to it, so it is one of those two panel paths and nothing else — never another
- * origin.
+ * Where GitHub sends the owner back: the gateway's Apps page, or its GitHub details. The gateway
+ * redirects to it, so it is one of those two panel paths and nothing else — never another origin.
+ * They are the old Integrations addresses and stay so for good: both hosts open them as Apps, and
+ * a panel and a gateway of different versions still agree on them.
  */
 export const githubReturnPathSchema = z.enum([
   '/settings/integrations',

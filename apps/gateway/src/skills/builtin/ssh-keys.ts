@@ -16,7 +16,7 @@ one.
 
 ## Git push over SSH
 
-${gitSection} When the owner connected GitHub under Integrations, \`github_git\` needs no key
+${gitSection} When the owner connected GitHub under Settings → Apps, \`github_git\` needs no key
 for GitHub repositories (\`github\` skill).
 `;
 

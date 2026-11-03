@@ -15,7 +15,7 @@ with \`search_mcp_tools\` ("create issue", "create pull request", "update issue"
 with \`load_mcp_tools\` before calling.
 
 This skill is about the server's API. To clone, fetch, pull or push a repository of the GitHub
-App the owner connected under Integrations, use \`github_git\` (the \`github\` skill), not the
+App the owner connected under Settings → Apps, use \`github_git\` (the \`github\` skill), not the
 server and not raw \`git\`.
 
 ## Auth modes the owner may have configured
@@ -63,8 +63,9 @@ A refused call is a normal tool error (not an uncertain write). Read the whole f
 - Bare \`Validation Failed\` without \`errors[]\` usually means an invalid milestone, unknown
   label, empty title, or bad assignee. Check the arguments against the rules above before
   retrying.
-- Auth or permission failures (401 / 403) are for the owner under Settings → Integrations or the PAT
-  scopes — do not loop the same call.
+- Auth or permission failures (401 / 403) are for the owner: the GitHub App's permissions under
+  Settings → Apps, or a server they added under Settings → MCP servers and its PAT scopes. Do
+  not loop the same call.
 
 ## Care
 

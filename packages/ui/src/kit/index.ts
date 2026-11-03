@@ -14,6 +14,7 @@ export { Progress } from './progress';
 export { RowInput, RowTextArea } from './row-field';
 export { Segmented } from './segmented';
 export { type FieldOption, SelectButton, SelectField } from './select-field';
+export { SettingsCard, SettingsCards } from './settings-card';
 export {
   SettingsGroup,
   SettingsLayout,
@@ -21,6 +22,7 @@ export {
   SettingsRow,
 } from './settings-layout';
 export {
+  SettingsCardSkeleton,
   SettingsPageSkeleton,
   SettingsRowSkeleton,
   SettingsRowsSkeleton,

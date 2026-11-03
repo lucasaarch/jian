@@ -5,7 +5,8 @@ const PAGES = [
   'appearance',
   'providers',
   'models',
-  'integrations',
+  'apps',
+  'mcp-servers',
   'ssh-keys',
   'machines',
 ];

@@ -26,9 +26,11 @@ const MOVED = [
   // The gateway's screens left the agent for Settings, its integrations onto one page, and
   // Remote became Machines.
   ['/agents/:profileId/:page(providers|models|ssh-keys)/:rest*', '/settings/:page'],
-  ['/agents/:profileId/integrations/:rest*', '/settings/integrations'],
+  ['/agents/:profileId/integrations/:rest*', '/settings/apps'],
   ['/agents/:profileId/remote/:rest*', '/settings/machines'],
-  ['/settings/integrations/:rest+', '/settings/integrations'],
+  // Integrations became Apps and MCP servers. Its addresses stay for good: GitHub and X send the
+  // owner back to them, as every gateway, old or new, is told to.
+  ['/settings/integrations/:rest*', '/settings/apps'],
   ['/settings/remote', '/settings/machines'],
   // An agent's skills, memories and channels are pages of its settings overlay, which these
   // older addresses open before going on to its chats.

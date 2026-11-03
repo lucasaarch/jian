@@ -51,6 +51,23 @@ export function SettingsRowSkeleton({
   );
 }
 
+/**
+ * A `SettingsCard` still on its way, at the real card's size: the mark, a name, a line of
+ * description and the button at its foot.
+ */
+export function SettingsCardSkeleton({ index = 0 }: { index?: number }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-glass-edge bg-glass-hover p-4">
+      <span className="flex items-center gap-2.5">
+        <Skeleton className="size-8 rounded-lg" />
+        <SkeletonLine className={widths[index % widths.length]} />
+      </span>
+      <SkeletonLine className="w-4/5" />
+      <Skeleton className="h-7 w-20" />
+    </div>
+  );
+}
+
 /** Several rows on their way, `count` of them, each with what `row` gives every one. */
 export function SettingsRowsSkeleton({
   count,

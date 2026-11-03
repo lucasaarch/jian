@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Blocks,
   Cable,
   Cpu,
   Keyboard,
@@ -194,11 +195,18 @@ function gatewayPages({ info, actions }: GatewaySettings): SettingsPage[] {
       keywords: ['model', 'audio', 'voice', 'speech', 'image', 'channel', 'compaction', 'defaults'],
     },
     {
-      id: 'integrations',
-      label: 'Integrations',
+      id: 'apps',
+      label: 'Apps',
+      icon: <Blocks size={15} />,
+      group,
+      keywords: ['github', 'x', 'twitter', 'app', 'account', 'connect', 'integrations'],
+    },
+    {
+      id: 'mcp-servers',
+      label: 'MCP servers',
       icon: <Cable size={15} />,
       group,
-      keywords: ['github', 'mcp', 'app', 'server'],
+      keywords: ['mcp', 'server', 'tools', 'connect', 'integrations'],
     },
     {
       id: 'ssh-keys',

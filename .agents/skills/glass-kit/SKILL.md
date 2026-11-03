@@ -25,7 +25,8 @@ from the rest is a bug.
 | List that opens | `Picker`, `MenuEntry`, `MenuDivider`, `menuPopup` |
 | Anything over the page | `Overlay`, `OverlayActions`, `ConfirmDialog` |
 | Room of pages with a list | `Overlay` with `SettingsLayout`, `SettingsGroup`, `SettingsRow` |
-| Waiting | `Skeleton`, `SkeletonRegion`, `SettingsPageSkeleton`, `Progress` |
+| Things to connect, side by side | `SettingsCards` holding a `SettingsCard` each |
+| Waiting | `Skeleton`, `SkeletonRegion`, `SettingsPageSkeleton`, `SettingsCardSkeleton`, `Progress` |
 | State or a hint | `StatusPill`, `InfoTip`, `HoverTip` |
 | An agent | `AgentFace`, `AgentHero` |
 | Search and run | `CommandPalette` |

@@ -19,8 +19,9 @@ Shared by the whole installation.
 - **Capabilities**: the models for channels, compaction, incoming audio, image generation and
   speech. Automatic selects from connected providers; Disabled turns that activity off where
   offered.
-- **Integrations**: the apps (GitHub and X) and the MCP servers, with connection tests and sign-in.
-  An app this gateway cannot offer, as one with no \`JIAN_PUBLIC_URL\`, is not listed.
+- **Apps**: GitHub and X, a card each, to connect accounts and configure them. An app this
+  gateway cannot offer, as one with no \`JIAN_PUBLIC_URL\`, is not listed.
+- **MCP servers**: the servers the owner adds by hand, with connection tests and sign-in.
 - **SSH keys**: the keys every agent uses for Git.
 - **Machines**: on a server gateway, the computers every agent can use, and how to install their
   worker. A desktop app connected to that gateway is listed as This computer.

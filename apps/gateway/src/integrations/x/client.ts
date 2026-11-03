@@ -61,7 +61,7 @@ export class XClient {
     if (missing.length > 0) {
       throw new XFailure(
         409,
-        `@${account.handle} was connected with fewer permissions than this needs (${missing.join(', ')}). Nothing was done. The owner has to connect it again in Settings > Integrations > X.`,
+        `@${account.handle} was connected with fewer permissions than this needs (${missing.join(', ')}). Nothing was done. The owner has to connect it again in Settings > Apps > X.`,
       );
     }
 

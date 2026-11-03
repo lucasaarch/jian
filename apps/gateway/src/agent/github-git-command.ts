@@ -189,7 +189,7 @@ export function gitProblem(stderr: string, repository: string): string | undefin
       text,
     )
   ) {
-    return `GitHub refused the App's token for ${repository}. Try once more; if it is refused again, the owner should check the App's installation and permissions under Integrations → GitHub.`;
+    return `GitHub refused the App's token for ${repository}. Try once more; if it is refused again, the owner should check the App's installation and permissions under Settings → Apps → GitHub.`;
   }
   if (/gh006|protected branch/.test(text)) {
     return 'GitHub refused the push: the branch is protected. Push another branch and open a pull request.';

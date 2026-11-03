@@ -274,7 +274,7 @@ export function ProjectPicker({
         ? 'No repository matches.'
         : integration?.accounts.length
           ? 'No repository is shared with this gateway yet.'
-          : 'Connect GitHub under Integrations in Settings to work on a repository.';
+          : 'Connect GitHub under Apps in Settings to work on a repository.';
   const nothing = place === 'here' ? !shownFolders.length : !shownRepositories.length;
 
   const places = place && (
