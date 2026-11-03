@@ -503,7 +503,10 @@ export function History({
           api.activities(profileId),
           group && api.people ? api.people(profileId, sessionId) : [],
           api.conversationSubagents?.(profileId, sessionId) ?? [],
-        ]);
+        ]).then(
+          (result) => ({ result }),
+          (failure) => ({ failure }),
+        );
         const history = await historyRequest;
         if (stopped) return;
         // A reload the owner asked for starts from what the gateway says now, and nothing else.
@@ -518,7 +521,9 @@ export function History({
         shown.current = true;
         setLoading(false);
 
-        const [activities, members, children] = await supportingReads;
+        const supporting = await supportingReads;
+        if ('failure' in supporting) throw supporting.failure;
+        const [activities, members, children] = supporting.result;
         const lastRun = activities
           .filter((activity) => activity.sessionId === sessionId)
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
