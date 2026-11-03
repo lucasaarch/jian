@@ -496,20 +496,35 @@ export function History({
     let stopped = false;
     const read = async () => {
       try {
-        const [history, activities, members, children] = await Promise.all([
-          api.messages(profileId, sessionId),
+        // The transcript is the part the owner came to see. Start its request with the supporting
+        // reads, but do not make the conversation wait for a second trip to fetch its timeline.
+        const historyRequest = api.messages(profileId, sessionId);
+        const supportingReads = Promise.all([
           api.activities(profileId),
           group && api.people ? api.people(profileId, sessionId) : [],
           api.conversationSubagents?.(profileId, sessionId) ?? [],
         ]);
+        const history = await historyRequest;
+        if (stopped) return;
+        // A reload the owner asked for starts from what the gateway says now, and nothing else.
+        const fresh = answered.current !== reloads;
+        setMessages((known) => joinHistory(fresh ? [] : known, history));
+        if (fresh) {
+          setAtBeginning(false);
+          setEarlier('idle');
+        }
+        setError('');
+        setBehind(false);
+        shown.current = true;
+        setLoading(false);
+
+        const [activities, members, children] = await supportingReads;
         const lastRun = activities
           .filter((activity) => activity.sessionId === sessionId)
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
           .at(-1);
         const read = await readTurns(history, lastRun?.id);
         if (stopped) return;
-        // A reload the owner asked for starts from what the gateway says now, and nothing else.
-        const fresh = answered.current !== reloads;
         // What a part that could not be read leaves as it was.
         if (read.toolsRead) {
           setTools((known) => overTurns(fresh ? new Map() : known, read.turns, read.steps));
@@ -520,18 +535,10 @@ export function History({
             overTurns(fresh ? new Map() : known, read.callTurns, read.called),
           );
         }
-        setMessages((known) => joinHistory(fresh ? [] : known, history));
-        if (fresh) {
-          setAtBeginning(false);
-          setEarlier('idle');
-        }
         setSubagents(children);
         setPeople(new Map(members.map((person) => [person.id, person])));
         setRun(lastRun);
-        setError('');
-        setBehind(false);
         setToolsUnread(read.unread);
-        shown.current = true;
         answered.current = reloads;
         keep({
           messages: history,

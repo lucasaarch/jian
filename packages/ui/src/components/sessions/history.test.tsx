@@ -46,6 +46,44 @@ it('outlines the conversation while it is loading', async () => {
   }
 });
 
+it('shows messages before the timeline finishes loading', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  let settleTimeline!: () => void;
+  const api = {
+    messages: async () => [
+      {
+        id: 'answer',
+        profileId: 'profile',
+        sessionId: 'session',
+        runId: 'run',
+        role: 'assistant' as const,
+        content: 'The conversation is ready.',
+        createdAt: '2026-10-31T10:00:00.000Z',
+      },
+    ],
+    activities: async () => [],
+    timeline: () =>
+      new Promise<Awaited<ReturnType<GatewayApi['timeline']>>>((resolve) => {
+        settleTimeline = () => resolve([]);
+      }),
+  } as unknown as GatewayApi;
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+
+  try {
+    await act(async () =>
+      root.render(<History api={api} profileId="profile" sessionId="session" />),
+    );
+    expect(element.textContent).toContain('The conversation is ready.');
+    expect(element.querySelector('[role="status"]')?.textContent).toBe('');
+    await act(async () => settleTimeline());
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+
 it('shows the agents a turn handed work to as cards, and follows one in the drawer', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   let completed = false;
