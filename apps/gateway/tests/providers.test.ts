@@ -102,8 +102,11 @@ it('keeps direct provider calls when the Caveman proxy is disabled', async () =>
   expect(url).toBe('https://api.openai.com/v1/responses');
 });
 
-it('keeps a cache boundary before changing memories without breaking subscription identity', async () => {
-  const bodies: Array<{ system: Array<{ text: string; cache_control?: unknown }> }> = [];
+it('caches the instructions and the history before a turn context that changes', async () => {
+  const bodies: Array<{
+    system: Array<{ text: string; cache_control?: unknown }>;
+    messages: Array<{ role: string; content: Array<{ text?: string; cache_control?: unknown }> }>;
+  }> = [];
   const model = await resolveModel(
     { provider: 'anthropic', modelId: 'test', credential: 'subscription' },
     {},
@@ -121,19 +124,29 @@ it('keeps a cache boundary before changing memories without breaking subscriptio
       generateText({
         model,
         maxRetries: 0,
-        system: cacheableInstructions(
-          withClaudeCodeIdentity(`Help the owner.\n\nRelevant shared memories: ${value}`),
+        system: cacheableInstructions(withClaudeCodeIdentity('Help the owner.'), '1h'),
+        messages: cacheable(
+          [
+            { role: 'user', content: 'Earlier question' },
+            { role: 'assistant', content: 'Earlier answer' },
+            { role: 'user', content: `Turn context: memories ${value}` },
+            { role: 'user', content: 'Hello' },
+          ],
           '1h',
+          3,
+          2,
         ),
-        messages: cacheable([{ role: 'user', content: 'Hello' }], '1h', 3),
       }),
     ).rejects.toThrow();
   }
-  expect(bodies[0]?.system[0]?.text).toBe(CLAUDE_CODE_IDENTITY);
-  expect(bodies[0]?.system[1]).toEqual(bodies[1]?.system[1]);
-  expect(bodies[0]?.system[1]?.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
-  expect(bodies[0]?.system[2]?.text).toContain('first');
-  expect(bodies[1]?.system[2]?.text).toContain('second');
+  const [first, second] = bodies;
+  expect(first?.system[0]?.text).toBe(CLAUDE_CODE_IDENTITY);
+  expect(first?.system[1]).toEqual(second?.system[1]);
+  expect(first?.system[1]?.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+  // The mark that the next turn reads back sits on the history, before what changes.
+  const answer = first?.messages.find((message) => message.role === 'assistant');
+  expect(answer?.content.at(-1)?.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+  expect(first?.messages.slice(0, 2)).toEqual(second?.messages.slice(0, 2));
 });
 
 it('rejects a compatible provider without an endpoint before making a request', async () => {

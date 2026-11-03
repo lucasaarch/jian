@@ -115,6 +115,8 @@ export function githubGitTools(options: {
    * does not take the agent's own commits for someone else's.
    */
   pushed?: (repository: string, branch: string, sha: string) => Promise<void> | undefined;
+  /** Told where a clone landed: a folder the conversation works in from now on. */
+  cloned?: (path: string) => Promise<void> | undefined;
 }): ToolSet {
   const { github, place, lend } = options;
 
@@ -148,6 +150,9 @@ export function githubGitTools(options: {
         const output = `${outcome.stdout}\n${outcome.stderr}`.trim();
         const done = outcome.exitCode === 0 && !outcome.timedOut;
 
+        if (done && command.action === 'clone') {
+          await Promise.resolve(options.cloned?.(path)).catch(() => undefined);
+        }
         if (done && command.action === 'push' && options.pushed) {
           await ownHead(place, path, command.branch, abortSignal)
             .then((sha) =>

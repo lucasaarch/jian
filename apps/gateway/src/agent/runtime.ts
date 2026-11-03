@@ -4,10 +4,12 @@ import {
   GATEWAY_SESSION_CHANNEL,
   JIAN_DESKTOP_CLIENT,
   LEARNING_SESSION_CHANNEL,
+  type McpServer,
   type ModelConfig,
   type Run,
   type RunApproval,
   type Session,
+  type Skill,
 } from '@jian/contracts';
 import {
   generateText,
@@ -25,6 +27,7 @@ import { z } from 'zod';
 import { isChatChannel } from '../channels/kinds.js';
 import { findContactBySession } from '../channels/repository.js';
 import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../context/budget.js';
+import { withTurnNote } from '../context/build.js';
 import { compactPrompt, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
 import { nowIso } from '../core/clock.js';
@@ -46,6 +49,7 @@ import { mergeProviderOptions, speedProviderOptions } from '../providers/speed.j
 import { readRunAction, writeRunAction } from '../runs/repository.js';
 import { createSafeFetch } from '../security/outbound.js';
 import type { ObjectiveContinuation } from '../sessions/continuation.js';
+import { dropLoads, listLoads, type SessionLoad, useLoads } from '../sessions/loads.js';
 import {
   type CavemanMode,
   cavemanMode,
@@ -53,8 +57,9 @@ import {
   ponytailMode,
   readLastClient,
 } from '../sessions/repository.js';
-import { findSkill } from '../skills/builtin/index.js';
+import { availableSkills, findSkill } from '../skills/builtin/index.js';
 import type { WebSearch } from '../web/service.js';
+import type { Workspaces } from '../workspaces/service.js';
 import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
 import { compactNote, isCompactCommand } from './compact-command.js';
@@ -87,7 +92,7 @@ import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
 import { reason, toolFailure } from './tool-failure.js';
-import { deferTools, groupMates, profileTools, type ToolServices } from './tools.js';
+import { deferTools, groupMates, profileTools, skillFor, type ToolServices } from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
 import { markSteering, outsideContent } from './untrusted.js';
 import { prepareGitAccess, prepareWorkerWorkspace } from './worker-workspace.js';
@@ -100,6 +105,12 @@ import { projectCheckout, sessionCheckouts } from './workspace-home.js';
  * fires on something that hung, not on work that takes its time.
  */
 const STALLED_AFTER_MS = 5 * 60_000;
+
+/**
+ * The share of the model's input window the conversation's loaded skills may take, kept in its
+ * instructions. Past it the least recently used goes, and is loaded again if needed.
+ */
+const PINNED_SHARE = 0.1;
 
 export type { RuntimeOptions } from './types.js';
 
@@ -114,6 +125,7 @@ export type RuntimeServices = ToolServices & {
   web?: Pick<WebSearch, 'tools' | 'browserFor' | 'access'>;
   learning?: Pick<Learning, 'consider'>;
   objectives?: Pick<ObjectiveContinuation, 'continueAfter'>;
+  workspaces?: Pick<Workspaces, 'forRun' | 'cloned' | 'touched'>;
 };
 
 /**
@@ -168,6 +180,85 @@ export class AgentRuntime {
    * the turn rather than in it. The request is counted on the run; when the model cannot
    * answer, the opening itself is the title, as before there was one to ask.
    */
+  /**
+   * The instructions of the skills this conversation loaded, written for this run, to sit at the
+   * end of its instructions. One the profile no longer has is forgotten; past a tenth of the
+   * model's window the least recently used go, and the catalog offers them again.
+   */
+  private async pinnedSkills(
+    run: Run,
+    loads: SessionLoad[],
+    servers: readonly McpServer[],
+    can: Parameters<typeof skillFor>[3],
+    projectSkills: readonly Skill[],
+  ): Promise<string> {
+    const scope = { profileId: run.profileId, sessionId: run.sessionId };
+    const policy = run.contextPolicy ?? run.profile.contextPolicy;
+    const model = run.model ?? run.profile.model;
+    const count = tokenCounter(model.provider, model.modelId);
+    const kept = loads
+      .filter((load) => load.kind === 'skill')
+      .map((load) => ({ load, skill: skillFor(run, servers, load.name, can, projectSkills) }));
+    const gone = kept.filter((item) => !item.skill).map((item) => item.load.name);
+    let held = kept.flatMap((item) =>
+      item.skill ? [{ ...item, tokens: count(item.skill.instructions) }] : [],
+    );
+    const room = Math.floor(policy.inputTokens * PINNED_SHARE);
+    const evicted: string[] = [];
+    while (held.length && held.reduce((sum, item) => sum + item.tokens, 0) > room) {
+      const oldest = held.reduce((a, b) => (a.load.usedAt <= b.load.usedAt ? a : b));
+      evicted.push(oldest.load.name);
+      held = held.filter((item) => item !== oldest);
+    }
+    await dropLoads(this.services.store.db, scope, 'skill', [...gone, ...evicted]);
+    if (!held.length) return '';
+
+    return [
+      'Loaded skills — loaded earlier in this conversation and kept here. Follow them; never load them again:',
+      ...held.map(({ skill }) => `## Skill: ${skill?.name}\n\n${skill?.instructions}`),
+    ].join('\n\n');
+  }
+
+  /**
+   * Keeps what a step loaded, and marks what it used, so the conversation keeps it through the
+   * next compaction. Whatever goes wrong here costs the keeping, never the turn.
+   */
+  private async keepLoads(
+    run: Run,
+    step: {
+      tools: string[];
+      mcp: string[];
+      used: string[];
+      gated: ReadonlySet<string>;
+      mcpToolNames: readonly string[];
+    },
+  ) {
+    const scope = { profileId: run.profileId, sessionId: run.sessionId };
+    const now = new Date();
+    const db = this.services.store.db;
+    await Promise.all([
+      useLoads(
+        db,
+        scope,
+        'tool',
+        [...step.tools, ...step.used.filter((name) => step.gated.has(name))],
+        now,
+      ),
+      useLoads(
+        db,
+        scope,
+        'mcp',
+        [...step.mcp, ...step.used.filter((name) => step.mcpToolNames.includes(name))],
+        now,
+      ),
+    ]).catch((error: unknown) => {
+      console.error(
+        'jian: what this turn loaded could not be kept',
+        error instanceof Error ? error.message : error,
+      );
+    });
+  }
+
   /**
    * Opens the gateway's watch over any pull request these answers created. Whatever happens
    * there stays there: a watch that cannot open never costs the turn.
@@ -490,6 +581,26 @@ export class AgentRuntime {
           ? await sessionCheckouts(profileId, session.id)
           : undefined;
       const xTools = !learning && this.options.x ? await this.options.x.for(run) : {};
+      const webAccess = this.services.web?.access(run, browser);
+      // What the folders this conversation works in say: their project instructions and skills.
+      // A look back has none; a workspace that cannot be read costs its instructions, not the turn.
+      const project =
+        learning || !this.services.workspaces
+          ? { sections: [], skills: [] }
+          : await this.services.workspaces
+              .forRun(
+                run,
+                // A subagent's are its conversation's: the one that started it.
+                conversation,
+                new Set(availableSkills(run.profile, skillServers).map((skill) => skill.name)),
+              )
+              .catch((error: unknown) => {
+                console.error(
+                  'jian: the workspaces of a conversation could not be read',
+                  error instanceof Error ? error.message : error,
+                );
+                return { sections: [], skills: [] };
+              });
       const tools: ToolSet = {
         ...profileTools(
           this.services,
@@ -497,8 +608,9 @@ export class AgentRuntime {
           gitAccess,
           session.remoteMachineId,
           skillServers,
-          this.services.web?.access(run, browser),
+          webAccess,
           Object.keys(xTools).length > 0,
+          project.skills,
         ),
         ...(!learning && this.options.github && gitPlace
           ? githubGitTools({
@@ -531,6 +643,17 @@ export class AgentRuntime {
                 ? {
                     pushed: (repository: string, branch: string, sha: string) =>
                       this.options.pulls?.pushed(profileId, repository, branch, sha),
+                  }
+                : {}),
+              ...(this.services.workspaces
+                ? {
+                    cloned: (path: string) =>
+                      this.services.workspaces?.cloned(
+                        profileId,
+                        run.sessionId,
+                        session.remoteMachineId ?? 'gateway',
+                        path,
+                      ),
                   }
                 : {}),
             })
@@ -583,9 +706,20 @@ export class AgentRuntime {
       if (learning) {
         for (const name of Object.keys(tools)) if (!LEARNING_TOOLS.has(name)) delete tools[name];
       }
-      // Loaded within the run and never across runs: a turn states what it needs. A look back
-      // has only a handful, all loaded from the start.
-      const loadedTools = new Set<string>(learning ? Object.keys(tools) : []);
+      // What the conversation loaded in earlier turns stays loaded: loading it again would cost a
+      // call, and dropping it would change the tools a provider caches the prompt behind. A look
+      // back has only a handful, all loaded from the start.
+      const loads = learning
+        ? []
+        : await listLoads(this.services.store.db, profileId, run.sessionId);
+      const loadedTools = new Set<string>(
+        learning
+          ? Object.keys(tools)
+          : loads
+              .filter((load) => load.kind === 'tool' && load.name in tools)
+              .map((load) => load.name),
+      );
+      const keptTools = new Set(loadedTools);
       const { gated } = deferTools(tools, loadedTools);
       const { mcpToolNames, selectedMcpTools, unavailable, catalog } = await connectMcpTools(
         servers,
@@ -600,17 +734,36 @@ export class AgentRuntime {
         },
       );
       mcpCatalog = catalog;
+      for (const load of loads) {
+        if (load.kind === 'mcp' && mcpToolNames.includes(load.name))
+          selectedMcpTools.add(load.name);
+      }
+      const keptMcp = new Set(selectedMcpTools);
+      const pinned = learning
+        ? ''
+        : await this.pinnedSkills(
+            run,
+            loads,
+            skillServers,
+            {
+              web: webAccess ?? { browser: false, inspects: true, subagent: Boolean(run.subagent) },
+              xConnected: Object.keys(xTools).length > 0,
+            },
+            project.skills,
+          );
       if (githubMcpFailure) unavailable.push(githubMcpFailure);
 
-      const mcpNote = [availableNote(catalog), unavailableNote(unavailable)]
-        .filter(Boolean)
-        .join('\n\n');
+      // Which servers answered is said with the turn, not the instructions: one down for a turn
+      // would otherwise change the prefix the provider caches.
+      const mcpNote = availableNote(catalog);
+      const mcpDown = unavailableNote(unavailable);
 
       for (const server of unavailable) {
         console.warn(`jian: MCP server ${server.name} is unavailable — ${server.reason}`);
       }
 
-      const context = await this.services.contexts.context(run, skillServers);
+      const context = await this.services.contexts.context(run, skillServers, project);
+      if (mcpDown) withTurnNote(context, mcpDown);
       compactCommand = isCompactCommand(run.input);
       if (compactCommand) compactionRequested = true;
       const cavemanSkill = findSkill(run.profile, skillServers, 'caveman');
@@ -949,7 +1102,11 @@ export class AgentRuntime {
       const currentPonytailMode = codingSkill
         ? await ponytailMode(this.services.store.db, profileId, run.sessionId)
         : 'off';
-      let codingInstructions = instructionsForCaveman(instructionsForMode(currentPonytailMode));
+      // Last, since it is what changes most often: a skill loaded changes only the end.
+      const withPinned = (system: string) => (pinned ? `${system}\n\n${pinned}` : system);
+      let codingInstructions = withPinned(
+        instructionsForCaveman(instructionsForMode(currentPonytailMode)),
+      );
 
       const agent = new ToolLoopAgent({
         model,
@@ -983,11 +1140,13 @@ export class AgentRuntime {
                 profileId,
                 run.sessionId,
               );
-            codingInstructions = instructionsForCaveman(
-              instructionsForMode(
-                codingSkill
-                  ? await ponytailMode(this.services.store.db, profileId, run.sessionId)
-                  : 'off',
+            codingInstructions = withPinned(
+              instructionsForCaveman(
+                instructionsForMode(
+                  codingSkill
+                    ? await ponytailMode(this.services.store.db, profileId, run.sessionId)
+                    : 'off',
+                ),
               ),
             );
             progress.redirected();
@@ -1203,7 +1362,7 @@ export class AgentRuntime {
             // Only Anthropic needs telling: OpenAI matches a long prefix on its own.
             messages:
               config.provider === 'anthropic'
-                ? cacheable(fitted.messages, cacheTtl, 3)
+                ? cacheable(fitted.messages, cacheTtl, 3, currentStartIndex)
                 : fitted.messages,
             activeTools: compactCommand ? [] : activeNames,
             maxOutputTokens: policy.outputTokens,
@@ -1236,6 +1395,31 @@ export class AgentRuntime {
               result: redactOutput(result.output, secrets),
             })),
           });
+
+          // An instruction file or a skill the agent wrote is read again next turn.
+          for (const call of toolCalls) {
+            const path = (call.input as { path?: unknown } | undefined)?.path;
+            if (
+              (call.toolName === 'write_file' || call.toolName === 'edit_file') &&
+              typeof path === 'string'
+            ) {
+              await this.services.workspaces
+                ?.touched(profileId, session.remoteMachineId ?? 'gateway', path)
+                .catch(() => undefined);
+            }
+          }
+
+          if (!learning) {
+            await this.keepLoads(run, {
+              tools: [...loadedTools].filter((name) => !keptTools.has(name)),
+              mcp: [...selectedMcpTools].filter((name) => !keptMcp.has(name)),
+              used: toolResults.map((result) => result.toolName),
+              gated,
+              mcpToolNames,
+            });
+            for (const name of loadedTools) keptTools.add(name);
+            for (const name of selectedMcpTools) keptMcp.add(name);
+          }
 
           await this.watchCreated(
             profileId,

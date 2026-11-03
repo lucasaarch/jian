@@ -11,6 +11,7 @@ import {
 } from '../src/sessions/objective.js';
 import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
+import { turnOf } from './helpers/turn.js';
 
 const input = {
   name: 'Atlas',
@@ -477,8 +478,8 @@ it('injects the open objective into the prompt', async () => {
     requestKey: 'ctx',
   });
   const context = await services.contexts.context(run, []);
-  expect(context.system).toContain('Finish the WhatsApp loop fix');
-  expect(context.system).toContain('complete_session_objective');
+  expect(turnOf(context)).toContain('Finish the WhatsApp loop fix');
+  expect(turnOf(context)).toContain('complete_session_objective');
 });
 
 it('prompt injection sanitizes a dump-shaped objective', async () => {
@@ -496,7 +497,7 @@ it('prompt injection sanitizes a dump-shaped objective', async () => {
     requestKey: 'ctx-dump',
   });
   const context = await services.contexts.context(run, []);
-  expect(context.system).not.toContain('Last login:');
-  expect(context.system).not.toContain('ERR_UNKNOWN_FILE_EXTENSION');
-  expect(context.system).toContain('Continue prior open work');
+  expect(turnOf(context)).not.toContain('Last login:');
+  expect(turnOf(context)).not.toContain('ERR_UNKNOWN_FILE_EXTENSION');
+  expect(turnOf(context)).toContain('Continue prior open work');
 });

@@ -557,6 +557,52 @@ export const schedules = pgTable(
 );
 
 /**
+ * What a workspace folder told the agent when it was last read: its project instructions, its
+ * skills and its other instruction files. One per place — the gateway, or a machine — and path,
+ * shared by every conversation working there. The prompt is written from this, never from the
+ * disk directly, so a read that finds nothing new leaves the prompt a provider caches alone.
+ */
+export const workspaceSnapshots = pgTable(
+  'workspace_snapshots',
+  {
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    // `gateway`, or the id of the machine the folder is on.
+    location: text('location').notNull(),
+    path: text('path').notNull(),
+    content: jsonb('content').$type<Record<string, unknown>>().notNull(),
+    hash: text('hash').notNull(),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.profileId, table.location, table.path] })],
+);
+
+/**
+ * What a conversation has loaded and keeps: skills, whose instructions stay in its prompt, tools
+ * of a deferred group, and MCP tools chosen by search. Kept across turns so nothing is loaded
+ * twice, and the prompt a provider caches stays the same from turn to turn. Compaction drops
+ * what was not used since the one before (`usedSinceCompaction`).
+ */
+export const sessionLoads = pgTable(
+  'session_loads',
+  {
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    kind: text('kind').$type<'skill' | 'tool' | 'mcp' | 'workspace'>().notNull(),
+    name: text('name').notNull(),
+    loadedAt: timestamp('loaded_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }).notNull(),
+    usedSinceCompaction: boolean('used_since_compaction').notNull().default(true),
+  },
+  (table) => [primaryKey({ columns: [table.sessionId, table.kind, table.name] })],
+);
+
+/**
  * A pull request the agent created, which the gateway watches for it until it is merged or
  * closed. The agent never opens or ends one. `state` holds only what the next look compares
  * against: ids seen, each check's outcome on the head, and the ETag of each address read.

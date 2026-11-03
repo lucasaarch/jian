@@ -1,6 +1,7 @@
 import { MEMORY_LINK_LIMIT } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
 import { testServices } from './helpers/services.js';
+import { turnOf } from './helpers/turn.js';
 
 async function setup() {
   const services = await testServices();
@@ -16,7 +17,7 @@ async function setup() {
   const recalled = async (text: string, key: string) => {
     const run = await services.runs.submit(profile.id, session.id, { text, requestKey: key });
 
-    return (await services.contexts.context(run, [])).system;
+    return turnOf(await services.contexts.context(run, []));
   };
 
   return { services, profile, other, note, recalled };

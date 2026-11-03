@@ -509,3 +509,40 @@ export async function listContextToolCheckpoints(
     )
     .orderBy(asc(checkpoints.createdAt), asc(checkpoints.id));
 }
+
+/**
+ * What a tool call of this conversation returned, whole, as its run recorded it; undefined for a
+ * call of another conversation or profile, which is not found rather than read.
+ */
+export async function recordedToolResult(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  toolCallId: string,
+): Promise<unknown> {
+  const result = await db.execute(sql`
+    select coalesce(
+      (
+        select item->'result' from jsonb_array_elements(
+          case when jsonb_typeof(${checkpoints.data}->'tools') = 'array'
+          then ${checkpoints.data}->'tools' else '[]'::jsonb end
+        ) as item
+        where item->>'toolCallId' = ${toolCallId}
+        limit 1
+      ),
+      case when ${checkpoints.data}->>'toolCallId' = ${toolCallId}
+        then ${checkpoints.data}->'result' end
+    ) as result
+    from ${checkpoints}
+    join ${runs} on ${runs.id} = ${checkpoints.runId}
+    where ${checkpoints.profileId} = ${profileId}
+      and ${runs.sessionId} = ${sessionId}
+      and ${checkpoints.data}->>'phase' in (
+        'step-completed', 'tool-completed', 'tool-failed', 'tool-uncertain', 'tool-refused'
+      )
+    order by ${checkpoints.createdAt} desc
+  `);
+  // Both drivers, node-postgres and PGlite, answer a raw query with its rows under `rows`.
+  const { rows } = result as unknown as { rows: { result: unknown }[] };
+  return rows.find((row) => row.result !== null && row.result !== undefined)?.result;
+}

@@ -9,6 +9,7 @@ import {
   memorySchema,
   messageReactionInputSchema,
   type Run,
+  type Skill,
 } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
@@ -26,7 +27,9 @@ import type { PeerAgents } from '../peers/port.js';
 import type { ProfileAdmin } from '../profiles/port.js';
 import type { Remote } from '../remote/service.js';
 import type { RunExecution, RunReader } from '../runs/port.js';
+import { recordedToolResult } from '../runs/repository.js';
 import type { Schedules } from '../schedules/service.js';
+import { isLoaded, useLoads } from '../sessions/loads.js';
 import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions/port.js';
 import type { Sessions } from '../sessions/service.js';
 import { findSkill } from '../skills/builtin/index.js';
@@ -106,6 +109,25 @@ export type ToolServices = {
   remote?: Pick<Remote, 'list' | 'execute' | 'executeComputer' | 'update'>;
 };
 
+/**
+ * A skill as this run may load it: the owner's own of that name as they wrote it, and the two
+ * built-in ones that say only what the run can do, written for this run.
+ */
+export function skillFor(
+  run: Run,
+  servers: readonly McpServer[],
+  name: string,
+  can: { web: WebAccess; xConnected: boolean },
+  /** The skills of the conversation's workspaces, named apart from the profile's already. */
+  projectSkills: readonly Skill[] = [],
+): Skill | undefined {
+  const skill =
+    findSkill(run.profile, servers, name) ?? projectSkills.find((item) => item.name === name);
+  if (skill === webResearch) return webResearchFor(can.web);
+  if (skill === x) return xFor({ connected: can.xConnected, subagent: Boolean(run.subagent) });
+  return skill;
+}
+
 export function profileTools(
   services: ToolServices,
   run: Run,
@@ -117,6 +139,8 @@ export function profileTools(
   web: WebAccess = { browser: false, inspects: true, subagent: Boolean(run.subagent) },
   /** Whether this run has X's tools, which the skill about them goes by. */
   xConnected = false,
+  /** The skills the conversation's workspaces offer. */
+  projectSkills: readonly Skill[] = [],
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -444,18 +468,32 @@ export function profileTools(
     }),
 
     load_skill: tool({
-      description: 'Load instructions for a skill enabled on this profile.',
+      description:
+        'Load instructions for a skill enabled on this profile. A skill loaded once stays in your instructions for the rest of the conversation: never load one the catalog marks loaded.',
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
-        const skill = findSkill(run.profile, servers, name);
+        const skill = skillFor(run, servers, name, { web, xConnected }, projectSkills);
 
         if (!skill) {
           throw new GatewayError(404, 'Skill not found');
         }
 
-        // The owner's own skill of that name is theirs as they wrote it.
-        if (skill === webResearch) return webResearchFor(web);
-        if (skill === x) return xFor({ connected: xConnected, subagent: Boolean(run.subagent) });
+        // Kept per conversation: a subagent's is its own, and starts with nothing loaded. What
+        // goes wrong keeping it costs the keeping: the skill is still answered with.
+        const scope = { profileId: run.profileId, sessionId: run.sessionId };
+        const kept = await isLoaded(services.store.db, scope, 'skill', skill.name).catch(
+          () => false,
+        );
+        await useLoads(services.store.db, scope, 'skill', [skill.name], new Date()).catch(
+          () => undefined,
+        );
+        if (kept) {
+          return {
+            name: skill.name,
+            loaded: true,
+            note: 'Already loaded in this conversation: its instructions are under Loaded skills in your instructions, or above in this turn if you loaded it just now. Follow them; there is nothing to load.',
+          };
+        }
         return skill;
       },
     }),
@@ -502,19 +540,37 @@ export function profileTools(
 
     read_artifact: tool({
       description:
-        'Read the full stored tool result one page at a time. Follow nextOffset until null; do not review a diff or claim complete coverage from a preview alone. Offsets count UTF-16 code units.',
+        'Read a full tool result one page at a time: a stored one by its artifactId, or one of an earlier turn of this conversation by its toolCallId, when the history shows it cut. Follow nextOffset until null; do not review a diff or claim complete coverage from a preview alone. Offsets count UTF-16 code units.',
       inputSchema: z.object({
-        artifactId: z.string().uuid(),
+        artifactId: z.string().uuid().optional(),
+        toolCallId: z.string().min(1).max(200).optional(),
         offset: z.number().int().min(0).default(0),
         limit: z.number().int().min(1).max(16000).default(16000),
       }),
-      execute: async ({ artifactId, offset, limit }) => {
+      execute: async ({ artifactId, toolCallId, offset, limit }) => {
+        if (!artifactId === !toolCallId) {
+          throw new GatewayError(400, 'Name either an artifactId or a toolCallId.');
+        }
+        if (toolCallId) {
+          const recorded = await recordedToolResult(
+            services.store.db,
+            run.profileId,
+            run.sessionId,
+            toolCallId,
+          );
+          if (recorded === undefined) throw new GatewayError(404, 'Tool call not found');
+          const content =
+            typeof recorded === 'string' ? recorded : (JSON.stringify(recorded, null, 2) ?? '');
+          return { toolCallId, ...artifactPage(content, offset, limit, run) };
+        }
         // The profile in the where clause is the owner check: another profile's artifact is
         // not found rather than read, whatever id the model guesses.
         const [record] = await services.store.db
           .select({ content: artifacts.content })
           .from(artifacts)
-          .where(and(eq(artifacts.id, artifactId), eq(artifacts.profileId, run.profileId)))
+          .where(
+            and(eq(artifacts.id, artifactId as string), eq(artifacts.profileId, run.profileId)),
+          )
           .limit(1);
 
         const { content } = assertFound(record, 'Artifact');

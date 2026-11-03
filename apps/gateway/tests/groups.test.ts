@@ -263,9 +263,13 @@ describe('group conversations', () => {
       if (!run) throw new Error('Run missing');
 
       const context = await f.services.contexts.context(run, []);
-      const transcript = context.messages.map((message) => message.content).join('\n\n');
+      const transcript = context.messages
+        .filter((_, index) => index !== context.currentStartIndex)
+        .map((message) => message.content)
+        .join('\n\n');
 
-      expect(context.messages).toHaveLength(2);
+      // The room as one message, then the turn context and the call that wakes the agent.
+      expect(context.messages).toHaveLength(3);
 
       // What the agent only heard is read back through the same contract as anything else.
       const history = await f.app.inject({

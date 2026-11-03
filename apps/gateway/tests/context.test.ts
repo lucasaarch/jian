@@ -211,7 +211,8 @@ describe('context', () => {
 
     const context = await services.contexts.context(run, []);
 
-    expect(context.messages).toEqual([{ role: 'user', content: 'Café 世界 🌍' }]);
+    expect(context.messages.at(-1)).toEqual({ role: 'user', content: 'Café 世界 🌍' });
+    expect(context.messages.at(-2)?.content).toMatch(/^Turn context/);
   });
 
   it('includes structured identity and a skill catalog while selecting relevant memories', async () => {
@@ -236,12 +237,17 @@ describe('context', () => {
       history: await services.sessions.messages(profile.id, run.sessionId),
     });
 
+    const turn = context.messages.at(-2)?.content;
+
     expect(context.system).toContain('Researcher');
     expect(context.system).toContain('No external writes');
-    expect(context.system).toContain('Deployment completed at 21:00');
-    expect(context.system).not.toContain('Forecast is sunny');
     expect(context.system).toContain('Search the catalog');
     expect(context.system).not.toContain('Private skill body');
+    // What the turn recalls changes from turn to turn: it is said with the turn, not the
+    // instructions a provider caches.
+    expect(context.system).not.toContain('Deployment completed at 21:00');
+    expect(turn).toContain('Deployment completed at 21:00');
+    expect(turn).not.toContain('Forecast is sunny');
     expect(context.messages.at(-1)?.content).toBe('When was the deployment?');
   });
 

@@ -34,6 +34,7 @@ import type { Store } from './storage/database.js';
 import { Work } from './tasks/service.js';
 import { machineBrowser } from './web/machine-browser.js';
 import { WebSearch } from './web/service.js';
+import { Workspaces } from './workspaces/service.js';
 
 export type Services = {
   profiles: Profiles;
@@ -59,6 +60,7 @@ export type Services = {
   work: Work;
   objectives: ObjectiveContinuation;
   pulls: PullWatchers;
+  workspaces: Workspaces;
   vault: Vault;
   gatewayVault: GatewayVault;
   sshKeys: SshKeys;
@@ -183,6 +185,11 @@ export function buildServices({
     work: new Work(store, sessions, runs, clock, decisions.judge),
     objectives: new ObjectiveContinuation(store, sessions, runs, clock),
     pulls,
+    workspaces: new Workspaces(
+      store,
+      (profileId, machineId, input, signal) => remote.execute(profileId, machineId, input, signal),
+      clock,
+    ),
     vault,
     gatewayVault,
     sshKeys: new SshKeys(store, gatewayVault),

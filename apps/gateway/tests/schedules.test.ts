@@ -6,6 +6,7 @@ import { listDeliveries } from '../src/channels/repository.js';
 import { Channels } from '../src/channels/service.js';
 import { TelegramChannel } from '../src/channels/telegram.js';
 import { testServices } from './helpers/services.js';
+import { turnOf } from './helpers/turn.js';
 
 const zone = 'America/Sao_Paulo';
 
@@ -446,7 +447,8 @@ describe('schedules', () => {
       text: 'Hi again',
       requestKey: 't',
     });
-    const system = (await f.services.contexts.context(run, [])).system;
+    // The time changes every turn, so it is said with the turn, not the cached instructions.
+    const system = turnOf(await f.services.contexts.context(run, []));
 
     expect(system).toContain('Thursday, 24 September 2026 at 07:00 in America/Sao_Paulo');
   });

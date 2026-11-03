@@ -32,6 +32,7 @@ import type { Queryable, Store } from '../storage/database.js';
 import { messages, projects, remoteMachines, runs } from '../storage/schema.js';
 import { checkoutChanges } from './changes.js';
 import { listCreatedPullAnswers } from './created-pulls.js';
+import { compactLoads } from './loads.js';
 import { objectiveAt, sanitizeObjectiveText } from './objective.js';
 import type { SessionStart } from './port.js';
 import { pullLinksIn } from './pull-links.js';
@@ -799,5 +800,7 @@ export class Sessions {
     await this.session(profileId, sessionId);
 
     await writeSessionSummary(this.store.db, sessionId, summary, upTo, throughId);
+    // What the summary replaced may have been all a skill or a tool was kept for.
+    await compactLoads(this.store.db, sessionId);
   }
 }

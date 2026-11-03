@@ -6,9 +6,10 @@ export const managingContext: Skill = {
     'Use before a long stretch of work, when the Context line says the turn starts above about half full, when a conversation changes subject, or when you lose track of what was said earlier.',
   instructions: `# Your context
 
-Your context is everything sent to the model on each step: your instructions, memories,
-the conversation so far, and every tool result of this turn. It has a budget. The last line
-of your instructions says how full it is when the turn starts: "Context: this turn starts at
+Your context is everything sent to the model on each step: your instructions, the
+conversation so far, the turn context, and every tool result of this turn. It has a budget.
+The turn context, just before each request, holds the time, the memories that may help, what
+else is running, and a last line on how full the request is: "Context: this turn starts at
 about 41,000 of 200,000 tokens (21%)". Each tool result adds to it until the turn ends.
 
 ## What the gateway does on its own
@@ -17,6 +18,14 @@ about 41,000 of 200,000 tokens (21%)". Each tool result adds to it until the tur
   in the conversation. Recent work and the latest request are kept whole.
 - A tool result too large to fit is stored, and you get an artifact id to read it a page at a
   time with \`read_artifact\`.
+- The tool results of your two latest turns stay whole in the conversation. Older ones are cut
+  to their input and the head of their result, marked \`cut\`: \`read_artifact\` with the
+  call's id as \`toolCallId\` returns the whole result. Read it back rather than repeating a
+  call, above all one that changed something.
+- A skill you load stays in your instructions, under Loaded skills, for the rest of the
+  conversation, and the catalog marks it loaded: never load it again. Tool groups and MCP tools
+  you load stay loaded too. At a compaction, what you did not use since the one before is let go,
+  and loaded again if you need it.
 
 If even the current request and fixed instructions cannot fit, the gateway reports an explicit
 context error instead of silently dropping conversation turns. What you lose to a successful

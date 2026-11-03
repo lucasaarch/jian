@@ -1,6 +1,7 @@
 import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
 import { testServices } from './helpers/services.js';
+import { turnOf } from './helpers/turn.js';
 
 const profileInput = {
   name: 'Atlas',
@@ -42,7 +43,7 @@ it('makes one session’s memory visible to another while isolating other profil
 
   const context = await services.contexts.context(run, []);
 
-  expect(context.system).toContain('Deploy release at 21:00.');
+  expect(turnOf(context)).toContain('Deploy release at 21:00.');
   expect(await services.memories.memories(otherProfile.id)).toEqual([]);
 
   await expect(services.sessions.messages(otherProfile.id, session.id)).rejects.toMatchObject({
@@ -69,7 +70,7 @@ it('allows parallel sessions and exposes their actual activity', async () => {
     requestKey: 'b',
   });
 
-  expect((await services.contexts.context(otherRun, [])).system).toContain('Deploy version 2');
+  expect(turnOf(await services.contexts.context(otherRun, []))).toContain('Deploy version 2');
 
   expect((await services.runs.activities(profile.id)).map((r) => r.status)).toEqual(
     expect.arrayContaining(['running', 'queued']),

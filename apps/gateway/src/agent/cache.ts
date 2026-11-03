@@ -43,25 +43,26 @@ const BREAKPOINTS = 4;
  */
 export type CacheTtl = '5m' | '1h';
 
-/** Keep the reusable instructions cached when retrieved memories or the session summary change. */
+/**
+ * The instructions as one cached block. They hold nothing that changes from turn to turn — the
+ * time, the memories and the rest go in the turn context — so the mark at their end is read back
+ * for the whole conversation.
+ */
 export function cacheableInstructions(system: string, ttl: CacheTtl): SystemModelMessage[] {
   const messages: SystemModelMessage[] = [];
   if (system.startsWith(CLAUDE_CODE_IDENTITY)) {
     messages.push({ role: 'system', content: CLAUDE_CODE_IDENTITY });
     system = system.slice(CLAUDE_CODE_IDENTITY.length).trim();
   }
-  const boundary = system.indexOf('Relevant shared memories:');
-  const stable = boundary < 0 ? system : system.slice(0, boundary).trimEnd();
   messages.push({
     role: 'system',
-    content: stable,
+    content: system,
     providerOptions: {
       anthropic: {
         cacheControl: ttl === '1h' ? { type: 'ephemeral', ttl } : { type: 'ephemeral' },
       },
     },
   });
-  if (boundary >= 0) messages.push({ role: 'system', content: system.slice(boundary) });
   return messages;
 }
 
@@ -78,11 +79,11 @@ function markable(message: ModelMessage): boolean {
  * Anthropic reuses a prompt only up to a point the request marks, and re-reading that prefix
  * costs a tenth of sending it. The marks go where the prompt stops changing:
  *
- * - on the first message, which puts the tool definitions and the instructions behind it —
- *   the largest stable block of every request, and identical across a whole conversation;
- * - on the last two messages, so the turns and tool results already accumulated are read back
- *   instead of re-sent. A mark at the head alone would cache the head and nothing else, since
- *   what is reused is the prefix that ends at a mark.
+ * - on the last message of the history, before the turn context (`turnStart`): the prefix
+ *   that is the same next turn, so the next turn reads the whole history back. Without
+ *   `turnStart`, on the first message, behind which are the tools and the instructions;
+ * - on the last two messages, so the steps of this turn are read back by the next step instead
+ *   of re-sent. What is reused is the prefix that ends at a mark.
  *
  * Marks are stripped before being placed: the loop hands its own messages back on every step,
  * and leaving the old ones would add a breakpoint per step until Anthropic refused them. A
@@ -93,6 +94,7 @@ export function cacheable(
   messages: ModelMessage[],
   ttl: CacheTtl = '5m',
   breakpoints = BREAKPOINTS,
+  turnStart?: number,
 ): ModelMessage[] {
   const eligible = messages.flatMap((message, index) => (markable(message) ? [index] : []));
 
@@ -100,7 +102,9 @@ export function cacheable(
     return messages;
   }
 
-  const head = eligible[0] as number;
+  const history =
+    turnStart === undefined ? undefined : eligible.filter((index) => index < turnStart).at(-1);
+  const head = history ?? (eligible[0] as number);
   const marks = new Set([head, ...eligible.slice(-(breakpoints - 1))]);
 
   return messages.map((message, index) => {

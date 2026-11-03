@@ -8,6 +8,7 @@ import { type Answer, Decisions, type Judge, type Question } from '../src/decisi
 import { Learning } from '../src/learning/service.js';
 import { lightEffort } from '../src/providers/effort.js';
 import { testServices } from './helpers/services.js';
+import { turnOf } from './helpers/turn.js';
 
 type Asked = { state: unknown; questions: Record<string, Question> };
 
@@ -169,9 +170,9 @@ describe('judging the turn before it starts', () => {
     const context = await contexts.context(f.run, []);
 
     expect(calls).toHaveLength(1);
-    expect(context.system).toContain('dentist-appointment');
-    expect(context.system).not.toContain('dentist-parking');
-    expect(context.system).toContain('suggests the skill "schedules"');
+    expect(turnOf(context)).toContain('dentist-appointment');
+    expect(turnOf(context)).not.toContain('dentist-parking');
+    expect(turnOf(context)).toContain('suggests the skill "schedules"');
     expect(context.light).toBe(true);
   });
 

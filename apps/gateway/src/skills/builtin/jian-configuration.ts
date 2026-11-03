@@ -44,6 +44,10 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   repositories, and where it runs.
 - **Model, effort and protection** are chosen in the composer, for that chat. Picking one also makes
   it what new chats start with.
+- **Project instructions**: in a conversation that works in folders or repositories, the
+  AGENTS.md of each (CLAUDE.md where there is none) is in your instructions, and the skills in
+  their .agents/skills and .claude/skills folders are in your catalog. They are read again when
+  they change; nested instruction files are listed for you to read when you work there.
 - **The Inspector**, beside the conversation, holds pull requests, subagents and, in the desktop
   app, the browser.
 - **The conversation's badges**, where it runs, show its objective and how many pull requests

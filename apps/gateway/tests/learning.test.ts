@@ -108,7 +108,9 @@ it('tells the agent how full its context is when the turn starts', async () => {
     text: 'Hello',
     requestKey: 'context',
   });
-  const { system } = await f.services.contexts.context(run, []);
+  const { messages } = await f.services.contexts.context(run, []);
 
-  expect(system).toMatch(/Context: this turn starts at about [\d,]+ of 32,000 tokens \(\d+%\)/);
+  expect(messages.at(-2)?.content).toMatch(
+    /Context: this turn starts at about [\d,]+ of 32,000 tokens \(\d+%\)/,
+  );
 });

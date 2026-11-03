@@ -7,6 +7,7 @@ import { insertMessage } from '../src/sessions/repository.js';
 import { mockModel } from './helpers/model.js';
 import { events } from './helpers/rows.js';
 import { testServices } from './helpers/services.js';
+import { turnOf } from './helpers/turn.js';
 
 const input = {
   name: 'Atlas',
@@ -366,7 +367,12 @@ it('ignores Ponytail commands submitted by internal runs', async () => {
 
 it('applies an owner mode change sent while a run is active on its next step', async () => {
   const services = await testServices();
-  const profile = await services.profiles.createProfile({ ...input, allowShell: true });
+  // Room enough that loading the files tools does not start a compaction in the middle.
+  const profile = await services.profiles.createProfile({
+    ...input,
+    allowShell: true,
+    contextPolicy: { inputTokens: 64_000 },
+  });
   const session = await services.sessions.createSession(profile.id, { title: 'Code' });
   const run = await services.runs.submit(profile.id, session.id, {
     text: 'Review this code',
@@ -557,7 +563,7 @@ describe('agent runtime', () => {
       requestKey: 'two',
     });
 
-    expect((await services.contexts.context(otherRun, [])).system).toContain('Deploy at 21:00');
+    expect(turnOf(await services.contexts.context(otherRun, []))).toContain('Deploy at 21:00');
 
     expect(
       (await events(services.store, profile.id, 0)).filter(

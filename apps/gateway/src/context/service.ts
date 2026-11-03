@@ -12,6 +12,7 @@ import type { Judge } from '../decisions/service.js';
 import { findMemories, searchMemories, withLinks } from '../memories/repository.js';
 import type { RunReader } from '../runs/port.js';
 import { listContextToolCheckpoints } from '../runs/repository.js';
+import { listLoads } from '../sessions/loads.js';
 import type { SessionReader } from '../sessions/port.js';
 import { availableSkills } from '../skills/builtin/index.js';
 import type { Store } from '../storage/database.js';
@@ -19,7 +20,7 @@ import { projects } from '../storage/schema.js';
 import { buildContext, rankMemories } from './build.js';
 import { judgeTurn } from './judgments.js';
 import type { ContextSource } from './port.js';
-import { toolHistoryByRun, withToolHistory } from './tool-history.js';
+import { toolRecordsByRun, withToolHistory } from './tool-history.js';
 
 /** What a chat works on beyond one project: told to the agent, since it is why it is here. */
 function workspaceGuidance(
@@ -72,10 +73,14 @@ export class Contexts {
       ),
     ];
     const checkpoints = await listContextToolCheckpoints(this.store.db, run.profileId, runIds);
-    return withToolHistory(history, toolHistoryByRun(checkpoints, summary), run.id);
+    return withToolHistory(history, toolRecordsByRun(checkpoints, summary), run.id);
   }
 
-  async context(run: Run, servers: readonly McpServer[]): ReturnType<ContextSource['context']> {
+  async context(
+    run: Run,
+    servers: readonly McpServer[],
+    workspaces?: Parameters<ContextSource['context']>[2],
+  ): ReturnType<ContextSource['context']> {
     const worker = run.subagent;
     const words = [...new Set(run.input.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])].slice(
       0,
@@ -138,31 +143,6 @@ export class Contexts {
           })
         : {};
 
-    const built = buildContext(run, {
-      servers,
-      ...(judged.relevance ? { relevance: judged.relevance } : {}),
-      ...(judged.skill ? { suggestedSkill: judged.skill } : {}),
-      ...(this.settings ? { timeZone: await this.settings.timeZone() } : {}),
-      memories,
-      linked,
-      activities,
-      // Name this conversation directly; there is no longer a profile-wide default chat.
-      conversations: [
-        ...(!worker && session.channel === GATEWAY_SESSION_CHANNEL
-          ? [{ sessionId: session.id, channel: 'gateway', with: 'your owner, in Jian Chats' }]
-          : []),
-        ...conversations.map((contact) => ({
-          sessionId: contact.sessionId as string,
-          channel: contact.type,
-          with: contact.displayName ?? contact.actorId,
-          ...(contact.scope === 'group' ? { group: true } : {}),
-        })),
-      ],
-      history: await this.historyWithTools(run, history, session.summary),
-      ...(session.summary ? { summary: session.summary } : {}),
-      ...(session.objective ? { objective: session.objective } : {}),
-    });
-
     const currentIndex = history.findIndex(
       (message) => message.runId === run.id && message.role === 'user',
     );
@@ -198,17 +178,47 @@ export class Contexts {
             )
         : [];
     const workspace = worker ? '' : workspaceGuidance(session, several);
+    const projectGuidance = project
+      ? session.remoteMachineId
+        ? `This conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}.${gitWay} This conversation targets one of the owner's machines; clone the repository there into a dedicated checkout before changing files, and keep all project work on that machine.`
+        : `This conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}.${gitWay} Use this conversation's checkout directory: ${JSON.stringify(await projectCheckout(run.profileId, project.id, session.id))}. ${github ? 'If it is not checked out yet, clone it with github_git, which clones into that path by default,' : 'If it is not checked out yet, create its parent directory with mkdir -p and clone this repository into that path'} before changing files. Keep this conversation's work in that checkout and report commands and verification performed.`
+      : undefined;
+    const guidance = [workspace, projectGuidance, workerGuidance].filter((part): part is string =>
+      Boolean(part),
+    );
+    const built = buildContext(run, {
+      servers,
+      ...(judged.relevance ? { relevance: judged.relevance } : {}),
+      ...(judged.skill ? { suggestedSkill: judged.skill } : {}),
+      ...(this.settings ? { timeZone: await this.settings.timeZone() } : {}),
+      memories,
+      linked,
+      activities,
+      // Name this conversation directly; there is no longer a profile-wide default chat.
+      conversations: [
+        ...(!worker && session.channel === GATEWAY_SESSION_CHANNEL
+          ? [{ sessionId: session.id, channel: 'gateway', with: 'your owner, in Jian Chats' }]
+          : []),
+        ...conversations.map((contact) => ({
+          sessionId: contact.sessionId as string,
+          channel: contact.type,
+          with: contact.displayName ?? contact.actorId,
+          ...(contact.scope === 'group' ? { group: true } : {}),
+        })),
+      ],
+      history: await this.historyWithTools(run, history, session.summary),
+      ...(session.summary ? { summary: session.summary } : {}),
+      ...(session.objective ? { objective: session.objective } : {}),
+      ...(guidance.length ? { guidance } : {}),
+      ...(workspaces?.sections.length ? { project: workspaces.sections } : {}),
+      ...(workspaces?.skills.length ? { projectSkills: workspaces.skills } : {}),
+      loadedSkills: (await listLoads(this.store.db, run.profileId, run.sessionId))
+        .filter((load) => load.kind === 'skill')
+        .map((load) => load.name),
+    });
+
     const result = {
       ...built,
-      ...(workspace ? { system: `${built.system}\n\n${workspace}` } : {}),
-      ...(project
-        ? {
-            system: session.remoteMachineId
-              ? `${built.system}\n\nThis conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}.${gitWay} This conversation targets one of the owner's machines; clone the repository there into a dedicated checkout before changing files, and keep all project work on that machine.`
-              : `${built.system}\n\nThis conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}.${gitWay} Use this conversation's checkout directory: ${JSON.stringify(await projectCheckout(run.profileId, project.id, session.id))}. ${github ? 'If it is not checked out yet, clone it with github_git, which clones into that path by default,' : 'If it is not checked out yet, create its parent directory with mkdir -p and clone this repository into that path'} before changing files. Keep this conversation's work in that checkout and report commands and verification performed.`,
-          }
-        : {}),
-      ...(workerGuidance ? { system: `${built.system}\n\n${workerGuidance}` } : {}),
       ...(previous ? { historyCursor: { id: previous.id, createdAt: previous.createdAt } } : {}),
     };
     return judged.light ? { ...result, light: true as const } : result;
