@@ -1,10 +1,10 @@
-import { createHash } from 'node:crypto';
 import type { MCPClient } from '@ai-sdk/mcp';
 import type { McpServer } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { connectMcp, type SecretReader } from './mcp-connect.js';
 import { mcpClientDisconnected } from './mcp-errors.js';
+import { exposedEnding } from './mcp-names.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
 
@@ -27,9 +27,7 @@ interface McpContext {
  * with "Third-party apps now draw from your extra usage"; `mcp__` is the form it accepts.
  */
 function exposedName(server: string, tool: string): string {
-  const suffix = createHash('sha256').update(tool).digest('hex').slice(0, 8);
-
-  return `mcp__${server}_${tool.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 18)}_${suffix}`;
+  return `mcp__${server}${exposedEnding(tool)}`;
 }
 
 /** What a server answered with when it refused to open, short enough to put in a prompt. */

@@ -110,6 +110,11 @@ export function githubGitTools(options: {
   checkoutOf?: (name: string) => string;
   place: GitPlace;
   lend: (secret: string) => void;
+  /**
+   * Told the head a push left the branch at, so the gateway's watch over a pull request of it
+   * does not take the agent's own commits for someone else's.
+   */
+  pushed?: (repository: string, branch: string, sha: string) => Promise<void> | undefined;
 }): ToolSet {
   const { github, place, lend } = options;
 
@@ -143,6 +148,14 @@ export function githubGitTools(options: {
         const output = `${outcome.stdout}\n${outcome.stderr}`.trim();
         const done = outcome.exitCode === 0 && !outcome.timedOut;
 
+        if (done && command.action === 'push' && options.pushed) {
+          await ownHead(place, path, command.branch, abortSignal)
+            .then((sha) =>
+              sha ? options.pushed?.(access.repository, command.branch, sha) : undefined,
+            )
+            .catch(() => undefined);
+        }
+
         return {
           ok: done,
           action: call.action,
@@ -163,4 +176,16 @@ export function githubGitTools(options: {
       },
     }),
   };
+}
+
+/** The commit a pushed branch points at, read back from the checkout that pushed it. */
+async function ownHead(
+  place: GitPlace,
+  path: string,
+  branch: string,
+  signal: AbortSignal | undefined,
+): Promise<string | undefined> {
+  const outcome = await place.git(['-C', path, 'rev-parse', `refs/heads/${branch}`], [], signal);
+  const sha = outcome.stdout.trim();
+  return outcome.exitCode === 0 && /^[0-9a-f]{40}$/i.test(sha) ? sha : undefined;
 }

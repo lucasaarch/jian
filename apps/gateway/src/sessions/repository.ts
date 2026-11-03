@@ -8,7 +8,7 @@ import {
   type SessionObjective,
   TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
-import { and, desc, eq, gt, isNotNull, like, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { messages, type SessionWorkspace, sessions } from '../storage/schema.js';
 import { sanitizeObjectiveText } from './objective.js';
@@ -370,27 +370,6 @@ export async function messageCursor(
     .limit(1);
 
   return cursor;
-}
-
-/**
- * What the agent wrote in a conversation that mentions a pull request, the latest first, in the
- * whole of it. An agent's words are its own lines and, in a conversation with another agent, that
- * agent's replies; what the owner wrote is left out.
- */
-export async function listPullMentions(db: Queryable, sessionId: string): Promise<string[]> {
-  const rows = await db
-    .select({ content: messages.content })
-    .from(messages)
-    .where(
-      and(
-        eq(messages.sessionId, sessionId),
-        or(eq(messages.role, 'assistant'), isNotNull(messages.call)),
-        like(messages.content, '%github.com/%/pull/%'),
-      ),
-    )
-    .orderBy(desc(messages.createdAt), desc(messages.seq));
-
-  return rows.map((row) => row.content);
 }
 
 export async function listSessionMessages(

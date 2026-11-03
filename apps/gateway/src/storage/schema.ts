@@ -556,6 +556,51 @@ export const schedules = pgTable(
   ],
 );
 
+/**
+ * A pull request the agent created, which the gateway watches for it until it is merged or
+ * closed. The agent never opens or ends one. `state` holds only what the next look compares
+ * against: ids seen, each check's outcome on the head, and the ETag of each address read.
+ * `version` is bumped by the worker that takes a look, so two never deliver the same change.
+ */
+export const pullWatchers = pgTable(
+  'pull_watchers',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    // The conversation told of each change: the one the owner asked in, above any subagent.
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    owner: text('owner').notNull(),
+    repo: text('repo').notNull(),
+    number: integer('number').notNull(),
+    status: text('status').$type<'watching' | 'ended' | 'unreachable'>().notNull(),
+    endedReason: text('ended_reason'),
+    state: jsonb('state').$type<Record<string, unknown>>().notNull().default({}),
+    // Heads the agent pushed itself, through `github_git`: a change to one is its own.
+    ownShas: jsonb('own_shas').$type<string[]>().notNull().default([]),
+    version: integer('version').notNull().default(0),
+    nextPollAt: timestamp('next_poll_at', { withTimezone: true }).notNull(),
+    // When the looks started failing in a row; null while GitHub answers.
+    failingSince: timestamp('failing_since', { withTimezone: true }),
+    createdAt,
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // GitHub reads owners and repositories in any case: one pull request, one watcher.
+    uniqueIndex('pull_watchers_pull').on(
+      table.profileId,
+      sql`lower(${table.owner})`,
+      sql`lower(${table.repo})`,
+      table.number,
+    ),
+    index('pull_watchers_due').on(table.nextPollAt).where(sql`${table.status} = 'watching'`),
+    index('pull_watchers_session').on(table.sessionId),
+  ],
+);
+
 /** One time a schedule started, or tried to: kept for thirty days as its history. */
 export const scheduleRuns = pgTable(
   'schedule_runs',

@@ -38,6 +38,11 @@ import type { Store } from './storage/database.js';
  * this much of it; every worker looks, and a schedule starts once however many do.
  */
 const SCHEDULE_TICK_MS = 15_000;
+/**
+ * How often the workers look for pull requests due a look, in ms. Each is looked at once a
+ * minute (`WATCH_EVERY_MS`); a tick this short only keeps that minute from slipping much.
+ */
+const PULL_TICK_MS = 15_000;
 
 export type GatewayOptions = {
   store: Store;
@@ -172,6 +177,8 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
   services.objectives.useDeliveries(channels);
   // Answering a mid-run question from the panel resumes a channel run the same way.
   services.runs.useDeliveries(channels);
+  // A pull request's change wakes its conversation, and a channel's hears the answer there.
+  services.pulls.useDeliveries(channels);
   services.sessions.useReactionDelivery((tx, session, message, emoji, runId) =>
     channels.queueReaction(tx, session, message, emoji, runId),
   );
@@ -187,6 +194,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
     ...(mcpLogins ? { mcpOAuth: mcpLogins.provider } : {}),
     codexLogin,
     outbound,
+    pulls: services.pulls,
     storeArtifact: (run, toolName, output) => coordination.storeArtifact(run, toolName, output),
   });
   services.runs.useCancellation((id) => runtime.cancel(id));
@@ -216,6 +224,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
       : undefined;
 
   let scheduleTimer: ReturnType<typeof setInterval> | undefined;
+  let pullTimer: ReturnType<typeof setInterval> | undefined;
   let stage: StartupStage = 'database';
   let stopping: Promise<void> | undefined;
 
@@ -242,6 +251,12 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
             .catch(() => console.error('jian: schedules could not be started; will retry'));
         }, SCHEDULE_TICK_MS);
         scheduleTimer.unref();
+        pullTimer = setInterval(() => {
+          void services.pulls
+            .lookDue()
+            .catch(() => console.error('jian: pull requests could not be looked at; will retry'));
+        }, PULL_TICK_MS);
+        pullTimer.unref();
       }
 
       if (!app || !listen) return {};
@@ -253,6 +268,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
       stopping ??= (async () => {
         codexLogin.stop();
         clearInterval(scheduleTimer);
+        clearInterval(pullTimer);
         // End long-lived event streams before waiting for HTTP shutdown.
         app?.server.closeAllConnections();
         await app?.close();

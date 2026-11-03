@@ -154,7 +154,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   const contact = contacts.find(
     (item) => item.sessionId === active.id && item.profileId === profile.id,
   );
-  // The pull requests the agent sent and where the objective stands, beside where it runs.
+  // The pull requests the agent created and where the objective stands, beside where it runs.
   const badges = () => (
     <span className="session-badges">
       <SessionPulls api={api} profileId={profile.id} sessionId={active.id} />

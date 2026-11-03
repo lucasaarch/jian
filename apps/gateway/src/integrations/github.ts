@@ -664,6 +664,12 @@ export class GitHubIntegrations {
     });
   }
 
+  /** The App's own account, `<slug>[bot]`, which signs what the agent writes through it. */
+  async appLogin(): Promise<string | undefined> {
+    const config = await this.config();
+    return config ? `${config.slug}[bot]` : undefined;
+  }
+
   async repository(accountId: string, repositoryId: number) {
     const repository = (await this.repositories(accountId)).find(
       (item) => item.id === repositoryId,

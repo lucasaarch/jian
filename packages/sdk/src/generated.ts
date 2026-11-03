@@ -18033,6 +18033,11 @@ export interface operations {
                     "application/json": {
                         /** Format: uri */
                         url: string;
+                        watch?: {
+                            /** @enum {string} */
+                            status: "watching" | "ended" | "unreachable";
+                            reason?: string;
+                        };
                     }[];
                 };
             };

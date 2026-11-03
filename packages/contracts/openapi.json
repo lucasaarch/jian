@@ -30537,6 +30537,27 @@
                         "type": "string",
                         "maxLength": 1000,
                         "format": "uri"
+                      },
+                      "watch": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "watching",
+                              "ended",
+                              "unreachable"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "maxLength": 300
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [

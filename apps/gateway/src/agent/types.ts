@@ -3,6 +3,7 @@ import type { ModelConfig, Run } from '@jian/contracts';
 import type { LanguageModel, ToolSet } from 'ai';
 import type { GitHubIntegrations } from '../integrations/github.js';
 import type { CodexLogin } from '../providers/codex/login.js';
+import type { PullWatchers } from '../pulls/service.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
 import type { createSafeFetch } from '../security/outbound.js';
 
@@ -43,6 +44,12 @@ export interface RuntimeOptions {
   /** The tools of an agent with an X account; none for a subagent or an agent without one. */
   x?: { for(run: Run): Promise<ToolSet> };
   codexLogin?: Pick<CodexLogin, 'accessToken'>;
+  /**
+   * The gateway's watch over the pull requests the agent creates: told of each tool answer, to
+   * open one when a creation went through, and of each head the agent pushed, which is not
+   * someone else's change.
+   */
+  pulls?: Pick<PullWatchers, 'created' | 'pushed'>;
   outbound?: ReturnType<typeof createSafeFetch>;
   storeArtifact?: (
     run: Run,

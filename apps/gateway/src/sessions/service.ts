@@ -25,11 +25,13 @@ import { projectCheckout } from '../agent/workspace-home.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { watchersOfSession } from '../pulls/repository.js';
 import { sessionContext } from '../runs/context-usage.js';
 import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { messages, projects, remoteMachines, runs } from '../storage/schema.js';
 import { checkoutChanges } from './changes.js';
+import { listCreatedPullAnswers } from './created-pulls.js';
 import { objectiveAt, sanitizeObjectiveText } from './objective.js';
 import type { SessionStart } from './port.js';
 import { pullLinksIn } from './pull-links.js';
@@ -42,7 +44,6 @@ import {
   insertMessage,
   insertSession,
   lastMessages,
-  listPullMentions,
   listSessionMessages,
   listSessions,
   listUncompactedMessages,
@@ -665,14 +666,37 @@ export class Sessions {
     );
   }
 
-  /** The tools the agent used in each recent turn here, for the owner's timeline. */
-  /** The pull requests the agent linked in this conversation, however long ago. */
+  /**
+   * The pull requests the agent created in this conversation through GitHub's MCP server,
+   * however long ago, its subagents' included; one it only read or linked is not among them.
+   */
   async pullRequests(profileId: string, sessionId: string) {
     await this.session(profileId, sessionId);
 
-    return pullLinksIn(await listPullMentions(this.store.db, sessionId));
+    const pulls = pullLinksIn(await listCreatedPullAnswers(this.store.db, profileId, sessionId));
+    const watchers = new Map(
+      (await watchersOfSession(this.store.db, profileId, sessionId)).map((watcher) => [
+        `https://github.com/${watcher.owner}/${watcher.repo}/pull/${watcher.number}`.toLowerCase(),
+        watcher,
+      ]),
+    );
+
+    return pulls.map((pull) => {
+      const watcher = watchers.get(pull.url.toLowerCase());
+      if (!watcher) return pull;
+      return {
+        ...pull,
+        watch: {
+          status: watcher.status,
+          ...(watcher.endedReason && watcher.status === 'unreachable'
+            ? { reason: watcher.endedReason.slice(0, 300) }
+            : {}),
+        },
+      };
+    });
   }
 
+  /** The tools the agent used in each recent turn here, for the owner's timeline. */
   async timeline(profileId: string, sessionId: string, runIds?: string[]) {
     await this.session(profileId, sessionId);
 

@@ -42,7 +42,13 @@ afterEach(async () => {
 
 const tick = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
 
-const show = async (urls: string[] | Error, summaries: GitHubLinkSummary[] = []) => {
+type Watch = { status: 'watching' | 'ended' | 'unreachable'; reason?: string };
+
+const show = async (
+  urls: string[] | Error,
+  summaries: GitHubLinkSummary[] = [],
+  watches: Record<string, Watch> = {},
+) => {
   const resolveGithubLinks = vi.fn(async (asked: string[]) =>
     asked.map(
       (url) =>
@@ -53,7 +59,7 @@ const show = async (urls: string[] | Error, summaries: GitHubLinkSummary[] = [])
   const api = {
     sessionPulls: async () => {
       if (urls instanceof Error) throw urls;
-      return urls.map((url) => ({ url }));
+      return urls.map((url) => ({ url, ...(watches[url] ? { watch: watches[url] } : {}) }));
     },
     resolveGithubLinks,
   };
@@ -77,7 +83,7 @@ const open = async () => {
 };
 const rows = () => [...document.querySelectorAll('.session-pull')];
 
-it('shows nothing when the agent sent none', async () => {
+it('shows nothing when the agent created none', async () => {
   await show([]);
 
   expect(trigger()).toBeNull();
@@ -155,4 +161,21 @@ it('keeps one GitHub cannot show on the list, with the way to it', async () => {
   expect(row?.textContent).toContain('#9');
   expect(row?.getAttribute('href')).toBe(pr(9));
   expect(trigger()?.textContent).toBe('1 PR');
+});
+
+it('says which the gateway watches for the agent, and why one it cannot', async () => {
+  const reason = 'The Jian GitHub App cannot reach acme/harbor.';
+  await show([pr(3), pr(2), pr(1)], [summary(3), summary(2), summary(1, { state: 'merged' })], {
+    [pr(3)]: { status: 'watching' },
+    [pr(2)]: { status: 'unreachable', reason },
+    [pr(1)]: { status: 'ended' },
+  });
+
+  await open();
+
+  const text = rows().map((row) => row.textContent);
+  expect(text[0]).toContain('Open · Watching');
+  expect(text[1]).toContain(`Not watched: ${reason}`);
+  // One merged says so already: that its watch ended adds nothing.
+  expect(text[2]).not.toContain('Watch');
 });

@@ -27,12 +27,32 @@ function standing(pull: Reachable): string {
   return said.join(' · ');
 }
 
+type Watch = { status: 'watching' | 'ended' | 'unreachable'; reason?: string };
+
+/**
+ * Whether the gateway watches it for the agent, after where it stands: said only while it does,
+ * or when it cannot, with why. One merged or closed says so already.
+ */
+function WatchNote({ watch }: { watch: Watch | undefined }) {
+  if (watch?.status === 'watching') return <> · Watching</>;
+  if (watch?.status !== 'unreachable') return null;
+  return (
+    <>
+      {' · '}
+      <span title={watch.reason}>Not watched</span>
+      {watch.reason && <span className="sr-only">: {watch.reason}</span>}
+    </>
+  );
+}
+
 function PullRow({
   url,
+  watch,
   load,
   onOpen,
 }: {
   url: string;
+  watch: Watch | undefined;
   load: (url: string) => Promise<GitHubLinkSummary>;
   onOpen: () => void;
 }) {
@@ -51,7 +71,7 @@ function PullRow({
     );
   }
 
-  // One the App cannot see is still one the agent sent: it stays counted, with the way to it.
+  // One the App cannot see is still one the agent created: it stays counted, with the way to it.
   if (!data.reachable) {
     return (
       <a className="session-pull" href={url} target="_blank" rel="noreferrer">
@@ -63,7 +83,10 @@ function PullRow({
         />
         <span className="session-pull-text">
           <span className="session-pull-title">{item ? `${item.owner}/${item.repo}` : url}</span>
-          <span className="session-pull-meta">Status unavailable</span>
+          <span className="session-pull-meta">
+            Status unavailable
+            <WatchNote watch={watch} />
+          </span>
         </span>
         {item && <span className="session-pull-number">#{item.number}</span>}
       </a>
@@ -81,6 +104,7 @@ function PullRow({
         </span>
         <span className="session-pull-meta">
           {data.repo} · {standing(data)}
+          <WatchNote watch={watch} />
         </span>
       </span>
       <span className="session-pull-number">#{data.number}</span>
@@ -89,7 +113,7 @@ function PullRow({
 }
 
 /**
- * The pull requests the agent sent in this conversation, as a badge beside its objective, with
+ * The pull requests the agent created in this conversation, as a badge beside its objective, with
  * how each stands in the list it opens. The count comes from the gateway, which reads the whole
  * conversation, and asks GitHub nothing: only opening the list does. A gateway too old to answer
  * leaves simply no badge.
@@ -120,7 +144,7 @@ export function SessionPulls({
       <Popover.Trigger
         ref={trigger}
         className={`${pillClass()} session-badge-trigger`}
-        aria-label={`${label}: show the pull requests the agent sent`}
+        aria-label={`${label}: show the pull requests the agent created`}
       >
         <GitPullRequest size={12} aria-hidden="true" />
         {label}
@@ -137,10 +161,11 @@ export function SessionPulls({
           <Popover.Popup className="model-menu session-badge-popup session-pulls-popup">
             <Popover.Title className="session-badge-title">Pull requests</Popover.Title>
             <ul className="session-pulls" aria-label="Pull requests">
-              {pulls.map(({ url }) => (
+              {pulls.map(({ url, watch }) => (
                 <li key={url}>
                   <PullRow
                     url={url}
+                    watch={watch}
                     load={load}
                     onOpen={() => {
                       const item = githubItemOf(url);

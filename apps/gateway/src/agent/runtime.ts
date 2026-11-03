@@ -168,6 +168,23 @@ export class AgentRuntime {
    * the turn rather than in it. The request is counted on the run; when the model cannot
    * answer, the opening itself is the title, as before there was one to ask.
    */
+  /**
+   * Opens the gateway's watch over any pull request these answers created. Whatever happens
+   * there stays there: a watch that cannot open never costs the turn.
+   */
+  private async watchCreated(
+    profileId: string,
+    runId: string,
+    answers: { toolName: string; result: unknown }[],
+  ) {
+    await this.options.pulls?.created(profileId, runId, answers).catch((error: unknown) => {
+      console.error(
+        'jian: a created pull request could not be watched',
+        error instanceof Error ? error.message : error,
+      );
+    });
+  }
+
   private async nameConversation(run: Run, secrets: Set<string>, title: TitleModel) {
     const opening = redactText(run.input, secrets);
 
@@ -510,6 +527,12 @@ export class AgentRuntime {
               place: gitPlace,
               // Masked in every result, error and timeline entry of this run from here on.
               lend: (secret) => secrets.add(secret),
+              ...(this.options.pulls
+                ? {
+                    pushed: (repository: string, branch: string, sha: string) =>
+                      this.options.pulls?.pushed(profileId, repository, branch, sha),
+                  }
+                : {}),
             })
           : {}),
         ...xTools,
@@ -1214,6 +1237,12 @@ export class AgentRuntime {
             })),
           });
 
+          await this.watchCreated(
+            profileId,
+            runId,
+            toolResults.map((result) => ({ toolName: result.toolName, result: result.output })),
+          );
+
           if (externalUncertain) {
             throw new Error('External tool outcome is uncertain');
           }
@@ -1258,6 +1287,9 @@ export class AgentRuntime {
               toolCallId: approved.toolCallId,
               result: redactOutput(outcome, secrets),
             });
+            await this.watchCreated(profileId, runId, [
+              { toolName: approved.toolName, result: outcome },
+            ]);
           } catch (error) {
             if (externalUncertain) throw error;
             outcome = { error: error instanceof Error ? error.message : 'The action failed.' };

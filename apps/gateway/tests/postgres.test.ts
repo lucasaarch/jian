@@ -9,12 +9,14 @@ import { MetaInbox } from '../src/channels/whatsapp-business-inbox.js';
 import { recordEvent } from '../src/core/events.js';
 import { Peers } from '../src/peers/service.js';
 import { updateProfileRow } from '../src/profiles/repository.js';
+import { PullWatchers } from '../src/pulls/service.js';
 import { BossExecutor } from '../src/runs/executors.js';
 import { RunQueue } from '../src/runs/queue.js';
 import { SecretBox } from '../src/security/crypto.js';
 import { GatewayVault } from '../src/security/gateway-vault.js';
 import { Vault } from '../src/security/vault.js';
 import { buildServices } from '../src/services.js';
+import { isPullCreation } from '../src/sessions/created-pulls.js';
 import { pageMessages } from '../src/sessions/repository.js';
 import { migrationsFolder } from '../src/storage/database.js';
 import { PostgresStore } from '../src/storage/postgres.js';
@@ -399,6 +401,60 @@ describe('PostgreSQL durability', () => {
     );
 
     expect(claims.filter(Boolean)).toHaveLength(1);
+  });
+
+  it('tells a pull request’s change once when two workers look at it together', async () => {
+    let now = Date.UTC(2026, 10, 3, 12, 0, 0);
+    const clock = () => now;
+    let comments: unknown[] = [];
+    const request = async (_owner: string, path: string) => {
+      const route = path.split('?')[0];
+      const body = route?.endsWith('/pulls/3')
+        ? { state: 'open', mergeable: true, head: { sha: 'a'.repeat(40), ref: 'fix' } }
+        : route?.endsWith('/issues/3/comments')
+          ? comments
+          : route?.includes('/check-runs')
+            ? { check_runs: [] }
+            : [];
+      return new Response(JSON.stringify(body), { status: 200 });
+    };
+    const second = new PostgresStore(connectionString);
+    const watchersOn = (on: PostgresStore) =>
+      new PullWatchers(on, services.runs, isPullCreation, clock, {
+        repoRequest: request,
+        appLogin: async () => 'jian-ci[bot]',
+      });
+    const [one, two] = [watchersOn(store), watchersOn(second)];
+
+    try {
+      const profile = await services.profiles.createProfile(input);
+      const session = await services.sessions.createSession(profile.id, { title: 'Watched' });
+      const run = await services.runs.submit(profile.id, session.id, {
+        text: 'Open it.',
+        requestKey: 'watched',
+      });
+      await one.created(profile.id, run.id, [
+        {
+          toolName: 'mcp__github_create_pull_reques_becd65b1',
+          result: {
+            content: [{ type: 'text', text: '{"url":"https://github.com/ci/app/pull/3"}' }],
+          },
+        },
+      ]);
+      await one.lookDue();
+
+      comments = [{ id: 1, body: 'Ship it?', user: { login: 'dana' } }];
+      now += 61_000;
+      await Promise.all([one.lookDue(), two.lookDue(), one.lookDue(), two.lookDue()]);
+
+      const told = await store.db.execute(
+        sql`select count(*)::int as count from messages
+            where session_id = ${session.id} and purpose = 'resume'`,
+      );
+      expect((told as unknown as { rows: { count: number }[] }).rows[0]?.count).toBe(1);
+    } finally {
+      await second.close();
+    }
   });
 
   it('rolls back record writes and events together', async () => {

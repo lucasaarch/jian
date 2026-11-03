@@ -14,6 +14,7 @@ import { Projects } from './projects/service.js';
 import type { ModelCatalog } from './providers/catalog-source.js';
 import { Providers } from './providers/service.js';
 import { SubscriptionUsageReader } from './providers/subscription-usage.js';
+import { PullWatchers } from './pulls/service.js';
 import { RepositoryStars } from './releases/repository.js';
 import { ReleaseNotes } from './releases/service.js';
 import { Remote } from './remote/service.js';
@@ -24,6 +25,7 @@ import type { GatewayVault } from './security/gateway-vault.js';
 import { createSafeFetch } from './security/outbound.js';
 import type { Vault } from './security/vault.js';
 import { ObjectiveContinuation } from './sessions/continuation.js';
+import { isPullCreation } from './sessions/created-pulls.js';
 import { Sessions } from './sessions/service.js';
 import { Settings } from './settings/service.js';
 import { SshKeys } from './ssh/service.js';
@@ -56,6 +58,7 @@ export type Services = {
   errands: Errands;
   work: Work;
   objectives: ObjectiveContinuation;
+  pulls: PullWatchers;
   vault: Vault;
   gatewayVault: GatewayVault;
   sshKeys: SshKeys;
@@ -85,7 +88,7 @@ export function buildServices({
   catalog?: ModelCatalog;
   fetcher?: typeof fetch;
   timeZone?: string;
-  github?: Pick<GitHubIntegrations, 'repository'>;
+  github?: Pick<GitHubIntegrations, 'repository' | 'repoRequest' | 'appLogin'>;
   nativeBrowser?: import('./web/native.js').NativeBrowser;
   /** A desktop app's own gateway is on the owner's computer, which a server is not. */
   mode?: 'server' | 'local';
@@ -125,6 +128,17 @@ export function buildServices({
   lifecycle.useNotices(push);
 
   const remote = new Remote(store, clock, undefined, gatewayVault);
+  // Without GitHub connected a created pull request is recorded as one nothing can watch.
+  const pulls = new PullWatchers(
+    store,
+    runs,
+    isPullCreation,
+    clock,
+    github
+      ? { repoRequest: (...args) => github.repoRequest(...args), appLogin: () => github.appLogin() }
+      : undefined,
+    decisions.judge,
+  );
   const services = {
     profiles,
     providers,
@@ -168,6 +182,7 @@ export function buildServices({
     errands: new Errands(store, clock),
     work: new Work(store, sessions, runs, clock, decisions.judge),
     objectives: new ObjectiveContinuation(store, sessions, runs, clock),
+    pulls,
     vault,
     gatewayVault,
     sshKeys: new SshKeys(store, gatewayVault),

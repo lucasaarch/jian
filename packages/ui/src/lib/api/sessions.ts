@@ -136,7 +136,7 @@ export const sessionCalls = (client: Client) => ({
         params: { path: { profileId, sessionId } },
       }),
     ),
-  /** The pull requests the agent linked in a conversation, however long ago. */
+  /** The pull requests the agent and its subagents created in a conversation, however long ago. */
   sessionPulls: (profileId: string, sessionId: string) =>
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/pull-requests', {

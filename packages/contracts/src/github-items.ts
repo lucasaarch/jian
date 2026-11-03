@@ -165,8 +165,20 @@ export const githubLinkSummarySchema = z.union([
   z.strictObject({ url: z.string().max(1000), reachable: z.literal(false) }),
 ]);
 
-/** A pull request the agent linked in a conversation, the latest first. */
-export const sessionPullSchema = z.strictObject({ url: z.url().max(1000) });
+/** A pull request the agent or a subagent created in a conversation, the latest first. */
+export const sessionPullSchema = z.strictObject({
+  url: z.url().max(1000),
+  /**
+   * The gateway's watch over it, which tells the agent of each change until it is merged or
+   * closed. Left out by a gateway without watchers, and for a pull request it never watched.
+   */
+  watch: z
+    .strictObject({
+      status: z.enum(['watching', 'ended', 'unreachable']),
+      reason: z.string().max(300).optional(),
+    })
+    .optional(),
+});
 
 export const githubUpdateBranchInputSchema = z.strictObject({
   /** Refuse to update if the head changed since the pull request was displayed. */
