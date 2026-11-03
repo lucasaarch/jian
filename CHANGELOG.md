@@ -4,6 +4,63 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.3.0 — 2026-11-03
+
+Turns cost less, because your agent keeps the skills and tools it loaded and providers read the conversation back from their cache. Agents follow a repository's AGENTS.md and skills, and the gateway watches the pull requests they open and tells them when something changes. Servers, machine workers and the app all move to 1.3 together.
+
+### What each turn costs
+
+* **Cheaper turns:** The instructions and the conversation so far now stay the same from one turn to the next, so providers that cache, like Anthropic and OpenAI, read them back at a fraction of the price. The time, the memories that may help and how full the context is come with each turn, after the conversation.
+* **Lighter history:** Tool results from your last two turns stay whole. Older ones are cut to a short excerpt, and your agent reads one back in full when it needs it.
+* **Skills load once:** A skill your agent loads stays in its instructions for the rest of the conversation, so it won't load it again. Tool groups and MCP tools it loads stay loaded too. Each compaction lets go of whatever wasn't used since the one before.
+* **Cache share:** It's in an agent's Activity and shows how much of what it sends is read from the cache.
+
+### Projects
+
+* **Your repository's instructions:** In a chat that works in folders or repositories, your agent follows each one's `AGENTS.md`, or its `CLAUDE.md` when there's no `AGENTS.md`. They rank below your own instructions and can't allow anything you wouldn't.
+* **Your repository's skills:** Skills in `.agents/skills` and `.claude/skills` show up beside your agent's own.
+* **Nested instructions:** `AGENTS.md` and `CLAUDE.md` files in subfolders are listed, and your agent reads them when it works there.
+* **Kept current:** Changes are picked up within a minute on the gateway and within five minutes on a machine. On a Windows machine your agent reads the files itself.
+* **Subagents too:** A subagent gets the instructions and skills of the conversation that started it.
+
+### Pull requests
+
+* **The badge counts what your agent opened:** It lists the pull requests your agent or its subagents created. One they only linked no longer shows up.
+* **Watched for you:** The gateway watches each pull request your agent opens until it's merged or closed. A new review or comment, a failed check, checks passing after a failure, a conflict, or commits from someone else reach your agent as one note, in the background. The note stays out of the chat, and you see what your agent does about it. The badge says which ones are watched, and why one can't be.
+* **Listeners are gone:** Watchers, listeners and subscriptions were removed, along with everything they kept.
+* **A smaller pull request panel:** It has flat tabs, a file filter and line wrapping.
+
+### Conversations
+
+* **The whole history:** Long conversations page their messages and tool activity and keep everything in order. A read that came back incomplete says so.
+* **Changes in the Inspector:** A project chat shows what changed in its checkout. A chat without one opens the changes its agent saved.
+* **Flat diffs:** They have one column of line numbers, bars for unchanged lines, arrows that bring hidden lines in, and marks on what changed inside a line. Check a file as reviewed to fold it away. The bar past the first or last change that had nothing to show is gone.
+* **Tool calls:** Each one waits for the line before it, and its details open only when there's something in them. What your agent says between tools reads as one answer.
+
+### Settings
+
+* **Apps and MCP servers:** Integrations is now two pages. Apps shows GitHub and X as cards, each with its state and a Connect or Configure button. MCP servers lists your servers as before. Old Integrations links open Apps.
+
+### Staying connected
+
+* **Lighter event streams:** Opening the panel no longer downloads the whole event history, which on the desktop could make a gateway look offline.
+* **Why a gateway is away:** The status bar's list and the gateway's settings say why, and Reconnect clears stuck connections first. A Reload chat that fails says so.
+* **Older gateways:** A gateway too old for something says so, where it used to answer Not Found.
+* **Small fixes in the desktop app:** The Close Inspector tip opens only under the pointer, and a check cut short by Reconnect no longer hides why a gateway is away.
+
+### What agents know
+
+* **Updated built-in skills:** They cover Apps and MCP servers, the pull request watch, project instructions and skills, and how the context works now.
+
+### Upgrading
+
+* **Migrations 0089 to 0093 run at startup.** They order messages, remove listeners and delete their data for good, and add pull request watchers, what each conversation keeps loaded, and what each workspace was last read as.
+* **Update your servers.** Recreate the gateway and web containers with the 1.3.0 images, or follow the `latest` tags. The desktop app on 1.3 works only with gateways on 1.3 and shows the mismatch on any other. This computer's gateway moves with the app.
+* **Update each machine's worker.** A 1.2 worker shows Update needed in Machines and gets no work from a 1.3 gateway until it's updated. Update in Machines does it for a worker installed with npm. On any other, run `jian-remote update` on that computer.
+* The desktop app updates itself to this release.
+* **If you relied on listeners,** there's nothing to set up in their place. Pull requests your agent opens from now on are watched automatically; ones it opened before aren't.
+* **The first turn of each existing conversation costs the full price once,** because the prompt has a new layout. The cache applies from the next turn.
+
 ## 1.2.2 — 2026-11-01
 
 Your agents can post on X from your own accounts and now share one set of files, on the desktop your own home. The desktop app stops losing replies from a remote gateway, and it reconnects by itself. Read the upgrade steps, because what agents can reach has changed.
