@@ -61,10 +61,8 @@ it('shows what an edit changed, line by line, each with its one number', () => {
     'Applied 1 edit',
   );
   expect(container.querySelector('.code-diff-path')?.textContent).toBe(diff.path);
-  // Lines 1 to 17 are left out above the change.
-  expect(container.querySelector('.code-diff-gap-label')?.textContent).toBe(
-    'More unmodified lines',
-  );
+  // Lines 1 to 17 are left out above the change, with no file to read them from: no bar.
+  expect(container.querySelector('.code-diff-gap')).toBeNull();
   const rows = [...container.querySelectorAll('.code-diff-line')].map((row) => [
     row.getAttribute('data-kind'),
     ...[...row.querySelectorAll('.code-diff-number')].map((cell) => cell.textContent),
@@ -248,7 +246,8 @@ describe('what a diff leaves out', () => {
   it('says what lies between changes in place of a hunk header, with nothing to press unread', () => {
     act(() => root.render(<FileDiff diff={spread} open />));
 
-    expect(labels()).toEqual(['More unmodified lines', '28 unmodified lines']);
+    // The edges say nothing they could act on, so only the gap between changes is told.
+    expect(labels()).toEqual(['28 unmodified lines']);
     expect(container.querySelector('.code-diff-gap button')).toBeNull();
     expect(container.textContent).not.toContain('@@');
   });
@@ -350,7 +349,7 @@ describe('what a diff leaves out', () => {
       ),
     );
 
-    expect(labels()).toEqual(['More lines', 'More lines']);
+    expect(labels()).toEqual(['More lines']);
     expect(container.querySelector('.code-diff-gap button')).toBeNull();
   });
 

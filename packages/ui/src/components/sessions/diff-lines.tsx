@@ -199,7 +199,10 @@ export function useUnmodified(diff: CodeDiff, readLines?: () => Promise<string[]
     const above = hunks[index - 1];
     const below = hunks[index];
     const edge = !above || !below;
-    if (!below && (!reader || diff.created || (above && reachesEnd(above)))) return undefined;
+    // Past the first or last change there is nothing to say without the file to read from: no
+    // count to give and nothing to press, so the edge shows no bar at all.
+    if (edge && !reader) return undefined;
+    if (!below && (diff.created || (above && reachesEnd(above)))) return undefined;
     const from = above ? endOf(above) : 1;
     const to = below ? startOf(below) : file && file.length + 1;
     const total = to === undefined ? undefined : to - from;
