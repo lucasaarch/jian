@@ -104,3 +104,26 @@ it('has details only when something was recorded', () => {
   expect(hasDetails({ note: 'Failed' })).toBe(false);
   expect(hasDetails({ note: 'Failed', detail: 'It broke.' })).toBe(true);
 });
+
+it('shows a tool server’s call as the JSON it took and gave, not as labelled fields', async () => {
+  const input = { owner: 'acme', repo: 'widgets', title: 'Widgets jam', labels: [] };
+  const answer = { content: [{ type: 'text', text: '{"number":7,"state":"open"}' }] };
+
+  await act(async () =>
+    root.render(
+      <ToolDetails
+        input={{ text: JSON.stringify(input) }}
+        output={{ text: JSON.stringify(answer) }}
+        json
+      />,
+    ),
+  );
+
+  const blocks = [...element.querySelectorAll('.code-block-lines')].map((block) =>
+    JSON.parse(block.textContent ?? ''),
+  );
+
+  expect(fields()).toEqual([]);
+  expect(element.querySelector('.code-block-head')?.textContent).toContain('json');
+  expect(blocks).toEqual([input, { number: 7, state: 'open' }]);
+});

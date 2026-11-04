@@ -7,62 +7,7 @@ import { RefineFrame } from '../ui/refine-frame';
 import { drawnBox } from './media';
 import { ChatSpeaker } from './message';
 import { ThoughtLine, type ThoughtStep } from './thought-line';
-
-/** What the panel calls each tool, so the owner reads an action instead of a function name. */
-const toolLabels: Record<string, string> = {
-  analyze_media: 'looking at an attachment',
-  send_file: 'sending a file',
-  save_attachment: 'saving an attachment',
-  compact_context: 'compacting its context',
-  load_tools: 'loading tools',
-  generate_image: 'drawing an image',
-  generate_speech: 'recording a voice reply',
-  list_speech_voices: 'choosing a voice',
-  create_checkpoint: 'saving its progress',
-  read_memories: 'reading its memories',
-  remember: 'saving a memory',
-  forget_memory: 'deleting a memory',
-  list_schedules: 'checking its schedules',
-  create_schedule: 'scheduling something',
-  update_schedule: 'changing a schedule',
-  delete_schedule: 'deleting a schedule',
-  link_memories: 'linking memories',
-  unlink_memories: 'unlinking memories',
-  list_sessions: 'looking through its conversations',
-  read_session: 'reading another conversation',
-  load_skill: 'loading a skill',
-  search_history: 'searching the history',
-  read_artifact: 'reading a large result',
-  list_activities: 'checking what is under way',
-  read_run_checkpoints: 'reviewing the steps of a run',
-  send_session_message: 'writing to another conversation',
-  list_agents: 'looking up the other agents',
-  ask_agent: 'asking another agent',
-  read_inbox: 'reading its inbox',
-  acquire_resource: 'reserving a resource',
-  release_resource: 'releasing a resource',
-  message_contact: 'writing to a contact',
-  list_contacts: 'looking up its contacts',
-  run_command: 'running a command',
-  read_file: 'reading a file',
-  edit_file: 'editing a file',
-  write_file: 'writing a file',
-  find_files: 'finding files',
-  search_files: 'searching files',
-  list_directory: 'listing a directory',
-  web_search: 'searching the web',
-  fetch_url: 'reading a page',
-  create_skill: 'writing a skill',
-  update_skill: 'rewriting a skill',
-  delete_skill: 'removing a skill',
-  update_identity: 'adjusting its own identity',
-  read_identity: 'rereading its own identity',
-  create_profile: 'creating an agent',
-  throw_confetti: 'throwing confetti',
-  spawn_subagent: 'handing work to an agent',
-  ask_jev: 'asking Jev',
-  ask_user: 'asking you',
-};
+import { isMcpName, toolLabel } from './tool-labels';
 
 /** The orb's animation for each tool: looking things up, working with its hands, or asking. */
 const toolOrbs: Record<string, OrbState> = {
@@ -89,18 +34,14 @@ export function statusOf(run: Pick<Run, 'status' | 'progress'>): {
   const progress = run.progress;
   const tool =
     progress?.phase === 'tool'
-      ? (toolLabels[progress.tool ?? ''] ?? progress.tool ?? 'using a tool')
+      ? progress.tool
+        ? toolLabel(progress.tool, progress.mcp)
+        : 'Using a tool'
       : undefined;
 
   return {
     label:
-      run.status === 'queued'
-        ? 'Starting'
-        : tool
-          ? `${tool[0]?.toUpperCase()}${tool.slice(1)}`
-          : progress?.text
-            ? 'Writing'
-            : 'Thinking',
+      run.status === 'queued' ? 'Starting' : tool ? tool : progress?.text ? 'Writing' : 'Thinking',
     state:
       run.status === 'queued'
         ? 'breathing'
@@ -121,12 +62,11 @@ const failures: Partial<Record<ToolStep['status'], string>> = {
 /** The tools of a turn as the Thought Line's trace, in the words the panel uses for them. */
 export function traceOf(steps: ToolStep[]): ThoughtStep[] {
   return steps.map((step) => {
-    const label = toolLabels[step.toolName] ?? step.toolName.replaceAll('_', ' ');
     const failed = failures[step.status];
 
     return {
       key: step.toolCallId,
-      text: `${label[0]?.toUpperCase()}${label.slice(1)}`,
+      text: toolLabel(step.toolName, step.mcp),
       status: step.status === 'running' ? 'running' : failed ? 'failed' : 'done',
       ...(failed ? { note: failed, ...(step.error ? { detail: step.error } : {}) } : {}),
       ...(step.input !== undefined
@@ -135,6 +75,7 @@ export function traceOf(steps: ToolStep[]): ThoughtStep[] {
       ...(step.output !== undefined
         ? { output: { text: step.output, truncated: Boolean(step.outputTruncated) } }
         : {}),
+      ...(step.mcp || isMcpName(step.toolName) ? { json: true } : {}),
       ...(step.diff ? { diff: step.diff } : {}),
     };
   });
@@ -208,7 +149,7 @@ export function placeSteps(steps: ToolStep[], said: Pick<Message, 'id' | 'create
     else head.push(step);
   }
 
-  return { head, after, last: said.at(-1) };
+  return { head, after, first: said[0], last: said.at(-1) };
 }
 
 /**

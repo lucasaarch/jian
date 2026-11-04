@@ -21,6 +21,8 @@ export type ThoughtStep = {
   detail?: string;
   input?: ToolValue;
   output?: ToolValue;
+  /** A tool server's call: its input and output are shown as JSON. */
+  json?: boolean;
   diff?: CodeDiff;
 };
 
@@ -218,6 +220,7 @@ export function ThoughtLine({
                       <ToolDetails
                         {...(step.input ? { input: step.input } : {})}
                         {...(step.output ? { output: step.output } : {})}
+                        json={step.json === true}
                       />
                       {step.diff && <FileDiff diff={step.diff} open={false} />}
                       {step.note && step.detail && (

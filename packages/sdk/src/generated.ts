@@ -5754,6 +5754,10 @@ export interface operations {
                             /** @enum {string} */
                             phase: "thinking" | "tool" | "writing";
                             tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
                             /** @default  */
                             text: string;
                             /** @default 0 */
@@ -8705,6 +8709,10 @@ export interface operations {
                             /** @enum {string} */
                             phase: "thinking" | "tool" | "writing";
                             tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
                             /** @default  */
                             text: string;
                             /** @default 0 */
@@ -8968,6 +8976,10 @@ export interface operations {
                             /** @enum {string} */
                             phase: "thinking" | "tool" | "writing";
                             tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
                             /** @default  */
                             text: string;
                             /** @default 0 */
@@ -9230,6 +9242,10 @@ export interface operations {
                             /** @enum {string} */
                             phase: "thinking" | "tool" | "writing";
                             tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
                             /** @default  */
                             text: string;
                             /** @default 0 */
@@ -18388,6 +18404,10 @@ export interface operations {
                             /** @enum {string} */
                             phase: "thinking" | "tool" | "writing";
                             tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
                             /** @default  */
                             text: string;
                             /** @default 0 */
@@ -19087,6 +19107,10 @@ export interface operations {
                             /** @enum {string} */
                             phase: "thinking" | "tool" | "writing";
                             tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
                             /** @default  */
                             text: string;
                             /** @default 0 */
@@ -19369,6 +19393,10 @@ export interface operations {
                         steps: {
                             toolCallId: string;
                             toolName: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
                             /** @enum {string} */
                             status: "running" | "done" | "failed" | "refused" | "uncertain" | "stopped";
                             /** Format: date-time */
@@ -21092,6 +21120,10 @@ export interface operations {
                             /** @enum {string} */
                             phase: "thinking" | "tool" | "writing";
                             tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
                             /** @default  */
                             text: string;
                             /** @default 0 */
@@ -22223,6 +22255,10 @@ export interface operations {
                             /** @enum {string} */
                             phase: "thinking" | "tool" | "writing";
                             tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
                             /** @default  */
                             text: string;
                             /** @default 0 */
@@ -22478,6 +22514,10 @@ export interface operations {
                             /** @enum {string} */
                             phase: "thinking" | "tool" | "writing";
                             tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
                             /** @default  */
                             text: string;
                             /** @default 0 */
@@ -22733,6 +22773,10 @@ export interface operations {
                             /** @enum {string} */
                             phase: "thinking" | "tool" | "writing";
                             tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
                             /** @default  */
                             text: string;
                             /** @default 0 */

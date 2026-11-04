@@ -440,6 +440,11 @@ export class AgentRuntime {
     let naming: Promise<void> | undefined;
     // The connected services' own names for their tools, for a card the model could not write.
     let mcpCatalog: McpEntry[] = [];
+    /** The server and tool behind an exposed name, for the owner's timeline; none for Jian's. */
+    const mcpOf = (name: string) => {
+      const entry = mcpCatalog.find((item) => item.name === name);
+      return entry ? { server: entry.server, tool: entry.tool } : undefined;
+    };
     let lastCompactionAttempt = -4;
     let compactionRequested = false;
     // A turn that is only `/compact`: the context is compacted before the first call, and the
@@ -847,6 +852,7 @@ export class AgentRuntime {
                   await this.services.lifecycle.checkpoint(profileId, runId, owner, {
                     phase: 'tool-started',
                     toolName: name,
+                    mcp: mcpOf(name),
                     toolCallId: options.toolCallId,
                     input: redactOutput(input, secrets),
                   });
@@ -864,6 +870,7 @@ export class AgentRuntime {
                     await this.services.lifecycle.checkpoint(profileId, runId, owner, {
                       phase: 'tool-started',
                       toolName: name,
+                      mcp: mcpOf(name),
                       toolCallId: options.toolCallId,
                       input: redactOutput(input, secrets),
                     });
@@ -887,6 +894,7 @@ export class AgentRuntime {
               await this.services.lifecycle.checkpoint(profileId, runId, owner, {
                 phase: 'tool-started',
                 toolName: name,
+                mcp: mcpOf(name),
                 toolCallId: options.toolCallId,
                 // What it was asked, for the owner's timeline; secrets are masked like results.
                 input: redactOutput(input, secrets),
@@ -1511,7 +1519,7 @@ export class AgentRuntime {
             await narrator.endStep(true).catch(() => {});
             progress.draft(narrator.draft);
             toolCalls.hear(part.toolCallId);
-            progress.usingTool(part.toolName);
+            progress.usingTool(part.toolName, mcpOf(part.toolName));
             work.push({ id: part.toolCallId, name: part.toolName });
             break;
           case 'tool-error': {
