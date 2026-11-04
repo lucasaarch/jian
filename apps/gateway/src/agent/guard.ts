@@ -190,6 +190,13 @@ const PLAIN: Record<
 
     switch (field(input, 'action')) {
       case 'push':
+        if (field(input, 'tag')) {
+          return {
+            title: `Push tag ${field(input, 'tag')} to ${repository}`,
+            detail,
+            confirm: 'Push',
+          };
+        }
         return force
           ? { title: `Force-push branch ${branch} to ${repository}`, detail, confirm: 'Force-push' }
           : { title: `Push branch ${branch} to ${repository}`, detail, confirm: 'Push' };
