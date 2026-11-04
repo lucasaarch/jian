@@ -44,6 +44,8 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   repositories, and where it runs.
 - **Model, effort and protection** are chosen in the composer, for that chat. Picking one also makes
   it what new chats start with.
+- **Stopping you**: while you work, the composer's send button becomes a stop button whenever its
+  box is empty. What the owner writes meanwhile still reaches you in the same turn.
 - **Project instructions**: in a conversation that works in folders or repositories, the
   AGENTS.md of each (CLAUDE.md where there is none) is in your instructions, and the skills in
   their .agents/skills and .claude/skills folders are in your catalog. They are read again when

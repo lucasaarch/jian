@@ -7,6 +7,7 @@ import { HoverTip } from '../../kit/info-tip';
 import type { GatewayApi, Message, Profile, ToolStep } from '../../lib/api';
 import { useCrew } from '../../lib/stores/crew';
 import { active, Elapsed, ModelNames, TierChip, useDrawerFocus } from './crew';
+import { groupMessages } from './group-messages';
 import { barButton, InspectorBar, InspectorBody, InspectorHeader } from './inspector';
 import { InspectorContent } from './inspector-host';
 import { MessageMedia } from './media';
@@ -94,6 +95,9 @@ export function CrewDrawer({
         ]
       : [];
   const placement = placeSteps(steps, displayed);
+  // Its paragraphs are stored one by one, as a chat channel receives them; read here as the
+  // conversation reads them, one answer between two stretches of tools.
+  const shown = groupMessages(displayed, new Map([[agent.runId, placement]]), new Map(), new Map());
   const activity = (items: ToolStep[]) =>
     items.length > 0 ? <ThoughtLine working={false} steps={traceOf(items)} /> : undefined;
   const alreadySaid =
@@ -170,7 +174,7 @@ export function CrewDrawer({
         </InspectorHeader>
         <InspectorBody className="grid content-start gap-3 px-(--inspector-inset) pt-4 [&_.chat-line]:mb-0">
           {error && <p className="text-[13px] text-bad">{error}</p>}
-          {displayed.map((message, index) => (
+          {shown.map(({ message, lastMessage, index }) => (
             <div key={message.id}>
               <ChatMessage
                 message={message}
@@ -188,8 +192,8 @@ export function CrewDrawer({
                   />
                 )}
               </ChatMessage>
-              {(!working || placement.last?.id !== message.id) &&
-                activity(placement.after.get(message.id) ?? [])}
+              {(!working || placement.last?.id !== lastMessage.id) &&
+                activity(placement.after.get(lastMessage.id) ?? [])}
             </div>
           ))}
           {working && !alreadySaid && (

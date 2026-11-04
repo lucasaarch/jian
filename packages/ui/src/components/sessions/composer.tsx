@@ -1,8 +1,9 @@
 'use client';
 
-import { ArrowUp, FileText, LoaderCircle, Plus, Reply, Trash2, X } from 'lucide-react';
+import { ArrowUp, FileText, LoaderCircle, Plus, Reply, Square, Trash2, X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { HoverTip } from '../../kit/info-tip';
 import type { MediaUpload } from '../../lib/api';
 import {
   type AttachmentKind,
@@ -50,6 +51,7 @@ export function Composer({
   status,
   replyTo,
   onCancelReply,
+  stop,
 }: {
   name: string;
   upload: (file: MediaUpload) => Promise<{ id: string }>;
@@ -66,6 +68,11 @@ export function Composer({
   above?: ReactNode;
   /** Where the conversation's objective and listeners stand, at the end of the row above it. */
   status?: ReactNode;
+  /**
+   * Stops the turn at work, offered only while one is. Words in the box still go to it as they
+   * would, so the button stops only when there is nothing to send.
+   */
+  stop?: () => Promise<unknown>;
 }) {
   const [text, setText] = useState(() =>
     draftKey ? (useDrafts.getState().texts[draftKey] ?? '') : '',
@@ -76,6 +83,7 @@ export function Composer({
   };
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [sending, setSending] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
@@ -438,9 +446,37 @@ export function Composer({
           />
           <span className="grow" />
           {modelControl}
-          <button type="submit" className="composer-send" aria-label="Send" disabled={!canSend}>
-            <ArrowUp size={16} />
-          </button>
+          {stop && !canSend && !sending ? (
+            <HoverTip tip="Stop the agent">
+              <button
+                type="button"
+                className="composer-send"
+                aria-label="Stop the agent"
+                disabled={stopping}
+                onClick={async () => {
+                  setStopping(true);
+                  setError('');
+                  try {
+                    await stop();
+                  } catch (failure) {
+                    setError(
+                      failure instanceof Error
+                        ? failure.message
+                        : 'The agent could not be stopped.',
+                    );
+                  } finally {
+                    setStopping(false);
+                  }
+                }}
+              >
+                <Square size={12} fill="currentColor" aria-hidden="true" />
+              </button>
+            </HoverTip>
+          ) : (
+            <button type="submit" className="composer-send" aria-label="Send" disabled={!canSend}>
+              <ArrowUp size={16} />
+            </button>
+          )}
         </div>
       </div>
     </form>

@@ -6,6 +6,7 @@ import type { GatewayApi, Run } from '../../lib/api';
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
+import { sendNow, useOutbox } from '../../lib/stores/outbox';
 import { useReconnect } from '../../lib/stores/reconnect';
 import { CrewDrawer } from './crew-drawer';
 import { History } from './history';
@@ -557,6 +558,233 @@ it('lays a turn out in the order it happened, its working line at the end', asyn
   } finally {
     await act(async () => root.unmount());
     element.remove();
+  }
+});
+
+it('keeps the work done before a message sent mid-turn above it, live and once the turn ends', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const working: Run = {
+    id: 'steered-run',
+    profileId: 'profile',
+    sessionId: 'session',
+    requestKey: 'steered',
+    input: 'Open an issue',
+    status: 'running',
+    progress: {
+      phase: 'tool',
+      tool: 'web_search',
+      text: '',
+      steps: 2,
+      updatedAt: '2026-09-29T18:06:00Z',
+    },
+    createdAt: '2026-09-29T18:00:00Z',
+    updatedAt: '2026-09-29T18:06:00Z',
+  };
+  const message = (id: string, role: 'user' | 'assistant', content: string, at: string) => ({
+    id,
+    profileId: 'profile',
+    sessionId: 'session',
+    runId: working.id,
+    role,
+    content,
+    createdAt: at,
+  });
+  let active = [working];
+  const api = {
+    messages: async () => [
+      message('request', 'user', 'Open an issue', '2026-09-29T18:00:00Z'),
+      message('said', 'assistant', 'Drafting the issue.', '2026-09-29T18:00:01Z'),
+      // Sent six minutes into the turn, which takes it in as it runs.
+      message('steer', 'user', 'Leave the parent out', '2026-09-29T18:06:00Z'),
+    ],
+    activities: async () => active,
+    timeline: async () => [
+      {
+        runId: working.id,
+        steps: [
+          {
+            toolCallId: 'before',
+            toolName: 'read_file',
+            status: 'done' as const,
+            startedAt: '2026-09-29T18:00:02Z',
+            finishedAt: '2026-09-29T18:05:59Z',
+          },
+          {
+            toolCallId: 'after',
+            toolName: 'fetch_url',
+            status: 'running' as const,
+            startedAt: '2026-09-29T18:06:01Z',
+          },
+        ],
+      },
+    ],
+  };
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  const follows = (first: Node | null | undefined, second: Node | null | undefined) =>
+    Boolean(
+      first && second && first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  const text = (words: string) =>
+    [...element.querySelectorAll('.chat-text')].find((item) => item.textContent?.includes(words));
+  const line = (words: string) =>
+    [...element.querySelectorAll('.thought-line')].find((item) =>
+      item.textContent?.includes(words),
+    );
+
+  try {
+    await act(async () =>
+      root.render(
+        <History api={api} profileId="profile" sessionId="session" initialRun={working} />,
+      ),
+    );
+    expect(follows(text('Drafting the issue.'), line('Reading a file'))).toBe(true);
+    expect(follows(line('Reading a file'), text('Leave the parent out'))).toBe(true);
+    const live = element.querySelector('.thought-line[data-working]');
+    expect(follows(text('Leave the parent out'), live)).toBe(true);
+    expect(live?.textContent).not.toContain('Reading a file');
+
+    // Ended: the same order, nothing moved.
+    active = [];
+    await act(async () =>
+      root.render(
+        <History
+          api={api}
+          profileId="profile"
+          sessionId="session"
+          initialRun={working}
+          revision={1}
+        />,
+      ),
+    );
+    expect(element.querySelector('.thought-line[data-working]')).toBeNull();
+    expect(follows(line('Reading a file'), text('Leave the parent out'))).toBe(true);
+    expect(follows(text('Leave the parent out'), line('Reading a page'))).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+
+it('shows the agent starting as soon as a message is sent, before the gateway answers', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  let deliver: (run: { id: string }) => void = () => {};
+  let started = false;
+  const queued: Run = {
+    id: 'new-run',
+    profileId: 'profile',
+    sessionId: 'session',
+    requestKey: 'new',
+    input: 'Hello',
+    status: 'queued',
+    createdAt: '2026-10-30T00:00:01Z',
+    updatedAt: '2026-10-30T00:00:01Z',
+  };
+  const api = {
+    messages: async () =>
+      started
+        ? [
+            {
+              id: 'hello',
+              profileId: 'profile',
+              sessionId: 'session',
+              runId: queued.id,
+              role: 'user' as const,
+              content: 'Hello',
+              createdAt: '2026-10-30T00:00:01Z',
+            },
+          ]
+        : [],
+    activities: async () => (started ? [queued] : []),
+    timeline: async () => [],
+  };
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  const working = () => element.querySelector('.thought-line[data-working]')?.textContent ?? '';
+
+  try {
+    await act(async () =>
+      root.render(<History api={api} profileId="profile" sessionId="session" />),
+    );
+    expect(working()).toBe('');
+
+    await act(async () =>
+      sendNow({
+        sessionId: 'session',
+        text: 'Hello',
+        mediaIds: [],
+        deliver: () => new Promise((resolve) => (deliver = resolve)),
+        delivered: () => {},
+      }),
+    );
+    // Still on its way: the agent is already there, starting.
+    expect(working()).toContain('Starting');
+
+    // Taken: the turn the gateway made is what shows from the next read on.
+    started = true;
+    await act(async () => deliver({ id: queued.id }));
+    await act(async () =>
+      root.render(<History api={api} profileId="profile" sessionId="session" revision={1} />),
+    );
+    expect(working()).toContain('Starting');
+    expect(element.querySelectorAll('.thought-line[data-working]')).toHaveLength(1);
+
+    // Over before the panel saw it at work: nothing is left starting.
+    started = false;
+    await act(async () =>
+      root.render(<History api={api} profileId="profile" sessionId="session" revision={2} />),
+    );
+    expect(working()).toBe('');
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+    useOutbox.setState({ items: [] });
+  }
+});
+
+it('reads a turn at work again when the event stream falls silent', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.useFakeTimers();
+  const working: Run = {
+    id: 'quiet-run',
+    profileId: 'profile',
+    sessionId: 'session',
+    requestKey: 'quiet',
+    input: 'Build it',
+    status: 'running',
+    createdAt: '2026-10-30T00:00:00Z',
+    updatedAt: '2026-10-30T00:00:00Z',
+  };
+  let reads = 0;
+  const api = {
+    messages: async () => {
+      reads += 1;
+      return [];
+    },
+    activities: async () => [working],
+    timeline: async () => [],
+  };
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+
+  try {
+    await act(async () =>
+      root.render(
+        <History api={api} profileId="profile" sessionId="session" initialRun={working} />,
+      ),
+    );
+    const first = reads;
+    await act(async () => vi.advanceTimersByTimeAsync(2_000));
+    expect(reads).toBe(first);
+    await act(async () => vi.advanceTimersByTimeAsync(4_000));
+    expect(reads).toBe(first + 1);
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+    vi.useRealTimers();
   }
 });
 

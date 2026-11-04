@@ -28,6 +28,7 @@ import { ConversationMap } from './conversation-map';
 import { CrewCards, placeCrew, reportOf } from './crew';
 import { ApprovalCard, QuestionCard } from './decision-cards';
 import { useFollowBottom } from './follow-bottom';
+import { groupMessages } from './group-messages';
 import { HistorySkeleton } from './history-skeleton';
 import { focusInspector } from './inspector-host';
 import { useKeptHistory } from './kept-history';
@@ -43,12 +44,21 @@ import { TroubleCard } from './trouble';
  * Who answers a message: the agent, or — on a question this profile carried to another agent —
  * that agent, whose run is kept in its own profile.
  */
+/**
+ * How long a turn at work may go without a word from the stream before the conversation is read
+ * anyway, in ms, and the longest the wait grows to while the silence lasts.
+ */
+const QUIET_READ_MS = 4_000;
+const QUIET_READ_MAX_MS = 30_000;
 /** How close to the top of the conversation, in px, reading further back begins. */
 const EARLIER_WITHIN_PX = 400;
 
 const answers = (message: Message) =>
   message.call ? message.role === 'user' : message.role === 'assistant';
 const turnOf = (message: Message) => message.call?.runId ?? message.runId;
+/** A person's own line in a turn: the one that opened it, or one sent while it ran. */
+const toldTurn = (message: Message) =>
+  message.role === 'user' && !message.call && !message.purpose && Boolean(message.runId);
 /** When a stretch of tools ended: its last tool's end, so a settled line stops its clock there. */
 const endOf = (steps: ToolStep[]) =>
   steps
@@ -127,92 +137,6 @@ const fallbacks = {
   cancelled: 'It stopped before it finished.',
 } as const;
 
-type DisplayMessage = {
-  message: Message;
-  lastMessage: Message;
-  index: number;
-  lastIndex: number;
-};
-
-/**
- * Channel comments arrive in pieces, but in the panel they are one Markdown answer. Keep turns,
- * tool activity, and messages with their own purpose as visible boundaries. Joining must never
- * lose anything, so what sits between two lines also divides them: an agent made there, and a
- * card that takes the place of the line it asked with and of nothing else.
- */
-function groupMessages(
-  messages: Message[],
-  placed: Map<string, ReturnType<typeof placeSteps>>,
-  crewBefore: Map<string, Subagent[]>,
-  asks: Map<string, { approval?: RunApproval; question?: RunQuestion }>,
-): DisplayMessage[] {
-  const groups: DisplayMessage[] = [];
-
-  for (let index = 0; index < messages.length; ) {
-    const first = messages[index];
-    if (!first) {
-      index += 1;
-      continue;
-    }
-
-    const sources = [first];
-    let previous = first;
-    let lastIndex = index;
-
-    while (lastIndex + 1 < messages.length) {
-      const next = messages[lastIndex + 1];
-      if (!next) break;
-      const runId = previous.runId;
-      const activity = runId ? placed.get(runId)?.after.get(previous.id) : undefined;
-
-      if (
-        previous.role !== 'assistant' ||
-        next.role !== 'assistant' ||
-        previous.call ||
-        next.call ||
-        previous.purpose ||
-        next.purpose ||
-        !runId ||
-        next.runId !== runId ||
-        activity?.length ||
-        crewBefore.has(next.id) ||
-        ((asks.get(runId)?.approval || asks.get(runId)?.question) &&
-          !messages
-            .slice(lastIndex + 2)
-            .some((later) => later.runId === runId && later.role === 'assistant')) ||
-        /\[(?:Attached media: |File not opened, it was not sent to you: [^\]]*?media ID )[0-9a-f-]{36}/.test(
-          previous.content + next.content,
-        )
-      ) {
-        break;
-      }
-
-      sources.push(next);
-      previous = next;
-      lastIndex += 1;
-    }
-
-    groups.push({
-      message:
-        sources.length === 1
-          ? first
-          : {
-              ...first,
-              content: sources.map((source) => source.content).join('\n\n'),
-              ...(sources.some((source) => source.reactions?.length)
-                ? { reactions: sources.flatMap((source) => source.reactions ?? []) }
-                : {}),
-            },
-      lastMessage: previous,
-      index,
-      lastIndex,
-    });
-    index = lastIndex + 1;
-  }
-
-  return groups;
-}
-
 /**
  * What was just read, joined to what is already known. A new line pushes the oldest out of the
  * latest page, and it stays: the reader has it on screen, and earlier pages end right above it.
@@ -251,6 +175,7 @@ export function History({
   onAnswered,
   retryRun,
   onReply,
+  onWork,
 }: {
   api: Pick<GatewayApi, 'messages' | 'activities'> &
     Partial<
@@ -286,6 +211,11 @@ export function History({
   onAnswered?: () => void;
   /** Runs a turn that failed again, where the conversation can be answered from the panel. */
   retryRun?: (run: Run) => Promise<unknown>;
+  /**
+   * Told the turn at work here whenever that changes, and undefined when none is: what this
+   * conversation reads is fresher than any list beside it.
+   */
+  onWork?: (run: Run | undefined) => void;
 }) {
   // Asked for from the palette: what is on screen stays while it is read again.
   const reloads = useReconnect((state) => state.chat);
@@ -312,6 +242,19 @@ export function History({
         .map((item) => item.key),
     );
   }, [outbox, sessionId, messages]);
+  // Turns the owner started from here that no read of the gateway has brought back yet, with
+  // when each was sent: the agent is drawn starting at once instead of after the next read.
+  const [awaited, setAwaited] = useState(new Map<string, string>());
+  useEffect(() => {
+    const sent = outbox.filter(
+      (item) => item.sessionId === sessionId && item.state === 'sent' && item.runId,
+    );
+    setAwaited((known) => {
+      const fresh = sent.filter((item) => item.runId && !known.has(item.runId));
+      if (!fresh.length) return known;
+      return new Map([...known, ...fresh.map((item) => [item.runId ?? '', item.at] as const)]);
+    });
+  }, [outbox, sessionId]);
   // What each run asked the owner to decide or answer, from the timeline.
   const [asks, setAsks] = useState(
     new Map<string, { approval?: RunApproval; question?: RunQuestion }>(kept?.asks),
@@ -326,6 +269,10 @@ export function History({
   const answered = useRef(reloads);
   // Bumped by an event about this conversation, so it reads again the moment something happens.
   const [heard, setHeard] = useState(0);
+  // When the stream last said something about this conversation, and when it was last read
+  // without being told to, in ms.
+  const streamAt = useRef(Date.now());
+  const polledAt = useRef(0);
   const [deciding, setDeciding] = useState(false);
   // The failed turn whose card the owner closed; a later one shows its own.
   const [dismissed, setDismissed] = useState<string>();
@@ -349,6 +296,7 @@ export function History({
         (event.data as { parentSessionId?: string } | undefined)?.parentSessionId;
 
       if (about && about !== sessionId) return;
+      streamAt.current = Date.now();
       // Several events arrive together as a turn moves; one read covers them all.
       clearTimeout(timer);
       timer = setTimeout(() => setHeard((value) => value + 1), 150);
@@ -392,13 +340,27 @@ export function History({
     () => placeCrew(subagents, messages.filter(answers)),
     [subagents, messages],
   );
+  // A line the owner sent while a turn was already at work joins that turn, and divides its work
+  // as the agent's own lines do: what was done before it stays above it, what came after goes
+  // below, while the turn runs and once it ends alike.
+  const steers = useMemo(() => {
+    const opened = new Set<string>();
+    const sent = new Set<string>();
+
+    for (const message of messages) {
+      if (!toldTurn(message) || !message.runId) continue;
+      if (opened.has(message.runId)) sent.add(message.id);
+      else opened.add(message.runId);
+    }
+    return sent;
+  }, [messages]);
   // Each turn's tools among the lines it said, so the work shows up as it was spoken.
   const placed = useMemo(() => {
     const said = new Map<string, { lines: Message[]; call: boolean }>();
 
     for (const message of messages) {
       const turn = turnOf(message);
-      if (!turn || !answers(message)) continue;
+      if (!turn || !(answers(message) || steers.has(message.id))) continue;
       const known = said.get(turn) ?? { lines: [], call: Boolean(message.call) };
       known.lines.push(message);
       said.set(turn, known);
@@ -410,7 +372,7 @@ export function History({
         placeSteps((call ? callTools : tools).get(turn) ?? [], lines),
       ]),
     );
-  }, [messages, tools, callTools]);
+  }, [messages, tools, callTools, steers]);
   const shownMessages = useMemo(
     () => groupMessages(messages, placed, crewPlacement.before, asks),
     [messages, placed, crewPlacement, asks],
@@ -495,6 +457,7 @@ export function History({
   useEffect(() => {
     let stopped = false;
     const read = async () => {
+      const began = new Date().toISOString();
       try {
         // The transcript is the part the owner came to see. Start its request with the supporting
         // reads, but do not make the conversation wait for a second trip to fetch its timeline.
@@ -528,6 +491,14 @@ export function History({
           .filter((activity) => activity.sessionId === sessionId)
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
           .at(-1);
+        // The turn at work is drawn now; its tools follow when the timeline answers.
+        setRun(lastRun);
+        // A turn sent before this read began is in what it read, at work or already over.
+        setAwaited((known) =>
+          [...known.values()].some((at) => at < began)
+            ? new Map([...known].filter(([, at]) => at >= began))
+            : known,
+        );
         const read = await readTurns(history, lastRun?.id);
         if (stopped) return;
         // What a part that could not be read leaves as it was.
@@ -542,7 +513,6 @@ export function History({
         }
         setSubagents(children);
         setPeople(new Map(members.map((person) => [person.id, person])));
-        setRun(lastRun);
         setToolsUnread(read.unread);
         answered.current = reloads;
         if (fresh) toast.success('Chat reloaded.');
@@ -699,6 +669,39 @@ export function History({
     };
   }, [api, callKey]);
 
+  // Sent from here and not yet seen at work: the agent shows as starting until a read says more.
+  const sending = outgoing.filter((item) => item.state === 'sending').map((item) => item.at);
+  const startingAt =
+    !isRunning && (sending.length || awaited.size)
+      ? [...sending, ...awaited.values()].sort().at(-1)
+      : undefined;
+
+  // While a turn is at work or awaited, a stream that went quiet is not taken at its word: the
+  // conversation is read again after a few seconds of silence, then less and less often, and
+  // back to listening as soon as the stream speaks. A stream that drops without failing would
+  // otherwise leave the turn frozen on screen until it ends.
+  const awaiting = isRunning || Boolean(startingAt);
+  const working = isRunning ? run : undefined;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: told only when the turn at work changes.
+  useEffect(() => onWork?.(working), [working?.id]);
+  useEffect(() => {
+    if (!awaiting) return;
+    let polls = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const check = () => {
+      if (streamAt.current > polledAt.current) polls = 0;
+      const quiet = Date.now() - Math.max(streamAt.current, polledAt.current);
+      if (quiet >= Math.min(QUIET_READ_MS * 2 ** polls, QUIET_READ_MAX_MS)) {
+        polls += 1;
+        polledAt.current = Date.now();
+        setHeard((value) => value + 1);
+      }
+      timer = setTimeout(check, 1000);
+    };
+    timer = setTimeout(check, 1000);
+    return () => clearTimeout(timer);
+  }, [awaiting]);
+
   // The turns still at work: their last stretch of tools is drawn at the end, not in place.
   const under = new Set([
     ...(run && isRunning ? [run.id] : []),
@@ -794,15 +797,13 @@ export function History({
           ) : messages.length ? (
             shownMessages.map(({ message, lastMessage, index, lastIndex }) => {
               const previous = messages[index - 1];
-              // The tools a turn used before saying anything go above the first thing it said.
-              const opensAnswer =
-                answers(message) &&
-                !messages
-                  .slice(0, index)
-                  .some((item) => answers(item) && turnOf(item) === turnOf(message));
+              const steered = steers.has(message.id);
               const answering = turnOf(message);
-              const place = answering && answers(message) ? placed.get(answering) : undefined;
-              const steps = opensAnswer ? place?.head : undefined;
+              const place =
+                answering && (answers(message) || steered) ? placed.get(answering) : undefined;
+              // The tools a turn used before its first line go above that line: the first thing
+              // it said, or a message the owner sent before it said anything.
+              const steps = place?.first?.id === message.id ? place.head : undefined;
               // The tools after this line, until the next: under it, where they happened. The
               // last stretch of a turn still at work belongs to its working line at the end.
               const later =
@@ -813,6 +814,7 @@ export function History({
                 message.role === 'user' &&
                 !message.call &&
                 message.runId &&
+                !placed.has(message.runId) &&
                 !(run?.id === message.runId && isRunning) &&
                 !messages.some(
                   (item) => item.role === 'assistant' && item.runId === message.runId,
@@ -875,6 +877,9 @@ export function History({
 
               return (
                 <Fragment key={message.id}>
+                  {steered && thought ? (
+                    <div className="chat-line theirs work">{thought}</div>
+                  ) : null}
                   {report || pause ? null : approval && message.runId ? (
                     <div className="chat-line theirs">
                       {thought}
@@ -935,7 +940,7 @@ export function History({
                       opensRun={!previous || who(previous) !== who(message)}
                       before={
                         <>
-                          {thought}
+                          {steered ? null : thought}
                           <CrewCards agents={beforeCrew} />
                         </>
                       }
@@ -1009,6 +1014,9 @@ export function History({
                 api={api}
               />
             ))}
+          {!loading && startingAt && (
+            <LiveTurn run={{ status: 'queued', createdAt: startingAt }} agent={agent} steps={[]} />
+          )}
           {!loading && pendingCall && callRun && running(callRun) && !alreadySaid(callRun) && (
             <LiveTurn
               run={callRun}
