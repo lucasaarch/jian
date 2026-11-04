@@ -83,6 +83,31 @@ describe("a conversation's tool timeline", () => {
     expect(timeline?.steps[1]?.output).toBeUndefined();
   });
 
+  it("names a tool server's call by its server and tool, and drops a malformed name", async () => {
+    const f = await setup();
+    const turn = await f.turn('servers');
+    await turn.write({
+      phase: 'tool-started',
+      toolName: 'mcp__github_issue_write_056a4702',
+      toolCallId: 'a',
+      mcp: { server: 'github', tool: 'issue_write' },
+      input: {},
+    });
+    await turn.write({
+      phase: 'tool-started',
+      toolName: 'mcp__docs_search_1a2b3c4d',
+      toolCallId: 'b',
+      mcp: { server: 7 },
+      input: {},
+    });
+    await turn.finish();
+
+    const [timeline] = await f.services.sessions.timeline(f.profile.id, f.session.id);
+
+    expect(timeline?.steps[0]?.mcp).toEqual({ server: 'github', tool: 'issue_write' });
+    expect(timeline?.steps[1]).not.toHaveProperty('mcp');
+  });
+
   it('bounds display values, retains redaction, and matches both the call id and tool name', async () => {
     const f = await setup();
     const turn = await f.turn('bounded');

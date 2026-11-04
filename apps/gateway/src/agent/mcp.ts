@@ -1,7 +1,8 @@
 import type { MCPClient } from '@ai-sdk/mcp';
 import type { McpServer } from '@jian/contracts';
-import { type ToolSet, tool } from 'ai';
+import { type JSONSchema7, jsonSchema, type ToolSet, tool } from 'ai';
 import { z } from 'zod';
+import { hiddenArguments } from './github-mcp.js';
 import { connectMcp, type SecretReader } from './mcp-connect.js';
 import { mcpClientDisconnected } from './mcp-errors.js';
 import { exposedEnding } from './mcp-names.js';
@@ -278,11 +279,38 @@ export function omitEmptyOptionalArguments(input: unknown, schema: unknown): unk
   return cleaned;
 }
 
+/**
+ * The tool without the arguments `hidden` names: gone from the schema the model reads, so it is
+ * never asked for them, and dropped from every call, so one it sends anyway never reaches the
+ * server.
+ */
+function withoutArguments(remote: ToolSet[string], hidden: readonly string[]): ToolSet[string] {
+  const schema = (remote.inputSchema as { jsonSchema?: JSONSchema7 }).jsonSchema;
+  if (!hidden.length || !schema?.properties) return remote;
+
+  const kept = (name: string) => !hidden.includes(name);
+  const narrowed: JSONSchema7 = {
+    ...schema,
+    properties: Object.fromEntries(
+      Object.entries(schema.properties).filter(([name]) => kept(name)),
+    ),
+    ...(schema.required ? { required: schema.required.filter(kept) } : {}),
+  };
+
+  return { ...remote, inputSchema: jsonSchema(narrowed) } as ToolSet[string];
+}
+
+function withoutKeys(input: unknown, hidden: readonly string[]): unknown {
+  if (!hidden.length || !input || typeof input !== 'object' || Array.isArray(input)) return input;
+  return Object.fromEntries(Object.entries(input).filter(([name]) => !hidden.includes(name)));
+}
+
 function withClosedClientRetry(
   live: LiveServer,
   serverTool: string,
   remote: ToolSet[string],
   context: McpContext,
+  hidden: readonly string[],
 ): ToolSet[string] {
   if (!remote.execute) {
     return remote;
@@ -298,7 +326,10 @@ function withClosedClientRetry(
       throw new Error(`MCP server ${live.config.name} no longer offers ${serverTool}`);
     }
 
-    return execute(omitEmptyOptionalArguments(input, remote.inputSchema), options);
+    return execute(
+      withoutKeys(omitEmptyOptionalArguments(input, remote.inputSchema), hidden),
+      options,
+    );
   };
 
   return {
@@ -389,7 +420,14 @@ export async function connectMcpTools(
 
       const exposed = exposedName(config.name, name);
 
-      tools[exposed] = withClosedClientRetry(live, name, remote, context);
+      const hidden = hiddenArguments(config, name);
+      tools[exposed] = withClosedClientRetry(
+        live,
+        name,
+        withoutArguments(remote, hidden),
+        context,
+        hidden,
+      );
       mcpToolNames.push(exposed);
       catalog.push({
         name: exposed,

@@ -165,6 +165,17 @@
     overflow-wrap: anywhere;
     color: var(--ink);
   }
+  /* A tool server's JSON: the chat's code block, flush in the card and held to the height of
+     a plain block, so a long answer scrolls inside it instead of stretching the trace. */
+  .tool-details .code-block {
+    @apply my-0 rounded-lg;
+  }
+  .tool-details .code-block-body {
+    @apply max-h-72 overflow-auto;
+  }
+  .tool-details .code-block-lines {
+    @apply text-[11px];
+  }
   .thought-truncated,
   .tool-empty {
     @apply m-0 text-xs;

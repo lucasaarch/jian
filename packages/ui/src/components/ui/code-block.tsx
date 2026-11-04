@@ -10,9 +10,18 @@ import { highlightLines } from './highlight';
  * button above, the lines numbered and coloured. The numbers are drawn, not text, so copying
  * by hand takes only the code.
  */
-export function CodeBlock({ text, language }: { text: string; language?: string }) {
+export function CodeBlock({
+  text,
+  language,
+  wrapped = false,
+}: {
+  text: string;
+  language?: string;
+  /** Whether lines start wrapped; the owner can still switch it. */
+  wrapped?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
-  const [wrap, setWrap] = useState(false);
+  const [wrap, setWrap] = useState(wrapped);
   const lines = highlightLines(text, language);
 
   return (

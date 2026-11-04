@@ -13,6 +13,7 @@ import {
   ORIGIN_QUERY,
   originUrls,
   repositoryName,
+  tagName,
 } from './github-git-command.js';
 import type { GitPlace } from './github-git-place.js';
 
@@ -28,7 +29,14 @@ const input = z.object({
     ),
   branch: branchName
     .optional()
-    .describe('clone: the branch to check out. fetch, pull: that branch only. push: required.'),
+    .describe(
+      'clone: the branch to check out. fetch, pull: that branch only. push: the branch, or give tag instead.',
+    ),
+  tag: tagName
+    .optional()
+    .describe(
+      'push only, instead of branch: a tag the checkout has, such as a release tag. A tag GitHub already has is never moved.',
+    ),
   depth: z
     .number()
     .int()
@@ -40,7 +48,9 @@ const input = z.object({
   force: z
     .boolean()
     .optional()
-    .describe('push only: overwrite the remote branch, with a lease. Only when the owner asked.'),
+    .describe(
+      'push of a branch only: overwrite the remote branch, with a lease. Only when the owner asked.',
+    ),
 });
 
 type Call = z.infer<typeof input>;
@@ -63,9 +73,20 @@ function commandOf(call: Call, path: string, url: string): GitAction {
     case 'pull':
       return { action: 'pull', path, ...branch, rebase: call.rebase === true };
     case 'push':
-      if (!call.branch) throw new GatewayError(400, 'Name the branch to push.');
+      if (call.tag) return { action: 'push-tag', path, tag: call.tag };
+      if (!call.branch) throw new GatewayError(400, 'Name the branch or the tag to push.');
       return { action: 'push', path, branch: call.branch, force: call.force === true };
   }
+}
+
+/** Why a push cannot be run as asked; undefined when it can. */
+function pushRefusal(call: Call): string | undefined {
+  if (call.action !== 'push') return undefined;
+  if (call.branch && call.tag) return 'Push a branch or a tag, not both.';
+  if (!call.branch && !call.tag) return 'Name the branch or the tag to push.';
+  // A release workflow runs on the tag; moving one would publish a version under another's name.
+  if (call.tag && call.force) return 'A tag is never force-pushed: a published tag never moves.';
+  return undefined;
 }
 
 /** The checkout's origin must be the repository the call names, or nothing is lent. */
@@ -123,13 +144,12 @@ export function githubGitTools(options: {
   return {
     [GITHUB_GIT]: tool({
       description:
-        'Clone, fetch, pull or push a GitHub repository with the access of the GitHub App the owner connected, where this conversation works: the machine this gateway runs on, or the machine it targets. Use it for every GitHub clone, fetch, pull and push, also when origin is an SSH URL; use git in the shell for everything local (status, branch, commit, diff, merge). Push needs branch.',
+        'Clone, fetch, pull or push a GitHub repository with the access of the GitHub App the owner connected, where this conversation works: the machine this gateway runs on, or the machine it targets. Use it for every GitHub clone, fetch, pull and push, also when origin is an SSH URL; use git in the shell for everything local (status, branch, commit, tag, diff, merge). Push needs branch, or tag to push a tag.',
       inputSchema: input,
       execute: async (call, { abortSignal }) => {
         // Before any token is minted for it.
-        if (call.action === 'push' && !call.branch) {
-          throw new GatewayError(400, 'Name the branch to push.');
-        }
+        const refused = pushRefusal(call);
+        if (refused) throw new GatewayError(400, refused);
         const access = await github.gitAccess(
           options.profileId,
           options.projectId,

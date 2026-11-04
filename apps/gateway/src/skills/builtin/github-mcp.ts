@@ -38,6 +38,12 @@ You cannot complete OAuth or mint a PAT. If the server needs sign-in, say so.
 Typical fields: \`owner\`, \`repo\`, \`title\` (required, non-empty), optional \`body\`, \`labels\`,
 \`assignees\`, \`milestone\`.
 
+- **Send only the fields you mean.** An optional field you have no value for is left out, not
+  filled with a placeholder.
+- **Never pass \`parent_issue_number\` on a plain create.** It files the new issue under that
+  parent, and a number guessed to fill the field fails the whole create with "failed to resolve
+  parent issue". When the owner wants a sub-issue, create it, then attach it with
+  \`sub_issue_write\`.
 - **Do not pass \`milestone\` as \`0\` or \`-1\`.** Those are not "no milestone"; GitHub 422s.
   Omit the field entirely when there is no milestone. Use a real milestone **number** from the
   repo when one applies.

@@ -111,3 +111,69 @@ it('sends a selected reply reference with the text and clears it only after subm
   expect(cancel).toHaveBeenCalledOnce();
   expect(container.querySelector('.composer-send .spin')).toBeNull();
 });
+
+it('stops the turn at work when there is nothing to send, and sends to it when there is', async () => {
+  const stop = vi.fn(async () => undefined);
+  const send = vi.fn(async () => undefined);
+  await act(async () => {
+    root.render(
+      createElement(Composer, { name: 'Mia', upload: vi.fn(), send, onSent: vi.fn(), stop }),
+    );
+  });
+  const button = () => container.querySelector<HTMLButtonElement>('.composer-send');
+
+  expect(button()?.getAttribute('aria-label')).toBe('Stop the agent');
+  await act(async () => button()?.click());
+  expect(stop).toHaveBeenCalledTimes(1);
+
+  const field = container.querySelector('textarea') as HTMLTextAreaElement;
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  await act(async () => {
+    setValue?.call(field, 'Also check the docs');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(button()?.getAttribute('aria-label')).toBe('Send');
+});
+
+it('never offers stop over words waiting for an upload to finish', async () => {
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:preview' }));
+  const stop = vi.fn(async () => undefined);
+  await act(async () => {
+    root.render(
+      createElement(Composer, {
+        name: 'Mia',
+        // Still uploading for as long as the test looks.
+        upload: () => new Promise<{ id: string }>(() => {}),
+        send: vi.fn(),
+        onSent: vi.fn(),
+        stop,
+      }),
+    );
+  });
+  const field = container.querySelector('textarea') as HTMLTextAreaElement;
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  const picker = container.querySelector('input[type="file"]') as HTMLInputElement;
+  await act(async () => {
+    setValue?.call(field, 'Also check the logs');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    Object.defineProperty(picker, 'files', {
+      value: [new File(['x'], 'screen.png', { type: 'image/png' })],
+      configurable: true,
+    });
+    picker.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  const button = container.querySelector<HTMLButtonElement>('.composer-send');
+  expect(button?.getAttribute('aria-label')).toBe('Send');
+  expect(button?.disabled).toBe(true);
+  vi.unstubAllGlobals();
+});
+
+it('offers no stop while nothing is at work', async () => {
+  await act(async () => {
+    root.render(
+      createElement(Composer, { name: 'Mia', upload: vi.fn(), send: vi.fn(), onSent: vi.fn() }),
+    );
+  });
+  expect(container.querySelector('[aria-label="Stop the agent"]')).toBeNull();
+});

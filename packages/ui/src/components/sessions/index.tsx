@@ -2,7 +2,7 @@
 
 import { AGENT_SESSION_CHANNEL, GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { useEffect, useState } from 'react';
-import type { Message, Session } from '../../lib/api';
+import type { Message, Run, Session } from '../../lib/api';
 import { conversationName } from '../../lib/conversation-name';
 import { agentPath } from '../../lib/navigation';
 import {
@@ -90,6 +90,8 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
     prettyModel(modelId);
   // Bumped by a sent message, so the open history reads again instead of waiting for its poll.
   const [sent, setSent] = useState(0);
+  // The turn at work in the open conversation, as its history last read it.
+  const [working, setWorking] = useState<Run>();
   const answered = () => {
     setSent((value) => value + 1);
     void refresh();
@@ -210,6 +212,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                       }
                       onAnswered={answered}
                       onReply={isGateway(active) ? setReplyTo : undefined}
+                      onWork={setWorking}
                     />
                     {docked(active) && (
                       <ConversationDock key={`dock-${active.id}`}>
@@ -277,6 +280,14 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                               })
                             }
                             onSent={answered}
+                            stop={
+                              working?.sessionId === active.id
+                                ? async () => {
+                                    await api.cancelRun(profile.id, working.id);
+                                    answered();
+                                  }
+                                : undefined
+                            }
                           />
                         ) : (
                           <AgentToolbar

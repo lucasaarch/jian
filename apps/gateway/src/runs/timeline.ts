@@ -1,6 +1,7 @@
 import {
   codeDiffSchema,
   imageAspectSchema,
+  mcpToolRefSchema,
   type RunTimeline,
   TOOL_DISPLAY_CHARS,
   type ToolStep,
@@ -82,6 +83,8 @@ export async function sessionTimeline(
       phase: sql<string>`${checkpoints.data}->>'phase'`,
       toolName: sql<string | null>`${checkpoints.data}->>'toolName'`,
       toolCallId: sql<string | null>`${checkpoints.data}->>'toolCallId'`,
+      // Only a tool server's call carries one; every other row reads null here.
+      mcp: sql<unknown>`${checkpoints.data}->'mcp'`,
       // These fields were redacted at write time. Bound them in SQL, before they leave the DB.
       input: sql<
         string | null
@@ -137,9 +140,11 @@ export async function sessionTimeline(
         row.toolName === 'generate_image'
           ? imageAspectSchema.safeParse(row.aspectRatio ?? '1:1')
           : undefined;
+      const mcp = row.mcp === null ? undefined : mcpToolRefSchema.safeParse(row.mcp);
       steps.set(row.toolCallId, {
         toolCallId: row.toolCallId,
         toolName: row.toolName,
+        ...(mcp?.success ? { mcp: mcp.data } : {}),
         status: 'running',
         startedAt: row.at.toISOString(),
         ...display('input', row.input),

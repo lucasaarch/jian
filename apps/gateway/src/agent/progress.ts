@@ -15,6 +15,7 @@ const URGENT_BACKLOG = 3;
 export class ProgressReporter {
   private phase: RunProgress['phase'] = 'thinking';
   private tool: string | undefined;
+  private mcp: RunProgress['mcp'];
   private text = '';
   private steps = 0;
   /** The newest token snapshot not yet written; a slower writer skips the ones in between. */
@@ -49,9 +50,10 @@ export class ProgressReporter {
   }
 
   /** A tool interrupts the answer: the text written before it is not the text that will stand. */
-  usingTool(name: string): void {
+  usingTool(name: string, mcp?: RunProgress['mcp']): void {
     this.phase = 'tool';
     this.tool = name;
+    this.mcp = mcp;
     this.text = '';
     this.mark(true);
   }
@@ -102,7 +104,7 @@ export class ProgressReporter {
   private snapshot(): RunProgress {
     return {
       phase: this.phase,
-      ...(this.tool ? { tool: this.tool } : {}),
+      ...(this.tool ? { tool: this.tool, ...(this.mcp ? { mcp: this.mcp } : {}) } : {}),
       // The tail is what a reader is looking at; the head is already on their screen.
       text: this.text.length > 8000 ? this.text.slice(-8000) : this.text,
       steps: this.steps,

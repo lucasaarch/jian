@@ -249,6 +249,64 @@ describe('github_git in the gateway workspace', () => {
     });
   });
 
+  it('pushes a release tag as a tag, annotated, and never moves one GitHub has', async () => {
+    const { tools, home, repositories } = await github();
+    await run(tools(), { action: 'clone', repository: 'octo-example/site' });
+    const checkout = join(home, 'site');
+    const remote = join(repositories, 'octo-example/site.git');
+    git(checkout, 'tag', '-a', 'v1.2.3', '-m', 'Site 1.2.3');
+    const pushTag = () =>
+      run(tools(), {
+        action: 'push',
+        repository: 'octo-example/site',
+        path: checkout,
+        tag: 'v1.2.3',
+      });
+
+    expect(await pushTag()).toMatchObject({ ok: true, action: 'push' });
+    expect(git(remote, 'cat-file', '-t', 'refs/tags/v1.2.3')).toBe('tag');
+    expect(git(remote, 'rev-parse', 'refs/tags/v1.2.3^{commit}')).toBe(
+      git(checkout, 'rev-parse', 'HEAD'),
+    );
+    expect(git(remote, 'for-each-ref', 'refs/heads/v1.2.3')).toBe('');
+
+    // Retagged elsewhere: the published tag stays where it was.
+    const published = git(remote, 'rev-parse', 'refs/tags/v1.2.3');
+    git(checkout, 'commit', '-q', '--allow-empty', '-m', 'Later');
+    git(checkout, 'tag', '-f', '-a', 'v1.2.3', '-m', 'Site 1.2.3 again');
+
+    expect(await pushTag()).toMatchObject({
+      ok: false,
+      problem: expect.stringMatching(/already has this tag/),
+    });
+    expect(git(remote, 'rev-parse', 'refs/tags/v1.2.3')).toBe(published);
+    await expect(
+      run(tools(), {
+        action: 'push',
+        repository: 'octo-example/site',
+        path: checkout,
+        tag: 'v1.2.3',
+        force: true,
+      }),
+    ).rejects.toThrow(/never force-pushed/);
+  });
+
+  it('tells a tag pushed as a branch to name it as a tag', async () => {
+    const { tools, home } = await github();
+    await run(tools(), { action: 'clone', repository: 'octo-example/site' });
+    const checkout = join(home, 'site');
+    git(checkout, 'tag', '-a', 'v1.2.3', '-m', 'Site 1.2.3');
+
+    expect(
+      await run(tools(), {
+        action: 'push',
+        repository: 'octo-example/site',
+        path: checkout,
+        branch: 'v1.2.3',
+      }),
+    ).toMatchObject({ ok: false, problem: expect.stringMatching(/name it as tag/) });
+  });
+
   it('lends nothing to a checkout whose origin is another repository', async () => {
     const { tools, home, server, minted } = await github();
     await run(tools(), { action: 'clone', repository: 'octo-example/site' });
@@ -639,5 +697,12 @@ describe('github_git under protection', () => {
         input: { action: 'push', repository: 'octo-example/site', branch: 'main', force: true },
       }).title,
     ).toBe('Force-push branch main to octo-example/site');
+    expect(
+      plainDescription({
+        toolName: 'github_git',
+        kind: 'service',
+        input: { action: 'push', repository: 'octo-example/site', tag: 'v1.2.3' },
+      }).title,
+    ).toBe('Push tag v1.2.3 to octo-example/site');
   });
 });

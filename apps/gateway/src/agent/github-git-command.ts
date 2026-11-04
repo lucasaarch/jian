@@ -13,15 +13,22 @@ export const repositoryName = z
   .regex(/^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/, 'Use owner/name, as GitHub shows it')
   .refine((value) => !/\/\.{1,2}$/.test(value), 'Use owner/name, as GitHub shows it');
 
-/** A branch as git's ref rules allow it, never starting with `-`. */
+/** A ref name as git's rules allow it, never starting with `-`. */
+const REF_NAME = /^(?!-)(?!.*\.\.)(?!.*\/\/)(?!.*@\{)(?!.*\.lock$)[A-Za-z0-9._/+-]+(?<![/.])$/;
+
 export const branchName = z
   .string()
   .trim()
   .min(1)
   .max(200)
-  .regex(/^(?!-)(?!.*\.\.)(?!.*\/\/)(?!.*@\{)(?!.*\.lock$)[A-Za-z0-9._/+-]+(?<![/.])$/, {
-    message: 'Not a branch name git accepts',
-  });
+  .regex(REF_NAME, { message: 'Not a branch name git accepts' });
+
+export const tagName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(REF_NAME, { message: 'Not a tag name git accepts' });
 
 /** A checkout path; quotes and control characters are refused so no shell can misread it. */
 export const checkoutPath = z
@@ -37,7 +44,8 @@ export type GitAction =
   | { action: 'clone'; url: string; path: string; branch?: string; depth?: number }
   | { action: 'fetch'; path: string; branch?: string }
   | { action: 'pull'; path: string; branch?: string; rebase?: boolean }
-  | { action: 'push'; path: string; branch: string; force?: boolean };
+  | { action: 'push'; path: string; branch: string; force?: boolean }
+  | { action: 'push-tag'; path: string; tag: string };
 
 /** The arguments of one git command; a checkout is named with `-C`, so a missing one fails. */
 export function gitArguments(command: GitAction): string[] {
@@ -81,6 +89,17 @@ export function gitArguments(command: GitAction): string[] {
         '--set-upstream',
         'origin',
         `refs/heads/${command.branch}:refs/heads/${command.branch}`,
+      ];
+    case 'push-tag':
+      // Spelled out under refs/tags, so a tag is never sent as a branch of the same name. The
+      // tag object goes as it is, an annotated tag keeping its message, and without a force
+      // git refuses to move a tag the remote already has.
+      return [
+        '-C',
+        command.path,
+        'push',
+        'origin',
+        `refs/tags/${command.tag}:refs/tags/${command.tag}`,
       ];
   }
 }
@@ -193,6 +212,15 @@ export function gitProblem(stderr: string, repository: string): string | undefin
   }
   if (/gh006|protected branch/.test(text)) {
     return 'GitHub refused the push: the branch is protected. Push another branch and open a pull request.';
+  }
+  if (/\(already exists\)/.test(text)) {
+    return 'GitHub already has this tag, and a published tag is never moved. Check which commit it names; to publish another, tag the next version.';
+  }
+  if (/src refspec refs\/tags\/.* does not match any/.test(text)) {
+    return 'The checkout has no such tag. Create it with git in the shell first (git tag -a for a release).';
+  }
+  if (/src refspec refs\/heads\/.* does not match any/.test(text)) {
+    return 'The checkout has no such branch. To push a tag, name it as tag instead of branch.';
   }
   if (/stale info/.test(text)) {
     return 'The forced push was refused: the remote branch moved since it was last fetched. Fetch, look at what changed, and decide again.';

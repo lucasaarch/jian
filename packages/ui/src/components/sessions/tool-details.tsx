@@ -1,5 +1,7 @@
 'use client';
 
+import { CodeBlock } from '../ui/code-block';
+
 /** Display values have already been bounded and redacted at the timeline boundary. */
 export type ToolValue = { text?: string; truncated?: boolean };
 
@@ -118,32 +120,69 @@ function Value({ value, none }: { value: unknown; none: string }) {
   return <Block value={scalar(value)} />;
 }
 
+/**
+ * A value as JSON, the way a tool server takes and gives it. A server's text that is itself
+ * JSON is laid out too; a value the gateway cut, no longer JSON, is shown as it stands.
+ */
+function JsonValue({ value, none }: { value: unknown; none: string }) {
+  const shown = typeof value === 'string' ? parsed(value) : value;
+  const empty =
+    shown === null ||
+    shown === '' ||
+    (typeof shown === 'object' && Object.keys(shown as object).length === 0);
+
+  if (empty) return <p className="tool-empty">{none}</p>;
+  if (typeof shown === 'string') return <Block value={shown} />;
+
+  return <CodeBlock text={JSON.stringify(shown, null, 2)} language="json" wrapped />;
+}
+
 function Section({
   title,
   value,
   none,
+  json,
 }: {
   title: 'Input' | 'Output';
   value: ToolValue;
   none: string;
+  json: boolean;
 }) {
+  const shown = unwrapped(parsed(value.text ?? ''));
+
   return (
     <section>
       <h4>{title}</h4>
-      <Value value={unwrapped(parsed(value.text ?? ''))} none={none} />
+      {json ? <JsonValue value={shown} none={none} /> : <Value value={shown} none={none} />}
       {value.truncated && <p className="thought-truncated">{title} truncated.</p>}
     </section>
   );
 }
 
-/** What a tool was asked and what it answered, in the owner's words rather than as raw JSON. */
-export function ToolDetails({ input, output }: { input?: ToolValue; output?: ToolValue }) {
+/**
+ * What a tool was asked and what it answered. Jian's own tools read in the owner's words; an
+ * MCP server's (`json`) as JSON, since its fields are the server's own and many, and a list of
+ * them labelled one by one is harder to read than the object they make.
+ */
+export function ToolDetails({
+  input,
+  output,
+  json = false,
+}: {
+  input?: ToolValue;
+  output?: ToolValue;
+  json?: boolean;
+}) {
   if (input?.text === undefined && output?.text === undefined) return null;
 
   return (
     <div className="tool-details">
-      {input?.text !== undefined && <Section title="Input" value={input} none="No arguments" />}
-      {output?.text !== undefined && <Section title="Output" value={output} none="No result" />}
+      {input?.text !== undefined && (
+        <Section title="Input" value={input} none="No arguments" json={json} />
+      )}
+      {output?.text !== undefined && (
+        <Section title="Output" value={output} none="No result" json={json} />
+      )}
     </div>
   );
 }

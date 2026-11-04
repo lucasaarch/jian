@@ -6105,6 +6105,24 @@
                             "type": "string",
                             "maxLength": 100
                           },
+                          "mcp": {
+                            "type": "object",
+                            "properties": {
+                              "server": {
+                                "type": "string",
+                                "maxLength": 100
+                              },
+                              "tool": {
+                                "type": "string",
+                                "maxLength": 200
+                              }
+                            },
+                            "required": [
+                              "server",
+                              "tool"
+                            ],
+                            "additionalProperties": false
+                          },
                           "text": {
                             "default": "",
                             "type": "string",
@@ -11777,6 +11795,24 @@
                           "type": "string",
                           "maxLength": 100
                         },
+                        "mcp": {
+                          "type": "object",
+                          "properties": {
+                            "server": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "tool": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "server",
+                            "tool"
+                          ],
+                          "additionalProperties": false
+                        },
                         "text": {
                           "default": "",
                           "type": "string",
@@ -12553,6 +12589,24 @@
                           "type": "string",
                           "maxLength": 100
                         },
+                        "mcp": {
+                          "type": "object",
+                          "properties": {
+                            "server": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "tool": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "server",
+                            "tool"
+                          ],
+                          "additionalProperties": false
+                        },
                         "text": {
                           "default": "",
                           "type": "string",
@@ -13326,6 +13380,24 @@
                         "tool": {
                           "type": "string",
                           "maxLength": 100
+                        },
+                        "mcp": {
+                          "type": "object",
+                          "properties": {
+                            "server": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "tool": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "server",
+                            "tool"
+                          ],
+                          "additionalProperties": false
                         },
                         "text": {
                           "default": "",
@@ -31329,6 +31401,24 @@
                           "type": "string",
                           "maxLength": 100
                         },
+                        "mcp": {
+                          "type": "object",
+                          "properties": {
+                            "server": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "tool": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "server",
+                            "tool"
+                          ],
+                          "additionalProperties": false
+                        },
                         "text": {
                           "default": "",
                           "type": "string",
@@ -33008,6 +33098,24 @@
                           "type": "string",
                           "maxLength": 100
                         },
+                        "mcp": {
+                          "type": "object",
+                          "properties": {
+                            "server": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "tool": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "server",
+                            "tool"
+                          ],
+                          "additionalProperties": false
+                        },
                         "text": {
                           "default": "",
                           "type": "string",
@@ -33636,6 +33744,24 @@
                             },
                             "toolName": {
                               "type": "string"
+                            },
+                            "mcp": {
+                              "type": "object",
+                              "properties": {
+                                "server": {
+                                  "type": "string",
+                                  "maxLength": 100
+                                },
+                                "tool": {
+                                  "type": "string",
+                                  "maxLength": 200
+                                }
+                              },
+                              "required": [
+                                "server",
+                                "tool"
+                              ],
+                              "additionalProperties": false
                             },
                             "status": {
                               "type": "string",
@@ -37204,6 +37330,24 @@
                           "type": "string",
                           "maxLength": 100
                         },
+                        "mcp": {
+                          "type": "object",
+                          "properties": {
+                            "server": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "tool": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "server",
+                            "tool"
+                          ],
+                          "additionalProperties": false
+                        },
                         "text": {
                           "default": "",
                           "type": "string",
@@ -39563,6 +39707,24 @@
                             "type": "string",
                             "maxLength": 100
                           },
+                          "mcp": {
+                            "type": "object",
+                            "properties": {
+                              "server": {
+                                "type": "string",
+                                "maxLength": 100
+                              },
+                              "tool": {
+                                "type": "string",
+                                "maxLength": 200
+                              }
+                            },
+                            "required": [
+                              "server",
+                              "tool"
+                            ],
+                            "additionalProperties": false
+                          },
                           "text": {
                             "default": "",
                             "type": "string",
@@ -40312,6 +40474,24 @@
                           "type": "string",
                           "maxLength": 100
                         },
+                        "mcp": {
+                          "type": "object",
+                          "properties": {
+                            "server": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "tool": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "server",
+                            "tool"
+                          ],
+                          "additionalProperties": false
+                        },
                         "text": {
                           "default": "",
                           "type": "string",
@@ -41059,6 +41239,24 @@
                         "tool": {
                           "type": "string",
                           "maxLength": 100
+                        },
+                        "mcp": {
+                          "type": "object",
+                          "properties": {
+                            "server": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "tool": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "server",
+                            "tool"
+                          ],
+                          "additionalProperties": false
                         },
                         "text": {
                           "default": "",

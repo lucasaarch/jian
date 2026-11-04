@@ -115,3 +115,64 @@ it('uses the chat message layout with the profile avatar above the tool activity
     useCrew.getState().leave('parent');
   }
 });
+
+it('reads an agent’s paragraphs as one answer, as the conversation does', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const agent = {
+    runId: 'writer',
+    sessionId: 'writer-session',
+    name: 'Writer',
+    role: 'execute',
+    status: 'completed',
+    createdAt: '2026-10-31T10:00:00Z',
+    updatedAt: '2026-10-31T10:00:09Z',
+  } as Subagent;
+  const line = (id: string, content: string, at: string) => ({
+    id,
+    runId: 'writer',
+    sessionId: 'writer-session',
+    profileId: 'profile',
+    role: 'assistant',
+    content,
+    createdAt: at,
+  });
+  const api = {
+    messages: async () => [
+      line('one', 'Checked the config.', '2026-10-31T10:00:01Z'),
+      line('two', 'Nothing else changed.', '2026-10-31T10:00:02Z'),
+      line('three', 'The suite passes.', '2026-10-31T10:00:08Z'),
+    ],
+    timeline: async () => [
+      {
+        runId: 'writer',
+        steps: [
+          {
+            toolCallId: 'suite',
+            toolName: 'run_command',
+            status: 'done',
+            startedAt: '2026-10-31T10:00:03Z',
+            finishedAt: '2026-10-31T10:00:07Z',
+          },
+        ],
+      },
+    ],
+  } as unknown as GatewayApi;
+  useCrew.setState({ sessionId: 'parent-session', agents: [agent], following: agent.runId });
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  try {
+    await act(async () => root.render(<CrewDrawer api={api} profileId="profile" />));
+    const answers = [...element.querySelectorAll('.chat-text')].map((item) => item.textContent);
+    // Joined until a tool runs between them, which keeps its own place.
+    expect(answers).toHaveLength(2);
+    expect(answers[0]).toContain('Checked the config.');
+    expect(answers[0]).toContain('Nothing else changed.');
+    expect(answers[1]).toContain('The suite passes.');
+    expect(element.querySelector('.thought-line')?.textContent).toContain('Running a command');
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+    useCrew.getState().leave('parent-session');
+  }
+});

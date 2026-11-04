@@ -6,11 +6,18 @@ Every release of Jian, newest first.
 
 ## 1.3.1 — 2026-11-04
 
-Remote event streams recover after a database connection drops, and the Inspector handles draft pull requests and branch updates more reliably.
+You can stop the agent from the composer, conversations with a remote gateway keep up while the agent works, and the agent can create GitHub issues and push release tags through the integration.
 
 ### Staying connected
 
 * When the gateway's database notification connection drops, it reconnects automatically. Event streams subscribe before reading, so changes committed during a read arrive without waiting for the next 25-second heartbeat.
+* While the agent works, an open conversation no longer waits on the event stream alone. After a few seconds without news it reads the conversation again, and it checks less often the longer the silence lasts. A turn on a remote gateway no longer sits frozen until it ends.
+
+### The conversation
+
+* While the agent works, the send button turns into a stop button whenever the message box is empty. Anything you write still reaches the agent in the same turn.
+* The agent shows up as Starting the moment you send a message. Before, the message could sit alone until the gateway answered.
+* When you send a message while the agent is working, the work it did before your message stays above it, and the work after goes below. This used to sort itself out only when the turn ended.
 
 ### GitHub in the Inspector
 
@@ -18,10 +25,18 @@ Remote event streams recover after a database connection drops, and the Inspecto
 * **Branch updates:** Updating a pull request branch no longer makes it look merged. The Inspector reloads its details after GitHub accepts the update.
 * Pull request details start loading when you hover over or focus a link, so the Inspector can open them sooner.
 
+### The agent and GitHub
+
+* Creating an issue through the GitHub integration no longer fails with "failed to resolve parent issue". The agent filled in a parent issue number on its own, usually 1, and GitHub refused the whole issue wherever #1 did not exist. Jian now leaves the parent fields out when the agent creates an issue. Making an issue a sub-issue of another is still possible, as a separate step.
+* The agent can push tags through the GitHub integration, so a release script that tags a version, such as `make release`, can finish from a conversation. Annotated tags keep their message, and the agent cannot move or force-push a tag GitHub already has.
+
 ### The Inspector and chat
 
 * The Inspector waits for the panel's first size measurement before choosing whether to fill the conversation area. This prevents an initial zero-width reading from forcing the wrong layout.
 * Reload Chat confirms when it succeeds and reports an error when the reload fails.
+* A subagent's reply in the Inspector reads as one message, as it does in the conversation, instead of one message per paragraph.
+* Calls to MCP server tools are titled with the server and the tool, such as `github · issue_write`, and show their input and output as JSON you can copy and wrap, instead of a list of labelled fields.
+* Every built-in tool in a turn's trace has a readable name now. Tools like SSH keys, machines, objectives and X posts used to show their function names.
 
 ### Upgrading
 

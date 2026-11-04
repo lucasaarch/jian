@@ -53,6 +53,10 @@ gateway's own machine, or the machine it targets. It reaches the same repositori
   \`git push\` in the shell depends on an SSH key that host accepts, and fails without one.
 - Everything local stays with \`git\` in the shell: status, branch, commit, diff, merge, rebase.
 - \`push\` needs \`branch\`. \`force: true\` pushes with a lease, and only when the owner asked.
+- A tag goes with \`tag\` instead of \`branch\`: create it with git in the shell (\`git tag -a\` for
+  a release), then push it. Annotated tags keep their message. A tag GitHub already has is never
+  moved, and \`force\` is refused for tags. When a release script tags and then fails at its own
+  \`git push\` for lack of an SSH key, push that same tag with \`github_git\`; do not retag.
 - A pull fast-forwards; pass \`rebase: true\` when the branches diverged.
 - Its errors say what to do: the App was not granted the repository, the token was refused,
   the push was not a fast-forward, the machine is offline.

@@ -558,6 +558,20 @@ it.each(['disconnect', 'isError', 'readOnlyError', 'validationError'])(
           return data.phase === 'tool-started' && data.toolName === remoteName;
         }),
       ).toHaveLength(failure === 'disconnect' ? 1 : 2);
+      // The owner's timeline names the server and the tool, which the exposed name only cuts.
+      expect(
+        (await services.lifecycle.checkpoints(profile.id, run.id))
+          .map(
+            (checkpoint) => checkpoint.data as { phase?: string; toolName?: string; mcp?: unknown },
+          )
+          .filter((data) => data.phase === 'tool-started' && data.toolName === remoteName)
+          .map((data) => data.mcp),
+      ).toEqual(
+        Array(failure === 'disconnect' ? 1 : 2).fill({
+          server: 'effects',
+          tool: remoteName.startsWith('mcp__effects_search_') ? 'search' : 'mutate',
+        }),
+      );
     } finally {
       await outbound.close();
       server.closeAllConnections();

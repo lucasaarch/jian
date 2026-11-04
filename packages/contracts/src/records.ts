@@ -12,7 +12,7 @@ import {
 } from './profile.js';
 import { projectSchema } from './projects.js';
 import { modelSelectionSchema } from './providers.js';
-import { runProgressSchema } from './run-progress.js';
+import { mcpToolRefSchema, runProgressSchema } from './run-progress.js';
 import { subagentSchema } from './work.js';
 
 const uuid = z.uuid();
@@ -498,6 +498,8 @@ export type SessionChanges = z.infer<typeof sessionChangesSchema>;
 export const toolStepSchema = z.strictObject({
   toolCallId: z.string(),
   toolName: z.string(),
+  /** Set when the tool belongs to an MCP server. */
+  mcp: mcpToolRefSchema.optional(),
   status: z.enum(['running', 'done', 'failed', 'refused', 'uncertain', 'stopped']),
   startedAt: timestamp,
   finishedAt: timestamp.optional(),
