@@ -4,6 +4,30 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.3.1 — 2026-11-04
+
+Remote event streams recover after a database connection drops, and the Inspector handles draft pull requests and branch updates more reliably.
+
+### Staying connected
+
+* When the gateway's database notification connection drops, it reconnects automatically. Event streams subscribe before reading, so changes committed during a read arrive without waiting for the next 25-second heartbeat.
+
+### GitHub in the Inspector
+
+* **Mark drafts ready:** Mark an open draft pull request ready for review from the Inspector. Jian checks that it is still open and its head branch has not changed since it was shown.
+* **Branch updates:** Updating a pull request branch no longer makes it look merged. The Inspector reloads its details after GitHub accepts the update.
+* Pull request details start loading when you hover over or focus a link, so the Inspector can open them sooner.
+
+### The Inspector and chat
+
+* The Inspector waits for the panel's first size measurement before choosing whether to fill the conversation area. This prevents an initial zero-width reading from forcing the wrong layout.
+* Reload Chat confirms when it succeeds and reports an error when the reload fails.
+
+### Upgrading
+
+* Recreate the gateway and web containers with the 1.3.1 images, or follow the `latest` tags. This release has no database migrations.
+* The desktop app updates itself to this release.
+
 ## 1.3.0 — 2026-11-03
 
 Turns cost less, because your agent keeps the skills and tools it loaded and providers read the conversation back from their cache. Agents follow a repository's AGENTS.md and skills, and the gateway watches the pull requests they open and tells them when something changes. Servers, machine workers and the app all move to 1.3 together.
