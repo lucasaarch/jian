@@ -190,6 +190,16 @@ export const githubUpdateBranchResultSchema = z.strictObject({
   message: z.string().max(500),
 });
 
+export const githubMarkReadyInputSchema = z.strictObject({
+  /** Refuse to update if the head changed since the pull request was displayed. */
+  expectedHeadSha: z.string().regex(/^[0-9a-f]{40}$/),
+});
+
+export const githubMarkReadyResultSchema = z.strictObject({
+  ready: z.literal(true),
+  message: z.string().max(500),
+});
+
 export const githubMergeInputSchema = z.strictObject({
   method: githubMergeMethodSchema,
   /** The head the owner saw: a branch that moved since is not merged blind. */

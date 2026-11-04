@@ -1,7 +1,11 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { toast } from 'sonner';
 import { expect, it, vi } from 'vitest';
 import type { GatewayApi, Run } from '../../lib/api';
+
+vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+
 import { useReconnect } from '../../lib/stores/reconnect';
 import { CrewDrawer } from './crew-drawer';
 import { History } from './history';
@@ -788,6 +792,7 @@ it('reads the open chat again when it is asked to, keeping what it showed until 
 
   expect(messages.mock.calls.length).toBe(before + 1);
   expect(host.textContent).toContain('Newer answer');
+  expect(toast.success).toHaveBeenCalledWith('Chat reloaded.');
   await act(async () => root.unmount());
   host.remove();
 });

@@ -91,6 +91,7 @@ const base = '/repos/octo-example/site';
 
 const pull = (overrides: Record<string, unknown> = {}) => ({
   html_url: 'https://github.com/octo-example/site/pull/7',
+  node_id: 'PR_kwDO_example7',
   number: 7,
   title: 'Add the pricing page',
   state: 'open',
@@ -405,6 +406,179 @@ it('asks GitHub to update a pull request branch using the head the owner saw', a
   expect(response.json()).toEqual({ updated: true, message: 'GitHub accepted the branch update.' });
   expect(asked[0]).toMatchObject({ method: 'POST', path: `${base}/pulls/7/update-branch` });
   expect(JSON.parse(asked[0]?.body ?? '{}')).toEqual({ expected_head_sha: head });
+});
+
+it('keeps an open pull request open in its drawer and link after updating its branch', async () => {
+  const { app } = await gateway({
+    ...pullRoutes(),
+    [`POST ${base}/pulls/7/update-branch`]: { status: 202, body: {} },
+  });
+  const url = 'https://github.com/octo-example/site/pull/7';
+  const card = async () =>
+    (
+      await app.inject({
+        method: 'POST',
+        url: '/v1/integrations/github/links',
+        headers,
+        payload: { urls: [url] },
+      })
+    ).json()[0];
+
+  expect((await card()).state).toBe('open');
+  const updated = await app.inject({
+    method: 'POST',
+    url: '/v1/integrations/github/pulls/octo-example/site/7/update-branch',
+    headers,
+    payload: { expectedHeadSha: head },
+  });
+  expect(updated.statusCode).toBe(200);
+
+  const drawer = await app.inject({
+    url: '/v1/integrations/github/pulls/octo-example/site/7',
+    headers,
+  });
+  expect(drawer.json().state).toBe('open');
+  expect((await card()).state).toBe('open');
+});
+
+it('marks a draft ready for review using its current GitHub node id', async () => {
+  let draft = true;
+  const { app, asked } = await gateway({
+    [`GET ${base}/pulls/7`]: () => ({ body: pull({ draft }) }),
+    'POST /graphql': (_init) => {
+      draft = false;
+      return {
+        body: {
+          data: {
+            markPullRequestReadyForReview: { pullRequest: { isDraft: false } },
+          },
+        },
+      };
+    },
+  });
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/integrations/github/pulls/octo-example/site/7/ready-for-review',
+    headers,
+    payload: { expectedHeadSha: head },
+  });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toEqual({
+    ready: true,
+    message: 'Pull request marked ready for review.',
+  });
+  expect(asked[0]).toMatchObject({ method: 'GET', path: `${base}/pulls/7` });
+  expect(asked[1]).toMatchObject({ method: 'POST', path: '/graphql' });
+  expect(JSON.parse(asked[1]?.body ?? '{}').variables).toEqual({
+    input: { pullRequestId: 'PR_kwDO_example7' },
+  });
+
+  const drawer = await app.inject({
+    url: '/v1/integrations/github/pulls/octo-example/site/7',
+    headers,
+  });
+  expect(drawer.json().draft).toBe(false);
+});
+
+it('refuses to mark a draft ready if its head moved after the owner saw it', async () => {
+  const { app, asked } = await gateway({
+    [`GET ${base}/pulls/7`]: {
+      body: pull({ draft: true, head: { ref: 'pricing-page', sha: 'b'.repeat(40) } }),
+    },
+  });
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/integrations/github/pulls/octo-example/site/7/ready-for-review',
+    headers,
+    payload: { expectedHeadSha: head },
+  });
+
+  expect(response.statusCode).toBe(409);
+  expect(response.json().error).toContain('branch changed');
+  expect(asked).toHaveLength(1);
+});
+
+it('refuses to mark a closed pull request ready for review', async () => {
+  const { app, asked } = await gateway({
+    [`GET ${base}/pulls/7`]: { body: pull({ draft: true, state: 'closed' }) },
+  });
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/integrations/github/pulls/octo-example/site/7/ready-for-review',
+    headers,
+    payload: { expectedHeadSha: head },
+  });
+
+  expect(response.statusCode).toBe(409);
+  expect(response.json().error).toContain('Only an open pull request');
+  expect(asked).toHaveLength(1);
+});
+
+it('does not call GitHub to mark a pull ready when it already is', async () => {
+  const { app, asked } = await gateway({
+    [`GET ${base}/pulls/7`]: { body: pull({ draft: false }) },
+  });
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/integrations/github/pulls/octo-example/site/7/ready-for-review',
+    headers,
+    payload: { expectedHeadSha: head },
+  });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toEqual({
+    ready: true,
+    message: 'The pull request is already ready for review.',
+  });
+  expect(asked).toHaveLength(1);
+});
+
+it('reports a GraphQL refusal without claiming a draft was marked ready', async () => {
+  const { app, asked } = await gateway({
+    [`GET ${base}/pulls/7`]: { body: pull({ draft: true }) },
+    'POST /graphql': {
+      body: { data: null, errors: [{ message: 'Review rules prevent this change.' }] },
+    },
+  });
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/integrations/github/pulls/octo-example/site/7/ready-for-review',
+    headers,
+    payload: { expectedHeadSha: head },
+  });
+
+  expect(response.statusCode).toBe(409);
+  expect(response.json().error).toBe('Review rules prevent this change.');
+  expect(asked.map(({ path }) => path)).toEqual([`${base}/pulls/7`, '/graphql']);
+});
+
+it('uses an action-specific message for an unreadable GitHub refusal', async () => {
+  const { app } = await gateway({
+    [`GET ${base}/pulls/7`]: { body: pull({ draft: true }) },
+    'POST /graphql': { status: 422, raw: 'not json' },
+  });
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/integrations/github/pulls/octo-example/site/7/ready-for-review',
+    headers,
+    payload: { expectedHeadSha: head },
+  });
+
+  expect(response.statusCode).toBe(409);
+  expect(response.json().error).toBe('GitHub refused to mark the pull request ready for review.');
+});
+
+it('requires an owner credential before marking a pull request ready', async () => {
+  const { app, asked } = await gateway({});
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/integrations/github/pulls/octo-example/site/7/ready-for-review',
+    payload: { expectedHeadSha: head },
+  });
+
+  expect(response.statusCode).toBe(401);
+  expect(asked).toHaveLength(0);
 });
 
 it('merges with the method and the head the owner saw, and records it on the agent', async () => {

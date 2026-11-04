@@ -225,8 +225,9 @@ export function InspectorHost({
   // What is left for the Inspector once the sidebar and the chat's minimum are taken.
   const room = area - sidebar - MIN_CHAT_WIDTH;
   const width = clamp(chosen ?? defaultWidth(area - sidebar), room);
-  // No room for both: the Inspector takes the chat's place rather than crush it.
-  const full = !phone && (fullChosen || room < MIN_WIDTH);
+  // Before the first measurement there is no known room; don't treat that as an impossibly small
+  // window and flash the Inspector over the conversation while its contents load.
+  const full = !phone && (fullChosen || (area > 0 && room < MIN_WIDTH));
   const resize = (next: number) => {
     const size = Math.round(clamp(next, room));
     setChosen(size);

@@ -61,6 +61,14 @@ const pullResponse = z.object({
   mergeable_state: z.string().nullish(),
 });
 
+const readyPullResponse = z.object({
+  node_id: z.string(),
+  state: z.enum(['open', 'closed']),
+  merged: z.boolean(),
+  draft: z.boolean(),
+  head: z.object({ sha: z.string() }),
+});
+
 const repoResponse = z.object({
   allow_merge_commit: z.boolean().optional(),
   allow_squash_merge: z.boolean().optional(),
@@ -137,6 +145,17 @@ const commentsResponse = z.array(
 
 const mergeResponse = z.object({ sha: z.string(), message: z.string().optional() });
 const errorResponse = z.object({ message: z.string() });
+const readyMutationResponse = z.object({
+  data: z
+    .object({
+      markPullRequestReadyForReview: z
+        .object({ pullRequest: z.object({ isDraft: z.boolean() }).nullable() })
+        .nullable(),
+    })
+    .nullable()
+    .optional(),
+  errors: z.array(errorResponse).optional(),
+});
 
 type Ref = { owner: string; repo: string; number: number };
 type Summary = Exclude<GitHubLinkSummary, { reachable: false }>;
@@ -408,14 +427,70 @@ export class GitHubItems {
     );
 
     if ([403, 404, 422].includes(response.status)) {
-      throw new GatewayError(409, await refusal(response));
+      throw new GatewayError(409, await refusal(response, 'GitHub refused the branch update.'));
     }
     if (!response.ok && response.status !== 202) {
       throw new GatewayError(502, `GitHub answered ${response.status} to a branch update.`);
     }
 
-    this.remember(ref);
+    this.forgetSummary(ref);
     return { updated: true as const, message: 'GitHub accepted the branch update.' };
+  }
+
+  async markReady(ref: Ref, expectedHeadSha: string) {
+    const current = await this.read(
+      ref,
+      `/repos/${ref.owner}/${ref.repo}/pulls/${ref.number}`,
+      readyPullResponse,
+    );
+
+    if (current.state !== 'open' || current.merged) {
+      throw new GatewayError(409, 'Only an open pull request can be marked ready for review.');
+    }
+    if (current.head.sha !== expectedHeadSha) {
+      throw new GatewayError(409, 'The pull request branch changed since it was displayed.');
+    }
+    if (!current.draft) {
+      this.forgetSummary(ref);
+      return { ready: true as const, message: 'The pull request is already ready for review.' };
+    }
+
+    const response = await this.request(ref, '/graphql', {
+      method: 'POST',
+      body: JSON.stringify({
+        query:
+          'mutation MarkPullRequestReadyForReview($input: MarkPullRequestReadyForReviewInput!) {' +
+          ' markPullRequestReadyForReview(input: $input) { pullRequest { isDraft } } }',
+        variables: { input: { pullRequestId: current.node_id } },
+      }),
+    });
+
+    if ([403, 404, 422].includes(response.status)) {
+      throw new GatewayError(
+        409,
+        await refusal(response, 'GitHub refused to mark the pull request ready for review.'),
+      );
+    }
+    if (!response.ok) {
+      throw new GatewayError(
+        502,
+        `GitHub answered ${response.status} when marking the pull ready.`,
+      );
+    }
+
+    const parsed = readyMutationResponse.safeParse(await response.json().catch(() => undefined));
+    if (!parsed.success) throw new GatewayError(502, 'GitHub sent an unexpected answer.');
+    if (parsed.data.errors?.length) {
+      const reason = clip(parsed.data.errors.map((error) => error.message).join(' '), 500);
+      throw new GatewayError(409, reason || 'GitHub could not mark the pull request ready.');
+    }
+    const updated = parsed.data.data?.markPullRequestReadyForReview?.pullRequest;
+    if (!updated || updated.isDraft) {
+      throw new GatewayError(502, 'GitHub did not mark the pull request ready for review.');
+    }
+
+    this.forgetSummary(ref);
+    return { ready: true as const, message: 'Pull request marked ready for review.' };
   }
 
   async merge(
@@ -440,7 +515,7 @@ export class GitHubItems {
 
     const merged = mergeResponse.parse(await response.json());
 
-    this.remember(ref);
+    this.rememberMerged(ref);
     if (input.profileId) {
       const profileId = input.profileId;
 
@@ -533,11 +608,16 @@ export class GitHubItems {
     };
   }
 
-  /** A merge this gateway made: the next read of the card asks again and reads it as merged. */
-  private remember(ref: Ref) {
+  /** A change made on GitHub: cards must ask again instead of keeping their old summary. */
+  private forgetSummary(ref: Ref) {
+    this.summaries.delete(keyOf(ref));
+  }
+
+  /** A merge this gateway made: GitHub may still answer open until its reads catch up. */
+  private rememberMerged(ref: Ref) {
     const key = keyOf(ref);
 
-    this.summaries.delete(key);
+    this.forgetSummary(ref);
     this.merged.add(key);
     if (this.merged.size > LINK_CACHE) {
       const oldest = this.merged.values().next().value;
@@ -685,8 +765,8 @@ function mergeMethods(repo: z.infer<typeof repoResponse> | undefined): GitHubMer
 }
 
 /** GitHub's own reason for refusing, which says what to fix, cut to a line. */
-async function refusal(response: Response) {
+async function refusal(response: Response, fallback = 'GitHub refused the merge.') {
   const parsed = errorResponse.safeParse(await response.json().catch(() => undefined));
 
-  return clip(parsed.success ? parsed.data.message : 'GitHub refused the merge.', 300);
+  return clip(parsed.success ? parsed.data.message : fallback, 300);
 }

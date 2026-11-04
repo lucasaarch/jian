@@ -545,6 +545,7 @@ export function History({
         setRun(lastRun);
         setToolsUnread(read.unread);
         answered.current = reloads;
+        if (fresh) toast.success('Chat reloaded.');
         keep({
           messages: history,
           tools: read.toolsRead ? read.steps : [...tools],

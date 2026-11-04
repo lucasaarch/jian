@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, Copy, RefreshCw, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, Copy, RefreshCw, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Action, Segmented } from '../../../kit';
@@ -15,7 +15,10 @@ import { CheckMark, Person, StatePill, Written } from './parts';
 import { Changes, Checks, checksStanding, Reviews } from './pull-sections';
 
 export type Pull = Pick<GitHubPull, 'owner' | 'repo' | 'number'>;
-type PullApi = Pick<GatewayApi, 'githubPullFile' | 'mergeGithubPull' | 'updateGithubPullBranch'>;
+type PullApi = Pick<
+  GatewayApi,
+  'githubPullFile' | 'markGithubPullReady' | 'mergeGithubPull' | 'updateGithubPullBranch'
+>;
 
 const mergeable: Record<GitHubPull['mergeable'], { note: string; colour: string }> = {
   clean: { note: 'Ready to merge.', colour: 'text-good' },
@@ -92,6 +95,7 @@ export function PullView({
   const [busy, setBusy] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [readying, setReadying] = useState(false);
   const itemId = `${pull.owner}/${pull.repo}#${pull.number}`;
   const [tab, setTabState] = useState<PullTab>(lastTab.get(itemId) ?? 'changes');
   const [filter, setFilter] = useState('');
@@ -118,7 +122,8 @@ export function PullView({
   const open = pull.state === 'open';
   const behind = open && pull.mergeable === 'behind';
   const fixable = open && pull.mergeable === 'conflicts' && Boolean(fixConflicts);
-  const merging = open && merges && pull.mergeable !== 'conflicts';
+  const readyForReview = open && pull.draft;
+  const merging = open && !pull.draft && merges && pull.mergeable !== 'conflicts';
   const state = pull.draft
     ? { note: 'A draft does not merge until it is marked ready.', colour: 'text-muted' }
     : mergeable[pull.mergeable];
@@ -168,6 +173,26 @@ export function PullView({
     }
   };
 
+  const markReady = async () => {
+    setReadying(true);
+    const key = keys.githubItem('pull', pull.owner, pull.repo, pull.number);
+    try {
+      const result = await api.markGithubPullReady(
+        pull.owner,
+        pull.repo,
+        pull.number,
+        pull.head.sha,
+      );
+      toast.success(result.message);
+      client.setQueryData<GitHubPull>(key, (known) => (known ? { ...known, draft: false } : known));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'GitHub could not mark it ready.');
+      await client.invalidateQueries({ queryKey: key });
+    } finally {
+      setReadying(false);
+    }
+  };
+
   const fix = async () => {
     if (!fixConflicts) return;
     setFixing(true);
@@ -208,10 +233,10 @@ export function PullView({
             </button>
           </div>
           {open && (
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div className="grid gap-1.5">
               {!fixable && !behind && <p className={`text-xs ${state.colour}`}>{state.note}</p>}
-              {(fixable || merging || behind) && (
-                <div className="ml-auto flex items-center gap-2">
+              {(fixable || merging || behind || readyForReview) && (
+                <div className="flex flex-wrap justify-end gap-2">
                   {fixable ? (
                     <Action tone="outline" size="small" busy={fixing} onClick={() => void fix()}>
                       {!fixing && <Sparkles size={13} aria-hidden="true" />}
@@ -228,7 +253,18 @@ export function PullView({
                       Update branch
                     </Action>
                   ) : (
-                    <MergeButton pull={pull} merge={setConfirming} />
+                    merging && <MergeButton pull={pull} merge={setConfirming} />
+                  )}
+                  {readyForReview && (
+                    <Action
+                      tone="outline"
+                      size="small"
+                      busy={readying}
+                      onClick={() => void markReady()}
+                    >
+                      {!readying && <Check size={13} aria-hidden="true" />}
+                      Mark as Ready
+                    </Action>
                   )}
                 </div>
               )}

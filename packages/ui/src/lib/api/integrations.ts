@@ -59,6 +59,13 @@ export const integrationCalls = (client: Client) => ({
         body: { expectedHeadSha },
       }),
     ),
+  markGithubPullReady: (owner: string, repo: string, number: number, expectedHeadSha: string) =>
+    result(
+      client.POST('/v1/integrations/github/pulls/{owner}/{repo}/{number}/ready-for-review', {
+        params: { path: { owner, repo, number } },
+        body: { expectedHeadSha },
+      }),
+    ),
   // The head the owner saw goes with it: GitHub refuses if the branch moved since.
   mergeGithubPull: (
     owner: string,

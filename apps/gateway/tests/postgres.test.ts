@@ -48,6 +48,20 @@ const input = {
   model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
 };
 
+async function within<T>(promise: Promise<T>, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), 5_000);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 beforeAll(async () => {
   await store.migrate();
 }, 30_000);
@@ -454,6 +468,46 @@ describe('PostgreSQL durability', () => {
       expect((told as unknown as { rows: { count: number }[] }).rows[0]?.count).toBe(1);
     } finally {
       await second.close();
+    }
+  });
+
+  it('reconnects its listener and delivers PostgreSQL notifications after a connection drops', async () => {
+    await services.profiles.createProfile(input);
+    const initial = new AbortController();
+    const initialPing = randomUUID();
+    const connected = store.waitForEvent(initialPing, initial.signal);
+    await store.db.execute(sql`select pg_notify('jian_events', ${initialPing})`);
+    await within(connected, 'Initial PostgreSQL notification listener did not connect.');
+
+    const internals = store as unknown as {
+      listener?: { query(query: string): Promise<{ rows: { pid: number }[] }> };
+    };
+    const listener = internals.listener;
+    expect(listener).toBeDefined();
+    const reconnect = new AbortController();
+    const reconnectPing = randomUUID();
+    const reconnected = store.waitForEvent(reconnectPing, reconnect.signal);
+    const notification = new AbortController();
+
+    try {
+      const pid = (await listener?.query('select pg_backend_pid() as pid'))?.rows[0]?.pid;
+      expect(pid).toBeTypeOf('number');
+      const terminated = await store.db.execute(
+        sql`select pg_terminate_backend(${pid}) as terminated`,
+      );
+      expect(
+        (terminated as unknown as { rows: { terminated: boolean }[] }).rows[0]?.terminated,
+      ).toBe(true);
+      await within(reconnected, 'PostgreSQL notification listener did not reconnect.');
+
+      const notificationPing = randomUUID();
+      const delivered = store.waitForEvent(notificationPing, notification.signal);
+      await store.db.execute(sql`select pg_notify('jian_events', ${notificationPing})`);
+      await within(delivered, 'The reconnected listener did not receive a notification.');
+    } finally {
+      initial.abort();
+      reconnect.abort();
+      notification.abort();
     }
   });
 

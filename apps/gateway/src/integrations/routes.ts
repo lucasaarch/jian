@@ -26,6 +26,13 @@ export function registerIntegrationRoutes(
     items.updateBranch(request.params, request.body.expectedHeadSha),
   );
 
+  app.post<{
+    Params: ItemParams;
+    Body: { expectedHeadSha: string };
+  }>('/v1/integrations/github/pulls/:owner/:repo/:number/ready-for-review', (request) =>
+    items.markReady(request.params, request.body.expectedHeadSha),
+  );
+
   app.get<{ Params: ItemParams }>(
     '/v1/integrations/github/issues/:owner/:repo/:number',
     (request) => items.issue(request.params),
