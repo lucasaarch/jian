@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CircleCheck,
   CircleDot,
@@ -12,14 +12,14 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useCallback, useState } from 'react';
 import type { GatewayApi, GitHubLinkSummary } from '../../lib/api';
-import { githubItemOf, linkBatcher } from '../../lib/github-links';
+import { GITHUB_PULL_STALE_MS, githubItemOf, linkBatcher } from '../../lib/github-links';
 import { keys } from '../../lib/query/keys';
 import { type GitHubItem, itemKey, useCrew } from '../../lib/stores/crew';
 import { MarkdownLinks } from '../ui/markdown';
 
 export { GitHubDrawer } from './github-drawer/drawer';
 
-type LinksApi = Pick<GatewayApi, 'resolveGithubLinks'>;
+type LinksApi = Pick<GatewayApi, 'githubPull' | 'resolveGithubLinks'>;
 export type Reachable = Extract<GitHubLinkSummary, { reachable: true }>;
 type State = Reachable['state'];
 
@@ -62,7 +62,15 @@ export const standingOf = (summary: Reachable) =>
 export const stateMark = (summary: Reachable) =>
   (summary.kind === 'pull' ? pullMarks : issueMarks)[shownOf(summary)];
 
-function GitHubCard({ summary, href }: { summary: Reachable; href: string }) {
+function GitHubCard({
+  summary,
+  href,
+  prefetchPull,
+}: {
+  summary: Reachable;
+  href: string;
+  prefetchPull: (summary: Reachable) => void;
+}) {
   const open = useCrew((state) => state.open);
   const close = useCrew((state) => state.close);
   const following = useCrew((state) => state.following);
@@ -82,6 +90,8 @@ function GitHubCard({ summary, href }: { summary: Reachable; href: string }) {
       aria-pressed={followed}
       aria-label={`${summary.kind === 'pull' ? 'Pull request' : 'Issue'} ${where}: ${summary.title}, ${standing}`}
       title={`${where} · ${summary.title} · ${standing}`}
+      onMouseEnter={() => prefetchPull(summary)}
+      onFocus={() => prefetchPull(summary)}
       onClick={(event) => (followed ? close() : open(item, event.currentTarget))}
     >
       <Mark size={14} aria-hidden="true" />#{summary.number}
@@ -107,14 +117,16 @@ function GitHubLink({
   href,
   label,
   load,
+  prefetchPull,
 }: {
   href: string;
   label: string;
   load: (url: string) => Promise<GitHubLinkSummary>;
+  prefetchPull: (summary: Reachable) => void;
 }) {
   const { data } = useLinkSummary(href, load);
 
-  if (data?.reachable) return <GitHubCard summary={data} href={href} />;
+  if (data?.reachable) return <GitHubCard summary={data} href={href} prefetchPull={prefetchPull} />;
   // Until it is known, and for good when the App cannot see it, the link stays a link.
   return (
     <a className="text-link" href={href} target="_blank" rel="noreferrer">
@@ -128,11 +140,25 @@ function GitHubLink({
  * looked up in one request; one the App cannot see stays the plain link it was.
  */
 export function GitHubLinks({ api, children }: { api: LinksApi; children: ReactNode }) {
+  const client = useQueryClient();
   const [load] = useState(() => linkBatcher((urls) => api.resolveGithubLinks(urls)));
+  const prefetchPull = useCallback(
+    (summary: Reachable) => {
+      if (summary.kind !== 'pull') return;
+      void client.prefetchQuery({
+        queryKey: keys.githubItem('pull', summary.owner, summary.repo, summary.number),
+        queryFn: () => api.githubPull(summary.owner, summary.repo, summary.number),
+        staleTime: GITHUB_PULL_STALE_MS,
+      });
+    },
+    [api, client],
+  );
   const render = useCallback(
     (href: string, label: string) =>
-      githubItemOf(href) ? <GitHubLink href={href} label={label} load={load} /> : undefined,
-    [load],
+      githubItemOf(href) ? (
+        <GitHubLink href={href} label={label} load={load} prefetchPull={prefetchPull} />
+      ) : undefined,
+    [load, prefetchPull],
   );
 
   return <MarkdownLinks.Provider value={render}>{children}</MarkdownLinks.Provider>;

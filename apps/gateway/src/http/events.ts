@@ -112,6 +112,8 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
         }
 
         let behind = false;
+        let notified: Promise<void> = Promise.resolve();
+        let stop = () => {};
 
         try {
           // Close slow consumers instead of buffering an unbounded event history.
@@ -127,10 +129,22 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
             return pump();
           }
 
+          // Subscribe before reading. A commit between the read and the wait is otherwise lost until
+          // the heartbeat timeout, which looks like a remote client has stopped syncing.
+          const waiting = new AbortController();
+          const stopWaiting = () => waiting.abort();
+          wake.signal.addEventListener('abort', stopWaiting, { once: true });
+          notified = options.store.waitForEvent(profileId, waiting.signal);
+          stop = () => {
+            waiting.abort();
+            wake.signal.removeEventListener('abort', stopWaiting);
+          };
+
           const events = await readEvents(options.store.db, profileId, cursor);
 
           for (const event of events) {
             if (closed) {
+              stop();
               return;
             }
 
@@ -168,19 +182,29 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
           // hear of new events only after a wake or a wait for every hundred old ones.
           behind = events.length === EVENTS_PAGE;
         } catch {
+          stop();
           reply.raw.end();
 
           return;
         }
 
         if (behind) {
+          stop();
           return pump();
         }
 
-        await Promise.race([
-          options.store.waitForEvent(profileId, wake.signal),
-          new Promise((resolve) => setTimeout(resolve, 25_000)),
-        ]);
+        let heartbeat: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            notified,
+            new Promise<void>((resolve) => {
+              heartbeat = setTimeout(resolve, 25_000);
+            }),
+          ]);
+        } finally {
+          if (heartbeat) clearTimeout(heartbeat);
+          stop();
+        }
         return pump();
       };
 

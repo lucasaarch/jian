@@ -5,6 +5,7 @@ import { ExternalLink } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Action } from '../../../kit';
 import type { GatewayApi, GitHubLinkSummary } from '../../../lib/api';
+import { GITHUB_PULL_STALE_MS } from '../../../lib/github-links';
 import { keys } from '../../../lib/query/keys';
 import { useCrew } from '../../../lib/stores/crew';
 import { GitHubLogo } from '../../ui';
@@ -19,7 +20,12 @@ import { type Pull, PullBar, PullView } from './pull-view';
 
 type DrawerApi = Pick<
   GatewayApi,
-  'githubPull' | 'githubPullFile' | 'githubIssue' | 'mergeGithubPull' | 'updateGithubPullBranch'
+  | 'githubPull'
+  | 'githubPullFile'
+  | 'githubIssue'
+  | 'markGithubPullReady'
+  | 'mergeGithubPull'
+  | 'updateGithubPullBranch'
 >;
 
 /** How often an open pull request is read again while it is followed, in ms. */
@@ -64,6 +70,7 @@ export function GitHubDrawer({
     queryKey: item ? keys.githubItem('pull', item.owner, item.repo, item.number) : ['none'],
     queryFn: () => api.githubPull(item?.owner ?? '', item?.repo ?? '', item?.number ?? 0),
     enabled: Boolean(item) && isPull,
+    staleTime: GITHUB_PULL_STALE_MS,
     refetchInterval: (query) =>
       query.state.data?.state !== 'open'
         ? false

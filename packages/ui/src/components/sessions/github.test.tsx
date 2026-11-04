@@ -159,6 +159,10 @@ function fakeApi(overrides: Partial<GitHubPull> = {}) {
       updated: true as const,
       message: 'Branch update queued.',
     })),
+    markGithubPullReady: vi.fn(async () => ({
+      ready: true as const,
+      message: 'Pull request marked ready for review.',
+    })),
     mergeGithubPull: vi.fn(async () => ({
       merged: true as const,
       sha: 'c'.repeat(40),
@@ -231,6 +235,19 @@ it('shows a pull request link as a reference, and one the App cannot see as the 
     'octo-example/site #7 · Add the pricing page · Open',
   );
   expect(element.querySelector(`a[href="${hidden}"]`)?.textContent).toBe(hidden);
+});
+
+it('prefetches a pull request on focus and reuses it when its drawer opens', async () => {
+  const api = fakeApi();
+  await render(<Markdown text={pullUrl} />, api);
+  expect(api.githubPull).not.toHaveBeenCalled();
+
+  await act(async () => element.querySelector<HTMLButtonElement>('.github-ref')?.focus());
+  await settled(() => api.githubPull.mock.calls.length === 1);
+  await openCard();
+
+  expect(api.githubPull).toHaveBeenCalledTimes(1);
+  expect(title()?.textContent).toBe('Add the pricing page #7');
 });
 
 it('shows a card in what a person wrote too', async () => {
@@ -330,6 +347,40 @@ it('opens the pull request in folding sections, and merges with the chosen metho
   );
   expect(element.querySelector('.github-ref')?.getAttribute('data-state')).toBe('merged');
   expect(api.githubPull).toHaveBeenCalledTimes(1);
+});
+
+it('keeps the merge action on its own line and marks a draft ready for review', async () => {
+  const api = fakeApi({ draft: true });
+  await render(<Markdown text={pullUrl} />, api, { merges: true });
+  await openCard();
+
+  expect(button('Mark as Ready')).toBeDefined();
+  expect(button('Squash and merge')).toBeUndefined();
+  await act(async () => button('Mark as Ready')?.click());
+  expect(api.markGithubPullReady).toHaveBeenCalledWith('octo-example', 'site', 7, head);
+  expect(button('Mark as Ready')).toBeUndefined();
+  expect(button('Squash and merge')).toBeDefined();
+  expect(drawer()?.textContent).toContain('Ready to merge.');
+  const note = [...(drawer()?.querySelectorAll('p') ?? [])].find(
+    (item) => item.textContent === 'Ready to merge.',
+  );
+  expect(button('Squash and merge')?.parentElement).not.toBe(note?.parentElement);
+});
+
+it.each([
+  { mergeable: 'conflicts' as const, action: 'Fix merge conflicts' },
+  { mergeable: 'behind' as const, action: 'Update branch' },
+])('offers Mark as Ready alongside $action for a draft', async ({ mergeable, action }) => {
+  const api = fakeApi({ draft: true, mergeable });
+  await render(<Markdown text={pullUrl} />, api, {
+    merges: true,
+    fixConflicts: vi.fn(async () => ({})),
+  });
+  await openCard();
+
+  expect(button(action)).toBeDefined();
+  expect(button('Mark as Ready')).toBeDefined();
+  expect(button('Squash and merge')).toBeUndefined();
 });
 
 it('says why GitHub could not be read, and reads it again on asking', async () => {

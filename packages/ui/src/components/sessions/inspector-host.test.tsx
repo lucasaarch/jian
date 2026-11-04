@@ -44,6 +44,7 @@ afterEach(async () => {
   root = undefined;
   element.remove();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 const show = async () => {
@@ -147,7 +148,30 @@ it('leaves room for a sidebar that arrives after it, as one does behind a stage'
   });
 
   expect(beside()?.style.width).toBe('256px');
-  useCrew.setState({ full: false });
+  await act(async () => useCrew.setState({ full: false }));
+});
+
+it('waits for its first measurement before deciding that it must take the chat’s place', async () => {
+  let resizeObserver: ResizeObserverCallback | undefined;
+  class Observer {
+    constructor(callback: ResizeObserverCallback) {
+      resizeObserver = callback;
+    }
+    observe() {}
+    disconnect() {}
+  }
+  vi.stubGlobal('ResizeObserver', Observer);
+  room = 0;
+  await show();
+
+  expect(host()?.hasAttribute('data-full')).toBe(false);
+
+  room = 660;
+  await act(async () => {
+    resizeObserver?.([], {} as ResizeObserver);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  });
+  expect(host()?.hasAttribute('data-full')).toBe(true);
 });
 
 it('takes the chat’s place when both cannot fit, rather than crush it', async () => {

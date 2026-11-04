@@ -19,6 +19,9 @@ export function githubItemOf(url: string): GitHubItem | undefined {
   };
 }
 
+/** A pull request preloaded from a link stays fresh for the drawer's first view, in ms. */
+export const GITHUB_PULL_STALE_MS = 15_000;
+
 /** The gateway takes this many links per request. */
 const BATCH = 20;
 

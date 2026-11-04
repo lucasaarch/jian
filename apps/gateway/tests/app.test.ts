@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import { recordEvent } from '../src/core/events.js';
 import { insertMessage } from '../src/sessions/repository.js';
@@ -351,6 +351,96 @@ it('streams committed events over HTTP and resumes after a cursor', async () => 
     await reader.cancel();
   } finally {
     controller.abort();
+  }
+});
+
+it('delivers an event committed between the feed read and its wait', async () => {
+  const { app, services } = await setup();
+  const profile = await services.profiles.createProfile(input);
+  const latest = (await events(services.store, profile.id, 0)).at(-1);
+
+  assert.ok(latest, 'Profile creation must emit an event');
+
+  let waiting = false;
+  let readsAfterWait = 0;
+  let waiterRegistered = false;
+  let waiterAborted = false;
+  let releaseWaiter = () => {};
+  let resolveWrite!: () => void;
+  let rejectWrite!: (error: unknown) => void;
+  const eventWritten = new Promise<void>((resolve, reject) => {
+    resolveWrite = resolve;
+    rejectWrite = reject;
+  });
+  const db = services.store.db;
+  const select = db.select.bind(db);
+  const selected = vi.spyOn(db, 'select').mockImplementation((...args) => {
+    if (waiting && ++readsAfterWait === 2) {
+      void services.profiles
+        .updateProfile(profile.id, { expectedVersion: 1, name: 'Updated' })
+        .then(() => {
+          if (waiterRegistered) releaseWaiter();
+          resolveWrite();
+        }, rejectWrite);
+    }
+    return select(...args);
+  });
+  const originalWait = services.store.waitForEvent;
+  services.store.waitForEvent = (_profileId, signal) => {
+    waiting = true;
+    waiterRegistered = true;
+    return new Promise((resolve) => {
+      const abort = () => {
+        waiterAborted = true;
+        resolve();
+      };
+      releaseWaiter = resolve;
+      if (signal.aborted) abort();
+      else signal.addEventListener('abort', abort, { once: true });
+    });
+  };
+
+  const url = await app.listen({ host: '127.0.0.1', port: 0 });
+  const controller = new AbortController();
+
+  try {
+    const response = await fetch(
+      `${url}/v1/profiles/${profile.id}/events/stream?after=${latest.id}`,
+      { headers, signal: controller.signal },
+    );
+    assert.ok(response.body, 'SSE response must have a body');
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    await eventWritten;
+
+    let data = '';
+    while (!data.includes('event: profile.updated')) {
+      const next = await new Promise<Awaited<ReturnType<typeof reader.read>> | null>(
+        (resolve, reject) => {
+          const timeout = setTimeout(() => resolve(null), 750);
+          reader.read().then(
+            (result) => {
+              clearTimeout(timeout);
+              resolve(result);
+            },
+            (error) => {
+              clearTimeout(timeout);
+              reject(error);
+            },
+          );
+        },
+      );
+      if (!next || next.done) break;
+      data += next.value;
+    }
+
+    expect(readsAfterWait).toBeGreaterThanOrEqual(2);
+    expect(data).toContain('event: profile.updated');
+    await reader.cancel();
+    expect(waiterAborted).toBe(true);
+  } finally {
+    controller.abort();
+    services.store.waitForEvent = originalWait;
+    selected.mockRestore();
   }
 });
 
