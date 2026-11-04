@@ -243,7 +243,9 @@ export function History({
     );
   }, [outbox, sessionId, messages]);
   // Turns the owner started from here that no read of the gateway has brought back yet, with
-  // when each was sent: the agent is drawn starting at once instead of after the next read.
+  // when the gateway was seen to take each: the agent is drawn starting at once instead of after
+  // the next read. Timed from the taking, not the click: a read that began in between may not
+  // hold the turn yet, and must not be taken for one that does.
   const [awaited, setAwaited] = useState(new Map<string, string>());
   useEffect(() => {
     const sent = outbox.filter(
@@ -252,7 +254,8 @@ export function History({
     setAwaited((known) => {
       const fresh = sent.filter((item) => item.runId && !known.has(item.runId));
       if (!fresh.length) return known;
-      return new Map([...known, ...fresh.map((item) => [item.runId ?? '', item.at] as const)]);
+      const taken = new Date().toISOString();
+      return new Map([...known, ...fresh.map((item) => [item.runId ?? '', taken] as const)]);
     });
   }, [outbox, sessionId]);
   // What each run asked the owner to decide or answer, from the timeline.
@@ -485,6 +488,8 @@ export function History({
         setLoading(false);
 
         const supporting = await supportingReads;
+        // Superseded while it waited: a newer read says what is at work now.
+        if (stopped) return;
         if ('failure' in supporting) throw supporting.failure;
         const [activities, members, children] = supporting.result;
         const lastRun = activities

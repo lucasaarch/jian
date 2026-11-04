@@ -446,7 +446,7 @@ export function Composer({
           />
           <span className="grow" />
           {modelControl}
-          {stop && !canSend && !sending ? (
+          {stop && !sending && !text.trim() && attachments.length === 0 && !recorder.recording ? (
             <HoverTip tip="Stop the agent">
               <button
                 type="button"

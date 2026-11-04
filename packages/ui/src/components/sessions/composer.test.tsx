@@ -135,6 +135,40 @@ it('stops the turn at work when there is nothing to send, and sends to it when t
   expect(button()?.getAttribute('aria-label')).toBe('Send');
 });
 
+it('never offers stop over words waiting for an upload to finish', async () => {
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:preview' }));
+  const stop = vi.fn(async () => undefined);
+  await act(async () => {
+    root.render(
+      createElement(Composer, {
+        name: 'Mia',
+        // Still uploading for as long as the test looks.
+        upload: () => new Promise<{ id: string }>(() => {}),
+        send: vi.fn(),
+        onSent: vi.fn(),
+        stop,
+      }),
+    );
+  });
+  const field = container.querySelector('textarea') as HTMLTextAreaElement;
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  const picker = container.querySelector('input[type="file"]') as HTMLInputElement;
+  await act(async () => {
+    setValue?.call(field, 'Also check the logs');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    Object.defineProperty(picker, 'files', {
+      value: [new File(['x'], 'screen.png', { type: 'image/png' })],
+      configurable: true,
+    });
+    picker.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  const button = container.querySelector<HTMLButtonElement>('.composer-send');
+  expect(button?.getAttribute('aria-label')).toBe('Send');
+  expect(button?.disabled).toBe(true);
+  vi.unstubAllGlobals();
+});
+
 it('offers no stop while nothing is at work', async () => {
   await act(async () => {
     root.render(
