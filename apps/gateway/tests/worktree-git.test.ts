@@ -1,5 +1,13 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -46,6 +54,20 @@ async function started(name = 'site') {
   const path = join(dir, `${name}-wt`);
   await addWorktree(place, { source, path, branch: 'jian/calm-otter', base: 'main' });
   return { source, path, branch: 'jian/calm-otter', base: 'main' };
+}
+
+/** A hook of the repository's own, as the owner's git would run it. */
+function hook(source: string, name: string, body: string) {
+  const file = join(source, '.git', 'hooks', name);
+  writeFileSync(file, `#!/bin/sh\n${body}\n`);
+  chmodSync(file, 0o755);
+}
+
+/** Where it was, with no merge left half done. */
+function expectUntouched(source: string, head: string) {
+  expect(run(source, 'rev-parse', 'HEAD')).toBe(head);
+  expect(() => run(source, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')).toThrow();
+  expect(run(source, 'status', '--porcelain')).toBe('');
 }
 
 const refusal = (promise: Promise<unknown>) =>
@@ -128,6 +150,17 @@ describe('worktree git', () => {
     expect(await refusal(mergeWorktree(place, t))).toMatch(/source.*(commit|stash)/i);
   });
 
+  it('tells a subagent merging back to commit in the conversation’s worktree, not the owner', async () => {
+    const t = await started();
+    writeFileSync(join(t.source, 'a.txt'), 'dirty\n');
+
+    const message = await refusal(mergeWorktree(place, { ...t, into: 'worktree' }));
+
+    expect(message).toContain(`The conversation's worktree at ${t.source} has uncommitted changes`);
+    expect(message).toContain('Commit them there');
+    expect(message).not.toContain('owner');
+  });
+
   it('merge refuses when the source is on another branch, naming both', async () => {
     const t = await started();
     run(t.source, 'checkout', '-b', 'other');
@@ -155,6 +188,86 @@ describe('worktree git', () => {
     expect(() => run(t.source, 'rev-parse', '--verify', 'MERGE_HEAD')).toThrow();
     expect(run(t.source, 'status', '--porcelain')).toBe('');
     expect(run(t.source, 'show', '--format=%P', '-s', 'HEAD').split(' ')).toHaveLength(2);
+  });
+
+  it('a merge a hook refuses is undone and says what to do next', async () => {
+    const t = await started();
+    commit(t.path, 'b.txt', 'b\n');
+    const before = run(t.source, 'rev-parse', 'HEAD');
+    hook(t.source, 'pre-merge-commit', 'echo "lint failed in b.txt" >&2\nexit 1');
+
+    const message = await refusal(mergeWorktree(place, t));
+
+    expect(message).toContain('lint failed in b.txt');
+    expect(message).toMatch(/undone/);
+    expect(message).toMatch(/commit .*merge again/i);
+    expect(message).not.toContain("use 'git commit'");
+    expectUntouched(t.source, before);
+  });
+
+  it('a merge stopped by the timeout is undone', async () => {
+    const t = await started();
+    commit(t.path, 'b.txt', 'b\n');
+    const before = run(t.source, 'rev-parse', 'HEAD');
+    hook(t.source, 'pre-merge-commit', 'sleep 2');
+
+    const message = await refusal(
+      mergeWorktree(localPlace({ readOnly: [], writable: [] }, 300), t),
+    );
+
+    expect(message).toMatch(/too long/);
+    expect(message).toMatch(/undone/);
+    expectUntouched(t.source, before);
+  });
+
+  it('a merge whose answer is lost is undone when it stopped, and kept when it went through', async () => {
+    const lost = (args: string[]) => args.includes('--no-ff');
+    // The worker ran the command, then its answer never came back.
+    const flaky: typeof place = {
+      ...place,
+      git: async (args, config, signal) => {
+        const outcome = await place.git(args, config, signal);
+        if (lost(args)) throw new Error('the machine went offline');
+        return outcome;
+      },
+    };
+    const refused = await started('refused');
+    commit(refused.path, 'b.txt', 'b\n');
+    const before = run(refused.source, 'rev-parse', 'HEAD');
+    hook(refused.source, 'pre-merge-commit', 'exit 1');
+    expect(await refusal(mergeWorktree(flaky, refused))).toMatch(/undone/);
+    expectUntouched(refused.source, before);
+
+    const done = await started('done');
+    commit(done.path, 'b.txt', 'b\n');
+    const { sha } = await mergeWorktree(flaky, done);
+    expect(sha).toBe(run(done.source, 'rev-parse', 'HEAD'));
+    expect(run(done.source, 'show', '--format=%P', '-s', 'HEAD').split(' ')).toHaveLength(2);
+  });
+
+  it('never aborts a merge that is not its own', async () => {
+    const t = await started();
+    commit(t.path, 'b.txt', 'b\n');
+    run(t.source, 'checkout', '-q', '-b', 'theirs', 'HEAD');
+    commit(t.source, 'a.txt', 'theirs\n');
+    run(t.source, 'checkout', '-q', 'main');
+    commit(t.source, 'a.txt', 'ours\n');
+    await updateWorktree(place, { ...t, strategy: 'merge' });
+    const theirs = run(t.source, 'rev-parse', 'theirs');
+    // Someone else starts a merge of their own just before this one runs, and it stops on a
+    // conflict: the merge that fails next is this one, and theirs must stay as it is.
+    const crowded: typeof place = {
+      ...place,
+      git: async (args, config, signal) => {
+        if (args.includes('--no-ff')) expect(() => run(t.source, 'merge', 'theirs')).toThrow();
+        return place.git(args, config, signal);
+      },
+    };
+
+    await refusal(mergeWorktree(crowded, t));
+
+    expect(run(t.source, 'rev-parse', 'MERGE_HEAD')).toBe(theirs);
+    expect(run(t.source, 'status', '--porcelain')).toContain('UU a.txt');
   });
 
   it('remove refuses uncommitted work unless discarded', async () => {

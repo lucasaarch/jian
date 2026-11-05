@@ -137,10 +137,66 @@ export async function updateWorktree(
   return { conflicts };
 }
 
+/** What git said, without the advice it gives a person at a terminal, which Jian follows itself. */
+function saidBy(outcome: { stdout: string; stderr: string }): string {
+  return `${outcome.stderr}\n${outcome.stdout}`
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !/^(hint:|Not committing merge)/.test(line))
+    .slice(0, 3)
+    .join(' ');
+}
+
+/**
+ * Where the source stands after a merge that failed, timed out or never answered, and whatever
+ * of this merge was left there undone. Only this merge is ever undone: MERGE_HEAD must be this
+ * branch's head, or the index exactly what this merge stages, so a merge someone else started is
+ * left alone. A merge killed inside its hook has staged its result without writing MERGE_HEAD,
+ * which `merge --abort` cannot see; `reset --merge` puts the index back and keeps any file the
+ * owner has not staged.
+ */
+async function settleMerge(
+  place: GitPlace,
+  input: { source: string; head: string; tip: string },
+): Promise<'merged' | 'restored' | 'busy'> {
+  const at = (args: string[]) =>
+    git(place, ['-C', input.source, ...args], true).then((out) => out.stdout.trim());
+  const now = await at(['rev-parse', 'HEAD']);
+  if (now !== input.head) {
+    const contains = await git(
+      place,
+      ['-C', input.source, 'merge-base', '--is-ancestor', input.tip, now],
+      true,
+    );
+    if (contains.exitCode === 0) return 'merged';
+  }
+
+  const merging = await at(['rev-parse', '-q', '--verify', 'MERGE_HEAD']);
+  if (merging) {
+    if (merging !== input.tip) return 'busy';
+    await git(place, ['-C', input.source, 'merge', '--abort']);
+    return 'restored';
+  }
+  // The branch holds the base, so the merge's tree is the branch's own.
+  const staged = await at(['write-tree']);
+  if (staged && staged === (await at(['rev-parse', `${input.tip}^{tree}`])) && now === input.head) {
+    await git(place, ['-C', input.source, 'reset', '--merge']);
+  }
+  return 'restored';
+}
+
 export async function mergeWorktree(
   place: GitPlace,
-  input: { source: string; path: string; branch: string; base: string },
+  input: {
+    source: string;
+    path: string;
+    branch: string;
+    base: string;
+    /** The source is the conversation's worktree, which a subagent merges back into. */
+    into?: 'folder' | 'worktree';
+  },
 ): Promise<{ sha: string }> {
+  const intoWorktree = input.into === 'worktree';
   if ((await uncommittedIn(place, input.path)) > 0) {
     throw new WorktreeProblem(
       'The worktree has uncommitted changes. Commit them in the worktree, then merge.',
@@ -149,7 +205,9 @@ export async function mergeWorktree(
   // Untracked files in the source are the owner's business; only tracked edits can collide.
   if ((await uncommittedIn(place, input.source, false)) > 0) {
     throw new WorktreeProblem(
-      'The source folder has uncommitted changes. Ask the owner to commit or stash them, then merge.',
+      intoWorktree
+        ? `The conversation's worktree at ${input.source} has uncommitted changes. Commit them there, then merge.`
+        : 'The source folder has uncommitted changes. Ask the owner to commit or stash them, then merge.',
     );
   }
 
@@ -158,8 +216,10 @@ export async function mergeWorktree(
   ).stdout.trim();
   if (current !== input.base) {
     throw new WorktreeProblem(
-      `The source folder is on ${current || 'a detached HEAD'}, but this worktree was made from ${input.base}. ` +
-        `Ask the owner to check out ${input.base} in the source folder, then merge.`,
+      intoWorktree
+        ? `The conversation's worktree at ${input.source} is on ${current || 'a detached HEAD'}, but this worktree was made from ${input.base}. Check out ${input.base} there, then merge.`
+        : `The source folder is on ${current || 'a detached HEAD'}, but this worktree was made from ${input.base}. ` +
+            `Ask the owner to check out ${input.base} in the source folder, then merge.`,
     );
   }
 
@@ -174,21 +234,58 @@ export async function mergeWorktree(
     );
   }
 
-  const merged = await git(
-    place,
-    [...NO_EDITOR, '-C', input.source, 'merge', '--no-ff', '--no-edit', input.branch],
-    true,
+  const head = (await git(place, ['-C', input.source, 'rev-parse', 'HEAD'])).stdout.trim();
+  const tip = (
+    await git(place, ['-C', input.source, 'rev-parse', '--verify', `${input.branch}^{commit}`])
+  ).stdout.trim();
+  // Straight through the place: a timeout or a lost answer must still reach the check below.
+  let outcome: Awaited<ReturnType<GitPlace['git']>> | undefined;
+  let lost: unknown;
+  try {
+    outcome = await place.git([
+      ...NO_EDITOR,
+      '-C',
+      input.source,
+      'merge',
+      '--no-ff',
+      '--no-edit',
+      input.branch,
+    ]);
+  } catch (error) {
+    lost = error;
+  }
+  const sha = async () =>
+    (await git(place, ['-C', input.source, 'rev-parse', 'HEAD'])).stdout.trim();
+  if (outcome && outcome.exitCode === 0 && !outcome.timedOut) return { sha: await sha() };
+
+  // Never leave the owner's folder mid-merge.
+  const settled = await settleMerge(place, { source: input.source, head, tip }).catch(
+    () => 'unknown' as const,
   );
-  if (merged.exitCode !== 0) {
-    // Never leave the owner's folder mid-merge.
-    await git(place, ['-C', input.source, 'merge', '--abort'], true);
+  if (settled === 'merged') return { sha: await sha() };
+
+  const why = outcome?.timedOut
+    ? 'The merge took too long and was stopped.'
+    : outcome
+      ? `The merge failed: ${saidBy(outcome) || `git exited with ${outcome.exitCode}`}.`
+      : `The merge got no answer: ${lost instanceof Error ? lost.message : 'unknown error'}.`;
+  if (settled === 'busy') {
     throw new WorktreeProblem(
-      merged.stderr.trim().split('\n')[0] ||
-        merged.stdout.trim().split('\n')[0] ||
-        'The merge failed.',
+      `${why} ${input.source} is in the middle of another merge, which was left as it is. Ask the owner to finish or abort it, then merge again.`,
     );
   }
-  return { sha: (await git(place, ['-C', input.source, 'rev-parse', 'HEAD'])).stdout.trim() };
+  if (settled === 'unknown') {
+    throw new WorktreeProblem(
+      `${why} Whether it left ${input.source} mid-merge could not be checked. Ask the owner to run git status there before anything else.`,
+    );
+  }
+  throw new WorktreeProblem(
+    `${why} It was undone, so ${input.source} is as it was. ${
+      outcome?.timedOut
+        ? 'A hook of the repository may be what is slow: tell the owner, or try again.'
+        : 'Fix the cause in the worktree, commit it, and merge again.'
+    }`,
+  );
 }
 
 export async function removeWorktree(

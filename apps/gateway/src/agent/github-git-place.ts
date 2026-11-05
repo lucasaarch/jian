@@ -64,11 +64,15 @@ const clip = (text: string) =>
  * environment, with the installation's SSH keys for everything else. A relative path starts in the
  * chat's first folder, or where this host keeps clones.
  */
-export function localPlace(gitAccess: {
-  readOnly: string[];
-  writable: string[];
-  sshCommand?: string;
-}): GitPlace {
+export function localPlace(
+  gitAccess: {
+    readOnly: string[];
+    writable: string[];
+    sshCommand?: string;
+  },
+  /** How long one git command may take, in ms; shorter only in tests of what a timeout leaves. */
+  timeoutMs = TIMEOUT_MS,
+): GitPlace {
   return {
     name: 'the machine this gateway runs on',
     home: async () => realOrParent(await cloneRoot()),
@@ -96,7 +100,7 @@ export function localPlace(gitAccess: {
           {
             cwd: home,
             env,
-            timeout: TIMEOUT_MS,
+            timeout: timeoutMs,
             maxBuffer: MAX_OUTPUT * 4,
             encoding: 'utf8',
             ...(signal ? { signal } : {}),
