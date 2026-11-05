@@ -374,6 +374,47 @@ export const sessions = pgTable(
   ],
 );
 
+/**
+ * A conversation's isolated checkout of a folder: a branch of its own in a folder of its own, so
+ * the agent never edits what the owner has open. Removed rows stay as history; `removedAt` frees
+ * the source and the name for the next one.
+ */
+export const sessionWorktrees = pgTable(
+  'session_worktrees',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    branch: text('branch').notNull(),
+    // The branch the source had checked out when this began; a merge goes back only into it.
+    base: text('base').notNull(),
+    // The folder it was made from.
+    source: text('source').notNull(),
+    path: text('path').notNull(),
+    // `gateway`, or the id of the machine the folder is on.
+    place: text('place').notNull(),
+    createdAt,
+    removedAt: timestamp('removed_at', { withTimezone: true }),
+  },
+  (table) => [
+    // One live worktree per folder in a conversation, and a name that points at one only.
+    uniqueIndex('session_worktrees_source')
+      .on(table.sessionId, table.source)
+      .where(sql`${table.removedAt} is null`),
+    uniqueIndex('session_worktrees_name')
+      .on(table.sessionId, table.name)
+      .where(sql`${table.removedAt} is null`),
+    index('session_worktrees_active_source')
+      .on(table.source)
+      .where(sql`${table.removedAt} is null`),
+  ],
+);
+
 export const runStatus = pgEnum('run_status', [
   'queued',
   'running',

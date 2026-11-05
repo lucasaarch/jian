@@ -20,7 +20,7 @@ import { isPullCreation } from '../src/sessions/created-pulls.js';
 import { pageMessages } from '../src/sessions/repository.js';
 import { migrationsFolder } from '../src/storage/database.js';
 import { PostgresStore } from '../src/storage/postgres.js';
-import { channels, metaInbox } from '../src/storage/schema.js';
+import { channels, metaInbox, sessionWorktrees } from '../src/storage/schema.js';
 import { mockModel } from './helpers/model.js';
 import { events, runRows } from './helpers/rows.js';
 
@@ -71,6 +71,41 @@ afterAll(async () => {
 });
 
 describe('PostgreSQL durability', () => {
+  it('keeps one active worktree per conversation and source', async () => {
+    const profile = await services.profiles.createProfile({ ...input, name: 'Worktrees' });
+    const session = await services.sessions.createSession(profile.id, { title: 'Worktrees' });
+    const row = (name: string, removedAt: Date | null = null) => ({
+      id: randomUUID(),
+      profileId: profile.id,
+      sessionId: session.id,
+      name,
+      branch: `jian/${name}`,
+      base: 'main',
+      source: '/Users/ana/Meus Projetos/café',
+      path: `/clones/worktrees/café-0a1b2c3d/${name}`,
+      place: 'gateway',
+      removedAt,
+    });
+    const first = row('quiet-river');
+    await store.db.insert(sessionWorktrees).values(first);
+
+    await expect(store.db.insert(sessionWorktrees).values(row('brave-lake'))).rejects.toThrow();
+
+    await store.db
+      .update(sessionWorktrees)
+      .set({ removedAt: new Date() })
+      .where(eq(sessionWorktrees.id, first.id));
+    await store.db.insert(sessionWorktrees).values(row('quiet-river'));
+
+    await store.db.execute(sql`delete from sessions where id = ${session.id}`);
+    expect(
+      await store.db
+        .select()
+        .from(sessionWorktrees)
+        .where(eq(sessionWorktrees.sessionId, session.id)),
+    ).toHaveLength(0);
+  });
+
   it('applies the complete published migration chain and leaves its ledger unchanged on reapplication', async () => {
     const applied = async () => {
       const result = await store.db.execute(

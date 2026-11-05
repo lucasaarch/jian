@@ -23,3 +23,4 @@ export * from './skills.js';
 export * from './ssh.js';
 export * from './web.js';
 export * from './work.js';
+export * from './worktrees.js';

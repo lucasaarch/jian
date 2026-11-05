@@ -141,6 +141,11 @@ import { skillImportSchema } from './skills.js';
 import { sshKeyCreateSchema, sshKeySchema } from './ssh.js';
 import { webSearchInputSchema, webSearchStatusSchema } from './web.js';
 import { conversationSubagentSchema } from './work.js';
+import {
+  sessionWorktreeSchema,
+  worktreeParamsSchema,
+  worktreeUpdateInputSchema,
+} from './worktrees.js';
 
 /**
  * `access` is the whole authorization model: the host token opens everything marked `admin`,
@@ -1179,6 +1184,50 @@ export const operations: Operation[] = [
     body: githubFixConflictsInputSchema,
     response: runRecordSchema,
     status: 202,
+  },
+  {
+    method: 'GET',
+    path: `${session}/worktrees`,
+    operationId: 'listSessionWorktrees',
+    access: 'admin',
+    response: z.array(sessionWorktreeSchema),
+  },
+  {
+    method: 'POST',
+    path: `${session}/worktrees/:name/merge`,
+    operationId: 'mergeSessionWorktree',
+    access: 'admin',
+    params: worktreeParamsSchema,
+    response: runRecordSchema,
+    status: 202,
+  },
+  {
+    method: 'POST',
+    path: `${session}/worktrees/:name/update`,
+    operationId: 'updateSessionWorktree',
+    access: 'admin',
+    params: worktreeParamsSchema,
+    body: worktreeUpdateInputSchema,
+    response: runRecordSchema,
+    status: 202,
+  },
+  {
+    method: 'POST',
+    path: `${session}/worktrees/:name/pull-request`,
+    operationId: 'openWorktreePullRequest',
+    access: 'admin',
+    params: worktreeParamsSchema,
+    response: runRecordSchema,
+    status: 202,
+  },
+  {
+    method: 'DELETE',
+    path: `${session}/worktrees/:name`,
+    operationId: 'discardSessionWorktree',
+    access: 'admin',
+    params: worktreeParamsSchema,
+    response: z.null(),
+    status: 204,
   },
   {
     method: 'PUT',

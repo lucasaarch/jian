@@ -1653,6 +1653,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/profiles/{profileId}/sessions/{sessionId}/worktrees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["listSessionWorktrees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/profiles/{profileId}/sessions/{sessionId}/worktrees/{name}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["mergeSessionWorktree"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/profiles/{profileId}/sessions/{sessionId}/worktrees/{name}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["updateSessionWorktree"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/profiles/{profileId}/sessions/{sessionId}/worktrees/{name}/pull-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["openWorktreePullRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/profiles/{profileId}/sessions/{sessionId}/worktrees/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Required permission: admin. */
+        delete: operations["discardSessionWorktree"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/sessions/{sessionId}/objective": {
         parameters: {
             query?: never;
@@ -18454,6 +18539,1016 @@ export interface operations {
                             note?: string;
                         };
                     };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSessionWorktrees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        branch: string;
+                        base: string;
+                        source: string;
+                        path: string;
+                        place: "gateway" | string;
+                        ahead: number | null;
+                        behind: number | null;
+                        uncommitted: number | null;
+                        pullRequest: boolean;
+                    }[];
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    mergeSessionWorktree: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                sessionId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        /** Format: uuid */
+                        sessionId: string;
+                        subagent?: {
+                            /** @enum {string} */
+                            role: "execute" | "review";
+                            name: string;
+                            identity: string;
+                            /** Format: uuid */
+                            parentRunId: string;
+                            spawnKey: string;
+                            inputHash: string;
+                            repositories?: string[];
+                            /** @enum {string} */
+                            tier?: "light" | "standard" | "deep";
+                            /** @enum {string} */
+                            tierBy?: "agent" | "jev" | "default";
+                        };
+                        requestKey: string;
+                        input: string;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "waiting" | "completed" | "failed" | "interrupted" | "cancelled";
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        error?: string;
+                        output?: string;
+                        usage?: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            /** @default 0 */
+                            cachedInputTokens: number;
+                            /** @default false */
+                            estimated: boolean;
+                            steps: number;
+                        };
+                        /** Format: uuid */
+                        continuationOf?: string;
+                        model?: {
+                            /** @enum {string} */
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
+                            modelId: string;
+                            apiKeyEnv?: string;
+                            /** Format: uuid */
+                            providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
+                            /** Format: uri */
+                            baseURL?: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                        };
+                        modelSelection?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                            voiceName?: string;
+                        };
+                        contextPolicy?: {
+                            /** @default 32000 */
+                            inputTokens: number;
+                            /** @default 4096 */
+                            outputTokens: number;
+                            /** @default 1500 */
+                            memoryTokens: number;
+                            /** @default 6000 */
+                            historyTokens: number;
+                            /** @default 1500 */
+                            toolResultTokens: number;
+                            /** @default 500 */
+                            maxSteps: number;
+                            maxRunTokens?: number;
+                        };
+                        call?: {
+                            /** Format: uuid */
+                            fromProfileId: string;
+                            fromName: string;
+                            /** Format: uuid */
+                            fromRunId: string;
+                            /** Format: uuid */
+                            fromSessionId?: string;
+                            depth: number;
+                            chain: string[];
+                        };
+                        group?: {
+                            chatId: string;
+                            name?: string;
+                            fromName: string;
+                            fromAgent: boolean;
+                            turns: number;
+                            /** @default [] */
+                            agents: string[];
+                        };
+                        progress?: {
+                            /** @enum {string} */
+                            phase: "thinking" | "tool" | "writing";
+                            tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
+                            /** @default  */
+                            text: string;
+                            /** @default 0 */
+                            steps: number;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        };
+                        commentary?: string[];
+                        /** Format: uuid */
+                        relayTo?: string;
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            recommended?: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
+                        };
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateSessionWorktree: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                sessionId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @default merge
+                     * @enum {string}
+                     */
+                    strategy?: "merge" | "rebase";
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        /** Format: uuid */
+                        sessionId: string;
+                        subagent?: {
+                            /** @enum {string} */
+                            role: "execute" | "review";
+                            name: string;
+                            identity: string;
+                            /** Format: uuid */
+                            parentRunId: string;
+                            spawnKey: string;
+                            inputHash: string;
+                            repositories?: string[];
+                            /** @enum {string} */
+                            tier?: "light" | "standard" | "deep";
+                            /** @enum {string} */
+                            tierBy?: "agent" | "jev" | "default";
+                        };
+                        requestKey: string;
+                        input: string;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "waiting" | "completed" | "failed" | "interrupted" | "cancelled";
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        error?: string;
+                        output?: string;
+                        usage?: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            /** @default 0 */
+                            cachedInputTokens: number;
+                            /** @default false */
+                            estimated: boolean;
+                            steps: number;
+                        };
+                        /** Format: uuid */
+                        continuationOf?: string;
+                        model?: {
+                            /** @enum {string} */
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
+                            modelId: string;
+                            apiKeyEnv?: string;
+                            /** Format: uuid */
+                            providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
+                            /** Format: uri */
+                            baseURL?: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                        };
+                        modelSelection?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                            voiceName?: string;
+                        };
+                        contextPolicy?: {
+                            /** @default 32000 */
+                            inputTokens: number;
+                            /** @default 4096 */
+                            outputTokens: number;
+                            /** @default 1500 */
+                            memoryTokens: number;
+                            /** @default 6000 */
+                            historyTokens: number;
+                            /** @default 1500 */
+                            toolResultTokens: number;
+                            /** @default 500 */
+                            maxSteps: number;
+                            maxRunTokens?: number;
+                        };
+                        call?: {
+                            /** Format: uuid */
+                            fromProfileId: string;
+                            fromName: string;
+                            /** Format: uuid */
+                            fromRunId: string;
+                            /** Format: uuid */
+                            fromSessionId?: string;
+                            depth: number;
+                            chain: string[];
+                        };
+                        group?: {
+                            chatId: string;
+                            name?: string;
+                            fromName: string;
+                            fromAgent: boolean;
+                            turns: number;
+                            /** @default [] */
+                            agents: string[];
+                        };
+                        progress?: {
+                            /** @enum {string} */
+                            phase: "thinking" | "tool" | "writing";
+                            tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
+                            /** @default  */
+                            text: string;
+                            /** @default 0 */
+                            steps: number;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        };
+                        commentary?: string[];
+                        /** Format: uuid */
+                        relayTo?: string;
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            recommended?: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
+                        };
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    openWorktreePullRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                sessionId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        /** Format: uuid */
+                        sessionId: string;
+                        subagent?: {
+                            /** @enum {string} */
+                            role: "execute" | "review";
+                            name: string;
+                            identity: string;
+                            /** Format: uuid */
+                            parentRunId: string;
+                            spawnKey: string;
+                            inputHash: string;
+                            repositories?: string[];
+                            /** @enum {string} */
+                            tier?: "light" | "standard" | "deep";
+                            /** @enum {string} */
+                            tierBy?: "agent" | "jev" | "default";
+                        };
+                        requestKey: string;
+                        input: string;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "waiting" | "completed" | "failed" | "interrupted" | "cancelled";
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        error?: string;
+                        output?: string;
+                        usage?: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            /** @default 0 */
+                            cachedInputTokens: number;
+                            /** @default false */
+                            estimated: boolean;
+                            steps: number;
+                        };
+                        /** Format: uuid */
+                        continuationOf?: string;
+                        model?: {
+                            /** @enum {string} */
+                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
+                            modelId: string;
+                            apiKeyEnv?: string;
+                            /** Format: uuid */
+                            providerId?: string;
+                            /** @enum {string} */
+                            credential?: "key" | "subscription";
+                            /** Format: uri */
+                            baseURL?: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                        };
+                        modelSelection?: {
+                            /** Format: uuid */
+                            providerId: string;
+                            modelId: string;
+                            /** @enum {string} */
+                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+                            fast?: boolean;
+                            voiceName?: string;
+                        };
+                        contextPolicy?: {
+                            /** @default 32000 */
+                            inputTokens: number;
+                            /** @default 4096 */
+                            outputTokens: number;
+                            /** @default 1500 */
+                            memoryTokens: number;
+                            /** @default 6000 */
+                            historyTokens: number;
+                            /** @default 1500 */
+                            toolResultTokens: number;
+                            /** @default 500 */
+                            maxSteps: number;
+                            maxRunTokens?: number;
+                        };
+                        call?: {
+                            /** Format: uuid */
+                            fromProfileId: string;
+                            fromName: string;
+                            /** Format: uuid */
+                            fromRunId: string;
+                            /** Format: uuid */
+                            fromSessionId?: string;
+                            depth: number;
+                            chain: string[];
+                        };
+                        group?: {
+                            chatId: string;
+                            name?: string;
+                            fromName: string;
+                            fromAgent: boolean;
+                            turns: number;
+                            /** @default [] */
+                            agents: string[];
+                        };
+                        progress?: {
+                            /** @enum {string} */
+                            phase: "thinking" | "tool" | "writing";
+                            tool?: string;
+                            mcp?: {
+                                server: string;
+                                tool: string;
+                            };
+                            /** @default  */
+                            text: string;
+                            /** @default 0 */
+                            steps: number;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        };
+                        commentary?: string[];
+                        /** Format: uuid */
+                        relayTo?: string;
+                        question?: {
+                            /** Format: uuid */
+                            id: string;
+                            prompt: string;
+                            choices?: string[];
+                            recommended?: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            answer?: string;
+                            /** Format: date-time */
+                            answeredAt?: string;
+                            /** @enum {string} */
+                            answeredBy?: "owner" | "contact";
+                        };
+                        approval?: {
+                            /** Format: uuid */
+                            id: string;
+                            toolCallId: string;
+                            toolName: string;
+                            /** @enum {string} */
+                            kind: "machine" | "service" | "message";
+                            title: string;
+                            detail: string;
+                            confirmLabel: string;
+                            request: string;
+                            /** Format: date-time */
+                            askedAt: string;
+                            /** @enum {string} */
+                            decision?: "approved" | "rejected";
+                            /** Format: date-time */
+                            decidedAt?: string;
+                            /** @enum {string} */
+                            decidedBy?: "owner" | "contact";
+                            note?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    discardSessionWorktree: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                sessionId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null;
                 };
             };
             /** @description Error */
