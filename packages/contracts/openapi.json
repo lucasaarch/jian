@@ -36935,6 +36935,16 @@
               "type": "string",
               "const": "true"
             }
+          },
+          {
+            "name": "worktree",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 60,
+              "pattern": "^[a-z]+-[a-z]+(-\\d+)?$"
+            }
           }
         ],
         "responses": {

@@ -14,6 +14,7 @@ import { projectSchema } from './projects.js';
 import { modelSelectionSchema } from './providers.js';
 import { mcpToolRefSchema, runProgressSchema } from './run-progress.js';
 import { subagentSchema } from './work.js';
+import { worktreeNameSchema } from './worktrees.js';
 
 const uuid = z.uuid();
 const timestamp = z.iso.datetime();
@@ -456,10 +457,12 @@ export const imageAspectSchema = z.enum(['1:1', '16:9', '9:16', '4:3', '3:4', '3
 export const TOOL_DISPLAY_CHARS = 16_000;
 
 export const sessionChangesQuerySchema = z.strictObject({
-  /** Omit to list changes; supply a listed path to read its current diff against HEAD. */
+  /** Omit to list changes; supply a listed path to read its current diff against HEAD (a worktree: its merge base). */
   path: z.string().min(1).max(4096).optional(),
   /** With a path: also the file as it is now, to show the lines its diff leaves out. */
   whole: z.literal('true').optional(),
+  /** Which of the conversation's worktrees to read; needed only when it has several. */
+  worktree: worktreeNameSchema.optional(),
 });
 
 /** A file line by line, each cut as a diff's lines are, for the lines a diff leaves out. */

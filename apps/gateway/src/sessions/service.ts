@@ -30,7 +30,7 @@ import { sessionContext } from '../runs/context-usage.js';
 import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { messages, projects, remoteMachines, runs } from '../storage/schema.js';
-import { checkoutChanges } from './changes.js';
+import { checkoutChanges, worktreeMergeBase } from './changes.js';
 import { listCreatedPullAnswers } from './created-pulls.js';
 import { compactLoads } from './loads.js';
 import { objectiveAt, sanitizeObjectiveText } from './objective.js';
@@ -126,6 +126,19 @@ export class Sessions {
     /** This gateway runs on the owner's own computer: a desktop app's. */
     private readonly ownComputer = false,
   ) {}
+
+  private worktreeRecords: (
+    profileId: string,
+    sessionId: string,
+  ) => Promise<{ name: string; path: string; base: string }[]> = async () => [];
+
+  /**
+   * Worktrees are built after sessions (they need the machines and keys sessions does not), so
+   * the changes route reads them through this once they exist.
+   */
+  useWorktrees(records: typeof this.worktreeRecords) {
+    this.worktreeRecords = records;
+  }
 
   /** Creates an owner chat without changing the singleton used by older clients. */
   async createGatewaySession(profileId: string, input: unknown) {
@@ -708,6 +721,27 @@ export class Sessions {
   async changes(profileId: string, sessionId: string, input: unknown = {}) {
     const session = await this.session(profileId, sessionId);
     const query = sessionChangesQuerySchema.parse(input);
+    // Only this conversation's own gateway worktrees are ever read: the source folder and another
+    // conversation's worktree are not reachable from here. Machine worktrees have no checkout on
+    // this disk, so they fall through to the refusals below and the panel shows the timeline.
+    const worktrees = await this.worktreeRecords(profileId, sessionId);
+    if (query.worktree && !worktrees.some((item) => item.name === query.worktree)) {
+      throw new GatewayError(404, `Worktree ${query.worktree} not found`);
+    }
+    if (worktrees.length) {
+      const chosen = query.worktree
+        ? worktrees.find((item) => item.name === query.worktree)
+        : worktrees.length === 1
+          ? worktrees[0]
+          : undefined;
+      if (!chosen) throw new GatewayError(409, 'Choose a worktree to read its changes.');
+      return checkoutChanges(
+        chosen.path,
+        query.path,
+        query.whole === 'true',
+        await worktreeMergeBase(chosen.path, chosen.base),
+      );
+    }
     if (!session.projectId || session.projectIds?.length) {
       throw new GatewayError(409, 'Choose a conversation with one project to read its changes.');
     }

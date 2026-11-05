@@ -17,7 +17,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { projectCheckout } from '../src/agent/workspace-home.js';
 import { createApp } from '../src/app.js';
 import { checkoutChanges } from '../src/sessions/changes.js';
-import { projects } from '../src/storage/schema.js';
+import { projects, sessionWorktrees } from '../src/storage/schema.js';
 import { git } from './helpers/git-server.js';
 import { testServices } from './helpers/services.js';
 
@@ -262,5 +262,105 @@ describe('current project checkout changes', () => {
     } finally {
       await app.close();
     }
+  });
+});
+
+describe("a worktree's changes", () => {
+  async function worktreeConversation() {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+    const session = await services.sessions.createGatewaySession(profile.id, {});
+    const source = repository();
+    git(source, 'branch', '-M', 'main');
+    const place = (name: string, sessionId = session.id, folder = source) => {
+      const path = join(root, 'worktrees', `${name}-${randomUUID().slice(0, 8)}`);
+      git(folder, 'branch', '-M', 'main');
+      git(folder, 'worktree', 'add', '-q', '-b', `jian/${name}`, path);
+      return services.store.db
+        .insert(sessionWorktrees)
+        .values({
+          id: randomUUID(),
+          profileId: profile.id,
+          sessionId,
+          name,
+          branch: `jian/${name}`,
+          base: 'main',
+          source: folder,
+          path,
+          place: 'gateway',
+        })
+        .then(() => path);
+    };
+    return { services, profile, session, source, place };
+  }
+
+  it('include its commits and uncommitted files against the merge base', async () => {
+    const { services, profile, session, source, place } = await worktreeConversation();
+    const path = await place('calm-otter');
+    git(path, 'config', 'user.email', 'ana@example.test');
+    git(path, 'config', 'user.name', 'Ana');
+    writeFileSync(join(path, 'committed.txt'), 'in a commit\n');
+    git(path, 'add', '.');
+    git(path, 'commit', '-qm', 'Add committed');
+    writeFileSync(join(path, 'modified.txt'), 'edited\n');
+    unlinkSync(join(path, 'deleted.txt'));
+    writeFileSync(join(path, 'loose.txt'), 'untracked\n');
+    // The base moves on after the branch was made: its new file is not the worktree's work.
+    writeFileSync(join(source, 'elsewhere.txt'), 'base work\n');
+    git(source, 'add', '.');
+    git(source, 'commit', '-qm', 'Base moves on');
+
+    const changes = await services.sessions.changes(profile.id, session.id);
+    expect(new Map(changes.files.map((file) => [file.path, file.status]))).toEqual(
+      new Map([
+        ['committed.txt', 'added'],
+        ['modified.txt', 'modified'],
+        ['deleted.txt', 'deleted'],
+        ['loose.txt', 'untracked'],
+      ]),
+    );
+    const diff = await services.sessions.changes(profile.id, session.id, { path: 'modified.txt' });
+    expect(sessionChangesSchema.safeParse(diff).success).toBe(true);
+    expect(diff.files[0]?.diff).toMatchObject({ additions: 1, deletions: 1 });
+    const committed = await services.sessions.changes(profile.id, session.id, {
+      path: 'committed.txt',
+    });
+    expect(committed.files[0]?.diff).toMatchObject({ created: true, additions: 1 });
+  });
+
+  it("never read the source or another conversation's worktree", async () => {
+    const { services, profile, session, source, place } = await worktreeConversation();
+    const other = await services.sessions.createGatewaySession(profile.id, {});
+    const theirs = await place('quiet-fox', other.id);
+    writeFileSync(join(theirs, 'private.txt'), 'theirs\n');
+    writeFileSync(join(source, 'in-source.txt'), 'source\n');
+
+    // Nothing of its own: the existing refusal, not their checkout and not the source.
+    await expect(services.sessions.changes(profile.id, session.id)).rejects.toMatchObject({
+      statusCode: 409,
+    });
+    await expect(
+      services.sessions.changes(profile.id, session.id, { worktree: 'quiet-fox' }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    const mine = await place('calm-otter', session.id, repository());
+    writeFileSync(join(mine, 'mine.txt'), 'mine\n');
+    const changes = await services.sessions.changes(profile.id, session.id);
+    expect(changes.files.map((file) => file.path)).toEqual(['mine.txt']);
+  });
+
+  it('need ?worktree= when there are several', async () => {
+    const { services, profile, session, place } = await worktreeConversation();
+    await place('calm-otter');
+    const second = await place('quiet-fox', session.id, repository());
+    writeFileSync(join(second, 'second.txt'), 'second\n');
+
+    await expect(services.sessions.changes(profile.id, session.id)).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining('Choose a worktree'),
+    });
+    const named = await services.sessions.changes(profile.id, session.id, {
+      worktree: 'quiet-fox',
+    });
+    expect(named.files.map((file) => file.path)).toEqual(['second.txt']);
   });
 });

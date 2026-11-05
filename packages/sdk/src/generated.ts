@@ -20654,6 +20654,7 @@ export interface operations {
             query?: {
                 path?: string;
                 whole?: "true";
+                worktree?: string;
             };
             header?: never;
             path: {

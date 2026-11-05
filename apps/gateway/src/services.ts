@@ -155,6 +155,9 @@ export function buildServices({
         : remotePlace(profileId, place, remote),
     (message) => console.warn(message),
   );
+  sessions.useWorktrees((profileId, sessionId) =>
+    worktrees.recordedOnGateway(profileId, sessionId),
+  );
   const services = {
     profiles,
     providers,

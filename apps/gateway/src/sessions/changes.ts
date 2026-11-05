@@ -54,7 +54,11 @@ function changedFiles(status: string): SessionChange[] {
                       : 'modified',
     });
   }
-  // A staged deletion followed by a replacement can appear again as an untracked file.
+  return merged(files);
+}
+
+/** A staged deletion followed by a replacement can appear again as an untracked file. */
+function merged(files: SessionChange[]): SessionChange[] {
   const unique = new Map<string, SessionChange>();
   for (const file of files) {
     unique.set(file.path, unique.has(file.path) ? { ...file, status: 'modified' } : file);
@@ -62,15 +66,37 @@ function changedFiles(status: string): SessionChange[] {
   return [...unique.values()];
 }
 
+const DIFF_STATUS: Record<string, SessionChange['status']> = {
+  A: 'added',
+  D: 'deleted',
+  M: 'modified',
+  T: 'typechanged',
+  U: 'conflicted',
+};
+
 /**
- * Read the checkout, never refresh its index or run repository-supplied hooks, filters or diff
- * drivers. A request cannot supply a command, revision, checkout path or arbitrary file path.
+ * `diff --name-status -z --no-renames`: a renamed file reads as a deletion plus an addition,
+ * which keeps one path per record and gives the old side a plain `git show` of the same path.
  */
-export async function checkoutChanges(
-  checkout: string,
-  path?: string,
-  whole = false,
-): Promise<SessionChanges> {
+function diffFiles(output: string): SessionChange[] {
+  const records = output.split('\0');
+  const files: SessionChange[] = [];
+  for (let index = 0; index + 1 < records.length; index += 2) {
+    const status = DIFF_STATUS[records[index]?.[0] ?? ''];
+    const path = records[index + 1] ?? '';
+    if (!status || !path) continue;
+    if (path.length > 4096) throw new GatewayError(413, 'A changed path is too long to display.');
+    files.push({ path, status });
+  }
+  return files;
+}
+
+/**
+ * The checkout read the way the panel may: never refresh its index or run repository-supplied
+ * hooks, filters or diff drivers. Every read of a checkout, including the merge base below, goes
+ * through here so none of them can be run with looser settings.
+ */
+async function openCheckout(checkout: string) {
   const root = await realpath(await confine(checkout, 'read')).catch(() => {
     throw new GatewayError(409, 'This conversation has no checkout yet.');
   });
@@ -120,6 +146,36 @@ export async function checkoutChanges(
   if (top.code !== 0 || (await realpath(top.stdout.trim()).catch(() => '')) !== root) {
     throw new GatewayError(409, 'This conversation has no git checkout at its project path.');
   }
+  return { root, git, settings };
+}
+
+/**
+ * Where a worktree's branch left its base: the commit its changes are shown against, so the
+ * base moving on never lists the base's own new work as the worktree's. The gateway computes it;
+ * a request never supplies a revision. The base is a branch name, passed as a full ref so it
+ * cannot read as an option or resolve to a tag.
+ */
+export async function worktreeMergeBase(checkout: string, base: string): Promise<string> {
+  const { git } = await openCheckout(checkout);
+  const found = await git(['merge-base', `refs/heads/${base}`, 'HEAD']);
+  const sha = found.stdout.trim();
+  if (found.code !== 0 || !/^[0-9a-f]{40}$/.test(sha)) {
+    throw new GatewayError(409, `Could not find where this worktree left ${base}.`);
+  }
+  return sha;
+}
+
+/**
+ * Read the checkout against \`against\` (HEAD for a project checkout, a merge base for a
+ * worktree). A request cannot supply a command, revision, checkout path or arbitrary file path.
+ */
+export async function checkoutChanges(
+  checkout: string,
+  path?: string,
+  whole = false,
+  against = 'HEAD',
+): Promise<SessionChanges> {
+  const { root, git, settings } = await openCheckout(checkout);
   // Even `status` can invoke a clean filter while comparing files. Override every local driver,
   // not just external diff/textconv, before asking git to inspect worktree contents.
   const filters = await git([
@@ -143,7 +199,26 @@ export async function checkoutChanges(
     '--ignore-submodules=dirty',
   ]);
   if (status.code !== 0) throw new GatewayError(409, 'The checkout changes could not be read.');
-  const files = changedFiles(status.stdout);
+  let files: SessionChange[];
+  if (against === 'HEAD') {
+    files = changedFiles(status.stdout);
+  } else {
+    // `against` is a sha the gateway computed; anything else would be a revision from outside.
+    if (!/^[0-9a-f]{40}$/.test(against)) throw new GatewayError(500, 'Invalid comparison base.');
+    const tracked = await git([
+      'diff',
+      '--name-status',
+      '-z',
+      '--no-renames',
+      '--ignore-submodules=dirty',
+      against,
+    ]);
+    if (tracked.code !== 0) throw new GatewayError(409, 'The checkout changes could not be read.');
+    files = merged([
+      ...diffFiles(tracked.stdout),
+      ...changedFiles(status.stdout).filter((file) => file.status === 'untracked'),
+    ]);
+  }
   if (path === undefined)
     return { files: files.slice(0, MAX_FILES), truncated: files.length > MAX_FILES };
 
@@ -202,7 +277,7 @@ export async function checkoutChanges(
   if (file.status !== 'untracked' && file.status !== 'added') {
     // Reading the blob does not execute filters or follow a worktree symlink.
     const original = await git(
-      ['show', `HEAD:${file.previousPath ?? file.path}`],
+      ['show', `${against}:${file.previousPath ?? file.path}`],
       MAX_FILE_BYTES + 1,
     ).catch((error: unknown) => {
       if (error instanceof GatewayError && error.statusCode === 413) return undefined;
