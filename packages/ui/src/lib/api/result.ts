@@ -25,7 +25,7 @@ const conflicts: Record<string, string> = {
     'This conversation has no git checkout at its project path.',
   'Choose a worktree to read its changes.': 'Choose a worktree to read its changes.',
   'The agent is working in this conversation. Discard once it has finished.':
-    'The agent is working here. Discard it once the turn ends.',
+    'The agent is working here. Discard the worktree once the turn ends.',
   'The agent is answering this conversation. Ask again once it has finished.':
     'The agent is answering this conversation. Ask again once it has finished.',
   'This conversation no longer has a folder or a machine, so the agent has no worktree tools here. Give it a folder first.':

@@ -17,7 +17,6 @@ import {
   useSessions,
 } from '../../lib/query/agent';
 import { keys } from '../../lib/query/keys';
-import { useCrew } from '../../lib/stores/crew';
 import { draftKey } from '../../lib/stores/drafts';
 import { sendNow } from '../../lib/stores/outbox';
 import { useRefresh } from '../../lib/workspace';
@@ -38,7 +37,7 @@ import { SessionModel } from './model-picker';
 import { SessionObjective } from './objective';
 import { SessionProtection } from './protection-menu';
 import { SessionPulls } from './session-pulls';
-import { SessionWorktrees } from './session-worktrees';
+import { SessionWorktrees, useChangesFlag } from './session-worktrees';
 
 const isGateway = (session: Session) => session.channel === GATEWAY_SESSION_CHANNEL;
 /**
@@ -104,10 +103,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
     enabled: Boolean(active),
   });
   const hasWorktree = Boolean(worktrees?.some((item) => item.place === 'gateway'));
-  useEffect(() => {
-    useCrew.setState({ worktrees: hasWorktree });
-    return () => useCrew.setState({ worktrees: false });
-  }, [hasWorktree]);
+  useChangesFlag(active?.id, hasWorktree);
   const answered = () => {
     setSent((value) => value + 1);
     void refresh();

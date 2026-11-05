@@ -3,11 +3,12 @@
 import { Popover } from '@base-ui/react/popover';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GitBranch } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Action, ConfirmDialog, pillClass } from '../../kit';
 import type { GatewayApi, SessionWorktree } from '../../lib/api';
 import { keys } from '../../lib/query/keys';
+import { useCrew } from '../../lib/stores/crew';
 
 type WorktreesApi = Pick<
   GatewayApi,
@@ -32,11 +33,14 @@ export function standing({ ahead, behind, uncommitted }: SessionWorktree): strin
 /** What discarding loses, said plainly: the folder goes, the branch and its commits stay. */
 function Loss({ worktree }: { worktree: SessionWorktree }) {
   const { uncommitted, branch } = worktree;
-  const lost = uncommitted
-    ? uncommitted === 1
-      ? 'Its 1 uncommitted file is lost.'
-      : `Its ${uncommitted} uncommitted files are lost.`
-    : 'Its folder is removed.';
+  const lost =
+    uncommitted === null
+      ? 'Any uncommitted files in it are lost.'
+      : uncommitted === 0
+        ? 'Its folder is removed.'
+        : uncommitted === 1
+          ? 'Its 1 uncommitted file is lost.'
+          : `Its ${uncommitted} uncommitted files are lost.`;
   return (
     <>
       {lost} Its commits stay on {branch}.
@@ -51,6 +55,7 @@ function Row({
   api,
   profileId,
   sessionId,
+  discard,
 }: {
   worktree: SessionWorktree;
   /** The agent has a turn open: removing the folder under it is refused. */
@@ -60,8 +65,8 @@ function Row({
   api: WorktreesApi;
   profileId: string;
   sessionId: string;
+  discard: () => void;
 }) {
-  const [asking, setAsking] = useState(false);
   const [working, setWorking] = useState(false);
   const { name, branch, base } = worktree;
   const run = async (call: () => Promise<unknown>, done: string) => {
@@ -81,11 +86,16 @@ function Row({
           {branch} → {base}
         </span>
         <span className="session-worktree-meta">{standing(worktree)}</span>
+        {/* A disabled button says nothing on hover or on a phone, so the row says why. */}
+        {busy && (
+          <span className="session-worktree-meta">Discard once the agent has finished.</span>
+        )}
       </span>
       <span className="session-worktree-actions">
         <Action
           tone="quiet"
           size="small"
+          title={`Merge into ${base}`}
           disabled={working}
           onClick={() =>
             run(
@@ -99,6 +109,7 @@ function Row({
         <Action
           tone="quiet"
           size="small"
+          title={`Update from ${base}`}
           disabled={working}
           onClick={() =>
             run(
@@ -124,33 +135,25 @@ function Row({
             Open pull request
           </Action>
         )}
-        <Action
-          tone="danger"
-          size="small"
-          disabled={busy || working}
-          onClick={() => setAsking(true)}
-        >
+        <Action tone="danger" size="small" disabled={busy || working} onClick={discard}>
           Discard
         </Action>
       </span>
-      <ConfirmDialog
-        open={asking}
-        onOpenChange={setAsking}
-        title={`Discard ${name}?`}
-        action="Discard worktree"
-        busy={working}
-        run={async () => {
-          const gone = await run(
-            () => api.discardSessionWorktree(profileId, sessionId, name),
-            `${name} was discarded.`,
-          );
-          if (gone) setAsking(false);
-        }}
-      >
-        <Loss worktree={worktree} />
-      </ConfirmDialog>
     </li>
   );
+}
+
+/**
+ * Sets the Inspector's flag for the conversation in front. The flag is reset when the one left
+ * is closed, so a switch between two conversations that both have a worktree sets it again: the
+ * answer was cached and did not change, but the effect must still run for the new one.
+ */
+export function useChangesFlag(sessionId: string | undefined, has: boolean) {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the conversation is what re-runs it.
+  useEffect(() => {
+    useCrew.setState({ worktrees: has });
+    return () => useCrew.setState({ worktrees: false });
+  }, [sessionId, has]);
 }
 
 /**
@@ -174,6 +177,9 @@ export function SessionWorktrees({
   onAction: () => void;
 }) {
   const client = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [discarding, setDiscarding] = useState<string>();
+  const [removing, setRemoving] = useState(false);
   const { data: worktrees = [] } = useQuery({
     queryKey: keys.sessionWorktrees(profileId, sessionId),
     queryFn: () => api.sessionWorktrees(profileId, sessionId),
@@ -197,44 +203,78 @@ export function SessionWorktrees({
   const single = worktrees.length === 1 ? first : undefined;
   const label = single ? single.name : `${worktrees.length} worktrees`;
 
+  const doomed = worktrees.find((item) => item.name === discarding);
+
   return (
-    <Popover.Root>
-      <Popover.Trigger
-        className={`${pillClass()} session-badge-trigger`}
-        aria-label={
-          single ? `Worktree ${single.name}: show its actions` : `${label}: show their actions`
-        }
-      >
-        <GitBranch size={12} aria-hidden="true" />
-        {label}
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner
-          className="select-positioner"
-          side="top"
-          align="end"
-          sideOffset={8}
-          positionMethod="fixed"
-          collisionBoundary={[]}
+    <>
+      <Popover.Root open={open} onOpenChange={setOpen}>
+        <Popover.Trigger
+          className={`${pillClass()} session-badge-trigger`}
+          aria-label={
+            single ? `Worktree ${single.name}: show its actions` : `${label}: show their actions`
+          }
         >
-          <Popover.Popup className="model-menu session-badge-popup session-pulls-popup">
-            <Popover.Title className="session-badge-title">Worktrees</Popover.Title>
-            <ul className="session-pulls" aria-label="Worktrees">
-              {worktrees.map((worktree) => (
-                <Row
-                  key={worktree.name}
-                  worktree={worktree}
-                  busy={busy}
-                  ask={ask}
-                  api={api}
-                  profileId={profileId}
-                  sessionId={sessionId}
-                />
-              ))}
-            </ul>
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+          <GitBranch size={12} aria-hidden="true" />
+          {label}
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Positioner
+            className="select-positioner"
+            side="top"
+            align="end"
+            sideOffset={8}
+            positionMethod="fixed"
+            collisionBoundary={[]}
+          >
+            <Popover.Popup className="model-menu session-badge-popup session-pulls-popup">
+              <Popover.Title className="session-badge-title">Worktrees</Popover.Title>
+              <ul className="session-pulls" aria-label="Worktrees">
+                {worktrees.map((worktree) => (
+                  <Row
+                    key={worktree.name}
+                    worktree={worktree}
+                    busy={busy}
+                    ask={ask}
+                    api={api}
+                    profileId={profileId}
+                    sessionId={sessionId}
+                    discard={() => {
+                      // The question stands outside the popover, which gives way to it.
+                      setOpen(false);
+                      setDiscarding(worktree.name);
+                    }}
+                  />
+                ))}
+              </ul>
+            </Popover.Popup>
+          </Popover.Positioner>
+        </Popover.Portal>
+      </Popover.Root>
+      {doomed && (
+        <ConfirmDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setDiscarding(undefined);
+          }}
+          title={`Discard ${doomed.name}?`}
+          action="Discard worktree"
+          busy={removing}
+          run={async () => {
+            setRemoving(true);
+            try {
+              const gone = await ask(
+                () => api.discardSessionWorktree(profileId, sessionId, doomed.name),
+                `${doomed.name} was discarded.`,
+              );
+              if (gone) setDiscarding(undefined);
+            } finally {
+              setRemoving(false);
+            }
+          }}
+        >
+          <Loss worktree={doomed} />
+        </ConfirmDialog>
+      )}
+    </>
   );
 }

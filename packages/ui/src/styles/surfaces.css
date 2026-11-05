@@ -211,6 +211,10 @@
   .session-worktree-actions {
     @apply -ml-2 flex flex-wrap gap-x-0.5 gap-y-0.5;
   }
+  /* A long base name wraps inside the button instead of widening the popup. */
+  .session-worktree-actions > button {
+    @apply h-auto min-h-7 max-w-full py-1 text-left whitespace-normal break-all;
+  }
   /* A channel's conversation has, where a chat has its composer, its agent settings: whether
      the agent answers this contact, and on which model. Same column, same box, no text. */
   .agent-toolbar {

@@ -175,7 +175,7 @@ export const sessionCalls = (client: Client) => ({
         params: { path: { profileId, sessionId, name } },
       }),
     ),
-  /** Removes the folder and its branch at once; the gateway refuses while the agent is working. */
+  /** Removes the folder at once and keeps the branch; the gateway refuses while the agent is working. */
   discardSessionWorktree: (profileId: string, sessionId: string, name: string) =>
     result(
       client.DELETE('/v1/profiles/{profileId}/sessions/{sessionId}/worktrees/{name}', {

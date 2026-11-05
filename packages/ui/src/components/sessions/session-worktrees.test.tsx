@@ -5,7 +5,8 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { SessionWorktree } from '../../lib/api';
 import { GatewayAnswer } from '../../lib/api/result';
-import { SessionWorktrees } from './session-worktrees';
+import { useCrew } from '../../lib/stores/crew';
+import { SessionWorktrees, useChangesFlag } from './session-worktrees';
 
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock('sonner', () => ({ toast }));
@@ -166,9 +167,12 @@ it('asks before discarding, then discards', async () => {
   const { calls, onAction } = await show([worktree('brave-otter')]);
   await open();
 
+  expect(document.body.textContent).not.toContain('Discard once the agent has finished.');
   await act(async () => button('Discard')?.click());
   await tick();
 
+  // The popover gives way, and the question stays until it is answered.
+  expect(document.querySelector('.session-worktree')).toBeNull();
   expect(calls.discardSessionWorktree).not.toHaveBeenCalled();
   expect(document.body.textContent).toContain('Discard brave-otter?');
   expect(document.body.textContent).toContain('Its 3 uncommitted files are lost');
@@ -180,9 +184,11 @@ it('asks before discarding, then discards', async () => {
   expect(onAction).toHaveBeenCalledTimes(1);
 });
 
-it('disables Discard while the agent works, and leaves the others', async () => {
+it('disables Discard while the agent works, says why, and leaves the others', async () => {
   const { calls } = await show([worktree('brave-otter', { pullRequest: true })], { busy: true });
   await open();
+
+  expect(document.body.textContent).toContain('Discard once the agent has finished.');
 
   expect(button('Discard')?.disabled).toBe(true);
   expect(button('Merge into main')?.disabled).toBe(false);
@@ -209,4 +215,29 @@ it('says why an action was refused, without telling the agent it worked', async 
 
   expect(toast.error).toHaveBeenCalledWith('The agent is answering this conversation.');
   expect(onAction).not.toHaveBeenCalled();
+});
+
+it('warns that unread uncommitted files are lost', async () => {
+  await show([worktree('brave-otter', { uncommitted: null })]);
+  await open();
+  await act(async () => button('Discard')?.click());
+  await tick();
+
+  expect(document.body.textContent).toContain('Any uncommitted files in it are lost.');
+});
+
+it('offers Changes again after switching between two conversations that both have a worktree', async () => {
+  function Probe({ id }: { id: string }) {
+    useChangesFlag(id, true);
+    return null;
+  }
+  await act(async () => root.render(<Probe id="a" />));
+  expect(useCrew.getState().worktrees).toBe(true);
+
+  // The history of the one left resets the flag as it closes; the next one sets it again.
+  await act(async () => {
+    root.render(<Probe id="b" />);
+    useCrew.setState({ worktrees: false });
+  });
+  expect(useCrew.getState().worktrees).toBe(true);
 });
