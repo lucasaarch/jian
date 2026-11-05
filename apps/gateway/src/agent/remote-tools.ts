@@ -352,7 +352,7 @@ export function remoteTools(
     }),
     pull_remote_file: tool({
       description:
-        'Read a file from an authorized remote computer into this conversation as media (binary via base64). For large files, prefer run_remote_command with a transfer the owner arranged. Text under a few hundred KB works best.',
+        'Read a file from an authorized remote computer into this conversation as media. Give an absolute path. At most 300,000 bytes: a larger file, or one that does not arrive whole, fails, and then split or compress it with run_remote_command first.',
       inputSchema: z.object({
         machineId: z.uuid(),
         path: z.string().min(1).max(4096),
@@ -444,7 +444,7 @@ export function remoteTools(
     }),
     push_remote_file: tool({
       description:
-        'Write bytes to a path on an authorized remote computer. Pass UTF-8 text, or base64 with encoding base64. Size is capped by the worker channel.',
+        'Write bytes to a path on an authorized remote computer. Give an absolute path; parent folders are created. Pass UTF-8 text, or base64 with encoding base64. At most 300,000 bytes on a machine whose Jian Remote has file operations. An older Jian Remote takes only what fits one command (a few KB; the error names the exact size): update Jian Remote on that machine for larger files.',
       inputSchema: z.object({
         machineId: z.uuid(),
         path: z.string().min(1).max(4096),

@@ -32,8 +32,10 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
   Coordinates are pixels in the screenshot image (origin top-left); use the returned
   \`widthPx\` / \`heightPx\`. A Jian overlay pointer is visible while the session is open;
   call \`end_session\` when finished so it disappears.
-- \`pull_remote_file\` — read a remote path into conversation media (size-capped).
-- \`push_remote_file\` — write UTF-8 or base64 bytes to a remote path (size-capped).
+- \`pull_remote_file\` — read an absolute remote path into conversation media, up to 300,000 bytes; a
+  larger file fails, so split or compress it with \`run_remote_command\` first.
+- \`push_remote_file\` — write UTF-8 or base64 bytes to an absolute remote path, up to 300,000 bytes. A
+  machine with an older Jian Remote takes only a few KB (the error names the size): update it first.
 
 Gateway \`files\` / \`shell\` tools act on the **gateway host**, not the remote
 PC. For work on the remote computer, use the remote tools. Do not claim a remote action
