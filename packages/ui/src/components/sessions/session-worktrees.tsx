@@ -20,7 +20,7 @@ type WorktreesApi = Pick<
 >;
 
 /** Where it stands against its base, in a line. A zero says nothing; a place out of reach says so. */
-export function standing({ ahead, behind, uncommitted }: SessionWorktree): string {
+function standing({ ahead, behind, uncommitted }: SessionWorktree): string {
   if (ahead === null || behind === null || uncommitted === null) return 'Not reachable';
   const said = [
     ahead ? `${ahead} ahead` : '',
