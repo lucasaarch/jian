@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { localPlace, remotePlace } from '../src/agent/github-git-place.js';
-import { sessions } from '../src/storage/schema.js';
+import { runs, sessions } from '../src/storage/schema.js';
 import { Worktrees } from '../src/worktrees/service.js';
 import { testServices } from './helpers/services.js';
 
@@ -473,4 +473,34 @@ it('reads a machine’s worktrees at most every 30 seconds, reaching the machine
   const settled = commands;
   await worktrees.list(profile.id, chat.id);
   expect(commands).toBeGreaterThan(settled);
+});
+
+it('never serves a machine’s counts read before a turn ended, nor to the agent', async () => {
+  let now = 1_000_000;
+  const { services, profile, chat } = await setup();
+  const machine = randomUUID();
+  const worktrees = new Worktrees(
+    services.store,
+    () => now,
+    async () => ({ ...gateway(), home: async () => home() }),
+  );
+  const made = await worktrees.create(profile.id, chat.id, repo(dir), machine);
+  const uncommitted = async (options?: { fresh: boolean }) =>
+    (await worktrees.list(profile.id, chat.id, options))[0]?.uncommitted;
+  expect(await uncommitted()).toBe(0);
+  const turn = await services.runs.submit(profile.id, chat.id, { text: 'Go', requestKey: 'go' });
+
+  // The agent leaves files behind during its turn.
+  writeFileSync(join(made.path, 'loose.txt'), 'x');
+  now += 5_000;
+  expect(await uncommitted()).toBe(0);
+  expect(await uncommitted({ fresh: true })).toBe(1);
+
+  writeFileSync(join(made.path, 'more.txt'), 'y');
+  await services.store.db
+    .update(runs)
+    .set({ status: 'completed', updatedAt: new Date() })
+    .where(eq(runs.id, turn.id));
+  now += 5_000;
+  expect(await uncommitted()).toBe(2);
 });

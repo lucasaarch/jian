@@ -163,6 +163,8 @@ export function worktreeTools({
     return sessionId;
   };
 
+  // The agent decides from what it is told: never a count kept from before its own edits.
+  const live = { fresh: true };
   // Only a run on the gateway has subagents that make worktrees, and only from the conversation's.
   const parentOfSubagents = !subagent && place === 'gateway';
   const madeFromIt = parentOfSubagents
@@ -215,17 +217,17 @@ export function worktreeTools({
       execute: async () => {
         if (subagent) {
           return [
-            ...(await worktrees.list(profileId, sessionId)),
-            ...(await worktrees.list(profileId, conversationId)),
+            ...(await worktrees.list(profileId, sessionId, live)),
+            ...(await worktrees.list(profileId, conversationId, live)),
           ];
         }
         const theirs = [];
         for (const id of await subagents()) {
-          for (const item of await worktrees.list(profileId, id)) {
+          for (const item of await worktrees.list(profileId, id, live)) {
             theirs.push({ ...item, subagent: true });
           }
         }
-        return [...(await worktrees.list(profileId, sessionId)), ...theirs];
+        return [...(await worktrees.list(profileId, sessionId, live)), ...theirs];
       },
     }),
     update_worktree: tool({

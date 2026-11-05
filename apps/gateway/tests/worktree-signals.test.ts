@@ -399,3 +399,12 @@ it('teaches the conversation to clear its subagents’ worktrees before its own'
   expect(onMachine.instructions).not.toContain('`list_worktrees` also shows');
   expect(parent.instructions).toMatch(/\.env/);
 });
+
+it('tells a subagent to report changes in the conversation’s worktree, not to commit them', async () => {
+  const { worktreesFor } = await import('../src/skills/builtin/worktrees.js');
+  const skill = worktreesFor({ create: true, machine: false, signals: false, subagent: true });
+
+  expect(skill.instructions).toContain("When that folder is the conversation's worktree");
+  expect(skill.instructions).toContain('report it in your final answer');
+  expect(skill.instructions).not.toContain('commit what is left there');
+});

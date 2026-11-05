@@ -152,7 +152,13 @@ export function registerWorktreeRoutes(app: FastifyInstance, deps: WorktreeRoute
         'The agent is working in this conversation. Discard once it has finished.',
       );
     }
-    await deps.worktrees.remove(profileId, sessionId, name, { discard: true });
+    // Read live first: the owner confirmed what the badge showed, which on a machine may be a
+    // count kept from a moment ago. The discard goes ahead either way, as confirmed; a folder
+    // the read finds already gone is retired by it, and is as discarded as it gets.
+    const live = await deps.worktrees.list(profileId, sessionId, { fresh: true });
+    if (live.some((item) => item.name === name)) {
+      await deps.worktrees.remove(profileId, sessionId, name, { discard: true });
+    }
     return reply.code(204).send();
   });
 }

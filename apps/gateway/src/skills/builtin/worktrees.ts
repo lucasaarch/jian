@@ -91,7 +91,7 @@ hangs.
 checked out. Tell the owner which, and ask them to commit, stash or switch back. Do not clean the
 folder up yourself.${
   can.create && can.subagent
-    ? " When that folder is the conversation's worktree, commit what is left there, then merge."
+    ? " When that folder is the conversation's worktree, its changes are not yours to commit: report it in your final answer, so the principal agent commits them and merges your worktree."
     : ''
 }
 

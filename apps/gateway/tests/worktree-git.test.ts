@@ -157,8 +157,8 @@ describe('worktree git', () => {
     const message = await refusal(mergeWorktree(place, { ...t, into: 'worktree' }));
 
     expect(message).toContain(`The conversation's worktree at ${t.source} has uncommitted changes`);
-    expect(message).toContain('Commit them there');
-    expect(message).not.toContain('owner');
+    expect(message).toContain('Report that in your final answer');
+    expect(message).not.toMatch(/owner|Commit them/);
   });
 
   it('merge refuses when the source is on another branch, naming both', async () => {
@@ -243,6 +243,26 @@ describe('worktree git', () => {
     const { sha } = await mergeWorktree(flaky, done);
     expect(sha).toBe(run(done.source, 'rev-parse', 'HEAD'));
     expect(run(done.source, 'show', '--format=%P', '-s', 'HEAD').split(' ')).toHaveLength(2);
+  });
+
+  it('says the source could not be checked when undoing the merge did not take', async () => {
+    const t = await started();
+    commit(t.path, 'b.txt', 'b\n');
+    hook(t.source, 'pre-merge-commit', 'exit 1');
+    // An abort that answers but does nothing: the merge is still there afterwards.
+    const stuck: typeof place = {
+      ...place,
+      git: async (args, config, signal) =>
+        args.includes('--abort')
+          ? { exitCode: 0, stdout: '', stderr: '', timedOut: false }
+          : place.git(args, config, signal),
+    };
+
+    const message = await refusal(mergeWorktree(stuck, t));
+
+    expect(message).toContain('git status');
+    expect(message).not.toMatch(/undone|as it was/);
+    expect(run(t.source, 'rev-parse', 'MERGE_HEAD')).toBe(run(t.source, 'rev-parse', t.branch));
   });
 
   it('never aborts a merge that is not its own', async () => {

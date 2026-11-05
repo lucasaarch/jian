@@ -28,6 +28,7 @@ import {
   markRemovedIn,
   openConversations,
   profileWorktrees,
+  settledRuns,
   type WorktreeRecord,
   workingFolders,
   worktreeHolders,
@@ -79,10 +80,10 @@ export class Worktrees {
     string,
     { at: number; checkout: { top: string; uncommitted: number } | null }
   >();
-  /** Where a machine's worktree stood, by `place|path`. */
+  /** Where a machine's worktree stood, by `place|path`, and how the conversation's runs stood. */
   private readonly standing = new Map<
     string,
-    { at: number; state: Awaited<ReturnType<typeof worktreeState>> }
+    { at: number; runs: string; state: Awaited<ReturnType<typeof worktreeState>> }
   >();
   /** A machine's source's GitHub repository, by `place|source`. */
   private readonly origins = new Map<string, { at: number; repository: string | null }>();
@@ -259,9 +260,21 @@ export class Worktrees {
     return { ...describe(record), ahead: 0, behind: 0, uncommitted: 0, pullRequest: false };
   }
 
-  async list(profileId: string, sessionId: string): Promise<WorktreeState[]> {
+  /**
+   * Where each of the conversation's worktrees stands. A machine's answer is kept for a while
+   * (`MACHINE_FRESH_MS`) unless `fresh`, which the agent and a discard ask for, and is never
+   * served once one of the conversation's runs has ended since: the badge reads it as a turn
+   * ends, and must not show the counts from before the agent's edits.
+   */
+  async list(
+    profileId: string,
+    sessionId: string,
+    options: { fresh?: boolean } = {},
+  ): Promise<WorktreeState[]> {
     const records = await activeWorktrees(this.store.db, profileId, sessionId);
     const states: WorktreeState[] = [];
+    const machines = records.some((record) => record.place !== 'gateway');
+    const runs = machines ? await settledRuns(this.store.db, profileId, sessionId) : '';
     // Each place is reached once per list: a machine's is looked up among the machines.
     const reached = new Map<string, Promise<GitPlace>>();
     const at = (place: string) => {
@@ -271,8 +284,8 @@ export class Worktrees {
     };
 
     for (const record of records) {
-      const kept = this.fresh(this.standing, record.place, record.path);
-      if (kept) {
+      const kept = options.fresh ? undefined : this.fresh(this.standing, record.place, record.path);
+      if (kept && kept.runs === runs) {
         states.push({ ...describe(record), ...kept.state });
         continue;
       }
@@ -284,7 +297,7 @@ export class Worktrees {
         }
         const state = await worktreeState(git, record);
         if (record.place !== 'gateway') {
-          this.standing.set(`${record.place}|${record.path}`, { at: this.clock(), state });
+          this.standing.set(`${record.place}|${record.path}`, { at: this.clock(), runs, state });
         }
         states.push({ ...describe(record), ...state });
       } catch {

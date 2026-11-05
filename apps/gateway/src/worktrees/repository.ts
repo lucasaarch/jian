@@ -305,3 +305,26 @@ export async function markRemovedIn(
       ),
     );
 }
+
+/**
+ * Changes whenever a run of the conversation ends or parks for the owner: the count of its runs
+ * not under way, and when the latest of them last changed. A machine's worktree counts read
+ * before it changed may be from before the agent's last edits, so they are not served after it.
+ */
+export async function settledRuns(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+): Promise<string> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)`, latest: sql<string | null>`max(${runs.updatedAt})` })
+    .from(runs)
+    .where(
+      and(
+        eq(runs.profileId, profileId),
+        eq(runs.sessionId, sessionId),
+        sql`${runs.status} not in ('queued', 'running')`,
+      ),
+    );
+  return `${row?.count ?? 0}|${row?.latest ?? ''}`;
+}

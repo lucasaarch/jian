@@ -158,7 +158,7 @@ function saidBy(outcome: { stdout: string; stderr: string }): string {
 async function settleMerge(
   place: GitPlace,
   input: { source: string; head: string; tip: string },
-): Promise<'merged' | 'restored' | 'busy'> {
+): Promise<'merged' | 'restored' | 'busy' | 'unknown'> {
   const at = (args: string[]) =>
     git(place, ['-C', input.source, ...args], true).then((out) => out.stdout.trim());
   const now = await at(['rev-parse', 'HEAD']);
@@ -175,14 +175,19 @@ async function settleMerge(
   if (merging) {
     if (merging !== input.tip) return 'busy';
     await git(place, ['-C', input.source, 'merge', '--abort']);
-    return 'restored';
+  } else {
+    // The branch holds the base, so the merge's tree is the branch's own.
+    const staged = await at(['write-tree']);
+    const tree = await at(['rev-parse', `${input.tip}^{tree}`]);
+    if (staged && staged === tree && now === input.head) {
+      await git(place, ['-C', input.source, 'reset', '--merge']);
+    }
   }
-  // The branch holds the base, so the merge's tree is the branch's own.
-  const staged = await at(['write-tree']);
-  if (staged && staged === (await at(['rev-parse', `${input.tip}^{tree}`])) && now === input.head) {
-    await git(place, ['-C', input.source, 'reset', '--merge']);
-  }
-  return 'restored';
+  // Said to be as it was only once git shows it: no merge under way and nothing staged.
+  const left = await at(['rev-parse', '-q', '--verify', 'MERGE_HEAD']);
+  const index = await at(['write-tree']);
+  const head = await at(['rev-parse', 'HEAD^{tree}']);
+  return !left && index && index === head ? 'restored' : 'unknown';
 }
 
 export async function mergeWorktree(
@@ -206,7 +211,7 @@ export async function mergeWorktree(
   if ((await uncommittedIn(place, input.source, false)) > 0) {
     throw new WorktreeProblem(
       intoWorktree
-        ? `The conversation's worktree at ${input.source} has uncommitted changes. Commit them there, then merge.`
+        ? `The conversation's worktree at ${input.source} has uncommitted changes, which are not yours to commit. Report that in your final answer, so the principal agent commits them and merges your worktree.`
         : 'The source folder has uncommitted changes. Ask the owner to commit or stash them, then merge.',
     );
   }
