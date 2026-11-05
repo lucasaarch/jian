@@ -1,3 +1,5 @@
+import { localPlace, remotePlace } from './agent/github-git-place.js';
+import { prepareGitAccess } from './agent/worker-workspace.js';
 import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
 import { Decisions } from './decisions/service.js';
@@ -35,6 +37,7 @@ import { Work } from './tasks/service.js';
 import { machineBrowser } from './web/machine-browser.js';
 import { WebSearch } from './web/service.js';
 import { Workspaces } from './workspaces/service.js';
+import { Worktrees } from './worktrees/service.js';
 
 export type Services = {
   profiles: Profiles;
@@ -61,6 +64,7 @@ export type Services = {
   objectives: ObjectiveContinuation;
   pulls: PullWatchers;
   workspaces: Workspaces;
+  worktrees: Worktrees;
   vault: Vault;
   gatewayVault: GatewayVault;
   sshKeys: SshKeys;
@@ -141,6 +145,7 @@ export function buildServices({
       : undefined,
     decisions.judge,
   );
+  const sshKeys = new SshKeys(store, gatewayVault);
   const services = {
     profiles,
     providers,
@@ -190,9 +195,14 @@ export function buildServices({
       (profileId, machineId, input, signal) => remote.execute(profileId, machineId, input, signal),
       clock,
     ),
+    worktrees: new Worktrees(store, clock, async (profileId, place) =>
+      place === 'gateway'
+        ? localPlace(await prepareGitAccess(sshKeys))
+        : remotePlace(profileId, place, remote),
+    ),
     vault,
     gatewayVault,
-    sshKeys: new SshKeys(store, gatewayVault),
+    sshKeys,
     mcp: new McpServers(store, gatewayVault, clock),
     remote,
     push,

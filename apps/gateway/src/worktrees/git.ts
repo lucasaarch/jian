@@ -220,12 +220,19 @@ export async function removeWorktree(
   return { branchKept: deleted.exitCode !== 0 };
 }
 
+/**
+ * The worktrees git lists for a source, by real path. One whose folder was deleted by hand is still
+ * listed, marked `prunable`, until git prunes it; it is not there, so it is left out.
+ */
 export async function listedWorktrees(place: GitPlace, source: string): Promise<Set<string>> {
   const out = (await git(place, ['-C', source, 'worktree', 'list', '--porcelain'])).stdout;
-  return new Set(
-    out
-      .split('\n')
-      .filter((line) => line.startsWith('worktree '))
-      .map((line) => line.slice('worktree '.length)),
-  );
+  const listed = new Set<string>();
+  for (const block of out.split(/\n\s*\n/)) {
+    const lines = block.split('\n');
+    const path = lines.find((line) => line.startsWith('worktree '));
+    if (path && !lines.some((line) => line === 'prunable' || line.startsWith('prunable '))) {
+      listed.add(path.slice('worktree '.length));
+    }
+  }
+  return listed;
 }
