@@ -49,3 +49,15 @@ test('fitResult can drop payloads entirely when even truncated text is too large
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /exceeded the gateway size limit/);
 });
+
+test("fitResult sends the app's browser answer, however large, to the gateway", () => {
+  const taskId = '11111111-1111-4111-8111-111111111111';
+  const base = { taskId, exitCode: 0, stdout: '', stderr: '', timedOut: false };
+  // `check` answers with an empty object: watching, nothing done. It must still arrive.
+  assert.deepEqual(JSON.parse(fitResult({ ...base, browser: {} }).body).browser, {});
+  const screenshot = 'p'.repeat(2_000_000);
+  const acted = { url: 'https://example.com/', screenshot };
+  const { body } = fitResult({ ...base, browser: { acted } }, 480_000);
+  assert.deepEqual(JSON.parse(body).browser, { acted });
+  assert.equal(JSON.parse(body).stderr, '');
+});
