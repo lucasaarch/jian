@@ -596,16 +596,6 @@ test('a bad op answers failed instead of throwing', async () => {
   problem(await answerFilesOp(undefined), 'failed');
 });
 
-test('git ops are not available yet', async () => {
-  const answer = await ask({ op: 'merge-base', root: folder(), base: 'main' });
-  assert.deepEqual(answer, {
-    ok: false,
-    op: 'merge-base',
-    problem: 'failed',
-    message: 'Not available yet.',
-  });
-});
-
 test('a files task becomes a result with exit code, empty output and the answer', async () => {
   const file = join(folder(), 'a.txt');
   writeFileSync(file, 'hi');

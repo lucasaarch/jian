@@ -1,4 +1,5 @@
 import type { RemoteFilesAnswer, RemoteFilesOp, RemoteResult, RemoteTask } from '@jian/contracts';
+import { gitFile, gitStatus, mergeBase } from './git.ts';
 import { RESULT_BYTES } from './limits.ts';
 import { isRefused, REFUSED_MESSAGE, realLocation, refusedFolders } from './paths.ts';
 import { findFiles, listFolder, SEARCH_TIMEOUT_MS, searchFiles, shower } from './search.ts';
@@ -44,10 +45,10 @@ const nameOf = (value: unknown): Op => {
 };
 
 async function run(op: RemoteFilesOp, options: FilesOptions): Promise<RemoteFilesAnswer> {
-  if (op.op === 'git-status' || op.op === 'git-file' || op.op === 'merge-base') {
-    return fail(op.op, 'failed', 'Not available yet.');
-  }
   const refused = options.refused ?? refusedFolders();
+  if (op.op === 'git-status') return gitStatus(op, refused);
+  if (op.op === 'git-file') return gitFile(op, refused);
+  if (op.op === 'merge-base') return mergeBase(op, refused);
   const real = await realLocation(op.path);
   if (await isRefused(real, refused)) return fail(op.op, 'refused', REFUSED_MESSAGE);
   // Everything acts on the real path the checks saw, never on the spelling given: `..` after a
