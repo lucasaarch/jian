@@ -816,3 +816,26 @@ test('a long file name does not make a temp name too long', async () => {
   ok(await ask({ op: 'write', path: file, content: 'x', expectedMtimeMs: null }), 'write');
   assert.equal(readFileSync(file, 'utf8'), 'x');
 });
+
+test('a ripgrep config that follows links does not reach the refused folder', {
+  skip: rgInstalled ? false : 'ripgrep is not installed on this machine',
+}, async () => {
+  if (process.platform === 'win32') return;
+  const { root, cfg, parent } = home();
+  const rc = join(root, 'rg.rc');
+  writeFileSync(rc, '--follow\n--no-ignore\n--hidden\n');
+  const searched = join(root, 'searched');
+  mkdirSync(searched);
+  symlinkSync(cfg, join(searched, 'door'));
+  writeFileSync(join(searched, 'ok.txt'), 'synthetic-token\n');
+  const answer = ok(
+    await ask(searchOp(searched, { pattern: 'synthetic-token' }), [cfg], {
+      ...process.env,
+      RIPGREP_CONFIG_PATH: rc,
+    }),
+    'search',
+  );
+  assert.doesNotMatch(JSON.stringify(answer), /door|config\.json/);
+  assert.equal(answer.matches.length, 1);
+  void parent;
+});

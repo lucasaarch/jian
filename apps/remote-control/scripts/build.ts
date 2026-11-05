@@ -15,6 +15,9 @@ await rm(dist, { recursive: true, force: true });
 await build({
   entryPoints: [new URL('../src/bin.ts', import.meta.url).pathname],
   outfile: bundle.pathname,
+  // No `minify` or `keepNames`: the search without ripgrep runs in a worker thread built from a
+  // function's own text (remote-core files/walk.ts), and the helpers they inject are not in it.
+  // tests/bundled-search.test.ts bundles the same way and runs that search.
   bundle: true,
   platform: 'node',
   format: 'esm',

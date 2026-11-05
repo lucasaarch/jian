@@ -97,6 +97,9 @@ type Found = { lines: string[]; truncated: boolean; timedOut: boolean } | { prob
 function ripgrepArgs(op: Search, target: string): string[] {
   const mode = op.output === 'files' ? ['-l'] : op.output === 'count' ? ['-c'] : ['-n'];
   return [
+    // The owner's RIPGREP_CONFIG_PATH may hold --follow or --no-ignore, which would walk through
+    // links into a refused folder under a spelling the output filter does not know.
+    '--no-config',
     '--no-heading',
     '--with-filename',
     '--color',
@@ -120,6 +123,7 @@ function ripgrep(
   target: string,
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
+  roots: string[],
 ): Promise<Found | undefined> {
   return new Promise((done) => {
     const child = spawn('rg', ripgrepArgs(op, target), {
@@ -169,7 +173,15 @@ function ripgrep(
         // 1 is no match, an answer. 2 is an error, but ripgrep still prints what it could read.
         finish({ lines: stdout.split('\n').filter(Boolean), truncated: false, timedOut: false });
       } else {
-        finish({ problem: stderr.trim() || `Search failed (${code}).` });
+        // Its complaints name files, which may lie in a refused folder; those lines are dropped.
+        const said = stderr
+          .split('\n')
+          .filter(
+            (line) =>
+              line.trim() && !roots.some((root) => line.toLowerCase().includes(root.toLowerCase())),
+          )
+          .join('\n');
+        finish({ problem: said || `Search failed (${code}).` });
       }
     });
   });
@@ -229,7 +241,7 @@ export async function searchFiles(
   const roots = await refusedRoots(refused);
   const caseless = process.platform === 'win32' || process.platform === 'darwin';
   const found =
-    (await ripgrep(op, real, env, timeoutMs)) ??
+    (await ripgrep(op, real, env, timeoutMs, roots)) ??
     (await walkInThread(
       {
         target: real,
