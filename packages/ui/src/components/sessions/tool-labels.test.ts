@@ -51,3 +51,21 @@ it('says which server tool is running while it runs', () => {
 
   expect(statusOf(run).label).toBe('github · issue_write');
 });
+
+it('names the worktree tools as what they do', () => {
+  expect(
+    traceOf([
+      step('create_worktree'),
+      step('list_worktrees'),
+      step('update_worktree'),
+      step('merge_worktree'),
+      step('remove_worktree'),
+    ]).map((item) => item.text),
+  ).toEqual([
+    'Creating a worktree',
+    'Checking worktrees',
+    'Updating a worktree',
+    'Merging a worktree',
+    'Removing a worktree',
+  ]);
+});

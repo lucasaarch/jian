@@ -19,6 +19,11 @@ const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
   update_remote_machine: 'machine',
   write_file: 'machine',
   edit_file: 'machine',
+  // Each changes a checkout on disk, and a merge changes the owner's own folder.
+  create_worktree: 'machine',
+  update_worktree: 'machine',
+  merge_worktree: 'machine',
+  remove_worktree: 'machine',
   send_file: 'message',
   send_session_message: 'message',
   message_contact: 'message',
@@ -166,6 +171,26 @@ const PLAIN: Record<
     title: "Update Jian Remote on a connected machine to this gateway's release",
     confirm: 'Update',
   }),
+  create_worktree: (input) => ({
+    title: 'Make a worktree of a folder',
+    detail: field(input, 'folder'),
+    confirm: 'Create',
+  }),
+  update_worktree: (input) => ({
+    title: `Update worktree ${field(input, 'name')} from its base`,
+    confirm: 'Update',
+  }),
+  merge_worktree: (input) => ({
+    title: `Merge worktree ${field(input, 'name')} into the folder it came from`,
+    confirm: 'Merge',
+  }),
+  remove_worktree: (input) =>
+    (input as { discard?: unknown } | null)?.discard === true
+      ? {
+          title: `Remove worktree ${field(input, 'name')} and its uncommitted changes`,
+          confirm: 'Discard',
+        }
+      : { title: `Remove worktree ${field(input, 'name')}`, confirm: 'Remove' },
   send_file: (input) => ({ title: 'Send a file', detail: field(input, 'path'), confirm: 'Send' }),
   send_session_message: (input) => ({
     title: 'Send a message',

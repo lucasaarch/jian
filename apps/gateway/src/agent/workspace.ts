@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
 import { type FileHandle, mkdir, open, readlink, realpath, stat } from 'node:fs/promises';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { onOwnerComputer, ownerComputer, workspaceHome, workspacesRoot } from './workspace-home.js';
 
 /**
@@ -91,17 +91,42 @@ async function realOf(path: string): Promise<string> {
 export type Access = 'read' | 'write';
 
 /**
+ * A source checkout this conversation works on through a worktree, with the worktree, as real
+ * paths. The source stays the owner's: the file tools read it but write only in the worktree.
+ */
+export type GuardedSource = { source: string; worktree: string };
+
+type Scope = { folders: readonly string[]; guarded: readonly GuardedSource[] };
+
+/**
  * The owner's folders the tool running now may reach, held for the length of its call so that every
  * check below sees them, whoever asks, and no other conversation does.
  */
-const openFolders = new AsyncLocalStorage<readonly string[]>();
+const openFolders = new AsyncLocalStorage<Scope>();
 
-/** Runs a tool with these folders within reach. They must be real paths: see `realFolders`. */
-export const withFolders = <T>(folders: readonly string[], work: () => T): T =>
-  openFolders.run(folders, work);
+/**
+ * Runs a tool with these folders within reach and these sources guarded. Both must be real paths:
+ * see `realFolders`.
+ */
+export const withFolders = <T>(
+  folders: readonly string[],
+  work: () => T,
+  guarded: readonly GuardedSource[] = [],
+): T => openFolders.run({ folders, guarded }, work);
 
-/** The folders within reach now; a command starts in the first. */
-export const reachableFolders = (): readonly string[] => openFolders.getStore() ?? [];
+/**
+ * The folders within reach now; a command starts in the first. A folder in a guarded source is
+ * the same place in its worktree, so commands and relative paths start where the work is. A
+ * folder that holds a source keeps its place: the worktree is not under it.
+ */
+export const reachableFolders = (): readonly string[] => {
+  const scope = openFolders.getStore();
+  if (!scope) return [];
+  return scope.folders.map((folder) => {
+    const held = scope.guarded.find(({ source }) => inside(folder, source));
+    return held ? join(held.worktree, relative(held.source, folder)) : folder;
+  });
+};
 
 /** What a chat's folders really are, since the checks compare real paths. */
 export const realFolders = (folders: readonly string[]) => Promise.all(folders.map(realOf));
@@ -129,6 +154,20 @@ export async function jianData(): Promise<{ closed: string[]; open: string } | u
 }
 
 async function assertWithin(real: string, access: Access, asked: string) {
+  // Before the desktop's wide reach below, which would otherwise let the write through.
+  const held =
+    access === 'write' &&
+    openFolders.getStore()?.guarded.find(({ source }) => inside(real, source));
+  if (held) {
+    // A hint keeps the agent's copy of a failure from being cut before the worktree is named.
+    throw Object.assign(
+      new Error(
+        `${asked} is in ${held.source}, which this conversation works on in its worktree. Write in ${held.worktree} instead.`,
+      ),
+      { hint: `Write in ${held.worktree} instead.` },
+    );
+  }
+
   const data = await jianData();
 
   if (data) {
@@ -142,7 +181,12 @@ async function assertWithin(real: string, access: Access, asked: string) {
   }
 
   const home = await workspaceHome();
-  const allowed = [...(access === 'write' ? [home] : [home, ...SYSTEM]), ...reachableFolders()];
+  // The chosen folders themselves stay within reach: a guarded source is still read.
+  const allowed = [
+    ...(access === 'write' ? [home] : [home, ...SYSTEM]),
+    ...(openFolders.getStore()?.folders ?? []),
+    ...reachableFolders(),
+  ];
 
   if (!allowed.some((root) => inside(real, root))) {
     throw new Error(

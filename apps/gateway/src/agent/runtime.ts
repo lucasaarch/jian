@@ -98,6 +98,7 @@ import { markSteering, outsideContent } from './untrusted.js';
 import { prepareGitAccess, prepareWorkerWorkspace } from './worker-workspace.js';
 import { realFolders, withFolders } from './workspace.js';
 import { projectCheckout, sessionCheckouts } from './workspace-home.js';
+import { RunWorktrees, type WorktreeService, worktreeTools } from './worktree-tools.js';
 
 /**
  * How long a model call or a tool may go without a sign of life before the turn is given up.
@@ -126,6 +127,7 @@ export type RuntimeServices = ToolServices & {
   learning?: Pick<Learning, 'consider'>;
   objectives?: Pick<ObjectiveContinuation, 'continueAfter'>;
   workspaces?: Pick<Workspaces, 'forRun' | 'cloned' | 'touched'>;
+  worktrees?: WorktreeService;
 };
 
 /**
@@ -581,6 +583,18 @@ export class AgentRuntime {
                   JIAN_DESKTOP_CLIENT,
               session.remoteMachineId,
             );
+      // Worktrees are of what the conversation works on: its folders, or the machine it targets.
+      // A subagent's are its parent's, so it works where the parent does.
+      const worktrees =
+        !learning &&
+        this.services.worktrees &&
+        (conversation.folders?.length || conversation.cloneInto || conversation.remoteMachineId)
+          ? {
+              service: this.services.worktrees,
+              scope: new RunWorktrees(this.services.worktrees, profileId, conversation.id),
+            }
+          : undefined;
+      await worktrees?.scope.refresh();
       const checkouts =
         session.projectIds?.length && !session.remoteMachineId
           ? await sessionCheckouts(profileId, session.id)
@@ -661,6 +675,16 @@ export class AgentRuntime {
                       ),
                   }
                 : {}),
+            })
+          : {}),
+        ...(worktrees
+          ? worktreeTools({
+              worktrees: worktrees.service,
+              profileId,
+              sessionId: conversation.id,
+              place: session.remoteMachineId ?? 'gateway',
+              folders,
+              scope: worktrees.scope,
             })
           : {}),
         ...xTools,
@@ -901,7 +925,12 @@ export class AgentRuntime {
               });
 
               try {
-                const raw = await withFolders(folders, () => execute(input, options));
+                // Read per call: a worktree tool earlier in this run may have changed them.
+                const raw = await withFolders(
+                  folders,
+                  () => execute(input, options),
+                  worktrees?.scope.guarded,
+                );
                 // A file write's diff is for the owner, not the agent: it goes to its own
                 // checkpoint, read by the timeline alone, and leaves the result before the
                 // result is bounded, so it can neither cost context nor push the result into an

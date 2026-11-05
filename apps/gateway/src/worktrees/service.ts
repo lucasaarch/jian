@@ -139,6 +139,28 @@ export class Worktrees {
     return states;
   }
 
+  /**
+   * The active worktrees on the gateway's own disk, checked against git there: what a run's file
+   * tools steer writes away from. A machine's are left out, since asking would cost a remote call
+   * on every turn and the gateway's file tools never reach that disk.
+   */
+  async onGateway(profileId: string, sessionId: string): Promise<WorktreeRecord[]> {
+    const records = (await activeWorktrees(this.store.db, profileId, sessionId)).filter(
+      (record) => record.place === 'gateway',
+    );
+    if (records.length === 0) return [];
+    const git = await this.places(profileId, 'gateway');
+    const kept: WorktreeRecord[] = [];
+
+    for (const record of records) {
+      // A source git cannot read keeps its guard: the row is not proof the folder is gone.
+      const there = await this.stillThere(git, record).catch(() => true);
+      if (there) kept.push(record);
+      else await this.retire(profileId, sessionId, record);
+    }
+    return kept;
+  }
+
   async find(profileId: string, sessionId: string, name: string): Promise<WorktreeRecord> {
     const found = (await activeWorktrees(this.store.db, profileId, sessionId)).find(
       (item) => item.name === name,
