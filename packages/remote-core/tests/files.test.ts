@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -237,6 +238,47 @@ test('find is newest first, skips .git and node_modules, and honours the limit',
   const two = ok(await ask({ op: 'find', path: dir, pattern: '**/*.ts', limit: 2 }), 'find');
   assert.equal(two.files.length, 2);
   assert.equal(two.truncated, true);
+});
+
+test('find stops at its deadline and returns what it found, marked truncated', async () => {
+  const dir = folder();
+  // Wide enough that walking it all takes far longer than the deadline below.
+  for (let a = 0; a < 40; a++) {
+    for (let b = 0; b < 40; b++) mkdirSync(join(dir, `d${a}`, `e${b}`), { recursive: true });
+  }
+  writeFileSync(join(dir, 'd0', 'first.ts'), '');
+  const started = Date.now();
+  const found = ok(
+    await answerFilesOp(
+      { op: 'find', path: dir, pattern: '**/*.nothing', limit: 10 },
+      { refused: [secrets()], timeoutMs: 1 },
+    ),
+    'find',
+  );
+  assert.equal(found.truncated, true);
+  assert.ok(Date.now() - started < 2_000);
+
+  // A task's own limit bounds it too, as it bounds a search.
+  const task = {
+    id: '00000000-0000-4000-8000-000000000009',
+    kind: 'files',
+    command: null,
+    cwd: null,
+    timeoutMs: 1,
+    files: { op: 'find', path: dir, pattern: '**/*.nothing', limit: 10 },
+  } as unknown as RemoteTask;
+  const result = await executeFilesTask(task, { refused: [secrets()] });
+  assert.equal((result.files as { truncated?: boolean }).truncated, true);
+});
+
+test('find leaves out the kernel folders of a Unix machine', {
+  skip: !existsSync('/proc/self/status'),
+}, async () => {
+  const found = ok(
+    await ask({ op: 'find', path: '/', pattern: 'proc/self/status', limit: 10 }),
+    'find',
+  );
+  assert.deepEqual(found.files, []);
 });
 
 const fixture = () => {

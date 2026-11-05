@@ -57,25 +57,56 @@ export async function listFolder(real: string, op: Op<'list'>): Promise<RemoteFi
   };
 }
 
-/** Files matching a glob, newest first, without walking a whole disk for a careless pattern. */
+/**
+ * Kernel folders of a Unix machine: endless or slow to walk, and never files anyone searches
+ * for. Windows has none at a fixed place.
+ */
+const SYSTEM_FOLDERS = process.platform === 'win32' ? [] : ['/proc', '/sys', '/dev'];
+
+/**
+ * Files matching a glob, newest first, without walking a whole disk for a careless pattern. The
+ * machine has one worker, so the walk stops at `timeoutMs` and answers with what it found,
+ * marked truncated. Folders it cannot read are left out by the glob itself.
+ */
 export async function findFiles(
   real: string,
   op: Op<'find'>,
   refused: string[],
   show: (path: string) => string = (path) => path,
+  timeoutMs = SEARCH_TIMEOUT_MS,
 ): Promise<RemoteFilesAnswer> {
   await folder(real);
   const found: Array<{ path: string; mtime: number }> = [];
-  for await (const entry of glob(op.pattern, {
+  const walk = glob(op.pattern, {
     cwd: real,
-    exclude: (name: string) => SKIPPED.includes(basename(name)),
-  })) {
-    const file = resolve(real, entry);
-    // A link in the tree may lead to the credentials; it is left out rather than listed.
-    if (await isRefused(await realLocation(file), refused)) continue;
-    const info = await stat(file).catch(() => undefined);
-    if (info?.isFile()) found.push({ path: file, mtime: info.mtimeMs });
-    if (found.length >= op.limit * 10) break;
+    exclude: (name: string) =>
+      SKIPPED.includes(basename(name)) || SYSTEM_FOLDERS.includes(resolve(real, name)),
+  })[Symbol.asyncIterator]();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // One wait for the whole walk: a step that finds nothing for a long time still ends at it.
+  const deadline = new Promise<'time'>((done) => {
+    timer = setTimeout(() => done('time'), timeoutMs);
+  });
+  let stopped = false;
+  try {
+    while (true) {
+      const next = await Promise.race([walk.next(), deadline]);
+      if (next === 'time') {
+        stopped = true;
+        break;
+      }
+      if (next.done) break;
+      const file = resolve(real, next.value);
+      // A link in the tree may lead to the credentials; it is left out rather than listed.
+      if (await isRefused(await realLocation(file), refused)) continue;
+      const info = await stat(file).catch(() => undefined);
+      if (info?.isFile()) found.push({ path: file, mtime: info.mtimeMs });
+      if (found.length >= op.limit * 10) break;
+    }
+  } finally {
+    clearTimeout(timer);
+    // Stops the walk at its next step; what it was reading when the deadline came is dropped.
+    void walk.return?.(undefined).catch(() => {});
   }
   found.sort((a, b) => b.mtime - a.mtime);
   const files: string[] = [];
@@ -86,7 +117,7 @@ export async function findFiles(
     chars += shown.length;
     files.push(shown);
   }
-  return { ok: true, op: 'find', files, truncated: found.length > files.length };
+  return { ok: true, op: 'find', files, truncated: stopped || found.length > files.length };
 }
 
 type Search = Op<'search'>;

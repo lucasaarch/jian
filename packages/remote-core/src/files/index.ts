@@ -13,7 +13,7 @@ export type FilesOptions = {
   refused?: string[];
   /** The environment a search program is found in. */
   env?: NodeJS.ProcessEnv;
-  /** How long a search may run, in ms; the task's own limit when it is shorter than 30 s. */
+  /** How long a find or search may run, in ms; the task's own limit when shorter than 30 s. */
   timeoutMs?: number;
 };
 
@@ -66,7 +66,7 @@ async function run(op: RemoteFilesOp, options: FilesOptions): Promise<RemoteFile
     case 'list':
       return listFolder(real, op);
     case 'find':
-      return findFiles(real, op, refused, shower(op.path, real));
+      return findFiles(real, op, refused, shower(op.path, real), options.timeoutMs);
     case 'search':
       return searchFiles(
         real,
