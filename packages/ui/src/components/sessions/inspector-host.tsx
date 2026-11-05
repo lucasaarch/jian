@@ -253,7 +253,7 @@ export function InspectorHost({
             label: 'Changes',
             description: projectId
               ? 'Review uncommitted changes in this project'
-              : 'Review uncommitted changes in this conversation’s worktree',
+              : 'Review the worktree’s work against its base, committed and uncommitted',
             icon: FileCode2,
             run: () => useCrew.getState().showChanges(),
           },

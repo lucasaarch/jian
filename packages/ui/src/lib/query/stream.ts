@@ -17,7 +17,7 @@ const STEADY_MS = 30_000;
  * agent editing itself changes the profile list; a contact or a channel can touch any slice of
  * the profile. None of them asks the providers for their models again.
  */
-function affected(event: GatewayEvent, profileId: string): QueryKey[] {
+export function affected(event: GatewayEvent, profileId: string): QueryKey[] {
   const { type } = event;
 
   // Nothing before this was told, so what the screens read while it opened may have missed some.
@@ -34,8 +34,10 @@ function affected(event: GatewayEvent, profileId: string): QueryKey[] {
       keys.contexts(profileId),
       // What the agent said may have linked a pull request.
       keys.sessionPulls(profileId),
-      // A worktree is made, merged or discarded by a turn, and counts move as it commits.
-      keys.sessionWorktrees(profileId),
+      // A worktree is made, merged or discarded by a turn, and its counts move as the turn
+      // commits. Read again when the turn starts or ends, or one changes: not on each step, since
+      // on a machine every read is a task its worker runs.
+      ...(type === 'run.step' ? [] : [keys.sessionWorktrees(profileId)]),
     ];
   }
   if (type.startsWith('profile.')) return [keys.profiles];

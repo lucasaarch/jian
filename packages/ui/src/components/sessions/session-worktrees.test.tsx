@@ -241,3 +241,24 @@ it('offers Changes again after switching between two conversations that both hav
   });
   expect(useCrew.getState().worktrees).toBe(true);
 });
+
+it('says the commits stay on the branch only when there are any', async () => {
+  await show([worktree('brave-otter', { ahead: 0, uncommitted: 0 })]);
+  await open();
+  await act(async () => button('Discard')?.click());
+  await tick();
+
+  expect(document.body.textContent).toContain('Its folder is removed.');
+  expect(document.body.textContent).not.toContain('Its commits stay on');
+
+  await act(async () => root.unmount());
+  root = createRoot(element);
+  document.body.innerHTML = '';
+  document.body.append(element);
+  await show([worktree('calm-heron', { ahead: 2 })]);
+  await open();
+  await act(async () => button('Discard')?.click());
+  await tick();
+
+  expect(document.body.textContent).toContain('Its commits stay on jian/calm-heron.');
+});

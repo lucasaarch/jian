@@ -213,7 +213,9 @@
   }
   /* A long base name wraps inside the button instead of widening the popup. */
   .session-worktree-actions > button {
-    @apply h-auto min-h-7 max-w-full py-1 text-left whitespace-normal break-all;
+    @apply h-auto min-h-7 max-w-full py-1 text-left whitespace-normal;
+    /* Breaks only a word too long for the line, where break-all would split every word. */
+    overflow-wrap: anywhere;
   }
   /* A channel's conversation has, where a chat has its composer, its agent settings: whether
      the agent answers this contact, and on which model. Same column, same box, no text. */

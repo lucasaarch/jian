@@ -30,9 +30,13 @@ function standing({ ahead, behind, uncommitted }: SessionWorktree): string {
   return said.length ? said.join(' · ') : 'Up to date';
 }
 
-/** What discarding loses, said plainly: the folder goes, the branch and its commits stay. */
+/**
+ * What discarding loses, said plainly: the folder goes, and the branch stays with any commits of
+ * its own. One with none is deleted, so there is nothing to say about it; one out of reach may
+ * have some.
+ */
 function Loss({ worktree }: { worktree: SessionWorktree }) {
-  const { uncommitted, branch } = worktree;
+  const { uncommitted, branch, ahead } = worktree;
   const lost =
     uncommitted === null
       ? 'Any uncommitted files in it are lost.'
@@ -43,7 +47,8 @@ function Loss({ worktree }: { worktree: SessionWorktree }) {
           : `Its ${uncommitted} uncommitted files are lost.`;
   return (
     <>
-      {lost} Its commits stay on {branch}.
+      {lost}
+      {ahead !== 0 && ` Its commits stay on ${branch}.`}
     </>
   );
 }
