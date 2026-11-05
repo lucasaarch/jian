@@ -71,6 +71,13 @@ export function npmInstaller(env = process.env, spawn: Run = runSync): Installer
 const tail = (text: string | undefined) => (text ?? '').trim().slice(-2000);
 
 /**
+ * The oldest Node.js a release runs on, as `engines` in package.json says. npm only warns about
+ * `engines`, and the new release runs on this same Node: an older one installs, then fails to
+ * load its first modern import, after npm already replaced the global package.
+ */
+const MINIMUM_NODE = 24;
+
+/**
  * Installs `target` (a release or `latest`) globally with npm and says where its worker landed
  * and which release it is. `stdio: 'inherit'` shows npm's own output, for a person at a terminal.
  */
@@ -81,10 +88,17 @@ export function installRelease(
     spawn = runSync,
     stdio = 'pipe',
     timeoutMs = 5 * 60_000,
-  }: { spawn?: Run; stdio?: 'pipe' | 'inherit'; timeoutMs?: number } = {},
+    node = process.versions.node,
+  }: { spawn?: Run; stdio?: 'pipe' | 'inherit'; timeoutMs?: number; node?: string } = {},
 ): { ok: true; cli: string; version: string } | { ok: false; error: string } {
   if (!/^(latest|\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?)$/.test(target)) {
     return { ok: false, error: `Not a release: ${target}` };
+  }
+  if (Number.parseInt(node, 10) < MINIMUM_NODE) {
+    return {
+      ok: false,
+      error: `Jian Remote needs Node.js ${MINIMUM_NODE} or later, and this machine runs ${node}. Install Node.js ${MINIMUM_NODE}, then run: npm install -g ${PACKAGE}@${target} && jian-remote reinstall`,
+    };
   }
   const installed = spawn(
     installer.npm,
