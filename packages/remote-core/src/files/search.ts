@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
+import type { Dirent } from 'node:fs';
 import { glob, readdir, stat } from 'node:fs/promises';
-import { basename, resolve, sep } from 'node:path';
+import { join, sep } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { RemoteFilesAnswer, RemoteFilesOp } from '@jian/contracts';
 import { MINIMAL_PATH } from '../shell.ts';
@@ -74,29 +75,37 @@ export async function findFiles(
   refused: string[],
   show: (path: string) => string = (path) => path,
   timeoutMs = SEARCH_TIMEOUT_MS,
+  systemFolders: readonly string[] = SYSTEM_FOLDERS,
 ): Promise<RemoteFilesAnswer> {
   await folder(real);
   const found: Array<{ path: string; mtime: number }> = [];
+  let stopped = false;
   const walk = glob(op.pattern, {
     cwd: real,
-    exclude: (name: string) =>
-      SKIPPED.includes(basename(name)) || SYSTEM_FOLDERS.includes(resolve(real, name)),
+    // Entries, not names: a name alone cannot tell `/dev` from `/home/ana/dev`.
+    withFileTypes: true,
+    // Once stopped, everything is left out, which is what ends a walk still under way: closing
+    // the iterator does not stop the reads it already started.
+    exclude: (entry: Dirent) =>
+      stopped ||
+      SKIPPED.includes(entry.name) ||
+      systemFolders.includes(join(entry.parentPath, entry.name)),
   })[Symbol.asyncIterator]();
   let timer: ReturnType<typeof setTimeout> | undefined;
   // One wait for the whole walk: a step that finds nothing for a long time still ends at it.
   const deadline = new Promise<'time'>((done) => {
     timer = setTimeout(() => done('time'), timeoutMs);
   });
-  let stopped = false;
+  let timedOut = false;
   try {
     while (true) {
       const next = await Promise.race([walk.next(), deadline]);
       if (next === 'time') {
-        stopped = true;
+        timedOut = true;
         break;
       }
       if (next.done) break;
-      const file = resolve(real, next.value);
+      const file = join(next.value.parentPath, next.value.name);
       // A link in the tree may lead to the credentials; it is left out rather than listed.
       if (await isRefused(await realLocation(file), refused)) continue;
       const info = await stat(file).catch(() => undefined);
@@ -105,7 +114,8 @@ export async function findFiles(
     }
   } finally {
     clearTimeout(timer);
-    // Stops the walk at its next step; what it was reading when the deadline came is dropped.
+    // Stopped by the deadline, by enough found, or by a failure: nothing more is walked.
+    stopped = true;
     void walk.return?.(undefined).catch(() => {});
   }
   found.sort((a, b) => b.mtime - a.mtime);
@@ -117,7 +127,7 @@ export async function findFiles(
     chars += shown.length;
     files.push(shown);
   }
-  return { ok: true, op: 'find', files, truncated: stopped || found.length > files.length };
+  return { ok: true, op: 'find', files, truncated: timedOut || found.length > files.length };
 }
 
 type Search = Op<'search'>;

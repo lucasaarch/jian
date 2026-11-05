@@ -39,6 +39,7 @@ import {
   MAX_TEXT,
   RESULT_BYTES,
 } from '../src/files/limits.ts';
+import { findFiles } from '../src/files/search.ts';
 import { writeAtomic } from '../src/files/text.ts';
 import { parseFilesOp } from '../src/files/validate.ts';
 import { answerFilesOp, describeTask, detectCapabilities, executeFilesTask } from '../src/index.ts';
@@ -235,6 +236,7 @@ test('find is newest first, skips .git and node_modules, and honours the limit',
     join(dir, 'src/mid.ts'),
     join(dir, 'src/old.ts'),
   ]);
+  assert.equal(found.truncated, false);
   const two = ok(await ask({ op: 'find', path: dir, pattern: '**/*.ts', limit: 2 }), 'find');
   assert.equal(two.files.length, 2);
   assert.equal(two.truncated, true);
@@ -269,6 +271,33 @@ test('find stops at its deadline and returns what it found, marked truncated', a
   } as unknown as RemoteTask;
   const result = await executeFilesTask(task, { refused: [secrets()] });
   assert.equal((result.files as { truncated?: boolean }).truncated, true);
+});
+
+test('find skips only the kernel folders at the root, not folders of the same name below', async () => {
+  // A stand-in for `/`, with its own kernel folders named.
+  const root = realpathSync(folder());
+  for (const dir of ['dev', 'proc', 'home/ana/dev', 'home/ana/proc/x']) {
+    mkdirSync(join(root, dir), { recursive: true });
+  }
+  writeFileSync(join(root, 'dev', 'null.ts'), '');
+  writeFileSync(join(root, 'proc', 'self.ts'), '');
+  writeFileSync(join(root, 'home/ana/dev', 'app.ts'), '');
+  writeFileSync(join(root, 'home/ana/proc/x', 'job.ts'), '');
+  const found = ok(
+    await findFiles(
+      root,
+      { op: 'find', path: root, pattern: '**/*.ts', limit: 10 },
+      [],
+      undefined,
+      5_000,
+      [join(root, 'dev'), join(root, 'proc')],
+    ),
+    'find',
+  );
+  assert.deepEqual([...found.files].sort(), [
+    join(root, 'home/ana/dev/app.ts'),
+    join(root, 'home/ana/proc/x/job.ts'),
+  ]);
 });
 
 test('find leaves out the kernel folders of a Unix machine', {
