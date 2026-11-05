@@ -120,6 +120,7 @@ function ListSkeleton() {
 export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: string }) {
   const tabs = useCrew((state) => state.tabs);
   const following = useCrew((state) => state.following);
+  const machineId = useCrew((state) => state.machineId);
   const closer = useRef<HTMLButtonElement>(null);
   const [wrap, setWrap] = useState(false);
   const [filter, setFilter] = useState('');
@@ -134,16 +135,20 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
   const path = tab?.kind === 'changes' ? tab.path : undefined;
 
   // A worktree is read like a project's checkout, on the gateway's disk or through the machine it
-  // is on; the gateway's come first, as the gateway picks them. An older gateway answers none, and
-  // one that cannot reach a machine's answers so, which leaves the timeline as the list.
+  // is on. Those where the conversation works come first, as the gateway picks them; a machine's
+  // gateway worktrees stay readable by name, and one on a machine it no longer targets is not
+  // read at all. An older gateway answers none, and one that cannot reach the machine says so,
+  // which leaves the timeline as the list.
   const worktrees = useQuery({
     queryKey: keys.sessionWorktrees(profileId, sessionId ?? ''),
     queryFn: async () => (await api.sessionWorktrees?.(profileId, sessionId ?? '')) ?? [],
     enabled: Boolean(sessionId),
   });
-  const here = [...(worktrees.data ?? [])].sort(
-    (a, b) => Number(b.place === 'gateway') - Number(a.place === 'gateway'),
-  );
+  const place = machineId ?? 'gateway';
+  const here = [
+    ...(worktrees.data ?? []).filter((item) => item.place === place),
+    ...(machineId ? (worktrees.data ?? []).filter((item) => item.place === 'gateway') : []),
+  ];
   // With several, the one chosen; until one is, the first, so the list never waits on an answer.
   const worktree = here.find((item) => item.name === picked)?.name ?? here[0]?.name;
   // Asking before the worktrees are known would be refused when there are several.

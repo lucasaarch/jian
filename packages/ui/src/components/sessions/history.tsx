@@ -166,6 +166,7 @@ export function History({
   agents = [],
   profileId,
   projectId,
+  machineId,
   sessionId,
   initialRun,
   revision = 0,
@@ -193,6 +194,8 @@ export function History({
     >;
   profileId: string;
   projectId?: string;
+  /** The machine the conversation works on, for the Inspector's Changes. */
+  machineId?: string;
   onReply?: (message: Message) => void;
   agent?: Pick<Profile, 'name' | 'avatar'>;
   agents?: Pick<Profile, 'id' | 'name' | 'avatar'>[];
@@ -605,8 +608,8 @@ export function History({
 
   // The drawer beside the conversation follows these agents from outside the history.
   useEffect(() => {
-    useCrew.getState().show(sessionId, subagents, projectId);
-  }, [sessionId, subagents, projectId]);
+    useCrew.getState().show(sessionId, subagents, projectId, machineId);
+  }, [sessionId, subagents, projectId, machineId]);
   useEffect(() => () => useCrew.getState().leave(sessionId), [sessionId]);
   // Opening or closing the drawer narrows or widens the conversation: the card the owner acted
   // on stays where it was. The store calls back before the layout changes, so the place it

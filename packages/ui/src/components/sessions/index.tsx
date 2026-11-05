@@ -102,7 +102,9 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
     queryFn: () => api.sessionWorktrees(profile.id, active?.id ?? ''),
     enabled: Boolean(active),
   });
-  const hasWorktree = Boolean(worktrees?.some((item) => item.place === 'gateway'));
+  // A worktree where the conversation works now: one on a machine it no longer targets is not.
+  const place = active?.remoteMachineId ?? 'gateway';
+  const hasWorktree = Boolean(worktrees?.some((item) => item.place === place));
   useChangesFlag(active?.id, hasWorktree);
   const answered = () => {
     setSent((value) => value + 1);
@@ -213,6 +215,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                       api={api}
                       profileId={profile.id}
                       projectId={active.projectId ?? undefined}
+                      machineId={active.remoteMachineId ?? undefined}
                       sessionId={active.id}
                       revision={sent}
                       group={active.scope === 'group' || contact?.scope === 'group'}

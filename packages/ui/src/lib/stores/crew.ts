@@ -25,7 +25,12 @@ export type BrowserPageTab = { id: string; title: string; url: string };
 type Crew = {
   sessionId?: string;
   projectId?: string;
-  /** The conversation has a worktree on the gateway: a checkout Changes can read with no project. */
+  /** The machine the conversation works on; absent when it works on the gateway. */
+  machineId?: string;
+  /**
+   * The conversation has a worktree where it works, on the gateway or its machine: a checkout
+   * Changes can read with no project.
+   */
   worktrees: boolean;
   agents: Subagent[];
   /** Whether the Inspector is on screen, which it can be with nothing in it. */
@@ -41,7 +46,7 @@ type Crew = {
   tabs: InspectorTab[];
   /** The host's way to open its browser; absent where there is none. */
   openBrowser?: () => void;
-  show: (sessionId: string, agents: Subagent[], projectId?: string) => void;
+  show: (sessionId: string, agents: Subagent[], projectId?: string, machineId?: string) => void;
   showChanges: (target?: {
     runId?: string;
     toolCallId?: string;
@@ -158,14 +163,14 @@ export const useCrew = create<Crew>()((set, get) => ({
     keep(sessionId, state);
     state.adoptBrowser?.(sessionId);
   },
-  show: (sessionId, agents, projectId) => {
+  show: (sessionId, agents, projectId, machineId) => {
     const state = get();
     if (state.sessionId === sessionId) {
-      set({ agents, projectId });
+      set({ agents, projectId, machineId });
       return;
     }
     keep(state.sessionId, state);
-    set({ ...restored(sessionId), sessionId, agents, projectId, opener: undefined });
+    set({ ...restored(sessionId), sessionId, agents, projectId, machineId, opener: undefined });
   },
   showChanges: (target = {}) =>
     set((state) => {
@@ -293,6 +298,7 @@ export const useCrew = create<Crew>()((set, get) => ({
     set({
       sessionId: undefined,
       projectId: undefined,
+      machineId: undefined,
       worktrees: false,
       agents: [],
       opener: undefined,
