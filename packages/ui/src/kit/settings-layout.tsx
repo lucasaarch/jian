@@ -101,9 +101,12 @@ export function SettingsLayout({
             className={`${bareInput} text-[13px]`}
           />
         </label>
-        <div className="grid min-h-0 content-start gap-3 overflow-y-auto">
+        {/* One column the sidebar's width, not its longest name's: an implicit `auto` column
+            grows to a label that does not wrap, and the list then scrolls sideways instead of
+            truncating it. The sidebar never scrolls sideways. */}
+        <div className="grid min-h-0 grid-cols-1 content-start gap-3 overflow-x-hidden overflow-y-auto">
           {groups.map((group) => (
-            <div key={group} className="grid gap-0.5">
+            <div key={group} className="grid grid-cols-1 gap-0.5">
               {group && (
                 <span className="px-2.5 pt-1 pb-1 text-xs font-medium text-muted">{group}</span>
               )}
