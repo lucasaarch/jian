@@ -646,6 +646,10 @@ export class AgentRuntime {
             create: 'create_worktree' in worktreeToolSet,
             // The conversation's, not this task session's: a subagent's worktrees are on the machine.
             machine: Boolean(conversation.remoteMachineId),
+            // Its turns say who else is in its folders: the ones it was given, or its checkouts
+            // in the folder it clones into. A subagent's turns say nothing of either.
+            signals:
+              !run.subagent && Boolean(conversation.folders?.length || conversation.cloneInto),
           }
         : undefined;
       const tools: ToolSet = {

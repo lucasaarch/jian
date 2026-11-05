@@ -1,6 +1,6 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -339,4 +339,138 @@ it('still retires a merged worktree when cleaning it up fails, and says what is 
   expect(result.sha).toBe(run(source, 'rev-parse', 'HEAD'));
   expect(result.leftBehind).toContain(made.path);
   expect(await worktrees.list(profile.id, chat.id)).toEqual([]);
+});
+
+it('will not merge or remove a worktree a subagent made its own from, until that one goes', async () => {
+  const { profile, chat, other, worktrees } = await setup();
+  const source = repo(dir);
+  const parent = await worktrees.create(profile.id, chat.id, source, 'gateway');
+  writeFileSync(join(parent.path, 'b.txt'), 'two\n');
+  run(parent.path, 'add', '.');
+  run(parent.path, 'commit', '-m', 'work');
+  // `other` stands for a subagent's task session, whose worktree comes from the conversation's.
+  const child = await worktrees.create(profile.id, other.id, parent.path, 'gateway');
+  const said = `merge or remove the subagent's worktree ${child.name} first`;
+
+  await expect(worktrees.merge(profile.id, chat.id, parent.name)).rejects.toMatchObject({
+    statusCode: 409,
+    message: expect.stringContaining(said),
+  });
+  await expect(
+    worktrees.remove(profile.id, chat.id, parent.name, { discard: true }),
+  ).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining(said) });
+  expect(run(source, 'rev-parse', '--verify', '-q', parent.branch)).not.toBe('');
+  expect((await worktrees.list(profile.id, other.id)).map((item) => item.name)).toEqual([
+    child.name,
+  ]);
+
+  await worktrees.remove(profile.id, other.id, child.name, { discard: true });
+  const { sha } = await worktrees.merge(profile.id, chat.id, parent.name);
+  expect(run(source, 'rev-parse', 'HEAD')).toBe(sha);
+});
+
+it('lets a worktree go once the subagent folder made from it was deleted by hand', async () => {
+  const { profile, chat, other, worktrees } = await setup();
+  const parent = await worktrees.create(profile.id, chat.id, repo(dir), 'gateway');
+  const child = await worktrees.create(profile.id, other.id, parent.path, 'gateway');
+  rmSync(child.path, { recursive: true, force: true });
+
+  await expect(worktrees.remove(profile.id, chat.id, parent.name)).resolves.toEqual({
+    branchKept: false,
+  });
+});
+
+it('clear marks what it removed, so a task session’s worktree is not left active', async () => {
+  const { profile, chat, other, worktrees } = await setup();
+  const parent = await worktrees.create(profile.id, chat.id, repo(dir), 'gateway');
+  await worktrees.create(profile.id, other.id, parent.path, 'gateway');
+
+  await worktrees.clear(profile.id, await worktrees.recordedForProfile(profile.id));
+
+  expect(await worktrees.recordedForProfile(profile.id)).toEqual([]);
+});
+
+it('finds a neighbour working in a folder of the repository, above it, or through a symlink', async () => {
+  const { services, profile, chat, worktrees, input } = await setup();
+  const source = repo(dir);
+  mkdirSync(join(source, 'packages', 'web'), { recursive: true });
+  symlinkSync(source, join(dir, 'linked'));
+  const conversations = [
+    ['Inside', join(source, 'packages', 'web')],
+    ['Linked', join(dir, 'linked')],
+    ['Above', dir],
+  ] as const;
+  for (const [title, folder] of conversations) {
+    const conversation = await services.sessions.createSession(profile.id, { title });
+    await services.store.db
+      .update(sessions)
+      .set({ workspace: { folders: [folder] } })
+      .where(eq(sessions.id, conversation.id));
+    await open(services, profile.id, conversation.id);
+  }
+  // Another repository beside it is nobody's business here.
+  const apart = await services.profiles.createProfile({ name: 'Borealis', ...input });
+  const elsewhere = await services.sessions.createSession(apart.id, { title: 'Elsewhere' });
+  await services.store.db
+    .update(sessions)
+    .set({ workspace: { folders: [repo(dir, 'docs')] } })
+    .where(eq(sessions.id, elsewhere.id));
+  await open(services, apart.id, elsewhere.id);
+
+  const found = await worktrees.neighbours(profile.id, chat.id, [source]);
+
+  expect(found.map((item) => item.conversation).sort()).toEqual(['Above', 'Inside', 'Linked']);
+});
+
+it('reads a machine’s worktrees at most every 30 seconds, reaching the machine once per list', async () => {
+  let now = 1_000_000;
+  const { services, profile, chat } = await setup();
+  const machine = randomUUID();
+  const reached: string[] = [];
+  let commands = 0;
+  const worktrees = new Worktrees(
+    services.store,
+    () => now,
+    async (_profileId, place) => {
+      reached.push(place);
+      const local = { ...gateway(), home: async () => home() };
+      return {
+        ...local,
+        git: (args, config, signal) => {
+          commands += 1;
+          return local.git(args, config, signal);
+        },
+      };
+    },
+  );
+  const site = await worktrees.create(profile.id, chat.id, repo(dir), machine);
+  await worktrees.create(profile.id, chat.id, repo(dir, 'docs'), machine);
+  const record = (await worktrees.recorded(profile.id, chat.id)).find(
+    (item) => item.name === site.name,
+  );
+  reached.length = 0;
+
+  const first = await worktrees.list(profile.id, chat.id);
+  await worktrees.githubRepository(profile.id, record as never);
+  expect(reached).toEqual([machine, machine]);
+  const asked = commands;
+
+  now += 10_000;
+  expect(await worktrees.list(profile.id, chat.id)).toEqual(expect.arrayContaining(first));
+  await worktrees.githubRepository(profile.id, record as never);
+  expect(commands).toBe(asked);
+
+  // What the agent or the owner does to one is read again at once.
+  writeFileSync(join(site.path, 'b.txt'), 'two\n');
+  run(site.path, 'add', '.');
+  run(site.path, 'commit', '-m', 'work');
+  await worktrees.update(profile.id, chat.id, site.name, 'merge');
+  // Both were made at the same instant of this clock, so they are found by name, not by order.
+  const listed = await worktrees.list(profile.id, chat.id);
+  expect(listed.find((item) => item.name === site.name)).toMatchObject({ ahead: 1 });
+
+  now += 31_000;
+  const settled = commands;
+  await worktrees.list(profile.id, chat.id);
+  expect(commands).toBeGreaterThan(settled);
 });

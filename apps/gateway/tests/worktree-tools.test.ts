@@ -456,3 +456,51 @@ it('parallel subagents each make a worktree from the conversation’s and merge 
     parent.name,
   ]);
 });
+
+it('the conversation lists its subagents’ worktrees, removes one, then merges its own', async () => {
+  const { services, profile, chat, turn, workOn, subagent } = await setup();
+  const source = repo('atlas');
+  await workOn([source]);
+  const parent = await services.worktrees.create(profile.id, chat.id, source, 'gateway');
+  writeFileSync(join(parent.path, 'b.txt'), 'two\n');
+  git(parent.path, 'add', '.');
+  git(parent.path, 'commit', '-m', 'second');
+  const child = await subagent('Helper');
+  const left = await services.worktrees.create(profile.id, child.sessionId, parent.path, 'gateway');
+
+  const { results } = await turn([
+    () => call('list', 'list_worktrees', {}),
+    () => call('early', 'merge_worktree', { name: parent.name }),
+    () => call('remove', 'remove_worktree', { name: left.name, discard: true }),
+    () => call('merge', 'merge_worktree', { name: parent.name }),
+  ]);
+
+  expect(results.get('list')).toEqual([
+    expect.objectContaining({ name: parent.name }),
+    expect.objectContaining({ name: left.name, subagent: true }),
+  ]);
+  expect((results.get('list') as { subagent?: boolean }[])[0]?.subagent).toBeUndefined();
+  expect(failed(results.get('early'))).toContain(
+    `merge or remove the subagent's worktree ${left.name} first`,
+  );
+  expect(results.get('remove')).toEqual({ branchKept: false });
+  expect(results.get('merge')).toMatchObject({ sha: git(source, 'rev-parse', 'HEAD') });
+  expect(readFileSync(join(source, 'b.txt'), 'utf8')).toBe('two\n');
+});
+
+it('tells a machine conversation to run its commands in the worktree, since nothing sends them there', async () => {
+  const { RunWorktrees, worktreeTools } = await import('../src/agent/worktree-tools.js');
+  const service = {} as never;
+  const create = (place: string) =>
+    worktreeTools({
+      worktrees: service,
+      profileId: 'p',
+      place,
+      folders: ['/home/ana/site'],
+      scope: new RunWorktrees(service, 'p', 's', 's'),
+    }).create_worktree?.description ?? '';
+
+  expect(create(randomUUID())).toContain("set cwd of run_remote_command to the worktree's path");
+  expect(create(randomUUID())).not.toMatch(/file tools refuse|commands start in the worktree/);
+  expect(create('gateway')).toContain('commands start in the worktree');
+});

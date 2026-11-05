@@ -83,7 +83,8 @@ export function worktreeSignals(
         : [
             uncommitted === 0
               ? 'No uncommitted changes.'
-              : `${files(uncommitted)} with uncommitted changes.`,
+              : // The agent's own edits of earlier turns are there too, and are not the owner's.
+                `${files(uncommitted)} with uncommitted changes. Changes you made in this conversation count too.`,
           ]),
       ...others.map((other) =>
         other.agent
@@ -239,17 +240,12 @@ export class Contexts {
               and(eq(projects.profileId, run.profileId), inArray(projects.id, session.projectIds)),
             )
         : [];
+    // Whatever the folders say: a conversation that clones into one of the owner's has its
+    // checkouts there, and one with a worktree works on its source.
     const signals =
-      !worker && workspaces?.worktrees && session.folders?.length && this.worktrees
+      !worker && workspaces?.worktrees && this.worktrees
         ? worktreeSignals(
-            await this.worktrees
-              .signals(
-                run.profileId,
-                session.id,
-                session.folders,
-                session.remoteMachineId ?? 'gateway',
-              )
-              .catch(() => []),
+            await this.worktrees.signals(run.profileId, session).catch(() => []),
             workspaces.worktrees.machine,
           )
         : { steady: [], turn: [] };

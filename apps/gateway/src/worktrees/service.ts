@@ -1,4 +1,5 @@
-import type { SessionWorktree } from '@jian/contracts';
+import { realpath } from 'node:fs/promises';
+import type { Session, SessionWorktree } from '@jian/contracts';
 import { ORIGIN_QUERY, originUrls } from '../agent/github-git-command.js';
 import type { GitPlace } from '../agent/github-git-place.js';
 import type { Clock } from '../core/clock.js';
@@ -13,6 +14,7 @@ import {
   removeWorktree,
   sourceOf,
   updateWorktree,
+  WorktreeProblem,
   worktreeRoot,
   worktreeState,
 } from './git.js';
@@ -21,10 +23,13 @@ import {
   activeWorktrees,
   conversationAndSubagentSessions,
   insertWorktree,
+  madeFrom,
   markRemoved,
+  markRemovedIn,
   openConversations,
   profileWorktrees,
   type WorktreeRecord,
+  workingFolders,
   worktreeHolders,
 } from './repository.js';
 
@@ -38,6 +43,12 @@ export type WorktreePlaces = (profileId: string, place: 'gateway' | string) => P
 
 /** How long a folder's uncommitted count is trusted, in ms: a turn must not run git every time. */
 const SIGNAL_FRESH_MS = 60_000;
+
+/**
+ * How long what a machine said about a worktree is trusted, in ms. The badge reads its
+ * worktrees as each turn starts and ends, and on a machine every read is a task its worker runs.
+ */
+const MACHINE_FRESH_MS = 30_000;
 
 /** What a turn tells the agent about one folder it works in. */
 export type FolderSignal = {
@@ -68,22 +79,61 @@ export class Worktrees {
     string,
     { at: number; checkout: { top: string; uncommitted: number } | null }
   >();
+  /** Where a machine's worktree stood, by `place|path`. */
+  private readonly standing = new Map<
+    string,
+    { at: number; state: Awaited<ReturnType<typeof worktreeState>> }
+  >();
+  /** A machine's source's GitHub repository, by `place|source`. */
+  private readonly origins = new Map<string, { at: number; repository: string | null }>();
+
+  /** A kept answer from a machine, while it is fresh; the gateway's own disk is always asked. */
+  private fresh<T extends { at: number }>(kept: Map<string, T>, place: string, path: string) {
+    if (place === 'gateway') return undefined;
+    const found = kept.get(`${place}|${path}`);
+    return found && this.clock() - found.at < MACHINE_FRESH_MS ? found : undefined;
+  }
+
+  /** What was done to a worktree is read again at once. */
+  private forget(record: WorktreeRecord) {
+    this.standing.delete(`${record.place}|${record.path}`);
+  }
 
   /**
    * What each folder's turn-start signal says: its changed files, who else works there and the
-   * conversation's own worktree for it. On the gateway git is asked once a minute per folder; on a
-   * machine nothing is, since a turn must not wait for a remote command: its signal is who else
-   * is there and what was recorded. A folder outside any repository has no signal.
+   * conversation's own worktree for it. The folders are those the conversation works on (see
+   * `workingFolders`), and the source of each worktree it has, which it works on whatever its
+   * folders say. On the gateway git is asked once a minute per folder; on a machine nothing is,
+   * since a turn must not wait for a remote command: its signal is who else is there and what was
+   * recorded. A folder outside any repository has no signal.
    */
   async signals(
     profileId: string,
-    sessionId: string,
-    folders: string[],
-    place: 'gateway' | string,
+    conversation: Pick<
+      Session,
+      'id' | 'projectId' | 'projectIds' | 'folders' | 'cloneInto' | 'remoteMachineId'
+    >,
   ): Promise<FolderSignal[]> {
+    const sessionId = conversation.id;
+    const place = conversation.remoteMachineId ?? 'gateway';
     const ours = (await activeWorktrees(this.store.db, profileId, sessionId)).filter(
       (record) => record.place === place,
     );
+    const folders =
+      (
+        await workingFolders(this.store.db, [
+          {
+            sessionId,
+            projectId: conversation.projectId ?? null,
+            remoteMachineId: conversation.remoteMachineId ?? null,
+            workspace: {
+              ...(conversation.folders ? { folders: conversation.folders } : {}),
+              ...(conversation.projectIds ? { projectIds: conversation.projectIds } : {}),
+              ...(conversation.cloneInto ? { cloneInto: conversation.cloneInto } : {}),
+            },
+          },
+        ])
+      ).get(sessionId) ?? [];
     const found: { folder: string; source: string; uncommitted?: number }[] = [];
 
     for (const folder of folders) {
@@ -94,6 +144,11 @@ export class Worktrees {
       const checkout = await this.checkoutOf(profileId, folder).catch(() => null);
       if (checkout) {
         found.push({ folder, source: checkout.top, uncommitted: checkout.uncommitted });
+      }
+    }
+    for (const record of ours) {
+      if (!found.some((item) => item.source === record.source)) {
+        found.push({ folder: record.source, source: record.source });
       }
     }
 
@@ -207,19 +262,34 @@ export class Worktrees {
   async list(profileId: string, sessionId: string): Promise<WorktreeState[]> {
     const records = await activeWorktrees(this.store.db, profileId, sessionId);
     const states: WorktreeState[] = [];
+    // Each place is reached once per list: a machine's is looked up among the machines.
+    const reached = new Map<string, Promise<GitPlace>>();
+    const at = (place: string) => {
+      const known = reached.get(place) ?? this.places(profileId, place);
+      reached.set(place, known);
+      return known;
+    };
 
     for (const record of records) {
-      const unknown = { ahead: null, behind: null, uncommitted: null };
+      const kept = this.fresh(this.standing, record.place, record.path);
+      if (kept) {
+        states.push({ ...describe(record), ...kept.state });
+        continue;
+      }
       try {
-        const git = await this.places(profileId, record.place);
+        const git = await at(record.place);
         if (!(await this.stillThere(git, record))) {
           await this.retire(profileId, sessionId, record);
           continue;
         }
-        states.push({ ...describe(record), ...(await worktreeState(git, record)) });
+        const state = await worktreeState(git, record);
+        if (record.place !== 'gateway') {
+          this.standing.set(`${record.place}|${record.path}`, { at: this.clock(), state });
+        }
+        states.push({ ...describe(record), ...state });
       } catch {
         // Offline machine or unreadable source: the row is not proof the folder is gone.
-        states.push({ ...describe(record), ...unknown });
+        states.push({ ...describe(record), ahead: null, behind: null, uncommitted: null });
       }
     }
     return states;
@@ -272,6 +342,16 @@ export class Worktrees {
    * the worktree's place; a place that cannot answer is simply not a pull request candidate.
    */
   async githubRepository(profileId: string, record: WorktreeRecord): Promise<string | null> {
+    const kept = this.fresh(this.origins, record.place, record.source);
+    if (kept) return kept.repository;
+    const repository = await this.originOf(profileId, record);
+    if (record.place !== 'gateway') {
+      this.origins.set(`${record.place}|${record.source}`, { at: this.clock(), repository });
+    }
+    return repository;
+  }
+
+  private async originOf(profileId: string, record: WorktreeRecord): Promise<string | null> {
     try {
       const git = await this.places(profileId, record.place);
       const outcome = await git.git(['-C', record.source, ...ORIGIN_QUERY]);
@@ -304,6 +384,7 @@ export class Worktrees {
     strategy: 'merge' | 'rebase',
   ): Promise<{ conflicts: string[] }> {
     const record = await this.find(profileId, sessionId, name);
+    this.forget(record);
     const git = await this.places(profileId, record.place);
     return updateWorktree(git, { path: record.path, base: record.base, strategy });
   }
@@ -315,8 +396,15 @@ export class Worktrees {
     name: string,
   ): Promise<{ sha: string; leftBehind?: string }> {
     const record = await this.find(profileId, sessionId, name);
+    await this.refuseWhileMadeFrom(profileId, record);
     const git = await this.places(profileId, record.place);
-    const { sha } = await mergeWorktree(git, record);
+    // A subagent merges back into the conversation's worktree, whose changes are no owner's.
+    const into = (await profileWorktrees(this.store.db, profileId)).some(
+      (other) => other.path === record.source && other.place === record.place,
+    )
+      ? 'worktree'
+      : 'folder';
+    const { sha } = await mergeWorktree(git, { ...record, into });
     // The merge is done and cannot be undone, so a cleanup that fails must not hide it: a retry
     // would be told the branch lacks the base. The row is retired either way.
     let leftBehind: string | undefined;
@@ -339,6 +427,7 @@ export class Worktrees {
     options: { discard?: boolean; deleteBranch?: boolean } = {},
   ): Promise<{ branchKept: boolean }> {
     const record = await this.find(profileId, sessionId, name);
+    await this.refuseWhileMadeFrom(profileId, record);
     const git = await this.places(profileId, record.place);
     const result = await removeWorktree(git, {
       ...record,
@@ -364,10 +453,12 @@ export class Worktrees {
       return parent && seen < records.length ? 1 + depth(parent, seen + 1) : 0;
     };
     const deepestFirst = [...records].sort((a, b) => depth(b) - depth(a));
+    const removed: string[] = [];
     for (const record of deepestFirst) {
       try {
         const git = await this.places(profileId, record.place);
         await removeWorktree(git, { ...record, discard: true, deleteBranch: false });
+        removed.push(record.id);
       } catch (error) {
         this.warn(
           `Worktree ${record.path} was left on ${record.place}: ${
@@ -376,6 +467,11 @@ export class Worktrees {
         );
       }
     }
+    // A subagent's task session outlives the conversation: its rows would stay active, and a
+    // reset would try them again. What could not be removed stays active, to be tried again.
+    await markRemovedIn(this.store.db, this.clock, profileId, removed).catch((error) =>
+      this.warn(`Could not mark removed worktrees: ${String(error)}`),
+    );
   }
 
   /**
@@ -393,9 +489,11 @@ export class Worktrees {
     const found = new Map<string, { source: string; agent?: string; conversation?: string }>();
 
     for (const other of open) {
+      // A folder is stored as the owner chose it; the sources are what git calls the checkout.
+      const folders = await Promise.all(other.folders.map(realOrSame));
       for (const source of sources) {
         const works =
-          other.folders.includes(source) ||
+          folders.some((folder) => overlaps(folder, source)) ||
           holders.some((held) => held.sessionId === other.sessionId && held.source === source);
         if (!works) continue;
 
@@ -411,6 +509,26 @@ export class Worktrees {
     return [...found.values()];
   }
 
+  /**
+   * A worktree another one was made from cannot go first: the subagent's would lose the branch
+   * it merges back into, and git cannot remove a checkout whose source is gone. One whose folder
+   * was deleted by hand no longer counts; one whose place cannot be read still does.
+   */
+  private async refuseWhileMadeFrom(profileId: string, record: WorktreeRecord) {
+    for (const child of await madeFrom(this.store.db, profileId, record.path)) {
+      const there = await this.places(profileId, child.place)
+        .then((git) => this.stillThere(git, child))
+        .catch(() => true);
+      if (!there) {
+        await this.retire(profileId, child.sessionId, child);
+        continue;
+      }
+      throw new WorktreeProblem(
+        `${record.name} has a subagent's worktree made from it: merge or remove the subagent's worktree ${child.name} first.`,
+      );
+    }
+  }
+
   private async stillThere(git: GitPlace, record: WorktreeRecord) {
     return (await listedWorktrees(git, record.source)).has(record.path);
   }
@@ -421,6 +539,7 @@ export class Worktrees {
     record: WorktreeRecord,
     change: Change = 'removed',
   ) {
+    this.forget(record);
     await this.store.transaction(profileId, async (tx) => {
       if (await markRemoved(tx, this.clock, profileId, sessionId, record.id)) {
         await this.announce(tx, profileId, sessionId, record.name, change);
@@ -437,6 +556,19 @@ export class Worktrees {
   ) {
     return recordEvent(tx, this.clock, profileId, 'session.worktree', { sessionId, name, change });
   }
+}
+
+/** The real path where it exists here; a machine's path, or one gone, is compared as written. */
+const realOrSame = (path: string) => realpath(path).catch(() => path);
+
+/**
+ * Whether two folders share files: the same, or one inside the other. Another conversation in a
+ * folder of the repository, or in one that holds it, works on the same checkout.
+ */
+function overlaps(a: string, b: string): boolean {
+  const within = (inner: string, outer: string) =>
+    inner.startsWith(/[\\/]$/.test(outer) ? outer : `${outer}/`) || inner.startsWith(`${outer}\\`);
+  return a === b || within(a, b) || within(b, a);
 }
 
 const alreadyHas = (existing: WorktreeRecord, source: string) =>

@@ -9,8 +9,11 @@ export interface ContextSource {
     project?: {
       sections: string[];
       skills: Skill[];
-      /** The run has worktree tools; `create` when it can also make one. */
-      worktrees?: { create: boolean; machine: boolean };
+      /**
+       * The run has worktree tools; `create` when it can also make one, `signals` when its turns
+       * say who else works in its folders.
+       */
+      worktrees?: { create: boolean; machine: boolean; signals: boolean };
     },
   ): Promise<{
     system: string;

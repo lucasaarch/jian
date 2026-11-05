@@ -123,7 +123,7 @@ export function skillFor(
     web: WebAccess;
     xConnected: boolean;
     /** What the run has of the worktree tools; absent when it has none. */
-    worktrees?: { create: boolean; machine: boolean };
+    worktrees?: { create: boolean; machine: boolean; signals: boolean };
   },
   /** The skills of the conversation's workspaces, named apart from the profile's already. */
   projectSkills: readonly Skill[] = [],
@@ -159,7 +159,7 @@ export function profileTools(
   /** The skills the conversation's workspaces offer. */
   projectSkills: readonly Skill[] = [],
   /** Whether this run has the worktree tools, which the skill about them goes by. */
-  worktrees?: { create: boolean; machine: boolean },
+  worktrees?: { create: boolean; machine: boolean; signals: boolean },
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();

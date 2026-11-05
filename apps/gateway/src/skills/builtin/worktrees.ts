@@ -5,6 +5,8 @@ type Can = {
   create: boolean;
   /** The conversation targets a machine, whose disk the file tools do not reach. */
   machine: boolean;
+  /** Its turns say, per folder, who else works there: not a subagent's, nor without a folder. */
+  signals: boolean;
   subagent: boolean;
 };
 
@@ -17,19 +19,29 @@ A worktree is a checkout of a repository of its own: a folder outside it and a b
 from the branch the owner has checked out. Work done there stays there until it is merged, so
 nobody's work lands half finished.`;
 
-const SIGNAL = `## Read the signal first
+function signal({ machine }: Can): string {
+  const says = machine
+    ? 'who else works there and whether you have a worktree for it. Nothing counts changes on a machine, so run `git status` there with `run_remote_command` before you edit.'
+    : 'how many files have uncommitted changes, who else works there and whether you have a worktree for it.';
+  return `## Read the signal first
 
-At the start of each turn, a line per folder you work in says how many files have uncommitted
-changes, who else works there and whether you have a worktree for it. Act on it before you edit:
+At the start of each turn, a line per folder you work in says ${says} Act on it before you edit:
 
 - **Another agent or conversation works there:** call \`create_worktree\` with the folder before
   your first edit.
 - **Only the owner's changes are there:** ask before you touch the folder. They may be the subject
-  of the request, and a worktree would not contain them.
+  of the request, and a worktree would not contain them. Changes you made yourself in this
+  conversation, in earlier turns, are not the owner's, and ${machine ? '`git status`' : 'the count'} shows them too: ask only
+  about changes you did not make.
 - **Clean and alone:** work in place. Make a worktree only when the owner asks, or when you expect
-  to leave the work half done for a while.
+  to leave the work half done for a while.${
+    machine
+      ? ''
+      : `
 
-The count is up to a minute old. It is a reason to ask, not proof that nothing changed.`;
+The count can be up to a minute old, so a file may have changed since.`
+  }`;
+}
 
 function whileYouHaveOne({ create, machine }: Can): string {
   const made = create
@@ -46,18 +58,29 @@ included.`;
 
 ${made}${where} Never run \`git worktree\` by hand: the tools keep what Jian knows in step with git.
 \`list_worktrees\` gives the name, branch, base, source and path of each, with commits ahead and
-behind and uncommitted files.`;
+behind and uncommitted files.
+
+A worktree holds only what is committed. Nothing git ignores is there, such as \`.env\`,
+\`node_modules\` or build output: install or copy what the checks need before you run them, and
+never commit a secret you copied in.`;
 }
 
-const bringingBack = ({ create, subagent }: Can) => `## Bringing the work back
+function whenToMerge({ create, machine, subagent }: Can): string {
+  if (create && subagent) return ', or, for your own worktree, when your work in it is done';
+  if (create && !machine) return ", or, for a subagent's worktree, when its work is done";
+  return '';
+}
 
-Merge only when the owner asked${create && subagent ? ', or, for your own worktree, when your work in it is done' : ''}.
+const bringingBack = (can: Can) => `## Bringing the work back
+
+Merge only when the owner asked${whenToMerge(can)}.
 
 1. Commit everything in the worktree. \`merge_worktree\` and \`update_worktree\` refuse otherwise.
 2. If \`list_worktrees\` shows it behind, call \`update_worktree\`. It merges the base in by default;
    pass \`strategy: "rebase"\` when the owner prefers a straight history.
 3. Call \`merge_worktree\`. It merges into the folder the worktree came from, then removes the
-   worktree and the merged branch.
+   worktree and the merged branch. A merge that a hook stops, or that takes too long, is undone
+   and the result says why: fix the cause in the worktree, commit, and merge again.
 
 \`update_worktree\` can stop on conflicts, which stay in the worktree and are listed. Resolve them
 there, add the files and finish with \`git -c core.editor=true rebase --continue\` after a rebase
@@ -66,7 +89,11 @@ hangs.
 
 \`merge_worktree\` refuses when the folder it merges into has uncommitted changes or another branch
 checked out. Tell the owner which, and ask them to commit, stash or switch back. Do not clean the
-folder up yourself.
+folder up yourself.${
+  can.create && can.subagent
+    ? " When that folder is the conversation's worktree, commit what is left there, then merge."
+    : ''
+}
 
 \`remove_worktree\` keeps a branch that holds commits the base lacks. Pass \`discard\` or
 \`deleteBranch\` only when the owner asked to throw work away.
@@ -101,8 +128,11 @@ worktrees, so give subagents that edit one repository in parallel files that do 
     ? `## Subagents
 
 A subagent makes its own worktree from yours when you have one for the repository, and from the
-folder otherwise, and merges it back with \`merge_worktree\`. The panel shows only your own. A
-subagent that never merges leaves its worktree behind, so ask for the merge in its brief.`
+folder otherwise, and merges it back with \`merge_worktree\`. The panel shows only your own.
+\`list_worktrees\` also shows your subagents', marked \`subagent: true\`, and \`merge_worktree\` and
+\`remove_worktree\` act on them too. While a subagent's worktree made from yours is there, yours
+cannot be merged or removed: merge or remove theirs first. A subagent that never merges leaves its
+worktree behind, so ask for the merge in its brief.`
     : '';
 }
 
@@ -112,9 +142,8 @@ export function worktreesFor(can: Can): Skill {
     description: DESCRIPTION,
     instructions: [
       INTRO,
-      // Signals are given for the conversation's folders; a subagent is not given them, and
-      // without a folder to make one from nothing in them could be acted on.
-      ...(can.create && !can.subagent ? [SIGNAL] : []),
+      // Without the signals, or a folder to make a worktree from, nothing in them applies.
+      ...(can.create && can.signals && !can.subagent ? [signal(can)] : []),
       whileYouHaveOne(can),
       bringingBack(can),
       approval(can.create),
@@ -126,4 +155,9 @@ export function worktreesFor(can: Can): Skill {
 }
 
 /** As the panel lists it: with everything, which a run then narrows down to what it has. */
-export const worktrees: Skill = worktreesFor({ create: true, machine: false, subagent: false });
+export const worktrees: Skill = worktreesFor({
+  create: true,
+  machine: false,
+  signals: true,
+  subagent: false,
+});

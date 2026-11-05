@@ -23,8 +23,8 @@ export async function prepareGitAccess(keys?: SshKeySync): Promise<WorkerGitAcce
 
 /**
  * Subagents share the filesystem of every agent. Git/SSH matches the principal; optional
- * `repositories` are named roots there, not detached worktrees Jian creates. If a task needs
- * isolation, the agent creates a normal `git worktree` inside the project.
+ * `repositories` are named roots there. A task that needs a checkout of its own gets one with
+ * `create_worktree` where the run has it, never with `git worktree` by hand, so Jian knows of it.
  */
 export async function prepareWorkerWorkspace(
   run: Run,

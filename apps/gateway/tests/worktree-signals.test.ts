@@ -8,8 +8,9 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import { localPlace } from '../src/agent/github-git-place.js';
 import { Contexts } from '../src/context/service.js';
 import { availableSkills } from '../src/skills/builtin/index.js';
-import { sessions } from '../src/storage/schema.js';
+import { projects, sessions } from '../src/storage/schema.js';
 import { Workspaces } from '../src/workspaces/service.js';
+import { insertWorktree } from '../src/worktrees/repository.js';
 import { Worktrees } from '../src/worktrees/service.js';
 import { testServices } from './helpers/services.js';
 
@@ -19,7 +20,7 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-const can = { create: true, machine: false };
+const can = { create: true, machine: false, signals: true };
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -67,7 +68,7 @@ async function setup(clock: () => number = Date.now) {
     undefined,
     worktrees,
   );
-  const ask = async (can: { create: boolean; machine: boolean } | undefined) => {
+  const ask = async (can: { create: boolean; machine: boolean; signals: boolean } | undefined) => {
     const run = await services.runs.submit(profile.id, chat.id, {
       text: 'Go',
       requestKey: randomUUID(),
@@ -97,7 +98,7 @@ it('the context counts uncommitted files and names another agent working there',
   const { system, turn } = await ask(can);
 
   expect(turn).toContain(
-    `${source}: 2 files with uncommitted changes. Another agent, Nova, is working here now. You have no worktree for it.`,
+    `${source}: 2 files with uncommitted changes. Changes you made in this conversation count too. Another agent, Nova, is working here now. You have no worktree for it.`,
   );
   expect(system + turn).not.toContain('Quarterly layoffs');
 });
@@ -117,7 +118,7 @@ it('sends a machine conversation to cwd, since its tools stop at the gateway', a
   const { profile, chat, source, worktrees, ask } = await setup();
   const made = await worktrees.create(profile.id, chat.id, source, 'gateway');
 
-  const { system } = await ask({ create: true, machine: true });
+  const { system } = await ask({ create: true, machine: true, signals: true });
 
   expect(system).toContain(`set cwd of run_remote_command to ${made.path}`);
   expect(system).not.toContain('your tools start there');
@@ -189,17 +190,22 @@ it('teaches each run only the tools it has', async () => {
     },
   );
   const web = { browser: false, inspects: true, subagent: false };
-  const load = (skillName: string, worktrees?: { create: boolean; machine: boolean }) =>
+  const load = (
+    skillName: string,
+    worktrees?: { create: boolean; machine: boolean; signals: boolean },
+  ) =>
     skillFor(run, [], skillName, { web, xConnected: false, ...(worktrees ? { worktrees } : {}) })
       ?.instructions ?? '';
 
-  const without = { create: false, machine: false };
+  const without = { create: false, machine: false, signals: false };
   expect(load('worktrees', without)).not.toContain('create_worktree');
   expect(load('worktrees', without)).toContain('merge_worktree');
   expect(load('long-running-work', without)).not.toContain('create_worktree');
   expect(load('long-running-work')).not.toMatch(/worktree/);
-  expect(load('long-running-work', { create: true, machine: false })).toContain('create_worktree');
-  expect(load('worktrees', { create: true, machine: true })).toContain('cwd');
+  expect(load('long-running-work', { create: true, machine: false, signals: true })).toContain(
+    'create_worktree',
+  );
+  expect(load('worktrees', { create: true, machine: true, signals: true })).toContain('cwd');
   expect(skill.instructions).toContain('create_worktree');
   expect(longRunningWork.instructions).toContain('create_worktree');
 });
@@ -213,7 +219,11 @@ it('tells a machine conversation’s subagent to use run_remote_command with a c
   });
   const subagent = { ...run, subagent: { name: 'Helper' } } as typeof run;
   const web = { browser: false, inspects: true, subagent: true };
-  const can = { web, xConnected: false, worktrees: { create: false, machine: true } };
+  const can = {
+    web,
+    xConnected: false,
+    worktrees: { create: false, machine: true, signals: false },
+  };
   const text = ['worktrees', 'long-running-work']
     .map((name) => skillFor(subagent, [], name, can)?.instructions ?? '')
     .join('\n');
@@ -241,11 +251,151 @@ it('does not promise a machine conversation’s workers worktrees', async () => 
     requestKey: randomUUID(),
   });
   const web = { browser: false, inspects: true, subagent: false };
-  const can = { web, xConnected: false, worktrees: { create: true, machine: true } };
+  const can = {
+    web,
+    xConnected: false,
+    worktrees: { create: true, machine: true, signals: true },
+  };
   const text = ['worktrees', 'long-running-work']
     .map((name) => skillFor(run, [], name, can)?.instructions ?? '')
     .join('\n');
 
   expect(text).toContain('files that do not overlap');
   expect(text).not.toMatch(/subagent makes its own worktree|tell each in its brief to call/);
+});
+
+it('a conversation that clones into the owner’s folder is told who else is in its checkout', async () => {
+  const { services, profile, chat, worktrees, input } = await setup();
+  const machine = randomUUID();
+  const cloneInto = '/Users/ana/Meus Projetos';
+  const checkout = `${cloneInto}/harbor`;
+  /** A conversation on the machine whose repositories go under `cloneInto`. */
+  const clonesHere = async (profileId: string, sessionId: string) => {
+    const projectId = randomUUID();
+    await services.store.db.insert(projects).values({
+      id: projectId,
+      profileId,
+      name: 'ana/harbor',
+      repositoryUrl: 'https://github.com/ana/harbor.git',
+    });
+    await services.store.db
+      .update(sessions)
+      .set({ projectId, remoteMachineId: machine, workspace: { cloneInto } })
+      .where(eq(sessions.id, sessionId));
+  };
+  await clonesHere(profile.id, chat.id);
+  const stranger = await services.profiles.createProfile({ name: 'Nova', ...input });
+  const theirs = await services.sessions.createSession(stranger.id, { title: 'Quarterly layoffs' });
+  await clonesHere(stranger.id, theirs.id);
+  await services.runs.submit(stranger.id, theirs.id, { text: 'Go', requestKey: randomUUID() });
+  const contexts = new Contexts(
+    services.store,
+    services.runs,
+    services.sessions,
+    undefined,
+    undefined,
+    worktrees,
+  );
+  const ask = async () => {
+    const run = await services.runs.submit(profile.id, chat.id, {
+      text: 'Go',
+      requestKey: randomUUID(),
+    });
+    const context = await contexts.context(run, [], {
+      sections: [],
+      skills: [],
+      worktrees: { create: true, machine: true, signals: true },
+    });
+    return context.system + context.messages.map((message) => message.content).join('\n');
+  };
+
+  const before = await ask();
+  expect(before).toContain(
+    `${checkout}: Another agent, Nova, is working here now. You have no worktree for it.`,
+  );
+  expect(before).not.toContain('Quarterly layoffs');
+
+  await insertWorktree(services.store.db, Date.now, profile.id, chat.id, {
+    name: 'brave-otter',
+    branch: 'jian/brave-otter',
+    base: 'main',
+    source: checkout,
+    path: '/Users/ana/Jian/worktrees/harbor-0123abcd/brave-otter',
+    place: machine,
+  });
+  expect(await ask()).toContain(
+    `${checkout}: You work on it in the worktree brave-otter at /Users/ana/Jian/worktrees/harbor-0123abcd/brave-otter`,
+  );
+});
+
+it('names a recorded worktree even when the conversation has no folder for it', async () => {
+  const { services, profile, chat, worktrees } = await setup();
+  const machine = randomUUID();
+  await services.store.db
+    .update(sessions)
+    .set({ remoteMachineId: machine, workspace: null })
+    .where(eq(sessions.id, chat.id));
+  await insertWorktree(services.store.db, Date.now, profile.id, chat.id, {
+    name: 'calm-heron',
+    branch: 'jian/calm-heron',
+    base: 'main',
+    source: '/home/ana/site',
+    path: '/home/ana/Jian/worktrees/site-0123abcd/calm-heron',
+    place: machine,
+  });
+  const run = await services.runs.submit(profile.id, chat.id, { text: 'Go', requestKey: 'x' });
+
+  const context = await new Contexts(
+    services.store,
+    services.runs,
+    services.sessions,
+    undefined,
+    undefined,
+    worktrees,
+  ).context(run, [], {
+    sections: [],
+    skills: [],
+    worktrees: { create: true, machine: true, signals: false },
+  });
+
+  expect(context.system).toContain(
+    '/home/ana/site: You work on it in the worktree calm-heron at /home/ana/Jian/worktrees/site-0123abcd/calm-heron',
+  );
+});
+
+it('leaves the signal rules out of the skill for a run that gets no signals', async () => {
+  const { skillFor } = await import('../src/agent/tools.js');
+  const { services, profile, chat } = await setup();
+  const run = await services.runs.submit(profile.id, chat.id, { text: 'Go', requestKey: 'y' });
+  const web = { browser: false, inspects: true, subagent: false };
+  const load = (signals: boolean) =>
+    skillFor(run, [], 'worktrees', {
+      web,
+      xConnected: false,
+      worktrees: { create: true, machine: true, signals },
+    })?.instructions ?? '';
+
+  expect(load(true)).toContain('Read the signal first');
+  expect(load(false)).not.toContain('Read the signal first');
+});
+
+it('does not take the agent’s own earlier edits for the owner’s', async () => {
+  const { worktreesFor } = await import('../src/skills/builtin/worktrees.js');
+  const { source, ask } = await setup();
+  writeFileSync(join(source, 'a.txt'), 'changed\n');
+  const skill = worktreesFor({ create: true, machine: false, signals: true, subagent: false });
+
+  expect(skill.instructions).toMatch(/changes you made yourself[^.]*are not the owner's/i);
+  expect((await ask(can)).turn).toContain('Changes you made in this conversation count too.');
+});
+
+it('teaches the conversation to clear its subagents’ worktrees before its own', async () => {
+  const { worktreesFor } = await import('../src/skills/builtin/worktrees.js');
+  const parent = worktreesFor({ create: true, machine: false, signals: true, subagent: false });
+  const onMachine = worktreesFor({ create: true, machine: true, signals: true, subagent: false });
+
+  expect(parent.instructions).toContain('`list_worktrees` also shows');
+  expect(parent.instructions).toContain('merge or remove theirs first');
+  expect(onMachine.instructions).not.toContain('`list_worktrees` also shows');
+  expect(parent.instructions).toMatch(/\.env/);
 });

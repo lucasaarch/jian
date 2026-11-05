@@ -8,7 +8,15 @@ import { type GuardedSource, realFolders } from './workspace.js';
 
 export type WorktreeService = Pick<
   Worktrees,
-  'create' | 'list' | 'find' | 'update' | 'merge' | 'remove' | 'onGateway' | 'recordedOnGateway'
+  | 'create'
+  | 'list'
+  | 'find'
+  | 'update'
+  | 'merge'
+  | 'remove'
+  | 'onGateway'
+  | 'recordedOnGateway'
+  | 'conversationSessions'
 >;
 
 type Records = (profileId: string, sessionId: string) => Promise<WorktreeRecord[]>;
@@ -129,21 +137,45 @@ export function worktreeTools({
           ...(fromParent.length ? [`the conversation's worktrees: ${fromParent.join(', ')}`] : []),
         ].join(', or ')}.`
       : 'Give the absolute path of the repository on the machine this conversation works on.';
-  /** The session that holds `name`: this run's own first, then the conversation's. */
+  /** The conversation's subagents' task sessions, for the conversation itself. */
+  const subagents = async () =>
+    subagent
+      ? []
+      : (await worktrees.conversationSessions(profileId, conversationId)).filter(
+          (id) => id !== sessionId,
+        );
+  /**
+   * The session that holds `name`: this run's own first, then, for a subagent, the
+   * conversation's, and for the conversation, its subagents'. A worktree is found by both ids.
+   */
   const holder = async (name: string) => {
-    if (!subagent) return sessionId;
-    return worktrees.find(profileId, sessionId, name).then(
-      () => sessionId,
-      (error: unknown) => {
-        if (isNotFound(error)) return conversationId;
-        throw error;
-      },
-    );
+    const others = subagent ? [conversationId] : await subagents();
+    for (const id of [sessionId, ...others]) {
+      const found = await worktrees.find(profileId, id, name).then(
+        () => true,
+        (error: unknown) => {
+          if (isNotFound(error)) return false;
+          throw error;
+        },
+      );
+      if (found) return id;
+    }
+    return sessionId;
   };
+
+  // Only a run on the gateway has subagents that make worktrees, and only from the conversation's.
+  const parentOfSubagents = !subagent && place === 'gateway';
+  const madeFromIt = parentOfSubagents
+    ? " Refused while a subagent's worktree made from it is there: merge or remove that one first, since a subagent's worktree from list_worktrees is yours to act on too."
+    : '';
 
   const tools: ToolSet = {
     create_worktree: tool({
-      description: `Make your own checkout of a repository: a folder outside it and a branch jian/<name> from the branch the folder has checked out, so you work without touching the owner's checkout. While it exists, the file tools refuse writes in the source and commands start in the worktree. ${where}${
+      description: `Make your own checkout of a repository: a folder outside it and a branch jian/<name> from the branch the folder has checked out, so you work without touching the owner's checkout. ${
+        place === 'gateway'
+          ? 'While it exists, the file tools refuse writes in the source and commands start in the worktree.'
+          : "Nothing sends your commands there on the machine: set cwd of run_remote_command to the worktree's path, never to the source folder."
+      } ${where}${
         subagent
           ? " As a subagent, you make your own worktree from the conversation's worktree (its path, or the source folder, leads there) and merge it back into that worktree with merge_worktree."
           : ''
@@ -173,13 +205,28 @@ export function worktreeTools({
     }),
     list_worktrees: tool({
       description: `${
-        subagent ? "Your worktrees, then the conversation's" : "This conversation's worktrees"
+        subagent
+          ? "Your worktrees, then the conversation's"
+          : parentOfSubagents
+            ? "This conversation's worktrees, then its subagents' (marked subagent: true)"
+            : "This conversation's worktrees"
       }: name, branch, base, source and path, with commits ahead of and behind the base and uncommitted files. A count is null when its machine could not be read; try again once it is online.`,
       inputSchema: z.object({}),
-      execute: async () => [
-        ...(await worktrees.list(profileId, sessionId)),
-        ...(subagent ? await worktrees.list(profileId, conversationId) : []),
-      ],
+      execute: async () => {
+        if (subagent) {
+          return [
+            ...(await worktrees.list(profileId, sessionId)),
+            ...(await worktrees.list(profileId, conversationId)),
+          ];
+        }
+        const theirs = [];
+        for (const id of await subagents()) {
+          for (const item of await worktrees.list(profileId, id)) {
+            theirs.push({ ...item, subagent: true });
+          }
+        }
+        return [...(await worktrees.list(profileId, sessionId)), ...theirs];
+      },
     }),
     update_worktree: tool({
       description:
@@ -193,14 +240,17 @@ export function worktreeTools({
     }),
     merge_worktree: tool({
       description: `Merge a worktree's branch into the folder it came from, then remove the worktree and the merged branch. Only when the owner asked${
-        subagent ? ', or, for a worktree of your own, when your work in it is done' : ''
-      }. Refused with uncommitted changes in the worktree (commit them first), when its branch lacks the latest base (run update_worktree first), or when the source folder has uncommitted changes or another branch checked out (ask the owner to commit, stash or check out the base). The result says what was left behind when the cleanup after a merge did not finish.`,
+        subagent
+          ? ', or, for a worktree of your own, when your work in it is done'
+          : parentOfSubagents
+            ? ", or, for a subagent's worktree, when its work is done"
+            : ''
+      }. Refused with uncommitted changes in the worktree (commit them first), when its branch lacks the latest base (run update_worktree first), or when the source folder has uncommitted changes or another branch checked out (ask the owner to commit, stash or check out the base). The result says what was left behind when the cleanup after a merge did not finish.${madeFromIt}`,
       inputSchema: z.object({ name: worktreeNameSchema }),
       execute: async ({ name }) => worktrees.merge(profileId, await holder(name), name),
     }),
     remove_worktree: tool({
-      description:
-        'Remove a worktree. Its branch is deleted only when the base has all its commits, or with deleteBranch. Refused with uncommitted changes: commit them, or pass discard only when the owner asked to throw them away.',
+      description: `Remove a worktree. Its branch is deleted only when the base has all its commits, or with deleteBranch. Refused with uncommitted changes: commit them, or pass discard only when the owner asked to throw them away.${madeFromIt}`,
       inputSchema: z.object({
         name: worktreeNameSchema,
         discard: z

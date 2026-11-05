@@ -57,8 +57,10 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   read is not counted. That one opens the list of them with how each stands — Watching while the
   gateway watches it for you, or Not watched with the reason — and each opens in the Inspector.
 - **The worktree badge**, left of the pull request badge when you have a worktree, is named after
-  it (with several it counts them), and offers four actions: Merge into the base branch, Update
-  from the base branch, Open pull request and Discard. Without a worktree the badge is not there.
+  it (with several it counts them). It offers Merge into the base branch, Update from the base
+  branch and Discard, plus Open pull request when the source's origin is a GitHub repository the
+  connected GitHub App reaches. It shows your own worktrees, not your subagents'. Without a
+  worktree the badge is not there.
 
 The installation time zone is set with \`JIAN_TIME_ZONE\` in the gateway environment and takes effect
 after a restart; there is no setting for it. For an actual failure, also read \`handling-errors\`;

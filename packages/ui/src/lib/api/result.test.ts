@@ -38,3 +38,14 @@ it('takes an answer with no body as a success when the gateway said 204', async 
     result(Promise.resolve({ response: new Response(null, { status: 200 }) })),
   ).rejects.toBeInstanceOf(GatewayAnswer);
 });
+
+it('names the subagent’s worktree that keeps a worktree from being discarded', async () => {
+  const refused = await answer(409, {
+    error:
+      "brave-otter has a subagent's worktree made from it: merge or remove the subagent's worktree calm-heron first.",
+  }).catch((error: unknown) => error);
+
+  expect((refused as GatewayAnswer).message).toBe(
+    "A subagent's worktree, calm-heron, was made from brave-otter. Ask the agent to merge or remove it first.",
+  );
+});

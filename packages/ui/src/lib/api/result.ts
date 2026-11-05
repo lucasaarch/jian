@@ -34,6 +34,10 @@ const conflicts: Record<string, string> = {
     'A pull request needs an origin on GitHub that the connected GitHub App can reach.',
 };
 
+/** A worktree a subagent made its own from: the panel cannot reach the subagent's, the agent can. */
+const madeFrom =
+  /^([a-z]+-[a-z]+(?:-\d+)?) has a subagent's worktree made from it: merge or remove the subagent's worktree ([a-z]+-[a-z]+(?:-\d+)?) first\.$/;
+
 function message(status: number, detail: Detail | undefined): string {
   if (status === 401) {
     return 'The token is invalid or expired. Sign in again.';
@@ -52,6 +56,10 @@ function message(status: number, detail: Detail | undefined): string {
   if (status === 409) {
     const error = detail?.error ?? '';
     if (conflicts[error]) return conflicts[error];
+    const blocked = madeFrom.exec(error);
+    if (blocked) {
+      return `A subagent's worktree, ${blocked[2]}, was made from ${blocked[1]}. Ask the agent to merge or remove it first.`;
+    }
     if (error.startsWith('This model cannot run ')) {
       return `${error}. Clear or replace that activity's model, then try again.`;
     }

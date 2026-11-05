@@ -180,6 +180,28 @@ describe('worktree routes', () => {
     expect(existsSync(made.path)).toBe(false);
   });
 
+  it('refuses to discard a worktree a subagent made its own from, and says which', async () => {
+    const { app, worktrees, services, profile, chat, url } = await setup();
+    const parent = await worktrees.create(profile.id, chat.id, repo(), 'gateway');
+    const task = await services.store.transaction(profile.id, (tx) =>
+      services.sessions.taskSession(profile.id, 'Part', tx),
+    );
+    const child = await worktrees.create(profile.id, task.id, parent.path, 'gateway');
+
+    const refused = await app.inject({
+      method: 'DELETE',
+      url: url(chat.id, `/${parent.name}`),
+      headers,
+    });
+
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error).toContain(
+      `merge or remove the subagent's worktree ${child.name} first`,
+    );
+    expect(existsSync(parent.path)).toBe(true);
+    expect(existsSync(child.path)).toBe(true);
+  });
+
   it('refuses a caller with no token', async () => {
     const { app, profile, chat, url } = await setup();
     for (const [method, tail] of [
