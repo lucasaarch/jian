@@ -1,11 +1,21 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { afterAll, expect, it } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { sessions } from '../src/storage/schema.js';
+import { insertWorktree } from '../src/worktrees/repository.js';
 import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
@@ -53,7 +63,7 @@ const call = (toolCallId: string, toolName: string, input: unknown) => ({
 });
 
 type Results = Map<string, unknown>;
-type Step = (results: Results) => ReturnType<typeof call>;
+type Step = (results: Results) => ReturnType<typeof call> | Promise<ReturnType<typeof call>>;
 
 /** What each call answered so far, by call id: a value, or the failure the agent was told. */
 function resultsOf(prompt: unknown[]): Results {
@@ -83,7 +93,7 @@ function scripted(steps: Step[], seen: { tools: string[]; results: Results }) {
       seen.tools = options.tools.map((item) => item.name);
       seen.results = resultsOf(options.prompt);
       const step = steps[next++];
-      return (step ? step(seen.results) : stop('Done.')) as ReturnType<typeof stop>;
+      return (step ? await step(seen.results) : stop('Done.')) as ReturnType<typeof stop>;
     },
   });
 }
@@ -117,7 +127,30 @@ async function setup(protection: 'ask' | 'full' = 'full') {
     await new AgentRuntime(services, () => scripted(steps, seen)).execute(profile.id, id);
     return { ...seen, run: await services.runs.run(profile.id, id) };
   };
-  return { services, profile, chat, workOn, turn };
+  let parentRun: string | undefined;
+  /** A subagent of this chat, ready to run: its own task session, the chat as its conversation. */
+  const subagent = async (name: string) => {
+    parentRun ??= (
+      await services.runs.submit(profile.id, chat.id, { text: 'Use helpers', requestKey: 'parent' })
+    ).id;
+    const own = await services.sessions.createSession(profile.id, { title: name });
+    return services.runs.submit(
+      profile.id,
+      own.id,
+      { text: 'Fix the bug', requestKey: name },
+      {
+        subagent: {
+          parentRunId: parentRun,
+          spawnKey: name,
+          inputHash: 'a'.repeat(64),
+          role: 'execute',
+          name,
+          identity: 'Fixes bugs.',
+        },
+      },
+    );
+  };
+  return { services, profile, chat, workOn, turn, subagent };
 }
 
 const pathOf = (value: unknown) => (value as { path: string }).path;
@@ -289,4 +322,137 @@ it('asks before merging into the owner’s folder, and merges nothing while it w
     confirmLabel: 'Merge',
   });
   expect(git(source, 'rev-parse', 'HEAD')).toBe(before);
+});
+
+it('a subagent of a machine conversation sees its parent’s worktrees and is offered no create', async () => {
+  const { services, profile, chat, turn, subagent } = await setup();
+  const machine = randomUUID();
+  await services.store.db
+    .update(sessions)
+    .set({ remoteMachineId: machine })
+    .where(eq(sessions.id, chat.id));
+  await insertWorktree(services.store.db, Date.now, profile.id, chat.id, {
+    name: 'brave-otter',
+    branch: 'jian/brave-otter',
+    base: 'main',
+    source: '/home/ana/site',
+    path: '/home/ana/Jian/worktrees/site-0123abcd/brave-otter',
+    place: machine,
+  });
+  const child = await subagent('Helper');
+
+  const seen = await turn([() => call('list', 'list_worktrees', {})], child.id);
+
+  expect(seen.tools).toEqual(
+    expect.arrayContaining([
+      'list_worktrees',
+      'update_worktree',
+      'merge_worktree',
+      'remove_worktree',
+    ]),
+  );
+  expect(seen.tools).not.toContain('create_worktree');
+  expect(seen.results.get('list')).toMatchObject([{ name: 'brave-otter', ahead: null }]);
+});
+
+it('a run is guarded by a worktree another run of its conversation makes, until it is removed', async () => {
+  const { services, profile, chat, turn, workOn } = await setup();
+  const source = repo('forum');
+  await workOn([source]);
+  let made: { name: string; path: string } | undefined;
+
+  const { results } = await turn([
+    () => call('load', 'load_tools', { groups: ['shell', 'files'] }),
+    () => call('before', 'run_command', { command: 'pwd -P' }),
+    // Run A, of the same conversation, makes a worktree while this run works.
+    async () => {
+      made = await services.worktrees.create(profile.id, chat.id, source, 'gateway');
+      return call('guarded', 'write_file', { path: join(source, 'b.txt'), content: 'two\n' });
+    },
+    () => call('inside', 'run_command', { command: 'pwd -P' }),
+    // Run A removes it.
+    async () => {
+      await services.worktrees.remove(profile.id, chat.id, made?.name as string);
+      return call('after', 'run_command', { command: 'pwd -P' });
+    },
+    () => call('free', 'write_file', { path: join(source, 'b.txt'), content: 'two\n' }),
+  ]);
+  const cwd = (id: string) => (results.get(id) as { stdout: string }).stdout.trim();
+
+  expect(cwd('before')).toBe(source);
+  expect(failed(results.get('guarded'))).toContain(`Write in ${made?.path} instead.`);
+  expect(cwd('inside')).toBe(made?.path);
+  expect(cwd('after')).toBe(source);
+  expect(results.get('free')).toMatchObject({ bytes: 4 });
+});
+
+it('parallel subagents each make a worktree from the conversation’s and merge back into it', async () => {
+  const { services, profile, chat, turn, workOn, subagent } = await setup();
+  const source = repo('game');
+  await workOn([source]);
+  const parent = await services.worktrees.create(profile.id, chat.id, source, 'gateway');
+  const first = await subagent('First');
+  const second = await subagent('Second');
+  const madeIn = (results: Results) =>
+    results.get('create') as { name: string; path: string; base: string; source: string };
+  let secondResults: Results = new Map();
+
+  const { results } = await turn(
+    [
+      () => call('create', 'create_worktree', { folder: parent.path }),
+      () => call('load', 'load_tools', { groups: ['shell', 'files'] }),
+      (seen) =>
+        call('write', 'write_file', { path: join(madeIn(seen).path, 'c.txt'), content: 'c\n' }),
+      () => call('parent', 'write_file', { path: join(parent.path, 'x.txt'), content: 'x\n' }),
+      () => call('source', 'write_file', { path: join(source, 'x.txt'), content: 'x\n' }),
+      () =>
+        call('commit', 'run_command', {
+          command: 'pwd -P && git add -A && git commit -qm "Add c"',
+        }),
+      // The second works beside the first, on the same source, before the first merges.
+      async (seen) => {
+        secondResults = (
+          await turn(
+            [
+              // The owner's folder leads to the conversation's worktree.
+              () => call('create', 'create_worktree', { folder: source }),
+              () => call('load', 'load_tools', { groups: ['files'] }),
+              (mine) =>
+                call('write', 'write_file', {
+                  path: join(madeIn(mine).path, 'd.txt'),
+                  content: 'd\n',
+                }),
+            ],
+            second.id,
+          )
+        ).results;
+        return call('merge', 'merge_worktree', { name: madeIn(seen).name });
+      },
+    ],
+    first.id,
+  );
+  const one = madeIn(results);
+  const two = madeIn(secondResults);
+
+  for (const made of [one, two]) {
+    expect(made).toMatchObject({ base: parent.branch, source: realpathSync(parent.path) });
+  }
+  expect(one.name).not.toBe(two.name);
+  expect(results.get('write')).toMatchObject({ bytes: 2 });
+  expect(secondResults.get('write')).toMatchObject({ bytes: 2 });
+  for (const id of ['parent', 'source']) {
+    expect(failed(results.get(id))).toContain(`Write in ${one.path} instead.`);
+  }
+  expect((results.get('commit') as { stdout: string }).stdout.trim()).toBe(one.path);
+  expect(results.get('merge')).toMatchObject({ sha: expect.any(String) });
+
+  // The first's work is in the conversation's worktree now, not in the owner's folder.
+  expect(readFileSync(join(parent.path, 'c.txt'), 'utf8')).toBe('c\n');
+  expect(existsSync(join(source, 'c.txt'))).toBe(false);
+  expect(existsSync(one.path)).toBe(false);
+  expect(readFileSync(join(two.path, 'd.txt'), 'utf8')).toBe('d\n');
+  expect(existsSync(join(parent.path, 'd.txt'))).toBe(false);
+  expect((await services.worktrees.list(profile.id, chat.id)).map((item) => item.name)).toEqual([
+    parent.name,
+  ]);
 });

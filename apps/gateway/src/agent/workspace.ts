@@ -115,6 +115,21 @@ export const withFolders = <T>(
 ): T => openFolders.run({ folders, guarded }, work);
 
 /**
+ * Where a path in a guarded source leads: the same place in its worktree, followed on while that
+ * is itself a guarded source, as a subagent's worktree made from the conversation's is. Each step
+ * moves to another guard's worktree, so it ends within as many steps as there are guards.
+ */
+function through(path: string, guarded: readonly GuardedSource[]): string {
+  let current = path;
+  for (let step = 0; step < guarded.length; step += 1) {
+    const held = guarded.find(({ source }) => inside(current, source));
+    if (!held) break;
+    current = join(held.worktree, relative(held.source, current));
+  }
+  return current;
+}
+
+/**
  * The folders within reach now; a command starts in the first. A folder in a guarded source is
  * the same place in its worktree, so commands and relative paths start where the work is. A
  * folder that holds a source keeps its place: the worktree is not under it.
@@ -122,10 +137,7 @@ export const withFolders = <T>(
 export const reachableFolders = (): readonly string[] => {
   const scope = openFolders.getStore();
   if (!scope) return [];
-  return scope.folders.map((folder) => {
-    const held = scope.guarded.find(({ source }) => inside(folder, source));
-    return held ? join(held.worktree, relative(held.source, folder)) : folder;
-  });
+  return scope.folders.map((folder) => through(folder, scope.guarded));
 };
 
 /** What a chat's folders really are, since the checks compare real paths. */
@@ -155,16 +167,16 @@ export async function jianData(): Promise<{ closed: string[]; open: string } | u
 
 async function assertWithin(real: string, access: Access, asked: string) {
   // Before the desktop's wide reach below, which would otherwise let the write through.
-  const held =
-    access === 'write' &&
-    openFolders.getStore()?.guarded.find(({ source }) => inside(real, source));
+  const guarded = openFolders.getStore()?.guarded ?? [];
+  const held = access === 'write' && guarded.find(({ source }) => inside(real, source));
   if (held) {
+    const worktree = through(held.worktree, guarded);
     // A hint keeps the agent's copy of a failure from being cut before the worktree is named.
     throw Object.assign(
       new Error(
-        `${asked} is in ${held.source}, which this conversation works on in its worktree. Write in ${held.worktree} instead.`,
+        `${asked} is in ${held.source}, which this conversation works on in its worktree. Write in ${worktree} instead.`,
       ),
-      { hint: `Write in ${held.worktree} instead.` },
+      { hint: `Write in ${worktree} instead.` },
     );
   }
 

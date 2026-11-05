@@ -161,6 +161,16 @@ export class Worktrees {
     return kept;
   }
 
+  /**
+   * The same, as recorded, without asking git: one indexed query, cheap enough before every tool
+   * call, so a run sees what another run of its conversation made or removed a moment ago.
+   */
+  async recordedOnGateway(profileId: string, sessionId: string): Promise<WorktreeRecord[]> {
+    return (await activeWorktrees(this.store.db, profileId, sessionId)).filter(
+      (record) => record.place === 'gateway',
+    );
+  }
+
   async find(profileId: string, sessionId: string, name: string): Promise<WorktreeRecord> {
     const found = (await activeWorktrees(this.store.db, profileId, sessionId)).find(
       (item) => item.name === name,

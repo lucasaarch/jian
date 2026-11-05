@@ -584,17 +584,22 @@ export class AgentRuntime {
               session.remoteMachineId,
             );
       // Worktrees are of what the conversation works on: its folders, or the machine it targets.
-      // A subagent's are its parent's, so it works where the parent does.
+      // A subagent's are its task session's, made from its parent's, which it also sees.
       const worktrees =
         !learning &&
         this.services.worktrees &&
         (conversation.folders?.length || conversation.cloneInto || conversation.remoteMachineId)
           ? {
               service: this.services.worktrees,
-              scope: new RunWorktrees(this.services.worktrees, profileId, conversation.id),
+              scope: new RunWorktrees(
+                this.services.worktrees,
+                profileId,
+                run.sessionId,
+                conversation.id,
+              ),
             }
           : undefined;
-      await worktrees?.scope.refresh();
+      await worktrees?.scope.start();
       const checkouts =
         session.projectIds?.length && !session.remoteMachineId
           ? await sessionCheckouts(profileId, session.id)
@@ -681,7 +686,8 @@ export class AgentRuntime {
           ? worktreeTools({
               worktrees: worktrees.service,
               profileId,
-              sessionId: conversation.id,
+              // This run's own target, not the conversation's: a worktree is made where this
+              // run's commands reach, and a subagent's task session reaches only the gateway.
               place: session.remoteMachineId ?? 'gateway',
               folders,
               scope: worktrees.scope,
@@ -925,7 +931,8 @@ export class AgentRuntime {
               });
 
               try {
-                // Read per call: a worktree tool earlier in this run may have changed them.
+                // Read per call: this run or another of its conversation may have changed them.
+                await worktrees?.scope.reload();
                 const raw = await withFolders(
                   folders,
                   () => execute(input, options),

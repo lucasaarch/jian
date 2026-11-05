@@ -1,41 +1,80 @@
-import { sep } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { worktreeNameSchema } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
-import type { Worktrees } from '../worktrees/service.js';
+import type { WorktreeRecord, Worktrees } from '../worktrees/service.js';
 import { type GuardedSource, realFolders } from './workspace.js';
 
 export type WorktreeService = Pick<
   Worktrees,
-  'create' | 'list' | 'update' | 'merge' | 'remove' | 'onGateway'
+  'create' | 'list' | 'find' | 'update' | 'merge' | 'remove' | 'onGateway' | 'recordedOnGateway'
 >;
 
+type Records = (profileId: string, sessionId: string) => Promise<WorktreeRecord[]>;
+
+/** Records as the checks compare them: real paths, as the folders' are. */
+const guardsOf = (records: WorktreeRecord[]) =>
+  Promise.all(
+    records.map(async (record) => {
+      const [source, worktree] = await realFolders([record.source, record.path]);
+      return { source: source as string, worktree: worktree as string };
+    }),
+  );
+
 /**
- * The sources a run's file tools guard, read once when the run starts and again after any worktree
- * tool returns, so a call never works from a worktree that was merged or removed a step ago.
+ * The sources a run's file tools guard. Checked against git when the run starts, then read from
+ * the records before every tool call: another run of the conversation (the parent, a subagent)
+ * may make or remove a worktree while this one works, and a stale guard would let a write through
+ * or send it to a folder that is gone.
+ *
+ * A subagent's own worktrees are its task session's, made from the conversation's: it guards the
+ * conversation's sources (`parent`) and, through its own, the conversation's worktrees too.
  */
 export class RunWorktrees {
-  guarded: readonly GuardedSource[] = [];
+  parent: readonly GuardedSource[] = [];
+  own: readonly GuardedSource[] = [];
 
   constructor(
-    private readonly worktrees: Pick<WorktreeService, 'onGateway'>,
+    private readonly worktrees: Pick<WorktreeService, 'onGateway' | 'recordedOnGateway'>,
     private readonly profileId: string,
-    private readonly sessionId: string,
+    /** This run's session: a subagent's task session, or the conversation itself. */
+    readonly sessionId: string,
+    /** The conversation: for a subagent, the one that started it. */
+    readonly conversationId: string,
   ) {}
 
-  async refresh(): Promise<void> {
+  get subagent() {
+    return this.sessionId !== this.conversationId;
+  }
+
+  /** In the order `reachableFolders` follows: the conversation's first, then this run's. */
+  get guarded(): readonly GuardedSource[] {
+    return [...this.parent, ...this.own];
+  }
+
+  /** At the start of the run, with git asked whether each folder is still there. */
+  start(): Promise<void> {
+    return this.read((profileId, sessionId) => this.worktrees.onGateway(profileId, sessionId));
+  }
+
+  /** Before each tool call, from the records alone. */
+  reload(): Promise<void> {
+    return this.read((profileId, sessionId) =>
+      this.worktrees.recordedOnGateway(profileId, sessionId),
+    );
+  }
+
+  private async read(records: Records) {
     try {
-      const records = await this.worktrees.onGateway(this.profileId, this.sessionId);
-      // The checks compare real paths, as the folders' are.
-      this.guarded = await Promise.all(
-        records.map(async (record) => {
-          const [source, worktree] = await realFolders([record.source, record.path]);
-          return { source: source as string, worktree: worktree as string };
-        }),
-      );
+      const own = await guardsOf(await records(this.profileId, this.sessionId));
+      const parent = this.subagent
+        ? await guardsOf(await records(this.profileId, this.conversationId))
+        : [];
+      this.own = own;
+      this.parent = parent;
     } catch (error) {
-      // What was guarded stays guarded; a run that cannot read them starts with none.
+      // What was guarded stays guarded, and the next call reads again.
       console.error(
         'jian: the worktrees of a conversation could not be read',
         error instanceof Error ? error.message : error,
@@ -54,67 +93,93 @@ const absolute = z
 const inside = (path: string, root: string) =>
   path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`);
 
+const isNotFound = (error: unknown) => error instanceof GatewayError && error.statusCode === 404;
+
 /**
- * The agent's hands on its conversation's worktrees. `sessionId` is the conversation's, which for a
- * subagent is the one that started it: a subagent works in its parent's worktrees. On the gateway a
- * worktree is made only of a repository inside the conversation's folders (`folders`, real paths);
- * a conversation on a machine already runs any command there, so any of its paths will do.
+ * The agent's hands on its worktrees. A run makes worktrees in its own session (`scope.sessionId`)
+ * and sees the conversation's too: for a subagent, its task session's and its parent's, so
+ * parallel subagents each make their own from the conversation's worktree and merge back into it.
+ * On the gateway a worktree is made only of a repository inside the conversation's folders
+ * (`folders`, real paths), or for a subagent of the conversation's worktree; a conversation on a
+ * machine already runs any command there, so any of its paths will do.
+ *
+ * `place` is where this run's own tools reach, not where the conversation is: a subagent's task
+ * session targets no machine, so its commands run here, and a worktree it made on the machine
+ * would be one it could not work in. The other tools act on each record at its own place.
  */
 export function worktreeTools({
   worktrees,
   profileId,
-  sessionId,
   place,
   folders,
   scope,
 }: {
   worktrees: WorktreeService;
   profileId: string;
-  sessionId: string;
   place: 'gateway' | string;
   folders: readonly string[];
   scope: RunWorktrees;
 }): ToolSet {
-  const changing = async <T>(work: () => Promise<T>): Promise<T> => {
-    try {
-      return await work();
-    } finally {
-      await scope.refresh();
-    }
-  };
+  const { sessionId, conversationId, subagent } = scope;
+  const fromParent = scope.parent.map(({ worktree }) => worktree);
   const where =
     place === 'gateway'
-      ? folders.length
-        ? `The folder must be inside this conversation's folders: ${folders.join(', ')}.`
-        : 'This conversation has no folders on this gateway to make one from.'
+      ? `The folder must be inside ${[
+          ...(folders.length ? [`this conversation's folders: ${folders.join(', ')}`] : []),
+          ...(fromParent.length ? [`the conversation's worktrees: ${fromParent.join(', ')}`] : []),
+        ].join(', or ')}.`
       : 'Give the absolute path of the repository on the machine this conversation works on.';
+  /** The session that holds `name`: this run's own first, then the conversation's. */
+  const holder = async (name: string) => {
+    if (!subagent) return sessionId;
+    return worktrees.find(profileId, sessionId, name).then(
+      () => sessionId,
+      (error: unknown) => {
+        if (isNotFound(error)) return conversationId;
+        throw error;
+      },
+    );
+  };
 
-  return {
+  const tools: ToolSet = {
     create_worktree: tool({
-      description: `Make this conversation its own checkout of a repository: a folder outside it and a branch jian/<name> from the branch the folder has checked out, so you work without touching the owner's checkout. While it exists, the file tools refuse writes in the source and commands start in the worktree. ${where} Refused when the folder is not a git repository (give the repository's folder), on a detached HEAD (ask the owner to check out a branch), or when this conversation already has one for that repository (use it, or remove it first).`,
+      description: `Make your own checkout of a repository: a folder outside it and a branch jian/<name> from the branch the folder has checked out, so you work without touching the owner's checkout. While it exists, the file tools refuse writes in the source and commands start in the worktree. ${where}${
+        subagent
+          ? " As a subagent, you make your own worktree from the conversation's worktree (its path, or the source folder, leads there) and merge it back into that worktree with merge_worktree."
+          : ''
+      } Refused when the folder is not a git repository (give the repository's folder), on a detached HEAD (ask the owner to check out a branch), or when you already have one for that repository (use it, or remove it first).`,
       inputSchema: z.object({
         folder: absolute.describe('The repository, or a folder inside it.'),
       }),
-      execute: ({ folder }) =>
-        changing(async () => {
-          if (place === 'gateway') {
-            const [real] = await realFolders([folder]);
-            if (!folders.some((root) => inside(real as string, root))) {
-              // A hint keeps the agent's copy of the failure whole, folders and all.
-              throw Object.assign(
-                new GatewayError(403, `${folder} is not in this conversation's folders.`),
-                { hint: where },
-              );
-            }
+      execute: async ({ folder }) => {
+        let from = folder;
+        if (place === 'gateway') {
+          let [real] = (await realFolders([folder])) as [string];
+          // A subagent's worktree comes from the conversation's, never from the owner's checkout.
+          const held = scope.parent.find(({ source }) => inside(real, source));
+          if (held) real = join(held.worktree, relative(held.source, real));
+          const allowed = [...folders, ...scope.parent.map(({ worktree }) => worktree)];
+          if (!allowed.some((root) => inside(real, root))) {
+            // A hint keeps the agent's copy of the failure whole, folders and all.
+            throw Object.assign(
+              new GatewayError(403, `${folder} is not in this conversation's folders.`),
+              { hint: where },
+            );
           }
-          return worktrees.create(profileId, sessionId, folder, place);
-        }),
+          from = real;
+        }
+        return worktrees.create(profileId, sessionId, from, place);
+      },
     }),
     list_worktrees: tool({
-      description:
-        "This conversation's worktrees: name, branch, base, source and path, with commits ahead of and behind the base and uncommitted files. A count is null when its machine could not be read; try again once it is online.",
+      description: `${
+        subagent ? "Your worktrees, then the conversation's" : "This conversation's worktrees"
+      }: name, branch, base, source and path, with commits ahead of and behind the base and uncommitted files. A count is null when its machine could not be read; try again once it is online.`,
       inputSchema: z.object({}),
-      execute: () => changing(() => worktrees.list(profileId, sessionId)),
+      execute: async () => [
+        ...(await worktrees.list(profileId, sessionId)),
+        ...(subagent ? await worktrees.list(profileId, conversationId) : []),
+      ],
     }),
     update_worktree: tool({
       description:
@@ -123,14 +188,15 @@ export function worktreeTools({
         name: worktreeNameSchema,
         strategy: z.enum(['merge', 'rebase']).default('merge'),
       }),
-      execute: ({ name, strategy }) =>
-        changing(() => worktrees.update(profileId, sessionId, name, strategy)),
+      execute: async ({ name, strategy }) =>
+        worktrees.update(profileId, await holder(name), name, strategy),
     }),
     merge_worktree: tool({
-      description:
-        "Merge a worktree's branch into the folder it came from, then remove the worktree and the merged branch. Only when the owner asked. Refused with uncommitted changes in the worktree (commit them first), when its branch lacks the latest base (run update_worktree first), or when the source folder has uncommitted changes or another branch checked out (ask the owner to commit, stash or check out the base). The result says what was left behind when the cleanup after a merge did not finish.",
+      description: `Merge a worktree's branch into the folder it came from, then remove the worktree and the merged branch. Only when the owner asked${
+        subagent ? ', or, for a worktree of your own, when your work in it is done' : ''
+      }. Refused with uncommitted changes in the worktree (commit them first), when its branch lacks the latest base (run update_worktree first), or when the source folder has uncommitted changes or another branch checked out (ask the owner to commit, stash or check out the base). The result says what was left behind when the cleanup after a merge did not finish.`,
       inputSchema: z.object({ name: worktreeNameSchema }),
-      execute: ({ name }) => changing(() => worktrees.merge(profileId, sessionId, name)),
+      execute: async ({ name }) => worktrees.merge(profileId, await holder(name), name),
     }),
     remove_worktree: tool({
       description:
@@ -148,13 +214,16 @@ export function worktreeTools({
             'Also delete a branch with commits not in the base, which are lost. Only when the owner asked.',
           ),
       }),
-      execute: ({ name, discard, deleteBranch }) =>
-        changing(() =>
-          worktrees.remove(profileId, sessionId, name, {
-            ...(discard !== undefined ? { discard } : {}),
-            ...(deleteBranch !== undefined ? { deleteBranch } : {}),
-          }),
-        ),
+      execute: async ({ name, discard, deleteBranch }) =>
+        worktrees.remove(profileId, await holder(name), name, {
+          ...(discard !== undefined ? { discard } : {}),
+          ...(deleteBranch !== undefined ? { deleteBranch } : {}),
+        }),
     }),
   };
+  // On the gateway a worktree needs a folder to come from; without one the tool could only refuse.
+  if (place === 'gateway' && folders.length === 0 && fromParent.length === 0) {
+    delete tools.create_worktree;
+  }
+  return tools;
 }
