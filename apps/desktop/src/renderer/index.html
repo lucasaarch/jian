@@ -3,10 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- The panel talks only to its own origin, which the main process forwards to gateways. -->
+    <!-- The panel talks only to its own origin, which the main process forwards to gateways.
+         The viewer opens a PDF from a blob the panel creates, in a frame the browser's reader
+         draws as an embedded object: frame-src and object-src accept those blobs, or it is blank. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' ws://localhost:*"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' ws://localhost:*; frame-src 'self' blob:; object-src 'self' blob:"
     />
     <title>Jian</title>
   </head>
