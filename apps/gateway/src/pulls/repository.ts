@@ -49,6 +49,32 @@ export async function dueWatchers(db: Queryable, now: Date, limit: number) {
 }
 
 /**
+ * Brings the next look at a pull request forward to `now`, never later than it was: Jian merged
+ * it, and its conversation should hear so at the next tick rather than a minute on. The look
+ * itself tells and ends the watch, as for a merge made anywhere else.
+ */
+export async function hastenWatcher(
+  db: Queryable,
+  profileId: string,
+  pull: { owner: string; repo: string; number: number },
+  now: Date,
+) {
+  await db
+    .update(pullWatchers)
+    .set({ nextPollAt: sql`least(${pullWatchers.nextPollAt}, ${now.toISOString()}::timestamptz)` })
+    .where(
+      and(
+        eq(pullWatchers.profileId, profileId),
+        // As the unique index reads them: GitHub ignores the case of owners and repositories.
+        sql`lower(${pullWatchers.owner}) = lower(${pull.owner})`,
+        sql`lower(${pullWatchers.repo}) = lower(${pull.repo})`,
+        eq(pullWatchers.number, pull.number),
+        eq(pullWatchers.status, 'watching'),
+      ),
+    );
+}
+
+/**
  * Takes a watcher's next look, moving it to `until` so no other worker takes it meanwhile.
  * Undefined when another worker took it first: its version moved.
  */

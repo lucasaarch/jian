@@ -13,6 +13,7 @@ import { fileLines, patchDiff } from '../agent/diff.js';
 import type { Clock } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { hastenWatcher } from '../pulls/repository.js';
 import type { Store } from '../storage/database.js';
 import type { GitHubIntegrations } from './github.js';
 
@@ -521,13 +522,14 @@ export class GitHubItems {
 
       // The merge already happened on GitHub; a feed that cannot take the event does not undo it.
       await this.store
-        .transaction(profileId, (tx) =>
-          recordEvent(tx, this.clock, profileId, 'github.pull.merged', {
+        .transaction(profileId, async (tx) => {
+          await recordEvent(tx, this.clock, profileId, 'github.pull.merged', {
             ...ref,
             method: input.method,
             sha: merged.sha,
-          }),
-        )
+          });
+          await hastenWatcher(tx, profileId, ref, new Date(this.clock()));
+        })
         .catch((error: unknown) => log('The merge event was not recorded.', error));
     }
 

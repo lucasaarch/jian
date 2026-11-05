@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { patchDiff } from '../src/agent/diff.js';
 import { createApp } from '../src/app.js';
 import { GitHubIntegrations } from '../src/integrations/github.js';
-import { githubInstallations } from '../src/storage/schema.js';
+import { insertWatcher } from '../src/pulls/repository.js';
+import { githubInstallations, pullWatchers } from '../src/storage/schema.js';
 import { events } from './helpers/rows.js';
 import { testServices } from './helpers/services.js';
 
@@ -613,6 +614,53 @@ it('merges with the method and the head the owner saw, and records it on the age
   );
   expect(recorded).toHaveLength(1);
   expect(recorded[0]?.data).toMatchObject({ owner: 'octo-example', number: 7, method: 'squash' });
+});
+
+it('has the pull request’s watcher look at it next, so its conversation hears of the merge', async () => {
+  const { app, services } = await gateway({
+    [`PUT ${base}/pulls/7/merge`]: {
+      body: { sha: 'c'.repeat(40), merged: true, message: 'Pull Request successfully merged' },
+    },
+  });
+  const profile = await services.profiles.createProfile({
+    name: 'Atlas',
+    instructions: 'Help.',
+    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  });
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const later = new Date(Date.now() + 10 * 60_000);
+  const watch = (owner: string, number: number) =>
+    insertWatcher(services.store.db, {
+      id: randomUUID(),
+      profileId: profile.id,
+      sessionId: session.id,
+      owner,
+      repo: 'site',
+      number,
+      status: 'watching',
+      nextPollAt: later,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  // GitHub reads owners in any case; the watcher was opened with the one the agent wrote.
+  await watch('Octo-Example', 7);
+  await watch('octo-example', 8);
+
+  await app.inject({
+    method: 'POST',
+    url: '/v1/integrations/github/pulls/octo-example/site/7/merge',
+    headers,
+    payload: { method: 'squash', expectedHeadSha: head, profileId: profile.id },
+  });
+
+  const due = new Map(
+    (await services.store.db.select().from(pullWatchers)).map((row) => [
+      row.number,
+      row.nextPollAt.getTime(),
+    ]),
+  );
+  expect(due.get(7)).toBeLessThanOrEqual(Date.now());
+  expect(due.get(8)).toBe(later.getTime());
 });
 
 it('reads a pull request it merged as merged while GitHub still answers open', async () => {
