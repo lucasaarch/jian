@@ -273,12 +273,14 @@ export const sessionCalls = (client: Client) => ({
   fixGithubConflicts: (
     profileId: string,
     sessionId: string,
-    body: { owner: string; repo: string; number: number },
+    { owner, repo, number }: { owner: string; repo: string; number: number },
   ) =>
     result(
+      // Picked by name: callers hand over a whole pull request, and the route refuses any
+      // property beyond these three.
       client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/github/fix-conflicts', {
         params: { path: { profileId, sessionId } },
-        body,
+        body: { owner, repo, number },
       }),
     ),
   answerRun: (profileId: string, runId: string, text: string) =>
