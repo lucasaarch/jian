@@ -35,7 +35,13 @@ export type WatchGitHub = {
 };
 
 type Deliveries = {
-  deliverRun(profileId: string, sessionId: string, runId: string): Promise<void>;
+  /** Called inside the look's transaction, which it must be given: see `tell`. */
+  deliverRun(
+    profileId: string,
+    sessionId: string,
+    runId: string,
+    transaction: Store['db'],
+  ): Promise<void>;
 };
 
 /** A tool's answer in a step, as the runtime records it. */
@@ -172,6 +178,16 @@ export class PullWatchers {
         : 'closed'
       : undefined;
 
+    // Judged before the transaction: Jev reads its settings and counts its use on the store's own
+    // connection, and on a single-connection store (the desktop app's) that read waits for the
+    // transaction, which waits for it, and every other request waits behind both.
+    const note = changes.length
+      ? await this.marked(
+          changeNote(pull, changes, { url, ...(endedBy ? { ended: endedBy } : {}) }),
+          changes,
+        )
+      : undefined;
+
     await this.store.transaction(watcher.profileId, async (tx) => {
       const saved = await saveWatcher(
         tx,
@@ -184,11 +200,7 @@ export class PullWatchers {
         now,
       );
       // Another worker looked since: what it found is the one told.
-      if (!saved || !changes.length) return;
-      const note = await this.marked(
-        changeNote(pull, changes, { url, ...(endedBy ? { ended: endedBy } : {}) }),
-        changes,
-      );
+      if (!saved || note === undefined) return;
       await this.tell(tx, watcher, note, changes);
     });
   }
@@ -259,7 +271,8 @@ export class PullWatchers {
       { text: note, requestKey: `pull-watch:${watcher.id}:${key}` },
       { transaction: tx, purpose: 'resume' },
     );
-    await this.deliveries?.deliverRun(watcher.profileId, watcher.sessionId, run.id);
+    // In the transaction: on the desktop app's one connection a read outside it waits for it.
+    await this.deliveries?.deliverRun(watcher.profileId, watcher.sessionId, run.id, tx);
   }
 
   /** What others wrote may address the agent: a note that does gets the warning on top. */
