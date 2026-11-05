@@ -198,7 +198,7 @@ importers:
         version: 8.12.3
       web-push:
         specifier: 3.6.7
-        version: 3.6.7
+        version: 3.6.7(supports-color@10.2.2)
       zod:
         specifier: '>=4.6.6'
         version: 4.6.7
@@ -383,6 +383,9 @@ importers:
       qrcode.react:
         specifier: ^4.2.0
         version: 4.2.0(react@19.3.0)
+      simple-icons:
+        specifier: 16.36.0
+        version: 16.36.0
       sonner:
         specifier: ^2.0.8
         version: 2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -4072,6 +4075,10 @@ packages:
   signal-exit@4.1.0:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
+
+  simple-icons@16.36.0:
+    resolution: {integrity: sha512-+VNPPkqSOLidFeSgBKUWX4n50WPpDC09hav+BgS26anIF1oQOlGBb8LvwGR+6fYRjo+B6CiKzNBceMPkSVXANQ==}
+    engines: {node: '>=0.12.18'}
 
   simple-update-notifier@2.0.0:
     resolution: {integrity: sha512-a2B9Y0KlNXl9u/vsW6sTIu9vGEpfKu2wRV6l1H3XEas/0gUIzGzBoP/IouTcUQbm9JWZLH3COxyn03TYlFax6w==}
@@ -8012,6 +8019,8 @@ snapshots:
   signal-exit@4.1.0:
     optional: true
 
+  simple-icons@16.36.0: {}
+
   simple-update-notifier@2.0.0:
     dependencies:
       semver: 7.8.5
@@ -8361,7 +8370,7 @@ snapshots:
 
   walk-up-path@4.0.0: {}
 
-  web-push@3.6.7:
+  web-push@3.6.7(supports-color@10.2.2):
     dependencies:
       asn1.js: 5.4.1
       http_ece: 1.2.0

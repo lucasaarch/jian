@@ -14,14 +14,9 @@ import { queries } from '../../lib/query/profile';
 import { matchesQuery } from '../../lib/search';
 import { useActions } from '../../lib/workspace';
 import { GITHUB_DESCRIPTION, GitHubCard, githubOffered } from './github-card';
+import { McpAppCard } from './mcp-app-card';
+import { CATEGORIES, type Category, MCP_APPS } from './mcp-apps';
 import { X_DESCRIPTION, XCard, xOffered } from './x-card';
-
-/** What an app is filed under, in the category list; the order here is the list's. */
-const CATEGORIES = {
-  development: 'Development',
-  social: 'Social',
-} as const;
-type Category = keyof typeof CATEGORIES;
 
 type App = {
   id: string;
@@ -48,7 +43,7 @@ export function AppsWaiting() {
 
 /**
  * The apps the gateway connects with the owner's own accounts, shared by every agent, a card each,
- * among those this gateway can do. A search over their names, categories and what they give, and
+ * among those this gateway can do: GitHub and X are its own, the rest a service's MCP server. A search over their names, categories and what they give, and
  * a category list, narrow the cards; the list offers only categories that hold an app.
  */
 export function AppsPage() {
@@ -75,14 +70,13 @@ export function AppsPage() {
       offered: xOffered(x.data),
       card: <XCard api={api} />,
     },
+    // A service's own MCP server under a card, which every gateway can connect.
+    ...MCP_APPS.map((app) => ({ ...app, offered: true, card: <McpAppCard app={app} /> })),
   ];
   const apps = every.filter((app) => app.offered);
 
-  if (!apps.length) {
-    // Until every app has answered, one may still turn out to be offered.
-    if (github.isPending || x.isPending) return <AppsWaiting />;
-    return <p className="px-1 text-sm text-muted">This gateway offers no apps to connect.</p>;
-  }
+  // Until GitHub and X have answered, their cards would land in the grid after the rest.
+  if (github.isPending || x.isPending) return <AppsWaiting />;
 
   const categories: FieldOption[] = [
     { value: ALL, label: 'All categories' },

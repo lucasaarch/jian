@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act } from 'react';
+import { act, Suspense } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { GatewayApi } from '../../lib/api';
@@ -11,11 +11,31 @@ vi.mock('../../platform/navigation', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
+const api = vi.hoisted(() => ({
+  replaceMcpServers: vi.fn(async (servers: unknown[]) => servers),
+  checkMcpServer: vi.fn(async (name: string) => ({
+    name,
+    reachable: true,
+    tools: [],
+    checkedAt: '2026-11-05T00:00:00.000Z',
+  })),
+}));
 vi.mock('../../lib/workspace', () => ({
-  useActions: () => ({ api: {} as GatewayApi, mutate: async () => true, busy: false }),
+  useActions: () => ({
+    api: api as unknown as GatewayApi,
+    mutate: async (run: () => Promise<unknown>) => {
+      await run();
+      return true;
+    },
+    busy: false,
+  }),
   notifyError: vi.fn(),
 }));
-const read = vi.hoisted(() => ({ githubIntegration: vi.fn(), xIntegration: vi.fn() }));
+const read = vi.hoisted(() => ({
+  githubIntegration: vi.fn(),
+  xIntegration: vi.fn(),
+  mcpServers: vi.fn(),
+}));
 vi.mock('../../lib/query/client', () => ({ panelApi: () => read }));
 
 const githubCallback = 'https://jian.example.test/v1/integrations/github/callback';
@@ -42,6 +62,9 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   read.githubIntegration.mockReset();
   read.xIntegration.mockReset();
+  read.mcpServers.mockReset().mockResolvedValue([]);
+  api.replaceMcpServers.mockClear();
+  vi.spyOn(window, 'open').mockReturnValue(null);
 });
 
 afterEach(async () => {
@@ -57,27 +80,69 @@ async function show() {
   await act(async () =>
     root?.render(
       <QueryClientProvider client={client}>
-        <AppsPage />
+        <Suspense fallback={<p aria-busy="true">Loading</p>}>
+          <AppsPage />
+        </Suspense>
       </QueryClientProvider>,
     ),
   );
   await vi.waitFor(() => expect(host.querySelector('[aria-busy="true"]')).toBeNull());
 }
 
-const titles = () => [...host.querySelectorAll('article h3')].map((title) => title.textContent);
+const every = () => [...host.querySelectorAll('article h3')].map((title) => title.textContent);
+/** The gateway's own apps, apart from the catalog every gateway shows. */
+const titles = () => every().filter((title) => title === 'GitHub' || title === 'X');
 const button = (name: string) =>
   [...host.querySelectorAll('button')].find((item) => item.getAttribute('aria-label') === name);
 
-it('says there is nothing to connect on a gateway that offers no app', async () => {
+it('offers the MCP apps on a gateway that offers neither GitHub nor X', async () => {
   read.githubIntegration.mockResolvedValue({ configured: false, accounts: [] });
   read.xIntegration.mockRejectedValue(new Error('Not found'));
 
   await show();
 
-  await vi.waitFor(() =>
-    expect(host.textContent).toContain('This gateway offers no apps to connect.'),
-  );
+  await vi.waitFor(() => expect(button('Connect Linear')).toBeDefined());
   expect(titles()).toEqual([]);
+});
+
+it('connects an MCP app as an OAuth server, beside the servers already there', async () => {
+  read.githubIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  read.xIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  // A server of the owner's own already holds the app's name: Connect must not replace it.
+  const theirs = { name: 'linear', transport: 'http', url: 'https://tickets.example.test/mcp' };
+  read.mcpServers.mockResolvedValue([theirs]);
+
+  await show();
+  const connect = await vi.waitFor(() => {
+    const found = button('Connect Linear');
+    if (!found) throw new Error('no Connect');
+    return found;
+  });
+  await act(async () => connect.click());
+
+  expect(api.replaceMcpServers).toHaveBeenCalledWith([
+    theirs,
+    expect.objectContaining({
+      name: 'linear_2',
+      transport: 'http',
+      url: 'https://mcp.linear.app/mcp',
+      auth: 'oauth',
+    }),
+  ]);
+});
+
+it("counts a server added by hand at an app's address as that app", async () => {
+  read.githubIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  read.xIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  read.mcpServers.mockResolvedValue([
+    { name: 'docs', transport: 'http', url: 'https://mcp.notion.com/mcp/', auth: 'oauth' },
+  ]);
+
+  await show();
+
+  await vi.waitFor(() => expect(button('Remove Notion')).toBeDefined());
+  expect(button('Connect Notion')).toBeUndefined();
+  await vi.waitFor(() => expect(host.textContent).toContain('Connected'));
 });
 
 it('shows a card only for each app the gateway offers', async () => {

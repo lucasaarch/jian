@@ -28,8 +28,8 @@ it.
   which server, and that the owner can test it under Settings → MCP servers. A server that runs
   as a command and signs in through a browser never answers on a server gateway: it has no browser
   there, and the owner has to use its HTTP address with sign-in instead.
-- **It needs sign-in** — the owner signs in from Settings → MCP servers; you cannot do
-  it for them.
+- **It needs sign-in** — the owner signs in from Settings → MCP servers, or with Sign in on
+  its card under Settings → Apps; you cannot do it for them.
 - **The client was already closed** — nothing was sent. The gateway tears the session down,
   reconnects a few times, and retries the call. If that still fails, you get a normal tool
   error. Keep going; do not treat it as an unknown write.
