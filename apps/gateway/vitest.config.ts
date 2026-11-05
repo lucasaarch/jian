@@ -14,6 +14,7 @@ export default defineConfig({
     minWorkers: 1,
     testTimeout: 20_000,
     hookTimeout: 30_000,
+    setupFiles: ['./tests/setup.ts'],
     // A run writes keys to the agents' directory and prunes them from it. Without this, a test file
     // naming no root of its own would do that in `~/workspaces`, a developer's real gateway's default.
     env: { JIAN_WORKSPACES: mkdtempSync(join(tmpdir(), 'jian-test-workspaces-')) },

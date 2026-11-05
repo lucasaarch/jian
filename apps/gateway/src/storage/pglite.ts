@@ -5,6 +5,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator';
 import type { Database, Queryable, Store } from './database.js';
 import { migrationsFolder } from './database.js';
 import * as schema from './schema.js';
+import { SingleConnection } from './single-connection.js';
 
 /**
  * PostgreSQL compiled to run inside this process, its data in one directory: the store of a
@@ -13,15 +14,21 @@ import * as schema from './schema.js';
  *
  * One connection serves everything, so transactions take turns. A transaction must not wait on
  * a query made outside it: that query would wait for the transaction, and neither would end.
+ * `SingleConnection` refuses such a query instead, and logs where it came from.
  */
 export class PGliteStore implements Store {
   private readonly client: PGlite;
   private readonly drizzled: ReturnType<typeof drizzle<typeof schema>>;
   private readonly waiters = new Map<string, Set<() => void>>();
   private readonly listening: Promise<unknown>;
+  private readonly connection: SingleConnection;
   readonly db: Database;
 
   private constructor(client: PGlite) {
+    // To stderr, which the desktop app keeps in local-gateway.log: the stack names the caller.
+    this.connection = new SingleConnection(client, (error) =>
+      console.error(`jian: ${error.stack}`),
+    );
     this.client = client;
     this.drizzled = drizzle(client, { schema, casing: 'snake_case' });
     this.db = this.drizzled as unknown as Database;
@@ -43,10 +50,11 @@ export class PGliteStore implements Store {
   }
 
   async transaction<T>(profileId: string, body: (tx: Queryable) => Promise<T>): Promise<T> {
+    const opened = this.connection.opening();
     return this.drizzled.transaction(async (tx) => {
       // Taken for parity with the server: code that relies on the lock reads the same here.
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${profileId}, 0))`);
-      return body(tx as unknown as Queryable);
+      return this.connection.body(opened, () => body(tx as unknown as Queryable));
     });
   }
 

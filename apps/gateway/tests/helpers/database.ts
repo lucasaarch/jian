@@ -6,6 +6,10 @@ import { migrate } from 'drizzle-orm/pglite/migrator';
 import type { Database, Queryable, Store } from '../../src/storage/database.js';
 import { migrationsFolder } from '../../src/storage/database.js';
 import * as schema from '../../src/storage/schema.js';
+import {
+  type QueryOutsideTransaction,
+  SingleConnection,
+} from '../../src/storage/single-connection.js';
 
 /**
  * A real PostgreSQL, compiled to run inside the test process. The schema is the one that
@@ -15,12 +19,21 @@ import * as schema from '../../src/storage/schema.js';
  */
 let shared: Promise<TestStore> | undefined;
 
+/**
+ * What the store refused since the last test: queries that would have hung the desktop app's
+ * gateway. Kept here because the code under test may catch the error; `tests/setup.ts` fails the
+ * test that made one.
+ */
+export const outsideTransactions: QueryOutsideTransaction[] = [];
+
 export class TestStore implements Store {
   private readonly client: PGlite;
   private readonly drizzled: ReturnType<typeof drizzle<typeof schema>>;
+  private readonly connection: SingleConnection;
   readonly db: Database;
 
   private constructor(client: PGlite) {
+    this.connection = new SingleConnection(client, (error) => outsideTransactions.push(error));
     this.client = client;
     this.drizzled = drizzle(client, { schema, casing: 'snake_case' });
     this.db = this.drizzled as unknown as Database;
@@ -61,10 +74,11 @@ export class TestStore implements Store {
   }
 
   async transaction<T>(profileId: string, body: (tx: Queryable) => Promise<T>): Promise<T> {
+    const opened = this.connection.opening();
     return this.drizzled.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${profileId}, 0))`);
 
-      return body(tx as unknown as Queryable);
+      return this.connection.body(opened, () => body(tx as unknown as Queryable));
     });
   }
 
