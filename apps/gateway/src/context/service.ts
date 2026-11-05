@@ -98,8 +98,11 @@ export function worktreeSignals(
 }
 
 /** What a subagent is told about a separate checkout, by what its run can do. */
-function worktreeAdvice(worktrees?: { create: boolean }): string {
+function worktreeAdvice(worktrees?: { create: boolean; machine: boolean }): string {
   if (!worktrees) return '';
+  if (worktrees.machine) {
+    return " The conversation's worktrees are on its machine: list_worktrees shows them, and to work in one, run commands there with run_remote_command and set its cwd to the worktree path.";
+  }
   return worktrees.create
     ? " If this assignment needs a checkout of its own, call create_worktree with the repository folder: it makes your worktree from the conversation's worktree when it has one for it, and from the folder otherwise, and merge_worktree brings it back to where it came from when your work is done."
     : " The conversation's worktrees are yours to use: list_worktrees shows them. Pass the path of the one your brief names as cwd when you run a command.";

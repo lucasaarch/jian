@@ -137,7 +137,10 @@ export function skillFor(
     return worktreesFor({ ...can.worktrees, subagent: Boolean(run.subagent) });
   }
   if (skill === longRunningWork) {
-    return longRunningWorkFor({ create: Boolean(can.worktrees?.create) });
+    return longRunningWorkFor({
+      create: Boolean(can.worktrees?.create),
+      machine: Boolean(can.worktrees?.machine),
+    });
   }
   return skill;
 }

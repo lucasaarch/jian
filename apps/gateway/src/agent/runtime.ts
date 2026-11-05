@@ -645,7 +645,8 @@ export class AgentRuntime {
       const worktreeCan = worktrees
         ? {
             create: 'create_worktree' in worktreeToolSet,
-            machine: Boolean(session.remoteMachineId),
+            // The conversation's, not this task session's: a subagent's worktrees are on the machine.
+            machine: Boolean(conversation.remoteMachineId),
           }
         : undefined;
       const tools: ToolSet = {

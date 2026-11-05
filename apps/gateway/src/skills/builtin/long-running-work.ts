@@ -5,13 +5,26 @@ const PARALLEL_WORKTREES = `When workers edit one repository in parallel, tell e
 for it, commit its work and \`merge_worktree\` it back before reporting; the \`worktrees\` skill
 has the details. `;
 
+/** A machine's subagents cannot make worktrees, so the sentence they would act on is another. */
+const MACHINE_PARALLEL = `Workers of a conversation on a machine work there through \`run_remote_command\` and cannot make
+worktrees, so give workers that edit one repository in parallel files that do not overlap. `;
+
 /** As the run can work: the sentence about worktrees is there only for a run that can make them. */
-export function longRunningWorkFor({ create }: { create: boolean }): Skill {
+export function longRunningWorkFor({
+  create,
+  machine,
+}: {
+  create: boolean;
+  machine: boolean;
+}): Skill {
   return {
     name: 'long-running-work',
     description:
       'Use when delegating to an internal subagent, finishing a multi-step workflow, work spans turns, or context is running out.',
-    instructions: BODY.replace('@@PARALLEL@@', create ? PARALLEL_WORKTREES : ''),
+    instructions: BODY.replace(
+      '@@PARALLEL@@',
+      !create ? '' : machine ? MACHINE_PARALLEL : PARALLEL_WORKTREES,
+    ),
   };
 }
 
@@ -85,4 +98,4 @@ Use a schedule for work that should resume at a specific time. Never claim an ef
 tool returns.`;
 
 /** As the panel lists it: with everything, which a run then narrows down to what it has. */
-export const longRunningWork: Skill = longRunningWorkFor({ create: true });
+export const longRunningWork: Skill = longRunningWorkFor({ create: true, machine: false });

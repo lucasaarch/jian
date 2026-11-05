@@ -19,8 +19,8 @@ nobody's work lands half finished.`;
 
 const SIGNAL = `## Read the signal first
 
-For each folder you work in, your instructions say how many files have uncommitted changes, who
-else works there and whether you have a worktree for it. Act on it before you edit:
+At the start of each turn, a line per folder you work in says how many files have uncommitted
+changes, who else works there and whether you have a worktree for it. Act on it before you edit:
 
 - **Another agent or conversation works there:** call \`create_worktree\` with the folder before
   your first edit.
@@ -36,8 +36,9 @@ function whileYouHaveOne({ create, machine }: Can): string {
     ? '`create_worktree` names the worktree and the branch for you. '
     : 'The conversation names them. ';
   const where = machine
-    ? `Your file tools do not reach a machine: run commands with \`cwd\` set to the worktree's path
-and never in the source folder.`
+    ? `The worktrees are on the machine, and your file tools do not reach them: run commands there
+with \`run_remote_command\`, setting its \`cwd\` to the worktree's path and never to the source
+folder.`
     : `From then on your file tools refuse writes in the source folder and your commands start in the
 worktree, so use paths inside it. Do not write in the source in any other way either, \`run_command\`
 included.`;
@@ -48,9 +49,9 @@ ${made}${where} Never run \`git worktree\` by hand: the tools keep what Jian kno
 behind and uncommitted files.`;
 }
 
-const BRINGING_BACK = `## Bringing the work back
+const bringingBack = ({ create, subagent }: Can) => `## Bringing the work back
 
-Merge only when the owner asked, or, for a subagent's own worktree, when its work is done.
+Merge only when the owner asked${create && subagent ? ', or, for your own worktree, when your work in it is done' : ''}.
 
 1. Commit everything in the worktree. \`merge_worktree\` and \`update_worktree\` refuse otherwise.
 2. If \`list_worktrees\` shows it behind, call \`update_worktree\`. It merges the base in by default;
@@ -77,7 +78,7 @@ Under Ask first, ${create ? '`create_worktree`, ' : ''}\`update_worktree\`, \`me
 \`remove_worktree\` wait for the owner like \`run_command\` does. Say what you are about to do and
 why. \`list_worktrees\` only reads.`;
 
-function subagents({ create, subagent }: Can): string {
+function subagents({ create, machine, subagent }: Can): string {
   if (subagent) {
     return create
       ? `## As a subagent
@@ -88,7 +89,13 @@ came from. Merge when your work in it is done, and say so in your report.`
       : `## As a subagent
 
 The conversation's worktrees are listed by \`list_worktrees\`. Work in the one your brief names and
-pass its path explicitly when a tool asks where to run.`;
+${machine ? 'run commands there with `run_remote_command`, setting its `cwd` to the worktree path' : 'pass its path explicitly when a tool asks where to run'}.`;
+  }
+  if (create && machine) {
+    return `## Subagents
+
+A subagent of a conversation on a machine works there through \`run_remote_command\` and cannot make
+worktrees, so give subagents that edit one repository in parallel files that do not overlap.`;
   }
   return create
     ? `## Subagents
@@ -109,7 +116,7 @@ export function worktreesFor(can: Can): Skill {
       // without a folder to make one from nothing in them could be acted on.
       ...(can.create && !can.subagent ? [SIGNAL] : []),
       whileYouHaveOne(can),
-      BRINGING_BACK,
+      bringingBack(can),
       approval(can.create),
       subagents(can),
     ]

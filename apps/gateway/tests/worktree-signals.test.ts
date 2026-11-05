@@ -203,3 +203,49 @@ it('teaches each run only the tools it has', async () => {
   expect(skill.instructions).toContain('create_worktree');
   expect(longRunningWork.instructions).toContain('create_worktree');
 });
+
+it('tells a machine conversation’s subagent to use run_remote_command with a cwd', async () => {
+  const { skillFor } = await import('../src/agent/tools.js');
+  const { profile, services, chat } = await setup();
+  const run = await services.runs.submit(profile.id, chat.id, {
+    text: 'Go',
+    requestKey: randomUUID(),
+  });
+  const subagent = { ...run, subagent: { name: 'Helper' } } as typeof run;
+  const web = { browser: false, inspects: true, subagent: true };
+  const can = { web, xConnected: false, worktrees: { create: false, machine: true } };
+  const text = ['worktrees', 'long-running-work']
+    .map((name) => skillFor(subagent, [], name, can)?.instructions ?? '')
+    .join('\n');
+  const context = await new Contexts(services.store, services.runs, services.sessions).context(
+    subagent,
+    [],
+    { sections: [], skills: [], worktrees: can.worktrees },
+  );
+
+  expect(text).toContain('run_remote_command');
+  expect(text).toContain('cwd');
+  for (const gone of ['create_worktree', 'start in the worktree', 'file tools refuse']) {
+    expect(text).not.toContain(gone);
+    expect(context.system).not.toContain(gone);
+  }
+  expect(context.system).toContain('run_remote_command');
+  expect(context.system).toContain('cwd');
+});
+
+it('does not promise a machine conversation’s workers worktrees', async () => {
+  const { skillFor } = await import('../src/agent/tools.js');
+  const { profile, services, chat } = await setup();
+  const run = await services.runs.submit(profile.id, chat.id, {
+    text: 'Go',
+    requestKey: randomUUID(),
+  });
+  const web = { browser: false, inspects: true, subagent: false };
+  const can = { web, xConnected: false, worktrees: { create: true, machine: true } };
+  const text = ['worktrees', 'long-running-work']
+    .map((name) => skillFor(run, [], name, can)?.instructions ?? '')
+    .join('\n');
+
+  expect(text).toContain('files that do not overlap');
+  expect(text).not.toMatch(/subagent makes its own worktree|tell each in its brief to call/);
+});
