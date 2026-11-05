@@ -1,16 +1,21 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
   REMOTE_BROWSER_CAPABILITY,
+  REMOTE_FILES_CAPABILITY,
   REMOTE_SYSTEM_MAX_LENGTH,
   type RemoteBrowserParams,
   type RemoteBrowserResult,
   type RemoteComputerParams,
+  type RemoteFilesAnswer,
+  type RemoteFilesOp,
   type RemoteMachineUpdate,
   type RemoteUpdateParams,
   remoteBrowserParamsSchema,
   remoteCommandSchema,
   remoteComputerCommandSchema,
   remoteComputerParamsSchema,
+  remoteFilesAnswerSchema,
+  remoteFilesOpSchema,
   remoteMachineCreateSchema,
   remotePlatformSchema,
   remoteResultSchema,
@@ -53,6 +58,9 @@ const SECRET_ENV_CAPABILITY = 'shell-secret-env-v1';
 /** A page can take a while to load and settle; the browser's own limit is 45 seconds. */
 const BROWSER_TIMEOUT_MS = 60_000;
 
+/** What a files answer holds of a file's contents; the stored row keeps the rest. */
+const FILE_CONTENT_FIELDS = new Set(['text', 'base64', 'before', 'after', 'status', 'diff']);
+
 /** Where a task's secret environment waits, encrypted, until its worker claims it. */
 const secretEnvKey = (taskId: string) => `remote-task-env:${taskId}`;
 
@@ -69,6 +77,7 @@ type TaskResult = {
   computer?: unknown;
   update?: { from: string; to: string };
   browser?: RemoteBrowserResult;
+  files?: unknown;
 };
 
 const UI_STATES = new Set(['unlocked', 'locked', 'display_asleep', 'unknown'] as const);
@@ -317,6 +326,62 @@ export class Remote {
     return { ...kept, browser };
   }
 
+  /** Whether a machine last advertised file operations; it need not be online right now. */
+  async offersFiles(machineId: string): Promise<boolean> {
+    const [machine] = await this.store.db
+      .select({ capabilities: remoteMachines.capabilities })
+      .from(remoteMachines)
+      .where(eq(remoteMachines.id, machineId))
+      .limit(1);
+    return (machine?.capabilities ?? []).includes(REMOTE_FILES_CAPABILITY);
+  }
+
+  /**
+   * Asks a machine to run one file operation and waits for its answer. A refusal by the machine
+   * (not found, changed, too large) is an answer, returned for the caller to word; an answer
+   * that does not match the request is the machine misbehaving. The file text a write sends and
+   * a read brings back is in the caller's hands alone: neither stays in the task's row.
+   */
+  async executeFiles(
+    profileId: string,
+    machineId: string,
+    input: RemoteFilesOp,
+    signal?: AbortSignal,
+    timeoutMs = 60_000,
+  ): Promise<RemoteFilesAnswer> {
+    const op = remoteFilesOpSchema.parse(input);
+    const machine = await this.machine(machineId);
+    if (!(machine.capabilities ?? []).includes(REMOTE_FILES_CAPABILITY)) {
+      throw new GatewayError(
+        409,
+        `${machine.name} runs a Jian Remote too old to edit files. Update Jian Remote there.`,
+      );
+    }
+    this.requireCurrent(machine);
+    const taskId = randomUUID();
+    const result = await this.waitForTask(
+      profileId,
+      machineId,
+      { kind: 'files', command: '', cwd: null, payload: op, timeoutMs },
+      signal,
+      taskId,
+    );
+    if (result.files && typeof result.files === 'object') {
+      const kept = Object.fromEntries(
+        Object.entries(result.files).filter(([key]) => !FILE_CONTENT_FIELDS.has(key)),
+      );
+      await this.store.db
+        .update(remoteTasks)
+        .set({ result: { ...result, files: kept } })
+        .where(eq(remoteTasks.id, taskId));
+    }
+    const answer = remoteFilesAnswerSchema.safeParse(result.files);
+    if (!answer.success || answer.data.op !== op.op) {
+      throw new GatewayError(502, 'The machine answered something else.');
+    }
+    return answer.data;
+  }
+
   async executeComputer(
     profileId: string,
     machineId: string,
@@ -413,10 +478,15 @@ export class Remote {
     profileId: string | null,
     machineId: string,
     task: {
-      kind: 'shell' | 'computer' | 'update' | 'browser';
+      kind: 'shell' | 'computer' | 'update' | 'browser' | 'files';
       command: string;
       cwd: string | null;
-      payload: RemoteComputerParams | RemoteBrowserParams | Record<string, unknown> | null;
+      payload:
+        | RemoteComputerParams
+        | RemoteBrowserParams
+        | RemoteFilesOp
+        | Record<string, unknown>
+        | null;
       timeoutMs: number;
     },
     signal?: AbortSignal,
@@ -586,6 +656,35 @@ export class Remote {
           cwd: null,
           timeoutMs: claimed.timeoutMs,
           browser: parsed.data,
+        },
+      };
+    }
+    if (kind === 'files') {
+      const parsed = remoteFilesOpSchema.safeParse(claimed.payload);
+      if (!parsed.success) {
+        await this.failClaimed(claimed.id, 'Invalid files payload');
+        return { task: null };
+      }
+      // What a write carries is the caller's file text: the worker has it now, the row need not.
+      if (parsed.data.op === 'write' || parsed.data.op === 'write-bytes') {
+        const {
+          content: _content,
+          base64: _base64,
+          ...kept
+        } = claimed.payload as Record<string, unknown>;
+        await this.store.db
+          .update(remoteTasks)
+          .set({ payload: kept })
+          .where(eq(remoteTasks.id, claimed.id));
+      }
+      return {
+        task: {
+          id: claimed.id,
+          kind: 'files' as const,
+          command: null,
+          cwd: null,
+          timeoutMs: claimed.timeoutMs,
+          files: parsed.data,
         },
       };
     }
