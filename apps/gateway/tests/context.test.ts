@@ -377,6 +377,40 @@ describe('context', () => {
     ).toBeUndefined();
   });
 
+  it('charges an image inside a tool result as pixels, not its base64', () => {
+    const data = 'A'.repeat(800_000);
+    const tokens = promptTokens({
+      provider: 'anthropic',
+      modelId: 'test',
+      instructions: 'Answer.',
+      tools: {},
+      messages: [
+        { role: 'user', content: 'Check the render' },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'look',
+              toolName: 'analyze_media',
+              output: {
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'Attached below' },
+                  { type: 'image-data', data, mediaType: 'image/png' },
+                  { type: 'file-data', data, mediaType: 'application/pdf' },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(tokens).toBeGreaterThan(8192);
+    expect(tokens).toBeLessThan(10_000);
+  });
+
   it('fails if the mandatory current turn and tool schemas cannot fit with output reserved', () => {
     expect(() =>
       fitPrompt({

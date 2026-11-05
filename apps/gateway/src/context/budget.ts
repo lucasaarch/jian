@@ -36,27 +36,36 @@ export function tokenCounter(provider: string, modelId: string): Counter {
   return byteCounter;
 }
 
-/** Pixels have a model cost, not the token count of their base64 transport. */
-export function promptText(value: unknown): string {
+/**
+ * Pixels have a model cost, not the token count of their base64 transport. That holds for an
+ * attachment inside a tool result too (`image-data`, `file-data`): counted as text, one 600 KB
+ * screenshot from analyze_media read as 800k tokens and failed a run that used 30k.
+ */
+export function promptText(value: unknown, onImage?: () => void): string {
   return JSON.stringify(value, (_key, item) => {
-    if (item && typeof item === 'object' && item.type === 'image')
+    if (!item || typeof item !== 'object') return item;
+    const image =
+      item.type === 'image' ||
+      item.type === 'image-data' ||
+      ((item.type === 'file' || item.type === 'file-data') &&
+        typeof item.mediaType === 'string' &&
+        (item.mediaType === 'image' || item.mediaType.startsWith('image/')));
+    if (image) {
+      onImage?.();
       return { type: 'text', text: '[Image attachment]' };
-    if (item && typeof item === 'object' && item.type === 'file')
+    }
+    if (item.type === 'file' || item.type === 'file-data')
       return { type: 'text', text: '[File attachment]' };
     return item;
   });
 }
 
 function messageCost(message: ModelMessage, count: Counter): number {
-  const images = Array.isArray(message.content)
-    ? message.content.filter(
-        (part) =>
-          part.type === 'image' ||
-          (part.type === 'file' &&
-            (part.mediaType === 'image' || part.mediaType.startsWith('image/'))),
-      ).length
-    : 0;
-  return count(promptText(message)) + images * 8192 + 16;
+  let images = 0;
+  const text = promptText(message, () => {
+    images++;
+  });
+  return count(text) + images * 8192 + 16;
 }
 
 function schemaText(tools: ToolSet): string {
