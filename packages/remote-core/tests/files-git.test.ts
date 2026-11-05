@@ -123,7 +123,7 @@ test('git-file returns the committed and the working side', async () => {
   assert.equal(existsSync(marker), false);
 });
 
-test('a path that looks like pathspec magic is a file name', async () => {
+test('a name that starts like pathspec magic is read as a plain name', async () => {
   const root = repository();
   writeFileSync(join(root, ':(top)x'), 'literal\n');
   const status = await answerFilesOp({ op: 'git-status', root }, { refused: [] });
@@ -180,4 +180,121 @@ test('merge-base returns the sha and refuses a missing base', async () => {
   });
   const missing = await answerFilesOp({ op: 'merge-base', root, base: 'nope' }, { refused: [] });
   assert.ok(!missing.ok && missing.problem === 'failed');
+});
+
+const ask = (op: object) => answerFilesOp(op, { refused: [] });
+
+test('an empty repository has changes and no committed side', async () => {
+  const root = join(base, `empty-${counter++}`);
+  mkdirSync(root);
+  git(root, 'init', '-q', '-b', 'main');
+  writeFileSync(join(root, 'a.txt'), 'a\n');
+  const status = await ask({ op: 'git-status', root });
+  assert.ok(status.ok && status.op === 'git-status' && status.status === '?? a.txt\0');
+  const file = await ask({ op: 'git-file', root, path: 'a.txt', against: 'HEAD', maxBytes: 100 });
+  assert.deepEqual(file, { ok: true, op: 'git-file', before: null, after: 'a\n' });
+  const bad = await ask({
+    op: 'git-file',
+    root,
+    path: 'a.txt',
+    against: 'a'.repeat(40),
+    maxBytes: 100,
+  });
+  assert.ok(!bad.ok && bad.problem === 'failed');
+});
+
+test('a commit that does not exist is failed, a folder is not-file', async () => {
+  const root = repository();
+  mkdirSync(join(root, 'dir'));
+  writeFileSync(join(root, 'dir', 'f.txt'), 'f\n');
+  git(root, ...QUIET, 'add', '-A');
+  git(root, ...QUIET, 'commit', '-q', '-m', 'dir');
+  const bad = await ask({
+    op: 'git-file',
+    root,
+    path: 'tracked.txt',
+    against: 'b'.repeat(40),
+    maxBytes: 100,
+  });
+  assert.ok(!bad.ok && bad.problem === 'failed');
+  const dir = await ask({ op: 'git-file', root, path: 'dir', against: 'HEAD', maxBytes: 100 });
+  assert.ok(!dir.ok && dir.problem === 'not-file');
+});
+
+test('a new file is absent, not failed, whatever language git would answer in', async (t) => {
+  const root = repository();
+  writeFileSync(join(root, 'fresh.txt'), 'fresh\n');
+  const saved = {
+    LANG: process.env.LANG,
+    LC_ALL: process.env.LC_ALL,
+    LC_MESSAGES: process.env.LC_MESSAGES,
+  };
+  t.after(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+  process.env.LANG = 'de_DE.UTF-8';
+  process.env.LC_ALL = 'de_DE.UTF-8';
+  process.env.LC_MESSAGES = 'de_DE.UTF-8';
+  const file = await ask({
+    op: 'git-file',
+    root,
+    path: 'fresh.txt',
+    against: 'HEAD',
+    maxBytes: 100,
+  });
+  assert.deepEqual(file, { ok: true, op: 'git-file', before: null, after: 'fresh\n' });
+});
+
+test('git settings in the worker environment change nothing', async (t) => {
+  const root = repository();
+  writeFileSync(join(root, 'tracked.txt'), 'two\n');
+  const keys = ['GIT_DIR', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0'];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  t.after(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+  process.env.GIT_DIR = join(base, 'nowhere');
+  process.env.GIT_CONFIG_COUNT = '2';
+  process.env.GIT_CONFIG_KEY_0 = 'filter.x.clean';
+  process.env.GIT_CONFIG_VALUE_0 = `touch ${marker}`;
+  process.env.GIT_CONFIG_KEY_1 = 'core.fsmonitor';
+  process.env.GIT_CONFIG_VALUE_1 = `touch ${marker}`;
+  const status = await ask({ op: 'git-status', root });
+  assert.ok(status.ok && status.op === 'git-status' && status.top === root);
+  assert.ok(status.status.split('\0').includes(' M tracked.txt'));
+  delete process.env.GIT_CONFIG_KEY_1;
+  delete process.env.GIT_CONFIG_VALUE_1;
+  assert.equal(existsSync(marker), false);
+});
+
+test('output over 200,000 bytes is too-large, an in-repo link is not-file', async () => {
+  const root = repository();
+  writeFileSync(join(root, 'big.txt'), 'x'.repeat(200_001));
+  const big = await ask({
+    op: 'git-file',
+    root,
+    path: 'big.txt',
+    against: 'HEAD',
+    maxBytes: 500_000,
+  });
+  assert.ok(!big.ok && big.problem === 'too-large');
+  for (let i = 0; i < 4000; i++) writeFileSync(join(root, `${'n'.repeat(60)}-${i}.txt`), '');
+  const status = await ask({ op: 'git-status', root });
+  assert.ok(!status.ok && status.problem === 'too-large');
+  const small = repository();
+  symlinkSync('tracked.txt', join(small, 'inner.txt'));
+  const link = await ask({
+    op: 'git-file',
+    root: small,
+    path: 'inner.txt',
+    against: 'HEAD',
+    maxBytes: 100,
+  });
+  assert.ok(!link.ok && link.problem === 'not-file');
 });

@@ -18,13 +18,21 @@ const SMALL_BYTES = 4096;
  * Git reads the repository the way the gateway's `openCheckout` does (apps/gateway/src/sessions/
  * changes.ts): never refresh the index, never run a hook, fsmonitor or filter the repository
  * supplies, never read the owner's global config, never fetch. Keep the two in step. Also,
- * `GIT_LITERAL_PATHSPECS` makes a path such as `:(top)x` a file name, not pathspec magic.
+ * `GIT_LITERAL_PATHSPECS` makes every pathspec git is given match literally, so a name that
+ * starts with `:` is never read as pathspec magic.
  */
 const nowhere = () => (process.platform === 'win32' ? 'NUL' : '/dev/null');
 
 function environment(): NodeJS.ProcessEnv {
+  // Nothing git reads from its environment is inherited: GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE,
+  // GIT_CONFIG_COUNT/KEY_n/VALUE_n, GIT_CONFIG_PARAMETERS or GIT_EXTERNAL_DIFF could each undo
+  // the settings below. LC_ALL=C keeps anything git prints in one language.
+  const inherited = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('GIT_')),
+  );
   return {
-    ...workerChildEnv(),
+    ...workerChildEnv(inherited),
+    LC_ALL: 'C',
     GIT_OPTIONAL_LOCKS: '0',
     GIT_TERMINAL_PROMPT: '0',
     GIT_CONFIG_NOSYSTEM: '1',
@@ -88,7 +96,7 @@ async function openRepository(root: string, refused?: string[]): Promise<Checkou
   const real = await realLocation(root);
   if (await isRefused(real, refused)) throw new FilesProblem('refused', REFUSED_MESSAGE);
   const settings: string[] = [];
-  const git = (args: string[], maxBytes = SIDE_BYTES + 1) => runGit(real, settings, args, maxBytes);
+  const git = (args: string[], maxBytes = SIDE_BYTES) => runGit(real, settings, args, maxBytes);
   const notRepository = new FilesProblem(
     'not-repository',
     'That folder is not the top of a git repository.',
@@ -205,14 +213,28 @@ export async function gitFile(op: Op<'git-file'>, refused?: string[]): Promise<R
   const checkout = await openRepository(op.root, refused);
   const cap = Math.min(op.maxBytes, SIDE_BYTES);
   await overrideFilters(checkout);
-  const shown = await checkout.git(['show', `${op.against}:${op.path}`], cap);
+  // Absence is decided by exit code, never by git's wording. A branch with no commit yet has
+  // nothing committed to compare with.
+  const unborn =
+    op.against === 'HEAD' &&
+    (await checkout.git(['rev-parse', '--verify', '-q', 'HEAD'])).code !== 0;
+  const object = `${op.against}:${op.path}`;
   let before: string | null = null;
   let binary = false;
-  if (shown.code === 0) {
-    if (shown.stdout.subarray(0, 8000).includes(0)) binary = true;
-    else before = shown.stdout.toString('utf8');
-  } else if (!/does not exist|exists on disk, but not in|not a tree object/i.test(shown.stderr)) {
-    throw new FilesProblem('failed', 'The committed file could not be read.');
+  if (!unborn) {
+    const exists = await checkout.git(['cat-file', '-e', object], SMALL_BYTES);
+    if (exists.code === 0) {
+      // `cat-file blob` fails on a folder or a submodule where `show` would print a listing.
+      const shown = await checkout.git(['cat-file', 'blob', object], cap);
+      if (shown.code !== 0) throw new FilesProblem('not-file', 'That path is not a file.');
+      if (shown.stdout.subarray(0, 8000).includes(0)) binary = true;
+      else before = shown.stdout.toString('utf8');
+    } else if (
+      (await checkout.git(['rev-parse', '--verify', '-q', `${op.against}^{commit}`], SMALL_BYTES))
+        .code !== 0
+    ) {
+      throw new FilesProblem('failed', 'That commit could not be found.');
+    }
   }
   const working = await workingSide(checkout, op.path, cap, refused);
   if (working.binary) binary = true;
