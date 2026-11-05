@@ -272,3 +272,71 @@ it('runs every git command of a machine place as a worker task, quoted', async (
   ).toBe(true);
   expect(await worktrees.list(profile.id, chat.id)).toMatchObject([{ ahead: 0, behind: 0 }]);
 });
+
+it('lets only one of two concurrent creates win, and leaves nothing untracked', async () => {
+  const { profile, chat, worktrees } = await setup();
+  const source = repo(dir);
+
+  const results = await Promise.allSettled([
+    worktrees.create(profile.id, chat.id, source, 'gateway'),
+    worktrees.create(profile.id, chat.id, source, 'gateway'),
+  ]);
+
+  const won = results.filter((item) => item.status === 'fulfilled');
+  const lost = results.filter((item) => item.status === 'rejected');
+  expect(won).toHaveLength(1);
+  expect(lost).toHaveLength(1);
+  const winner = (won[0] as PromiseFulfilledResult<{ name: string }>).value.name;
+  expect((lost[0] as PromiseRejectedResult).reason).toMatchObject({
+    statusCode: 409,
+    message: expect.stringContaining(winner),
+  });
+  expect(run(source, 'worktree', 'list').split('\n')).toHaveLength(2);
+  expect(run(source, 'branch', '--list', 'jian/*').split('\n')).toHaveLength(1);
+});
+
+it('never draws a name whose branch already exists in the source', async () => {
+  const { services, profile, chat } = await setup();
+  const source = repo(dir);
+  // random() = 0 always draws the first adjective and the first animal.
+  run(source, 'branch', 'jian/amber-badger');
+  const worktrees = new Worktrees(
+    services.store,
+    Date.now,
+    async () => ({ ...gateway(), home: async () => home() }),
+    undefined,
+    () => 0,
+  );
+
+  const made = await worktrees.create(profile.id, chat.id, source, 'gateway');
+
+  expect(made.name).toBe('amber-badger-2');
+});
+
+it('still retires a merged worktree when cleaning it up fails, and says what is left', async () => {
+  const { services, profile, chat } = await setup();
+  const source = repo(dir);
+  let breakRemoval = false;
+  const worktrees = new Worktrees(services.store, Date.now, async () => {
+    const place = gateway();
+    return {
+      ...place,
+      home: async () => home(),
+      git: async (args, config, signal) =>
+        breakRemoval && args.includes('remove')
+          ? { exitCode: 1, stdout: '', stderr: 'fatal: cannot remove', timedOut: false }
+          : place.git(args, config, signal),
+    };
+  });
+  const made = await worktrees.create(profile.id, chat.id, source, 'gateway');
+  writeFileSync(join(made.path, 'b.txt'), 'two\n');
+  run(made.path, 'add', '.');
+  run(made.path, 'commit', '-m', 'work');
+  breakRemoval = true;
+
+  const result = await worktrees.merge(profile.id, chat.id, made.name);
+
+  expect(result.sha).toBe(run(source, 'rev-parse', 'HEAD'));
+  expect(result.leftBehind).toContain(made.path);
+  expect(await worktrees.list(profile.id, chat.id)).toEqual([]);
+});

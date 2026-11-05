@@ -45,6 +45,7 @@ export class Worktrees {
     private readonly clock: Clock,
     private readonly places: WorktreePlaces,
     private readonly warn: (message: string) => void = () => {},
+    private readonly random: () => number = Math.random,
   ) {}
 
   async create(
@@ -61,35 +62,59 @@ export class Worktrees {
     );
     if (existing) {
       // A folder deleted by hand must not keep the slot taken.
-      if (await this.stillThere(git, existing)) {
-        throw new GatewayError(
-          409,
-          `This conversation already has the worktree ${existing.name} for ${top}. Use it, or remove it first.`,
-        );
-      }
+      if (await this.stillThere(git, existing)) throw alreadyHas(existing, top);
       await this.retire(profileId, sessionId, existing);
     }
 
-    const taken = new Set(
+    const active = new Set(
       (await activeWorktrees(this.store.db, profileId, sessionId)).map((item) => item.name),
     );
-    const name = await randomName((candidate) => taken.has(candidate));
-    const path = git.join(await worktreeRoot(git, top), name);
+    const root = await worktreeRoot(git, top);
+    // Branches and folders outlive a removal (a kept branch) and are shared by every
+    // conversation on the source, so a name is free only if neither exists on the place.
+    const name = await randomName(async (candidate) => {
+      if (active.has(candidate)) return true;
+      const branchRef = `refs/heads/jian/${candidate}`;
+      const ref = await git.git(['-C', top, 'show-ref', '--verify', '--quiet', branchRef]);
+      if (ref.exitCode === 0) return true;
+      return (await listedWorktrees(git, top)).has(git.join(root, candidate));
+    }, this.random);
+    const path = git.join(root, name);
     const branch = `jian/${name}`;
     await addWorktree(git, { source: top, path, branch, base });
 
-    const record = await this.store.transaction(profileId, async (tx) => {
-      const created = await insertWorktree(tx, this.clock, profileId, sessionId, {
-        name,
-        branch,
-        base,
+    let record: WorktreeRecord;
+    try {
+      record = await this.store.transaction(profileId, async (tx) => {
+        const created = await insertWorktree(tx, this.clock, profileId, sessionId, {
+          name,
+          branch,
+          base,
+          source: top,
+          path,
+          place,
+        });
+        await this.announce(tx, profileId, sessionId, name, 'created');
+        return created;
+      });
+    } catch (error) {
+      // A concurrent create won the slot: undo what this one made so nothing is left untracked.
+      await removeWorktree(git, {
         source: top,
         path,
-        place,
-      });
-      await this.announce(tx, profileId, sessionId, name, 'created');
-      return created;
-    });
+        branch,
+        base,
+        discard: true,
+        deleteBranch: true,
+      }).catch((cleanup) => this.warn(`Could not clean up ${path}: ${String(cleanup)}`));
+      if (isUniqueViolation(error)) {
+        const winner = (await activeWorktrees(this.store.db, profileId, sessionId)).find(
+          (item) => item.source === top,
+        );
+        if (winner) throw alreadyHas(winner, top);
+      }
+      throw error;
+    }
     return { ...describe(record), ahead: 0, behind: 0, uncommitted: 0, pullRequest: false };
   }
 
@@ -134,13 +159,27 @@ export class Worktrees {
   }
 
   /** Merges into the source, then removes the worktree and its branch: both are in the base now. */
-  async merge(profileId: string, sessionId: string, name: string): Promise<{ sha: string }> {
+  async merge(
+    profileId: string,
+    sessionId: string,
+    name: string,
+  ): Promise<{ sha: string; leftBehind?: string }> {
     const record = await this.find(profileId, sessionId, name);
     const git = await this.places(profileId, record.place);
     const { sha } = await mergeWorktree(git, record);
-    await removeWorktree(git, { ...record, discard: false, deleteBranch: true });
+    // The merge is done and cannot be undone, so a cleanup that fails must not hide it: a retry
+    // would be told the branch lacks the base. The row is retired either way.
+    let leftBehind: string | undefined;
+    try {
+      const removed = await removeWorktree(git, { ...record, discard: false, deleteBranch: true });
+      if (removed.branchKept) leftBehind = `The branch ${record.branch} was kept.`;
+    } catch (error) {
+      leftBehind = `The merge went through, but ${record.path} and the branch ${record.branch} were left behind: ${
+        error instanceof Error ? error.message : 'unknown error'
+      }`;
+    }
     await this.retire(profileId, sessionId, record, 'merged');
-    return { sha };
+    return leftBehind ? { sha, leftBehind } : { sha };
   }
 
   async remove(
@@ -239,6 +278,17 @@ export class Worktrees {
   ) {
     return recordEvent(tx, this.clock, profileId, 'session.worktree', { sessionId, name, change });
   }
+}
+
+const alreadyHas = (existing: WorktreeRecord, source: string) =>
+  new GatewayError(
+    409,
+    `This conversation already has the worktree ${existing.name} for ${source}. Use it, or remove it first.`,
+  );
+
+function isUniqueViolation(error: unknown): boolean {
+  const code = (error as { code?: string; cause?: { code?: string } } | null) ?? {};
+  return code.code === '23505' || code.cause?.code === '23505';
 }
 
 function describe({ id: _id, ...record }: WorktreeRecord) {
