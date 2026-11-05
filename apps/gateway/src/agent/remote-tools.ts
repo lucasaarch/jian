@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Run } from '@jian/contracts';
-import { remoteComputerActionSchema } from '@jian/contracts';
+import { mediaMimeOf, REMOTE_FILES_MAX_TEXT, remoteComputerActionSchema } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
@@ -138,16 +138,20 @@ export function screenshotCommand(platform: 'windows' | 'macos' | 'linux') {
   ].join(' ');
 }
 
-function pullCommand(platform: 'windows' | 'macos' | 'linux', path: string) {
+/**
+ * Prints the base64, then the file's size on its own last line: the gateway compares the two, so
+ * a file the worker cut at its output cap is told apart from a whole one (the cap still exits 0).
+ */
+export function pullCommand(platform: 'windows' | 'macos' | 'linux', path: string) {
   const escaped = path.replaceAll("'", "''");
   if (platform === 'windows') {
-    return `[Convert]::ToBase64String([IO.File]::ReadAllBytes('${escaped}'))`;
+    return `$b = [IO.File]::ReadAllBytes('${escaped}'); [Convert]::ToBase64String($b); $b.Length`;
   }
   const shellPath = path.replaceAll("'", `'\\''`);
-  return `base64 < '${shellPath}'`;
+  return `base64 < '${shellPath}' && printf '\\n%s\\n' "$(wc -c < '${shellPath}' | tr -d ' ')"`;
 }
 
-function pushCommand(platform: 'windows' | 'macos' | 'linux', path: string, base64: string) {
+export function pushCommand(platform: 'windows' | 'macos' | 'linux', path: string, base64: string) {
   if (platform === 'windows') {
     const escapedPath = path.replaceAll("'", "''");
     return [
@@ -160,6 +164,24 @@ function pushCommand(platform: 'windows' | 'macos' | 'linux', path: string, base
   return `mkdir -p "$(dirname '${shellPath}')" && printf '%s' '${base64}' | base64 -d > '${shellPath}'`;
 }
 
+/** run_remote_command accepts at most this many characters, and a shell push is one command. */
+const COMMAND_CHARS = 8000;
+/** The most bytes whose base64 is REMOTE_FILES_MAX_TEXT: a read-bytes answer then stays under the result limit. */
+const FILE_BYTES_MAX = (REMOTE_FILES_MAX_TEXT / 4) * 3;
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+const ABSOLUTE = /^(\/|[A-Za-z]:[\\/])/;
+const TOO_LARGE_TO_PULL =
+  'Files over about 300 KB do not fit through the machine channel: split or compress it with run_remote_command first, then pull the parts.';
+
+/** Splits a shell pull's stdout into its base64 and the size line that follows it. */
+function parsePulled(stdout: string): { base64: string; size: number } | undefined {
+  const lines = stdout.split('\n').map((line) => line.trim());
+  while (lines.length && !lines[lines.length - 1]) lines.pop();
+  const last = lines.pop();
+  if (!last || !/^\d+$/.test(last)) return undefined;
+  return { base64: lines.join(''), size: Number(last) };
+}
+
 const coordinateSchema = z.tuple([z.number().int(), z.number().int()]);
 
 /**
@@ -168,7 +190,10 @@ const coordinateSchema = z.tuple([z.number().int(), z.number().int()]);
  */
 export function remoteTools(
   run: Run,
-  remote: Pick<Remote, 'list' | 'execute' | 'executeComputer' | 'update'>,
+  remote: Pick<
+    Remote,
+    'list' | 'execute' | 'executeComputer' | 'update' | 'executeFiles' | 'offersFiles'
+  >,
   store: Store,
   targetMachineId?: string,
 ): ToolSet {
@@ -348,30 +373,50 @@ export function remoteTools(
         if (!machine) throw new GatewayError(404, 'Remote machine not found');
         if (!machine.online) throw new GatewayError(503, 'Remote machine is offline');
 
-        const platform = platformOf(machine);
-        const result = await remote.execute(
-          run.profileId,
-          machineId,
-          { command: pullCommand(platform, path), timeoutMs },
-          abortSignal,
-        );
-        if (result.timedOut || result.exitCode !== 0) {
-          return {
-            ok: false,
-            exitCode: result.exitCode,
-            stderr: result.stderr,
-            timedOut: result.timedOut,
-          };
+        let base64: string;
+        if (await remote.offersFiles(machineId)) {
+          if (!ABSOLUTE.test(path)) {
+            return { ok: false, error: 'Give the absolute path of the file on that machine.' };
+          }
+          const answer = await remote.executeFiles(
+            run.profileId,
+            machineId,
+            { op: 'read-bytes', path, maxBytes: FILE_BYTES_MAX },
+            abortSignal,
+          );
+          if (!answer.ok) {
+            const detail = answer.problem === 'too-large' ? ` ${TOO_LARGE_TO_PULL}` : '';
+            return { ok: false, error: `${answer.message}${detail}` };
+          }
+          if (answer.op !== 'read-bytes') {
+            return { ok: false, error: 'The machine answered something else.' };
+          }
+          base64 = answer.base64;
+        } else {
+          const result = await remote.execute(
+            run.profileId,
+            machineId,
+            { command: pullCommand(platformOf(machine), path), timeoutMs },
+            abortSignal,
+          );
+          if (result.timedOut || result.exitCode !== 0) {
+            return {
+              ok: false,
+              exitCode: result.exitCode,
+              stderr: result.stderr,
+              timedOut: result.timedOut,
+            };
+          }
+          // The worker keeps 400,000 characters of output and still exits 0, so a long file
+          // arrives cut: its size line is gone, or the bytes no longer add up to it.
+          const parsed =
+            result.stdout.length >= REMOTE_PAYLOAD_CHARS ? undefined : parsePulled(result.stdout);
+          if (!parsed || Buffer.from(parsed.base64, 'base64').length !== parsed.size) {
+            return { ok: false, error: `The file did not arrive whole. ${TOO_LARGE_TO_PULL}` };
+          }
+          base64 = parsed.base64;
         }
-
-        const base64 = result.stdout.replace(/\s+/g, '');
         if (!base64) return { ok: false, error: 'File was empty or unreadable.' };
-        if (base64.length > REMOTE_PAYLOAD_CHARS) {
-          return {
-            ok: false,
-            error: 'File is too large for the worker channel (roughly 300 KB binary).',
-          };
-        }
 
         const bytes = Buffer.from(base64, 'base64');
         const mediaId = randomUUID();
@@ -382,7 +427,7 @@ export function remoteTools(
           sessionId: run.sessionId,
           runId: run.id,
           sourceKey: `remote-pull:${mediaId}`,
-          mimeType: 'application/octet-stream',
+          mimeType: mediaMimeOf(undefined, fileName),
           name: fileName.slice(0, 200),
           data: base64,
           bytes: bytes.length,
@@ -414,19 +459,49 @@ export function remoteTools(
         if (!machine) throw new GatewayError(404, 'Remote machine not found');
         if (!machine.online) throw new GatewayError(503, 'Remote machine is offline');
 
-        const platform = platformOf(machine);
         const base64 =
           encoding === 'base64'
             ? content.replace(/\s+/g, '')
             : Buffer.from(content, 'utf8').toString('base64');
-        if (base64.length > REMOTE_PAYLOAD_CHARS) {
-          return { ok: false, error: 'Payload is too large for the worker channel.' };
+
+        if (await remote.offersFiles(machineId)) {
+          if (!ABSOLUTE.test(path)) {
+            return { ok: false, error: 'Give the absolute path of the file on that machine.' };
+          }
+          if (base64.length > REMOTE_FILES_MAX_TEXT) {
+            return {
+              ok: false,
+              error: `A file written through the machine channel is at most ${FILE_BYTES_MAX.toLocaleString('en-US')} bytes; this one is larger. Split it, or write it in parts.`,
+            };
+          }
+          if (base64.length % 4 !== 0 || !BASE64.test(base64)) {
+            return { ok: false, error: 'The content is not valid base64.' };
+          }
+          const answer = await remote.executeFiles(
+            run.profileId,
+            machineId,
+            { op: 'write-bytes', path, base64 },
+            abortSignal,
+          );
+          if (!answer.ok) return { ok: false, error: answer.message, path, machineId };
+          return { ok: true, exitCode: 0, stderr: '', timedOut: false, path, machineId };
+        }
+
+        const platform = platformOf(machine);
+        const command = pushCommand(platform, path, base64);
+        if (command.length > COMMAND_CHARS) {
+          const room = COMMAND_CHARS - pushCommand(platform, path, '').length;
+          const fits = Math.max(0, Math.floor(room / 4) * 3);
+          return {
+            ok: false,
+            error: `This machine's Jian Remote sends a file inside one command, so a file here is at most about ${fits.toLocaleString('en-US')} bytes. Update Jian Remote on that machine to write larger files.`,
+          };
         }
 
         const result = await remote.execute(
           run.profileId,
           machineId,
-          { command: pushCommand(platform, path, base64), timeoutMs },
+          { command, timeoutMs },
           abortSignal,
         );
 
