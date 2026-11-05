@@ -1,10 +1,21 @@
 import type { Skill } from '@jian/contracts';
 
-export const longRunningWork: Skill = {
-  name: 'long-running-work',
-  description:
-    'Use when delegating to an internal subagent, finishing a multi-step workflow, work spans turns, or context is running out.',
-  instructions: `# Work that outlives one turn
+/** One sentence a run that can make worktrees is told about its workers; the others are told none. */
+const PARALLEL_WORKTREES = `When workers edit one repository in parallel, tell each in its brief to call \`create_worktree\`
+for it, commit its work and \`merge_worktree\` it back before reporting; the \`worktrees\` skill
+has the details. `;
+
+/** As the run can work: the sentence about worktrees is there only for a run that can make them. */
+export function longRunningWorkFor({ create }: { create: boolean }): Skill {
+  return {
+    name: 'long-running-work',
+    description:
+      'Use when delegating to an internal subagent, finishing a multi-step workflow, work spans turns, or context is running out.',
+    instructions: BODY.replace('@@PARALLEL@@', create ? PARALLEL_WORKTREES : ''),
+  };
+}
+
+const BODY = `# Work that outlives one turn
 
 A run is one turn with a step and context budget. Conversation history, checkpoints,
 memories, schedules and the session objective survive it. While a session objective is
@@ -50,11 +61,7 @@ Pass image IDs in \`mediaIds\` when the worker needs images from this profile.
 
 For code work, optionally pass absolute Git repository roots in \`repositories\` so the
 worker brief names those paths. Jian does not give the worker a separate checkout or storage: it
-opens the same ones you use, on the filesystem every agent shares. When workers edit one repository
-in parallel and you have the worktree tools, tell each in its brief to call \`create_worktree\`
-for it, commit its work and \`merge_worktree\` it back before reporting; the \`worktrees\` skill
-has the details.
-Commit changes needed for handoff and report the commit or branch; push when the assignment
+opens the same ones you use, on the filesystem every agent shares. @@PARALLEL@@Commit changes needed for handoff and report the commit or branch; push when the assignment
 requires a remote handoff. Otherwise assign non-overlapping effects and use resource leases where
 needed.
 
@@ -75,5 +82,7 @@ See \`managing-context\` before long stretches of work. \`read_run_checkpoints\`
 what an earlier run actually did; inspect it before repeating an external action.
 
 Use a schedule for work that should resume at a specific time. Never claim an effect before its
-tool returns.`,
-};
+tool returns.`;
+
+/** As the panel lists it: with everything, which a run then narrows down to what it has. */
+export const longRunningWork: Skill = longRunningWorkFor({ create: true });

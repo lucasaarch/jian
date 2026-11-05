@@ -18,7 +18,7 @@ import { availableSkills } from '../skills/builtin/index.js';
 import type { Store } from '../storage/database.js';
 import { projects } from '../storage/schema.js';
 import type { FolderSignal, Worktrees } from '../worktrees/service.js';
-import { buildContext, rankMemories } from './build.js';
+import { buildContext, rankMemories, withTurnNote } from './build.js';
 import { judgeTurn } from './judgments.js';
 import type { ContextSource } from './port.js';
 import { toolRecordsByRun, withToolHistory } from './tool-history.js';
@@ -54,38 +54,55 @@ function workspaceGuidance(
 const files = (count: number) => `${count} ${count === 1 ? 'file' : 'files'}`;
 
 /**
- * One line a git folder: what a turn needs to know before it edits there. Another agent is named
- * by its own name only, because its conversations are private to it.
+ * What a turn tells the agent about the folders it works in, in two parts because they change at
+ * different rates. `steady` is the worktree it works in, which changes when the agent says so and
+ * belongs in the cached system prompt. `turn` is the uncommitted count and who else is there,
+ * which change under it and so go in the turn context. Another agent is named by its own name
+ * only, because its conversations are private to it.
  */
-export function worktreeSignals(signals: readonly FolderSignal[]): string {
-  return signals
-    .map(({ folder, uncommitted, others, worktree }) => {
-      const parts = [
-        ...(uncommitted && !worktree
-          ? [`${files(uncommitted)} with uncommitted changes.`]
-          : uncommitted === 0 && !worktree
-            ? ['No uncommitted changes.']
-            : []),
-        ...others.map((other) =>
-          other.agent
-            ? `Another agent, ${other.agent}, is working here now.`
-            : `Another conversation of yours, ${JSON.stringify(other.conversation)}, is working here now.`,
-        ),
-        worktree
-          ? `You work on it in the worktree ${worktree.name} at ${worktree.path} (branch ${worktree.branch} from ${worktree.base}); your tools start there.`
-          : 'You have no worktree for it.',
-      ];
-      return `${folder}: ${parts.join(' ')}`;
-    })
-    .join('\n');
+export function worktreeSignals(
+  signals: readonly FolderSignal[],
+  machine: boolean,
+): { steady: string[]; turn: string[] } {
+  const steady: string[] = [];
+  const turn: string[] = [];
+
+  for (const { folder, uncommitted, others, worktree } of signals) {
+    if (worktree) {
+      // Guards and the cwd remap exist on the gateway only: a machine's commands are told apart.
+      const start = machine
+        ? `. Your tools do not reach a machine: set cwd of run_remote_command to ${worktree.path}.`
+        : '; your tools start there.';
+      steady.push(
+        `${folder}: You work on it in the worktree ${worktree.name} at ${worktree.path} (branch ${worktree.branch} from ${worktree.base})${start}`,
+      );
+    }
+    const parts = [
+      ...(worktree || uncommitted === undefined
+        ? []
+        : [
+            uncommitted === 0
+              ? 'No uncommitted changes.'
+              : `${files(uncommitted)} with uncommitted changes.`,
+          ]),
+      ...others.map((other) =>
+        other.agent
+          ? `Another agent, ${other.agent}, is working here now.`
+          : `Another conversation of yours, ${JSON.stringify(other.conversation)}, is working here now.`,
+      ),
+      ...(worktree ? [] : ['You have no worktree for it.']),
+    ];
+    if (parts.length && (!worktree || others.length)) turn.push(`${folder}: ${parts.join(' ')}`);
+  }
+  return { steady, turn };
 }
 
 /** What a subagent is told about a separate checkout, by what its run can do. */
 function worktreeAdvice(worktrees?: { create: boolean }): string {
   if (!worktrees) return '';
   return worktrees.create
-    ? " If this assignment needs a checkout of its own, call create_worktree with the repository folder: it makes your worktree from the conversation's, and merge_worktree brings it back into that one when your work is done."
-    : " The conversation's worktrees are yours to use: list_worktrees shows them, and your commands start in the one the brief names.";
+    ? " If this assignment needs a checkout of its own, call create_worktree with the repository folder: it makes your worktree from the conversation's worktree when it has one for it, and from the folder otherwise, and merge_worktree brings it back to where it came from when your work is done."
+    : " The conversation's worktrees are yours to use: list_worktrees shows them. Pass the path of the one your brief names as cwd when you run a command.";
 }
 
 export class Contexts {
@@ -230,11 +247,12 @@ export class Contexts {
                 session.remoteMachineId ?? 'gateway',
               )
               .catch(() => []),
+            workspaces.worktrees.machine,
           )
-        : '';
+        : { steady: [], turn: [] };
     const workspace = worker
       ? ''
-      : [workspaceGuidance(session, several), signals].filter(Boolean).join('\n\n');
+      : [workspaceGuidance(session, several), ...signals.steady].filter(Boolean).join('\n\n');
     const projectGuidance = project
       ? session.remoteMachineId
         ? `This conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}.${gitWay} This conversation targets one of the owner's machines; clone the repository there into a dedicated checkout before changing files, and keep all project work on that machine.`
@@ -275,6 +293,11 @@ export class Contexts {
         .map((load) => load.name),
     });
 
+    // The count and who else is there change under the agent: said in the turn, so the cached
+    // prefix stays as it was.
+    if (signals.turn.length) {
+      withTurnNote(built, `Where you work now:\n${signals.turn.join('\n')}`);
+    }
     const result = {
       ...built,
       ...(previous ? { historyCursor: { id: previous.id, createdAt: previous.createdAt } } : {}),

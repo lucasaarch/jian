@@ -10,7 +10,7 @@ export interface ContextSource {
       sections: string[];
       skills: Skill[];
       /** The run has worktree tools; `create` when it can also make one. */
-      worktrees?: { create: boolean };
+      worktrees?: { create: boolean; machine: boolean };
     },
   ): Promise<{
     system: string;

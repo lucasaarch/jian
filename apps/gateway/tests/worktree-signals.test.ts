@@ -19,6 +19,8 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
+const can = { create: true, machine: false };
+
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 
@@ -65,13 +67,17 @@ async function setup(clock: () => number = Date.now) {
     undefined,
     worktrees,
   );
-  const ask = async (can: { create: boolean } | undefined) => {
+  const ask = async (can: { create: boolean; machine: boolean } | undefined) => {
     const run = await services.runs.submit(profile.id, chat.id, {
       text: 'Go',
       requestKey: randomUUID(),
     });
     const project = { sections: [], skills: [], ...(can ? { worktrees: can } : {}) };
-    return (await contexts.context(run, [], project)).system;
+    const context = await contexts.context(run, [], project);
+    return {
+      system: context.system,
+      turn: context.messages.map((message) => message.content).join('\n'),
+    };
   };
   return { services, profile, chat, source, worktrees, ask, input };
 }
@@ -88,46 +94,58 @@ it('the context counts uncommitted files and names another agent working there',
     .where(eq(sessions.id, theirs.id));
   await services.runs.submit(stranger.id, theirs.id, { text: 'Go', requestKey: randomUUID() });
 
-  const system = await ask({ create: true });
+  const { system, turn } = await ask(can);
 
-  expect(system).toContain(
+  expect(turn).toContain(
     `${source}: 2 files with uncommitted changes. Another agent, Nova, is working here now. You have no worktree for it.`,
   );
-  expect(system).not.toContain('Quarterly layoffs');
+  expect(system + turn).not.toContain('Quarterly layoffs');
 });
 
 it('the context names the worktree and where tools start', async () => {
   const { profile, chat, source, worktrees, ask } = await setup();
   const made = await worktrees.create(profile.id, chat.id, source, 'gateway');
 
-  const system = await ask({ create: true });
+  const { system } = await ask(can);
 
   expect(system).toContain(
     `${source}: You work on it in the worktree ${made.name} at ${made.path} (branch jian/${made.name} from main); your tools start there.`,
   );
 });
 
+it('sends a machine conversation to cwd, since its tools stop at the gateway', async () => {
+  const { profile, chat, source, worktrees, ask } = await setup();
+  const made = await worktrees.create(profile.id, chat.id, source, 'gateway');
+
+  const { system } = await ask({ create: true, machine: true });
+
+  expect(system).toContain(`set cwd of run_remote_command to ${made.path}`);
+  expect(system).not.toContain('your tools start there');
+});
+
 it('the context has no worktree text without the tools', async () => {
   const { profile, chat, source, worktrees, ask } = await setup();
   await worktrees.create(profile.id, chat.id, source, 'gateway');
 
-  const system = await ask(undefined);
+  const { system, turn } = await ask(undefined);
 
-  expect(system).not.toMatch(/worktree/i);
-  expect(system).not.toContain('uncommitted');
+  expect(system + turn).not.toMatch(/worktree/i);
+  expect(system + turn).not.toContain('uncommitted');
 });
 
-it('reads uncommitted files again only once the count is a minute old', async () => {
+it('keeps the system prompt the same when only the count changes', async () => {
   let now = 1_000_000;
   const { source, ask } = await setup(() => now);
   writeFileSync(join(source, 'a.txt'), 'changed\n');
-  expect(await ask({ create: true })).toContain('1 file with uncommitted changes');
+  const first = await ask(can);
 
   writeFileSync(join(source, 'b.txt'), 'two\n');
-  now += 30_000;
-  expect(await ask({ create: true })).toContain('1 file with uncommitted changes');
-  now += 31_000;
-  expect(await ask({ create: true })).toContain('2 files with uncommitted changes');
+  now += 61_000;
+  const second = await ask(can);
+
+  expect(second.system).toBe(first.system);
+  expect(first.turn).toContain('1 file with uncommitted changes');
+  expect(second.turn).toContain('2 files with uncommitted changes');
 });
 
 it('project instructions come from the worktree, not its source', async () => {
@@ -155,4 +173,33 @@ it('offers the worktrees skill only to a run with the tools', async () => {
 
   expect(names(true)).toContain('worktrees');
   expect(names(false)).not.toContain('worktrees');
+});
+
+it('teaches each run only the tools it has', async () => {
+  const { skillFor } = await import('../src/agent/tools.js');
+  const { worktrees: skill } = await import('../src/skills/builtin/worktrees.js');
+  const { longRunningWork } = await import('../src/skills/builtin/long-running-work.js');
+  const { profile, services } = await setup();
+  const run = await services.runs.submit(
+    profile.id,
+    (await services.sessions.createSession(profile.id, {})).id,
+    {
+      text: 'Go',
+      requestKey: randomUUID(),
+    },
+  );
+  const web = { browser: false, inspects: true, subagent: false };
+  const load = (skillName: string, worktrees?: { create: boolean; machine: boolean }) =>
+    skillFor(run, [], skillName, { web, xConnected: false, ...(worktrees ? { worktrees } : {}) })
+      ?.instructions ?? '';
+
+  const without = { create: false, machine: false };
+  expect(load('worktrees', without)).not.toContain('create_worktree');
+  expect(load('worktrees', without)).toContain('merge_worktree');
+  expect(load('long-running-work', without)).not.toContain('create_worktree');
+  expect(load('long-running-work')).not.toMatch(/worktree/);
+  expect(load('long-running-work', { create: true, machine: false })).toContain('create_worktree');
+  expect(load('worktrees', { create: true, machine: true })).toContain('cwd');
+  expect(skill.instructions).toContain('create_worktree');
+  expect(longRunningWork.instructions).toContain('create_worktree');
 });

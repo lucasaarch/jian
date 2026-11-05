@@ -33,7 +33,9 @@ import { isLoaded, useLoads } from '../sessions/loads.js';
 import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions/port.js';
 import type { Sessions } from '../sessions/service.js';
 import { findSkill } from '../skills/builtin/index.js';
+import { longRunningWork, longRunningWorkFor } from '../skills/builtin/long-running-work.js';
 import { type WebAccess, webResearch, webResearchFor } from '../skills/builtin/web-research.js';
+import { worktreesFor, worktrees as worktreesSkill } from '../skills/builtin/worktrees.js';
 import { x, xFor } from '../skills/builtin/x.js';
 import { skillTools } from '../skills/tools.js';
 import type { SshKeys } from '../ssh/service.js';
@@ -117,15 +119,26 @@ export function skillFor(
   run: Run,
   servers: readonly McpServer[],
   name: string,
-  can: { web: WebAccess; xConnected: boolean; worktrees?: boolean },
+  can: {
+    web: WebAccess;
+    xConnected: boolean;
+    /** What the run has of the worktree tools; absent when it has none. */
+    worktrees?: { create: boolean; machine: boolean };
+  },
   /** The skills of the conversation's workspaces, named apart from the profile's already. */
   projectSkills: readonly Skill[] = [],
 ): Skill | undefined {
   const skill =
-    findSkill(run.profile, servers, name, { worktrees: can.worktrees === true }) ??
+    findSkill(run.profile, servers, name, { worktrees: Boolean(can.worktrees) }) ??
     projectSkills.find((item) => item.name === name);
   if (skill === webResearch) return webResearchFor(can.web);
   if (skill === x) return xFor({ connected: can.xConnected, subagent: Boolean(run.subagent) });
+  if (skill === worktreesSkill && can.worktrees) {
+    return worktreesFor({ ...can.worktrees, subagent: Boolean(run.subagent) });
+  }
+  if (skill === longRunningWork) {
+    return longRunningWorkFor({ create: Boolean(can.worktrees?.create) });
+  }
   return skill;
 }
 
@@ -143,7 +156,7 @@ export function profileTools(
   /** The skills the conversation's workspaces offer. */
   projectSkills: readonly Skill[] = [],
   /** Whether this run has the worktree tools, which the skill about them goes by. */
-  worktrees = false,
+  worktrees?: { create: boolean; machine: boolean },
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();

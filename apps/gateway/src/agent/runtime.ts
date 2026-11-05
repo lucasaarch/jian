@@ -629,6 +629,25 @@ export class AgentRuntime {
                 );
                 return { sections: [], skills: [] };
               });
+      const worktreeToolSet: ToolSet = worktrees
+        ? worktreeTools({
+            worktrees: worktrees.service,
+            profileId,
+            // This run's own target, not the conversation's: a worktree is made where this
+            // run's commands reach, and a subagent's task session reaches only the gateway.
+            place: session.remoteMachineId ?? 'gateway',
+            folders,
+            scope: worktrees.scope,
+          })
+        : {};
+      // What the skills about worktrees may say: `create_worktree` is absent when it could only
+      // refuse, as with only a clone folder or for a subagent of a machine's conversation.
+      const worktreeCan = worktrees
+        ? {
+            create: 'create_worktree' in worktreeToolSet,
+            machine: Boolean(session.remoteMachineId),
+          }
+        : undefined;
       const tools: ToolSet = {
         ...profileTools(
           this.services,
@@ -639,7 +658,7 @@ export class AgentRuntime {
           webAccess,
           Object.keys(xTools).length > 0,
           project.skills,
-          Boolean(worktrees),
+          worktreeCan,
         ),
         ...(!learning && this.options.github && gitPlace
           ? githubGitTools({
@@ -687,17 +706,7 @@ export class AgentRuntime {
                 : {}),
             })
           : {}),
-        ...(worktrees
-          ? worktreeTools({
-              worktrees: worktrees.service,
-              profileId,
-              // This run's own target, not the conversation's: a worktree is made where this
-              // run's commands reach, and a subagent's task session reaches only the gateway.
-              place: session.remoteMachineId ?? 'gateway',
-              folders,
-              scope: worktrees.scope,
-            })
-          : {}),
+        ...worktreeToolSet,
         ...xTools,
         ...this.services.media?.tools(run, async (usage) => {
           await account(
@@ -788,7 +797,7 @@ export class AgentRuntime {
             {
               web: webAccess ?? { browser: false, inspects: true, subagent: Boolean(run.subagent) },
               xConnected: Object.keys(xTools).length > 0,
-              worktrees: Boolean(worktrees),
+              ...(worktreeCan ? { worktrees: worktreeCan } : {}),
             },
             project.skills,
           );
@@ -806,8 +815,7 @@ export class AgentRuntime {
       const context = await this.services.contexts.context(
         run,
         skillServers,
-        // 'create_worktree' is absent when it could only refuse, as for a subagent of a machine.
-        worktrees ? { ...project, worktrees: { create: 'create_worktree' in tools } } : project,
+        worktreeCan ? { ...project, worktrees: worktreeCan } : project,
       );
       if (mcpDown) withTurnNote(context, mcpDown);
       compactCommand = isCompactCommand(run.input);
