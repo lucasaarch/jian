@@ -236,7 +236,7 @@ export function PullView({
             <div className="grid gap-1.5">
               {!fixable && !behind && <p className={`text-xs ${state.colour}`}>{state.note}</p>}
               {(fixable || merging || behind || readyForReview) && (
-                <div className="flex flex-wrap justify-end gap-2">
+                <div className="flex flex-wrap gap-2">
                   {fixable ? (
                     <Action tone="outline" size="small" busy={fixing} onClick={() => void fix()}>
                       {!fixing && <Sparkles size={13} aria-hidden="true" />}
