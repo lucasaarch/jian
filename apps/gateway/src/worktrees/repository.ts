@@ -100,7 +100,8 @@ export type Working = {
   workspace: SessionWorkspace | null;
 };
 
-const repositoryName = (url: string) => /([^/:]+?)(?:\.git)?\/?$/.exec(url)?.[1];
+/** The folder name `github_git` clones a repository under, from its URL. */
+export const repositoryName = (url: string) => /([^/:]+?)(?:\.git)?\/?$/.exec(url)?.[1];
 
 /**
  * The folders each conversation works on: those it was given and, when it clones into a folder

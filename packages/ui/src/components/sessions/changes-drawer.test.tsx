@@ -905,19 +905,48 @@ describe('with worktrees', () => {
     );
   });
 
-  it('keeps the timeline for a worktree that is only on a machine', async () => {
+  it('reads a worktree on the conversation’s machine', async () => {
     useCrew.getState().show('session', []);
     useCrew.getState().showChanges();
     const api = {
       sessionWorktrees: vi.fn(async () => [tree('brave-otter', crypto.randomUUID())]),
-      sessionChanges: vi.fn(async () => ({ files: [], truncated: false })),
+      sessionChanges: vi.fn(async () => ({
+        files: [{ path, status: 'modified' as const }],
+        truncated: false,
+      })),
+      timeline: vi.fn(async () => []),
+    };
+
+    await render(api as never);
+    await settled(() => Boolean(container.textContent?.includes(path)));
+
+    expect(api.sessionChanges).toHaveBeenCalledWith(
+      'profile',
+      'session',
+      undefined,
+      undefined,
+      'brave-otter',
+    );
+    expect(api.timeline).not.toHaveBeenCalled();
+  });
+
+  it('keeps the timeline while the machine is offline', async () => {
+    useCrew.getState().show('session', []);
+    useCrew.getState().showChanges();
+    const offline = new GatewayAnswer('Remote machine is offline', 503);
+    const api = {
+      sessionWorktrees: vi.fn(async () => [tree('brave-otter', crypto.randomUUID())]),
+      sessionChanges: vi.fn(async () => {
+        throw offline;
+      }),
       timeline: vi.fn(async () => [{ runId, steps: [step] }]),
     };
 
     await render(api as never);
     await settled(() => Boolean(container.textContent?.includes(path)));
 
-    expect(api.sessionChanges).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Showing what this conversation saved.');
+    expect(container.textContent).toContain('Remote machine is offline');
     expect(api.timeline).toHaveBeenCalled();
   });
 });

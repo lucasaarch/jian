@@ -9,6 +9,9 @@ import {
   type Message,
   messageReactionInputSchema,
   type Profile,
+  REMOTE_FILES_CAPABILITY,
+  type RemoteFilesAnswer,
+  type RemoteFilesOp,
   type Session,
   type SessionObjective,
   sessionChangesQuerySchema,
@@ -30,9 +33,11 @@ import { sessionContext } from '../runs/context-usage.js';
 import { sessionTimeline } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { messages, projects, remoteMachines, runs } from '../storage/schema.js';
-import { checkoutChanges, worktreeMergeBase } from './changes.js';
+import { settledRuns } from '../worktrees/repository.js';
+import { checkoutChanges, readChanges, worktreeMergeBase } from './changes.js';
 import { listCreatedPullAnswers } from './created-pulls.js';
 import { compactLoads } from './loads.js';
+import { cloneOnMachine, MachineAnswers, machineReader } from './machine-checkout.js';
 import { objectiveAt, sanitizeObjectiveText } from './objective.js';
 import type { SessionStart } from './port.js';
 import { pullLinksIn } from './pull-links.js';
@@ -130,7 +135,7 @@ export class Sessions {
   private worktreeRecords: (
     profileId: string,
     sessionId: string,
-  ) => Promise<{ name: string; path: string; base: string }[]> = async () => [];
+  ) => Promise<{ name: string; path: string; base: string; place: string }[]> = async () => [];
 
   /**
    * Worktrees are built after sessions (they need the machines and keys sessions does not), so
@@ -138,6 +143,18 @@ export class Sessions {
    */
   useWorktrees(records: typeof this.worktreeRecords) {
     this.worktreeRecords = records;
+  }
+
+  private machineFiles?: (
+    profileId: string,
+    machineId: string,
+    op: RemoteFilesOp,
+  ) => Promise<RemoteFilesAnswer>;
+  private readonly machineAnswers = new MachineAnswers(() => this.clock());
+
+  /** How the changes route reads a checkout on a machine: the machine's file operations. */
+  useMachineFiles(files: NonNullable<typeof this.machineFiles>) {
+    this.machineFiles = files;
   }
 
   /** Creates an owner chat without changing the singleton used by older clients. */
@@ -717,36 +734,53 @@ export class Sessions {
     return sessionTimeline(this.store.db, profileId, sessionId, runIds);
   }
 
-  /** Current uncommitted files, not just the files a tool happened to edit in a recent turn. */
+  /**
+   * Current uncommitted files, not just the files a tool happened to edit in a recent turn. A
+   * worktree comes first: the gateway's own, then one on the conversation's machine. Without one,
+   * the project's checkout: on the gateway, or its one clone known on the conversation's machine.
+   */
   async changes(profileId: string, sessionId: string, input: unknown = {}) {
     const session = await this.session(profileId, sessionId);
     const query = sessionChangesQuerySchema.parse(input);
-    // Only this conversation's own gateway worktrees are ever read: the source folder and another
-    // conversation's worktree are not reachable from here. Machine worktrees have no checkout on
-    // this disk, so they fall through to the refusals below and the panel shows the timeline.
-    const worktrees = await this.worktreeRecords(profileId, sessionId);
-    if (query.worktree && !worktrees.some((item) => item.name === query.worktree)) {
+    const whole = query.whole === 'true';
+    // Only this conversation's own worktrees, on the gateway or on its machine, are ever read:
+    // the source folder and another conversation's worktree are not reachable from here.
+    const records = await this.worktreeRecords(profileId, sessionId);
+    const gateway = records.filter((item) => item.place === 'gateway');
+    const machine = records.filter(
+      (item) => session.remoteMachineId && item.place === session.remoteMachineId,
+    );
+    const reachable = [...gateway, ...machine];
+    if (query.worktree && !reachable.some((item) => item.name === query.worktree)) {
       throw new GatewayError(404, `Worktree ${query.worktree} not found`);
     }
+    const worktrees = gateway.length ? gateway : machine;
     if (worktrees.length) {
       const chosen = query.worktree
-        ? worktrees.find((item) => item.name === query.worktree)
+        ? reachable.find((item) => item.name === query.worktree)
         : worktrees.length === 1
           ? worktrees[0]
           : undefined;
       if (!chosen) throw new GatewayError(409, 'Choose a worktree to read its changes.');
+      if (chosen.place !== 'gateway') {
+        return this.machineChanges(profileId, session, chosen.path, query.path, whole, chosen.base);
+      }
       return checkoutChanges(
         chosen.path,
         query.path,
-        query.whole === 'true',
+        whole,
         await worktreeMergeBase(chosen.path, chosen.base),
       );
     }
+    if (session.remoteMachineId && (session.projectId || session.projectIds?.length)) {
+      const clone = await cloneOnMachine(this.store.db, profileId, session);
+      if (!clone) {
+        throw new GatewayError(409, 'Changes on remote machines are not available here yet.');
+      }
+      return this.machineChanges(profileId, session, clone, query.path, whole);
+    }
     if (!session.projectId || session.projectIds?.length) {
       throw new GatewayError(409, 'Choose a conversation with one project to read its changes.');
-    }
-    if (session.remoteMachineId) {
-      throw new GatewayError(409, 'Changes on remote machines are not available here yet.');
     }
     const [project] = await this.store.db
       .select({ id: projects.id })
@@ -757,8 +791,47 @@ export class Sessions {
     return checkoutChanges(
       await projectCheckout(profileId, session.projectId, sessionId),
       query.path,
-      query.whole === 'true',
+      whole,
     );
+  }
+
+  /**
+   * A checkout on the conversation's machine, read through its worker. What the machine answered
+   * is kept for a poll (see `MachineAnswers`), so `runs` says how the conversation's runs stood.
+   */
+  private async machineChanges(
+    profileId: string,
+    session: Session,
+    root: string,
+    path: string | undefined,
+    whole: boolean,
+    base?: string,
+  ) {
+    const machineId = session.remoteMachineId ?? '';
+    const [found] = await this.store.db
+      .select({ name: remoteMachines.name, capabilities: remoteMachines.capabilities })
+      .from(remoteMachines)
+      .where(eq(remoteMachines.id, machineId))
+      .limit(1);
+    const machine = assertFound(found, 'Remote machine');
+    const files = this.machineFiles;
+    if (!files || !(machine.capabilities ?? []).includes(REMOTE_FILES_CAPABILITY)) {
+      throw new GatewayError(
+        409,
+        `${machine.name} runs a Jian Remote too old to show changes. Update Jian Remote there.`,
+      );
+    }
+    const scope = {
+      profileId,
+      sessionId: session.id,
+      machineId,
+      runs: await settledRuns(this.store.db, profileId, session.id),
+    };
+    const reader = machineReader(root, (op) =>
+      this.machineAnswers.answer(scope, op, () => files(profileId, machineId, op)),
+    );
+    const against = base ? await reader.mergeBase(base) : 'HEAD';
+    return readChanges(reader, path, whole, against);
   }
 
   /** How full this conversation's context is and what its turns have cost, for the owner. */

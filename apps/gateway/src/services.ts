@@ -73,6 +73,12 @@ export type Services = {
   push: PushNotifications;
 };
 
+/**
+ * How long a machine has for one git read the changes route asks, in ms: a few git commands of
+ * at most 10 s each, and the panel is waiting on it.
+ */
+const MACHINE_CHANGES_TIMEOUT_MS = 30_000;
+
 /** One wiring point: every area gets the same store, vault and clock. */
 export function buildServices({
   store,
@@ -155,8 +161,9 @@ export function buildServices({
         : remotePlace(profileId, place, remote),
     (message) => console.warn(message),
   );
-  sessions.useWorktrees((profileId, sessionId) =>
-    worktrees.recordedOnGateway(profileId, sessionId),
+  sessions.useWorktrees((profileId, sessionId) => worktrees.recorded(profileId, sessionId));
+  sessions.useMachineFiles((profileId, machineId, op) =>
+    remote.executeFiles(profileId, machineId, op, undefined, MACHINE_CHANGES_TIMEOUT_MS),
   );
   const services = {
     profiles,

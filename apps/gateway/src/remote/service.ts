@@ -79,6 +79,17 @@ const secretEnvKey = (taskId: string) => `remote-task-env:${taskId}`;
 const UPDATE_TIMEOUT_MS = 5 * 60_000;
 
 type Machine = typeof remoteMachines.$inferSelect;
+
+/** A files answer as `complete` stored it: its JSON text (see there). */
+const storedFiles = (files: unknown): unknown => {
+  if (typeof files !== 'string') return files;
+  try {
+    return JSON.parse(files);
+  } catch {
+    return undefined;
+  }
+};
+
 type TaskResult = {
   taskId?: string;
   exitCode: number | null;
@@ -379,7 +390,7 @@ export class Remote {
         signal,
         taskId,
       );
-      const answer = remoteFilesAnswerSchema.safeParse(result.files);
+      const answer = remoteFilesAnswerSchema.safeParse(storedFiles(result.files));
       if (!answer.success || answer.data.op !== op.op) {
         throw new GatewayError(502, 'The machine answered something else.');
       }
@@ -408,9 +419,10 @@ export class Remote {
       .where(eq(remoteTasks.id, taskId))
       .limit(1);
     const result = row?.result as TaskResult | null | undefined;
-    if (!result?.files || typeof result.files !== 'object') return;
+    const files = storedFiles(result?.files);
+    if (!result || !files || typeof files !== 'object') return;
     const kept = Object.fromEntries(
-      Object.entries(result.files).filter(([key]) => !FILE_CONTENT_FIELDS.has(key)),
+      Object.entries(files).filter(([key]) => !FILE_CONTENT_FIELDS.has(key)),
     );
     await this.store.db
       .update(remoteTasks)
@@ -806,9 +818,13 @@ export class Remote {
     await this.authenticate(machineId, authorization);
     const result = remoteResultSchema.parse(input);
     if (result.taskId !== taskId) throw new GatewayError(400, 'Task id mismatch');
+    // Postgres keeps no U+0000 in jsonb, and git's `-z` outputs are made of it: a files answer
+    // waits in the row as its JSON text, where every NUL is escaped, until its caller reads it.
+    const kept =
+      result.files === undefined ? result : { ...result, files: JSON.stringify(result.files) };
     const [task] = await this.store.db
       .update(remoteTasks)
-      .set({ status: 'completed', result, updatedAt: new Date(this.clock()) })
+      .set({ status: 'completed', result: kept, updatedAt: new Date(this.clock()) })
       .where(
         and(
           eq(remoteTasks.id, taskId),

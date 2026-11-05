@@ -61,12 +61,15 @@ function messageOf(error: unknown) {
 }
 
 /**
- * The gateway answered that it cannot read this checkout: an older gateway, or a conversation with
- * none. Trying again will not change that, and what its turns saved is still worth reading. A
- * dropped connection or a failed read is different: a saved diff would pass for the current file.
+ * The gateway answered that it cannot read this checkout: an older gateway, a conversation with
+ * none, or a machine that is offline (503). Trying again now will not change that, and what its
+ * turns saved is still worth reading; the list is asked again on its own and takes over once it
+ * answers. A dropped connection or a failed read is different: a saved diff would pass for the
+ * current file.
  */
 const cannotRead = (error: unknown) =>
-  error instanceof GatewayAnswer && (error.status === 404 || error.status === 409);
+  error instanceof GatewayAnswer &&
+  (error.status === 404 || error.status === 409 || error.status === 503);
 
 /** A read that failed and may yet work: what happened, and a way to ask again. */
 function Trouble({ query }: { query: { error: unknown; refetch: () => unknown } }) {
@@ -130,14 +133,17 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
   const toolCallId = tab?.kind === 'changes' ? tab.toolCallId : undefined;
   const path = tab?.kind === 'changes' ? tab.path : undefined;
 
-  // A worktree's checkout is on the gateway's disk and read like a project's. One on a machine is
-  // not, so it leaves the timeline as the only list. An older gateway answers none.
+  // A worktree is read like a project's checkout, on the gateway's disk or through the machine it
+  // is on; the gateway's come first, as the gateway picks them. An older gateway answers none, and
+  // one that cannot reach a machine's answers so, which leaves the timeline as the list.
   const worktrees = useQuery({
     queryKey: keys.sessionWorktrees(profileId, sessionId ?? ''),
     queryFn: async () => (await api.sessionWorktrees?.(profileId, sessionId ?? '')) ?? [],
     enabled: Boolean(sessionId),
   });
-  const here = (worktrees.data ?? []).filter((item) => item.place === 'gateway');
+  const here = [...(worktrees.data ?? [])].sort(
+    (a, b) => Number(b.place === 'gateway') - Number(a.place === 'gateway'),
+  );
   // With several, the one chosen; until one is, the first, so the list never waits on an answer.
   const worktree = here.find((item) => item.name === picked)?.name ?? here[0]?.name;
   // Asking before the worktrees are known would be refused when there are several.
