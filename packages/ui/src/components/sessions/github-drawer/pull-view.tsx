@@ -233,7 +233,7 @@ export function PullView({
             </button>
           </div>
           {open && (
-            <div className="grid gap-1.5">
+            <div className="grid gap-2.5">
               {!fixable && !behind && <p className={`text-xs ${state.colour}`}>{state.note}</p>}
               {(fixable || merging || behind || readyForReview) && (
                 <div className="flex flex-wrap gap-2">
