@@ -37,6 +37,9 @@ export function createWindow(options: { quitting: () => boolean }): BrowserWindo
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      // Chromium's own PDF reader is a plugin: without it the viewer's PDF frame stays blank.
+      // It is the only plugin Electron ships.
+      plugins: true,
     },
   });
 

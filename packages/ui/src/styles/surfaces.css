@@ -554,6 +554,9 @@
   /* The viewer takes the whole screen so photos have a quiet backdrop. */
   .viewer {
     @apply m-0 h-(--app-height) max-h-none w-screen max-w-none bg-transparent p-0 text-white;
+    /* A host whose title bar lies over the window (desktop: the traffic lights, or the window
+       buttons) sets --title-bar; the viewer starts under it so its name and buttons stay clear. */
+    padding-top: var(--title-bar, 0px);
   }
   .viewer[open] {
     @apply flex flex-col;
@@ -573,6 +576,13 @@
   }
   .viewer-button {
     @apply grid h-10 w-10 place-items-center rounded-full text-white/85 transition-colors hover:bg-white/15 hover:text-white;
+  }
+  /* One track the size of the box, not of its content: an implicit `auto` row grows to the
+     picture's own height, so `h-full` and `max-h-full` below it never bind and a tall picture
+     opens cropped instead of fitted. */
+  .viewer-stage,
+  .zoom-frame {
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   }
   .viewer-stage {
     @apply grid min-h-0 flex-1 place-items-center px-16 pb-8;
