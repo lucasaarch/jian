@@ -158,10 +158,34 @@ export function fitPrompt(input: {
   };
 }
 
+/** A tool result put aside to fit the window; its step checkpoint keeps it for read_artifact. */
+function shedResults(block: ModelMessage[]): { block: ModelMessage[]; shed: number } {
+  let shed = 0;
+  const next = block.map((message) => {
+    if (message.role !== 'tool') return message;
+    return {
+      ...message,
+      content: message.content.map((part) => {
+        if (part.type !== 'tool-result') return part;
+        shed++;
+        return {
+          ...part,
+          output: {
+            type: 'text' as const,
+            value: `[Result removed to fit the context window; read_artifact with toolCallId "${part.toolCallId}" returns it.]`,
+          },
+        };
+      }),
+    };
+  });
+  return { block: next, shed };
+}
+
 /**
  * Last resort when compaction cannot shrink the request: drop the oldest turn blocks until the
  * prompt fits, keeping the latest user turn. The dropped turns remain in the database and the
- * panel.
+ * panel. When the current turn alone outgrew the window, step by step, the results of its
+ * oldest tool calls are put aside, never the latest step's, rather than failing the run.
  */
 export function truncatePrompt(input: {
   provider: string;
@@ -178,6 +202,7 @@ export function truncatePrompt(input: {
       tokens: number;
       breakdown: { system: number; tools: number; messages: number };
       droppedBlocks: number;
+      shedResults: number;
     }
   | undefined {
   const blocks = blocksOf(input.messages);
@@ -205,19 +230,24 @@ export function truncatePrompt(input: {
         ...input,
         messages: blocks.slice(keepFrom).flat(),
       });
-      return { ...fitted, droppedBlocks: keepFrom };
+      return { ...fitted, droppedBlocks: keepFrom, shedResults: 0 };
     } catch {
       // Keep dropping older blocks until the current turn fits or nothing remains to drop.
     }
   }
 
-  try {
-    const fitted = fitPrompt({
-      ...input,
-      messages: blocks.slice(currentBlock).flat(),
-    });
-    return { ...fitted, droppedBlocks: currentBlock };
-  } catch {
-    return undefined;
+  const current = blocks.slice(currentBlock);
+  let shed = 0;
+  for (let index = 0; ; index++) {
+    try {
+      const fitted = fitPrompt({ ...input, messages: current.flat() });
+      return { ...fitted, droppedBlocks: currentBlock, shedResults: shed };
+    } catch {
+      // The latest step's results are what the model is answering now: never shed those.
+      if (index >= current.length - 1) return undefined;
+      const next = shedResults(current[index] as ModelMessage[]);
+      current[index] = next.block;
+      shed += next.shed;
+    }
   }
 }

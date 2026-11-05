@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Message } from '@jian/contracts';
-import { tool } from 'ai';
+import { type ModelMessage, tool } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../src/context/budget.js';
@@ -299,6 +299,82 @@ describe('context', () => {
     expect(truncated?.droppedBlocks).toBeGreaterThan(0);
     expect(JSON.stringify(truncated?.messages)).toContain('current question');
     expect(JSON.stringify(truncated?.messages)).not.toContain('old'.repeat(20));
+  });
+
+  it('sheds the oldest tool results of a current turn that outgrew the window alone', () => {
+    const step = (id: string, value: string): ModelMessage[] => [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: id, toolName: 'search', input: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: id,
+            toolName: 'search',
+            output: { type: 'text', value },
+          },
+        ],
+      },
+    ];
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'current question' },
+      ...step('first', 'a'.repeat(2500)),
+      ...step('second', 'b'.repeat(2500)),
+      ...step('latest', 'answer'),
+    ];
+
+    const truncated = truncatePrompt({
+      provider: 'anthropic',
+      modelId: 'test',
+      policy: { inputTokens: 4096, outputTokens: 256 },
+      instructions: 'Answer carefully.',
+      messages,
+      tools: {},
+      currentStartIndex: 0,
+    });
+
+    const text = JSON.stringify(truncated?.messages);
+    expect(truncated?.shedResults).toBe(1);
+    expect(text).toContain('current question');
+    expect(text).toContain('read_artifact with toolCallId \\"first\\"');
+    expect(text).not.toContain('a'.repeat(100));
+    expect(text).toContain('b'.repeat(100));
+    expect(text).toContain('answer');
+    expect(truncated?.messages).toHaveLength(messages.length);
+  });
+
+  it('never sheds the latest step of the current turn', () => {
+    expect(
+      truncatePrompt({
+        provider: 'anthropic',
+        modelId: 'test',
+        policy: { inputTokens: 4096, outputTokens: 256 },
+        instructions: 'Answer carefully.',
+        messages: [
+          { role: 'user', content: 'current question' },
+          {
+            role: 'assistant',
+            content: [{ type: 'tool-call', toolCallId: 'only', toolName: 'search', input: {} }],
+          },
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'only',
+                toolName: 'search',
+                output: { type: 'text', value: 'x'.repeat(5000) },
+              },
+            ],
+          },
+        ],
+        tools: {},
+        currentStartIndex: 0,
+      }),
+    ).toBeUndefined();
   });
 
   it('fails if the mandatory current turn and tool schemas cannot fit with output reserved', () => {
