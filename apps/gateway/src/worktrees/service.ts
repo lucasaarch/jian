@@ -340,6 +340,22 @@ export class Worktrees {
     );
   }
 
+  /**
+   * The active worktrees on one machine, as recorded: what the file tools on that machine steer
+   * writes away from. Git is not asked, as it is for the gateway's at a run's start: that would
+   * cost the machine a task, and a source whose worktree is gone stays guarded only until the
+   * record is removed.
+   */
+  async recordedOnMachine(
+    profileId: string,
+    sessionId: string,
+    machineId: string,
+  ): Promise<WorktreeRecord[]> {
+    return (await activeWorktrees(this.store.db, profileId, sessionId)).filter(
+      (record) => record.place === machineId,
+    );
+  }
+
   /** Every active worktree of the profile, whichever conversation holds it. */
   recordedForProfile(profileId: string): Promise<WorktreeRecord[]> {
     return profileWorktrees(this.store.db, profileId);

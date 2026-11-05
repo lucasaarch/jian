@@ -86,6 +86,7 @@ import {
   requestText,
 } from './guard.js';
 import { guardrail } from './guardrail.js';
+import { machineBackend, offersMachineFiles } from './machine-files.js';
 import { availableNote, connectMcpTools, type McpEntry, unavailableNote } from './mcp.js';
 import { MCP_ERROR_UNSAID, mcpErrorText, mcpOutcomeUncertain } from './mcp-errors.js';
 import { Narrator, ToolCalls } from './narrator.js';
@@ -93,11 +94,18 @@ import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
 import { reason, toolFailure } from './tool-failure.js';
-import { deferTools, groupMates, profileTools, skillFor, type ToolServices } from './tools.js';
+import {
+  deferTools,
+  groupMates,
+  MACHINE_FILES_SUMMARY,
+  profileTools,
+  skillFor,
+  type ToolServices,
+} from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
 import { markSteering, outsideContent } from './untrusted.js';
 import { prepareGitAccess, prepareWorkerWorkspace } from './worker-workspace.js';
-import { realFolders, withFolders } from './workspace.js';
+import { type GuardedSource, realFolders, withFolders } from './workspace.js';
 import { projectCheckout, sessionCheckouts } from './workspace-home.js';
 import { RunWorktrees, type WorktreeService, worktreeTools } from './worktree-tools.js';
 
@@ -177,6 +185,21 @@ export class AgentRuntime {
     private model: ModelResolver = resolveModel,
     private options: RuntimeOptions = {},
   ) {}
+
+  /**
+   * The file tools' reach on the machine a run targets, or undefined when the machine is no
+   * longer listed. Its platform decides how its paths compare.
+   */
+  private async machineFiles(
+    profileId: string,
+    machineId: string,
+    guarded: () => readonly GuardedSource[],
+  ) {
+    const remote = this.services.remote;
+    const machine = (await remote?.list())?.find((item) => item.id === machineId);
+    if (!remote || !machine) return undefined;
+    return machineBackend(remote, profileId, machine, guarded);
+  }
 
   /**
    * Names a conversation from its first message, with the conversation's own model and beside
@@ -595,10 +618,24 @@ export class AgentRuntime {
                 profileId,
                 run.sessionId,
                 conversation.id,
+                session.remoteMachineId ?? undefined,
               ),
             }
           : undefined;
       await worktrees?.scope.start();
+      // The file tools reach the machine this run targets when its worker runs file operations,
+      // as it said when it last polled; a write there is steered from its worktrees' sources.
+      const machineFiles =
+        session.remoteMachineId &&
+        this.services.remote &&
+        (await offersMachineFiles(this.services.remote, {
+          remoteTarget: session.remoteMachineId,
+          learning,
+        }))
+          ? await this.machineFiles(profileId, session.remoteMachineId, () =>
+              worktrees ? worktrees.scope.machine : [],
+            )
+          : undefined;
       const checkouts =
         session.projectIds?.length && !session.remoteMachineId
           ? await sessionCheckouts(profileId, session.id)
@@ -663,6 +700,7 @@ export class AgentRuntime {
           Object.keys(xTools).length > 0,
           project.skills,
           worktreeCan,
+          machineFiles,
         ),
         ...(!learning && this.options.github && gitPlace
           ? githubGitTools({
@@ -773,7 +811,11 @@ export class AgentRuntime {
               .map((load) => load.name),
       );
       const keptTools = new Set(loadedTools);
-      const { gated } = deferTools(tools, loadedTools);
+      const { gated } = deferTools(
+        tools,
+        loadedTools,
+        machineFiles ? { files: MACHINE_FILES_SUMMARY } : {},
+      );
       const { mcpToolNames, selectedMcpTools, unavailable, catalog } = await connectMcpTools(
         servers,
         tools,

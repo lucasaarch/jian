@@ -44,6 +44,7 @@ import type { Store } from '../storage/database.js';
 import { artifacts, checkpoints } from '../storage/schema.js';
 import type { Work } from '../tasks/service.js';
 import { AskUserPause } from './ask-user.js';
+import { type FileBackend, fileTools } from './files.js';
 import { remoteTools } from './remote-tools.js';
 import { artifactPage } from './results.js';
 import { shellTools } from './shell.js';
@@ -108,7 +109,10 @@ export type ToolServices = {
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
   work?: Pick<Work, 'spawnInConversation' | 'cancelInConversation' | 'focusInspector'>;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove' | 'sync'>;
-  remote?: Pick<Remote, 'list' | 'execute' | 'executeComputer' | 'update'>;
+  remote?: Pick<
+    Remote,
+    'list' | 'execute' | 'executeComputer' | 'update' | 'executeFiles' | 'offersFiles'
+  >;
 };
 
 /**
@@ -160,6 +164,8 @@ export function profileTools(
   projectSkills: readonly Skill[] = [],
   /** Whether this run has the worktree tools, which the skill about them goes by. */
   worktrees?: { create: boolean; machine: boolean; signals: boolean },
+  /** The file tools' reach on the machine this run targets, when it offers them there. */
+  machineFiles?: FileBackend,
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -743,8 +749,10 @@ export function profileTools(
   });
 
   // The shell and the file tools are always available, and so is every connected
-  // machine; a conversation aimed at one machine works there instead of locally.
+  // machine; a conversation aimed at one machine works there instead of locally: its commands
+  // through run_remote_command, its files through the same file tools when its worker has them.
   if (!remoteTarget) Object.assign(tools, shellTools(gitAccess));
+  else if (machineFiles) Object.assign(tools, fileTools(machineFiles));
   if (services.remote) {
     Object.assign(tools, remoteTools(run, services.remote, services.store, remoteTarget));
   }
@@ -913,7 +921,11 @@ export const TOOL_GROUPS = {
   ...X_TOOL_GROUPS,
 } as const;
 
-type ToolGroup = keyof typeof TOOL_GROUPS;
+export type ToolGroup = keyof typeof TOOL_GROUPS;
+
+/** The `files` group for a run whose file tools reach its machine, not the gateway's. */
+export const MACHINE_FILES_SUMMARY =
+  'read, edit, write, find and search files on the machine this conversation works on — for code too';
 
 const deferred = new Map<string, ToolGroup>(
   Object.entries(TOOL_GROUPS).flatMap(([group, entry]) =>
@@ -941,7 +953,12 @@ function offeredGroups(tools: ToolSet): ToolGroup[] {
  * Adds the loader and reports which tools it gates. The returned set is live: loading a group
  * adds its names to it, and the runtime sends only the tools it holds.
  */
-export function deferTools(tools: ToolSet, loaded: Set<string>): { gated: Set<string> } {
+export function deferTools(
+  tools: ToolSet,
+  loaded: Set<string>,
+  /** A group's summary as this run has it, where the default would say something untrue. */
+  summaries: Partial<Record<ToolGroup, string>> = {},
+): { gated: Set<string> } {
   const groups = offeredGroups(tools);
   const gated = new Set(
     Object.keys(tools).filter((name) => groups.includes(deferred.get(name) as ToolGroup)),
@@ -953,7 +970,7 @@ export function deferTools(tools: ToolSet, loaded: Set<string>): { gated: Set<st
 
   tools.load_tools = tool({
     description: `Load a group of tools before using it. ${groups
-      .map((group) => `${group}: ${TOOL_GROUPS[group].summary}`)
+      .map((group) => `${group}: ${summaries[group] ?? TOOL_GROUPS[group].summary}`)
       .join('. ')}.`,
     inputSchema: z.object({
       groups: z.array(z.enum(groups as [ToolGroup, ...ToolGroup[]])).min(1),

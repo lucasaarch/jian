@@ -16,6 +16,7 @@ export type WorktreeService = Pick<
   | 'remove'
   | 'onGateway'
   | 'recordedOnGateway'
+  | 'recordedOnMachine'
   | 'conversationSessions'
 >;
 
@@ -42,14 +43,24 @@ const guardsOf = (records: WorktreeRecord[]) =>
 export class RunWorktrees {
   parent: readonly GuardedSource[] = [];
   own: readonly GuardedSource[] = [];
+  /**
+   * The sources of this run's worktrees on its target machine, as recorded, for the file tools
+   * there. Machine paths, not real ones: the gateway cannot resolve a path on another machine.
+   */
+  machine: readonly GuardedSource[] = [];
 
   constructor(
-    private readonly worktrees: Pick<WorktreeService, 'onGateway' | 'recordedOnGateway'>,
+    private readonly worktrees: Pick<
+      WorktreeService,
+      'onGateway' | 'recordedOnGateway' | 'recordedOnMachine'
+    >,
     private readonly profileId: string,
     /** This run's session: a subagent's task session, or the conversation itself. */
     readonly sessionId: string,
     /** The conversation: for a subagent, the one that started it. */
     readonly conversationId: string,
+    /** The machine this run's own session targets, whose file tools it guards. */
+    private readonly machineId?: string,
   ) {}
 
   get subagent() {
@@ -61,7 +72,7 @@ export class RunWorktrees {
     return [...this.parent, ...this.own];
   }
 
-  /** At the start of the run, with git asked whether each folder is still there. */
+  /** At the start of the run, with git asked whether each folder on the gateway is still there. */
   start(): Promise<void> {
     return this.read((profileId, sessionId) => this.worktrees.onGateway(profileId, sessionId));
   }
@@ -79,8 +90,14 @@ export class RunWorktrees {
       const parent = this.subagent
         ? await guardsOf(await records(this.profileId, this.conversationId))
         : [];
+      const machine = this.machineId
+        ? (
+            await this.worktrees.recordedOnMachine(this.profileId, this.sessionId, this.machineId)
+          ).map(({ source, path }) => ({ source, worktree: path }))
+        : [];
       this.own = own;
       this.parent = parent;
+      this.machine = machine;
     } catch (error) {
       // What was guarded stays guarded, and the next call reads again.
       console.error(
