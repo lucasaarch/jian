@@ -10,7 +10,7 @@ import { agentPath } from './navigation';
 import { panelApi } from './query/client';
 import { keys } from './query/keys';
 import { queries, useProfiles } from './query/profile';
-import { draftKey, useDrafts } from './stores/drafts';
+import { draftKey, useAttached, useDrafts } from './stores/drafts';
 import { useLastProfile } from './stores/last-profile';
 
 /**
@@ -135,6 +135,7 @@ export function useDeleteConversation(): (sessionId: string) => Promise<boolean>
       }
 
       useDrafts.getState().write(draftKey(profileId, sessionId), '');
+      useAttached.getState().forget(draftKey(profileId, sessionId));
       await client.cancelQueries({ queryKey: keys.sessions(profileId) });
       // The key from the query's own options carries its type, so the update is checked.
       client.setQueryData(queries.sessions(profileId).queryKey, (sessions = []) =>

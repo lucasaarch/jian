@@ -5,33 +5,16 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { HoverTip } from '../../kit/info-tip';
 import type { MediaUpload } from '../../lib/api';
-import {
-  type AttachmentKind,
-  base64,
-  classify,
-  MAX_MESSAGE_MEDIA,
-  PASTE_AS_FILE_CHARS,
-} from '../../lib/attachments';
+import { base64, classify, MAX_MESSAGE_MEDIA, PASTE_AS_FILE_CHARS } from '../../lib/attachments';
 import { useRecorder } from '../../lib/recorder';
-import { useDrafts } from '../../lib/stores/drafts';
+import { type Attachment, useAttached, useDrafts } from '../../lib/stores/drafts';
 import { AudioPlayer } from '../ui';
 import { listBreak } from './list-break';
 import { size } from './media';
 import { VoicePill } from './voice-pill';
 
-type Attachment = {
-  key: string;
-  name: string;
-  kind: AttachmentKind;
-  bytes: number;
-  /** A local address for the picture or the recording, released when the tile goes. */
-  preview?: string;
-  state: 'uploading' | 'ready' | 'failed';
-  id?: string;
-  file?: File;
-  mimeType?: MediaUpload['mimeType'];
-  voice?: boolean;
-};
+/** The files of a composer that keeps no draft, which go with it. */
+const NONE: Attachment[] = [];
 
 /**
  * The owner's side of the gateway conversation. Each file uploads the moment it is attached,
@@ -81,7 +64,14 @@ export function Composer({
     setText(next);
     if (draftKey) useDrafts.getState().write(draftKey, next);
   };
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [own, setOwn] = useState<Attachment[]>(NONE);
+  const kept = useAttached((state) => (draftKey ? state.files[draftKey] : undefined));
+  const attachments = draftKey ? (kept ?? NONE) : own;
+  // By the key, not the component: an upload that ends after the owner left lands in the draft.
+  const setAttachments = (next: (files: Attachment[]) => Attachment[]) => {
+    if (draftKey) useAttached.getState().change(draftKey, next);
+    else setOwn(next);
+  };
   const [sending, setSending] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState('');
@@ -94,10 +84,13 @@ export function Composer({
   }, [replyTo]);
   const recorder = useRecorder();
   const pastes = useRef(0);
-  // Local previews hold memory until released; the last ones go with the composer.
+  // Local previews hold memory until released. Without a draft the last ones go with the
+  // composer; a draft's stay with its files, which the draft releases.
   const previews = useRef(new Set<string>());
+  const keeps = useRef(Boolean(draftKey));
   useEffect(
     () => () => {
+      if (keeps.current) return;
       for (const url of previews.current) URL.revokeObjectURL(url);
     },
     [],
@@ -205,7 +198,7 @@ export function Composer({
       for (const item of attachments) if (item.preview) URL.revokeObjectURL(item.preview);
       previews.current.clear();
       write('');
-      setAttachments([]);
+      setAttachments(() => []);
       onSent();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'The message could not be sent.');
