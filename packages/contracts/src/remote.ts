@@ -106,7 +106,7 @@ export const remoteUpdateParamsSchema = z.strictObject({
   version: z.string().regex(/^(latest|\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?)$/),
 });
 
-export const remoteTaskKindSchema = z.enum(['shell', 'computer', 'update', 'browser']);
+export const remoteTaskKindSchema = z.enum(['shell', 'computer', 'update', 'browser', 'files']);
 
 /**
  * Says a request comes from the desktop app, which signs it on its way out. Only that app has a
@@ -143,6 +143,211 @@ export const remoteBrowserResultSchema = z.strictObject({
     .optional(),
 });
 
+/** What a worker says when it runs `files` tasks: file operations with Node's `fs`, no shell. */
+export const REMOTE_FILES_CAPABILITY = 'files-v1';
+
+/**
+ * Absolute on the worker's own system: POSIX `/…` or Windows `C:\…` / `C:/…`. A relative path
+ * would resolve against whatever folder the worker happens to run in.
+ */
+const remoteFilesPathSchema = z
+  .string()
+  .max(4096)
+  .regex(/^(\/|[A-Za-z]:[\\/])/)
+  .refine((path) => !path.includes('\0'), 'A path cannot contain NUL.');
+
+const remoteFilesShaSchema = z.string().regex(/^[0-9a-f]{40}$/);
+
+/** The largest file a read may ask for, as the local file tools allow. */
+export const REMOTE_FILES_MAX_READ_BYTES = 20 * 1024 * 1024;
+/** The largest git file kept, in bytes. */
+export const REMOTE_FILES_MAX_GIT_BYTES = 500_000;
+/** Longest text a write or a read answer carries; a result must stay under 480,000 bytes. */
+export const REMOTE_FILES_MAX_TEXT = 400_000;
+
+/** One file operation on a machine. */
+export const remoteFilesOpSchema = z.discriminatedUnion('op', [
+  z.strictObject({
+    op: z.literal('read'),
+    path: remoteFilesPathSchema,
+    maxBytes: z.number().int().min(1).max(REMOTE_FILES_MAX_READ_BYTES),
+  }),
+  z.strictObject({
+    op: z.literal('write'),
+    path: remoteFilesPathSchema,
+    content: z.string().max(REMOTE_FILES_MAX_TEXT),
+    /** The mtime the writer read; null means the file must not exist. A mismatch is `changed`. */
+    expectedMtimeMs: z.number().nullable(),
+  }),
+  z.strictObject({
+    op: z.literal('list'),
+    path: remoteFilesPathSchema,
+    limit: z.number().int().min(1).max(300),
+  }),
+  z.strictObject({
+    op: z.literal('find'),
+    path: remoteFilesPathSchema,
+    pattern: z.string().min(1).max(500),
+    limit: z.number().int().min(1).max(1000),
+  }),
+  z.strictObject({
+    op: z.literal('search'),
+    path: remoteFilesPathSchema,
+    pattern: z.string().min(1).max(2000),
+    glob: z.string().max(200).optional(),
+    ignoreCase: z.boolean(),
+    contextLines: z.number().int().min(0).max(10),
+    output: z.enum(['content', 'files', 'count']),
+    limit: z.number().int().min(1).max(2000),
+  }),
+  z.strictObject({
+    op: z.literal('read-bytes'),
+    path: remoteFilesPathSchema,
+    maxBytes: z.number().int().min(1).max(REMOTE_FILES_MAX_READ_BYTES),
+  }),
+  z.strictObject({
+    op: z.literal('write-bytes'),
+    path: remoteFilesPathSchema,
+    // Base64 of at most 300,000 bytes, which keeps the task far under the channel's size.
+    base64: z
+      .string()
+      .max(REMOTE_FILES_MAX_TEXT)
+      .regex(/^[A-Za-z0-9+/]*={0,2}$/),
+  }),
+  z.strictObject({
+    op: z.literal('git-status'),
+    root: remoteFilesPathSchema,
+    /** Also diff the working tree against this commit. */
+    against: remoteFilesShaSchema.optional(),
+  }),
+  z.strictObject({
+    op: z.literal('git-file'),
+    root: remoteFilesPathSchema,
+    path: z
+      .string()
+      .min(1)
+      .max(4096)
+      .refine((p) => !p.includes('\0'), 'No NUL.'),
+    against: z.union([remoteFilesShaSchema, z.literal('HEAD')]),
+    maxBytes: z.number().int().min(1).max(REMOTE_FILES_MAX_GIT_BYTES),
+  }),
+  z.strictObject({
+    op: z.literal('merge-base'),
+    root: remoteFilesPathSchema,
+    base: z.string().min(1).max(256),
+  }),
+]);
+
+export const remoteFilesProblemSchema = z.enum([
+  'missing',
+  'not-file',
+  'not-directory',
+  'binary',
+  'too-large',
+  'changed',
+  'exists',
+  'refused',
+  'not-repository',
+  'failed',
+]);
+
+const remoteFilesRawSchema = z.string().max(REMOTE_FILES_MAX_TEXT);
+
+/** What the worker answered; `op` repeats the request's so the gateway can match the two. */
+export const remoteFilesAnswerSchema = z.union([
+  z.discriminatedUnion('op', [
+    z.strictObject({
+      ok: z.literal(true),
+      op: z.literal('read'),
+      text: remoteFilesRawSchema,
+      mtimeMs: z.number(),
+      bytes: z.number().int().min(0),
+    }),
+    z.strictObject({
+      ok: z.literal(true),
+      op: z.literal('write'),
+      mtimeMs: z.number(),
+      bytes: z.number().int().min(0),
+      created: z.boolean(),
+    }),
+    z.strictObject({
+      ok: z.literal(true),
+      op: z.literal('list'),
+      entries: z
+        .array(
+          z.strictObject({
+            name: z.string().max(1024),
+            kind: z.enum(['file', 'directory', 'symlink', 'other']),
+          }),
+        )
+        .max(300),
+      truncated: z.boolean(),
+    }),
+    z.strictObject({
+      ok: z.literal(true),
+      op: z.literal('find'),
+      files: z.array(z.string().max(4096)).max(1000),
+      truncated: z.boolean(),
+    }),
+    z.strictObject({
+      ok: z.literal(true),
+      op: z.literal('search'),
+      /** Output lines as the gateway's search prints them; the total stays within 60,000 characters. */
+      matches: z.array(z.string().max(60_000)).max(2000),
+      truncated: z.boolean(),
+    }),
+    z.strictObject({
+      ok: z.literal(true),
+      op: z.literal('read-bytes'),
+      base64: z.string().max(REMOTE_FILES_MAX_TEXT),
+      bytes: z.number().int().min(0),
+    }),
+    z.strictObject({
+      ok: z.literal(true),
+      op: z.literal('write-bytes'),
+      bytes: z.number().int().min(0),
+    }),
+    z.strictObject({
+      ok: z.literal(true),
+      op: z.literal('git-status'),
+      top: z.string().max(4096),
+      filters: z.array(z.string().max(1024)).max(200),
+      /** Raw `git status --porcelain -z` and `git diff -z` outputs, for the gateway's parsers. */
+      status: remoteFilesRawSchema,
+      diff: remoteFilesRawSchema.optional(),
+    }),
+    z.strictObject({
+      ok: z.literal(true),
+      op: z.literal('git-file'),
+      before: z.string().max(REMOTE_FILES_MAX_GIT_BYTES).nullable(),
+      after: z.string().max(REMOTE_FILES_MAX_GIT_BYTES).nullable(),
+      binary: z.boolean().optional(),
+    }),
+    z.strictObject({
+      ok: z.literal(true),
+      op: z.literal('merge-base'),
+      sha: remoteFilesShaSchema,
+    }),
+  ]),
+  z.strictObject({
+    ok: z.literal(false),
+    op: z.enum([
+      'read',
+      'write',
+      'list',
+      'find',
+      'search',
+      'read-bytes',
+      'write-bytes',
+      'git-status',
+      'git-file',
+      'merge-base',
+    ]),
+    problem: remoteFilesProblemSchema,
+    message: z.string().max(2000),
+  }),
+]);
+
 export const remoteTaskSchema = z.strictObject({
   id: z.uuid(),
   kind: remoteTaskKindSchema.default('shell'),
@@ -152,6 +357,7 @@ export const remoteTaskSchema = z.strictObject({
   computer: remoteComputerParamsSchema.optional(),
   update: remoteUpdateParamsSchema.optional(),
   browser: remoteBrowserParamsSchema.optional(),
+  files: remoteFilesOpSchema.optional(),
   /**
    * A shell task's secret environment, such as a credential the command needs: added to that
    * command alone. A worker that advertises `shell-secret-env-v1` never logs it and masks its
@@ -184,6 +390,7 @@ export const remoteResultSchema = z.strictObject({
   /** The releases an update task went from and to; the worker restarts after posting it. */
   update: z.strictObject({ from: z.string(), to: z.string() }).optional(),
   browser: remoteBrowserResultSchema.optional(),
+  files: remoteFilesAnswerSchema.optional(),
 });
 
 /** What updating a machine came to, for the owner in the panel and for an agent. */
@@ -202,6 +409,8 @@ export type RemoteCommand = z.infer<typeof remoteCommandSchema>;
 export type RemoteComputerParams = z.infer<typeof remoteComputerParamsSchema>;
 export type RemoteBrowserParams = z.infer<typeof remoteBrowserParamsSchema>;
 export type RemoteBrowserResult = z.infer<typeof remoteBrowserResultSchema>;
+export type RemoteFilesOp = z.infer<typeof remoteFilesOpSchema>;
+export type RemoteFilesAnswer = z.infer<typeof remoteFilesAnswerSchema>;
 export type RemoteComputerCommand = z.infer<typeof remoteComputerCommandSchema>;
 /** A task as the gateway hands it to a worker. */
 export type RemoteTask = z.infer<typeof remoteTaskSchema>;

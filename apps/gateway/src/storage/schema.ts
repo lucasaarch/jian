@@ -130,7 +130,7 @@ export const remoteTasks = pgTable(
     /** The agent's profile; none when the owner asked from the panel. */
     profileId: uuid('profile_id').references(() => profiles.id, { onDelete: 'cascade' }),
     kind: text('kind')
-      .$type<'shell' | 'computer' | 'update' | 'browser'>()
+      .$type<'shell' | 'computer' | 'update' | 'browser' | 'files'>()
       .notNull()
       .default('shell'),
     command: text('command').notNull().default(''),

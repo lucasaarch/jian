@@ -5085,7 +5085,7 @@ export interface operations {
                              * @default shell
                              * @enum {string}
                              */
-                            kind: "shell" | "computer" | "update" | "browser";
+                            kind: "shell" | "computer" | "update" | "browser" | "files";
                             command: string | null;
                             cwd: string | null;
                             timeoutMs: number;
@@ -5118,6 +5118,67 @@ export interface operations {
                                 /** Format: uuid */
                                 sessionId: string;
                                 input: unknown;
+                            };
+                            files?: {
+                                /** @constant */
+                                op: "read";
+                                path: string;
+                                maxBytes: number;
+                            } | {
+                                /** @constant */
+                                op: "write";
+                                path: string;
+                                content: string;
+                                expectedMtimeMs: number | null;
+                            } | {
+                                /** @constant */
+                                op: "list";
+                                path: string;
+                                limit: number;
+                            } | {
+                                /** @constant */
+                                op: "find";
+                                path: string;
+                                pattern: string;
+                                limit: number;
+                            } | {
+                                /** @constant */
+                                op: "search";
+                                path: string;
+                                pattern: string;
+                                glob?: string;
+                                ignoreCase: boolean;
+                                contextLines: number;
+                                /** @enum {string} */
+                                output: "content" | "files" | "count";
+                                limit: number;
+                            } | {
+                                /** @constant */
+                                op: "read-bytes";
+                                path: string;
+                                maxBytes: number;
+                            } | {
+                                /** @constant */
+                                op: "write-bytes";
+                                path: string;
+                                base64: string;
+                            } | {
+                                /** @constant */
+                                op: "git-status";
+                                root: string;
+                                against?: string;
+                            } | {
+                                /** @constant */
+                                op: "git-file";
+                                root: string;
+                                path: string;
+                                against: string | "HEAD";
+                                maxBytes: number;
+                            } | {
+                                /** @constant */
+                                op: "merge-base";
+                                root: string;
+                                base: string;
                             };
                             env?: {
                                 [key: string]: string;
@@ -5359,6 +5420,92 @@ export interface operations {
                             archive: string;
                             snapshot: unknown;
                         };
+                    };
+                    files?: ({
+                        /** @constant */
+                        ok: true;
+                        /** @constant */
+                        op: "read";
+                        text: string;
+                        mtimeMs: number;
+                        bytes: number;
+                    } | {
+                        /** @constant */
+                        ok: true;
+                        /** @constant */
+                        op: "write";
+                        mtimeMs: number;
+                        bytes: number;
+                        created: boolean;
+                    } | {
+                        /** @constant */
+                        ok: true;
+                        /** @constant */
+                        op: "list";
+                        entries: {
+                            name: string;
+                            /** @enum {string} */
+                            kind: "file" | "directory" | "symlink" | "other";
+                        }[];
+                        truncated: boolean;
+                    } | {
+                        /** @constant */
+                        ok: true;
+                        /** @constant */
+                        op: "find";
+                        files: string[];
+                        truncated: boolean;
+                    } | {
+                        /** @constant */
+                        ok: true;
+                        /** @constant */
+                        op: "search";
+                        matches: string[];
+                        truncated: boolean;
+                    } | {
+                        /** @constant */
+                        ok: true;
+                        /** @constant */
+                        op: "read-bytes";
+                        base64: string;
+                        bytes: number;
+                    } | {
+                        /** @constant */
+                        ok: true;
+                        /** @constant */
+                        op: "write-bytes";
+                        bytes: number;
+                    } | {
+                        /** @constant */
+                        ok: true;
+                        /** @constant */
+                        op: "git-status";
+                        top: string;
+                        filters: string[];
+                        status: string;
+                        diff?: string;
+                    } | {
+                        /** @constant */
+                        ok: true;
+                        /** @constant */
+                        op: "git-file";
+                        before: string | null;
+                        after: string | null;
+                        binary?: boolean;
+                    } | {
+                        /** @constant */
+                        ok: true;
+                        /** @constant */
+                        op: "merge-base";
+                        sha: string;
+                    }) | {
+                        /** @constant */
+                        ok: false;
+                        /** @enum {string} */
+                        op: "read" | "write" | "list" | "find" | "search" | "read-bytes" | "write-bytes" | "git-status" | "git-file" | "merge-base";
+                        /** @enum {string} */
+                        problem: "missing" | "not-file" | "not-directory" | "binary" | "too-large" | "changed" | "exists" | "refused" | "not-repository" | "failed";
+                        message: string;
                     };
                 };
             };
