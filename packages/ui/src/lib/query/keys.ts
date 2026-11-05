@@ -40,8 +40,17 @@ export const keys = {
     ['profile', profileId, 'timeline', sessionId] as const,
   sessionPulls: (profileId: string, sessionId?: string) =>
     ['profile', profileId, 'pulls', ...(sessionId ? [sessionId] : [])] as const,
-  sessionChanges: (profileId: string, sessionId: string, path?: string) =>
-    ['profile', profileId, 'changes', sessionId, ...(path ? [path] : [])] as const,
+  sessionWorktrees: (profileId: string, sessionId?: string) =>
+    ['profile', profileId, 'worktrees', ...(sessionId ? [sessionId] : [])] as const,
+  sessionChanges: (profileId: string, sessionId: string, path?: string, worktree?: string) =>
+    [
+      'profile',
+      profileId,
+      'changes',
+      sessionId,
+      ...(worktree ? [{ worktree }] : []),
+      ...(path ? [path] : []),
+    ] as const,
   schedules: (profileId: string) => ['profile', profileId, 'schedules'] as const,
   scheduleHistory: (profileId: string, scheduleId: string) =>
     ['profile', profileId, 'schedules', scheduleId, 'history'] as const,

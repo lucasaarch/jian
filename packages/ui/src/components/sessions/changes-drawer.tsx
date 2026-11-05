@@ -1,9 +1,9 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileCode2 } from 'lucide-react';
+import { FileCode2, GitBranch } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Action, Skeleton, SkeletonLine, SkeletonRegion } from '../../kit';
+import { Action, Picker, PickerRow, Skeleton, SkeletonLine, SkeletonRegion } from '../../kit';
 import type { GatewayApi, SessionChange } from '../../lib/api';
 import { GatewayAnswer } from '../../lib/api/result';
 import { subscribe } from '../../lib/events';
@@ -15,7 +15,8 @@ import { FileFilter, WrapSwitch } from './diff-controls';
 import { InspectorBar, InspectorBody } from './inspector';
 import { InspectorContent } from './inspector-host';
 
-type DrawerApi = Pick<GatewayApi, 'sessionChanges' | 'timeline'>;
+type DrawerApi = Pick<GatewayApi, 'sessionChanges' | 'timeline'> &
+  Partial<Pick<GatewayApi, 'sessionWorktrees'>>;
 
 /**
  * How often an open list asks again, in ms. Events tell of what the agent changes; only asking
@@ -119,6 +120,8 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
   const closer = useRef<HTMLButtonElement>(null);
   const [wrap, setWrap] = useState(false);
   const [filter, setFilter] = useState('');
+  const [picked, setPicked] = useState<string>();
+  const [picking, setPicking] = useState(false);
   const client = useQueryClient();
   const tab = tabs.find((item) => item.kind === 'changes' && item.key === following);
   const sessionId = tab?.kind === 'changes' ? tab.sessionId : undefined;
@@ -127,26 +130,40 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
   const toolCallId = tab?.kind === 'changes' ? tab.toolCallId : undefined;
   const path = tab?.kind === 'changes' ? tab.path : undefined;
 
+  // A worktree's checkout is on the gateway's disk and read like a project's. One on a machine is
+  // not, so it leaves the timeline as the only list. An older gateway answers none.
+  const worktrees = useQuery({
+    queryKey: keys.sessionWorktrees(profileId, sessionId ?? ''),
+    queryFn: async () => (await api.sessionWorktrees?.(profileId, sessionId ?? '')) ?? [],
+    enabled: Boolean(sessionId),
+  });
+  const here = (worktrees.data ?? []).filter((item) => item.place === 'gateway');
+  // With several, the one chosen; until one is, the first, so the list never waits on an answer.
+  const worktree = here.find((item) => item.name === picked)?.name ?? here[0]?.name;
+  // Asking before the worktrees are known would be refused when there are several.
+  const known = !worktrees.isPending;
+  const readable = Boolean(projectId || worktree);
+
   const listing = useQuery({
-    queryKey: keys.sessionChanges(profileId, sessionId ?? ''),
-    queryFn: () => api.sessionChanges(profileId, sessionId ?? ''),
-    enabled: Boolean(sessionId && projectId),
+    queryKey: keys.sessionChanges(profileId, sessionId ?? '', undefined, worktree),
+    queryFn: () => api.sessionChanges(profileId, sessionId ?? '', undefined, undefined, worktree),
+    enabled: Boolean(sessionId && readable && known),
     refetchInterval: READ_AGAIN_MS,
     refetchOnWindowFocus: true,
   });
   const selected = useQuery({
-    queryKey: keys.sessionChanges(profileId, sessionId ?? '', path),
-    queryFn: () => api.sessionChanges(profileId, sessionId ?? '', path),
+    queryKey: keys.sessionChanges(profileId, sessionId ?? '', path, worktree),
+    queryFn: () => api.sessionChanges(profileId, sessionId ?? '', path, undefined, worktree),
     enabled: Boolean(
-      sessionId && projectId && path && listing.data?.files.some((file) => file.path === path),
+      sessionId && readable && path && listing.data?.files.some((file) => file.path === path),
     ),
     refetchInterval: READ_AGAIN_MS,
     refetchOnWindowFocus: true,
   });
   const pathIsCurrent = Boolean(listing.data?.files.some((file) => file.path === path));
-  const unreadable = Boolean(projectId && !listing.data && cannotRead(listing.error));
+  const unreadable = Boolean(readable && !listing.data && cannotRead(listing.error));
   // Reads the checkout as it is now; otherwise, what the conversation's turns saved is all there is.
-  const live = Boolean(projectId && !unreadable);
+  const live = Boolean(readable && !unreadable);
   const needsHistory = Boolean(
     sessionId && runId && path && (!live || (listing.isSuccess && !pathIsCurrent)),
   );
@@ -161,7 +178,7 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
   const saved = useQuery({
     queryKey: keys.sessionTimeline(profileId, sessionId ?? ''),
     queryFn: () => api.timeline(profileId, sessionId ?? ''),
-    enabled: Boolean(sessionId && !live && !path),
+    enabled: Boolean(sessionId && known && !live && !path),
   });
   const recordedStep = needsHistory
     ? history.data
@@ -182,7 +199,7 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
   const opened = Boolean(sessionId);
   const listed = live ? listing : saved;
   // Reads wait while the gateway is away, with nothing on the way: an outline would never end.
-  const held = [listed, selected, history].some(
+  const held = [worktrees, listed, selected, history].some(
     (query) => !query.data && query.fetchStatus === 'paused',
   );
   const truncated = Boolean(live && listing.data?.truncated);
@@ -275,6 +292,34 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
             )}
             {/* One place in the line, so the field stays the same element from a file to the list
               and the keyboard stays in it. */}
+            {here.length > 1 && (
+              <Picker
+                label="Worktree"
+                open={picking}
+                onOpenChange={setPicking}
+                trigger={
+                  <>
+                    <GitBranch size={12} aria-hidden="true" />
+                    <span className="truncate">{worktree}</span>
+                  </>
+                }
+              >
+                {here.map((item) => (
+                  <PickerRow
+                    key={item.name}
+                    label={item.name}
+                    detail={`${item.branch} → ${item.base}`}
+                    selected={item.name === worktree}
+                    onPick={() => {
+                      setPicked(item.name);
+                      setPicking(false);
+                      // Another checkout has other files: the one open may not be among them.
+                      if (path) choose();
+                    }}
+                  />
+                ))}
+              </Picker>
+            )}
             <FileFilter
               value={filter}
               onChange={(next) => {
@@ -323,7 +368,7 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
                         file === current && file.status !== 'deleted' && sessionId && path
                           ? () =>
                               api
-                                .sessionChanges(profileId, sessionId, path, true)
+                                .sessionChanges(profileId, sessionId, path, true, worktree)
                                 .then((read) => read.files[0]?.lines ?? [])
                           : undefined
                       }

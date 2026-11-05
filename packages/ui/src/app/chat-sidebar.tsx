@@ -34,6 +34,7 @@ import { ChatRow } from './chat-row';
 import { ChatSection, WorkspaceFolder } from './chat-section';
 import { channelKind, chatSections, lastAt, NO_PROJECT, workspaceName } from './chat-sections';
 import { SidebarSkeleton } from './chats-loading';
+import { WorktreeLoss } from './worktree-loss';
 
 /** What a conversation is at a glance: the app's own chat, or the channel it came through. */
 function conversationIcon(session: Session) {
@@ -249,6 +250,7 @@ function AgentSidebar({ profileId }: { profileId: string }) {
           }
         : {})}
       remove={() => actions.remove(session)}
+      loss={<WorktreeLoss profileId={profileId} sessionId={session.id} />}
     />
   );
 

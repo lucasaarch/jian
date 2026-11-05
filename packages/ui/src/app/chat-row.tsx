@@ -32,6 +32,8 @@ export type ChatRowProps = {
   pin?: () => void;
   /** Whether it was deleted. Only ever called once the owner has said yes. */
   remove: () => Promise<boolean>;
+  /** What else deleting it costs, read when the owner is asked. */
+  loss?: ReactNode;
 };
 
 /**
@@ -119,6 +121,7 @@ export function ChatRow(props: ChatRowProps) {
         onOpenChange={setDeleting}
         name={props.name}
         remove={props.remove}
+        {...(props.loss ? { loss: props.loss } : {})}
       />
     </>
   );
@@ -130,11 +133,14 @@ export function DeleteChatDialog({
   onOpenChange,
   name,
   remove,
+  loss,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   name: string;
   remove: () => Promise<boolean>;
+  /** Rendered only while the question is open, so what it reads is asked for then. */
+  loss?: ReactNode;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -152,7 +158,7 @@ export function DeleteChatDialog({
         if (deleted) onOpenChange(false);
       }}
     >
-      The chat and everything said in it are gone for good.
+      The chat and everything said in it are gone for good. {loss}
     </ConfirmDialog>
   );
 }

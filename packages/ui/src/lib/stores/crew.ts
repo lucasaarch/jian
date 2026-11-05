@@ -25,6 +25,8 @@ export type BrowserPageTab = { id: string; title: string; url: string };
 type Crew = {
   sessionId?: string;
   projectId?: string;
+  /** The conversation has a worktree on the gateway: a checkout Changes can read with no project. */
+  worktrees: boolean;
   agents: Subagent[];
   /** Whether the Inspector is on screen, which it can be with nothing in it. */
   opened: boolean;
@@ -144,6 +146,7 @@ const EMPTY: Kept = {
 const restored = (sessionId: string): Kept => kept().get(sessionId) ?? EMPTY;
 const browserTabKey = (pageId: string) => `browser:${pageId}`;
 export const useCrew = create<Crew>()((set, get) => ({
+  worktrees: false,
   agents: [],
   tabs: [],
   opened: false,
@@ -287,7 +290,14 @@ export const useCrew = create<Crew>()((set, get) => ({
     const state = get();
     if (state.sessionId !== sessionId) return;
     keep(sessionId, state);
-    set({ sessionId: undefined, projectId: undefined, agents: [], opener: undefined, ...EMPTY });
+    set({
+      sessionId: undefined,
+      projectId: undefined,
+      worktrees: false,
+      agents: [],
+      opener: undefined,
+      ...EMPTY,
+    });
   },
 }));
 

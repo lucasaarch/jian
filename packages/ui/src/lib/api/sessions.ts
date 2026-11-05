@@ -143,6 +143,45 @@ export const sessionCalls = (client: Client) => ({
         params: { path: { profileId, sessionId } },
       }),
     ),
+  /** The conversation's isolated checkouts, and where each stands against the folder it came from. */
+  sessionWorktrees: (profileId: string, sessionId: string) =>
+    result(
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/worktrees', {
+        params: { path: { profileId, sessionId } },
+      }),
+    ),
+  /** The four below ask the agent, which does the work: the answer is the run that was started. */
+  mergeSessionWorktree: (profileId: string, sessionId: string, name: string) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/worktrees/{name}/merge', {
+        params: { path: { profileId, sessionId, name } },
+      }),
+    ),
+  updateSessionWorktree: (
+    profileId: string,
+    sessionId: string,
+    name: string,
+    strategy: 'merge' | 'rebase' = 'merge',
+  ) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/worktrees/{name}/update', {
+        params: { path: { profileId, sessionId, name } },
+        body: { strategy },
+      }),
+    ),
+  openWorktreePullRequest: (profileId: string, sessionId: string, name: string) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/worktrees/{name}/pull-request', {
+        params: { path: { profileId, sessionId, name } },
+      }),
+    ),
+  /** Removes the folder and its branch at once; the gateway refuses while the agent is working. */
+  discardSessionWorktree: (profileId: string, sessionId: string, name: string) =>
+    result(
+      client.DELETE('/v1/profiles/{profileId}/sessions/{sessionId}/worktrees/{name}', {
+        params: { path: { profileId, sessionId, name } },
+      }),
+    ),
   /** The tools of the turns named, however old; with none named, of the latest turns. */
   timeline: (profileId: string, sessionId: string, runs?: string[]) =>
     result(
@@ -162,12 +201,21 @@ export const sessionCalls = (client: Client) => ({
     sessionId: string,
     path?: string,
     whole?: boolean,
+    worktree?: string,
   ): Promise<SessionChanges> =>
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/changes', {
         params: {
           path: { profileId, sessionId },
-          ...(path ? { query: { path, ...(whole ? { whole: 'true' as const } : {}) } } : {}),
+          ...(path || worktree
+            ? {
+                query: {
+                  ...(path ? { path } : {}),
+                  ...(path && whole ? { whole: 'true' as const } : {}),
+                  ...(worktree ? { worktree } : {}),
+                },
+              }
+            : {}),
         },
       }),
     ),

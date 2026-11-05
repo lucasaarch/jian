@@ -93,7 +93,13 @@ it('lists a project’s current changed files and opens the selected checkout di
   await act(async () => file?.click());
   await settled(() => Boolean(container.querySelector('.code-diff-path')));
 
-  expect(api.sessionChanges).toHaveBeenLastCalledWith('profile', 'session', path);
+  expect(api.sessionChanges).toHaveBeenLastCalledWith(
+    'profile',
+    'session',
+    path,
+    undefined,
+    undefined,
+  );
   expect(api.timeline).not.toHaveBeenCalled();
   expect(container.querySelector('.code-diff-head')?.getAttribute('aria-expanded')).toBe('true');
   expect(container.querySelector('.code-diff-line code')?.textContent).toBe('const price = 1;');
@@ -819,4 +825,99 @@ it('says it waits for the gateway while reads are held, and reads once it answer
   } finally {
     onlineManager.setOnline(true);
   }
+});
+
+describe('with worktrees', () => {
+  const tree = (name: string, place = 'gateway') => ({
+    name,
+    branch: `jian/${name}`,
+    base: 'main',
+    source: '/work/harbor',
+    path: `/data/worktrees/harbor-1a2b3c4d/${name}`,
+    place,
+    ahead: 1,
+    behind: 0,
+    uncommitted: 1,
+    pullRequest: false,
+  });
+
+  it('reads a folder conversation’s worktree, which has no project', async () => {
+    useCrew.getState().show('session', []);
+    useCrew.getState().showChanges();
+    const api = {
+      sessionWorktrees: vi.fn(async () => [tree('brave-otter')]),
+      sessionChanges: vi.fn(async () => ({
+        files: [{ path, status: 'modified' as const }],
+        truncated: false,
+      })),
+      timeline: vi.fn(async () => []),
+    };
+
+    await render(api as never);
+    await settled(() => Boolean(container.textContent?.includes(path)));
+
+    expect(api.sessionChanges).toHaveBeenCalledWith(
+      'profile',
+      'session',
+      undefined,
+      undefined,
+      'brave-otter',
+    );
+    expect(api.timeline).not.toHaveBeenCalled();
+    // One worktree needs no choosing.
+    expect(container.querySelector('[aria-label="Worktree"]')).toBeNull();
+  });
+
+  it('asks which worktree when there are several', async () => {
+    useCrew.getState().show('session', []);
+    useCrew.getState().showChanges();
+    const api = {
+      sessionWorktrees: vi.fn(async () => [tree('brave-otter'), tree('calm-heron')]),
+      sessionChanges: vi.fn(
+        async (_p: string, _s: string, _f?: string, _w?: boolean, w?: string) => ({
+          files: [
+            { path: w === 'calm-heron' ? 'src/heron.ts' : path, status: 'modified' as const },
+          ],
+          truncated: false,
+        }),
+      ),
+      timeline: vi.fn(async () => []),
+    };
+
+    await render(api as never);
+    await settled(() => Boolean(container.textContent?.includes(path)));
+    const picker = container.querySelector<HTMLElement>('[aria-label="Worktree"]');
+    expect(picker?.textContent).toContain('brave-otter');
+
+    await act(async () => picker?.click());
+    const choice = [...document.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('calm-heron'),
+    );
+    await act(async () => choice?.click());
+    await settled(() => Boolean(container.textContent?.includes('src/heron.ts')));
+
+    expect(api.sessionChanges).toHaveBeenLastCalledWith(
+      'profile',
+      'session',
+      undefined,
+      undefined,
+      'calm-heron',
+    );
+  });
+
+  it('keeps the timeline for a worktree that is only on a machine', async () => {
+    useCrew.getState().show('session', []);
+    useCrew.getState().showChanges();
+    const api = {
+      sessionWorktrees: vi.fn(async () => [tree('brave-otter', crypto.randomUUID())]),
+      sessionChanges: vi.fn(async () => ({ files: [], truncated: false })),
+      timeline: vi.fn(async () => [{ runId, steps: [step] }]),
+    };
+
+    await render(api as never);
+    await settled(() => Boolean(container.textContent?.includes(path)));
+
+    expect(api.sessionChanges).not.toHaveBeenCalled();
+    expect(api.timeline).toHaveBeenCalled();
+  });
 });

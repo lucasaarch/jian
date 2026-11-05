@@ -9,6 +9,7 @@ import { useReconnect } from '../../lib/stores/reconnect';
 import { useParams } from '../../platform/navigation';
 import { useChatActions } from '../chat-actions';
 import { DeleteChatDialog, RenameDialog } from '../chat-row';
+import { WorktreeLoss } from '../worktree-loss';
 import { type AppCommand, useCommands } from './registry';
 
 /** What can be done to the chat open: the same as from its row, asking the same before deleting. */
@@ -95,6 +96,7 @@ export function ChatCommands({ profileId }: { profileId: string }) {
         onOpenChange={setDeleting}
         name={name}
         remove={() => actions.remove(session)}
+        loss={<WorktreeLoss profileId={profileId} sessionId={session.id} />}
       />
     </>
   );

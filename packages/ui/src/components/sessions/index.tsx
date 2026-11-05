@@ -1,6 +1,7 @@
 'use client';
 
 import { AGENT_SESSION_CHANNEL, GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import type { Message, Run, Session } from '../../lib/api';
 import { conversationName } from '../../lib/conversation-name';
@@ -15,6 +16,8 @@ import {
   useProviderModels,
   useSessions,
 } from '../../lib/query/agent';
+import { keys } from '../../lib/query/keys';
+import { useCrew } from '../../lib/stores/crew';
 import { draftKey } from '../../lib/stores/drafts';
 import { sendNow } from '../../lib/stores/outbox';
 import { useRefresh } from '../../lib/workspace';
@@ -35,6 +38,7 @@ import { SessionModel } from './model-picker';
 import { SessionObjective } from './objective';
 import { SessionProtection } from './protection-menu';
 import { SessionPulls } from './session-pulls';
+import { SessionWorktrees } from './session-worktrees';
 
 const isGateway = (session: Session) => session.channel === GATEWAY_SESSION_CHANNEL;
 /**
@@ -92,6 +96,18 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   const [sent, setSent] = useState(0);
   // The turn at work in the open conversation, as its history last read it.
   const [working, setWorking] = useState<Run>();
+  // The same read as the badge's, so one answer serves both. The Inspector offers Changes for a
+  // worktree the gateway holds, which is a checkout with no project.
+  const { data: worktrees } = useQuery({
+    queryKey: keys.sessionWorktrees(profile.id, active?.id ?? ''),
+    queryFn: () => api.sessionWorktrees(profile.id, active?.id ?? ''),
+    enabled: Boolean(active),
+  });
+  const hasWorktree = Boolean(worktrees?.some((item) => item.place === 'gateway'));
+  useEffect(() => {
+    useCrew.setState({ worktrees: hasWorktree });
+    return () => useCrew.setState({ worktrees: false });
+  }, [hasWorktree]);
   const answered = () => {
     setSent((value) => value + 1);
     void refresh();
@@ -159,6 +175,14 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   // The pull requests the agent created and where the objective stands, beside where it runs.
   const badges = () => (
     <span className="session-badges">
+      {/* Discard waits for the turn to end; the rest steer into it, as the composer does. */}
+      <SessionWorktrees
+        api={api}
+        profileId={profile.id}
+        sessionId={active.id}
+        busy={working?.sessionId === active.id}
+        onAction={answered}
+      />
       <SessionPulls api={api} profileId={profile.id} sessionId={active.id} />
       {active.objective && <SessionObjective objective={active.objective} />}
     </span>

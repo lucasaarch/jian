@@ -23,6 +23,15 @@ const conflicts: Record<string, string> = {
   'This conversation has no checkout yet.': 'This conversation has no checkout yet.',
   'This conversation has no git checkout at its project path.':
     'This conversation has no git checkout at its project path.',
+  'Choose a worktree to read its changes.': 'Choose a worktree to read its changes.',
+  'The agent is working in this conversation. Discard once it has finished.':
+    'The agent is working here. Discard it once the turn ends.',
+  'The agent is answering this conversation. Ask again once it has finished.':
+    'The agent is answering this conversation. Ask again once it has finished.',
+  'This conversation no longer has a folder or a machine, so the agent has no worktree tools here. Give it a folder first.':
+    'The agent has no folder or machine in this conversation, so it cannot work on a worktree. Give it a folder first.',
+  'A pull request needs an origin on GitHub that the connected GitHub App reaches.':
+    'A pull request needs an origin on GitHub that the connected GitHub App can reach.',
 };
 
 function message(status: number, detail: Detail | undefined): string {

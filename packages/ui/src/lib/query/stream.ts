@@ -34,6 +34,8 @@ function affected(event: GatewayEvent, profileId: string): QueryKey[] {
       keys.contexts(profileId),
       // What the agent said may have linked a pull request.
       keys.sessionPulls(profileId),
+      // A worktree is made, merged or discarded by a turn, and counts move as it commits.
+      keys.sessionWorktrees(profileId),
     ];
   }
   if (type.startsWith('profile.')) return [keys.profiles];

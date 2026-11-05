@@ -49,7 +49,7 @@ export const useBrowserOffer = () => ({
 export const toggleInspectorFull = () => {
   const crew = useCrew.getState();
   if (crew.opened) return crew.toggleFull();
-  if (!crew.tabs.length && !crew.openBrowser && !crew.projectId) return;
+  if (!crew.tabs.length && !crew.openBrowser && !crew.projectId && !crew.worktrees) return;
   crew.reopen();
   if (!crew.full) crew.toggleFull();
 };
@@ -80,7 +80,7 @@ export const inspectorHasBrowserPage = (pageId: string) =>
 export const toggleInspector = () => {
   const crew = useCrew.getState();
   if (crew.opened) crew.close();
-  else if (crew.tabs.length || crew.openBrowser || crew.projectId) crew.reopen();
+  else if (crew.tabs.length || crew.openBrowser || crew.projectId || crew.worktrees) crew.reopen();
 };
 export const conversationOfInspector = () => useCrew.getState().sessionId;
 /** The browser tab the Inspector has in front, for a host to bring its page there. */
@@ -188,6 +188,7 @@ export function InspectorHost({
   const tabs = useCrew((state) => state.tabs);
   const agents = useCrew((state) => state.agents);
   const projectId = useCrew((state) => state.projectId);
+  const worktrees = useCrew((state) => state.worktrees);
   const [target, setTarget] = useState<HTMLDivElement | null>(null);
   const [chosen, setChosen] = useState(savedWidth);
   const [area, setArea] = useState(0);
@@ -246,11 +247,13 @@ export function InspectorHost({
           },
         ]
       : []),
-    ...(projectId
+    ...(projectId || worktrees
       ? [
           {
             label: 'Changes',
-            description: 'Review uncommitted changes in this project',
+            description: projectId
+              ? 'Review uncommitted changes in this project'
+              : 'Review uncommitted changes in this conversation’s worktree',
             icon: FileCode2,
             run: () => useCrew.getState().showChanges(),
           },
