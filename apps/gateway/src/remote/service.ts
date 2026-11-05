@@ -410,6 +410,10 @@ export class Remote {
         signal,
         taskId,
       );
+      // A task failed without an answer, by the restart sweep or as unusable, says why.
+      if (result.files === undefined && result.stderr.trim()) {
+        throw new GatewayError(502, result.stderr.trim());
+      }
       const answer = remoteFilesAnswerSchema.safeParse(storedFiles(result.files));
       if (!answer.success || answer.data.op !== op.op) {
         throw new GatewayError(502, 'The machine answered something else.');
@@ -427,11 +431,13 @@ export class Remote {
             and(eq(remoteTasks.id, taskId), inArray(remoteTasks.status, ['queued', 'running'])),
           )
           .catch(() => {});
+        // A database error here must not hide why the call ended, nor skip the strip below.
         if (op.op === 'write' || op.op === 'write-bytes') {
           await this.store.db
             .update(remoteTasks)
             .set({ payload: withoutWrittenContent(op) })
-            .where(eq(remoteTasks.id, taskId));
+            .where(eq(remoteTasks.id, taskId))
+            .catch(() => {});
         }
       }
       await this.stripFileContents(taskId);
@@ -439,13 +445,19 @@ export class Remote {
   }
 
   /**
-   * The files tasks a stopped gateway was waiting on: their callers are gone, so each fails and
-   * gives up the file text it holds, and a worker's late claim or answer is refused. Run once at
-   * start, before the gateway takes work. A second gateway process sharing the database loses
-   * the files calls it has in flight then; a write queued just before a restart is dropped along
-   * with the run that asked for it.
+   * The files tasks whose callers are gone: each fails and gives up the file text it holds, and a
+   * worker's late claim or answer is refused. A gateway that is the only process runs it at
+   * start over every one, since a restart ended all its calls; a write queued just before is
+   * dropped with the run that asked. Where other processes share the database (`givenUpOnly`),
+   * a task is swept only once its caller has certainly stopped waiting: its limit and the 30 s
+   * `waitForTask` allows past it are over.
    */
-  async failLeftoverFiles() {
+  async failLeftoverFiles({ givenUpOnly = false }: { givenUpOnly?: boolean } = {}) {
+    const givenUp = givenUpOnly
+      ? [
+          sql`${remoteTasks.createdAt} + (${remoteTasks.timeoutMs} + 30000) * interval '1 millisecond' < ${new Date(this.clock()).toISOString()}::timestamptz`,
+        ]
+      : [];
     const rows = await this.store.db
       .select({ id: remoteTasks.id, status: remoteTasks.status, payload: remoteTasks.payload })
       .from(remoteTasks)
@@ -457,6 +469,7 @@ export class Remote {
             // An answer its caller never read is still the JSON text `complete` stored.
             sql`jsonb_typeof(${remoteTasks.result} -> 'files') = 'string'`,
           ),
+          ...givenUp,
         ),
       );
     for (const row of rows) {

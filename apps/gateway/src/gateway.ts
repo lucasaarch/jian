@@ -43,6 +43,11 @@ const SCHEDULE_TICK_MS = 15_000;
  * minute (`WATCH_EVERY_MS`); a tick this short only keeps that minute from slipping much.
  */
 const PULL_TICK_MS = 15_000;
+/**
+ * How often a gateway that shares its database with other processes fails the files tasks
+ * whose callers gave up, in ms. Until then a task's file text waits in its row.
+ */
+const FILES_SWEEP_MS = 60_000;
 
 export type GatewayOptions = {
   store: Store;
@@ -225,6 +230,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
 
   let scheduleTimer: ReturnType<typeof setInterval> | undefined;
   let pullTimer: ReturnType<typeof setInterval> | undefined;
+  let sweepTimer: ReturnType<typeof setInterval> | undefined;
   let stage: StartupStage = 'database';
   let stopping: Promise<void> | undefined;
 
@@ -239,8 +245,18 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
       await moveMcpSecrets(store, vault, gatewayVault);
       // SSH keys that still live only as files in an earlier per-agent folder; nothing once imported.
       await importWorkspaceSshKeys(store, gatewayVault);
-      // File operations a machine was doing for a caller this restart ended; see there.
-      await services.remote.failLeftoverFiles();
+      // File operations a machine was doing for a caller that is gone (see there). Alone, this
+      // process's restart ended every call; beside others, only those past their wait are.
+      const shared = options.role !== 'all';
+      await services.remote.failLeftoverFiles({ givenUpOnly: shared });
+      if (shared) {
+        sweepTimer = setInterval(() => {
+          void services.remote
+            .failLeftoverFiles({ givenUpOnly: true })
+            .catch(() => console.error('jian: files tasks could not be swept; will retry'));
+        }, FILES_SWEEP_MS);
+        sweepTimer.unref();
+      }
       stage = 'queue';
       await queue?.start();
 
@@ -271,6 +287,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
         codexLogin.stop();
         clearInterval(scheduleTimer);
         clearInterval(pullTimer);
+        clearInterval(sweepTimer);
         // End long-lived event streams before waiting for HTTP shutdown.
         app?.server.closeAllConnections();
         await app?.close();

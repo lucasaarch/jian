@@ -1,6 +1,6 @@
 import type { RemoteFilesAnswer } from '@jian/contracts';
 import { eq } from 'drizzle-orm';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { remoteTasks } from '../src/storage/schema.js';
 import { testServices } from './helpers/services.js';
 
@@ -422,4 +422,126 @@ it('refuses an operation the contract does not accept in one sentence naming the
     message: expect.stringMatching(/^The glob .*\.$/),
   });
   await expect(refused).rejects.not.toMatchObject({ message: expect.stringContaining('"code"') });
+});
+
+it('sweeps only the files tasks whose caller has given up when another process may wait on them', async () => {
+  let now = Date.parse('2026-11-05T12:00:00.000Z');
+  const services = await testServices(() => now);
+  const profile = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+  const machine = await services.remote.create({ name: 'Studio' });
+  const base = { machineId: machine.id, profileId: profile.id, command: '', timeoutMs: 60_000 };
+  // Given up: past its own limit and the 30 s the caller waits beyond it.
+  const old = new Date(now - 60_000 - 30_000 - 1_000);
+  const young = new Date(now - 5_000);
+  const unread = (id: string) => ({
+    taskId: id,
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+    timedOut: false,
+    files: JSON.stringify({ ok: true, op: 'read', text: `text of ${id}`, mtimeMs: 1, bytes: 9 }),
+  });
+  const ids = {
+    youngRunning: '00000000-0000-4000-8000-000000000011',
+    oldRunning: '00000000-0000-4000-8000-000000000012',
+    youngAnswer: '00000000-0000-4000-8000-000000000013',
+    oldAnswer: '00000000-0000-4000-8000-000000000014',
+  };
+  await services.store.db.insert(remoteTasks).values([
+    {
+      ...base,
+      id: ids.youngRunning,
+      kind: 'files',
+      payload: readOp,
+      status: 'running',
+      createdAt: young,
+      updatedAt: young,
+    },
+    {
+      ...base,
+      id: ids.oldRunning,
+      kind: 'files',
+      payload: privateWrite,
+      status: 'running',
+      createdAt: old,
+      updatedAt: old,
+    },
+    {
+      ...base,
+      id: ids.youngAnswer,
+      kind: 'files',
+      payload: readOp,
+      status: 'completed',
+      result: unread(ids.youngAnswer),
+      createdAt: young,
+      updatedAt: young,
+    },
+    {
+      ...base,
+      id: ids.oldAnswer,
+      kind: 'files',
+      payload: readOp,
+      status: 'completed',
+      result: unread(ids.oldAnswer),
+      createdAt: old,
+      updatedAt: old,
+    },
+  ]);
+
+  await services.remote.failLeftoverFiles({ givenUpOnly: true });
+
+  expect((await row(services, ids.youngRunning))?.status).toBe('running');
+  expect(JSON.stringify((await row(services, ids.youngAnswer))?.result)).toContain('text of');
+  const swept = await row(services, ids.oldRunning);
+  expect(swept?.status).toBe('failed');
+  expect(JSON.stringify(swept?.payload)).not.toContain('private plan');
+  expect(JSON.stringify((await row(services, ids.oldAnswer))?.result)).not.toContain('text of');
+
+  // A minute on, the young one has been given up too.
+  now += 120_000;
+  await services.remote.failLeftoverFiles({ givenUpOnly: true });
+  expect((await row(services, ids.youngRunning))?.status).toBe('failed');
+});
+
+it('tells a caller still waiting that the gateway restarted, not that the machine misanswered', async () => {
+  const { services, profile, machine } = await setup();
+  const pending = services.remote.executeFiles(profile.id, machine.id, readOp);
+  const settled = expect(pending).rejects.toMatchObject({
+    message: 'The gateway restarted before the machine answered.',
+  });
+  await queuedRow(services);
+  await services.remote.failLeftoverFiles();
+  await settled;
+});
+
+it('keeps the reason a write ended when taking its text out of the row fails', async () => {
+  const { services, profile, machine } = await setup();
+  const db = services.store.db;
+  const update = db.update.bind(db);
+  // Only the update that takes a write's text out of its payload meets a database error.
+  const spy = vi.spyOn(db, 'update').mockImplementation(((table: typeof remoteTasks) => {
+    const builder = update(table);
+    const set = builder.set.bind(builder);
+    return Object.assign(builder, {
+      set: (values: Record<string, unknown>) =>
+        'payload' in values && !('status' in values)
+          ? { where: () => Promise.reject(new Error('database gone')) }
+          : set(values as never),
+    });
+  }) as never);
+  try {
+    const abort = new AbortController();
+    const pending = services.remote.executeFiles(
+      profile.id,
+      machine.id,
+      privateWrite,
+      abort.signal,
+    );
+    const settled = expect(pending).rejects.toMatchObject({ statusCode: 499 });
+    await queuedRow(services);
+    abort.abort();
+    await settled;
+  } finally {
+    spy.mockRestore();
+  }
 });
