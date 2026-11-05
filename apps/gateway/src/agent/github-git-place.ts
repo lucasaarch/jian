@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { mkdir, realpath } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { GatewayError } from '../core/errors.js';
 import type { Remote } from '../remote/service.js';
 import { withGitConfig } from './github-git-command.js';
@@ -36,7 +36,23 @@ export type GitPlace = {
   ): Promise<GitOutcome>;
   /** Where Jian keeps what it makes on that machine: worktrees live under it. No trailing slash. */
   home(): Promise<string>;
+  /** Joins path parts the way that machine writes them: the gateway's own separator, or `/`. */
+  join(...parts: string[]): string;
 };
+
+/**
+ * The real path of a folder that may not exist yet: git lists worktrees by real path, so a home
+ * under a symlink must be resolved or it never matches its own listing. A missing tail is kept
+ * and its nearest existing parent resolved.
+ */
+async function realOrParent(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    const parent = dirname(path);
+    return parent === path ? path : join(await realOrParent(parent), basename(path));
+  }
+}
 
 const clip = (text: string) =>
   text.length > MAX_OUTPUT
@@ -55,7 +71,8 @@ export function localPlace(gitAccess: {
 }): GitPlace {
   return {
     name: 'the machine this gateway runs on',
-    home: cloneRoot,
+    home: async () => realOrParent(await cloneRoot()),
+    join,
     async checkout(path, fallback, clone) {
       const base = reachableFolders()[0] ?? (await cloneRoot());
       const target = await confine(resolve(base, path ?? fallback), 'write');
@@ -128,7 +145,10 @@ export function remotePlace(
     name: 'the machine this conversation targets',
     async home() {
       const windows = (await machine()).platform.startsWith('win32');
-      const command = windows ? 'Write-Output $env:USERPROFILE' : 'printf %s "$HOME"';
+      // Resolved in the same task: a home behind a symlink is listed by git under its real path.
+      const command = windows
+        ? 'Write-Output (Resolve-Path $env:USERPROFILE).Path'
+        : 'cd "$HOME" && pwd -P';
       const outcome = await remote.execute(profileId, machineId, { command, timeoutMs: 30_000 });
       const home = outcome.stdout.trim().replaceAll('\\', '/').replace(/\/+$/, '');
       if (outcome.exitCode !== 0 || !home) {
@@ -136,6 +156,7 @@ export function remotePlace(
       }
       return `${home}/Jian`;
     },
+    join: (...parts) => parts.join('/'),
     async checkout(path, fallback) {
       // Relative paths start in the worker's home; the machine's own filesystem decides the rest.
       return path ?? fallback;

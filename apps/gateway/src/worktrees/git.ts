@@ -31,7 +31,7 @@ async function git(place: GitPlace, args: string[], allowFailure = false) {
 export async function worktreeRoot(place: GitPlace, source: string): Promise<string> {
   const base = source.split(/[\\/]/).filter(Boolean).at(-1) ?? 'source';
   const digest = createHash('sha256').update(source).digest('hex').slice(0, 8);
-  return `${await place.home()}/worktrees/${base}-${digest}`;
+  return place.join(await place.home(), 'worktrees', `${base}-${digest}`);
 }
 
 export async function sourceOf(
@@ -182,6 +182,7 @@ export async function removeWorktree(
     source: string;
     path: string;
     branch: string;
+    base: string;
     discard: boolean;
     deleteBranch: boolean;
   },
@@ -202,30 +203,21 @@ export async function removeWorktree(
     input.path,
   ]);
 
-  const base = (await git(place, ['-C', input.source, 'branch', '--show-current'])).stdout.trim();
-  const merged = base
-    ? (
-        await git(
-          place,
-          ['-C', input.source, 'branch', '--merged', base, '--format=%(refname:short)'],
-          true,
-        )
-      ).stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .includes(input.branch)
-    : false;
+  // Merged means every commit of the branch is in the base, so a deletion cannot lose work. `-D`
+  // because `-d` also checks the upstream, and refuses a branch pushed for a pull request.
+  const merged =
+    (
+      await git(
+        place,
+        ['-C', input.source, 'merge-base', '--is-ancestor', input.branch, input.base],
+        true,
+      )
+    ).exitCode === 0;
 
   if (!input.deleteBranch && !merged) return { branchKept: true };
-  await git(place, [
-    '-C',
-    input.source,
-    'branch',
-    input.deleteBranch ? '-D' : '-d',
-    '--',
-    input.branch,
-  ]);
-  return { branchKept: false };
+  // The worktree is gone by now; a branch that will not delete is kept, never an error.
+  const deleted = await git(place, ['-C', input.source, 'branch', '-D', '--', input.branch], true);
+  return { branchKept: deleted.exitCode !== 0 };
 }
 
 export async function listedWorktrees(place: GitPlace, source: string): Promise<Set<string>> {

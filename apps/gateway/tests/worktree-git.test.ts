@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -171,6 +171,13 @@ describe('worktree git', () => {
     const kept = await started('kept');
     commit(kept.path, 'b.txt', 'b\n');
     const args = (t: typeof kept) => ({ ...t, discard: false, deleteBranch: false });
+    const force = await started('forced');
+    commit(force.path, 'b.txt', 'b\n');
+    expect(await removeWorktree(place, { ...args(force), deleteBranch: true })).toEqual({
+      branchKept: false,
+    });
+    expect(run(force.source, 'branch', '--list', 'jian/calm-otter')).toBe('');
+
     expect(await removeWorktree(place, args(kept))).toEqual({ branchKept: true });
     expect(run(kept.source, 'branch', '--list', 'jian/calm-otter')).not.toBe('');
 
@@ -193,6 +200,40 @@ describe('worktree git', () => {
     await mergeWorktree(place, t);
     await removeWorktree(place, { ...t, discard: false, deleteBranch: false });
     rmSync(root, { recursive: true, force: true });
+  });
+
+  it('deletes a merged branch that was pushed with an upstream, without throwing', async () => {
+    const t = await started();
+    const remote = join(dir, 'remote.git');
+    run(dir, 'init', '--bare', '-b', 'main', remote);
+    run(t.source, 'remote', 'add', 'origin', remote);
+    run(t.source, 'push', '-u', 'origin', 'main');
+    commit(t.path, 'b.txt', 'b\n');
+    run(t.path, 'push', '-u', 'origin', t.branch);
+    commit(t.path, 'c.txt', 'c\n');
+    await mergeWorktree(place, t);
+
+    expect(await removeWorktree(place, { ...t, discard: false, deleteBranch: false })).toEqual({
+      branchKept: false,
+    });
+    expect(await listedWorktrees(place, t.source)).not.toContain(t.path);
+  });
+
+  it('keeps a home behind a symlink matching what git lists', async () => {
+    const real = join(dir, 'real-home');
+    mkdirSync(real);
+    symlinkSync(real, join(dir, 'link-home'));
+    const previous = process.env.JIAN_WORKSPACES;
+    process.env.JIAN_WORKSPACES = join(dir, 'link-home', 'ws');
+    try {
+      const source = repo();
+      const wt = join(await worktreeRoot(place, source), 'calm-otter');
+      await addWorktree(place, { source, path: wt, branch: 'jian/calm-otter', base: 'main' });
+      expect(await listedWorktrees(place, source)).toContain(wt);
+    } finally {
+      if (previous === undefined) delete process.env.JIAN_WORKSPACES;
+      else process.env.JIAN_WORKSPACES = previous;
+    }
   });
 
   it('worktreeRoot is stable and keyed by the source path', async () => {
