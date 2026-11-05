@@ -73,7 +73,7 @@ export type Showing = {
 };
 
 /** An agent using this computer as a machine right now: on which gateway, and how. */
-export type MachineUse = { gatewayId: string; kind: 'shell' | 'computer' };
+export type MachineUse = { gatewayId: string; kind: 'shell' | 'computer' | 'files' };
 
 /** A key pressed inside a page that belongs to the app. */
 export type BrowserShortcut = { key: string; code: string; shift: boolean; alt: boolean };

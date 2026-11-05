@@ -408,3 +408,96 @@ it('tells a subagent to report changes in the conversation’s worktree, not to 
   expect(skill.instructions).toContain('report it in your final answer');
   expect(skill.instructions).not.toContain('commit what is left there');
 });
+
+/** Skill text wraps at 100 columns; a sentence is compared on one line. */
+const squish = (text: string) => text.replace(/\s+/g, ' ');
+
+async function machineRun(subagent = false) {
+  const { skillFor } = await import('../src/agent/tools.js');
+  const { profile, services, chat, source, worktrees, ask } = await setup();
+  const run = await services.runs.submit(profile.id, chat.id, {
+    text: 'Go',
+    requestKey: randomUUID(),
+  });
+  const web = { browser: false, inspects: true, subagent };
+  const load = (
+    can: { create: boolean; machine: boolean; signals: boolean; files?: boolean },
+    names = ['worktrees', 'long-running-work', 'remote-control'],
+  ) =>
+    names
+      .map(
+        (name) =>
+          skillFor(
+            subagent ? ({ ...run, subagent: { name: 'Helper' } } as typeof run) : run,
+            [],
+            name,
+            {
+              web,
+              xConnected: false,
+              worktrees: can,
+              machine: { files: Boolean(can.files) },
+            },
+          )?.instructions ?? '',
+      )
+      .join('\n');
+  return { load, ask, profile, chat, source, worktrees, services, run };
+}
+
+it('tells a run whose machine runs file operations that its file tools work there', async () => {
+  const { load, ask, profile, chat, source, worktrees } = await machineRun();
+  const made = await worktrees.create(profile.id, chat.id, source, 'gateway');
+  const can = { create: true, machine: true, signals: true, files: true };
+
+  const text = load(can);
+  const { system } = await ask(can);
+
+  expect(text).toContain('Your file tools work in them');
+  expect(text).toContain('400,000');
+  expect(text).not.toContain('do not reach');
+  expect(system).toContain(`set cwd of run_remote_command to ${made.path}`);
+  expect(system).toContain('Your file tools work in it on the machine');
+  expect(system).not.toContain('do not reach');
+});
+
+it('tells a run whose machine cannot run file operations to update Jian Remote', async () => {
+  const { load, ask, profile, chat, source, worktrees } = await machineRun();
+  await worktrees.create(profile.id, chat.id, source, 'gateway');
+  const can = { create: true, machine: true, signals: true, files: false };
+
+  const text = squish(load(can));
+  const { system } = await ask(can);
+
+  expect(text).toContain('Updating Jian Remote on that machine lets the file tools reach it');
+  expect(text).not.toContain('400,000');
+  expect(system).toContain('Updating Jian Remote on that machine');
+});
+
+it('tells a machine conversation’s principal agent that its workers stay on the gateway', async () => {
+  const { load } = await machineRun();
+  const text = squish(
+    load({ create: true, machine: true, signals: true, files: true }, [
+      'worktrees',
+      'long-running-work',
+      'remote-control',
+    ]),
+  );
+
+  expect(text).toContain("works on the gateway, with the gateway's file tools");
+  expect(text).toContain('a worker works on the gateway');
+});
+
+it('says a machine conversation’s subagent works on the gateway', async () => {
+  const { load, services, run } = await machineRun(true);
+  const can = { create: false, machine: true, signals: false, files: false };
+
+  expect(squish(load(can, ['worktrees']))).toContain('act on the gateway, not on it');
+  expect(squish(load(can, ['worktrees']))).not.toContain('Updating Jian Remote');
+
+  const worker = { ...run, subagent: { name: 'Helper' } } as typeof run;
+  const context = await new Contexts(services.store, services.runs, services.sessions).context(
+    worker,
+    [],
+    { sections: [], skills: [], worktrees: can },
+  );
+  expect(context.system).toContain('work on the gateway, not on that machine');
+});

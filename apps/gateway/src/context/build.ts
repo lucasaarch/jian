@@ -18,6 +18,8 @@ export interface ContextSources {
   servers: readonly McpServer[];
   /** The run has the worktree tools, so the skill about them is offered. */
   worktrees?: boolean;
+  /** The run's file tools work on the machine its conversation targets, not on the gateway. */
+  machineFiles?: boolean;
   /** The installation's zone, which the agent reads the time in; the host's when absent. */
   timeZone?: string;
   /** The memories the request matched, each carrying the keys of those linked to it. */
@@ -214,9 +216,11 @@ export function buildContext(
     // The tools are deferred like any other group, and a model that cannot see them answers
     // that it has no access instead of asking for them.
     // A claim about the host, not the agent: what is shared and what may be touched differs.
-    onOwnerComputer()
-      ? "You can run commands and read, edit, find and search files on the owner's computer, as the owner: load the shell and files tool groups when a task needs them. $HOME is their real home, so touch only what the task needs. New clones with no folder chosen go under ~/Jian. Every agent of this installation shares these files. The file tools refuse only Jian's own data."
-      : 'You can run commands and read, edit, find and search files on the machine this gateway runs on: load the shell and files tool groups when a task needs them. $HOME is one directory shared by every agent of this installation: keep each task in a folder of its own, do not assume you are alone in ~, and leave what you did not create. Your memories and conversations stay yours; these files do not.',
+    sources.machineFiles
+      ? "You can read, edit, find and search files on the machine this conversation works on, and run commands there with run_remote_command: load the files and remote tool groups when a task needs them. Paths are the machine's own, absolute."
+      : onOwnerComputer()
+        ? "You can run commands and read, edit, find and search files on the owner's computer, as the owner: load the shell and files tool groups when a task needs them. $HOME is their real home, so touch only what the task needs. New clones with no folder chosen go under ~/Jian. Every agent of this installation shares these files. The file tools refuse only Jian's own data."
+        : 'You can run commands and read, edit, find and search files on the machine this gateway runs on: load the shell and files tool groups when a task needs them. $HOME is one directory shared by every agent of this installation: keep each task in a folder of its own, do not assume you are alone in ~, and leave what you did not create. Your memories and conversations stay yours; these files do not.',
     'Every machine connected to this installation supports shell and computer use through the remote tool group.',
     'You can search the web and read public pages: load the web tool group when a question needs current or outside information, and say where an answer came from.',
     ...(!worker

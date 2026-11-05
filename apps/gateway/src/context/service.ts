@@ -63,16 +63,21 @@ const files = (count: number) => `${count} ${count === 1 ? 'file' : 'files'}`;
 export function worktreeSignals(
   signals: readonly FolderSignal[],
   machine: boolean,
+  /** The run's file tools work on that machine, as its worker offers them. */
+  onMachineFiles = false,
 ): { steady: string[]; turn: string[] } {
   const steady: string[] = [];
   const turn: string[] = [];
 
   for (const { folder, uncommitted, others, worktree } of signals) {
     if (worktree) {
-      // Guards and the cwd remap exist on the gateway only: a machine's commands are told apart.
-      const start = machine
-        ? `. Your tools do not reach a machine: set cwd of run_remote_command to ${worktree.path}.`
-        : '; your tools start there.';
+      // The cwd remap exists on the gateway only: a machine's commands are told apart. Its file
+      // tools, when the worker has them, work in the worktree and guard the source as here.
+      const start = !machine
+        ? '; your tools start there.'
+        : onMachineFiles
+          ? `. Your file tools work in it on the machine and refuse writes in the source; commands do not start there, so set cwd of run_remote_command to ${worktree.path}.`
+          : `. Your file tools do not reach the machine: set cwd of run_remote_command to ${worktree.path}. Updating Jian Remote on that machine lets the file tools reach it.`;
       steady.push(
         `${folder}: You work on it in the worktree ${worktree.name} at ${worktree.path} (branch ${worktree.branch} from ${worktree.base})${start}`,
       );
@@ -102,7 +107,8 @@ export function worktreeSignals(
 function worktreeAdvice(worktrees?: { create: boolean; machine: boolean }): string {
   if (!worktrees) return '';
   if (worktrees.machine) {
-    return " The conversation's worktrees are on its machine: list_worktrees shows them, and to work in one, run commands there with run_remote_command and set its cwd to the worktree path.";
+    // A worker's tools carry no machine, so the file tools and run_command it has are the gateway's.
+    return " The conversation's worktrees are on its machine: list_worktrees shows them. Your file tools and run_command work on the gateway, not on that machine; to work in a worktree there, run commands with run_remote_command and set its cwd to the worktree path.";
   }
   return worktrees.create
     ? " If this assignment needs a checkout of its own, call create_worktree with the repository folder: it makes your worktree from the conversation's worktree when it has one for it, and from the folder otherwise, and merge_worktree brings it back to where it came from when your work is done."
@@ -247,6 +253,7 @@ export class Contexts {
         ? worktreeSignals(
             await this.worktrees.signals(run.profileId, session).catch(() => []),
             workspaces.worktrees.machine,
+            Boolean(workspaces.worktrees.files),
           )
         : { steady: [], turn: [] };
     const workspace = worker
@@ -263,6 +270,7 @@ export class Contexts {
     const built = buildContext(run, {
       servers,
       ...(workspaces?.worktrees ? { worktrees: true } : {}),
+      ...(workspaces?.machineFiles ? { machineFiles: true } : {}),
       ...(judged.relevance ? { relevance: judged.relevance } : {}),
       ...(judged.skill ? { suggestedSkill: judged.skill } : {}),
       ...(this.settings ? { timeZone: await this.settings.timeZone() } : {}),

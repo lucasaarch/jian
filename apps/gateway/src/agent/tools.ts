@@ -34,6 +34,7 @@ import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions
 import type { Sessions } from '../sessions/service.js';
 import { findSkill } from '../skills/builtin/index.js';
 import { longRunningWork, longRunningWorkFor } from '../skills/builtin/long-running-work.js';
+import { remoteControl, remoteControlFor } from '../skills/builtin/remote-control.js';
 import { type WebAccess, webResearch, webResearchFor } from '../skills/builtin/web-research.js';
 import { worktreesFor, worktrees as worktreesSkill } from '../skills/builtin/worktrees.js';
 import { x, xFor } from '../skills/builtin/x.js';
@@ -127,7 +128,9 @@ export function skillFor(
     web: WebAccess;
     xConnected: boolean;
     /** What the run has of the worktree tools; absent when it has none. */
-    worktrees?: { create: boolean; machine: boolean; signals: boolean };
+    worktrees?: { create: boolean; machine: boolean; signals: boolean; files?: boolean };
+    /** The conversation targets a machine, and whether this run's file tools work on it. */
+    machine?: { files: boolean };
   },
   /** The skills of the conversation's workspaces, named apart from the profile's already. */
   projectSkills: readonly Skill[] = [],
@@ -143,9 +146,10 @@ export function skillFor(
   if (skill === longRunningWork) {
     return longRunningWorkFor({
       create: Boolean(can.worktrees?.create),
-      machine: Boolean(can.worktrees?.machine),
+      machine: Boolean(can.machine ?? can.worktrees?.machine),
     });
   }
+  if (skill === remoteControl) return remoteControlFor(can.machine);
   return skill;
 }
 
@@ -163,7 +167,7 @@ export function profileTools(
   /** The skills the conversation's workspaces offer. */
   projectSkills: readonly Skill[] = [],
   /** Whether this run has the worktree tools, which the skill about them goes by. */
-  worktrees?: { create: boolean; machine: boolean; signals: boolean },
+  worktrees?: { create: boolean; machine: boolean; signals: boolean; files?: boolean },
   /** The file tools' reach on the machine this run targets, when it offers them there. */
   machineFiles?: FileBackend,
 ): ToolSet {
@@ -497,7 +501,18 @@ export function profileTools(
         'Load instructions for a skill enabled on this profile. A skill loaded once stays in your instructions for the rest of the conversation: never load one the catalog marks loaded.',
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
-        const skill = skillFor(run, servers, name, { web, xConnected, worktrees }, projectSkills);
+        const skill = skillFor(
+          run,
+          servers,
+          name,
+          {
+            web,
+            xConnected,
+            worktrees,
+            ...(remoteTarget ? { machine: { files: Boolean(machineFiles) } } : {}),
+          },
+          projectSkills,
+        );
 
         if (!skill) {
           throw new GatewayError(404, 'Skill not found');

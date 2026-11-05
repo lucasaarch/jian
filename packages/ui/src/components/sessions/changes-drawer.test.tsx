@@ -65,8 +65,8 @@ async function render(api: Partial<GatewayApi>) {
   );
 }
 
-async function settled(done: () => boolean) {
-  for (let tries = 0; tries < 100 && !done(); tries += 1) {
+async function settled(done: () => boolean, limit = 100) {
+  for (let tries = 0; tries < limit && !done(); tries += 1) {
     await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
   }
 }
@@ -688,24 +688,26 @@ it('remembers what was typed when the owner comes back to the list', async () =>
 it('keeps the filter on screen while it applies, however short the list becomes', async () => {
   const files = many(12);
   let shrunk = false;
+  const sessionChanges = vi.fn(async () => ({
+    files: shrunk ? files.slice(0, 3) : files,
+    truncated: false,
+  }));
   useCrew.getState().show('session', [], 'project');
   useCrew.getState().showChanges();
-  await render({
-    sessionChanges: vi.fn(async () => ({
-      files: shrunk ? files.slice(0, 3) : files,
-      truncated: false,
-    })),
-    timeline: vi.fn(async () => []),
-  });
-  await settled(() => Boolean(filter()));
+  await render({ sessionChanges, timeline: vi.fn(async () => []) });
+  // The filter is there before the list is, so wait for the files themselves.
+  await settled(() => container.textContent?.includes('12 changed files') === true);
   await type('file2');
   expect(rows()).toBe(1);
 
   shrunk = true;
-  await act(async () => {
-    publish({ id: 1, type: 'run.step' });
-    await new Promise((resolve) => setTimeout(resolve, 700));
-  });
+  const before = sessionChanges.mock.calls.length;
+  await act(async () => publish({ id: 1, type: 'run.step' }));
+  // The refetch waits out a debounce, so wait for it by what it does, not for a fixed time.
+  // and for the shorter list to be on screen, which a loaded machine can take well past the debounce.
+  await settled(() => container.textContent?.includes('3 changed files') === true, 600);
+  expect(sessionChanges.mock.calls.length).toBeGreaterThan(before);
+  expect(container.textContent).toContain('3 changed files');
 
   // Otherwise the list would stay narrowed by words the owner can no longer see or clear.
   expect(filter()?.value).toBe('file2');

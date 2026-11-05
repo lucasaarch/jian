@@ -674,6 +674,7 @@ export class AgentRuntime {
             place: session.remoteMachineId ?? 'gateway',
             folders,
             scope: worktrees.scope,
+            machineFiles: Boolean(machineFiles),
           })
         : {};
       // What the skills about worktrees may say: `create_worktree` is absent when it could only
@@ -683,6 +684,8 @@ export class AgentRuntime {
             create: 'create_worktree' in worktreeToolSet,
             // The conversation's, not this task session's: a subagent's worktrees are on the machine.
             machine: Boolean(conversation.remoteMachineId),
+            // This run's own: a subagent's file tools stay on the gateway.
+            files: Boolean(machineFiles),
             // Its turns say who else is in its folders: the ones it was given, or its checkouts
             // in the folder it clones into. A subagent's turns say nothing of either.
             signals:
@@ -858,11 +861,11 @@ export class AgentRuntime {
         console.warn(`jian: MCP server ${server.name} is unavailable — ${server.reason}`);
       }
 
-      const context = await this.services.contexts.context(
-        run,
-        skillServers,
-        worktreeCan ? { ...project, worktrees: worktreeCan } : project,
-      );
+      const context = await this.services.contexts.context(run, skillServers, {
+        ...project,
+        ...(worktreeCan ? { worktrees: worktreeCan } : {}),
+        ...(machineFiles ? { machineFiles: true } : {}),
+      });
       if (mcpDown) withTurnNote(context, mcpDown);
       compactCommand = isCompactCommand(run.input);
       if (compactCommand) compactionRequested = true;

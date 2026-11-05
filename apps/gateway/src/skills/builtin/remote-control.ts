@@ -1,10 +1,60 @@
 import type { Skill } from '@jian/contracts';
 
-export const remoteControl: Skill = {
-  name: 'remote-control',
-  description:
-    'Use when asked to control a computer the owner connected under Machines: run commands there, drive the screen (click, type, scroll), take a screenshot, or copy files to or from that machine.',
-  instructions: `# Machines
+const DESCRIPTION =
+  'Use when asked to control a computer the owner connected under Machines: run commands there, drive the screen (click, type, scroll), take a screenshot, or copy files to or from that machine.';
+
+/** The sentence about where the file and shell tools act, by what this run has. */
+function whereTools(machine?: { files: boolean }): string {
+  if (machine?.files) {
+    return `In this conversation the file tools act on its machine (see below). Commands go through
+\`run_remote_command\`.`;
+  }
+  return `Gateway \`files\` / \`shell\` tools act on the **gateway host**, not the remote
+PC. For work on the remote computer, use the remote tools.${
+    machine
+      ? " This machine's Jian Remote does not run file operations yet: updating it (`update_remote_machine`) lets the file tools reach it."
+      : ''
+  }`;
+}
+
+/** Only a run whose file tools reach its machine is told what they do there. */
+function machineFiles(machine?: { files: boolean }): string {
+  if (!machine?.files) return '';
+  return `
+## File tools on this conversation's machine
+
+\`read_file\`, \`edit_file\`, \`write_file\`, \`find_files\`, \`search_files\` and \`list_directory\` (the
+\`files\` group) work on the machine this conversation targets, not on the gateway. Give absolute
+paths in the machine's own form (\`/Users/…\`, \`C:\\…\`). They run as the logged-in user, so they open
+what that user can, except Jian Remote's own folder and its credentials.
+
+- Read a file with \`read_file\` before you change it; a change is refused when the file changed
+  since you read it, and you then read it again.
+- A file up to 20 MiB can be read, but a result shows at most 2,000 lines and is bounded, so read a
+  long file in parts. A single write is at most 400,000 characters; for more, write it in
+  pieces or use \`run_remote_command\`.
+- \`list_directory\` shows 300 entries, \`find_files\` 1,000, and \`search_files\` at most 2,000 matches
+  in 60,000 characters; narrow the path or the pattern when a result says it is cut.
+- In a worktree on the machine they refuse writes in its source folder, as on the gateway.
+- Builds, tests and Git still run with \`run_remote_command\`, which needs its \`cwd\`.
+- A subagent of this conversation works on the gateway with the gateway's file tools and
+  \`run_command\`, not on the machine.
+`;
+}
+
+export function remoteControlFor(machine?: { files: boolean }): Skill {
+  return {
+    name: 'remote-control',
+    description: DESCRIPTION,
+    instructions: body(machine),
+  };
+}
+
+/** As the panel lists it, for a conversation that targets no machine. */
+export const remoteControl: Skill = remoteControlFor();
+
+function body(machine?: { files: boolean }): string {
+  return `# Machines
 
 The owner connects computers in the panel under **Machines**. A desktop app connected to this
 gateway is one of them by itself, listed as This computer, for as long as the app is open. Each
@@ -37,10 +87,9 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
 - \`push_remote_file\` — write UTF-8 or base64 bytes to an absolute remote path, up to 300,000 bytes. A
   machine with an older Jian Remote takes only a few KB (the error names the size): update it first.
 
-Gateway \`files\` / \`shell\` tools act on the **gateway host**, not the remote
-PC. For work on the remote computer, use the remote tools. Do not claim a remote action
+${whereTools(machine)} Do not claim a remote action
 succeeded unless the tool result confirms it (exit code, stdout, or \`ok: true\`).
-
+${machineFiles(machine)}
 ## How to work
 
 1. \`list_remote_machines\` and pick an **online** machine the owner named (or confirm which
@@ -82,5 +131,5 @@ panel. A desktop app's own machine comes and goes with the app.
   before anyone signs in is a different limit. Lid-closed system sleep is true offline
   until the Mac wakes.
 - Never print the worker token or stored credentials into the chat.
-`,
-};
+`;
+}

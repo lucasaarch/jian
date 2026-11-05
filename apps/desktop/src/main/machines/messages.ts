@@ -18,7 +18,7 @@ export type FromWorkers =
   | { type: 'refused'; gatewayId: string }
   | { type: 'stopped' }
   /** An agent on that gateway began using this computer: a command, or the screen. */
-  | { type: 'using'; gatewayId: string; kind: 'shell' | 'computer' }
+  | { type: 'using'; gatewayId: string; kind: 'shell' | 'computer' | 'files' }
   /** What it was doing is over. */
   | { type: 'done'; gatewayId: string }
   /** The gateway wants the browser beside a conversation; only the main process has it. */

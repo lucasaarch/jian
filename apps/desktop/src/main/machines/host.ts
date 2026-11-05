@@ -39,7 +39,7 @@ export class UtilityWorkerHost implements WorkerHost {
     private readonly events: {
       refused(gatewayId: string): void;
       /** An agent on the gateway began or ended using this computer; null when it ended. */
-      using(gatewayId: string, kind: 'shell' | 'computer' | null): void;
+      using(gatewayId: string, kind: 'shell' | 'computer' | 'files' | null): void;
       /** The gateway wants the browser beside a conversation. */
       browser(gatewayId: string, params: RemoteBrowserParams): Promise<RemoteBrowserResult>;
     },

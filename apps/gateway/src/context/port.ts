@@ -13,7 +13,9 @@ export interface ContextSource {
        * The run has worktree tools; `create` when it can also make one, `signals` when its turns
        * say who else works in its folders.
        */
-      worktrees?: { create: boolean; machine: boolean; signals: boolean };
+      /** The run's file tools work on the machine its conversation targets. */
+      machineFiles?: boolean;
+      worktrees?: { create: boolean; machine: boolean; signals: boolean; files?: boolean };
     },
   ): Promise<{
     system: string;

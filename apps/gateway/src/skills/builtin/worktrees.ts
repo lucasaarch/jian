@@ -3,8 +3,13 @@ import type { Skill } from '@jian/contracts';
 type Can = {
   /** The run has `create_worktree`: not a conversation with only a clone folder, nor a machine's subagent. */
   create: boolean;
-  /** The conversation targets a machine, whose disk the file tools do not reach. */
+  /** The conversation targets a machine, where its worktrees are. */
   machine: boolean;
+  /**
+   * This run's file tools work on that machine, as its worker offers them: the same answer the
+   * runtime used to give them. False for its subagents, whose file tools stay on the gateway.
+   */
+  files?: boolean;
   /** Its turns say, per folder, who else works there: not a subagent's, nor without a folder. */
   signals: boolean;
   subagent: boolean;
@@ -43,14 +48,30 @@ The count can be up to a minute old, so a file may have changed since.`
   }`;
 }
 
-function whileYouHaveOne({ create, machine }: Can): string {
+/** What a run on a machine is told about its file tools there, by what it actually has. */
+function onMachine({ files, subagent }: Can): string {
+  if (files) {
+    return `The worktrees are on the machine. Your file tools work in them and refuse writes in the
+source folder, as they do on the gateway. Commands do not start in a worktree: set the \`cwd\` of
+\`run_remote_command\` to the worktree's path and never to the source folder.`;
+  }
+  if (subagent) {
+    return `The worktrees are on the machine. Your file tools and \`run_command\` act on the gateway, not
+on it: run commands there with \`run_remote_command\`, setting its \`cwd\` to the worktree's path
+and never to the source folder.`;
+  }
+  return `The worktrees are on the machine, and your file tools do not reach them: run commands there
+with \`run_remote_command\`, setting its \`cwd\` to the worktree's path and never to the source
+folder. Updating Jian Remote on that machine lets the file tools reach it.`;
+}
+
+function whileYouHaveOne(can: Can): string {
+  const { create, machine } = can;
   const made = create
     ? '`create_worktree` names the worktree and the branch for you. '
     : 'The conversation names them. ';
   const where = machine
-    ? `The worktrees are on the machine, and your file tools do not reach them: run commands there
-with \`run_remote_command\`, setting its \`cwd\` to the worktree's path and never to the source
-folder.`
+    ? onMachine(can)
     : `From then on your file tools refuse writes in the source folder and your commands start in the
 worktree, so use paths inside it. Do not write in the source in any other way either, \`run_command\`
 included.`;
@@ -105,7 +126,8 @@ Under Ask first, ${create ? '`create_worktree`, ' : ''}\`update_worktree\`, \`me
 \`remove_worktree\` wait for the owner like \`run_command\` does. Say what you are about to do and
 why. \`list_worktrees\` only reads.`;
 
-function subagents({ create, machine, subagent }: Can): string {
+function subagents(can: Can): string {
+  const { create, machine, subagent } = can;
   if (subagent) {
     return create
       ? `## As a subagent
@@ -121,8 +143,10 @@ ${machine ? 'run commands there with `run_remote_command`, setting its `cwd` to 
   if (create && machine) {
     return `## Subagents
 
-A subagent of a conversation on a machine works there through \`run_remote_command\` and cannot make
-worktrees, so give subagents that edit one repository in parallel files that do not overlap.`;
+A subagent of a conversation on a machine works on the gateway, with the gateway's file tools and
+\`run_command\`, not the machine's. It reaches the machine only through \`run_remote_command\` and
+cannot make worktrees, so give subagents that edit one repository in parallel files that do not
+overlap.`;
   }
   return create
     ? `## Subagents

@@ -6,8 +6,17 @@ for it, commit its work and \`merge_worktree\` it back before reporting; the \`w
 has the details. `;
 
 /** A machine's subagents cannot make worktrees, so the sentence they would act on is another. */
-const MACHINE_PARALLEL = `Workers of a conversation on a machine work there through \`run_remote_command\` and cannot make
-worktrees, so give workers that edit one repository in parallel files that do not overlap. `;
+const MACHINE_PARALLEL = `Workers of a conversation on a machine cannot make worktrees, so give workers that edit one
+repository in parallel files that do not overlap. `;
+
+/**
+ * A worker's tools carry no target, so the same-named file tools and \`run_command\` it has act on
+ * the gateway. Said for a machine's conversation, where the parent's own tools mean the machine.
+ */
+const MACHINE_WORKERS = ` On a conversation that works on a machine, that holds for the gateway only: a
+worker works on the gateway, with the gateway's file tools and \`run_command\`, not on the machine
+your tools reach. It reaches the machine only through \`run_remote_command\`, so name the machine,
+the paths and the \`cwd\` in its brief.`;
 
 /** As the run can work: the sentence about worktrees is there only for a run that can make them. */
 export function longRunningWorkFor({
@@ -21,7 +30,7 @@ export function longRunningWorkFor({
     name: 'long-running-work',
     description:
       'Use when delegating to an internal subagent, finishing a multi-step workflow, work spans turns, or context is running out.',
-    instructions: BODY.replace(
+    instructions: BODY.replace('@@MACHINE@@', machine ? MACHINE_WORKERS : '').replace(
       '@@PARALLEL@@',
       !create ? '' : machine ? MACHINE_PARALLEL : PARALLEL_WORKTREES,
     ),
@@ -56,7 +65,7 @@ Load the \`tasks\` tool group, then call \`spawn_subagent\` for a focused assign
 run independently. Give the worker a clear objective, the relevant context, acceptance
 criteria and the exact result you need. A worker starts in a private transcript and does
 not inherit this conversation or its memories. It uses the same profile's tools and works
-on the same files as you (same HOME and repository checkouts). This call returns when
+on the same files as you (same HOME and repository checkouts).@@MACHINE@@ This call returns when
 the worker is queued; its result comes back into this conversation after it finishes. Do
 not duplicate its work while it runs. \`cancel_subagent\` stops one that is no longer needed.
 

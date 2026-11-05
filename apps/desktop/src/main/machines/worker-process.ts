@@ -97,7 +97,11 @@ async function start(gatewayId: string, target: WorkerTarget): Promise<void> {
     execute: async (task) => {
       // In plain sight in the Inspector, with nothing on the rest of the screen to warn of.
       if (task.kind === 'browser' && task.browser) return askBrowser(gatewayId, task);
-      send({ type: 'using', gatewayId, kind: task.kind === 'computer' ? 'computer' : 'shell' });
+      send({
+        type: 'using',
+        gatewayId,
+        kind: task.kind === 'computer' || task.kind === 'files' ? task.kind : 'shell',
+      });
       try {
         return await executeTask(task);
       } finally {
