@@ -148,13 +148,45 @@ export const REMOTE_FILES_CAPABILITY = 'files-v1';
 
 /**
  * Absolute on the worker's own system: POSIX `/…` or Windows `C:\…` / `C:/…`. A relative path
- * would resolve against whatever folder the worker happens to run in.
+ * would resolve against whatever folder the worker happens to run in. `C:x` (drive-relative) and
+ * `\\server\share` are refused; `//server/share` passes the POSIX branch, and the worker decides
+ * what it means.
  */
 const remoteFilesPathSchema = z
   .string()
   .max(4096)
   .regex(/^(\/|[A-Za-z]:[\\/])/)
-  .refine((path) => !path.includes('\0'), 'A path cannot contain NUL.');
+  .refine((path) => !hasNul(path), 'A path cannot contain NUL.');
+
+const hasNul = (value: string) => value.includes('\0');
+// biome-ignore lint/suspicious/noControlCharactersInRegex: refusing control characters is the point
+const hasControl = (value: string) => /[\u0000-\u001f\u007f]/.test(value);
+
+/**
+ * Text that git or a glob would read as an option when it leads with '-', and that has no
+ * meaning with control characters or surrounding space.
+ */
+const remoteFilesPlainArgSchema = (max: number) =>
+  z
+    .string()
+    .min(1)
+    .max(max)
+    .refine((value) => !value.startsWith('-'), 'Cannot start with "-".')
+    .refine(
+      (value) => !hasControl(value) && value === value.trim(),
+      'Cannot hold control or edge space.',
+    );
+
+/** A path inside a repository: relative, no `..`, never an option, no NUL. */
+const remoteFilesRepoPathSchema = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine((value) => !hasNul(value) && !value.startsWith('-'), 'No NUL or leading "-".')
+  .refine(
+    (value) => !/^([\\/]|[A-Za-z]:)/.test(value) && !value.split(/[\\/]/).includes('..'),
+    'Must stay inside the repository.',
+  );
 
 const remoteFilesShaSchema = z.string().regex(/^[0-9a-f]{40}$/);
 
@@ -162,8 +194,23 @@ const remoteFilesShaSchema = z.string().regex(/^[0-9a-f]{40}$/);
 export const REMOTE_FILES_MAX_READ_BYTES = 20 * 1024 * 1024;
 /** The largest git file kept, in bytes. */
 export const REMOTE_FILES_MAX_GIT_BYTES = 500_000;
-/** Longest text a write or a read answer carries; a result must stay under 480,000 bytes. */
+/** Longest text a write carries, in characters. */
 export const REMOTE_FILES_MAX_TEXT = 400_000;
+/**
+ * The worker's result budget in bytes. Every ok answer must serialize within it; a worker whose
+ * answer would not fit answers `too-large` itself. Characters are not bytes: multibyte text and
+ * JSON escapes grow, so a byte check on the whole answer backs the per-field caps below.
+ */
+export const REMOTE_FILES_RESULT_BYTES = 480_000;
+/** Each side of a `git-file` answer; lower than the gateway's 500,000 because both share one result. */
+export const REMOTE_FILES_MAX_GIT_SIDE = 200_000;
+/** Each raw `git-status` output. */
+export const REMOTE_FILES_MAX_GIT_STATUS = 200_000;
+/** Total characters of `find` paths and of `search` lines in one answer. */
+export const REMOTE_FILES_MAX_FIND_CHARS = 200_000;
+export const REMOTE_FILES_MAX_SEARCH_CHARS = 60_000;
+
+const totalLength = (items: string[]) => items.reduce((sum, item) => sum + item.length, 0);
 
 /** One file operation on a machine. */
 export const remoteFilesOpSchema = z.discriminatedUnion('op', [
@@ -187,14 +234,22 @@ export const remoteFilesOpSchema = z.discriminatedUnion('op', [
   z.strictObject({
     op: z.literal('find'),
     path: remoteFilesPathSchema,
-    pattern: z.string().min(1).max(500),
+    pattern: z
+      .string()
+      .min(1)
+      .max(500)
+      .refine((v) => !hasNul(v), 'No NUL.'),
     limit: z.number().int().min(1).max(1000),
   }),
   z.strictObject({
     op: z.literal('search'),
     path: remoteFilesPathSchema,
-    pattern: z.string().min(1).max(2000),
-    glob: z.string().max(200).optional(),
+    pattern: z
+      .string()
+      .min(1)
+      .max(2000)
+      .refine((v) => !hasNul(v), 'No NUL.'),
+    glob: remoteFilesPlainArgSchema(200).optional(),
     ignoreCase: z.boolean(),
     contextLines: z.number().int().min(0).max(10),
     output: z.enum(['content', 'files', 'count']),
@@ -223,18 +278,14 @@ export const remoteFilesOpSchema = z.discriminatedUnion('op', [
   z.strictObject({
     op: z.literal('git-file'),
     root: remoteFilesPathSchema,
-    path: z
-      .string()
-      .min(1)
-      .max(4096)
-      .refine((p) => !p.includes('\0'), 'No NUL.'),
+    path: remoteFilesRepoPathSchema,
     against: z.union([remoteFilesShaSchema, z.literal('HEAD')]),
     maxBytes: z.number().int().min(1).max(REMOTE_FILES_MAX_GIT_BYTES),
   }),
   z.strictObject({
     op: z.literal('merge-base'),
     root: remoteFilesPathSchema,
-    base: z.string().min(1).max(256),
+    base: remoteFilesPlainArgSchema(256),
   }),
 ]);
 
@@ -254,99 +305,118 @@ export const remoteFilesProblemSchema = z.enum([
 const remoteFilesRawSchema = z.string().max(REMOTE_FILES_MAX_TEXT);
 
 /** What the worker answered; `op` repeats the request's so the gateway can match the two. */
-export const remoteFilesAnswerSchema = z.union([
-  z.discriminatedUnion('op', [
-    z.strictObject({
-      ok: z.literal(true),
-      op: z.literal('read'),
-      text: remoteFilesRawSchema,
-      mtimeMs: z.number(),
-      bytes: z.number().int().min(0),
-    }),
-    z.strictObject({
-      ok: z.literal(true),
-      op: z.literal('write'),
-      mtimeMs: z.number(),
-      bytes: z.number().int().min(0),
-      created: z.boolean(),
-    }),
-    z.strictObject({
-      ok: z.literal(true),
-      op: z.literal('list'),
-      entries: z
-        .array(
-          z.strictObject({
-            name: z.string().max(1024),
-            kind: z.enum(['file', 'directory', 'symlink', 'other']),
-          }),
-        )
-        .max(300),
-      truncated: z.boolean(),
-    }),
-    z.strictObject({
-      ok: z.literal(true),
-      op: z.literal('find'),
-      files: z.array(z.string().max(4096)).max(1000),
-      truncated: z.boolean(),
-    }),
-    z.strictObject({
-      ok: z.literal(true),
-      op: z.literal('search'),
-      /** Output lines as the gateway's search prints them; the total stays within 60,000 characters. */
-      matches: z.array(z.string().max(60_000)).max(2000),
-      truncated: z.boolean(),
-    }),
-    z.strictObject({
-      ok: z.literal(true),
-      op: z.literal('read-bytes'),
-      base64: z.string().max(REMOTE_FILES_MAX_TEXT),
-      bytes: z.number().int().min(0),
-    }),
-    z.strictObject({
-      ok: z.literal(true),
-      op: z.literal('write-bytes'),
-      bytes: z.number().int().min(0),
-    }),
-    z.strictObject({
-      ok: z.literal(true),
-      op: z.literal('git-status'),
-      top: z.string().max(4096),
-      filters: z.array(z.string().max(1024)).max(200),
-      /** Raw `git status --porcelain -z` and `git diff -z` outputs, for the gateway's parsers. */
-      status: remoteFilesRawSchema,
-      diff: remoteFilesRawSchema.optional(),
-    }),
-    z.strictObject({
-      ok: z.literal(true),
-      op: z.literal('git-file'),
-      before: z.string().max(REMOTE_FILES_MAX_GIT_BYTES).nullable(),
-      after: z.string().max(REMOTE_FILES_MAX_GIT_BYTES).nullable(),
-      binary: z.boolean().optional(),
-    }),
-    z.strictObject({
-      ok: z.literal(true),
-      op: z.literal('merge-base'),
-      sha: remoteFilesShaSchema,
-    }),
-  ]),
-  z.strictObject({
-    ok: z.literal(false),
-    op: z.enum([
-      'read',
-      'write',
-      'list',
-      'find',
-      'search',
-      'read-bytes',
-      'write-bytes',
-      'git-status',
-      'git-file',
-      'merge-base',
+export const remoteFilesAnswerSchema = z
+  .union([
+    z.discriminatedUnion('op', [
+      z.strictObject({
+        ok: z.literal(true),
+        op: z.literal('read'),
+        text: remoteFilesRawSchema,
+        mtimeMs: z.number(),
+        bytes: z.number().int().min(0),
+      }),
+      z.strictObject({
+        ok: z.literal(true),
+        op: z.literal('write'),
+        mtimeMs: z.number(),
+        bytes: z.number().int().min(0),
+        created: z.boolean(),
+      }),
+      z.strictObject({
+        ok: z.literal(true),
+        op: z.literal('list'),
+        entries: z
+          .array(
+            z.strictObject({
+              name: z.string().max(1024),
+              kind: z.enum(['file', 'directory', 'symlink', 'other']),
+            }),
+          )
+          .max(300),
+        truncated: z.boolean(),
+      }),
+      z.strictObject({
+        ok: z.literal(true),
+        op: z.literal('find'),
+        files: z
+          .array(z.string().max(4096))
+          .max(1000)
+          .refine(
+            (files) => totalLength(files) <= REMOTE_FILES_MAX_FIND_CHARS,
+            'Too many characters.',
+          ),
+        truncated: z.boolean(),
+      }),
+      z.strictObject({
+        ok: z.literal(true),
+        op: z.literal('search'),
+        /** Output lines as the gateway's search prints them, 60,000 characters in all. */
+        matches: z
+          .array(z.string().max(REMOTE_FILES_MAX_SEARCH_CHARS))
+          .max(2000)
+          .refine(
+            (lines) => totalLength(lines) <= REMOTE_FILES_MAX_SEARCH_CHARS,
+            'Too many characters.',
+          ),
+        truncated: z.boolean(),
+      }),
+      z.strictObject({
+        ok: z.literal(true),
+        op: z.literal('read-bytes'),
+        base64: z.string().max(REMOTE_FILES_MAX_TEXT),
+        bytes: z.number().int().min(0),
+      }),
+      z.strictObject({
+        ok: z.literal(true),
+        op: z.literal('write-bytes'),
+        bytes: z.number().int().min(0),
+      }),
+      z.strictObject({
+        ok: z.literal(true),
+        op: z.literal('git-status'),
+        top: z.string().max(4096),
+        filters: z.array(z.string().max(1024)).max(200),
+        /** Raw `git status --porcelain -z` and `git diff -z` outputs, for the gateway's parsers. */
+        status: z.string().max(REMOTE_FILES_MAX_GIT_STATUS),
+        diff: z.string().max(REMOTE_FILES_MAX_GIT_STATUS).optional(),
+      }),
+      z.strictObject({
+        ok: z.literal(true),
+        op: z.literal('git-file'),
+        before: z.string().max(REMOTE_FILES_MAX_GIT_SIDE).nullable(),
+        after: z.string().max(REMOTE_FILES_MAX_GIT_SIDE).nullable(),
+        binary: z.boolean().optional(),
+      }),
+      z.strictObject({
+        ok: z.literal(true),
+        op: z.literal('merge-base'),
+        sha: remoteFilesShaSchema,
+      }),
     ]),
-    problem: remoteFilesProblemSchema,
-    message: z.string().max(2000),
-  }),
-]);
+    z.strictObject({
+      ok: z.literal(false),
+      // The gateway must match this `op` with the request's and treat a mismatch as a failure.
+      op: z.enum([
+        'read',
+        'write',
+        'list',
+        'find',
+        'search',
+        'read-bytes',
+        'write-bytes',
+        'git-status',
+        'git-file',
+        'merge-base',
+      ]),
+      problem: remoteFilesProblemSchema,
+      message: z.string().max(2000),
+    }),
+  ])
+  .refine(
+    (answer) =>
+      new TextEncoder().encode(JSON.stringify(answer)).length <= REMOTE_FILES_RESULT_BYTES,
+    'The answer is larger than a worker result may be.',
+  );
 
 export const remoteTaskSchema = z.strictObject({
   id: z.uuid(),

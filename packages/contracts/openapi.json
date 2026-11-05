@@ -5098,6 +5098,7 @@
                                 },
                                 "glob": {
                                   "type": "string",
+                                  "minLength": 1,
                                   "maxLength": 200
                                 },
                                 "ignoreCase": {
@@ -5950,11 +5951,11 @@
                               },
                               "status": {
                                 "type": "string",
-                                "maxLength": 400000
+                                "maxLength": 200000
                               },
                               "diff": {
                                 "type": "string",
-                                "maxLength": 400000
+                                "maxLength": 200000
                               }
                             },
                             "required": [
@@ -5982,14 +5983,14 @@
                                   "string",
                                   "null"
                                 ],
-                                "maxLength": 500000
+                                "maxLength": 200000
                               },
                               "after": {
                                 "type": [
                                   "string",
                                   "null"
                                 ],
-                                "maxLength": 500000
+                                "maxLength": 200000
                               },
                               "binary": {
                                 "type": "boolean"
