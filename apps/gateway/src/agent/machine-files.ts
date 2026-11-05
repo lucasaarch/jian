@@ -86,6 +86,9 @@ export function machineBackend(
   const windows = machine.platform.startsWith('win32');
   const caseless = windows || machine.platform.startsWith('darwin');
   const partial = windows ? 'Get-Content with -TotalCount or -Tail' : 'head, tail or sed';
+  // The worker refuses a file whose text exceeds what one answer carries, before offset and
+  // limit apply (the worker never sees them): a longer file is read in parts by command.
+  const readLimit = `On this machine a file of more than about ${REMOTE_FILES_MAX_TEXT.toLocaleString('en-US')} characters cannot be read at all; read part of a longer one with run_remote_command and ${partial}.`;
 
   /** What the machine refused, in the words the local tools use where they have some. */
   const refusal = (path: string, answer: Problem) => {
@@ -96,7 +99,7 @@ export function machineBackend(
         return new Error('The file is binary; inspect it with run_remote_command instead');
       case 'too-large':
         return new Error(
-          `The file is too large to read through the file tools; use run_remote_command with ${partial}`,
+          `The file is too large for a read on a machine, which carries about ${REMOTE_FILES_MAX_TEXT.toLocaleString('en-US')} characters at most; read part of it with run_remote_command and ${partial}`,
         );
       case 'changed':
         return new Error(CHANGED);
@@ -130,9 +133,19 @@ export function machineBackend(
 
   return {
     place: 'the machine this conversation works on',
+    readLimit,
+    // The worker falls back to its own walk without ripgrep, which reads every file.
+    ignores: ' when ripgrep is installed there',
     path: machinePath,
 
     confine: async (path, access) => {
+      // A `/…` path on Windows means the current drive's root, which the worker would resolve
+      // somewhere the source guard never compares against.
+      if (windows && !windowsShaped(path)) {
+        throw new Error(
+          `${path} has no drive letter; on this Windows machine use a full path such as C:\\Users\\…`,
+        );
+      }
       if (access === 'write') {
         const asked = spelling(path, caseless);
         const held = guarded().find(({ source }) => within(asked, spelling(source, caseless)));

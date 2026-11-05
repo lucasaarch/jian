@@ -775,7 +775,10 @@ export class Sessions {
     if (session.remoteMachineId && (session.projectId || session.projectIds?.length)) {
       const clone = await cloneOnMachine(this.store.db, profileId, session);
       if (!clone) {
-        throw new GatewayError(409, 'Changes on remote machines are not available here yet.');
+        throw new GatewayError(
+          409,
+          "Jian does not know a checkout of this project on the conversation's machine yet: ask the agent to clone it there with github_git, or to work in a worktree.",
+        );
       }
       return this.machineChanges(profileId, session, clone, query.path, whole);
     }

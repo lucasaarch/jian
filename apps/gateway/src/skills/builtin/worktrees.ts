@@ -60,9 +60,10 @@ source folder, as they do on the gateway. Commands do not start in a worktree: s
 on it: run commands there with \`run_remote_command\`, setting its \`cwd\` to the worktree's path
 and never to the source folder.`;
   }
-  return `The worktrees are on the machine, and your file tools do not reach them: run commands there
-with \`run_remote_command\`, setting its \`cwd\` to the worktree's path and never to the source
-folder. Update Jian Remote there (for This computer, update the desktop app) to let the file tools reach it.`;
+  return `The worktrees are on the machine, and you have no file tools there: commands and files go
+through \`run_remote_command\`, with its \`cwd\` set to the worktree's path and never to the source
+folder. Updating Jian Remote on that machine (for This computer, the desktop app) gives you file
+tools there.`;
 }
 
 function whileYouHaveOne(can: Can): string {

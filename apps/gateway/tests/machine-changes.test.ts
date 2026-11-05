@@ -422,7 +422,8 @@ describe('changes on a machine', () => {
 
     await expect(services.sessions.changes(profile.id, session.id)).rejects.toMatchObject({
       statusCode: 409,
-      message: 'Changes on remote machines are not available here yet.',
+      message:
+        "Jian does not know a checkout of this project on the conversation's machine yet: ask the agent to clone it there with github_git, or to work in a worktree.",
     });
     expect(worker?.ops).toEqual([]);
   });

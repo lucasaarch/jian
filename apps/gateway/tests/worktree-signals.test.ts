@@ -467,9 +467,14 @@ it('tells a run whose machine cannot run file operations to update Jian Remote',
   const text = squish(load(can));
   const { system } = await ask(can);
 
-  expect(text).toContain('Update Jian Remote there');
+  // Such a run has no file tools at all: nothing may speak of "your file tools".
+  expect(text).toContain('you have no file tools there');
+  expect(text).toContain('Updating Jian Remote on that machine');
+  expect(text).not.toContain('your file tools');
   expect(text).not.toContain('400,000');
-  expect(system).toContain('Update Jian Remote there');
+  expect(system).toContain('You have no file tools there');
+  expect(system).toContain('Updating Jian Remote on that machine');
+  expect(system).not.toContain('Your file tools do not reach');
 });
 
 it('tells a machine conversation’s principal agent that its workers stay on the gateway', async () => {

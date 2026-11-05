@@ -430,6 +430,35 @@ it('works on a Windows machine with Windows paths', async () => {
   expect(worker.files.get(file)?.text).toBe('<h1>Hello</h1>\r\n');
 });
 
+it('refuses a path without a drive letter on a Windows machine, sending nothing', async () => {
+  const { worker, turn } = await setup({ platform: 'win32-x64' });
+
+  const { results } = await turn([
+    load,
+    () => call('read', 'read_file', { path: '/Users/ana/site/index.html' }),
+    () => call('write', 'write_file', { path: '/Users/ana/site/a.txt', content: 'x' }),
+  ]);
+
+  expect(failed(results.get('read'))).toContain('drive letter');
+  expect(failed(results.get('write'))).toContain('drive letter');
+  expect(worker.ops).toEqual([]);
+});
+
+it('words a refused search argument as one sentence naming it', async () => {
+  const { worker, turn } = await setup();
+
+  const { results } = await turn([
+    load,
+    () => call('search', 'search_files', { path: '/home/ana/site', pattern: 'x', glob: '-x' }),
+  ]);
+
+  const said = failed(results.get('search'));
+  expect(said).toContain('glob');
+  expect(said).not.toContain('ZodError');
+  expect(said).not.toContain('custom');
+  expect(worker.ops).toEqual([]);
+});
+
 it('points a file too large to carry at run_remote_command', async () => {
   const { worker, turn } = await setup();
   const file = '/var/log/big.log';
@@ -439,6 +468,26 @@ it('points a file too large to carry at run_remote_command', async () => {
 
   expect(failed(results.get('read'))).toContain('run_remote_command');
   expect(failed(results.get('read'))).not.toContain('run_command ');
+  expect(failed(results.get('read'))).toContain('400,000 characters');
+});
+
+it('states the read limit a machine actually has, in the tool and in the skill', async () => {
+  const { turn } = await setup();
+
+  const seen = await turn([load, () => call('noop', 'list_remote_machines', {})]);
+
+  // The worker refuses a file above the text an answer carries before offset and limit apply.
+  const read = seen.descriptions.get('read_file') ?? '';
+  expect(read).toContain('400,000 characters');
+  expect(read).toContain('run_remote_command');
+  expect(seen.descriptions.get('search_files')).toContain(
+    'respecting .gitignore when ripgrep is installed there',
+  );
+  const { remoteControlFor } = await import('../src/skills/builtin/remote-control.js');
+  const skill = remoteControlFor({ files: true }).instructions;
+  expect(skill).not.toContain('20 MiB');
+  expect(skill).toContain('400,000 characters');
+  expect(skill).toMatch(/beyond that[^.]*run_remote_command/);
 });
 
 it('refuses a write in the source of a machine worktree, naming the worktree', async () => {
@@ -526,7 +575,8 @@ it('keeps the update hint of a loaded skill on the next turn for a machine witho
   const next = await turn([]);
 
   expect(next.system).toContain('update_remote_machine');
-  expect(next.system).toContain('to let the file tools reach it');
+  expect(next.system).toContain('You have no file tools on this conversation');
+  expect(next.system).not.toContain('Gateway `files` / `shell` tools');
   expect(next.system).not.toContain("## File tools on this conversation's machine");
 });
 

@@ -77,7 +77,7 @@ export function worktreeSignals(
         ? '; your tools start there.'
         : onMachineFiles
           ? `. Your file tools work in it on the machine and refuse writes in the source; commands do not start there, so set cwd of run_remote_command to ${worktree.path}.`
-          : `. Your file tools do not reach the machine: set cwd of run_remote_command to ${worktree.path}. Update Jian Remote there (for This computer, update the desktop app) to let the file tools reach it.`;
+          : `. You have no file tools there: commands and files go through run_remote_command, so set cwd of run_remote_command to ${worktree.path}. Updating Jian Remote on that machine (for This computer, the desktop app) gives you file tools there.`;
       steady.push(
         `${folder}: You work on it in the worktree ${worktree.name} at ${worktree.path} (branch ${worktree.branch} from ${worktree.base})${start}`,
       );

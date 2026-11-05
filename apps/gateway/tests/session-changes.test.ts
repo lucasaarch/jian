@@ -244,7 +244,7 @@ describe('current project checkout changes', () => {
       // A real local checkout must never become a fallback for a remote conversation.
       await expect(services.sessions.changes(profile.id, session.id)).rejects.toMatchObject({
         statusCode: 409,
-        message: expect.stringContaining('remote'),
+        message: expect.stringContaining("on the conversation's machine"),
       });
       const secondId = randomUUID();
       await services.store.db.insert(projects).values({

@@ -9,12 +9,14 @@ function whereTools(machine?: { files: boolean }): string {
     return `In this conversation the file tools act on its machine (see below). Commands go through
 \`run_remote_command\`.`;
   }
+  if (machine) {
+    // Such a run has neither file nor shell tools: only the remote ones reach anything.
+    return `You have no file tools on this conversation's machine: commands and files there go through
+\`run_remote_command\`, and pull/push copy a file. Updating its Jian Remote (\`update_remote_machine\`;
+for This computer, update the desktop app) gives you file tools there.`;
+  }
   return `Gateway \`files\` / \`shell\` tools act on the **gateway host**, not the remote
-PC. For work on the remote computer, use the remote tools.${
-    machine
-      ? " This machine's Jian Remote does not run file operations yet: update it (`update_remote_machine`; for This computer, update the desktop app) to let the file tools reach it."
-      : ''
-  }`;
+PC. For work on the remote computer, use the remote tools.`;
 }
 
 /** Only a run whose file tools reach its machine is told what they do there. */
@@ -25,16 +27,21 @@ function machineFiles(machine?: { files: boolean }): string {
 
 \`read_file\`, \`edit_file\`, \`write_file\`, \`find_files\`, \`search_files\` and \`list_directory\` (the
 \`files\` group) work on the machine this conversation targets, not on the gateway. Give absolute
-paths in the machine's own form (\`/Users/…\`, \`C:\\…\`). They run as the logged-in user, so they open
-what that user can, except Jian Remote's own folder and its credentials.
+paths in the machine's own form (\`/Users/…\`, \`C:\\…\`), on Windows always with the drive
+letter. They run as the logged-in user, so they open what that user can, except Jian Remote's own
+folder and its credentials.
 
 - Read a file with \`read_file\` before you change it; a change is refused when the file changed
   since you read it, and you then read it again.
-- A file up to 20 MiB can be read, but a result shows at most 2,000 lines and is bounded, so read a
-  long file in parts. A single write is at most 400,000 characters; for more, write it in
-  pieces or use \`run_remote_command\`.
+- A read carries about 400,000 characters at most on a machine, and the whole file is refused
+  above that, whatever \`offset\` and \`limit\` say; beyond that read it with \`run_remote_command\`
+  (\`head\`, \`tail\` or \`sed\`, or \`Get-Content\` on Windows). A result shows at most 2,000 lines,
+  so read a long file in parts. A single write is at most 400,000 characters; for more, write it
+  in pieces or use \`run_remote_command\`.
 - \`list_directory\` shows 300 entries, \`find_files\` 1,000, and \`search_files\` at most 2,000 matches
-  in 60,000 characters; narrow the path or the pattern when a result says it is cut.
+  in 60,000 characters; narrow the path or the pattern when a result says it is cut. A find or a
+  search stops after 30 seconds with what it found so far, also marked cut, and \`find_files\`
+  skips \`/proc\`, \`/sys\` and \`/dev\`.
 - In a worktree on the machine they refuse writes in its source folder, as on the gateway.
 - Builds, tests and Git still run with \`run_remote_command\`, which needs its \`cwd\`.
 - A subagent of this conversation works on the gateway with the gateway's file tools and

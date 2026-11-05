@@ -69,6 +69,10 @@ export type SearchInput = {
 export type FileBackend = {
   /** Where the files are, as the tools' descriptions say it. */
   place: string;
+  /** A limit on reading that the local tools lack, said in read_file's description. */
+  readLimit?: string;
+  /** How search_files respects .gitignore there, after "respecting .gitignore". */
+  ignores?: string;
   /** What a path must look like to be one on that machine. */
   path: z.ZodType<string>;
   /** The path to work on, refused when it is out of reach for this access. */
@@ -363,8 +367,7 @@ export function fileTools(backend: FileBackend = localBackend()): ToolSet {
 
   return {
     read_file: tool({
-      description:
-        'Read a text file, numbered by line (the number, a tab, then the line). Reads the first 2000 lines unless told where to start and how many. Read a file before editing it.',
+      description: `Read a text file, numbered by line (the number, a tab, then the line). Reads the first 2000 lines unless told where to start and how many. Read a file before editing it.${backend.readLimit ? ` ${backend.readLimit}` : ''}`,
       inputSchema: z.object({
         path,
         offset: z.number().int().min(1).default(1).describe('First line to read, from 1.'),
@@ -498,8 +501,7 @@ export function fileTools(backend: FileBackend = localBackend()): ToolSet {
     }),
 
     search_files: tool({
-      description:
-        'Search file contents with a regular expression, the way ripgrep does, respecting .gitignore. Returns path:line:text, or only the paths, or a count per file.',
+      description: `Search file contents with a regular expression, the way ripgrep does, respecting .gitignore${backend.ignores ?? ''}. Returns path:line:text, or only the paths, or a count per file.`,
       inputSchema: z.object({
         pattern: z.string().min(1).max(1000),
         path: path.describe('A folder or a single file.'),
