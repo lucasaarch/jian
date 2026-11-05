@@ -7,6 +7,7 @@ import type { RemoteFilesAnswer, RemoteFilesOp } from '@jian/contracts';
 import { sessionChangesSchema } from '@jian/contracts';
 import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it } from 'vitest';
+import { MachineAnswers } from '../src/sessions/machine-checkout.js';
 import { projects, remoteTasks, runs, sessionWorktrees } from '../src/storage/schema.js';
 import { git } from './helpers/git-server.js';
 import { testServices } from './helpers/services.js';
@@ -50,6 +51,8 @@ function fakeWorker(services: Services, machine: Machine, capabilities = 'files-
   const ops: RemoteFilesOp[] = [];
   const tooLarge = new Set<string>();
   let stopped = false;
+  /** While set, a claimed task is answered only once it resolves: a busy machine. */
+  let held: Promise<void> | undefined;
 
   const answer = (op: RemoteFilesOp): RemoteFilesAnswer => {
     if (op.op === 'git-status') {
@@ -121,6 +124,7 @@ function fakeWorker(services: Services, machine: Machine, capabilities = 'files-
         continue;
       }
       ops.push(task.files);
+      await held;
       await services.remote.complete(machine.id, task.id, `Bearer ${machine.token}`, {
         taskId: task.id,
         exitCode: 0,
@@ -134,6 +138,17 @@ function fakeWorker(services: Services, machine: Machine, capabilities = 'files-
   return {
     ops,
     tooLarge,
+    /** Holds every answer until the returned function is called. */
+    hold() {
+      let release = () => {};
+      held = new Promise((resolve) => {
+        release = () => {
+          held = undefined;
+          resolve();
+        };
+      });
+      return release;
+    },
     stop: async () => {
       stopped = true;
       await loop;
@@ -410,5 +425,107 @@ describe('changes on a machine', () => {
       message: 'Changes on remote machines are not available here yet.',
     });
     expect(worker?.ops).toEqual([]);
+  });
+  it('read the worktree where a retargeted conversation now works, and the other only when named', async () => {
+    const { services, profile, machine, worker } = await setup();
+    const session = await services.sessions.createGatewaySession(profile.id, {});
+    const worktreeOf = async (name: string, place: string) => {
+      const source = repository();
+      // The gateway reads its own worktrees only under the folder the agents share.
+      const base = place === 'gateway' ? (process.env.JIAN_WORKSPACES ?? root) : root;
+      const path = join(base, `${name}-${randomUUID().slice(0, 8)}`);
+      git(source, 'worktree', 'add', '-q', '-b', `jian/${name}`, path);
+      await services.store.db.insert(sessionWorktrees).values({
+        id: randomUUID(),
+        profileId: profile.id,
+        sessionId: session.id,
+        name,
+        branch: `jian/${name}`,
+        base: 'main',
+        source,
+        path,
+        place,
+      });
+      writeFileSync(join(path, `${name}.txt`), 'work\n');
+      return path;
+    };
+    await worktreeOf('old-heron', 'gateway');
+    const onMachine = await worktreeOf('calm-otter', machine.id);
+    await services.sessions.setGatewayTarget(profile.id, session.id, {
+      projectId: null,
+      remoteMachineId: machine.id,
+    });
+
+    const changes = await services.sessions.changes(profile.id, session.id);
+    expect(changes.files.map((file) => file.path)).toEqual(['calm-otter.txt']);
+    expect(worker?.ops[0]).toEqual({ op: 'merge-base', root: onMachine, base: 'main' });
+    const named = await services.sessions.changes(profile.id, session.id, {
+      worktree: 'old-heron',
+    });
+    expect(named.files.map((file) => file.path)).toEqual(['old-heron.txt']);
+  });
+
+  it('show a file with a NUL anywhere as binary', async () => {
+    const { services, profile, conversation } = await setup();
+    const { into, clone } = cloneInto();
+    const session = await conversation(into);
+    writeFileSync(join(clone, 'modified.txt'), `${'text\n'.repeat(3000)}\0tail\n`);
+
+    const file = await services.sessions.changes(profile.id, session.id, {
+      path: 'modified.txt',
+    });
+    expect(file.files[0]?.unavailable).toBe('Binary files have no text diff.');
+  });
+
+  it('hand a busy machine the same read once, however long it takes', async () => {
+    const { services, profile, worker, conversation, advance } = await setup();
+    const { into } = cloneInto();
+    const session = await conversation(into);
+    const release = worker?.hold() ?? (() => {});
+
+    const first = services.sessions.changes(profile.id, session.id);
+    await expect.poll(() => worker?.ops.length).toBe(1);
+    advance(11_000);
+    const second = services.sessions.changes(profile.id, session.id);
+    release();
+    await Promise.all([first, second]);
+    expect(worker?.ops).toHaveLength(1);
+  });
+
+  it('name both folders when the project was cloned twice on the machine', async () => {
+    const { services, profile, machine, worker, conversation } = await setup();
+    const session = await conversation();
+    const one = cloneInto().clone;
+    const two = cloneInto().clone;
+    await services.workspaces.cloned(profile.id, session.id, machine.id, one);
+    await services.workspaces.cloned(profile.id, session.id, machine.id, two);
+
+    await expect(services.sessions.changes(profile.id, session.id)).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringMatching(
+        new RegExp(`more than one clone.*${one}.*${two}|more than one clone.*${two}.*${one}`),
+      ),
+    });
+    expect(worker?.ops).toEqual([]);
+  });
+});
+
+describe('answers kept from machines', () => {
+  it('keep a bounded number, letting go of the oldest first', async () => {
+    const answers = new MachineAnswers(() => 0);
+    const scope = { profileId: 'p', sessionId: 's', machineId: 'm', runs: '0|' };
+    let asked = 0;
+    const read = (index: number) =>
+      answers.answer(scope, { op: 'git-status', root: `/work/${index}` }, async () => {
+        asked += 1;
+        return { ok: true, op: 'git-status', top: `/work/${index}`, filters: [], status: '' };
+      });
+    for (let index = 0; index < 70; index += 1) await read(index);
+    expect(asked).toBe(70);
+
+    await read(69);
+    expect(asked).toBe(70);
+    await read(0);
+    expect(asked).toBe(71);
   });
 });

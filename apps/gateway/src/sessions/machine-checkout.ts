@@ -98,6 +98,14 @@ export function machineReader(root: string, ask: AskMachine): CheckoutReader {
       const original =
         wantsBefore && file.previousPath ? await side(file.previousPath, against) : current;
       if ('unavailable' in original) return original;
+      // The worker sniffs only a file's start for binary; a NUL anywhere has no text diff here,
+      // as on the gateway's own disk.
+      if (
+        (wantsAfter && current.after?.includes('\0')) ||
+        (wantsBefore && original.before?.includes('\0'))
+      ) {
+        return { unavailable: 'Binary files have no text diff.' };
+      }
       if (wantsAfter && current.after === null) {
         return { unavailable: 'The file changed while reading; refresh the changes.' };
       }
@@ -124,16 +132,23 @@ export function machineReader(root: string, ask: AskMachine): CheckoutReader {
 
 /** How long a machine's answer about a checkout is shown again, in ms: the panel's poll. */
 const MACHINE_ANSWER_MS = 10_000;
+/**
+ * The most answers kept at once. Each can hold a file's two sides, and nothing else frees them
+ * once the drawers that asked are closed.
+ */
+const MACHINE_ANSWERS_KEPT = 64;
 
-type Kept = { at: number; runs: string; answer: Promise<RemoteFilesAnswer> };
+/** `settled` is when the machine answered, in ms; absent while it has not yet. */
+type Kept = { settled?: number; runs: string; answer: Promise<RemoteFilesAnswer> };
 
 /**
  * What machines answered about checkouts, so the panel reading every 10 seconds does not hand
  * the machine a task each time. An answer is kept per profile, conversation, machine and the
  * operation itself (root, comparison base and path), never shared between conversations or
  * profiles, and is not served once one of the conversation's runs has ended since it was
- * asked: a turn that ended may have changed the checkout. A read still under way is shared, so
- * the list and an open file polled together send it once.
+ * asked: a turn that ended may have changed the checkout. A read still under way is shared
+ * however long it takes, so a busy machine is not handed the same read on every poll, and the
+ * list and an open file polled together send it once. The 10 seconds count from the answer.
  */
 export class MachineAnswers {
   private readonly kept = new Map<string, Kept>();
@@ -147,19 +162,39 @@ export class MachineAnswers {
   ): Promise<RemoteFilesAnswer> {
     const now = this.now();
     for (const [key, entry] of this.kept) {
-      if (now - entry.at >= MACHINE_ANSWER_MS) this.kept.delete(key);
+      if (entry.settled !== undefined && now - entry.settled >= MACHINE_ANSWER_MS) {
+        this.kept.delete(key);
+      }
     }
     const key = JSON.stringify([scope.profileId, scope.sessionId, scope.machineId, op]);
     const found = this.kept.get(key);
     if (found && found.runs === scope.runs) return found.answer;
 
-    const entry: Kept = { at: now, runs: scope.runs, answer: ask() };
+    const entry: Kept = { runs: scope.runs, answer: ask() };
+    this.kept.delete(key);
     this.kept.set(key, entry);
-    // An offline machine or a timeout is not an answer: the next poll asks again.
-    entry.answer.catch(() => {
-      if (this.kept.get(key) === entry) this.kept.delete(key);
-    });
+    entry.answer.then(
+      () => {
+        entry.settled = this.now();
+      },
+      // An offline machine or a timeout is not an answer: the next poll asks again.
+      () => {
+        if (this.kept.get(key) === entry) this.kept.delete(key);
+      },
+    );
+    this.bound();
     return entry.answer;
+  }
+
+  /** Drops the oldest answers past the bound; a read still under way stays until it settles. */
+  private bound() {
+    const settled = [...this.kept]
+      .filter(([, entry]) => entry.settled !== undefined)
+      .sort(([, a], [, b]) => (a.settled ?? 0) - (b.settled ?? 0));
+    for (const [key] of settled) {
+      if (this.kept.size <= MACHINE_ANSWERS_KEPT) break;
+      this.kept.delete(key);
+    }
   }
 }
 
@@ -188,18 +223,27 @@ export async function cloneOnMachine(
     .from(projects)
     .where(and(eq(projects.profileId, profileId), inArray(projects.id, ids)));
   const names = new Set(rows.map((row) => repositoryName(row.url ?? '')).filter(Boolean));
-  let known: string[];
+  const several = () =>
+    new GatewayError(409, 'Choose a conversation with one project to read its changes.');
   if (session.cloneInto) {
-    known = [...names].map((name) => `${session.cloneInto}/${name}`);
-  } else {
-    known = (await listLoads(db, profileId, session.id))
-      .filter((load) => load.kind === 'workspace' && load.name.startsWith(`${machineId}|`))
-      .map((load) => load.name.slice(machineId.length + 1))
-      .filter((path) => ABSOLUTE.test(path) && names.has(lastPart(path)));
+    if (names.size > 1) throw several();
+    const [name] = names;
+    return name ? `${session.cloneInto}/${name}` : undefined;
   }
-  const unique = [...new Set(known)];
-  if (unique.length > 1) {
-    throw new GatewayError(409, 'Choose a conversation with one project to read its changes.');
+  const clones = [
+    ...new Set(
+      (await listLoads(db, profileId, session.id))
+        .filter((load) => load.kind === 'workspace' && load.name.startsWith(`${machineId}|`))
+        .map((load) => load.name.slice(machineId.length + 1))
+        .filter((path) => ABSOLUTE.test(path) && names.has(lastPart(path))),
+    ),
+  ];
+  if (new Set(clones.map(lastPart)).size > 1) throw several();
+  if (clones.length > 1) {
+    throw new GatewayError(
+      409,
+      `This project has more than one clone on the conversation's machine: ${clones.join(', ')}. Work in one of them to read its changes.`,
+    );
   }
-  return unique[0];
+  return clones[0];
 }

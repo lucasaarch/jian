@@ -736,8 +736,10 @@ export class Sessions {
 
   /**
    * Current uncommitted files, not just the files a tool happened to edit in a recent turn. A
-   * worktree comes first: the gateway's own, then one on the conversation's machine. Without one,
-   * the project's checkout: on the gateway, or its one clone known on the conversation's machine.
+   * worktree where the conversation works comes first: on its machine, or on the gateway. Without
+   * one, the project's checkout there: on the gateway, or its one clone known on the machine. A
+   * gateway worktree of a conversation now on a machine is read only when named: its tools no
+   * longer work there.
    */
   async changes(profileId: string, sessionId: string, input: unknown = {}) {
     const session = await this.session(profileId, sessionId);
@@ -745,21 +747,19 @@ export class Sessions {
     const whole = query.whole === 'true';
     // Only this conversation's own worktrees, on the gateway or on its machine, are ever read:
     // the source folder and another conversation's worktree are not reachable from here.
-    const records = await this.worktreeRecords(profileId, sessionId);
-    const gateway = records.filter((item) => item.place === 'gateway');
-    const machine = records.filter(
-      (item) => session.remoteMachineId && item.place === session.remoteMachineId,
+    const place = session.remoteMachineId ?? 'gateway';
+    const records = (await this.worktreeRecords(profileId, sessionId)).filter(
+      (item) => item.place === place || item.place === 'gateway',
     );
-    const reachable = [...gateway, ...machine];
-    if (query.worktree && !reachable.some((item) => item.name === query.worktree)) {
+    const here = records.filter((item) => item.place === place);
+    if (query.worktree && !records.some((item) => item.name === query.worktree)) {
       throw new GatewayError(404, `Worktree ${query.worktree} not found`);
     }
-    const worktrees = gateway.length ? gateway : machine;
-    if (worktrees.length) {
+    if (query.worktree || here.length) {
       const chosen = query.worktree
-        ? reachable.find((item) => item.name === query.worktree)
-        : worktrees.length === 1
-          ? worktrees[0]
+        ? records.find((item) => item.name === query.worktree)
+        : here.length === 1
+          ? here[0]
           : undefined;
       if (!chosen) throw new GatewayError(409, 'Choose a worktree to read its changes.');
       if (chosen.place !== 'gateway') {
@@ -815,7 +815,8 @@ export class Sessions {
       .limit(1);
     const machine = assertFound(found, 'Remote machine');
     const files = this.machineFiles;
-    if (!files || !(machine.capabilities ?? []).includes(REMOTE_FILES_CAPABILITY)) {
+    if (!files) throw new GatewayError(500, 'This gateway cannot reach files on machines.');
+    if (!(machine.capabilities ?? []).includes(REMOTE_FILES_CAPABILITY)) {
       throw new GatewayError(
         409,
         `${machine.name} runs a Jian Remote too old to show changes. Update Jian Remote there.`,
