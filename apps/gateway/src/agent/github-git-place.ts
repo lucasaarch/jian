@@ -34,6 +34,8 @@ export type GitPlace = {
     config?: ReadonlyArray<[string, string]>,
     signal?: AbortSignal,
   ): Promise<GitOutcome>;
+  /** Where Jian keeps what it makes on that machine: worktrees live under it. No trailing slash. */
+  home(): Promise<string>;
 };
 
 const clip = (text: string) =>
@@ -53,6 +55,7 @@ export function localPlace(gitAccess: {
 }): GitPlace {
   return {
     name: 'the machine this gateway runs on',
+    home: cloneRoot,
     async checkout(path, fallback, clone) {
       const base = reachableFolders()[0] ?? (await cloneRoot());
       const target = await confine(resolve(base, path ?? fallback), 'write');
@@ -123,6 +126,16 @@ export function remotePlace(
 
   return {
     name: 'the machine this conversation targets',
+    async home() {
+      const windows = (await machine()).platform.startsWith('win32');
+      const command = windows ? 'Write-Output $env:USERPROFILE' : 'printf %s "$HOME"';
+      const outcome = await remote.execute(profileId, machineId, { command, timeoutMs: 30_000 });
+      const home = outcome.stdout.trim().replaceAll('\\', '/').replace(/\/+$/, '');
+      if (outcome.exitCode !== 0 || !home) {
+        throw new GatewayError(502, 'Could not read the home folder of the machine.');
+      }
+      return `${home}/Jian`;
+    },
     async checkout(path, fallback) {
       // Relative paths start in the worker's home; the machine's own filesystem decides the rest.
       return path ?? fallback;
