@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { SessionWorktree } from '@jian/contracts';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Clock } from '../core/clock.js';
 import type { Queryable } from '../storage/database.js';
 import { profiles, runs, sessions, sessionWorktrees } from '../storage/schema.js';
@@ -116,4 +116,41 @@ export async function worktreeHolders(
     .select({ sessionId: sessionWorktrees.sessionId, source: sessionWorktrees.source })
     .from(sessionWorktrees)
     .where(and(inArray(sessionWorktrees.source, sources), isNull(sessionWorktrees.removedAt)));
+}
+
+/**
+ * The conversation and the task sessions of the subagents it started, however deep. A subagent's
+ * worktrees belong to its own task session, and deleting the conversation does not remove that
+ * session, so they have to be found before the conversation's runs are gone.
+ */
+export async function conversationAndSubagentSessions(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+): Promise<string[]> {
+  const found = new Set([sessionId]);
+  let frontier = [sessionId];
+
+  while (frontier.length > 0) {
+    const parents = await db
+      .select({ id: runs.id })
+      .from(runs)
+      .where(and(eq(runs.profileId, profileId), inArray(runs.sessionId, frontier)));
+    if (parents.length === 0) break;
+    const children = await db
+      .selectDistinct({ sessionId: runs.sessionId })
+      .from(runs)
+      .where(
+        and(
+          eq(runs.profileId, profileId),
+          inArray(
+            sql`(${runs.subagent}->>'parentRunId')`,
+            parents.map((run) => run.id),
+          ),
+        ),
+      );
+    frontier = children.map((run) => run.sessionId).filter((id) => !found.has(id));
+    for (const id of frontier) found.add(id);
+  }
+  return [...found];
 }

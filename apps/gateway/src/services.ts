@@ -146,10 +146,14 @@ export function buildServices({
     decisions.judge,
   );
   const sshKeys = new SshKeys(store, gatewayVault);
-  const worktrees = new Worktrees(store, clock, async (profileId, place) =>
-    place === 'gateway'
-      ? localPlace(await prepareGitAccess(sshKeys))
-      : remotePlace(profileId, place, remote),
+  const worktrees = new Worktrees(
+    store,
+    clock,
+    async (profileId, place) =>
+      place === 'gateway'
+        ? localPlace(await prepareGitAccess(sshKeys))
+        : remotePlace(profileId, place, remote),
+    (message) => console.warn(message),
   );
   const services = {
     profiles,

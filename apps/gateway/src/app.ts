@@ -43,6 +43,7 @@ import { registerStatsRoutes } from './stats/routes.js';
 import type { Store } from './storage/database.js';
 import { registerWorkRoutes } from './tasks/routes.js';
 import { registerWebRoutes } from './web/routes.js';
+import { registerWorktreeRoutes } from './worktrees/routes.js';
 
 export function createApp(
   options: Services & {
@@ -158,6 +159,7 @@ export function createApp(
     registerProfileRoutes(routes, options);
     registerProjectRoutes(routes, options.projects);
     registerSessionRoutes(routes, { ...options, coordination });
+    registerWorktreeRoutes(routes, options);
     registerMemoryRoutes(routes, options);
     registerStatsRoutes(routes, options);
     registerScheduleRoutes(routes, options);

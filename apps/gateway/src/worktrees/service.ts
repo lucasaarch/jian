@@ -1,4 +1,5 @@
 import type { SessionWorktree } from '@jian/contracts';
+import { ORIGIN_QUERY, originUrls } from '../agent/github-git-command.js';
 import type { GitPlace } from '../agent/github-git-place.js';
 import type { Clock } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
@@ -18,6 +19,7 @@ import {
 import { randomName } from './names.js';
 import {
   activeWorktrees,
+  conversationAndSubagentSessions,
   insertWorktree,
   markRemoved,
   openConversations,
@@ -254,6 +256,33 @@ export class Worktrees {
     );
   }
 
+  /** The conversation's own id first, then its subagents' task sessions. */
+  conversationSessions(profileId: string, sessionId: string): Promise<string[]> {
+    return conversationAndSubagentSessions(this.store.db, profileId, sessionId);
+  }
+
+  /**
+   * `owner/repo` when the source's origin is a github.com repository, else null. One git read at
+   * the worktree's place; a place that cannot answer is simply not a pull request candidate.
+   */
+  async githubRepository(profileId: string, record: WorktreeRecord): Promise<string | null> {
+    try {
+      const git = await this.places(profileId, record.place);
+      const outcome = await git.git(['-C', record.source, ...ORIGIN_QUERY]);
+      if (outcome.exitCode !== 0) return null;
+      for (const url of originUrls(outcome.stdout)) {
+        const match =
+          /^(?:https:\/\/(?:[^@/]+@)?|ssh:\/\/git@|git@)github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i.exec(
+            url,
+          );
+        if (match) return `${match[1]}/${match[2]}`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   async find(profileId: string, sessionId: string, name: string): Promise<WorktreeRecord> {
     const found = (await activeWorktrees(this.store.db, profileId, sessionId)).find(
       (item) => item.name === name,
@@ -319,7 +348,17 @@ export class Worktrees {
    * no work is lost. A machine that cannot be reached leaves its folder behind, said in the log.
    */
   async forget(profileId: string, sessionId: string): Promise<void> {
-    for (const record of await activeWorktrees(this.store.db, profileId, sessionId)) {
+    const records = await activeWorktrees(this.store.db, profileId, sessionId);
+    await this.clear(profileId, records);
+    for (const record of records) await this.retire(profileId, sessionId, record);
+  }
+
+  /**
+   * The same cleanup for records read earlier: deleting a conversation takes its rows with it, so
+   * the route reads them first and clears the folders once the delete has committed.
+   */
+  async clear(profileId: string, records: WorktreeRecord[]): Promise<void> {
+    for (const record of records) {
       try {
         const git = await this.places(profileId, record.place);
         await removeWorktree(git, { ...record, discard: true, deleteBranch: false });
@@ -330,7 +369,6 @@ export class Worktrees {
           }`,
         );
       }
-      await this.retire(profileId, sessionId, record);
     }
   }
 

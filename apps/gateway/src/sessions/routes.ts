@@ -12,6 +12,7 @@ import { GatewayError } from '../core/errors.js';
 import type { ProfileParams, SessionParams } from '../http/params.js';
 import { conflictsBrief } from '../integrations/github-items.js';
 import type { RunWriter } from '../runs/port.js';
+import type { Worktrees } from '../worktrees/service.js';
 import type { SessionWriter } from './port.js';
 import type { Sessions } from './service.js';
 
@@ -36,6 +37,7 @@ type SessionRouteServices = {
       | 'markRead'
     >;
   runs: RunWriter;
+  worktrees: Pick<Worktrees, 'conversationSessions' | 'recorded' | 'clear'>;
   // History spans every message of a profile or a session, so it comes from coordination.
   coordination: Pick<Coordination, 'history'>;
 };
@@ -71,8 +73,21 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
 
   app.delete<{ Params: SessionParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId',
-    async (request) =>
-      deps.sessions.deleteSession(request.params.profileId, request.params.sessionId),
+    async (request) => {
+      const { profileId, sessionId } = request.params;
+      // Deleting the conversation takes its worktree rows with it, and a subagent's belong to
+      // its task session, which only the conversation's runs lead to: read them all first.
+      const records = [];
+      for (const holder of await deps.worktrees.conversationSessions(profileId, sessionId)) {
+        records.push(...(await deps.worktrees.recorded(profileId, holder)));
+      }
+      const deleted = await deps.sessions.deleteSession(profileId, sessionId);
+      // The conversation is gone either way; a folder that could not be removed is logged.
+      await deps.worktrees
+        .clear(profileId, records)
+        .catch((error) => console.warn(`Could not clean up worktrees: ${String(error)}`));
+      return deleted;
+    },
   );
 
   app.put<{ Params: SessionParams }>(

@@ -28,3 +28,13 @@ it('says why a checkout cannot be read, in place of the generic conflict', async
   expect(refused).toBeInstanceOf(GatewayAnswer);
   expect((refused as GatewayAnswer).message).toBe('This conversation has no checkout yet.');
 });
+
+it('takes an answer with no body as a success when the gateway said 204', async () => {
+  await expect(
+    result(Promise.resolve({ response: new Response(null, { status: 204 }) })),
+  ).resolves.toBeUndefined();
+  // A 200 with nothing in it is still a broken answer.
+  await expect(
+    result(Promise.resolve({ response: new Response(null, { status: 200 }) })),
+  ).rejects.toBeInstanceOf(GatewayAnswer);
+});

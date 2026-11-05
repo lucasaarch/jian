@@ -82,9 +82,13 @@ export async function result<T>(
 ): Promise<T> {
   const { data, error, response } = await request;
 
-  if (!response.ok || data === undefined) {
+  // A 204 has no body by design, so its data is undefined on success; any other answer without
+  // one is broken.
+  const empty = response.status === 204;
+
+  if (!response.ok || (data === undefined && !empty)) {
     throw new GatewayAnswer(message(response.status, error as Detail | undefined), response.status);
   }
 
-  return data;
+  return data as T;
 }
