@@ -1,5 +1,5 @@
 import type { RemoteFilesOp } from '@jian/contracts';
-import { MAX_READ_BYTES, MAX_TEXT } from './limits.ts';
+import { MAX_GIT_BYTES, MAX_READ_BYTES, MAX_TEXT } from './limits.ts';
 
 /**
  * Checks a task's `files` the way `remoteFilesOpSchema` does, without Zod (see limits.ts). The
@@ -45,9 +45,10 @@ const SHAPES: Record<string, Record<string, Check>> = {
   read: { path, maxBytes: integer(1, MAX_READ_BYTES) },
   write: {
     path,
-    content: text(MAX_TEXT),
+    // Any characters: unlike a path, a file's text may hold NUL.
+    content: (value) => typeof value === 'string' && value.length <= MAX_TEXT,
     expectedMtimeMs: (value) =>
-      value === null || (typeof value === 'number' && !Number.isNaN(value)),
+      value === null || (typeof value === 'number' && Number.isFinite(value)),
   },
   list: { path, limit: integer(1, 300) },
   find: { path, pattern: pattern(500), limit: integer(1, 1000) },
@@ -70,7 +71,7 @@ const SHAPES: Record<string, Record<string, Check>> = {
     root: path,
     path: repoPath,
     against: (value) => value === 'HEAD' || sha(value),
-    maxBytes: integer(1, 500_000),
+    maxBytes: integer(1, MAX_GIT_BYTES),
   },
   'merge-base': { root: path, base: plain(256) },
 };
@@ -80,11 +81,15 @@ const OPTIONAL = new Set(['glob', 'against']);
 export function parseFilesOp(value: unknown): RemoteFilesOp | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
-  const shape = typeof record.op === 'string' ? SHAPES[record.op] : undefined;
+  const shape =
+    typeof record.op === 'string' && Object.hasOwn(SHAPES, record.op)
+      ? SHAPES[record.op]
+      : undefined;
   if (!shape) return undefined;
-  for (const key of Object.keys(record)) if (key !== 'op' && !(key in shape)) return undefined;
+  for (const key of Object.keys(record))
+    if (key !== 'op' && !Object.hasOwn(shape, key)) return undefined;
   for (const [key, check] of Object.entries(shape)) {
-    if (record[key] === undefined) {
+    if (!Object.hasOwn(record, key) || record[key] === undefined) {
       if (OPTIONAL.has(key) && record.op !== 'git-file') continue;
       return undefined;
     }

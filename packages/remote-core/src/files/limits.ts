@@ -9,3 +9,4 @@ export const RESULT_BYTES = 480_000;
 export const MAX_FIND_CHARS = 200_000;
 export const MAX_SEARCH_CHARS = 60_000;
 export const MAX_READ_BYTES = 20 * 1024 * 1024;
+export const MAX_GIT_BYTES = 500_000;

@@ -1,7 +1,7 @@
 import type { RemoteFilesAnswer, RemoteFilesOp, RemoteResult, RemoteTask } from '@jian/contracts';
 import { RESULT_BYTES } from './limits.ts';
 import { isRefused, REFUSED_MESSAGE, realLocation, refusedFolders } from './paths.ts';
-import { findFiles, listFolder, searchFiles } from './search.ts';
+import { findFiles, listFolder, SEARCH_TIMEOUT_MS, searchFiles, shower } from './search.ts';
 import { FilesProblem, problemOf, readBytes, readText, writeBytes, writeText } from './text.ts';
 import { parseFilesOp } from './validate.ts';
 
@@ -12,6 +12,8 @@ export type FilesOptions = {
   refused?: string[];
   /** The environment a search program is found in. */
   env?: NodeJS.ProcessEnv;
+  /** How long a search may run, in ms; the task's own limit when it is shorter than 30 s. */
+  timeoutMs?: number;
 };
 
 const OPS = [
@@ -48,8 +50,9 @@ async function run(op: RemoteFilesOp, options: FilesOptions): Promise<RemoteFile
   const refused = options.refused ?? refusedFolders();
   const real = await realLocation(op.path);
   if (await isRefused(real, refused)) return fail(op.op, 'refused', REFUSED_MESSAGE);
-  // Reads and writes act on the real file, so a link keeps being a link; the rest keep the path
-  // as given, which is how the agent will recognise what comes back.
+  // Everything acts on the real path the checks saw, never on the spelling given: `..` after a
+  // link, `./`, case and a link as the root all lead where the real path leads. Answers that
+  // name paths show them as the agent gave them.
   switch (op.op) {
     case 'read':
       return readText(real, op);
@@ -60,11 +63,18 @@ async function run(op: RemoteFilesOp, options: FilesOptions): Promise<RemoteFile
     case 'write-bytes':
       return writeBytes(real, op);
     case 'list':
-      return listFolder(op.path, op);
+      return listFolder(real, op);
     case 'find':
-      return findFiles(op.path, op, refused);
+      return findFiles(real, op, refused, shower(op.path, real));
     case 'search':
-      return searchFiles(op.path, op, options.env ?? process.env, refused);
+      return searchFiles(
+        real,
+        op,
+        options.env ?? process.env,
+        refused,
+        shower(op.path, real),
+        options.timeoutMs,
+      );
   }
 }
 
@@ -99,7 +109,10 @@ export async function executeFilesTask(
   task: RemoteTask,
   options: FilesOptions = {},
 ): Promise<RemoteResult> {
-  const files = await answerFilesOp(task.files, options);
+  const files = await answerFilesOp(task.files, {
+    ...options,
+    timeoutMs: options.timeoutMs ?? Math.min(SEARCH_TIMEOUT_MS, Math.max(1, task.timeoutMs)),
+  });
   return {
     taskId: task.id,
     exitCode: files.ok ? 0 : 1,

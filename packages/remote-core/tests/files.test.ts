@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -17,6 +18,7 @@ import { after, test } from 'node:test';
 import {
   REMOTE_FILES_CAPABILITY,
   REMOTE_FILES_MAX_FIND_CHARS,
+  REMOTE_FILES_MAX_GIT_BYTES,
   REMOTE_FILES_MAX_READ_BYTES,
   REMOTE_FILES_MAX_SEARCH_CHARS,
   REMOTE_FILES_MAX_TEXT,
@@ -30,6 +32,7 @@ import {
 import {
   FILES_CAPABILITY,
   MAX_FIND_CHARS,
+  MAX_GIT_BYTES,
   MAX_READ_BYTES,
   MAX_SEARCH_CHARS,
   MAX_TEXT,
@@ -394,6 +397,8 @@ test('the worker copies of the contract constants and validation agree with the 
   assert.equal(MAX_FIND_CHARS, REMOTE_FILES_MAX_FIND_CHARS);
   assert.equal(MAX_SEARCH_CHARS, REMOTE_FILES_MAX_SEARCH_CHARS);
   assert.equal(MAX_READ_BYTES, REMOTE_FILES_MAX_READ_BYTES);
+  assert.equal(MAX_GIT_BYTES, REMOTE_FILES_MAX_GIT_BYTES);
+  assert.ok(parseFilesOp({ op: 'read', path: 'C:\\Users\\theo\\a.txt', maxBytes: 5 }));
   const sha = 'a'.repeat(40);
   const cases: unknown[] = [
     { op: 'read', path: '/a', maxBytes: 1 },
@@ -463,6 +468,108 @@ test('the worker copies of the contract constants and validation agree with the 
     { op: 'nope' },
     null,
     'read',
+    { op: 'constructor' },
+    { op: 'toString', path: '/a' },
+    JSON.parse('{"op":"read","path":"/a","maxBytes":1,"__proto__":{}}'),
+    { op: 'write', path: '/a', content: 'with\0nul', expectedMtimeMs: null },
+    { op: 'write', path: '/a', content: '', expectedMtimeMs: Number.POSITIVE_INFINITY },
+    { op: 'read', path: `/${'a'.repeat(4095)}`, maxBytes: 1 },
+    { op: 'read', path: `/${'a'.repeat(4096)}`, maxBytes: 1 },
+    { op: 'read', path: 'C:\\Users\\theo', maxBytes: 1 },
+    { op: 'read', path: 'C:/Users/theo', maxBytes: REMOTE_FILES_MAX_READ_BYTES },
+    { op: 'find', path: '/a', pattern: 'a'.repeat(500), limit: 1000 },
+    { op: 'find', path: '/a', pattern: 'a'.repeat(501), limit: 1 },
+    { op: 'find', path: '/a', pattern: 'a', limit: 1001 },
+    { op: 'find', path: '/a', pattern: 'a', limit: 0 },
+    {
+      op: 'search',
+      path: '/a',
+      pattern: 'a'.repeat(2000),
+      ignoreCase: false,
+      contextLines: 10,
+      output: 'count',
+      limit: 2000,
+    },
+    {
+      op: 'search',
+      path: '/a',
+      pattern: 'a'.repeat(2001),
+      ignoreCase: false,
+      contextLines: 0,
+      output: 'count',
+      limit: 1,
+    },
+    {
+      op: 'search',
+      path: '/a',
+      pattern: 'a',
+      ignoreCase: false,
+      contextLines: 0,
+      output: 'count',
+      limit: 2001,
+    },
+    {
+      op: 'search',
+      path: '/a',
+      pattern: 'a',
+      glob: '*.t\ns',
+      ignoreCase: false,
+      contextLines: 0,
+      output: 'count',
+      limit: 1,
+    },
+    {
+      op: 'search',
+      path: '/a',
+      pattern: 'a',
+      glob: ' *.ts',
+      ignoreCase: false,
+      contextLines: 0,
+      output: 'count',
+      limit: 1,
+    },
+    {
+      op: 'search',
+      path: '/a',
+      pattern: 'a',
+      glob: '*.ts ',
+      ignoreCase: false,
+      contextLines: 0,
+      output: 'count',
+      limit: 1,
+    },
+    {
+      op: 'search',
+      path: '/a',
+      pattern: 'a',
+      glob: '',
+      ignoreCase: false,
+      contextLines: 0,
+      output: 'count',
+      limit: 1,
+    },
+    {
+      op: 'search',
+      path: '/a',
+      pattern: 'a',
+      glob: 'a'.repeat(201),
+      ignoreCase: false,
+      contextLines: 0,
+      output: 'count',
+      limit: 1,
+    },
+    { op: 'merge-base', root: '/a', base: 'a'.repeat(256) },
+    { op: 'merge-base', root: '/a', base: 'a'.repeat(257) },
+    { op: 'merge-base', root: '/a', base: 'main\u007f' },
+    { op: 'git-file', root: '/a', path: 'x', against: 'HEAD', maxBytes: 500_000 },
+    { op: 'git-file', root: '/a', path: 'x', against: 'HEAD', maxBytes: 500_001 },
+    { op: 'git-file', root: '/a', path: 'C:x', against: 'HEAD', maxBytes: 5 },
+    { op: 'git-file', root: '/a', path: 'a\\..\\b', against: 'HEAD', maxBytes: 5 },
+    { op: 'git-file', root: '/a', path: 'a/..', against: 'HEAD', maxBytes: 5 },
+    { op: 'git-file', root: '/a', path: '/abs', against: 'HEAD', maxBytes: 5 },
+    { op: 'git-file', root: '/a', path: 'x', against: 'A'.repeat(40), maxBytes: 5 },
+    { op: 'git-file', root: '/a', path: 'x', against: sha, maxBytes: 5 },
+    { op: 'git-status', root: '/a', against: 'A'.repeat(40) },
   ];
   for (const value of cases) {
     assert.equal(
@@ -526,4 +633,186 @@ test('a files task becomes a result with exit code, empty output and the answer'
 
 test('the worker advertises files-v1', async () => {
   assert.ok((await detectCapabilities()).includes(REMOTE_FILES_CAPABILITY));
+});
+
+const noRg = () => ({ PATH: join(base, 'no-such-bin') });
+const engines: Array<[string, NodeJS.ProcessEnv | undefined]> = [
+  ['walk', noRg()],
+  ...(rgInstalled ? ([['ripgrep', undefined]] as Array<[string, undefined]>) : []),
+];
+
+/** A home with a refused folder `cfg` beside a plain file, both holding the same words. */
+const home = () => {
+  const root = realpathSync(folder());
+  const cfg = join(root, 'home', 'cfg');
+  mkdirSync(cfg, { recursive: true });
+  writeFileSync(join(cfg, 'config.json'), 'synthetic-token\n');
+  writeFileSync(join(root, 'home', 'plain.txt'), 'synthetic-token\n');
+  mkdirSync(join(root, 'work'));
+  return { root, cfg, parent: join(root, 'home') };
+};
+for (const [engine, env] of engines) {
+  test(`search from odd spellings of a path never reads the refused folder (${engine})`, async () => {
+    if (process.platform === 'win32') return;
+    const { root, cfg, parent } = home();
+    symlinkSync(parent, join(root, 'lnk'));
+    symlinkSync(cfg, join(root, 'lnk-cfg'));
+    symlinkSync(cfg, join(root, 'work', 'm'));
+    const upper = (path: string) => path.replace(/cfg/g, 'CFG');
+    const targets = [
+      `${parent}/.`,
+      `${root}/work/../home`,
+      join(root, 'lnk'),
+      `${root}/work/m/..`,
+      `${parent}/./cfg`,
+      `${root}/work/../home/cfg`,
+      join(root, 'lnk-cfg'),
+      join(root, 'work', 'm'),
+      upper(cfg),
+      upper(parent),
+    ];
+    for (const target of targets) {
+      const answer = await ask(
+        searchOp(target, { pattern: 'synthetic-token', output: 'files' }),
+        [cfg],
+        env,
+      );
+      if (answer.ok) {
+        assert.ok(
+          answer.op === 'search' && answer.matches.every((line) => line.endsWith('plain.txt')),
+          `${target}: ${JSON.stringify(answer)}`,
+        );
+      }
+      const content = await ask(searchOp(target, { pattern: 'synthetic-token' }), [cfg], env);
+      assert.doesNotMatch(JSON.stringify(content), /config\.json/, target);
+    }
+  });
+}
+
+test('list and find from odd spellings do not enter the refused folder', async () => {
+  if (process.platform === 'win32') return;
+  const { root, cfg } = home();
+  symlinkSync(cfg, join(root, 'work', 'm'));
+  const direct = [`${root}/home/./cfg`, join(root, 'work', 'm'), `${root}/work/../home/cfg`];
+  for (const target of direct) {
+    problem(await ask({ op: 'list', path: target, limit: 50 }, [cfg]), 'refused');
+    problem(await ask({ op: 'find', path: target, pattern: '**/*', limit: 50 }, [cfg]), 'refused');
+  }
+  // `m/..` is the parent of the link's target, as it is for the program that opens it.
+  const parent = ok(await ask({ op: 'list', path: `${root}/work/m/..`, limit: 50 }, [cfg]), 'list');
+  assert.deepEqual(parent.entries.map((e) => e.name).sort(), ['cfg', 'plain.txt']);
+  const found = ok(
+    await ask({ op: 'find', path: `${root}/work/m/..`, pattern: '**/*', limit: 50 }, [cfg]),
+    'find',
+  );
+  assert.deepEqual(
+    found.files.map((file) => file.split('/').pop()),
+    ['plain.txt'],
+  );
+  if (process.platform === 'darwin') {
+    problem(
+      await ask({ op: 'read', path: cfg.replace('cfg', 'CFG') + '/config.json', maxBytes: 99 }, [
+        cfg,
+      ]),
+      'refused',
+    );
+  }
+});
+
+test('the desktop data folder and the CLI config folder are both refused by default', async () => {
+  const { refusedFolders } = await import('../src/index.ts');
+  const folders = refusedFolders().join('|');
+  assert.match(folders, /jian-remote/);
+  assert.match(folders, /Jian/);
+});
+
+for (const [engine, env] of engines) {
+  test(`a search with thousands of matches answers truncated, not failed (${engine})`, async () => {
+    const dir = folder();
+    for (let file = 0; file < 300; file += 1) {
+      writeFileSync(
+        join(dir, `f${String(file).padStart(3, '0')}.txt`),
+        'needle in a line of text\n'.repeat(40),
+      );
+    }
+    const answer = ok(await ask(searchOp(dir, { limit: 2000 }), undefined, env), 'search');
+    assert.equal(answer.truncated, true);
+    assert.ok(answer.matches.length > 100);
+    const chars = answer.matches.reduce((sum, line) => sum + line.length, 0);
+    assert.ok(chars <= 60_000);
+  });
+}
+
+for (const [engine, env] of engines) {
+  test(`one matching line over the character budget is cut, not dropped (${engine})`, async () => {
+    const dir = folder();
+    writeFileSync(join(dir, 'wide.txt'), `needle${'x'.repeat(70_000)}\n`);
+    const answer = ok(await ask(searchOp(dir), undefined, env), 'search');
+    assert.equal(answer.matches.length, 1);
+    assert.equal(answer.matches[0]?.length, 60_000);
+  });
+}
+
+test('the fallback walk gives up a pattern that never ends at its deadline without blocking the worker', async () => {
+  const dir = folder();
+  writeFileSync(join(dir, 'a.txt'), `${'a'.repeat(60)}b\n`);
+  let slowest = 0;
+  let last = Date.now();
+  const timer = setInterval(() => {
+    slowest = Math.max(slowest, Date.now() - last);
+    last = Date.now();
+  }, 50);
+  const started = Date.now();
+  const answer = await answerFilesOp(searchOp(dir, { pattern: '(a+)+$' }), {
+    refused: [secrets()],
+    env: noRg(),
+    timeoutMs: 1000,
+  });
+  clearInterval(timer);
+  assert.equal(answer.ok, true, JSON.stringify(answer));
+  assert.equal((answer as { truncated: boolean }).truncated, true);
+  assert.ok(Date.now() - started < 4000);
+  assert.ok(slowest < 500, `the event loop stalled for ${slowest} ms`);
+});
+
+test('the fallback walk skips a folder it cannot read', async () => {
+  if (process.platform === 'win32' || process.getuid?.() === 0) return;
+  const dir = folder();
+  mkdirSync(join(dir, 'locked'));
+  writeFileSync(join(dir, 'locked', 'x.txt'), 'needle\n');
+  writeFileSync(join(dir, 'open.txt'), 'needle\n');
+  chmodSync(join(dir, 'locked'), 0o000);
+  try {
+    const answer = ok(await ask(searchOp(dir, { output: 'files' }), undefined, noRg()), 'search');
+    assert.deepEqual(answer.matches, [join(dir, 'open.txt')]);
+  } finally {
+    chmodSync(join(dir, 'locked'), 0o755);
+  }
+});
+
+test('the fallback walk handles context lines and multibyte text across chunk edges', async () => {
+  const dir = folder();
+  const filler = 'é'.repeat(40_000);
+  writeFileSync(join(dir, 'a.txt'), `${filler}\nneedle one\nafter\nfar\nfar\nfar\nneedle two\n`);
+  const answer = ok(await ask(searchOp(dir, { contextLines: 1 }), undefined, noRg()), 'search');
+  const file = join(dir, 'a.txt');
+  assert.deepEqual(
+    answer.matches,
+    [
+      `${file}-1-${filler}`.slice(0, 0) + `${file}-1-${filler}`,
+      `${file}:2:needle one`,
+      `${file}-3-after`,
+      '--',
+      `${file}-6-far`,
+      `${file}:7:needle two`,
+    ].filter(Boolean),
+  );
+});
+
+test('a long file name does not make a temp name too long', async () => {
+  if (process.platform === 'win32') return;
+  const dir = folder();
+  const file = join(dir, 'n'.repeat(250));
+  ok(await ask({ op: 'write', path: file, content: 'x', expectedMtimeMs: null }), 'write');
+  assert.equal(readFileSync(file, 'utf8'), 'x');
 });

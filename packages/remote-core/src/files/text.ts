@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { RemoteFilesAnswer, RemoteFilesOp } from '@jian/contracts';
 import { MAX_TEXT } from './limits.ts';
 
@@ -86,7 +86,8 @@ export async function writeAtomic(
   mode: number | undefined,
   io: WriteIo = { rename },
 ): Promise<void> {
-  const temp = join(dirname(target), `.${basename(target)}.${randomBytes(6).toString('hex')}.tmp`);
+  // Not named after the target: a name near the 255 byte limit would leave no room for a suffix.
+  const temp = join(dirname(target), `.jian-write-${randomBytes(6).toString('hex')}.tmp`);
   try {
     await writeFile(temp, data, { flag: 'wx', ...(mode === undefined ? {} : { mode }) });
     // `mode` passes through the umask on creation; the replaced file's own bits are kept exactly.
