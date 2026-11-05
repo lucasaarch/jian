@@ -31,6 +31,7 @@ import {
 import { net } from 'electron';
 import type { FromWorkers, ToWorkers, WorkersSetup } from './messages';
 import type { WorkerTarget } from './sharing';
+import { shownUse } from './use';
 
 /** How long a stopping worker may finish the poll it is in before it says goodbye, in ms. */
 const STOP_WAIT_MS = 3_000;
@@ -97,11 +98,9 @@ async function start(gatewayId: string, target: WorkerTarget): Promise<void> {
     execute: async (task) => {
       // In plain sight in the Inspector, with nothing on the rest of the screen to warn of.
       if (task.kind === 'browser' && task.browser) return askBrowser(gatewayId, task);
-      send({
-        type: 'using',
-        gatewayId,
-        kind: task.kind === 'computer' || task.kind === 'files' ? task.kind : 'shell',
-      });
+      const kind = shownUse(task);
+      if (!kind) return executeTask(task);
+      send({ type: 'using', gatewayId, kind });
       try {
         return await executeTask(task);
       } finally {
