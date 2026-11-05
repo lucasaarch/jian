@@ -298,6 +298,19 @@ test('find skips only the kernel folders at the root, not folders of the same na
     join(root, 'home/ana/dev/app.ts'),
     join(root, 'home/ana/proc/x/job.ts'),
   ]);
+  // A pattern without wildcards is looked up directly: the glob never asks what to leave out.
+  const literal = ok(
+    await findFiles(
+      root,
+      { op: 'find', path: root, pattern: 'proc/self.ts', limit: 10 },
+      [],
+      undefined,
+      5_000,
+      [join(root, 'dev'), join(root, 'proc')],
+    ),
+    'find',
+  );
+  assert.deepEqual(literal.files, []);
 });
 
 test('find leaves out the kernel folders of a Unix machine', {

@@ -80,16 +80,17 @@ export async function findFiles(
   await folder(real);
   const found: Array<{ path: string; mtime: number }> = [];
   let stopped = false;
+  const system = (path: string) =>
+    systemFolders.some((root) => path === root || path.startsWith(root + sep));
   const walk = glob(op.pattern, {
     cwd: real,
     // Entries, not names: a name alone cannot tell `/dev` from `/home/ana/dev`.
     withFileTypes: true,
     // Once stopped, everything is left out, which is what ends a walk still under way: closing
-    // the iterator does not stop the reads it already started.
+    // the iterator does not stop the reads it already started. This only prunes a walk: a
+    // pattern without wildcards is looked up directly, never asking, so matches are checked too.
     exclude: (entry: Dirent) =>
-      stopped ||
-      SKIPPED.includes(entry.name) ||
-      systemFolders.includes(join(entry.parentPath, entry.name)),
+      stopped || SKIPPED.includes(entry.name) || system(join(entry.parentPath, entry.name)),
   })[Symbol.asyncIterator]();
   let timer: ReturnType<typeof setTimeout> | undefined;
   // One wait for the whole walk: a step that finds nothing for a long time still ends at it.
@@ -106,6 +107,7 @@ export async function findFiles(
       }
       if (next.done) break;
       const file = join(next.value.parentPath, next.value.name);
+      if (system(file)) continue;
       // A link in the tree may lead to the credentials; it is left out rather than listed.
       if (await isRefused(await realLocation(file), refused)) continue;
       const info = await stat(file).catch(() => undefined);
