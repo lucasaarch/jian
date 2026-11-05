@@ -135,22 +135,29 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
   const path = tab?.kind === 'changes' ? tab.path : undefined;
 
   // A worktree is read like a project's checkout, on the gateway's disk or through the machine it
-  // is on. Those where the conversation works come first, as the gateway picks them; a machine's
-  // gateway worktrees stay readable by name, and one on a machine it no longer targets is not
-  // read at all. An older gateway answers none, and one that cannot reach the machine says so,
-  // which leaves the timeline as the list.
+  // is on. Only those where the conversation works are read unasked, as the gateway picks them;
+  // a machine conversation's gateway worktrees are offered by name, since its tools no longer
+  // work there, and one on a machine it no longer targets is not read at all. An older gateway
+  // answers none, and one that cannot reach the machine says so, which leaves the timeline.
   const worktrees = useQuery({
     queryKey: keys.sessionWorktrees(profileId, sessionId ?? ''),
     queryFn: async () => (await api.sessionWorktrees?.(profileId, sessionId ?? '')) ?? [],
     enabled: Boolean(sessionId),
   });
   const place = machineId ?? 'gateway';
-  const here = [
-    ...(worktrees.data ?? []).filter((item) => item.place === place),
-    ...(machineId ? (worktrees.data ?? []).filter((item) => item.place === 'gateway') : []),
-  ];
-  // With several, the one chosen; until one is, the first, so the list never waits on an answer.
-  const worktree = here.find((item) => item.name === picked)?.name ?? here[0]?.name;
+  const atPlace = (worktrees.data ?? []).filter((item) => item.place === place);
+  const left = machineId ? (worktrees.data ?? []).filter((item) => item.place === 'gateway') : [];
+  const here = [...atPlace, ...left];
+  // The one chosen; until then the first where the conversation works, so the list never waits
+  // on an answer. With none there, nothing is named and the gateway reads the machine's clone.
+  const worktree = here.find((item) => item.name === picked)?.name ?? atPlace[0]?.name;
+  // What is read when no worktree is named, offered beside the gateway's left-behind ones.
+  const unnamed =
+    machineId && !atPlace.length && left.length
+      ? projectId
+        ? "The project's checkout on the machine"
+        : 'What this conversation saved'
+      : undefined;
   // Asking before the worktrees are known would be refused when there are several.
   const known = !worktrees.isPending;
   const readable = Boolean(projectId || worktree);
@@ -303,7 +310,7 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
             )}
             {/* One place in the line, so the field stays the same element from a file to the list
               and the keyboard stays in it. */}
-            {here.length > 1 && (
+            {(here.length > 1 || unnamed) && (
               <Picker
                 label="Worktree"
                 open={picking}
@@ -311,10 +318,21 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
                 trigger={
                   <>
                     <GitBranch size={12} aria-hidden="true" />
-                    <span className="truncate">{worktree}</span>
+                    <span className="truncate">{worktree ?? unnamed}</span>
                   </>
                 }
               >
+                {unnamed && (
+                  <PickerRow
+                    label={unnamed}
+                    selected={!worktree}
+                    onPick={() => {
+                      setPicked(undefined);
+                      setPicking(false);
+                      if (path) choose();
+                    }}
+                  />
+                )}
                 {here.map((item) => (
                   <PickerRow
                     key={item.name}

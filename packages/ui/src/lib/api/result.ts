@@ -18,8 +18,8 @@ const conflicts: Record<string, string> = {
     'The reasoning levels of this model are not catalogued on this gateway.',
   'Choose a conversation with one project to read its changes.':
     'Choose a conversation with one project to read its changes.',
-  'Changes on remote machines are not available here yet.':
-    'Changes on remote machines are not available here yet.',
+  "Jian does not know a checkout of this project on the conversation's machine yet: ask the agent to clone it there with github_git, or to work in a worktree.":
+    "Jian does not know a checkout of this project on the conversation's machine yet: ask the agent to clone it there with github_git, or to work in a worktree.",
   'This conversation has no checkout yet.': 'This conversation has no checkout yet.',
   'This conversation has no git checkout at its project path.':
     'This conversation has no git checkout at its project path.',

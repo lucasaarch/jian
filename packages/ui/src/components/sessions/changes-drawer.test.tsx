@@ -943,6 +943,73 @@ describe('with worktrees', () => {
     expect(names.some((name) => name?.includes('lost-fox'))).toBe(false);
   });
 
+  it('reads the machine’s clone over a gateway worktree the conversation left, and offers it', async () => {
+    const machine = crypto.randomUUID();
+    useCrew.getState().show('session', [], 'project', machine);
+    useCrew.getState().showChanges();
+    const api = {
+      sessionWorktrees: vi.fn(async () => [tree('old-heron')]),
+      sessionChanges: vi.fn(
+        async (_p: string, _s: string, _f?: string, _w?: boolean, w?: string) => ({
+          files: [{ path: w === 'old-heron' ? 'src/heron.ts' : path, status: 'modified' as const }],
+          truncated: false,
+        }),
+      ),
+      timeline: vi.fn(async () => []),
+    };
+
+    await render(api as never);
+    await settled(() => Boolean(container.textContent?.includes(path)));
+
+    // As the gateway reads it with no worktree named: the project's clone on the machine.
+    expect(api.sessionChanges).toHaveBeenCalledWith(
+      'profile',
+      'session',
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(api.sessionChanges).not.toHaveBeenCalledWith(
+      'profile',
+      'session',
+      undefined,
+      undefined,
+      'old-heron',
+    );
+    // The only worktree there is still offered, to read by choice.
+    const picker = container.querySelector<HTMLElement>('[aria-label="Worktree"]');
+    expect(picker).not.toBeNull();
+    await act(async () => picker?.click());
+    const choice = [...document.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('old-heron'),
+    );
+    await act(async () => choice?.click());
+    await settled(() => Boolean(container.textContent?.includes('src/heron.ts')));
+    expect(api.sessionChanges).toHaveBeenLastCalledWith(
+      'profile',
+      'session',
+      undefined,
+      undefined,
+      'old-heron',
+    );
+
+    // And the clone can be chosen again.
+    await act(async () => container.querySelector<HTMLElement>('[aria-label="Worktree"]')?.click());
+    const back = [...document.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('checkout on the machine'),
+    );
+    expect(back).toBeDefined();
+    await act(async () => back?.click());
+    await settled(() => Boolean(container.textContent?.includes(path)));
+    expect(api.sessionChanges).toHaveBeenLastCalledWith(
+      'profile',
+      'session',
+      undefined,
+      undefined,
+      undefined,
+    );
+  });
+
   it('keeps the timeline for a worktree on a machine the conversation does not work on', async () => {
     useCrew.getState().show('session', []);
     useCrew.getState().showChanges();
