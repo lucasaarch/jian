@@ -28,6 +28,9 @@ type App = NonNullable<GithubIntegration['app']>;
 export const githubOffered = (integration: GithubIntegration | undefined) =>
   Boolean((integration?.configured && integration.app) || integration?.callbackUrl);
 
+/** What the app gives, on its card and for the Apps search. */
+export const GITHUB_DESCRIPTION = 'Repositories, issues and pull requests for every agent.';
+
 /**
  * GitHub's card among the apps, connected or not, on a gateway that offers it.
  * Connecting GitHub registers Jian's App the first time and an account after; once one is in,
@@ -64,7 +67,7 @@ export function GitHubCard({ api }: { api: GatewayApi }) {
             {attention && <StatusPill tone="warn">Needs attention</StatusPill>}
           </>
         }
-        description="Repositories, issues and pull requests for every agent."
+        description={GITHUB_DESCRIPTION}
         action={
           app && accounts.length > 0 ? (
             <Action

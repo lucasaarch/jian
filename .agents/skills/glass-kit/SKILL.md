@@ -21,6 +21,7 @@ from the rest is a bug.
 |---|---|
 | Button | `Action`, tones `primary`, `glass`, `quiet`, `outline`, `danger` |
 | Field | `TextField`, `TextArea`, `SelectField`, `DateTimeField`, `RowInput` |
+| Search and filter a list | `SearchField`, with a `FilterSelect` beside it |
 | On and off, or one of a few | `SwitchControl`, `Toggle`, `Segmented` |
 | List that opens | `Picker`, `MenuEntry`, `MenuDivider`, `menuPopup` |
 | Anything over the page | `Overlay`, `OverlayActions`, `ConfirmDialog` |

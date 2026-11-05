@@ -116,3 +116,49 @@ it('offers to connect GitHub until an account is in, and to configure it after',
   expect(host.textContent).toContain('Connected');
   expect(button('Connect GitHub')).toBeUndefined();
 });
+
+const type = async (input: HTMLInputElement, value: string) => {
+  const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  await act(async () => {
+    set?.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+};
+
+it('narrows the cards by search and by category', async () => {
+  read.githubIntegration.mockResolvedValue({
+    configured: false,
+    callbackUrl: githubCallback,
+    accounts: [],
+  });
+  read.xIntegration.mockResolvedValue({ configured: false, callbackUrl: xCallback, accounts: [] });
+
+  await show();
+  await vi.waitFor(() => expect(titles()).toEqual(['GitHub', 'X']));
+  const search = host.querySelector<HTMLInputElement>('input[aria-label="Search apps"]');
+  if (!search) throw new Error('no search');
+
+  // By what an app gives, not only its name.
+  await type(search, 'pull requests');
+  expect(titles()).toEqual(['GitHub']);
+  await type(search, 'nothing like this');
+  expect(titles()).toEqual([]);
+  expect(host.textContent).toContain('No app matches.');
+  await type(search, '');
+
+  const category = button('Category');
+  if (!category) throw new Error('no category');
+  await act(async () => {
+    category.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    category.click();
+  });
+  const social = await vi.waitFor(() => {
+    const option = [...document.querySelectorAll('[role="option"]')].find(
+      (item) => item.textContent === 'Social',
+    );
+    if (!option) throw new Error('no option');
+    return option as HTMLElement;
+  });
+  await act(async () => social.click());
+  await vi.waitFor(() => expect(titles()).toEqual(['X']));
+});

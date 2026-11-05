@@ -12,8 +12,9 @@ export { Overlay, OverlayActions } from './overlay';
 export { Picker, PickerAction, PickerRow } from './picker';
 export { Progress } from './progress';
 export { RowInput, RowTextArea } from './row-field';
+export { SearchField } from './search-field';
 export { Segmented } from './segmented';
-export { type FieldOption, SelectButton, SelectField } from './select-field';
+export { type FieldOption, FilterSelect, SelectButton, SelectField } from './select-field';
 export { SettingsCard, SettingsCards } from './settings-card';
 export {
   SettingsGroup,

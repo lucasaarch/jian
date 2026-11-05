@@ -5,6 +5,7 @@ import { Select } from '@base-ui/react/select';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { type ReactNode, useId } from 'react';
 import { matchesQuery } from '../lib/search';
+import { searchBox } from './search-field';
 import { bareInput, control, Labelled } from './text-field';
 
 export type FieldOption = {
@@ -256,6 +257,47 @@ export function SelectButton({
         <>
           {children}
           <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-muted" />
+        </>
+      }
+      triggerProps={{ 'aria-label': label }}
+    />
+  );
+}
+
+/**
+ * A choice that narrows a list, beside its search: as tall as the search box and drawn like it,
+ * showing what is chosen. Its list is as wide as it needs, not as the trigger.
+ */
+export function FilterSelect({
+  label,
+  value,
+  options,
+  onValueChange,
+  disabled = false,
+}: {
+  /** What it filters by, for assistive technology. */
+  label: string;
+  value: string;
+  options: FieldOption[];
+  onValueChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const chosen = options.find((option) => option.value === value);
+
+  return (
+    <Choice
+      label={label}
+      value={value}
+      options={options}
+      onValueChange={onValueChange}
+      disabled={disabled}
+      searchable={options.length >= SEARCH_FROM}
+      triggerClass={`${searchBox} shrink-0 text-[13px] text-ink transition-colors hover:bg-glass-press data-popup-open:border-ink/20 data-popup-open:bg-glass-press disabled:opacity-45`}
+      width="min-w-(--anchor-width) w-max max-w-[min(20rem,calc(100vw-2rem))]"
+      shown={
+        <>
+          <span className="truncate">{chosen?.label ?? label}</span>
+          <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-muted" />
         </>
       }
       triggerProps={{ 'aria-label': label }}

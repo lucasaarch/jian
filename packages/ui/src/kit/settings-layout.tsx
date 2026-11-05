@@ -1,9 +1,9 @@
 'use client';
 
 import { Dialog } from '@base-ui/react/dialog';
-import { ArrowLeft, ChevronLeft, Search } from 'lucide-react';
+import { ArrowLeft, ChevronLeft } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { bareInput } from './text-field';
+import { SearchField } from './search-field';
 
 export type SettingsPage = {
   id: string;
@@ -86,21 +86,15 @@ export function SettingsLayout({
           {action}
         </div>
         {heading && <div className="px-2 text-sm font-semibold">{heading}</div>}
-        <label className="flex h-8 items-center gap-2 rounded-lg border border-glass-edge bg-glass-hover px-2.5 text-muted focus-within:border-ink/20">
-          <Search size={14} className="shrink-0" aria-hidden="true" />
-          <input
-            type="search"
-            aria-label={searchLabel}
-            placeholder={searchLabel}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              // Enter opens the first page found, as typing a name and pressing it would ask.
-              if (event.key === 'Enter' && shown[0]) select(shown[0].id);
-            }}
-            className={`${bareInput} text-[13px]`}
-          />
-        </label>
+        <SearchField
+          label={searchLabel}
+          value={query}
+          onValueChange={setQuery}
+          onKeyDown={(event) => {
+            // Enter opens the first page found, as typing a name and pressing it would ask.
+            if (event.key === 'Enter' && shown[0]) select(shown[0].id);
+          }}
+        />
         {/* One column the sidebar's width, not its longest name's: an implicit `auto` column
             grows to a label that does not wrap, and the list then scrolls sideways instead of
             truncating it. The sidebar never scrolls sideways. */}
