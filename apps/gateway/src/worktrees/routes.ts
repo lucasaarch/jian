@@ -12,6 +12,7 @@ import type { GitHubIntegrations } from '../integrations/github.js';
 import type { RunWriter } from '../runs/port.js';
 import type { Sessions } from '../sessions/service.js';
 import { mergeBrief, pullRequestBrief, updateBrief } from './briefs.js';
+import { offersWorktrees } from './offered.js';
 import type { WorktreeRecord, Worktrees } from './service.js';
 
 type WorktreeRouteServices = {
@@ -79,7 +80,11 @@ export function registerWorktreeRoutes(app: FastifyInstance, deps: WorktreeRoute
   // but one already answering a contact would carry the work to them, so that has to finish.
   const act = (
     path: string,
-    brief: (record: WorktreeRecord, request: { body: unknown }) => string,
+    brief: (
+      record: WorktreeRecord,
+      request: { body: unknown },
+      profileId: string,
+    ) => string | Promise<string>,
     action: string,
   ) =>
     app.post<{ Params: NameParams }>(`${base}/:name/${path}`, async (request, reply) => {
@@ -87,22 +92,30 @@ export function registerWorktreeRoutes(app: FastifyInstance, deps: WorktreeRoute
       const session = await owned(request.params);
       const record = await deps.worktrees.find(profileId, sessionId, name);
 
+      // The brief names worktree tools; a conversation the run gives none to must not be sent one.
+      if (!offersWorktrees(session)) {
+        throw new GatewayError(
+          409,
+          'This conversation no longer has a folder or a machine, so the agent has no worktree tools here. Give it a folder first.',
+        );
+      }
       if (session.channel !== GATEWAY_SESSION_CHANNEL && (await openRun(profileId, sessionId))) {
         throw new GatewayError(
           409,
           'The agent is answering this conversation. Ask again once it has finished.',
         );
       }
-      return reply
-        .code(202)
-        .send(
-          await deps.runs.submit(
-            profileId,
-            sessionId,
-            { text: brief(record, request), requestKey: `worktree-${action}:${randomUUID()}` },
-            { purpose: 'resume' },
-          ),
-        );
+      return reply.code(202).send(
+        await deps.runs.submit(
+          profileId,
+          sessionId,
+          {
+            text: await brief(record, request, profileId),
+            requestKey: `worktree-${action}:${randomUUID()}`,
+          },
+          { purpose: 'resume' },
+        ),
+      );
     });
 
   act('merge', (record) => mergeBrief(record), 'merge');
@@ -112,7 +125,20 @@ export function registerWorktreeRoutes(app: FastifyInstance, deps: WorktreeRoute
       updateBrief(record, worktreeUpdateInputSchema.parse(request.body).strategy),
     'update',
   );
-  act('pull-request', (record) => pullRequestBrief(record), 'pull-request');
+  act(
+    'pull-request',
+    async (record, _request, profileId) => {
+      const repository = await deps.worktrees.githubRepository(profileId, record);
+      if (!repository || !(await canOpenPullRequest(deps, profileId, record))) {
+        throw new GatewayError(
+          409,
+          'A pull request needs an origin on GitHub that the connected GitHub App reaches.',
+        );
+      }
+      return pullRequestBrief(record, repository);
+    },
+    'pull-request',
+  );
 
   app.delete<{ Params: NameParams }>(`${base}/:name`, async (request, reply) => {
     const { profileId, sessionId, name } = worktreeParamsSchema.parse(request.params);

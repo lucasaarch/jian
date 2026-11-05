@@ -154,3 +154,15 @@ export async function conversationAndSubagentSessions(
   }
   return [...found];
 }
+
+export async function profileWorktrees(
+  db: Queryable,
+  profileId: string,
+): Promise<WorktreeRecord[]> {
+  const rows = await db
+    .select(columns)
+    .from(sessionWorktrees)
+    .where(and(eq(sessionWorktrees.profileId, profileId), isNull(sessionWorktrees.removedAt)))
+    .orderBy(sessionWorktrees.createdAt);
+  return rows.map(asRecord);
+}

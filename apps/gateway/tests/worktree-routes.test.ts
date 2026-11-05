@@ -2,10 +2,12 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { localPlace } from '../src/agent/github-git-place.js';
 import { createApp } from '../src/app.js';
+import { sessions } from '../src/storage/schema.js';
 import { Worktrees } from '../src/worktrees/service.js';
 import { testServices } from './helpers/services.js';
 
@@ -60,9 +62,15 @@ async function setup(github?: { accounts: () => Promise<{ login: string }[]> }) 
   apps.push(app);
   const profile = await services.profiles.createProfile(input);
   const chat = await services.sessions.createGatewaySession(profile.id, {});
+  /** A conversation works on folders, which is what gives its agent the worktree tools. */
+  const workOn = (sessionId: string, folder: string) =>
+    services.store.db
+      .update(sessions)
+      .set({ workspace: { folders: [folder] } })
+      .where(eq(sessions.id, sessionId));
   const url = (sessionId: string, tail = '') =>
     `/v1/profiles/${profile.id}/sessions/${sessionId}/worktrees${tail}`;
-  return { services, worktrees, app, profile, chat, url };
+  return { services, worktrees, app, profile, chat, url, workOn };
 }
 
 describe('worktree routes', () => {
@@ -103,8 +111,10 @@ describe('worktree routes', () => {
   });
 
   it('merge submits a hidden message and returns 202 with the run', async () => {
-    const { app, worktrees, services, profile, chat, url } = await setup();
-    const made = await worktrees.create(profile.id, chat.id, repo(), 'gateway');
+    const { app, worktrees, services, profile, chat, url, workOn } = await setup();
+    const source = repo();
+    const made = await worktrees.create(profile.id, chat.id, source, 'gateway');
+    await workOn(chat.id, source);
 
     const response = await app.inject({
       method: 'POST',
@@ -123,8 +133,10 @@ describe('worktree routes', () => {
   });
 
   it('with a run in flight it steers into it', async () => {
-    const { app, worktrees, services, profile, chat, url } = await setup();
-    const made = await worktrees.create(profile.id, chat.id, repo(), 'gateway');
+    const { app, worktrees, services, profile, chat, url, workOn } = await setup();
+    const source = repo();
+    const made = await worktrees.create(profile.id, chat.id, source, 'gateway');
+    await workOn(chat.id, source);
     const first = await services.runs.submit(profile.id, chat.id, {
       text: 'Work on it',
       requestKey: 'first',
@@ -214,5 +226,114 @@ describe('worktree routes', () => {
     expect(deleted.statusCode).toBe(200);
     expect(existsSync(made.path)).toBe(false);
     expect(git(source, 'branch', '--list', made.branch)).toContain(made.branch);
+  });
+
+  it('refuses an action when the conversation no longer has the worktree tools', async () => {
+    const { app, worktrees, services, profile, chat, url } = await setup({
+      accounts: async () => [{ login: 'octo-example' }],
+    });
+    const made = await worktrees.create(
+      profile.id,
+      chat.id,
+      repo('git@github.com:octo-example/site.git'),
+      'gateway',
+    );
+
+    // No folders, no clone folder, no machine: the brief would name tools the run lacks.
+    for (const tail of ['merge', 'update', 'pull-request']) {
+      const response = await app.inject({
+        method: 'POST',
+        url: url(chat.id, `/${made.name}/${tail}`),
+        headers,
+        payload: tail === 'update' ? { strategy: 'merge' } : undefined,
+      });
+      expect(response.statusCode).toBe(409);
+    }
+    expect(await services.runs.activities(profile.id)).toHaveLength(0);
+  });
+
+  it('names the repository and the base in the pull request brief', async () => {
+    const { app, worktrees, services, profile, chat, url, workOn } = await setup({
+      accounts: async () => [{ login: 'octo-example' }],
+    });
+    const source = repo('git@github.com:octo-example/site.git');
+    const made = await worktrees.create(profile.id, chat.id, source, 'gateway');
+    await workOn(chat.id, source);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: url(chat.id, `/${made.name}/pull-request`),
+      headers,
+    });
+
+    expect(response.statusCode).toBe(202);
+    const brief = (await services.sessions.messages(profile.id, chat.id)).find(
+      (message) => message.runId === response.json().id,
+    );
+    expect(brief?.content).toContain('octo-example/site');
+    expect(brief?.content).toContain('create_pull_request');
+  });
+
+  it('removes a subagent’s worktree made from the conversation’s own when the conversation goes', async () => {
+    const { app, worktrees, services, profile, chat } = await setup();
+    const source = repo();
+    const parent = await worktrees.create(profile.id, chat.id, source, 'gateway');
+    const task = await services.store.transaction(profile.id, (tx) =>
+      services.sessions.taskSession(profile.id, 'Part', tx),
+    );
+    const child = await worktrees.create(profile.id, task.id, parent.path, 'gateway');
+    const parentRun = await services.runs.submit(profile.id, chat.id, {
+      text: 'Start',
+      requestKey: 'parent',
+    });
+    await services.runs.submit(
+      profile.id,
+      task.id,
+      { text: 'Part', requestKey: 'child' },
+      {
+        subagent: {
+          parentRunId: parentRun.id,
+          spawnKey: 'one',
+          inputHash: 'a'.repeat(64),
+          role: 'worker',
+          name: 'part',
+        } as never,
+      },
+    );
+    await services.store.db.execute(`update runs set status = 'completed'` as never);
+
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${profile.id}/sessions/${chat.id}`,
+      headers,
+    });
+
+    expect(deleted.statusCode).toBe(200);
+    expect(existsSync(child.path)).toBe(false);
+    expect(existsSync(parent.path)).toBe(false);
+    const listed = git(source, 'worktree', 'list', '--porcelain');
+    expect(listed).not.toContain(child.name);
+    expect(listed).not.toContain(parent.name);
+  });
+
+  it('removes the profile’s worktree folders when it is reset or deleted', async () => {
+    for (const action of ['reset', 'delete'] as const) {
+      const { app, worktrees, profile, chat } = await setup();
+      const made = await worktrees.create(profile.id, chat.id, repo(), 'gateway');
+      expect(existsSync(made.path)).toBe(true);
+
+      const response =
+        action === 'reset'
+          ? await app.inject({
+              method: 'POST',
+              url: `/v1/profiles/${profile.id}/reset`,
+              headers,
+            })
+          : await app.inject({ method: 'DELETE', url: `/v1/profiles/${profile.id}`, headers });
+
+      expect(response.statusCode).toBe(200);
+      expect(existsSync(made.path)).toBe(false);
+      rmSync(join(dir, 'site'), { recursive: true, force: true });
+    }
   });
 });

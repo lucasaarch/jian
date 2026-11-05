@@ -23,6 +23,7 @@ import {
   insertWorktree,
   markRemoved,
   openConversations,
+  profileWorktrees,
   type WorktreeRecord,
   worktreeHolders,
 } from './repository.js';
@@ -256,6 +257,11 @@ export class Worktrees {
     );
   }
 
+  /** Every active worktree of the profile, whichever conversation holds it. */
+  recordedForProfile(profileId: string): Promise<WorktreeRecord[]> {
+    return profileWorktrees(this.store.db, profileId);
+  }
+
   /** The conversation's own id first, then its subagents' task sessions. */
   conversationSessions(profileId: string, sessionId: string): Promise<string[]> {
     return conversationAndSubagentSessions(this.store.db, profileId, sessionId);
@@ -344,21 +350,21 @@ export class Worktrees {
   }
 
   /**
-   * For a conversation being deleted. Folders go; a branch with commits not in the base stays, so
-   * no work is lost. A machine that cannot be reached leaves its folder behind, said in the log.
-   */
-  async forget(profileId: string, sessionId: string): Promise<void> {
-    const records = await activeWorktrees(this.store.db, profileId, sessionId);
-    await this.clear(profileId, records);
-    for (const record of records) await this.retire(profileId, sessionId, record);
-  }
-
-  /**
-   * The same cleanup for records read earlier: deleting a conversation takes its rows with it, so
-   * the route reads them first and clears the folders once the delete has committed.
+   * For a conversation or profile being deleted: deleting takes the rows with it, so the caller
+   * reads them first and clears the folders once the delete has committed. Folders go; a branch
+   * with commits not in the base stays, so no work is lost. A machine that cannot be reached
+   * leaves its folder behind, said in the log.
+   *
+   * A worktree made from another one (a subagent's, from its parent's) goes first: git cannot
+   * remove a checkout from inside a folder that is already gone.
    */
   async clear(profileId: string, records: WorktreeRecord[]): Promise<void> {
-    for (const record of records) {
+    const depth = (record: WorktreeRecord, seen = 0): number => {
+      const parent = records.find((other) => other.path === record.source);
+      return parent && seen < records.length ? 1 + depth(parent, seen + 1) : 0;
+    };
+    const deepestFirst = [...records].sort((a, b) => depth(b) - depth(a));
+    for (const record of deepestFirst) {
       try {
         const git = await this.places(profileId, record.place);
         await removeWorktree(git, { ...record, discard: true, deleteBranch: false });

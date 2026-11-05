@@ -60,6 +60,7 @@ import {
 import { availableSkills, findSkill } from '../skills/builtin/index.js';
 import type { WebSearch } from '../web/service.js';
 import type { Workspaces } from '../workspaces/service.js';
+import { offersWorktrees } from '../worktrees/offered.js';
 import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
 import { compactNote, isCompactCommand } from './compact-command.js';
@@ -586,9 +587,7 @@ export class AgentRuntime {
       // Worktrees are of what the conversation works on: its folders, or the machine it targets.
       // A subagent's are its task session's, made from its parent's, which it also sees.
       const worktrees =
-        !learning &&
-        this.services.worktrees &&
-        (conversation.folders?.length || conversation.cloneInto || conversation.remoteMachineId)
+        !learning && this.services.worktrees && offersWorktrees(conversation)
           ? {
               service: this.services.worktrees,
               scope: new RunWorktrees(

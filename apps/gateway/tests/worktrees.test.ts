@@ -128,7 +128,7 @@ it('merges into the source and retires the worktree', async () => {
   expect(run(source, 'branch', '--list', made.branch)).toBe('');
 });
 
-it('forget removes the folder but keeps a branch with unmerged commits', async () => {
+it('clear removes the folder but keeps a branch with unmerged commits', async () => {
   const { profile, chat, worktrees } = await setup();
   const source = repo(dir);
   const unmerged = await worktrees.create(profile.id, chat.id, source, 'gateway');
@@ -137,14 +137,14 @@ it('forget removes the folder but keeps a branch with unmerged commits', async (
   run(unmerged.path, 'commit', '-m', 'work');
   const clean = await worktrees.create(profile.id, chat.id, repo(dir, 'docs'), 'gateway');
 
-  await worktrees.forget(profile.id, chat.id);
+  await worktrees.clear(profile.id, await worktrees.recorded(profile.id, chat.id));
 
   expect(await worktrees.list(profile.id, chat.id)).toEqual([]);
   expect(run(source, 'branch', '--list', unmerged.branch)).toContain(unmerged.branch);
   expect(run(join(dir, 'docs'), 'branch', '--list', clean.branch)).toBe('');
 });
 
-it('forget survives an unreachable place and still retires the row', async () => {
+it('clear survives an unreachable place and says what it left', async () => {
   const { profile, chat, services } = await setup();
   const source = repo(dir);
   const warnings: string[] = [];
@@ -161,13 +161,13 @@ it('forget survives an unreachable place and still retires the row', async () =>
   await worktrees.create(profile.id, chat.id, source, 'gateway');
   online = false;
 
-  // Unreachable: the row stays listed with unknown counts, and is only retired by forget.
+  // Unreachable: the row stays listed with unknown counts.
   expect(await worktrees.list(profile.id, chat.id)).toMatchObject([
     { ahead: null, behind: null, uncommitted: null },
   ]);
-  await expect(worktrees.forget(profile.id, chat.id)).resolves.toBeUndefined();
-  online = true;
-  expect(await worktrees.list(profile.id, chat.id)).toEqual([]);
+  await expect(
+    worktrees.clear(profile.id, await worktrees.recorded(profile.id, chat.id)),
+  ).resolves.toBeUndefined();
   expect(warnings).toHaveLength(1);
 });
 
