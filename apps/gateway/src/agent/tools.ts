@@ -384,8 +384,11 @@ export function profileTools(
             },
           }),
           spawn_subagent: tool({
-            description:
-              'Start a scoped subagent in this conversation for a focused assignment. Give it the objective and necessary context in the brief, and media IDs for needed images; it does not inherit this conversation. It works on the same files as you (same HOME and checkouts), which every agent of this installation shares. The call returns when queued, and the result is delivered here when it finishes. Set tier to light, standard or deep for how much model the work needs, or leave it out to let Decisions pick from the brief; each tier runs on a model the installation offers, subscriptions first.',
+            description: `Start a scoped subagent in this conversation for a focused assignment. Give it the objective and necessary context in the brief, and media IDs for needed images; it does not inherit this conversation. ${
+              remoteTarget
+                ? "It works on the gateway, not on this conversation's machine: its file tools and run_command are the gateway's, and it reaches the machine only through run_remote_command, so name the machine, the paths and the cwd in the brief."
+                : 'It works on the same files as you (same HOME and checkouts), which every agent of this installation shares.'
+            } The call returns when queued, and the result is delivered here when it finishes. Set tier to light, standard or deep for how much model the work needs, or leave it out to let Decisions pick from the brief; each tier runs on a model the installation offers, subscriptions first.`,
             inputSchema: conversationSubagentInputSchema,
             execute: async (input, options) =>
               services.work?.spawnInConversation(run, input, options.toolCallId),

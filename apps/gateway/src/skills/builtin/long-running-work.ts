@@ -13,10 +13,9 @@ repository in parallel files that do not overlap. `;
  * A worker's tools carry no target, so the same-named file tools and \`run_command\` it has act on
  * the gateway. Said for a machine's conversation, where the parent's own tools mean the machine.
  */
-const MACHINE_WORKERS = ` On a conversation that works on a machine, that holds for the gateway only: a
-worker works on the gateway, with the gateway's file tools and \`run_command\`, not on the machine
-your tools reach. It reaches the machine only through \`run_remote_command\`, so name the machine,
-the paths and the \`cwd\` in its brief.`;
+const MACHINE_WORKERS = ` In a conversation on a machine, a worker works on the gateway instead: its file tools and
+\`run_command\` are the gateway's, and it reaches the machine only through \`run_remote_command\`, so
+name the machine, the paths and the \`cwd\` in its brief.`;
 
 /** As the run can work: the sentence about worktrees is there only for a run that can make them. */
 export function longRunningWorkFor({

@@ -13,7 +13,8 @@ const LINGER = 1_500;
 
 /**
  * That an agent is using this computer, the way the system shows a camera in use: the screen
- * being driven above all, then a command, and file work when that is all there is, with the gateway it came from in the tooltip.
+ * being driven above all, then a command, and file work when that is all there is. The gateway
+ * it came from is in the tooltip.
  * It opens the machines. Shown only while it lasts, and a moment after.
  */
 export function ComputerInUse({ uses, open }: { uses: ComputerUse[]; open: () => void }) {

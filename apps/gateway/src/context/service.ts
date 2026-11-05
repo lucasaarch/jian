@@ -77,7 +77,7 @@ export function worktreeSignals(
         ? '; your tools start there.'
         : onMachineFiles
           ? `. Your file tools work in it on the machine and refuse writes in the source; commands do not start there, so set cwd of run_remote_command to ${worktree.path}.`
-          : `. Your file tools do not reach the machine: set cwd of run_remote_command to ${worktree.path}. Updating Jian Remote on that machine lets the file tools reach it.`;
+          : `. Your file tools do not reach the machine: set cwd of run_remote_command to ${worktree.path}. Update Jian Remote there (for This computer, update the desktop app) to let the file tools reach it.`;
       steady.push(
         `${folder}: You work on it in the worktree ${worktree.name} at ${worktree.path} (branch ${worktree.branch} from ${worktree.base})${start}`,
       );
@@ -102,6 +102,13 @@ export function worktreeSignals(
   }
   return { steady, turn };
 }
+
+/**
+ * A worker's tools carry no machine, so its $HOME, checkouts, file tools and run_command are the
+ * gateway's, not those of the machine its conversation works on.
+ */
+const MACHINE_WORKER =
+  " The conversation works on a machine, but you work on the gateway: your file tools and run_command are the gateway's, and the principal's paths on the machine are not here. You reach the machine only through run_remote_command, so use the machine, paths and cwd your brief names.";
 
 /** What a subagent is told about a separate checkout, by what its run can do. */
 function worktreeAdvice(worktrees?: { create: boolean; machine: boolean }): string {
@@ -224,7 +231,7 @@ export class Contexts {
       workerGuidance = [
         `You are ${JSON.stringify(worker.name)}, an ephemeral ${worker.role} worker for one task.`,
         `Identity and working approach: ${worker.identity}`,
-        `Your $HOME is ${home}, the same as the principal agent's (same cwd roots and repository checkouts), and every agent of this installation shares these files, so they may change while you work; touch only what the assignment names. ${repositories.length ? `Named repository roots for this assignment: ${repositories.join(', ')}.` : onOwnerComputer() ? "Use the repositories the brief names; this is the owner's own computer." : 'Use repositories under this directory as needed.'} ${worktreeAdvice(workspaces?.worktrees)}`,
+        `Your $HOME is ${home}, the same as the principal agent's (same cwd roots and repository checkouts), and every agent of this installation shares these files, so they may change while you work; touch only what the assignment names. ${repositories.length ? `Named repository roots for this assignment: ${repositories.join(', ')}.` : onOwnerComputer() ? "Use the repositories the brief names; this is the owner's own computer." : 'Use repositories under this directory as needed.'} ${workspaces?.machine ? MACHINE_WORKER : ''}${worktreeAdvice(workspaces?.worktrees)}`,
         'Work only on the assignment in your opening message. Your parent conversation is not in this context; use the brief and available tools. Do not create tasks or spawn another subagent. Report verified outcomes and exact blockers in your final response.',
         'Your final response is a factual report to the principal agent, not a message to the owner.',
       ].join('\n\n');
@@ -270,7 +277,7 @@ export class Contexts {
     const built = buildContext(run, {
       servers,
       ...(workspaces?.worktrees ? { worktrees: true } : {}),
-      ...(workspaces?.machineFiles ? { machineFiles: true } : {}),
+      ...(!worker && workspaces?.machine ? { machine: workspaces.machine } : {}),
       ...(judged.relevance ? { relevance: judged.relevance } : {}),
       ...(judged.skill ? { suggestedSkill: judged.skill } : {}),
       ...(this.settings ? { timeZone: await this.settings.timeZone() } : {}),

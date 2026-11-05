@@ -29,7 +29,13 @@ const call = (toolCallId: string, toolName: string, input: unknown) => ({
 
 type Results = Map<string, unknown>;
 type Step = (results: Results) => ReturnType<typeof call> | Promise<ReturnType<typeof call>>;
-type Seen = { tools: string[]; descriptions: Map<string, string>; results: Results };
+type Seen = {
+  tools: string[];
+  descriptions: Map<string, string>;
+  results: Results;
+  /** The instructions the model was sent on its first call with tools. */
+  system: string;
+};
 
 function resultsOf(prompt: unknown[]): Results {
   const found: Results = new Map();
@@ -60,6 +66,10 @@ function scripted(steps: Step[], seen: Seen) {
         ]),
       );
       seen.results = resultsOf(options.prompt);
+      seen.system ||= (options.prompt as { role: string; content: unknown }[])
+        .filter((message) => message.role === 'system')
+        .map((message) => String(message.content))
+        .join('\n');
       const step = steps[next++];
       return (step ? await step(seen.results) : stop('Done.')) as ReturnType<typeof stop>;
     },
@@ -136,7 +146,7 @@ function fakeWorker(services: Services, machine: Machine, platform: string, capa
     return { ok: false, op: op.op, problem: 'failed', message: 'Not in this fake.' };
   };
 
-  const loop = (async () => {
+  const run = async () => {
     while (!stopped) {
       const { task } = await services.remote.poll(
         machine.id,
@@ -171,7 +181,8 @@ function fakeWorker(services: Services, machine: Machine, platform: string, capa
         files: answer(op),
       });
     }
-  })();
+  };
+  let loop = run();
 
   return {
     files,
@@ -183,6 +194,12 @@ function fakeWorker(services: Services, machine: Machine, platform: string, capa
       clock += 7;
       files.set(path, { text, mtimeMs: clock });
     },
+    /** Polls again after `stop`, for another turn of the same conversation. */
+    start() {
+      if (!stopped) return;
+      stopped = false;
+      loop = run();
+    },
     stop: async () => {
       stopped = true;
       await loop;
@@ -193,16 +210,18 @@ function fakeWorker(services: Services, machine: Machine, platform: string, capa
 async function setup({
   platform = 'linux-x64',
   capabilities = 'files-v1',
+  inputTokens = 64_000,
 }: {
   platform?: string;
   capabilities?: string;
+  inputTokens?: number;
 } = {}) {
   const services = await testServices();
   const profile = await services.profiles.createProfile({
     name: 'Atlas',
     instructions: 'Help.',
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-    contextPolicy: { inputTokens: 64_000 },
+    contextPolicy: { inputTokens },
   });
   const machine = await services.remote.create({ name: 'Studio' });
   // The worker says what it can do before the run starts, as a real one does on its first poll.
@@ -221,7 +240,8 @@ async function setup({
     .where(eq(sessions.id, chat.id));
   const worker = fakeWorker(services, machine, platform, capabilities);
   const turn = async (steps: Step[]) => {
-    const seen: Seen = { tools: [], descriptions: new Map(), results: new Map() };
+    worker.start();
+    const seen: Seen = { tools: [], descriptions: new Map(), results: new Map(), system: '' };
     const { id } = await services.runs.submit(profile.id, chat.id, {
       text: 'Work',
       requestKey: `${Math.random()}`,
@@ -484,4 +504,59 @@ it('compares paths on a Windows machine without regard to case or slashes', asyn
   ).slice(1, -1);
   expect(String(results.get('write'))).toContain(said);
   expect(worker.ops).toEqual([]);
+});
+
+const loadRemoteControl = () => call('skill', 'load_skill', { name: 'remote-control' });
+
+it('keeps the machine file-tools section of a loaded skill on the next turn', async () => {
+  // A window large enough for the kept skill: the pinned ones may take a tenth of it.
+  const { turn } = await setup({ inputTokens: 400_000 });
+
+  await turn([loadRemoteControl]);
+  const next = await turn([]);
+
+  expect(next.system).toContain("## File tools on this conversation's machine");
+  expect(next.system).not.toContain('Gateway `files` / `shell` tools act on the **gateway host**');
+});
+
+it('keeps the update hint of a loaded skill on the next turn for a machine without files-v1', async () => {
+  const { turn } = await setup({ capabilities: 'shell-secret-env-v1', inputTokens: 400_000 });
+
+  await turn([loadRemoteControl]);
+  const next = await turn([]);
+
+  expect(next.system).toContain('update_remote_machine');
+  expect(next.system).toContain('to let the file tools reach it');
+  expect(next.system).not.toContain("## File tools on this conversation's machine");
+});
+
+it('tells a machine run what it has, with files-v1 or without', async () => {
+  const withFiles = await (await setup()).turn([]);
+  expect(withFiles.system).toContain(
+    'read, edit, find and search files on the machine this conversation',
+  );
+
+  const without = await (await setup({ capabilities: 'shell-secret-env-v1' })).turn([]);
+  expect(without.system).not.toContain('load the shell and files tool groups');
+  expect(without.system).toContain('You have no file tools there');
+  expect(without.system).toContain('run_remote_command');
+});
+
+it('tells a worker of a machine conversation it works on the gateway, even without worktrees', async () => {
+  const { services, profile, chat } = await setup();
+  const { Contexts } = await import('../src/context/service.js');
+  const run = await services.runs.submit(profile.id, chat.id, {
+    text: 'Go',
+    requestKey: `${Math.random()}`,
+  });
+  const worker = { ...run, subagent: { name: 'Helper', role: 'coder', identity: 'Careful' } };
+
+  const context = await new Contexts(services.store, services.runs, services.sessions).context(
+    worker as typeof run,
+    [],
+    { sections: [], skills: [], machine: { files: false } },
+  );
+
+  expect(context.system).toContain('you work on the gateway');
+  expect(context.system).toContain('run_remote_command');
 });

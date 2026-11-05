@@ -62,7 +62,7 @@ and never to the source folder.`;
   }
   return `The worktrees are on the machine, and your file tools do not reach them: run commands there
 with \`run_remote_command\`, setting its \`cwd\` to the worktree's path and never to the source
-folder. Updating Jian Remote on that machine lets the file tools reach it.`;
+folder. Update Jian Remote there (for This computer, update the desktop app) to let the file tools reach it.`;
 }
 
 function whileYouHaveOne(can: Can): string {

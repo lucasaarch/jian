@@ -198,7 +198,7 @@ export function worktreeTools({
           ? 'While it exists, the file tools refuse writes in the source and commands start in the worktree.'
           : machineFiles
             ? 'While it exists, your file tools refuse writes in the source on the machine. Commands do not start in the worktree: set cwd of run_remote_command to its path, never to the source folder.'
-            : "Nothing sends your commands there on the machine: set cwd of run_remote_command to the worktree's path, never to the source folder. Updating Jian Remote on that machine lets the file tools reach it."
+            : "Nothing sends your commands there on the machine: set cwd of run_remote_command to the worktree's path, never to the source folder. Update Jian Remote there (for This computer, update the desktop app) to let the file tools reach it."
       } ${where}${
         subagent
           ? " As a subagent, you make your own worktree from the conversation's worktree (its path, or the source folder, leads there) and merge it back into that worktree with merge_worktree."

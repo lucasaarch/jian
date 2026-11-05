@@ -703,15 +703,15 @@ it('keeps the filter on screen while it applies, however short the list becomes'
   shrunk = true;
   const before = sessionChanges.mock.calls.length;
   await act(async () => publish({ id: 1, type: 'run.step' }));
-  // The refetch waits out a debounce, so wait for it by what it does, not for a fixed time.
-  // and for the shorter list to be on screen, which a loaded machine can take well past the debounce.
-  await settled(() => container.textContent?.includes('3 changed files') === true, 600);
+  // The refetch waits out a debounce, and a loaded machine can take well past it: wait for the
+  // shorter list to be on screen (up to 3 s) rather than for a fixed time.
+  await settled(() => container.textContent?.includes('3 changed files') === true, 300);
   expect(sessionChanges.mock.calls.length).toBeGreaterThan(before);
   expect(container.textContent).toContain('3 changed files');
 
   // Otherwise the list would stay narrowed by words the owner can no longer see or clear.
   expect(filter()?.value).toBe('file2');
-});
+}, 10_000);
 
 it('says when nothing matches', async () => {
   await listed(many(12));

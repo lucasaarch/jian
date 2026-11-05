@@ -467,9 +467,9 @@ it('tells a run whose machine cannot run file operations to update Jian Remote',
   const text = squish(load(can));
   const { system } = await ask(can);
 
-  expect(text).toContain('Updating Jian Remote on that machine lets the file tools reach it');
+  expect(text).toContain('Update Jian Remote there');
   expect(text).not.toContain('400,000');
-  expect(system).toContain('Updating Jian Remote on that machine');
+  expect(system).toContain('Update Jian Remote there');
 });
 
 it('tells a machine conversation’s principal agent that its workers stay on the gateway', async () => {
@@ -491,7 +491,7 @@ it('says a machine conversation’s subagent works on the gateway', async () => 
   const can = { create: false, machine: true, signals: false, files: false };
 
   expect(squish(load(can, ['worktrees']))).toContain('act on the gateway, not on it');
-  expect(squish(load(can, ['worktrees']))).not.toContain('Updating Jian Remote');
+  expect(squish(load(can, ['worktrees']))).not.toContain('Update Jian Remote');
 
   const worker = { ...run, subagent: { name: 'Helper' } } as typeof run;
   const context = await new Contexts(services.store, services.runs, services.sessions).context(

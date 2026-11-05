@@ -12,7 +12,7 @@ function whereTools(machine?: { files: boolean }): string {
   return `Gateway \`files\` / \`shell\` tools act on the **gateway host**, not the remote
 PC. For work on the remote computer, use the remote tools.${
     machine
-      ? " This machine's Jian Remote does not run file operations yet: updating it (`update_remote_machine`) lets the file tools reach it."
+      ? " This machine's Jian Remote does not run file operations yet: update it (`update_remote_machine`; for This computer, update the desktop app) to let the file tools reach it."
       : ''
   }`;
 }

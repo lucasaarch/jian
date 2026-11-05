@@ -847,6 +847,8 @@ export class AgentRuntime {
               web: webAccess ?? { browser: false, inspects: true, subagent: Boolean(run.subagent) },
               xConnected: Object.keys(xTools).length > 0,
               ...(worktreeCan ? { worktrees: worktreeCan } : {}),
+              // As load_skill builds it: a skill kept from an earlier turn reads the same.
+              ...(session.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
             },
             project.skills,
           );
@@ -864,7 +866,7 @@ export class AgentRuntime {
       const context = await this.services.contexts.context(run, skillServers, {
         ...project,
         ...(worktreeCan ? { worktrees: worktreeCan } : {}),
-        ...(machineFiles ? { machineFiles: true } : {}),
+        ...(conversation.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
       });
       if (mcpDown) withTurnNote(context, mcpDown);
       compactCommand = isCompactCommand(run.input);
