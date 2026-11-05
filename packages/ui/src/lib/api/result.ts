@@ -6,7 +6,11 @@
 /** The shapes the gateway uses for a failure body. Both fields are optional on purpose. */
 type Detail = { error?: string; issues?: Array<{ path: string; message: string }> };
 
-/** Conflicts the owner can act on. Anything else falls back to the generic 409 sentence. */
+/**
+ * Conflicts reworded for the owner. Any other 409 shows the gateway's own sentence, which is
+ * often the reason from GitHub (a ruleset, a required review); the generic sentence is only for
+ * a 409 that says nothing.
+ */
 const conflicts: Record<string, string> = {
   'Wait for this conversation to finish before deleting it':
     'This chat is still running. Wait for it to finish, then delete it.',
@@ -66,7 +70,7 @@ function message(status: number, detail: Detail | undefined): string {
     if (error === 'Selected provider or model is unavailable') {
       return 'That provider or model is no longer available. Choose another under Model defaults.';
     }
-    return 'Something changed, or the session is busy. Refresh and try again.';
+    return error || 'Something changed, or the session is busy. Refresh and try again.';
   }
 
   if (status === 429) {

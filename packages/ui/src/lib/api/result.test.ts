@@ -29,6 +29,18 @@ it('says why a checkout cannot be read, in place of the generic conflict', async
   expect((refused as GatewayAnswer).message).toBe('This conversation has no checkout yet.');
 });
 
+it('shows why GitHub refused a merge, and the generic conflict only when nothing was said', async () => {
+  await expect(
+    answer(409, { error: 'Repository rule violations found\n\nA required check is expected.' }),
+  ).rejects.toMatchObject({
+    message: 'Repository rule violations found\n\nA required check is expected.',
+    status: 409,
+  });
+  await expect(answer(409, {})).rejects.toMatchObject({
+    message: 'Something changed, or the session is busy. Refresh and try again.',
+  });
+});
+
 it('takes an answer with no body as a success when the gateway said 204', async () => {
   await expect(
     result(Promise.resolve({ response: new Response(null, { status: 204 }) })),
