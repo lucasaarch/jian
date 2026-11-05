@@ -19,11 +19,16 @@ export function fitResult(
   requested = RESULT_BODY_BUDGET,
 ): { result: RemoteResult; body: string } {
   // A files answer is already held to REMOTE_FILES_RESULT_BYTES by its worker and cannot be
-  // shrunk here; only the envelope around it is allowed on top.
-  const budget = result.files ? requested + ENVELOPE_SLACK : requested;
+  // shrunk here; only the envelope around it is allowed on top. A browser answer is the app's
+  // whole reply, a page's picture and export included, and the gateway route takes megabytes
+  // for it: it goes as it is, on top, and only the text fields shrink. Left out of the body,
+  // the gateway reads every browser task as unanswered.
+  const { computer, update, files, browser } = result;
+  const budget =
+    (files ? requested + ENVELOPE_SLACK : requested) +
+    (browser ? Buffer.byteLength(JSON.stringify(browser)) : 0);
   let stdout = result.stdout ?? '';
   let stderr = result.stderr ?? '';
-  const { computer, update, files } = result;
   const pack = () =>
     JSON.stringify({
       taskId: result.taskId,
@@ -34,6 +39,7 @@ export function fitResult(
       ...(computer ? { computer } : {}),
       ...(update ? { update } : {}),
       ...(files ? { files } : {}),
+      ...(browser ? { browser } : {}),
     });
   let body = pack();
   if (Buffer.byteLength(body) <= budget) {
