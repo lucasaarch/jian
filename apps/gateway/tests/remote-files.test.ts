@@ -255,3 +255,171 @@ it('keeps search output out of the stored result and gives the caller all of it'
   expect(JSON.stringify(stored?.result)).not.toContain('hidden line');
   expect(stored?.result).toMatchObject({ files: { op: 'search', truncated: false } });
 });
+
+const privateWrite = {
+  op: 'write',
+  path: '/srv/plan.md',
+  content: 'private plan text',
+  expectedMtimeMs: null,
+} as const;
+
+async function queuedRow(services: Services) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const [queued] = await services.store.db
+      .select()
+      .from(remoteTasks)
+      .where(eq(remoteTasks.status, 'queued'));
+    if (queued) return queued;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error('No task was queued');
+}
+
+it('keeps what a write carries out of the row when it is cancelled before the worker claims it', async () => {
+  const { services, profile, machine } = await setup();
+  const abort = new AbortController();
+  const pending = services.remote.executeFiles(profile.id, machine.id, privateWrite, abort.signal);
+  const settled = expect(pending).rejects.toMatchObject({ statusCode: 499 });
+  const queued = await queuedRow(services);
+  abort.abort();
+  await settled;
+  const stored = await row(services, queued.id);
+  expect(stored?.status).toBe('failed');
+  expect(JSON.stringify(stored?.payload)).not.toContain('private plan text');
+  expect(stored?.payload).toMatchObject({ op: 'write', path: '/srv/plan.md' });
+  await expect(poll(services, machine)).resolves.toEqual({ task: null });
+});
+
+it('keeps what a write carries out of the row when the machine never claims it in time', async () => {
+  let now = 1_000_000;
+  const services = await testServices(() => now);
+  const profile = await services.profiles.createProfile({ name: 'Owner', instructions: 'Help.' });
+  const machine = await services.remote.create({ name: 'Studio' });
+  await poll(services, machine);
+  const pending = services.remote.executeFiles(
+    profile.id,
+    machine.id,
+    { op: 'write-bytes', path: '/srv/a.bin', base64: 'c2VjcmV0Ynl0ZXM=' },
+    undefined,
+    1_000,
+  );
+  const settled = expect(pending).rejects.toMatchObject({ statusCode: 504 });
+  const queued = await queuedRow(services);
+  // Past the call's deadline, while the machine still counts as present.
+  now += 40_000;
+  await settled;
+  const stored = await row(services, queued.id);
+  expect(stored?.status).toBe('failed');
+  expect(JSON.stringify(stored?.payload)).not.toContain('c2VjcmV0');
+});
+
+it('fails and empties the files tasks a restart left behind, so a late answer is refused', async () => {
+  const { services, profile, machine } = await setup();
+  const at = new Date();
+  const base = { machineId: machine.id, profileId: profile.id, command: '', timeoutMs: 60_000 };
+  const ids = {
+    queued: '00000000-0000-4000-8000-000000000001',
+    running: '00000000-0000-4000-8000-000000000002',
+    answered: '00000000-0000-4000-8000-000000000003',
+    shell: '00000000-0000-4000-8000-000000000004',
+  };
+  await services.store.db.insert(remoteTasks).values([
+    {
+      ...base,
+      id: ids.queued,
+      kind: 'files',
+      payload: privateWrite,
+      status: 'queued',
+      createdAt: at,
+      updatedAt: at,
+    },
+    {
+      ...base,
+      id: ids.running,
+      kind: 'files',
+      payload: readOp,
+      status: 'running',
+      createdAt: at,
+      updatedAt: at,
+    },
+    {
+      ...base,
+      id: ids.answered,
+      kind: 'files',
+      payload: readOp,
+      status: 'completed',
+      result: {
+        taskId: ids.answered,
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timedOut: false,
+        files: JSON.stringify({
+          ok: true,
+          op: 'read',
+          text: 'unread secret',
+          mtimeMs: 1,
+          bytes: 13,
+        }),
+      },
+      createdAt: at,
+      updatedAt: at,
+    },
+    {
+      ...base,
+      id: ids.shell,
+      kind: 'shell',
+      command: 'uptime',
+      payload: null,
+      status: 'queued',
+      createdAt: at,
+      updatedAt: at,
+    },
+  ]);
+
+  await services.remote.failLeftoverFiles();
+
+  for (const id of [ids.queued, ids.running]) {
+    const stored = await row(services, id);
+    expect(stored?.status).toBe('failed');
+  }
+  expect(JSON.stringify((await row(services, ids.queued))?.payload)).not.toContain('private plan');
+  const answered = await row(services, ids.answered);
+  expect(answered?.status).toBe('completed');
+  expect(JSON.stringify(answered?.result)).not.toContain('unread secret');
+  expect(answered?.result).toMatchObject({ files: { op: 'read', bytes: 13 } });
+  expect((await row(services, ids.shell))?.status).toBe('queued');
+
+  await expect(
+    services.remote.complete(machine.id, ids.running, `Bearer ${machine.token}`, {
+      taskId: ids.running,
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      files: { ok: true, op: 'read', text: 'late secret', mtimeMs: 1, bytes: 11 },
+    }),
+  ).rejects.toMatchObject({ statusCode: 404 });
+  expect(JSON.stringify(await row(services, ids.running))).not.toContain('late secret');
+  // Only the shell task is left to hand out.
+  await expect(poll(services, machine)).resolves.toMatchObject({ task: { id: ids.shell } });
+});
+
+it('refuses an operation the contract does not accept in one sentence naming the field', async () => {
+  const { services, profile, machine } = await setup();
+  const search = {
+    op: 'search',
+    path: '/srv',
+    pattern: 'x',
+    glob: ' *.ts',
+    ignoreCase: false,
+    contextLines: 0,
+    output: 'content',
+    limit: 10,
+  } as const;
+  const refused = services.remote.executeFiles(profile.id, machine.id, search);
+  await expect(refused).rejects.toMatchObject({
+    statusCode: 400,
+    message: expect.stringMatching(/^The glob .*\.$/),
+  });
+  await expect(refused).rejects.not.toMatchObject({ message: expect.stringContaining('"code"') });
+});

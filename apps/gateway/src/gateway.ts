@@ -239,6 +239,8 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
       await moveMcpSecrets(store, vault, gatewayVault);
       // SSH keys that still live only as files in an earlier per-agent folder; nothing once imported.
       await importWorkspaceSshKeys(store, gatewayVault);
+      // File operations a machine was doing for a caller this restart ended; see there.
+      await services.remote.failLeftoverFiles();
       stage = 'queue';
       await queue?.start();
 

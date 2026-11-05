@@ -21,7 +21,7 @@ import {
   remoteResultSchema,
   remoteUpdateParamsSchema,
 } from '@jian/contracts';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
 import { GatewayError } from '../core/errors.js';
 import { gatewayRelease, workerOutdated } from '../core/release.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
@@ -71,6 +71,26 @@ const FILE_CONTENT_FIELDS = new Set([
   'status',
   'diff',
 ]);
+
+/** What a write's payload holds of the caller's file: the rest says what the task was. */
+const withoutWrittenContent = (payload: Record<string, unknown> | null) => {
+  if (!payload) return payload;
+  const { content: _content, base64: _base64, ...kept } = payload;
+  return kept;
+};
+
+/**
+ * A files operation as the contract takes it. What it refuses reaches an agent as a tool's
+ * failure, so it is one sentence naming the field instead of the schema's JSON.
+ */
+function filesOp(input: RemoteFilesOp): RemoteFilesOp {
+  const parsed = remoteFilesOpSchema.safeParse(input);
+  if (parsed.success) return parsed.data;
+  const issue = parsed.error.issues[0];
+  const field = issue?.path.join('.') || 'operation';
+  const reason = (issue?.message ?? 'Invalid.').replace(/\.?$/, '.');
+  throw new GatewayError(400, `The ${field} of this file operation is refused: ${reason}`);
+}
 
 /** Where a task's secret environment waits, encrypted, until its worker claims it. */
 const secretEnvKey = (taskId: string) => `remote-task-env:${taskId}`;
@@ -371,7 +391,7 @@ export class Remote {
     signal?: AbortSignal,
     timeoutMs = 60_000,
   ): Promise<RemoteFilesAnswer> {
-    const op = remoteFilesOpSchema.parse(input);
+    const op = filesOp(input);
     const machine = await this.machine(machineId);
     if (!(machine.capabilities ?? []).includes(REMOTE_FILES_CAPABILITY)) {
       throw new GatewayError(
@@ -397,7 +417,8 @@ export class Remote {
       returned = true;
       return answer.data;
     } finally {
-      // Whatever ends the call early, a late answer must not land in the row with its contents.
+      // Whatever ends the call early, a late answer must not land in the row with its contents,
+      // and a write the worker never claimed must not keep the text it was to write.
       if (!returned) {
         await this.store.db
           .update(remoteTasks)
@@ -406,8 +427,59 @@ export class Remote {
             and(eq(remoteTasks.id, taskId), inArray(remoteTasks.status, ['queued', 'running'])),
           )
           .catch(() => {});
+        if (op.op === 'write' || op.op === 'write-bytes') {
+          await this.store.db
+            .update(remoteTasks)
+            .set({ payload: withoutWrittenContent(op) })
+            .where(eq(remoteTasks.id, taskId));
+        }
       }
       await this.stripFileContents(taskId);
+    }
+  }
+
+  /**
+   * The files tasks a stopped gateway was waiting on: their callers are gone, so each fails and
+   * gives up the file text it holds, and a worker's late claim or answer is refused. Run once at
+   * start, before the gateway takes work. A second gateway process sharing the database loses
+   * the files calls it has in flight then; a write queued just before a restart is dropped along
+   * with the run that asked for it.
+   */
+  async failLeftoverFiles() {
+    const rows = await this.store.db
+      .select({ id: remoteTasks.id, status: remoteTasks.status, payload: remoteTasks.payload })
+      .from(remoteTasks)
+      .where(
+        and(
+          eq(remoteTasks.kind, 'files'),
+          or(
+            inArray(remoteTasks.status, ['queued', 'running']),
+            // An answer its caller never read is still the JSON text `complete` stored.
+            sql`jsonb_typeof(${remoteTasks.result} -> 'files') = 'string'`,
+          ),
+        ),
+      );
+    for (const row of rows) {
+      if (row.status === 'queued' || row.status === 'running') {
+        await this.store.db
+          .update(remoteTasks)
+          .set({
+            status: 'failed',
+            payload: withoutWrittenContent(row.payload),
+            result: {
+              taskId: row.id,
+              exitCode: null,
+              stdout: '',
+              stderr: 'The gateway restarted before the machine answered.',
+              timedOut: false,
+            },
+            updatedAt: new Date(this.clock()),
+          })
+          .where(
+            and(eq(remoteTasks.id, row.id), inArray(remoteTasks.status, ['queued', 'running'])),
+          );
+      }
+      await this.stripFileContents(row.id);
     }
   }
 
@@ -715,14 +787,9 @@ export class Remote {
       }
       // What a write carries is the caller's file text: the worker has it now, the row need not.
       if (parsed.data.op === 'write' || parsed.data.op === 'write-bytes') {
-        const {
-          content: _content,
-          base64: _base64,
-          ...kept
-        } = claimed.payload as Record<string, unknown>;
         await this.store.db
           .update(remoteTasks)
-          .set({ payload: kept })
+          .set({ payload: withoutWrittenContent(claimed.payload) })
           .where(eq(remoteTasks.id, claimed.id));
       }
       return {
