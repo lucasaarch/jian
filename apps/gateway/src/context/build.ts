@@ -16,6 +16,8 @@ import { tokenCounter } from './budget.js';
 export interface ContextSources {
   /** The MCP servers this run reaches: the skills it is offered follow them. */
   servers: readonly McpServer[];
+  /** The run has the worktree tools, so the skill about them is offered. */
+  worktrees?: boolean;
   /** The installation's zone, which the agent reads the time in; the host's when absent. */
   timeZone?: string;
   /** The memories the request matched, each carrying the keys of those linked to it. */
@@ -176,7 +178,7 @@ export function buildContext(
   // Skill bodies are loaded on demand; the prompt carries only their discovery catalog.
   const loaded = new Set(sources.loadedSkills ?? []);
   const skills = [
-    ...availableSkills(run.profile, sources.servers),
+    ...availableSkills(run.profile, sources.servers, { worktrees: sources.worktrees === true }),
     ...(sources.projectSkills ?? []),
   ].map(({ name, description }) => ({
     name,

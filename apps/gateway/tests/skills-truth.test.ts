@@ -36,7 +36,11 @@ const github = {
   disabledTools: [],
 };
 // With what only a desktop's run is told: this file runs as a server.
-const everything = [...builtinSkills([github]), machineToolsFor(true), sshKeysFor(true)];
+const everything = [
+  ...builtinSkills([github], { worktrees: true }),
+  machineToolsFor(true),
+  sshKeysFor(true),
+];
 const text = everything.map(({ instructions }) => instructions).join('\n');
 
 /** Written like a tool in a skill, and no tool: fields, actions and values the skills teach. */

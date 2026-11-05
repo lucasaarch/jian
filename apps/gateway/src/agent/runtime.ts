@@ -616,7 +616,11 @@ export class AgentRuntime {
                 run,
                 // A subagent's are its conversation's: the one that started it.
                 conversation,
-                new Set(availableSkills(run.profile, skillServers).map((skill) => skill.name)),
+                new Set(
+                  availableSkills(run.profile, skillServers, {
+                    worktrees: Boolean(worktrees),
+                  }).map((skill) => skill.name),
+                ),
               )
               .catch((error: unknown) => {
                 console.error(
@@ -635,6 +639,7 @@ export class AgentRuntime {
           webAccess,
           Object.keys(xTools).length > 0,
           project.skills,
+          Boolean(worktrees),
         ),
         ...(!learning && this.options.github && gitPlace
           ? githubGitTools({
@@ -783,6 +788,7 @@ export class AgentRuntime {
             {
               web: webAccess ?? { browser: false, inspects: true, subagent: Boolean(run.subagent) },
               xConnected: Object.keys(xTools).length > 0,
+              worktrees: Boolean(worktrees),
             },
             project.skills,
           );
@@ -797,7 +803,12 @@ export class AgentRuntime {
         console.warn(`jian: MCP server ${server.name} is unavailable — ${server.reason}`);
       }
 
-      const context = await this.services.contexts.context(run, skillServers, project);
+      const context = await this.services.contexts.context(
+        run,
+        skillServers,
+        // 'create_worktree' is absent when it could only refuse, as for a subagent of a machine.
+        worktrees ? { ...project, worktrees: { create: 'create_worktree' in tools } } : project,
+      );
       if (mcpDown) withTurnNote(context, mcpDown);
       compactCommand = isCompactCommand(run.input);
       if (compactCommand) compactionRequested = true;

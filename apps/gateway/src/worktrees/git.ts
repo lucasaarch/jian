@@ -79,6 +79,21 @@ async function uncommittedIn(place: GitPlace, path: string, untracked = true) {
   return count;
 }
 
+/**
+ * The checkout a folder belongs to and how many files it has changed, for the signal a turn gives
+ * the agent. Null when the folder is not in a repository; a detached HEAD still counts.
+ */
+export async function checkoutSignal(
+  place: GitPlace,
+  folder: string,
+): Promise<{ top: string; uncommitted: number } | null> {
+  const top = (
+    await git(place, ['-C', folder, 'rev-parse', '--show-toplevel'], true)
+  ).stdout.trim();
+  if (!top) return null;
+  return { top, uncommitted: await uncommittedIn(place, top) };
+}
+
 export async function worktreeState(
   place: GitPlace,
   input: { path: string; base: string },

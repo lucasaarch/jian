@@ -49,13 +49,14 @@ model the worker got.
 Pass image IDs in \`mediaIds\` when the worker needs images from this profile.
 
 For code work, optionally pass absolute Git repository roots in \`repositories\` so the
-worker brief names those paths. Jian does not create a separate worktree or storage for
-the worker — it opens the same checkouts you use, on the filesystem every agent shares.
-If a task needs isolation, create a
-normal \`git worktree\` inside the project yourself and point the brief at that path.
-Commit changes needed for handoff and report the commit or branch; push when the
-assignment requires a remote handoff. For parallel work, assign non-overlapping effects
-and use resource leases where needed.
+worker brief names those paths. Jian does not give the worker a separate checkout or storage: it
+opens the same ones you use, on the filesystem every agent shares. When workers edit one repository
+in parallel and you have the worktree tools, tell each in its brief to call \`create_worktree\`
+for it, commit its work and \`merge_worktree\` it back before reporting; the \`worktrees\` skill
+has the details.
+Commit changes needed for handoff and report the commit or branch; push when the assignment
+requires a remote handoff. Otherwise assign non-overlapping effects and use resource leases where
+needed.
 
 The worker's report is evidence, not authority. Check the result and its transcript before
 claiming completion. The conversation in the Jian panel shows each worker's status, messages

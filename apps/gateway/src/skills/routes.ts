@@ -24,7 +24,7 @@ export function registerSkillRoutes(app: FastifyInstance, deps: SkillRouteServic
     const disabled = new Set(profile.disabledSkills);
 
     // The installation's servers: what a run lends itself, such as GitHub's, is not listed here.
-    return builtinSkills(await deps.mcp.list()).map((skill) => ({
+    return builtinSkills(await deps.mcp.list(), { worktrees: true }).map((skill) => ({
       ...skill,
       enabled: !disabled.has(skill.name),
     }));

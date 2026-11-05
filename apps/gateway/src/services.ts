@@ -146,6 +146,11 @@ export function buildServices({
     decisions.judge,
   );
   const sshKeys = new SshKeys(store, gatewayVault);
+  const worktrees = new Worktrees(store, clock, async (profileId, place) =>
+    place === 'gateway'
+      ? localPlace(await prepareGitAccess(sshKeys))
+      : remotePlace(profileId, place, remote),
+  );
   const services = {
     profiles,
     providers,
@@ -185,7 +190,7 @@ export function buildServices({
     schedules: new Schedules(store, profiles, sessions, runs, clock),
     settings,
     lifecycle,
-    contexts: new Contexts(store, runs, sessions, settings, decisions.judge),
+    contexts: new Contexts(store, runs, sessions, settings, decisions.judge, worktrees),
     errands: new Errands(store, clock),
     work: new Work(store, sessions, runs, clock, decisions.judge),
     objectives: new ObjectiveContinuation(store, sessions, runs, clock),
@@ -194,12 +199,9 @@ export function buildServices({
       store,
       (profileId, machineId, input, signal) => remote.execute(profileId, machineId, input, signal),
       clock,
+      worktrees,
     ),
-    worktrees: new Worktrees(store, clock, async (profileId, place) =>
-      place === 'gateway'
-        ? localPlace(await prepareGitAccess(sshKeys))
-        : remotePlace(profileId, place, remote),
-    ),
+    worktrees,
     vault,
     gatewayVault,
     sshKeys,

@@ -117,12 +117,13 @@ export function skillFor(
   run: Run,
   servers: readonly McpServer[],
   name: string,
-  can: { web: WebAccess; xConnected: boolean },
+  can: { web: WebAccess; xConnected: boolean; worktrees?: boolean },
   /** The skills of the conversation's workspaces, named apart from the profile's already. */
   projectSkills: readonly Skill[] = [],
 ): Skill | undefined {
   const skill =
-    findSkill(run.profile, servers, name) ?? projectSkills.find((item) => item.name === name);
+    findSkill(run.profile, servers, name, { worktrees: can.worktrees === true }) ??
+    projectSkills.find((item) => item.name === name);
   if (skill === webResearch) return webResearchFor(can.web);
   if (skill === x) return xFor({ connected: can.xConnected, subagent: Boolean(run.subagent) });
   return skill;
@@ -141,6 +142,8 @@ export function profileTools(
   xConnected = false,
   /** The skills the conversation's workspaces offer. */
   projectSkills: readonly Skill[] = [],
+  /** Whether this run has the worktree tools, which the skill about them goes by. */
+  worktrees = false,
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -472,7 +475,7 @@ export function profileTools(
         'Load instructions for a skill enabled on this profile. A skill loaded once stays in your instructions for the rest of the conversation: never load one the catalog marks loaded.',
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
-        const skill = skillFor(run, servers, name, { web, xConnected }, projectSkills);
+        const skill = skillFor(run, servers, name, { web, xConnected, worktrees }, projectSkills);
 
         if (!skill) {
           throw new GatewayError(404, 'Skill not found');

@@ -6,7 +6,12 @@ export interface ContextSource {
     run: Run,
     servers: readonly McpServer[],
     /** What the conversation's workspaces say: project instructions and skills. */
-    project?: { sections: string[]; skills: Skill[] },
+    project?: {
+      sections: string[];
+      skills: Skill[];
+      /** The run has worktree tools; `create` when it can also make one. */
+      worktrees?: { create: boolean };
+    },
   ): Promise<{
     system: string;
     messages: Array<{ role: 'user' | 'assistant'; content: string }>;

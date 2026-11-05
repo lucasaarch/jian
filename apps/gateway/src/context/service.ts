@@ -17,6 +17,7 @@ import type { SessionReader } from '../sessions/port.js';
 import { availableSkills } from '../skills/builtin/index.js';
 import type { Store } from '../storage/database.js';
 import { projects } from '../storage/schema.js';
+import type { FolderSignal, Worktrees } from '../worktrees/service.js';
 import { buildContext, rankMemories } from './build.js';
 import { judgeTurn } from './judgments.js';
 import type { ContextSource } from './port.js';
@@ -50,6 +51,43 @@ function workspaceGuidance(
   return parts.join('\n\n');
 }
 
+const files = (count: number) => `${count} ${count === 1 ? 'file' : 'files'}`;
+
+/**
+ * One line a git folder: what a turn needs to know before it edits there. Another agent is named
+ * by its own name only, because its conversations are private to it.
+ */
+export function worktreeSignals(signals: readonly FolderSignal[]): string {
+  return signals
+    .map(({ folder, uncommitted, others, worktree }) => {
+      const parts = [
+        ...(uncommitted && !worktree
+          ? [`${files(uncommitted)} with uncommitted changes.`]
+          : uncommitted === 0 && !worktree
+            ? ['No uncommitted changes.']
+            : []),
+        ...others.map((other) =>
+          other.agent
+            ? `Another agent, ${other.agent}, is working here now.`
+            : `Another conversation of yours, ${JSON.stringify(other.conversation)}, is working here now.`,
+        ),
+        worktree
+          ? `You work on it in the worktree ${worktree.name} at ${worktree.path} (branch ${worktree.branch} from ${worktree.base}); your tools start there.`
+          : 'You have no worktree for it.',
+      ];
+      return `${folder}: ${parts.join(' ')}`;
+    })
+    .join('\n');
+}
+
+/** What a subagent is told about a separate checkout, by what its run can do. */
+function worktreeAdvice(worktrees?: { create: boolean }): string {
+  if (!worktrees) return '';
+  return worktrees.create
+    ? " If this assignment needs a checkout of its own, call create_worktree with the repository folder: it makes your worktree from the conversation's, and merge_worktree brings it back into that one when your work is done."
+    : " The conversation's worktrees are yours to use: list_worktrees shows them, and your commands start in the one the brief names.";
+}
+
 export class Contexts {
   constructor(
     private readonly store: Store,
@@ -58,6 +96,8 @@ export class Contexts {
     private readonly settings?: { timeZone(): Promise<string> },
     /** Reads the shortlist for meaning when the installation has a Jev key; see judgments.ts. */
     private readonly judge?: Judge,
+    /** Who else works in the conversation's folders, and its own worktrees. */
+    private readonly worktrees?: Pick<Worktrees, 'signals'>,
   ) {}
 
   private async historyWithTools(
@@ -136,7 +176,9 @@ export class Contexts {
             request: run.input,
             ...(before ? { before } : {}),
             memories: rankMemories(run.input, memories).map(({ memory }) => memory),
-            skills: availableSkills(run.profile, servers).map(({ name, description }) => ({
+            skills: availableSkills(run.profile, servers, {
+              worktrees: Boolean(workspaces?.worktrees),
+            }).map(({ name, description }) => ({
               name,
               description,
             })),
@@ -155,7 +197,7 @@ export class Contexts {
       workerGuidance = [
         `You are ${JSON.stringify(worker.name)}, an ephemeral ${worker.role} worker for one task.`,
         `Identity and working approach: ${worker.identity}`,
-        `Your $HOME is ${home}, the same as the principal agent's (same cwd roots and repository checkouts), and every agent of this installation shares these files, so they may change while you work; touch only what the assignment names. ${repositories.length ? `Named repository roots for this assignment: ${repositories.join(', ')}.` : onOwnerComputer() ? "Use the repositories the brief names; this is the owner's own computer." : 'Use repositories under this directory as needed.'} If this assignment needs a separate checkout, create a normal git worktree inside the project yourself; Jian does not give you an isolated copy.`,
+        `Your $HOME is ${home}, the same as the principal agent's (same cwd roots and repository checkouts), and every agent of this installation shares these files, so they may change while you work; touch only what the assignment names. ${repositories.length ? `Named repository roots for this assignment: ${repositories.join(', ')}.` : onOwnerComputer() ? "Use the repositories the brief names; this is the owner's own computer." : 'Use repositories under this directory as needed.'} ${worktreeAdvice(workspaces?.worktrees)}`,
         'Work only on the assignment in your opening message. Your parent conversation is not in this context; use the brief and available tools. Do not create tasks or spawn another subagent. Report verified outcomes and exact blockers in your final response.',
         'Your final response is a factual report to the principal agent, not a message to the owner.',
       ].join('\n\n');
@@ -177,7 +219,22 @@ export class Contexts {
               and(eq(projects.profileId, run.profileId), inArray(projects.id, session.projectIds)),
             )
         : [];
-    const workspace = worker ? '' : workspaceGuidance(session, several);
+    const signals =
+      !worker && workspaces?.worktrees && session.folders?.length && this.worktrees
+        ? worktreeSignals(
+            await this.worktrees
+              .signals(
+                run.profileId,
+                session.id,
+                session.folders,
+                session.remoteMachineId ?? 'gateway',
+              )
+              .catch(() => []),
+          )
+        : '';
+    const workspace = worker
+      ? ''
+      : [workspaceGuidance(session, several), signals].filter(Boolean).join('\n\n');
     const projectGuidance = project
       ? session.remoteMachineId
         ? `This conversation belongs to the coding project ${JSON.stringify(project.name)}. Repository: ${project.repositoryUrl}.${gitWay} This conversation targets one of the owner's machines; clone the repository there into a dedicated checkout before changing files, and keep all project work on that machine.`
@@ -188,6 +245,7 @@ export class Contexts {
     );
     const built = buildContext(run, {
       servers,
+      ...(workspaces?.worktrees ? { worktrees: true } : {}),
       ...(judged.relevance ? { relevance: judged.relevance } : {}),
       ...(judged.skill ? { suggestedSkill: judged.skill } : {}),
       ...(this.settings ? { timeZone: await this.settings.timeZone() } : {}),

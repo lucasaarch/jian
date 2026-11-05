@@ -6,6 +6,7 @@ import { recordEvent } from '../core/events.js';
 import type { Store } from '../storage/database.js';
 import {
   addWorktree,
+  checkoutSignal,
   listedWorktrees,
   mergeWorktree,
   removeWorktree,
@@ -32,6 +33,18 @@ export type WorktreeState = Omit<SessionWorktree, 'pullRequest'>;
 /** Where git runs for `place`: the gateway, or the id of a machine. */
 export type WorktreePlaces = (profileId: string, place: 'gateway' | string) => Promise<GitPlace>;
 
+/** How long a folder's uncommitted count is trusted, in ms: a turn must not run git every time. */
+const SIGNAL_FRESH_MS = 60_000;
+
+/** What a turn tells the agent about one folder it works in. */
+export type FolderSignal = {
+  folder: string;
+  /** Files with uncommitted changes in the folder's checkout; absent on a machine. */
+  uncommitted?: number;
+  others: { agent?: string; conversation?: string }[];
+  worktree?: { name: string; path: string; branch: string; base: string };
+};
+
 type Change = 'created' | 'merged' | 'removed';
 
 /**
@@ -47,6 +60,76 @@ export class Worktrees {
     private readonly warn: (message: string) => void = () => {},
     private readonly random: () => number = Math.random,
   ) {}
+
+  private readonly seen = new Map<
+    string,
+    { at: number; checkout: { top: string; uncommitted: number } | null }
+  >();
+
+  /**
+   * What each folder's turn-start signal says: its changed files, who else works there and the
+   * conversation's own worktree for it. On the gateway git is asked once a minute per folder; on a
+   * machine nothing is, since a turn must not wait for a remote command: its signal is who else
+   * is there and what was recorded. A folder outside any repository has no signal.
+   */
+  async signals(
+    profileId: string,
+    sessionId: string,
+    folders: string[],
+    place: 'gateway' | string,
+  ): Promise<FolderSignal[]> {
+    const ours = (await activeWorktrees(this.store.db, profileId, sessionId)).filter(
+      (record) => record.place === place,
+    );
+    const found: { folder: string; source: string; uncommitted?: number }[] = [];
+
+    for (const folder of folders) {
+      if (place !== 'gateway') {
+        found.push({ folder, source: folder });
+        continue;
+      }
+      const checkout = await this.checkoutOf(profileId, folder).catch(() => null);
+      if (checkout) {
+        found.push({ folder, source: checkout.top, uncommitted: checkout.uncommitted });
+      }
+    }
+
+    const neighbours = await this.neighbours(
+      profileId,
+      sessionId,
+      found.map((item) => item.source),
+    );
+    return found.map(({ folder, source, uncommitted }) => {
+      const own = ours.find((record) => record.source === source);
+      return {
+        folder,
+        ...(uncommitted === undefined ? {} : { uncommitted }),
+        others: neighbours
+          .filter((item) => item.source === source)
+          .map(({ agent, conversation }) => ({
+            ...(agent ? { agent } : {}),
+            ...(conversation ? { conversation } : {}),
+          })),
+        ...(own
+          ? { worktree: { name: own.name, path: own.path, branch: own.branch, base: own.base } }
+          : {}),
+      };
+    });
+  }
+
+  /** Every active worktree of the conversation, as recorded and wherever it is. */
+  recorded(profileId: string, sessionId: string): Promise<WorktreeRecord[]> {
+    return activeWorktrees(this.store.db, profileId, sessionId);
+  }
+
+  private async checkoutOf(profileId: string, folder: string) {
+    const now = this.clock();
+    const kept = this.seen.get(folder);
+    if (kept && now - kept.at < SIGNAL_FRESH_MS) return kept.checkout;
+    const checkout = await checkoutSignal(await this.places(profileId, 'gateway'), folder);
+    this.seen.set(folder, { at: now, checkout });
+    return checkout;
+  }
 
   async create(
     profileId: string,

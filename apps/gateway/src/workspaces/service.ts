@@ -8,6 +8,7 @@ import type { Clock } from '../core/clock.js';
 import { listLoads, useLoads } from '../sessions/loads.js';
 import type { Store } from '../storage/database.js';
 import { remoteMachines, workspaceSnapshots } from '../storage/schema.js';
+import type { Worktrees } from '../worktrees/service.js';
 import {
   digest,
   parseRemote,
@@ -32,7 +33,8 @@ type RunOnMachine = (
   signal?: AbortSignal,
 ) => Promise<{ exitCode: number | null; stdout: string; timedOut?: boolean }>;
 
-type Place = { location: string; path: string };
+/** `as` names a worktree after the folder it is a checkout of: its own name says nothing. */
+type Place = { location: string; path: string; as?: string };
 
 /** What the workspaces of a conversation tell its run: prompt sections and skills to offer. */
 export type ProjectContext = { sections: string[]; skills: Skill[] };
@@ -50,6 +52,7 @@ export class Workspaces {
     private readonly store: Store,
     private readonly runOnMachine?: RunOnMachine,
     private readonly clock: Clock = Date.now,
+    private readonly worktrees?: Pick<Worktrees, 'recorded'>,
   ) {}
 
   /** A folder the conversation cloned a repository into: a workspace from now on. */
@@ -93,7 +96,7 @@ export class Workspaces {
 
     for (const place of places) {
       const snapshot = await this.snapshot(run.profileId, place);
-      const folder = basename(place.path);
+      const folder = place.as ?? basename(place.path);
       const where =
         place.location === 'gateway' ? place.path : `${place.path} on the conversation's machine`;
 
@@ -174,7 +177,28 @@ export class Workspaces {
       found.push({ location: load.name.slice(0, at), path: load.name.slice(at + 1) });
     }
 
-    const unique = new Map(found.map((place) => [key(place), place]));
+    // A folder the conversation has a worktree of is read there: that is where its tools start,
+    // and the branch may carry instructions the source lacks.
+    const records = this.worktrees
+      ? (
+          await Promise.all(
+            conversations.map((id) => this.worktrees?.recorded(run.profileId, id) ?? []),
+          )
+        ).flat()
+      : [];
+    const replaced = new Set(
+      records.map((record) => key({ location: record.place, path: record.source })),
+    );
+    const unique = new Map(
+      [
+        ...found.filter((place) => !replaced.has(key(place))),
+        ...records.map((record) => ({
+          location: record.place,
+          path: record.path,
+          as: basename(record.source),
+        })),
+      ].map((place) => [key(place), place]),
+    );
     return [...unique.values()].sort((a, b) => key(a).localeCompare(key(b)));
   }
 

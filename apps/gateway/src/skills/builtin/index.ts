@@ -29,6 +29,7 @@ import { discernmentNudge } from './vendored/discernment-nudge.js';
 import { ponytailSkills } from './vendored/ponytail.js';
 import { webResearch } from './web-research.js';
 import { workingWithAgents } from './working-with-agents.js';
+import { worktrees } from './worktrees.js';
 import { x } from './x.js';
 
 /**
@@ -75,7 +76,7 @@ const ALWAYS: readonly Skill[] = [
 const MCP: readonly Skill[] = [mcpServers, githubMcp];
 
 export const builtinSkillNames: ReadonlySet<string> = new Set(
-  [...ALWAYS, ...MCP, github].map((skill) => skill.name),
+  [...ALWAYS, ...MCP, github, worktrees].map((skill) => skill.name),
 );
 
 /**
@@ -88,12 +89,22 @@ function forThisHost(skill: Skill): Skill {
   return skill;
 }
 
+/** What a run has beyond the MCP servers, which decides the skills that teach it. */
+export type RunSkills = {
+  /** The run has the worktree tools; a skill about them would send it after tools it lacks. */
+  worktrees?: boolean;
+};
+
 /** `servers` are the MCP servers a run reaches: the installation's, and any lent to it. */
-export function builtinSkills(servers: readonly McpServer[]): readonly Skill[] {
+export function builtinSkills(
+  servers: readonly McpServer[],
+  has: RunSkills = {},
+): readonly Skill[] {
   return [
     ...ALWAYS.map(forThisHost),
     ...(servers.length ? MCP : []),
     ...(servers.some(isGitHubIntegrationServer) ? [github] : []),
+    ...(has.worktrees ? [worktrees] : []),
   ];
 }
 
@@ -101,12 +112,18 @@ export function builtinSkills(servers: readonly McpServer[]): readonly Skill[] {
  * What the profile can load this run. An imported skill wins over a built-in of the same
  * name, so an owner who disagrees with a default replaces it by importing over it.
  */
-export function availableSkills(profile: Profile, servers: readonly McpServer[]): Skill[] {
+export function availableSkills(
+  profile: Profile,
+  servers: readonly McpServer[],
+  has: RunSkills = {},
+): Skill[] {
   const own = new Set(profile.skills.map((skill) => skill.name));
   const disabled = new Set(profile.disabledSkills);
 
   return [
-    ...builtinSkills(servers).filter((skill) => !own.has(skill.name) && !disabled.has(skill.name)),
+    ...builtinSkills(servers, has).filter(
+      (skill) => !own.has(skill.name) && !disabled.has(skill.name),
+    ),
     ...profile.skills,
   ];
 }
@@ -115,6 +132,7 @@ export function findSkill(
   profile: Profile,
   servers: readonly McpServer[],
   name: string,
+  has: RunSkills = {},
 ): Skill | undefined {
-  return availableSkills(profile, servers).find((skill) => skill.name === name);
+  return availableSkills(profile, servers, has).find((skill) => skill.name === name);
 }
