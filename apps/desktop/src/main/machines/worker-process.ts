@@ -24,6 +24,7 @@ import {
   setHelpersInstallDir,
   setHelpersRoot,
   setHostWording,
+  setRefusedFolders,
   type WorkerStateFile,
   workerHeaders,
 } from '@jian/remote-core';
@@ -163,6 +164,7 @@ port.on('message', ({ data }: { data: ToWorkers }) => {
       setup = data;
       setHelpersRoot(data.helpers);
       setHelpersInstallDir(data.helperInstall);
+      setRefusedFolders([data.data]);
       mkdirSync(data.logs, { recursive: true, mode: 0o700 });
       void watchScreen();
       return;

@@ -30,6 +30,8 @@ export type WorkersSetup = {
   helpers: string;
   /** Where the helper is copied to run from: the app's own, apart from the CLI's. */
   helperInstall: string;
+  /** The app's own data, where the worker tokens are kept: file operations never touch it. */
+  data: string;
   /** Where each worker writes its log, one file per gateway. */
   logs: string;
   /** Where each worker keeps how it stands. */

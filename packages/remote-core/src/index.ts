@@ -8,6 +8,13 @@ export {
   setHelpersInstallDir,
   setHelpersRoot,
 } from './computer/helpers.ts';
+export {
+  answerFilesOp,
+  executeFilesTask,
+  type FilesOptions,
+  refusedFolders,
+  setRefusedFolders,
+} from './files/index.ts';
 export * from './host.ts';
 export * from './log.ts';
 export * from './result.ts';

@@ -125,6 +125,7 @@ export class UtilityWorkerHost implements WorkerHost {
       type: 'setup',
       helpers: helpersDir(),
       helperInstall: join(app.getPath('userData'), 'computer-helper'),
+      data: app.getPath('userData'),
       logs: app.getPath('logs'),
       state: join(app.getPath('userData'), 'machines'),
       version: app.getVersion(),

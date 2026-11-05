@@ -8,17 +8,22 @@ import { STDERR_CAP, STDOUT_CAP } from './shell.ts';
  * framing so a full screenshot still fits without a 413.
  */
 const RESULT_BODY_BUDGET = 480_000;
+/** What the result's own fields add around a files answer, in bytes. */
+const ENVELOPE_SLACK = 1_000;
 /** Permanent HTTP statuses — retrying forever leaves the task stuck and the machine offline. */
 const PERMANENT_RESULT_STATUS = new Set([400, 401, 403, 404, 413]);
 
 /** Shrink stdout/stderr until the JSON body fits under budget (UTF-8 byte length). */
 export function fitResult(
   result: RemoteResult,
-  budget = RESULT_BODY_BUDGET,
+  requested = RESULT_BODY_BUDGET,
 ): { result: RemoteResult; body: string } {
+  // A files answer is already held to REMOTE_FILES_RESULT_BYTES by its worker and cannot be
+  // shrunk here; only the envelope around it is allowed on top.
+  const budget = result.files ? requested + ENVELOPE_SLACK : requested;
   let stdout = result.stdout ?? '';
   let stderr = result.stderr ?? '';
-  const { computer, update } = result;
+  const { computer, update, files } = result;
   const pack = () =>
     JSON.stringify({
       taskId: result.taskId,
@@ -28,6 +33,7 @@ export function fitResult(
       timedOut: Boolean(result.timedOut),
       ...(computer ? { computer } : {}),
       ...(update ? { update } : {}),
+      ...(files ? { files } : {}),
     });
   let body = pack();
   if (Buffer.byteLength(body) <= budget) {
@@ -38,6 +44,7 @@ export function fitResult(
         stderr,
         timedOut: Boolean(result.timedOut),
         ...(computer ? { computer } : {}),
+        ...(files ? { files } : {}),
       },
       body,
     };

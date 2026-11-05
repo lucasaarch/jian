@@ -1,4 +1,6 @@
 import type { RemoteResult, RemoteTask } from '@jian/contracts';
+import { executeFilesTask } from './files/index.ts';
+import { FILES_CAPABILITY } from './files/limits.ts';
 import { hostWording } from './host.ts';
 import type { Logger } from './log.ts';
 import { postResult } from './result.ts';
@@ -33,6 +35,7 @@ export async function executeTask(task: RemoteTask): Promise<RemoteResult> {
     const { executeComputerTask } = await import('./computer/index.ts');
     return executeComputerTask(task);
   }
+  if (task.kind === 'files') return executeFilesTask(task);
   return executeShellTask(task);
 }
 
@@ -43,19 +46,19 @@ export async function executeTask(task: RemoteTask): Promise<RemoteResult> {
 export const SECRET_ENV_CAPABILITY = 'shell-secret-env-v1';
 
 /**
- * What this machine offers: a shell that takes a secret environment, and Computer Use when its
- * helper works.
+ * What this machine offers: a shell that takes a secret environment, file operations, and
+ * Computer Use when its helper works.
  */
 export async function detectCapabilities(): Promise<string[]> {
   try {
     const { probeComputerCapability, computerCapabilityName } = await import('./computer/index.ts');
     const name = computerCapabilityName();
     return name && (await probeComputerCapability())
-      ? [SECRET_ENV_CAPABILITY, name]
-      : [SECRET_ENV_CAPABILITY];
+      ? [SECRET_ENV_CAPABILITY, FILES_CAPABILITY, name]
+      : [SECRET_ENV_CAPABILITY, FILES_CAPABILITY];
   } catch {
     // Computer Use unavailable until its helper is ready; shell tasks still work.
-    return [SECRET_ENV_CAPABILITY];
+    return [SECRET_ENV_CAPABILITY, FILES_CAPABILITY];
   }
 }
 

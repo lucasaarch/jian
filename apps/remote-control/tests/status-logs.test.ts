@@ -75,6 +75,7 @@ test('the running worker keeps its connection and what it ran where status reads
     computer: 1,
     update: 0,
     browser: 0,
+    files: 0,
   });
   assert.deepEqual(
     { kind: read().lastTask.kind, ok: read().lastTask.ok },
