@@ -98,6 +98,12 @@ async function readBlocks(
       }
 
       if (!type) continue;
+      // A durable event's data line is the whole event as the feed keeps it; what it is about
+      // (its conversation, the Inspector tab it asks for) is that event's own `data`. A live
+      // update without an id carries its data as it is.
+      if (id !== undefined && data && typeof data === 'object' && 'data' in data) {
+        data = (data as { data?: unknown }).data;
+      }
       if (id === undefined) {
         onEvent({ id: cursor, type, data });
       } else if (id > cursor || type === STREAM_OPENED_EVENT) {

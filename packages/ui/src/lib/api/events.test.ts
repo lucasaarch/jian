@@ -39,6 +39,20 @@ it('opens from now with no cursor, and resumes from the one it was given', async
   ]);
 });
 
+it("hands on a durable event's own data, as the gateway writes the whole event", async () => {
+  const heard: unknown[] = [];
+  const focus = { sessionId: 'atlas', kind: 'pull_request', url: 'https://github.com/o/r/pull/1' };
+  const progress = { runId: 'run', at: '2026-11-05T00:00:00Z' };
+
+  answering(
+    `id: 3\nevent: conversation.inspector.focus\ndata: ${JSON.stringify({ id: 3, type: 'conversation.inspector.focus', data: focus })}\n\n` +
+      `event: run.progress\ndata: ${JSON.stringify(progress)}\n\n`,
+  );
+  await readEvents('profile', 0, (event) => heard.push(event.data), new AbortController().signal);
+
+  expect(heard).toEqual([focus, progress]);
+});
+
 it('tells the opening even of an empty feed, and only what comes after its cursor', async () => {
   const heard: [string, number][] = [];
   const hear = (event: { type: string; id: number }) => heard.push([event.type, event.id]);
