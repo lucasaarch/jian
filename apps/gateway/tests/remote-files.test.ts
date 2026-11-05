@@ -214,3 +214,44 @@ it('offers files from the capabilities a machine last advertised, online or not'
     false,
   );
 });
+
+it('rejects a late answer to a call that was cancelled while the machine was running it', async () => {
+  const { services, profile, machine } = await setup();
+  const abort = new AbortController();
+  const pending = services.remote.executeFiles(profile.id, machine.id, readOp, abort.signal);
+  const settled = expect(pending).rejects.toMatchObject({ statusCode: 499 });
+  const task = await nextTask(services, machine);
+  abort.abort();
+  await settled;
+  await expect(
+    services.remote.complete(machine.id, task.id, `Bearer ${machine.token}`, {
+      taskId: task.id,
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      files: { ok: true, op: 'read', text: 'late secret', mtimeMs: 1, bytes: 11 },
+    }),
+  ).rejects.toMatchObject({ statusCode: 404 });
+  const stored = await row(services, task.id);
+  expect(stored?.status).toBe('failed');
+  expect(JSON.stringify(stored)).not.toContain('late secret');
+});
+
+it('keeps search output out of the stored result and gives the caller all of it', async () => {
+  const { services, profile, machine } = await setup();
+  const pending = services.remote.executeFiles(profile.id, machine.id, {
+    op: 'search',
+    path: '/srv',
+    pattern: 'x',
+    ignoreCase: false,
+    contextLines: 0,
+    output: 'content',
+    limit: 10,
+  });
+  const reply = { ok: true, op: 'search', matches: ['/srv/a.txt:1:hidden line'], truncated: false };
+  const task = await answer(services, machine, reply);
+  await expect(pending).resolves.toEqual(reply);
+  const stored = await row(services, task.id);
+  expect(JSON.stringify(stored?.result)).not.toContain('hidden line');
+  expect(stored?.result).toMatchObject({ files: { op: 'search', truncated: false } });
+});

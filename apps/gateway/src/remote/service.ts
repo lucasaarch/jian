@@ -58,8 +58,19 @@ const SECRET_ENV_CAPABILITY = 'shell-secret-env-v1';
 /** A page can take a while to load and settle; the browser's own limit is 45 seconds. */
 const BROWSER_TIMEOUT_MS = 60_000;
 
-/** What a files answer holds of a file's contents; the stored row keeps the rest. */
-const FILE_CONTENT_FIELDS = new Set(['text', 'base64', 'before', 'after', 'status', 'diff']);
+/**
+ * What a files answer holds of a file's contents, search output included; the stored row keeps
+ * the rest: op, sizes, and the paths and names in `entries` and `files`.
+ */
+const FILE_CONTENT_FIELDS = new Set([
+  'text',
+  'base64',
+  'matches',
+  'before',
+  'after',
+  'status',
+  'diff',
+]);
 
 /** Where a task's secret environment waits, encrypted, until its worker claims it. */
 const secretEnvKey = (taskId: string) => `remote-task-env:${taskId}`;
@@ -359,27 +370,52 @@ export class Remote {
     }
     this.requireCurrent(machine);
     const taskId = randomUUID();
-    const result = await this.waitForTask(
-      profileId,
-      machineId,
-      { kind: 'files', command: '', cwd: null, payload: op, timeoutMs },
-      signal,
-      taskId,
-    );
-    if (result.files && typeof result.files === 'object') {
-      const kept = Object.fromEntries(
-        Object.entries(result.files).filter(([key]) => !FILE_CONTENT_FIELDS.has(key)),
+    let returned = false;
+    try {
+      const result = await this.waitForTask(
+        profileId,
+        machineId,
+        { kind: 'files', command: '', cwd: null, payload: op, timeoutMs },
+        signal,
+        taskId,
       );
-      await this.store.db
-        .update(remoteTasks)
-        .set({ result: { ...result, files: kept } })
-        .where(eq(remoteTasks.id, taskId));
+      const answer = remoteFilesAnswerSchema.safeParse(result.files);
+      if (!answer.success || answer.data.op !== op.op) {
+        throw new GatewayError(502, 'The machine answered something else.');
+      }
+      returned = true;
+      return answer.data;
+    } finally {
+      // Whatever ends the call early, a late answer must not land in the row with its contents.
+      if (!returned) {
+        await this.store.db
+          .update(remoteTasks)
+          .set({ status: 'failed', updatedAt: new Date(this.clock()) })
+          .where(
+            and(eq(remoteTasks.id, taskId), inArray(remoteTasks.status, ['queued', 'running'])),
+          )
+          .catch(() => {});
+      }
+      await this.stripFileContents(taskId);
     }
-    const answer = remoteFilesAnswerSchema.safeParse(result.files);
-    if (!answer.success || answer.data.op !== op.op) {
-      throw new GatewayError(502, 'The machine answered something else.');
-    }
-    return answer.data;
+  }
+
+  /** Removes file contents from a files task's stored answer, keeping its op, sizes and names. */
+  private async stripFileContents(taskId: string) {
+    const [row] = await this.store.db
+      .select({ result: remoteTasks.result })
+      .from(remoteTasks)
+      .where(eq(remoteTasks.id, taskId))
+      .limit(1);
+    const result = row?.result as TaskResult | null | undefined;
+    if (!result?.files || typeof result.files !== 'object') return;
+    const kept = Object.fromEntries(
+      Object.entries(result.files).filter(([key]) => !FILE_CONTENT_FIELDS.has(key)),
+    );
+    await this.store.db
+      .update(remoteTasks)
+      .set({ result: { ...result, files: kept } })
+      .where(eq(remoteTasks.id, taskId));
   }
 
   async executeComputer(
