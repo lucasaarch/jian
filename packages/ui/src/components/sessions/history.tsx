@@ -82,27 +82,29 @@ function RunChangesSummary({
   if (!files.size) return null;
 
   return (
-    <section className="run-change-summary" aria-label="Files changed in this run">
-      <p className="run-change-summary-title">Files changed</p>
-      <ul>
-        {[...files.values()].map((step) => (
-          <li key={`${step.toolCallId}:${step.diff.path}`}>
-            <button
-              type="button"
-              aria-label={`${step.diff.path}, ${step.diff.additions} added, ${step.diff.deletions} removed`}
-              onClick={(event) => onOpen(step, event.currentTarget)}
-            >
-              <span className="run-change-summary-path">
-                <FilePath path={step.diff.path} />
-              </span>
-              <span className="run-change-summary-counts" aria-hidden="true">
-                <i>+{step.diff.additions}</i> <b>−{step.diff.deletions}</b>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <div className="chat-line theirs">
+      <section className="run-change-summary" aria-label="Files changed in this run">
+        <p className="run-change-summary-title">Files changed</p>
+        <ul>
+          {[...files.values()].map((step) => (
+            <li key={`${step.toolCallId}:${step.diff.path}`}>
+              <button
+                type="button"
+                aria-label={`${step.diff.path}, ${step.diff.additions} added, ${step.diff.deletions} removed`}
+                onClick={(event) => onOpen(step, event.currentTarget)}
+              >
+                <span className="run-change-summary-path">
+                  <FilePath path={step.diff.path} />
+                </span>
+                <span className="run-change-summary-counts" aria-hidden="true">
+                  <i>+{step.diff.additions}</i> <b>−{step.diff.deletions}</b>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
   );
 }
 
@@ -840,16 +842,17 @@ export function History({
                 return { startedAt: about[0]?.createdAt, finishedAt: about.at(-1)?.createdAt };
               };
               const live = isRunning && run?.id === message.runId;
-              const finalRunMessage = Boolean(
-                run &&
-                  !isRunning &&
-                  run.status !== 'waiting' &&
-                  answering === run.id &&
-                  answers(message) &&
-                  !messages
-                    .slice(lastIndex + 1)
-                    .some((item) => answers(item) && turnOf(item) === run.id),
-              );
+              // The run whose last line this is, once it settled: every finished run keeps its
+              // files under its last line, not only the latest, which a new message replaces.
+              const settledRun =
+                answering &&
+                answers(message) &&
+                (answering !== run?.id || (!isRunning && run.status !== 'waiting')) &&
+                !messages
+                  .slice(lastIndex + 1)
+                  .some((item) => answers(item) && turnOf(item) === answering)
+                  ? answering
+                  : undefined;
               const crew =
                 message.runId && !live && messages[lastIndex + 1]?.runId !== message.runId
                   ? (crewPlacement.tail.get(message.runId) ?? [])
@@ -986,20 +989,18 @@ export function History({
                       <CrewCards agents={crew} />
                     </div>
                   )}
-                  {finalRunMessage && run && (
-                    <div className="chat-line theirs">
-                      <RunChangesSummary
-                        steps={tools.get(run.id) ?? []}
-                        onOpen={(step, opener) =>
-                          useCrew.getState().showChanges({
-                            runId: run.id,
-                            toolCallId: step.toolCallId,
-                            path: step.diff.path,
-                            opener,
-                          })
-                        }
-                      />
-                    </div>
+                  {settledRun && (
+                    <RunChangesSummary
+                      steps={tools.get(settledRun) ?? []}
+                      onOpen={(step, opener) =>
+                        useCrew.getState().showChanges({
+                          runId: settledRun,
+                          toolCallId: step.toolCallId,
+                          path: step.diff.path,
+                          opener,
+                        })
+                      }
+                    />
                   )}
                 </Fragment>
               );

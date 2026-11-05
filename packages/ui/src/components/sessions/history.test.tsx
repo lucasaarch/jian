@@ -561,6 +561,65 @@ it('lays a turn out in the order it happened, its working line at the end', asyn
   }
 });
 
+it('keeps the files a finished run changed once the next run starts', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const next: Run = {
+    id: 'next-run',
+    profileId: 'profile',
+    sessionId: 'session',
+    requestKey: 'next',
+    input: 'Now the docs',
+    status: 'running',
+    createdAt: '2026-09-29T18:00:00Z',
+    updatedAt: '2026-09-29T18:00:01Z',
+  };
+  const message = (
+    id: string,
+    runId: string,
+    role: 'user' | 'assistant',
+    content: string,
+    at: string,
+  ) => ({ id, profileId: 'profile', sessionId: 'session', runId, role, content, createdAt: at });
+  const api = {
+    messages: async () => [
+      message('ask', 'done-run', 'user', 'Fix the bug', '2026-09-29T17:58:00Z'),
+      message('fixed', 'done-run', 'assistant', 'Fixed it.', '2026-09-29T17:59:00Z'),
+      message('again', next.id, 'user', 'Now the docs', '2026-09-29T18:00:00Z'),
+    ],
+    activities: async () => [next],
+    timeline: async () => [
+      {
+        runId: 'done-run',
+        steps: [
+          {
+            toolCallId: 'edit-1',
+            toolName: 'edit_file',
+            status: 'done' as const,
+            startedAt: '2026-09-29T17:58:10Z',
+            finishedAt: '2026-09-29T17:58:20Z',
+            diff: { path: 'src/a.ts', additions: 1, deletions: 0, hunks: [] },
+          },
+        ],
+      },
+    ],
+  };
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+
+  try {
+    await act(async () =>
+      root.render(<History api={api} profileId="profile" sessionId="session" initialRun={next} />),
+    );
+    const summary = element.querySelector('.run-change-summary');
+    expect(summary?.textContent).toContain('a.ts');
+    expect(element.querySelectorAll('.run-change-summary')).toHaveLength(1);
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+
 it('keeps the work done before a message sent mid-turn above it, live and once the turn ends', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const working: Run = {
