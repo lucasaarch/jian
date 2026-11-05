@@ -1437,19 +1437,26 @@ export class AgentRuntime {
             signal.throwIfAborted();
             // When compaction cannot shrink the window, drop oldest turns so the current request
             // can still run. Originals stay stored in the database and the panel.
+            // read_artifact is budgeted in: a shed result is read back with it.
+            const reader = guarded.read_artifact;
             const truncated = truncatePrompt({
               provider: config.provider,
               modelId: config.modelId,
               policy,
               instructions: codingInstructions,
               messages,
-              tools: activeTools,
+              tools: reader ? { ...activeTools, read_artifact: reader } : activeTools,
               currentStartIndex,
             });
             if (!truncated) throw error;
+            if (truncated.shedResults && reader && !activeNames.includes('read_artifact')) {
+              loadedTools.add('read_artifact');
+              activeNames.push('read_artifact');
+            }
             await this.services.lifecycle.checkpoint(profileId, runId, owner, {
               phase: 'context-truncated',
               droppedBlocks: truncated.droppedBlocks,
+              shedResults: truncated.shedResults,
               beforeTokens: before,
               afterTokens: truncated.tokens,
             });
