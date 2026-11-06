@@ -6,11 +6,11 @@ Every release of Jian, newest first.
 
 ## 1.6.0 — 2026-11-06
 
-Pair a phone with your gateway by scanning a QR code, and get a push when an agent replies or needs you. The gateway side is ready for the Jian phone app.
+Pair a phone with your gateway by scanning a QR code, and get a push when an agent replies or needs you.
 
 ### Phones
 
-* **Pair a phone:** Settings → Mobile shows a QR code with your gateway's address and a one-time pairing code that works for 5 minutes. Scanning it gives the phone a token of its own, so you never copy your owner credentials onto it. The Jian app for iOS and Android isn't released yet. The gateway side is ready for it.
+* **Pair a phone:** Settings → Mobile shows a QR code with your gateway's address and a one-time pairing code that works for 5 minutes. Scanning it gives the phone a token of its own, so you never copy your owner credentials onto it. The Jian app for iOS and Android isn't released yet, but the gateway side is ready for it.
 * **See and revoke your phones:** The page lists each paired phone with its platform and when it was last seen. Revoke asks first, and a revoked phone loses access at once.
 * **Needs `JIAN_PUBLIC_URL`:** The QR code carries your gateway's address, so pairing needs `JIAN_PUBLIC_URL` set. Without it, the page tells you to set it.
 * **Not on the desktop app's own gateway:** Mobile isn't offered there. It appears when the desktop app is connected to a server gateway.
@@ -18,10 +18,10 @@ Pair a phone with your gateway by scanning a QR code, and get a push when an age
 
 ### Push notifications
 
-* **When it sends:** Each paired phone with notifications on gets a push when an agent replies in a panel chat, asks for approval or asks a question, or when a run stops on an error. The title is the agent's name, pushes are grouped per conversation, and the app icon's badge counts the conversations waiting on you.
+* **When it sends:** Each paired phone with notifications on gets a push when an agent replies in a panel chat, asks for approval or asks a question, or when a run stops on an error. The title is the agent's name, pushes are grouped per conversation, and the app icon's badge shows how many panel chats are waiting for your answer.
 * **Show previews:** Turn it off for a phone and the text is replaced with "replied", "needs your approval", "asked you something" or "stopped on an error".
-* **Previews pass through Expo:** Pushes go through Expo's push service. Unlike the browser notifications, they are not end-to-end encrypted, so a preview passes through Expo, Apple and Google. That is what Show previews is for.
-* **No push where you are looking:** A phone that has that conversation open gets nothing. A phone that uninstalled the app stops being sent to.
+* **Previews pass through Expo:** Unlike browser notifications, pushes to a phone go through Expo's push service and are not end-to-end encrypted, so a preview passes through Expo, Apple and Google unless you turn Show previews off for that phone.
+* **No push where you are looking:** A phone that has that conversation open gets nothing, and no phone gets one about a chat you are reading in the panel. Jian stops sending to a phone that uninstalled the app.
 
 ### Upgrading
 
