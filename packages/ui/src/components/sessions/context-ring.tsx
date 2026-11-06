@@ -9,7 +9,7 @@ import type { SessionContext } from '../../lib/api';
 import { ago } from '../../lib/format';
 import { queries } from '../../lib/query/profile';
 
-/** Past this share of the room the ring warns; the gateway compacts at `compactAt`, near 85%. */
+/** Past this share of the room the ring warns; it turns red at `compactAt`. */
 const NEAR = 0.6;
 
 const counted = (value: number) =>

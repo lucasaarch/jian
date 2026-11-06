@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { JSONValue, ModelMessage, SystemModelMessage } from 'ai';
+import { XAI_BASE_URL } from '../providers/catalog.js';
 import { CLAUDE_CODE_IDENTITY } from '../providers/claude-subscription.js';
 
 /** OpenAI uses this key to keep unrelated profiles from sharing a prompt-cache partition. */
@@ -16,6 +17,24 @@ function openAiPromptCacheOptions(
     .slice(0, 48);
 
   return { openai: { promptCacheKey } };
+}
+
+/**
+ * xAI caches a repeated prefix only on the server that saw it, and routes by this header. Without
+ * it each step lands anywhere: Grok conversations read back about 1% of their input from cache.
+ */
+export function withConversationAffinity(
+  fetcher: typeof globalThis.fetch,
+  baseURL: string | undefined,
+  conversationId: string,
+): typeof globalThis.fetch {
+  if (baseURL !== XAI_BASE_URL) return fetcher;
+
+  return (input, init) => {
+    const headers = new Headers(init?.headers);
+    headers.set('x-grok-conv-id', conversationId);
+    return fetcher(input, { ...init, headers });
+  };
 }
 
 /** Merge provider options without replacing reasoning settings already selected for the turn. */

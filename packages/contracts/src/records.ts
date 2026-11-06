@@ -84,7 +84,7 @@ export const sessionSummarySchema = sessionRecordSchema.extend({
     .optional(),
 });
 
-export const messagePurposeSchema = z.enum(['answer', 'resume']);
+export const messagePurposeSchema = z.enum(['answer', 'resume', 'compact']);
 
 export const messageRecordSchema = z.strictObject({
   reactions: z.array(messageReactionSchema).max(2).optional(),
@@ -105,8 +105,8 @@ export const messageRecordSchema = z.strictObject({
   /**
    * A turn the gateway wrote around a pause, not something said in the conversation: `answer`
    * is the reply to a question or a decision, which the panel shows in its card instead, and
-   * `resume` is the note that tells the agent to carry on. The agent reads both as written; a
-   * reader of the conversation needs neither.
+   * `resume` is the note that tells the agent to carry on, and `compact` is Compact now. The
+   * agent reads all three as written; a reader of the conversation needs none of them.
    */
   purpose: messagePurposeSchema.optional(),
   createdAt: timestamp,

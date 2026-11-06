@@ -24,7 +24,6 @@ const isEffort = (value: string): value is ReasoningEffort =>
 /** Each activity in a few words. A chat's own model is chosen in the chat, and remembered there. */
 const said: Partial<Record<Role, string>> = {
   channel: 'Conversations on WhatsApp, Telegram and other channels, which have no model menu.',
-  compaction: 'Summing up a long conversation.',
   image: 'Drawing images.',
   audio: 'Understanding voice notes and audio files.',
   speech: 'Spoken replies.',

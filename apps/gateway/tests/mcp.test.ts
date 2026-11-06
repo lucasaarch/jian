@@ -399,6 +399,8 @@ it.each(['disconnect', 'isError', 'readOnlyError', 'validationError'])(
         name: 'Effect test',
         instructions: 'Help.',
         model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+        // Room enough that no step reaches compaction, which this test is not about.
+        contextPolicy: { inputTokens: 64000 },
       });
       await services.mcp.replace({ servers: [{ name: 'effects', url: `${origin}/mcp` }] });
 

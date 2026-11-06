@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { LEARNING_SESSION_CHANNEL } from '@jian/contracts';
 import { expect, it } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
+import { insertMessage } from '../src/sessions/repository.js';
 import { mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
@@ -113,4 +115,33 @@ it('tells the agent how full its context is when the turn starts', async () => {
   expect(messages.at(-2)?.content).toMatch(
     /Context: this turn starts at about [\d,]+ of 32,000 tokens \(\d+%\)/,
   );
+});
+
+it('reads each look back alone, without the looks back before it', async () => {
+  const f = await profileWith();
+  const learning = await f.services.sessions.learningSession(f.profile.id);
+  await insertMessage(f.services.store.db, {
+    id: randomUUID(),
+    profileId: f.profile.id,
+    sessionId: learning.id,
+    role: 'assistant',
+    content: `earlier-look-back ${'old review '.repeat(200)}`,
+    createdAt: '2026-10-30T09:00:00.000Z',
+  });
+  const run = await f.services.runs.submit(f.profile.id, learning.id, {
+    text: '[Learning] Looking back at a new turn',
+    requestKey: 'look-alone',
+  });
+  const prompts: string[] = [];
+  const model = mockModel({
+    doGenerate: async (options) => {
+      prompts.push(JSON.stringify(options.prompt));
+      return answer('Nothing to keep.');
+    },
+  });
+
+  await new AgentRuntime(f.services, () => model).execute(f.profile.id, run.id);
+
+  expect(prompts.at(-1)).toContain('Looking back at a new turn');
+  expect(prompts.join('')).not.toContain('earlier-look-back');
 });

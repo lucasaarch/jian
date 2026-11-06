@@ -147,7 +147,9 @@ const optionalRoleSelection = z
 export const modelDefaultsInputSchema = z.strictObject({
   conversation: roleSelection,
   channel: roleSelection,
-  compaction: roleSelection,
+  compaction: roleSelection.describe(
+    'Deprecated and unused: a conversation is compacted by its own model. Accepted so that older clients can still save.',
+  ),
   image: optionalRoleSelection,
   vision: optionalRoleSelection.describe(
     'Deprecated and unused: the conversation model reads images itself. Accepted so that older clients can still save.',

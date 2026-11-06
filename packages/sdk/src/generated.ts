@@ -8156,7 +8156,10 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         } | null;
-                        /** @default null */
+                        /**
+                         * @description Deprecated and unused: a conversation is compacted by its own model. Accepted so that older clients can still save.
+                         * @default null
+                         */
                         compaction: {
                             /** Format: uuid */
                             providerId: string;
@@ -8340,7 +8343,10 @@ export interface operations {
                         fast?: boolean;
                         voiceName?: string;
                     } | null;
-                    /** @default null */
+                    /**
+                     * @description Deprecated and unused: a conversation is compacted by its own model. Accepted so that older clients can still save.
+                     * @default null
+                     */
                     compaction?: {
                         /** Format: uuid */
                         providerId: string;
@@ -8437,7 +8443,10 @@ export interface operations {
                             fast?: boolean;
                             voiceName?: string;
                         } | null;
-                        /** @default null */
+                        /**
+                         * @description Deprecated and unused: a conversation is compacted by its own model. Accepted so that older clients can still save.
+                         * @default null
+                         */
                         compaction: {
                             /** Format: uuid */
                             providerId: string;
@@ -12470,7 +12479,7 @@ export interface operations {
                                 runId: string;
                             };
                             /** @enum {string} */
-                            purpose?: "answer" | "resume";
+                            purpose?: "answer" | "resume" | "compact";
                             /** Format: date-time */
                             createdAt: string;
                         }[];
@@ -12617,7 +12626,7 @@ export interface operations {
                                 runId: string;
                             };
                             /** @enum {string} */
-                            purpose?: "answer" | "resume";
+                            purpose?: "answer" | "resume" | "compact";
                             /** Format: date-time */
                             createdAt: string;
                         }[];
@@ -20117,7 +20126,7 @@ export interface operations {
                             runId: string;
                         };
                         /** @enum {string} */
-                        purpose?: "answer" | "resume";
+                        purpose?: "answer" | "resume" | "compact";
                         /** Format: date-time */
                         createdAt: string;
                     }[];
@@ -21229,7 +21238,7 @@ export interface operations {
                             runId: string;
                         };
                         /** @enum {string} */
-                        purpose?: "answer" | "resume";
+                        purpose?: "answer" | "resume" | "compact";
                         /** Format: date-time */
                         createdAt: string;
                     };

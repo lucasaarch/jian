@@ -876,6 +876,7 @@ export function History({
               // decided, which its card already shows.
               const pause =
                 message.purpose === 'resume' ||
+                message.purpose === 'compact' ||
                 (message.purpose === 'answer' && Boolean(asked?.question || asked?.approval));
               const thought =
                 answering && steps?.length ? (

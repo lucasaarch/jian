@@ -514,7 +514,7 @@ export const messages = pgTable(
     authorId: text('author_id'),
     authorName: text('author_name'),
     call: jsonb('call').$type<{ profileId: string; sessionId: string; runId: string }>(),
-    purpose: text('purpose').$type<'answer' | 'resume'>(),
+    purpose: text('purpose').$type<'answer' | 'resume' | 'compact'>(),
     createdAt,
     // The order they were written in. Two lines of one turn can share a millisecond, and an id
     // is random: without this they could swap places in the conversation.

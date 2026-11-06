@@ -42,7 +42,6 @@ import {
   takesAdaptiveThinking,
 } from '../providers/effort.js';
 import { resolveModel } from '../providers/models.js';
-import { readModelDefaults } from '../providers/repository.js';
 import type { Providers } from '../providers/service.js';
 import { providerSecret } from '../providers/service.js';
 import { mergeProviderOptions, speedProviderOptions } from '../providers/speed.js';
@@ -62,7 +61,13 @@ import type { WebSearch } from '../web/service.js';
 import type { Workspaces } from '../workspaces/service.js';
 import { offersWorktrees } from '../worktrees/offered.js';
 import { AskUserPause, buildRunQuestion } from './ask-user.js';
-import { type CacheTtl, cacheable, cacheableInstructions, withOpenAiPromptCache } from './cache.js';
+import {
+  type CacheTtl,
+  cacheable,
+  cacheableInstructions,
+  withConversationAffinity,
+  withOpenAiPromptCache,
+} from './cache.js';
 import { compactNote, isCompactCommand } from './compact-command.js';
 import { splitDiff } from './diff.js';
 import { githubGitTools } from './github-git.js';
@@ -118,9 +123,11 @@ const STALLED_AFTER_MS = 5 * 60_000;
 
 /**
  * The share of the model's input window the conversation's loaded skills may take, kept in its
- * instructions. Past it the least recently used goes, and is loaded again if needed.
+ * instructions, and the most they may take in tokens: a tenth of a 1M window let 100k of skills
+ * ride in every step. Past it the least recently used goes, and is loaded again if needed.
  */
 const PINNED_SHARE = 0.1;
+const PINNED_CEILING = 16_000;
 
 export type { RuntimeOptions } from './types.js';
 
@@ -143,6 +150,12 @@ export type RuntimeServices = ToolServices & {
  * What a look back may touch: its memories and its skills, nothing that reaches a person or
  * the machine. A review that could send a message would be a turn nobody asked for.
  */
+/**
+ * What a turn keeps when instructions and tool definitions alone overflow the window: enough to
+ * load back what it needs, one group at a time, and to read back what was put aside.
+ */
+const MINIMAL_TOOLS = ['load_tools', 'load_mcp_tools', 'load_skill', 'read_artifact'];
+
 const LEARNING_TOOLS = new Set([
   'read_memories',
   'remember',
@@ -209,7 +222,7 @@ export class AgentRuntime {
   /**
    * The instructions of the skills this conversation loaded, written for this run, to sit at the
    * end of its instructions. One the profile no longer has is forgotten; past a tenth of the
-   * model's window the least recently used go, and the catalog offers them again.
+   * model's window, or 16k tokens, the least recently used go, and the catalog offers them again.
    */
   private async pinnedSkills(
     run: Run,
@@ -229,7 +242,7 @@ export class AgentRuntime {
     let held = kept.flatMap((item) =>
       item.skill ? [{ ...item, tokens: count(item.skill.instructions) }] : [],
     );
-    const room = Math.floor(policy.inputTokens * PINNED_SHARE);
+    const room = Math.min(PINNED_CEILING, Math.floor(policy.inputTokens * PINNED_SHARE));
     const evicted: string[] = [];
     while (held.length && held.reduce((sum, item) => sum + item.tokens, 0) > room) {
       const oldest = held.reduce((a, b) => (a.load.usedAt <= b.load.usedAt ? a : b));
@@ -477,6 +490,10 @@ export class AgentRuntime {
     // agent, told what it came to, says so and does nothing else.
     let compactCommand = false;
     let compactedTo: { beforeTokens: number; afterTokens: number } | undefined;
+    let compactionFailure: string | undefined;
+    // Set once the fixed cost alone overflowed the window: the only tools offered until the
+    // agent loads more.
+    let minimal: Set<string> | undefined;
 
     const progress = new ProgressReporter((snapshot) =>
       this.services.lifecycle.progress(runId, owner, snapshot),
@@ -531,7 +548,12 @@ export class AgentRuntime {
           providerKey ?? (config.apiKeyEnv ? process.env[config.apiKeyEnv] : undefined),
         ) === 'subscription';
 
-      const model = await this.model(config, process.env, outbound.fetch, providerKey);
+      const model = await this.model(
+        config,
+        process.env,
+        withConversationAffinity(outbound.fetch, config.baseURL, run.sessionId),
+        providerKey,
+      );
       const session = await this.services.sessions.session(profileId, run.sessionId);
       const learning = session.channel === LEARNING_SESSION_CHANNEL;
       // The installation's servers, read now rather than frozen with the profile: one the owner
@@ -779,7 +801,7 @@ export class AgentRuntime {
         ),
         compact_context: tool({
           description:
-            'Request a context checkpoint before continuing a long task. The gateway summarizes older turns with the configured compaction model after this tool returns, preserving recent work and the latest request. Automatic compaction remains active.',
+            "Request a context checkpoint before continuing a long task. The gateway summarizes older turns with this conversation's own model after this tool returns, preserving recent work and the latest request. Automatic compaction remains active past 80% of the budget.",
           inputSchema: z.object({}),
           execute: async () => {
             compactionRequested = true;
@@ -1281,15 +1303,53 @@ export class AgentRuntime {
             );
           });
 
-          const activeNames = Object.keys(guarded).filter((name) =>
-            mcpToolNames.includes(name)
-              ? selectedMcpTools.has(name)
-              : !gated.has(name) || loadedTools.has(name),
-          );
-
-          const activeTools = Object.fromEntries(
-            activeNames.map((name) => [name, guarded[name]]),
-          ) as ToolSet;
+          const pick = () => {
+            const names = Object.keys(guarded).filter((name) =>
+              mcpToolNames.includes(name)
+                ? selectedMcpTools.has(name)
+                : (!gated.has(name) && (!minimal || minimal.has(name))) || loadedTools.has(name),
+            );
+            return {
+              names,
+              tools: Object.fromEntries(names.map((name) => [name, guarded[name]])) as ToolSet,
+            };
+          };
+          let { names: activeNames, tools: activeTools } = pick();
+          const fixedCost = (withCurrent = false) =>
+            promptTokens({
+              ...config,
+              instructions: codingInstructions,
+              // What a summary never shrinks: the request being answered now. Its tool work
+              // can be summarised, so it does not count here.
+              messages: withCurrent
+                ? messages.slice(currentStartIndex ?? 0, (currentStartIndex ?? 0) + 1)
+                : [],
+              tools: activeTools,
+            });
+          // A summary cannot shrink the system instructions or tool definitions, so a window
+          // they already fill (a smaller model after a larger one) is freed here instead: first
+          // what was loaded, which one load call brings back, then all but the loaders.
+          const fixedBefore = fixedCost(true);
+          if (fixedBefore > policy.inputTokens - policy.outputTokens) {
+            const dropped = [...loadedTools, ...selectedMcpTools];
+            const scope = { profileId, sessionId: run.sessionId };
+            await dropLoads(this.services.store.db, scope, 'tool', [...loadedTools]);
+            await dropLoads(this.services.store.db, scope, 'mcp', [...selectedMcpTools]);
+            loadedTools.clear();
+            selectedMcpTools.clear();
+            ({ names: activeNames, tools: activeTools } = pick());
+            if (fixedCost(true) > policy.inputTokens - policy.outputTokens) {
+              minimal = new Set(MINIMAL_TOOLS);
+              dropped.push(...activeNames.filter((name) => !minimal?.has(name)));
+              ({ names: activeNames, tools: activeTools } = pick());
+            }
+            await this.services.lifecycle.checkpoint(profileId, runId, owner, {
+              phase: 'context-truncated',
+              droppedTools: dropped,
+              beforeTokens: fixedBefore,
+              afterTokens: fixedCost(true),
+            });
+          }
 
           const before = promptTokens({
             ...config,
@@ -1297,16 +1357,8 @@ export class AgentRuntime {
             messages,
             tools: activeTools,
           });
-          // A summary cannot shrink the system instructions or tool definitions.
-          if (
-            promptTokens({
-              ...config,
-              instructions: codingInstructions,
-              messages: [],
-              tools: activeTools,
-            }) >
-            policy.inputTokens - policy.outputTokens
-          ) {
+          // Still too large with only the loaders: say so, naming the parts.
+          if (fixedCost() > policy.inputTokens - policy.outputTokens) {
             fitPrompt({
               ...config,
               policy,
@@ -1325,50 +1377,22 @@ export class AgentRuntime {
             lastCompactionAttempt = stepNumber;
             try {
               const session = await this.services.sessions.session(profileId, run.sessionId);
-              const selection = (await readModelDefaults(this.services.store.db, run.createdAt))
-                .compaction;
-              const chosen =
-                selection && this.services.providers
-                  ? await this.services.providers.selectedModel(selection, this.services.store.db)
-                  : undefined;
-              const summaryConfig: ModelConfig = chosen?.config ?? config;
-              let summaryKey = providerKey;
-              if (chosen) {
-                summaryKey =
-                  summaryConfig.provider === 'openai-codex' && summaryConfig.providerId
-                    ? await this.options.codexLogin?.accessToken(summaryConfig.providerId)
-                    : summaryConfig.providerId
-                      ? await this.options.gatewayVault?.read(
-                          providerSecret(summaryConfig.providerId),
-                        )
-                      : summaryConfig.apiKeyEnv
-                        ? process.env[summaryConfig.apiKeyEnv]
-                        : undefined;
-                if (summaryKey) secrets.add(summaryKey);
-              }
-              const summarySubscription =
-                summaryConfig.provider === 'anthropic' &&
-                anthropicCredential(
-                  summaryConfig.credential,
-                  summaryConfig.apiKeyEnv,
-                  summaryKey,
-                ) === 'subscription';
+              // The conversation's own model. A separately chosen one can be the provider whose
+              // quota just ran out, which is how a full window used to report nothing to compact.
               const compacted = await compactPrompt({
-                model: chosen
-                  ? await this.model(summaryConfig, process.env, outbound.fetch, summaryKey)
-                  : model,
-                ...summaryConfig,
+                model,
+                ...config,
                 messages,
                 currentStartIndex,
                 includeCurrent: before > policy.inputTokens - policy.outputTokens,
                 previous: session.summary,
                 providerOptions: reasoningProviderOptions(
-                  summaryConfig,
-                  Math.min(2048, (chosen?.policy ?? policy).outputTokens),
+                  config,
+                  Math.min(2048, policy.outputTokens),
                 ),
-                policy: chosen?.policy ?? policy,
+                policy,
                 signal,
-                dress: summarySubscription ? withClaudeCodeIdentity : undefined,
+                dress: subscription ? withClaudeCodeIdentity : undefined,
                 onUsage: async (usage, tokens, text) => {
                   await account(usage, tokens, text, 0);
                 },
@@ -1407,9 +1431,10 @@ export class AgentRuntime {
               }
             } catch (error) {
               signal.throwIfAborted();
+              compactionFailure = reason(error, secrets);
               await this.services.lifecycle.checkpoint(profileId, runId, owner, {
                 phase: 'compaction-failed',
-                reason: reason(error, secrets),
+                reason: compactionFailure,
               });
             }
           }
@@ -1418,7 +1443,9 @@ export class AgentRuntime {
             const at = messages.findLastIndex((message) => message.role === 'user');
             if (at >= 0) {
               messages = messages.map((message, index) =>
-                index === at ? { role: 'user', content: compactNote(compactedTo) } : message,
+                index === at
+                  ? { role: 'user', content: compactNote(compactedTo, compactionFailure) }
+                  : message,
               ) as ModelMessage[];
             }
           }

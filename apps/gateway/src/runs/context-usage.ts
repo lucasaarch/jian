@@ -1,6 +1,6 @@
 import type { ContextPolicy, ModelConfig, SessionContext } from '@jian/contracts';
 import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
-import { COMPACT_AT } from '../context/compaction.js';
+import { compactionThreshold } from '../context/compaction.js';
 import type { Queryable } from '../storage/database.js';
 import { checkpoints, runs } from '../storage/schema.js';
 
@@ -71,7 +71,7 @@ export async function sessionContext(
         : null,
     limit,
     window: policy.inputTokens,
-    compactAt: Math.round(limit * COMPACT_AT),
+    compactAt: compactionThreshold(limit),
     measuredAt: (compactedLast ? compaction.at : step?.at)?.toISOString() ?? null,
     model: { provider: model.provider, modelId: model.modelId },
     totals: {

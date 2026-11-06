@@ -699,7 +699,8 @@ it.each([31700, 32000])(
         credential: 'subscription',
         apiKeyEnv: 'ANTHROPIC_API_TOKEN',
       },
-      contextPolicy: { maxRunTokens: 32000, maxSteps: 5 },
+      // Room enough that the 80% threshold does not start a compaction between the calls.
+      contextPolicy: { inputTokens: 64000, maxRunTokens: 32000, maxSteps: 5 },
     });
     const session = await services.sessions.createSession(profile.id, { title: 'Budget' });
     const run = await services.runs.submit(profile.id, session.id, {
@@ -955,93 +956,95 @@ it.each([false, true])(
   },
 );
 
-it.each([false])('uses the separately selected compaction model', async (subscription) => {
-  const { services, profile, session, run } = await fixture(
-    {
-      inputTokens: 32000,
-      historyTokens: 1000,
-      toolResultTokens: 8000,
-      maxSteps: 10,
-    },
-    subscription,
-  );
-  await services.memories.remember(
-    profile.id,
-    {
-      key: 'unrelated',
-      content: `receipt-123 ${'large result '.repeat(280)}`,
-      expectedVersion: 0,
-    },
-    session.id,
-  );
-  const provider = await services.providers.createProvider({
-    name: 'Summary',
-    kind: 'google',
-    secret: 'synthetic-summary-key-1234567890',
-  });
-  await services.providers.setModelDefaults({
-    compaction: { providerId: provider.id, modelId: 'summary-model' },
-  });
-  let summaryCalls = 0;
-  let step = 0;
-  let afterCheckpoint = false;
-  const model = mockModel({
-    doGenerate: async (options) => {
-      const prompt = JSON.stringify(options.prompt);
-      if (!options.tools?.length) {
-        if (
-          subscription &&
-          !prompt.includes("You are Claude Code, Anthropic's official CLI for Claude.")
-        ) {
-          throw new Error('Missing subscription system identity');
+it.each([false])(
+  'compacts with the conversation model even when an old compaction model is saved',
+  async (subscription) => {
+    const { services, profile, session, run } = await fixture(
+      {
+        inputTokens: 32000,
+        historyTokens: 1000,
+        toolResultTokens: 8000,
+        maxSteps: 10,
+      },
+      subscription,
+    );
+    await services.memories.remember(
+      profile.id,
+      {
+        key: 'unrelated',
+        content: `receipt-123 ${'large result '.repeat(280)}`,
+        expectedVersion: 0,
+      },
+      session.id,
+    );
+    const provider = await services.providers.createProvider({
+      name: 'Summary',
+      kind: 'google',
+      secret: 'synthetic-summary-key-1234567890',
+    });
+    await services.providers.setModelDefaults({
+      compaction: { providerId: provider.id, modelId: 'summary-model' },
+    });
+    let summaryCalls = 0;
+    let step = 0;
+    let afterCheckpoint = false;
+    const model = mockModel({
+      doGenerate: async (options) => {
+        const prompt = JSON.stringify(options.prompt);
+        if (!options.tools?.length) {
+          if (
+            subscription &&
+            !prompt.includes("You are Claude Code, Anthropic's official CLI for Claude.")
+          ) {
+            throw new Error('Missing subscription system identity');
+          }
+          expect(prompt).toContain('receipt-123');
+          return answer('Checkpoint: receipt-123 was inspected; finish the deployment report.');
         }
-        expect(prompt).toContain('receipt-123');
-        return answer('Checkpoint: receipt-123 was inspected; finish the deployment report.');
-      }
-      if (prompt.includes('Checkpoint: receipt-123')) {
-        afterCheckpoint = true;
-        expect(prompt).toContain('Remember the deployment time');
-        return answer('Report complete using receipt-123.');
-      }
-      return {
-        content: [
-          {
-            type: 'tool-call',
-            toolCallId: `read-${step}`,
-            toolName:
-              ['load_tools', 'read_memories', 'compact_context'][step++] ?? 'compact_context',
-            input: step === 1 ? JSON.stringify({ groups: ['tasks'] }) : '{}',
-          },
-        ],
-        finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
-        usage,
-        warnings: [],
-      };
-    },
-  });
-  await new AgentRuntime(
-    services,
-    (config, _env, _fetch, key) => {
-      if (config.modelId === 'summary-model') {
-        expect(key).toBe('synthetic-summary-key-1234567890');
-        summaryCalls++;
-      }
-      return model;
-    },
-    { gatewayVault: services.gatewayVault },
-  ).execute(profile.id, run.id);
-  expect(summaryCalls).toBeGreaterThan(0);
-  const finished = await services.runs.run(profile.id, run.id);
-  expect(afterCheckpoint).toBe(true);
-  expect(finished.status).toBe('completed');
-  expect(finished.commentary ?? []).not.toContain(
-    'Summarising what we said earlier so I can carry on.',
-  );
-  expect((await services.sessions.session(profile.id, session.id)).summary).toContain(
-    'receipt-123',
-  );
-  expect(finished.usage?.inputTokens).toBe((step + 2) * 10);
-});
+        if (prompt.includes('Checkpoint: receipt-123')) {
+          afterCheckpoint = true;
+          expect(prompt).toContain('Remember the deployment time');
+          return answer('Report complete using receipt-123.');
+        }
+        return {
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: `read-${step}`,
+              toolName:
+                ['load_tools', 'read_memories', 'compact_context'][step++] ?? 'compact_context',
+              input: step === 1 ? JSON.stringify({ groups: ['tasks'] }) : '{}',
+            },
+          ],
+          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+          usage,
+          warnings: [],
+        };
+      },
+    });
+    await new AgentRuntime(
+      services,
+      (config, _env, _fetch, key) => {
+        // A provider whose quota ran out would otherwise be asked to compact the conversation.
+        if (config.modelId === 'summary-model') summaryCalls++;
+        void key;
+        return model;
+      },
+      { gatewayVault: services.gatewayVault },
+    ).execute(profile.id, run.id);
+    expect(summaryCalls).toBe(0);
+    const finished = await services.runs.run(profile.id, run.id);
+    expect(afterCheckpoint).toBe(true);
+    expect(finished.status).toBe('completed');
+    expect(finished.commentary ?? []).not.toContain(
+      'Summarising what we said earlier so I can carry on.',
+    );
+    expect((await services.sessions.session(profile.id, session.id)).summary).toContain(
+      'receipt-123',
+    );
+    expect(finished.usage?.inputTokens).toBe((step + 2) * 10);
+  },
+);
 
 it('reports a safe context-budget error when required prompt content cannot fit', async () => {
   const services = await testServices();
@@ -1050,7 +1053,7 @@ it('reports a safe context-budget error when required prompt content cannot fit'
     ...input,
     instructions: 'x'.repeat(8000),
     // The smallest legal budget that cannot hold the tool definitions and the prompt.
-    contextPolicy: { inputTokens: 16000, outputTokens: 15000 },
+    contextPolicy: { inputTokens: 16000, outputTokens: 3000 },
   });
 
   const session = await services.sessions.createSession(profile.id, { title: 'Budget' });
@@ -1077,6 +1080,38 @@ it('reports a safe context-budget error when required prompt content cannot fit'
   expect(finished.error).toContain('Context budget exceeded');
   expect(finished.error).toContain('Tool definitions cost');
   expect(finished.error).not.toContain('credential');
+});
+
+it('lets go of tools instead of failing when they alone overflow a smaller window', async () => {
+  const services = await testServices();
+  // As after switching to a model with a smaller window: the tools no longer fit beside the
+  // instructions, and a summary cannot shrink either.
+  const profile = await services.profiles.createProfile({
+    ...input,
+    contextPolicy: { inputTokens: 16000, outputTokens: 3000 },
+  });
+  const session = await services.sessions.createSession(profile.id, { title: 'Smaller' });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Hi',
+    requestKey: 'smaller-window',
+  });
+  const offered: string[][] = [];
+  const model = mockModel({
+    doGenerate: async (options) => {
+      offered.push((options.tools ?? []).map((item) => item.name));
+      return answer('Answered with fewer tools.');
+    },
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const finished = await services.runs.run(profile.id, run.id);
+  expect(finished.error).toBeUndefined();
+  expect(finished.status).toBe('completed');
+  // The answer is the call with tools; one without is a summary.
+  const answered = offered.findLast((names) => names.length);
+  expect(answered).toContain('load_tools');
+  expect(answered?.length).toBeLessThanOrEqual(4);
 });
 
 it('truncates older turns when compaction cannot free the context budget', async () => {
@@ -1473,7 +1508,11 @@ it('answers with what it has when the agent exhausts its tool budget', async () 
 
 it('writes its own skill through the loop without accepting new capability grants', async () => {
   const services = await testServices();
-  const profile = await services.profiles.createProfile(input);
+  // Room enough that the 80% threshold does not start a compaction between the calls.
+  const profile = await services.profiles.createProfile({
+    ...input,
+    contextPolicy: { inputTokens: 64000 },
+  });
   const session = await services.sessions.createSession(profile.id, { title: 'Skills' });
 
   const run = await services.runs.submit(profile.id, session.id, {
