@@ -2,21 +2,38 @@ import {
   type SimpleIcon,
   siAirtable,
   siAtlassian,
+  siBuildkite,
+  siCaldotcom,
+  siCalendly,
   siClickup,
   siCloudflare,
+  siDropbox,
+  siExpo,
+  siGitlab,
+  siHostinger,
   siHuggingface,
   siIntercom,
   siLinear,
+  siMake,
+  siMercadopago,
+  siMiro,
+  siMixpanel,
   siNeon,
   siNetlify,
   siNotion,
   siPaypal,
   siPosthog,
+  siPostman,
   siPrisma,
+  siRailway,
+  siResend,
+  siSanity,
   siSentry,
   siSquare,
   siStripe,
   siSupabase,
+  siTodoist,
+  siTrello,
   siVercel,
   siWebflow,
   siWix,
@@ -48,6 +65,11 @@ export type McpApp = {
   description: string;
   category: Category;
   url: string;
+  /**
+   * Where the app's server used to be. A server saved there before the app moved is still this
+   * app, or it would drop out of its card and back onto the MCP servers page as a stranger.
+   */
+  formerUrls?: string[];
   icon: AppMark;
 };
 
@@ -56,6 +78,11 @@ export type McpApp = {
  * here from an openly licensed set, with its own `viewBox` when it is not the 24 unit square.
  */
 type AppMark = Pick<SimpleIcon, 'path'> & { viewBox?: string };
+
+/** AWS, from Boxicons Brands (MIT): Simple Icons no longer carries it. */
+const awsMark: AppMark = {
+  path: 'M18.75 11.35a4.32 4.32 0 0 1-.79-.08 3.9 3.9 0 0 1-.73-.23l-.17-.04h-.12q-.15 0-.15.21v.33a.43.43 0 0 0 0 .19.5.5 0 0 0 .21.19 3 3 0 0 0 .76.26 4.38 4.38 0 0 0 1 .12 3 3 0 0 0 1-.14 1.94 1.94 0 0 0 .73-.37 1.81 1.81 0 0 0 .49-.58 1.79 1.79 0 0 0 .17-.78 1.54 1.54 0 0 0-.3-.93 2.15 2.15 0 0 0-1-.64l-.95-.3a2 2 0 0 1-.73-.36.65.65 0 0 1-.2-.47.66.66 0 0 1 .31-.6 1.82 1.82 0 0 1 .89-.18 2.89 2.89 0 0 1 1.27.26.79.79 0 0 0 .26.08c.1 0 .15-.08.15-.22v-.36a.38.38 0 0 0-.06-.22.56.56 0 0 0-.2-.16 1.55 1.55 0 0 0-.28-.12 3.44 3.44 0 0 0-.38-.11l-.44-.1A3.4 3.4 0 0 0 19 6a2.82 2.82 0 0 0-.83.11 2.19 2.19 0 0 0-.7.35A1.61 1.61 0 0 0 17 7a1.5 1.5 0 0 0-.18.74 1.6 1.6 0 0 0 .33 1 2.08 2.08 0 0 0 1.06.68l1 .3a1.58 1.58 0 0 1 .67.34.66.66 0 0 1 .18.47.72.72 0 0 1-.35.63 1.83 1.83 0 0 1-.96.19zM12.94 6.5a.48.48 0 0 0-.13-.26.37.37 0 0 0-.26-.07H12a.43.43 0 0 0-.26.07.42.42 0 0 0-.13.26l-1 4.4-1.14-4.4a.48.48 0 0 0-.14-.26s-.13-.07-.26-.07h-.65c-.11 0-.16.06-.16.17a1.22 1.22 0 0 0 .06.27l1.56 5.14A.61.61 0 0 0 10 12a.45.45 0 0 0 .26.06h.57a.49.49 0 0 0 .27-.06.57.57 0 0 0 .12-.27l1-4.28 1 4.29a.42.42 0 0 0 .12.26.4.4 0 0 0 .27.07h.57a.41.41 0 0 0 .25-.07.44.44 0 0 0 .14-.26l1.61-5.14a.73.73 0 0 0 0-.16.52.52 0 0 0 0-.11.15.15 0 0 0-.17-.17h-.62a.45.45 0 0 0-.26.07.68.68 0 0 0-.13.26L14 11zM5.77 8.63a5.92 5.92 0 0 0-.71-.05 2.42 2.42 0 0 0-1.63.52 1.72 1.72 0 0 0-.6 1.37 1.7 1.7 0 0 0 .49 1.28 1.82 1.82 0 0 0 1.33.48 2.48 2.48 0 0 0 2-.92 3.5 3.5 0 0 0 .2.39 2.34 2.34 0 0 0 .24.31.26.26 0 0 0 .37 0l.42-.28a.28.28 0 0 0 .13-.2.27.27 0 0 0 0-.16 3.63 3.63 0 0 1-.21-.47 2 2 0 0 1-.07-.6V8.19a2.2 2.2 0 0 0-.55-1.64A2.42 2.42 0 0 0 5.33 6a3.9 3.9 0 0 0-1 .13 3.9 3.9 0 0 0-.84.3.47.47 0 0 0-.18.14.37.37 0 0 0 0 .23v.33c0 .14 0 .2.14.2a.26.26 0 0 0 .11 0l.23-.08A4.32 4.32 0 0 1 4.42 7a3 3 0 0 1 .72-.09 1.5 1.5 0 0 1 1.08.31 1.46 1.46 0 0 1 .31 1.06v.49zm.78.9v.27a2.36 2.36 0 0 1-.07.58 1.06 1.06 0 0 1-.23.43 1.38 1.38 0 0 1-.63.42 2.12 2.12 0 0 1-.68.12.94.94 0 0 1-.7-.24.92.92 0 0 1-.24-.71.92.92 0 0 1 .33-.76 1.52 1.52 0 0 1 1-.27h.62a5.67 5.67 0 0 1 .6.16zM19.76 15a19.68 19.68 0 0 1-7.55 1.54 20 20 0 0 1-9.9-2.62c-.24-.15-.43.1-.22.29A14.68 14.68 0 0 0 12 18a14.4 14.4 0 0 0 8.1-2.47c.34-.31.03-.72-.34-.53z M18.38 14.06c-.19.14-.16.33.05.3.71-.09 2.28-.27 2.56.09s-.31 1.83-.58 2.49c-.08.2.1.28.28.13a3.9 3.9 0 0 0 1.23-3.34 3.94 3.94 0 0 0-3.54.33z',
+};
 
 /** Canva, from Boxicons Brands (MIT). */
 const canvaMark: AppMark = {
@@ -86,10 +113,27 @@ export const MCP_APPS: McpApp[] = [
   {
     id: 'atlassian',
     name: 'Atlassian',
-    description: 'Jira issues and Confluence pages.',
+    description: 'Jira, Confluence, Compass and Bitbucket in your Atlassian organization.',
     category: 'projects',
-    url: 'https://mcp.atlassian.com/v1/mcp',
+    url: 'https://mcp.atlassian.com/v2/mcp',
+    formerUrls: ['https://mcp.atlassian.com/v1/mcp'],
     icon: siAtlassian,
+  },
+  {
+    id: 'trello',
+    name: 'Trello',
+    description: 'Boards, lists and cards in your Trello workspaces.',
+    category: 'projects',
+    url: 'https://mcp.trello.com/v1',
+    icon: siTrello,
+  },
+  {
+    id: 'todoist',
+    name: 'Todoist',
+    description: 'Tasks, projects and due dates in Todoist.',
+    category: 'projects',
+    url: 'https://ai.todoist.net/mcp',
+    icon: siTodoist,
   },
   {
     id: 'clickup',
@@ -132,6 +176,38 @@ export const MCP_APPS: McpApp[] = [
     icon: siZapier,
   },
   {
+    id: 'make',
+    name: 'Make',
+    description: 'Scenarios in your Make organization, run as tools.',
+    category: 'productivity',
+    url: 'https://mcp.make.com',
+    icon: siMake,
+  },
+  {
+    id: 'calendly',
+    name: 'Calendly',
+    description: 'Event types, scheduled meetings and availability in Calendly.',
+    category: 'productivity',
+    url: 'https://mcp.calendly.com',
+    icon: siCalendly,
+  },
+  {
+    id: 'cal_com',
+    name: 'Cal.com',
+    description: 'Bookings, event types and availability on Cal.com.',
+    category: 'productivity',
+    url: 'https://mcp.cal.com/mcp',
+    icon: siCaldotcom,
+  },
+  {
+    id: 'dropbox',
+    name: 'Dropbox',
+    description: 'Files and folders in your Dropbox.',
+    category: 'productivity',
+    url: 'https://mcp.dropbox.com/mcp',
+    icon: siDropbox,
+  },
+  {
     id: 'canva',
     name: 'Canva',
     description: 'Find, create and export designs in Canva.',
@@ -156,6 +232,22 @@ export const MCP_APPS: McpApp[] = [
     icon: siWix,
   },
   {
+    id: 'miro',
+    name: 'Miro',
+    description: 'Boards, their items and diagrams in Miro.',
+    category: 'design',
+    url: 'https://mcp.miro.com/',
+    icon: siMiro,
+  },
+  {
+    id: 'sanity',
+    name: 'Sanity',
+    description: 'Documents, schemas and datasets in your Sanity projects.',
+    category: 'design',
+    url: 'https://mcp.sanity.io',
+    icon: siSanity,
+  },
+  {
     id: 'stripe',
     name: 'Stripe',
     description: 'Customers, payments, invoices and subscriptions on Stripe.',
@@ -178,6 +270,14 @@ export const MCP_APPS: McpApp[] = [
     category: 'payments',
     url: 'https://mcp.squareup.com/mcp',
     icon: siSquare,
+  },
+  {
+    id: 'mercado_pago',
+    name: 'Mercado Pago',
+    description: 'Mercado Pago applications and credentials, webhooks, test users and the docs.',
+    category: 'payments',
+    url: 'https://mcp.mercadopago.com/mcp',
+    icon: siMercadopago,
   },
   {
     id: 'intercom',
@@ -267,15 +367,93 @@ export const MCP_APPS: McpApp[] = [
     url: 'https://huggingface.co/mcp',
     icon: siHuggingface,
   },
+  {
+    id: 'gitlab',
+    name: 'GitLab',
+    description: 'Projects, issues, merge requests and pipelines on GitLab.com.',
+    category: 'development',
+    url: 'https://gitlab.com/api/v4/mcp',
+    icon: siGitlab,
+  },
+  {
+    id: 'aws',
+    name: 'AWS',
+    description: 'AWS services through their APIs, as your IAM permissions allow, and the docs.',
+    category: 'development',
+    // The query has AWS answer a call with no token by asking for sign-in, which is what starts
+    // it here; without it the first call is answered and sign-in never begins.
+    url: 'https://aws-mcp.us-east-1.api.aws/mcp?oauth=initialize',
+    icon: awsMark,
+  },
+  {
+    id: 'railway',
+    name: 'Railway',
+    description: 'Projects, services, deployments and logs on Railway.',
+    category: 'development',
+    url: 'https://mcp.railway.com',
+    icon: siRailway,
+  },
+  {
+    id: 'hostinger',
+    name: 'Hostinger',
+    description: 'VPS, domains, DNS, hosting, billing and email marketing at Hostinger.',
+    category: 'development',
+    url: 'https://mcp.hostinger.com',
+    icon: siHostinger,
+  },
+  {
+    id: 'expo',
+    name: 'Expo',
+    description: 'EAS builds and workflows, store crashes and reviews, and the Expo docs.',
+    category: 'development',
+    url: 'https://mcp.expo.dev/mcp',
+    icon: siExpo,
+  },
+  {
+    id: 'resend',
+    name: 'Resend',
+    description: 'Emails, domains, audiences and broadcasts in Resend.',
+    category: 'development',
+    url: 'https://mcp.resend.com/mcp',
+    icon: siResend,
+  },
+  {
+    id: 'postman',
+    name: 'Postman',
+    description: 'Workspaces, collections, environments and APIs in Postman.',
+    category: 'development',
+    url: 'https://mcp.postman.com/mcp',
+    icon: siPostman,
+  },
+  {
+    id: 'buildkite',
+    name: 'Buildkite',
+    description: 'Pipelines, builds and job logs on Buildkite.',
+    category: 'development',
+    url: 'https://mcp.buildkite.com/mcp',
+    icon: siBuildkite,
+  },
+  {
+    id: 'mixpanel',
+    name: 'Mixpanel',
+    description: 'Events, reports and funnels in your Mixpanel projects.',
+    category: 'development',
+    url: 'https://mcp.mixpanel.com/mcp',
+    icon: siMixpanel,
+  },
 ];
 
 /** The same address however it was typed: a trailing slash makes no other server. */
 const same = (a: string | undefined, b: string) =>
   Boolean(a) && a?.replace(/\/+$/, '') === b.replace(/\/+$/, '');
 
+/** Whether an address is this app's, now or before it moved. */
+const isAt = (app: McpApp, url: string | undefined) =>
+  [app.url, ...(app.formerUrls ?? [])].some((known) => same(url, known));
+
 /** The saved server that is this app, by its address: a server the owner added by hand counts. */
 export function serverOf<T extends { url?: string | undefined }>(app: McpApp, servers: T[]) {
-  return servers.find((server) => same(server.url, app.url));
+  return servers.find((server) => isAt(app, server.url));
 }
 
 /**
@@ -283,7 +461,7 @@ export function serverOf<T extends { url?: string | undefined }>(app: McpApp, se
  * servers page leaves it out.
  */
 export const isAppServer = (server: { url?: string | undefined }) =>
-  MCP_APPS.some((app) => same(server.url, app.url));
+  MCP_APPS.some((app) => isAt(app, server.url));
 
 /** The app's own name, or the first free one after it, so Connect never replaces a server. */
 export function freeName(app: McpApp, taken: string[]) {

@@ -145,6 +145,25 @@ it("counts a server added by hand at an app's address as that app", async () => 
   await vi.waitFor(() => expect(host.textContent).toContain('Connected'));
 });
 
+it('keeps a server saved at an address the app has since left as that app', async () => {
+  read.githubIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  read.xIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  read.mcpServers.mockResolvedValue([
+    {
+      name: 'atlassian',
+      transport: 'http',
+      url: 'https://mcp.atlassian.com/v1/mcp',
+      auth: 'oauth',
+    },
+  ]);
+
+  await show();
+
+  // Connected before Atlassian moved to v2: still its card, not a stranger under MCP servers.
+  await vi.waitFor(() => expect(button('Remove Atlassian')).toBeDefined());
+  expect(button('Connect Atlassian')).toBeUndefined();
+});
+
 it('shows a card only for each app the gateway offers', async () => {
   read.githubIntegration.mockResolvedValue({ configured: false, accounts: [] });
   read.xIntegration.mockResolvedValue({ configured: false, callbackUrl: xCallback, accounts: [] });
