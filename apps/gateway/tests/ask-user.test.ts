@@ -8,6 +8,8 @@ const input = {
   name: 'Atlas',
   instructions: 'Help.',
   model: { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  // Room enough that no turn here reaches compaction, which these tests are not about.
+  contextPolicy: { inputTokens: 64000 },
 };
 
 const usage = {
