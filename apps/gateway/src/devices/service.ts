@@ -142,7 +142,10 @@ export class Devices {
     if (revoked.length === 0) throw new GatewayError(404, 'Device not found');
   }
 
-  /** The device id behind an `Authorization` header value, or undefined. Never throws. */
+  /**
+   * The device id behind an `Authorization` header value. Undefined for a malformed, unknown or
+   * revoked credential; a database error still throws.
+   */
   async authenticate(bearer: string): Promise<string | undefined> {
     const token = BEARER.exec(bearer)?.[1];
     if (!token) return undefined;

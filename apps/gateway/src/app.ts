@@ -111,10 +111,10 @@ export function createApp(
       directives: { mediaSrc: ["'self'", 'data:'], frameSrc: ["'self'", 'blob:'] },
     },
   });
-  // The limit guards the doors anyone can knock on. The owner and a paired phone are exempt: the panel reaches the
-  // gateway through its own web server, so every tab shares one address, and a chat that keeps
-  // its runs, timeline and agents current would otherwise lock its own owner out. A phone does
-  // the same, and phones behind one NAT share a key.
+  // The limit guards the doors anyone can knock on. The owner and a paired phone are exempt:
+  // the panel reaches the gateway through its own web server, so every tab shares one address,
+  // and a chat that keeps its runs, timeline and agents current would otherwise lock its own
+  // owner out. A phone does the same, and phones behind one NAT share a key.
   void app.register(rateLimit, {
     max: 120,
     timeWindow: '1 minute',

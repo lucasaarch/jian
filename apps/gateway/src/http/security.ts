@@ -4,13 +4,17 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { GatewayError } from '../core/errors.js';
 import type { Devices } from '../devices/service.js';
+import { DEVICE_TOKEN_PREFIX } from '../devices/tokens.js';
 import { authorizesPanel } from '../security/panel-session.js';
 
 /**
- * The host token is the only API credential: it opens the whole installation. Unknown routes
- * require it, public routes carry their own proof, and webhook adapters authenticate the
- * secret of their own channel binding.
+ * Three credentials open the whole installation with the owner's access: the host token, the
+ * panel's signed cookie traded for it, and the token of each paired phone. Rotating the host token
+ * ends every cookie; revoking a phone ends its token alone. Unknown routes require one of them,
+ * public routes carry their own proof, and webhook adapters authenticate the secret of their own
+ * channel binding.
  */
+
 /** The request carries the host token, as a bearer or as the panel's signed cookie. */
 export function isOwner(request: FastifyRequest, token: string): boolean {
   const authorization = request.headers.authorization ?? '';
@@ -34,7 +38,7 @@ declare module 'fastify' {
 }
 
 /** A device token is a different credential from the host token; only this prefix reaches it. */
-const DEVICE_BEARER = 'Bearer jdev_';
+const DEVICE_BEARER = `Bearer ${DEVICE_TOKEN_PREFIX}`;
 
 export function configureSecurity(
   app: FastifyInstance,

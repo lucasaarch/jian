@@ -157,9 +157,11 @@ import {
 } from './worktrees.js';
 
 /**
- * `access` is the whole authorization model: the host token opens everything marked `admin`,
- * `public` routes carry their own proof in the body, and a webhook authenticates with the
- * token of its own channel binding.
+ * `access` is the whole authorization model. Everything marked `admin` opens to the owner, with
+ * any of three credentials: the host token, the panel's signed cookie traded for it, or the token
+ * of a paired phone, which has the owner's access. Rotating the host token ends every cookie;
+ * revoking a phone ends its token alone. `public` routes carry their own proof in the body, and a
+ * webhook authenticates with the token of its own channel binding.
  */
 export type Operation = {
   method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
