@@ -743,6 +743,7 @@ it.each([31700, 32000])(
       inputTokens: inputTokens * 2 + 10,
       outputTokens: 610,
       cachedInputTokens: 0,
+      cacheWriteTokens: 0,
       estimated: false,
       steps: 3,
     });
@@ -1152,6 +1153,65 @@ it('truncates older turns when compaction cannot free the context budget', async
   expect(JSON.stringify(await services.lifecycle.checkpoints(profile.id, run.id))).toContain(
     'context-truncated',
   );
+});
+
+it.each([
+  ['past the threshold', 12],
+  ['past the whole window', 30],
+])('stops resending a failing summary and cuts the prompt once, %s', async (_, turns) => {
+  const { services, profile, session, run } = await fixture({
+    inputTokens: 60000,
+    outputTokens: 1024,
+    toolResultTokens: 1500,
+    maxSteps: 8,
+  });
+  for (let index = 0; index < turns; index++) {
+    await insertMessage(services.store.db, {
+      id: randomUUID(),
+      profileId: profile.id,
+      sessionId: session.id,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      content: `turn-${index} ${'history '.repeat(2000)}`,
+      createdAt: new Date(Date.parse('2026-09-29T09:00:00.000Z') + index * 1000).toISOString(),
+    });
+  }
+  let summaries = 0;
+  let step = 0;
+  const heads: string[] = [];
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (!options.tools?.length) {
+        summaries++;
+        throw new Error('The summary was cut off at its limit');
+      }
+      heads.push(JSON.stringify(options.prompt.filter((part) => part.role !== 'system')[0]));
+      if (step === 5) return answer('Done without a summary.');
+      step++;
+      return {
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: `read-${step}`,
+            toolName: 'read_memories',
+            input: '{}',
+          },
+        ],
+        finishReason: { unified: 'tool-calls' as const, raw: 'tool-calls' },
+        usage,
+        warnings: [],
+      };
+    },
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const finished = await services.runs.run(profile.id, run.id);
+  expect(finished.output).toBe('Done without a summary.');
+  // Each attempt is the whole older transcript, uncached: one failure, not one per step.
+  expect(summaries).toBe(1);
+  // Cut once: every later step starts the same way, so it reads its prefix back from cache.
+  expect(new Set(heads).size).toBe(1);
+  expect(heads[0]).not.toContain('turn-0 ');
 });
 
 it('does not mark a local validation failure as an uncertain external effect', async () => {

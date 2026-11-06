@@ -31,7 +31,7 @@ it('adds up tokens, list-price cost, days, models, channels and tools', async ()
       .update(runs)
       .set({
         status: 'completed',
-        usage: { ...usage, estimated: false, steps: 1 },
+        usage: { cacheWriteTokens: 0, ...usage, estimated: false, steps: 1 },
         model: model as never,
         createdAt: new Date(at),
         updatedAt: new Date(at + 90_000),
@@ -179,6 +179,7 @@ it('lets an agent read its own full activity without exposing another profile', 
           inputTokens: tokens,
           outputTokens: 0,
           cachedInputTokens: 0,
+          cacheWriteTokens: 0,
           estimated: false,
           steps: 1,
         },

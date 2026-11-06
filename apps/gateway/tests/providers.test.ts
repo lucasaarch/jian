@@ -343,15 +343,22 @@ it('keeps a prefix for an hour when a person is the one answering', async () => 
 });
 
 describe('anthropic thinking', () => {
-  it('lets Claude 4.6 and newer choose their own depth', () => {
+  it('lets Claude 4.6 and newer choose their own depth, within the effort the owner picked', () => {
     for (const id of ['claude-opus-5', 'claude-sonnet-5', 'claude-fable-5-1', 'claude-opus-4-8']) {
       expect(
         reasoningProviderOptions(
-          { provider: 'anthropic', modelId: id, reasoningEffort: 'high' },
+          { provider: 'anthropic', modelId: id, reasoningEffort: 'medium' },
           6144,
         ),
-      ).toEqual({ anthropic: { thinking: { type: 'adaptive' } } });
+      ).toEqual({ anthropic: { thinking: { type: 'adaptive' }, effort: 'medium' } });
     }
+    const opus = { provider: 'anthropic', modelId: 'claude-opus-5-5' } as const;
+    expect(
+      reasoningProviderOptions({ ...opus, reasoningEffort: 'minimal' }, 6144)?.anthropic,
+    ).toMatchObject({ effort: 'low' });
+    expect(reasoningProviderOptions({ ...opus, reasoningEffort: 'none' }, 6144)).toEqual({
+      anthropic: { thinking: { type: 'disabled' } },
+    });
   });
 
   it('still sends a budget to the models that require one', () => {

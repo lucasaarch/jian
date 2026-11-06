@@ -3,8 +3,8 @@ import { generateText, Output } from 'ai';
 import { expect, it } from 'vitest';
 import { z } from 'zod';
 import { plainDescription } from '../src/agent/guard.js';
-import { cardOptions } from '../src/agent/runtime.js';
 import { withClaudeCodeIdentity } from '../src/providers/claude-subscription.js';
+import { leastReasoningOptions } from '../src/providers/effort.js';
 import { resolveModel } from '../src/providers/models.js';
 
 it('asks a model that always thinks for as little as it takes, and nothing it refuses', async () => {
@@ -36,7 +36,7 @@ it('asks a model that always thinks for as little as it takes, and nothing it re
       system: withClaudeCodeIdentity('Write the card.'),
       prompt: '{}',
       output: Output.object({ schema: z.object({ title: z.string() }) }),
-      providerOptions: cardOptions(config),
+      providerOptions: leastReasoningOptions(config),
       maxRetries: 0,
       maxOutputTokens: 2000,
     }),
@@ -63,8 +63,8 @@ it('leaves the effort alone where a model has no such setting', () => {
     apiKeyEnv: 'OPENAI_API_KEY',
   });
 
-  expect(cardOptions(older)).toBeUndefined();
-  expect(cardOptions(plain)).toBeUndefined();
+  expect(leastReasoningOptions(older)).toBeUndefined();
+  expect(leastReasoningOptions(plain)).toBeUndefined();
 });
 
 it('writes a readable card when the model could not', () => {

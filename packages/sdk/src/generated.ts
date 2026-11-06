@@ -8881,6 +8881,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;
@@ -9148,6 +9150,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;
@@ -9414,6 +9418,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;
@@ -18576,6 +18582,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;
@@ -18951,6 +18959,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;
@@ -19221,6 +19231,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;
@@ -19481,6 +19493,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;
@@ -20289,6 +20303,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;
@@ -20977,6 +20993,7 @@ export interface operations {
                         totals: {
                             inputTokens: number;
                             cachedInputTokens: number;
+                            cacheWriteTokens: number;
                             outputTokens: number;
                             turns: number;
                         };
@@ -22303,6 +22320,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;
@@ -23438,6 +23457,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;
@@ -23697,6 +23718,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;
@@ -23956,6 +23979,8 @@ export interface operations {
                             outputTokens: number;
                             /** @default 0 */
                             cachedInputTokens: number;
+                            /** @default 0 */
+                            cacheWriteTokens: number;
                             /** @default false */
                             estimated: boolean;
                             steps: number;

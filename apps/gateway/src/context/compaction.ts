@@ -16,6 +16,20 @@ export const COMPACT_AT = 0.8;
  */
 export const COMPACT_CEILING = 200_000;
 
+/**
+ * The most a summary may write, in tokens. A structured record of a long session does not fit
+ * in 2,048: it was cut off, the compaction failed, and the next step sent the whole uncached
+ * transcript again to fail the same way.
+ */
+export const SUMMARY_TOKENS = 8_192;
+
+/**
+ * The most transcript one summary call reads, in tokens. A longer one is folded in segments.
+ * Each call is sent uncached, so this bounds what one failure costs, and a model condensing a
+ * few hundred thousand tokens into a page at once keeps less of what matters.
+ */
+export const SEGMENT_TOKENS = 120_000;
+
 /** The size past which the older turns are summarised, for a budget in tokens. */
 export const compactionThreshold = (budget: number) =>
   Math.min(Math.round(budget * COMPACT_AT), COMPACT_CEILING);
@@ -56,7 +70,11 @@ export async function compactPrompt(input: {
   const recent = blocks.slice(keepFrom).flat();
   const lastUser = input.messages.findLast((message) => message.role === 'user');
   const count = tokenCounter(input.provider, input.modelId);
-  const policy = { ...input.policy, outputTokens: Math.min(2048, input.policy.outputTokens) };
+  const outputTokens = Math.min(SUMMARY_TOKENS, input.policy.outputTokens);
+  const policy = {
+    inputTokens: Math.min(input.policy.inputTokens, SEGMENT_TOKENS + outputTokens),
+    outputTokens,
+  };
   const transcript = promptText(older);
   let summary = input.previous ?? '';
   let offset = 0;
@@ -73,7 +91,10 @@ export async function compactPrompt(input: {
         messages: [{ role: 'user', content: transcript.slice(offset, offset + length) }],
       });
     let low = 0;
-    let high = transcript.length - offset;
+    // Text runs well under 16 characters a token, so the segment's end lies inside this bound;
+    // when it does not, the segment is only smaller. Searching the whole remaining transcript
+    // tokenized up to a million tokens per probe.
+    let high = Math.min(transcript.length - offset, policy.inputTokens * 16);
     while (low < high) {
       const middle = Math.ceil((low + high) / 2);
       try {

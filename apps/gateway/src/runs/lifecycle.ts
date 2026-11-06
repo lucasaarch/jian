@@ -178,6 +178,7 @@ export class RunLifecycle {
       inputTokens: number;
       outputTokens: number;
       cachedInputTokens?: number;
+      cacheWriteTokens?: number;
       estimated?: boolean;
       steps: number;
     },
@@ -191,6 +192,7 @@ export class RunLifecycle {
         inputTokens: 0,
         outputTokens: 0,
         cachedInputTokens: 0,
+        cacheWriteTokens: 0,
         estimated: false,
         steps: 0,
       };
@@ -201,6 +203,7 @@ export class RunLifecycle {
           inputTokens: previous.inputTokens + usage.inputTokens,
           outputTokens: previous.outputTokens + usage.outputTokens,
           cachedInputTokens: previous.cachedInputTokens + (usage.cachedInputTokens ?? 0),
+          cacheWriteTokens: (previous.cacheWriteTokens ?? 0) + (usage.cacheWriteTokens ?? 0),
           // One counted step makes the whole run's number a count, not a report.
           estimated: previous.estimated || Boolean(usage.estimated),
           steps: previous.steps + usage.steps,

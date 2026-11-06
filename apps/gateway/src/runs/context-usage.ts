@@ -22,6 +22,7 @@ export async function sessionContext(
     .select({
       input: sql<string>`coalesce(sum((${runs.usage}->>'inputTokens')::numeric), 0)`,
       cached: sql<string>`coalesce(sum((${runs.usage}->>'cachedInputTokens')::numeric), 0)`,
+      written: sql<string>`coalesce(sum((${runs.usage}->>'cacheWriteTokens')::numeric), 0)`,
       output: sql<string>`coalesce(sum((${runs.usage}->>'outputTokens')::numeric), 0)`,
       turns: sql<string>`count(*)`,
     })
@@ -77,6 +78,7 @@ export async function sessionContext(
     totals: {
       inputTokens: count(totals?.input),
       cachedInputTokens: count(totals?.cached),
+      cacheWriteTokens: count(totals?.written),
       outputTokens: count(totals?.output),
       turns: count(totals?.turns),
     },

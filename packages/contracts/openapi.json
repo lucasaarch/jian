@@ -12215,6 +12215,11 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "estimated": {
                           "default": false,
                           "type": "boolean"
@@ -12229,6 +12234,7 @@
                         "inputTokens",
                         "outputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "estimated",
                         "steps"
                       ],
@@ -13009,6 +13015,11 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "estimated": {
                           "default": false,
                           "type": "boolean"
@@ -13023,6 +13034,7 @@
                         "inputTokens",
                         "outputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "estimated",
                         "steps"
                       ],
@@ -13801,6 +13813,11 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "estimated": {
                           "default": false,
                           "type": "boolean"
@@ -13815,6 +13832,7 @@
                         "inputTokens",
                         "outputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "estimated",
                         "steps"
                       ],
@@ -31823,6 +31841,11 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "estimated": {
                           "default": false,
                           "type": "boolean"
@@ -31837,6 +31860,7 @@
                         "inputTokens",
                         "outputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "estimated",
                         "steps"
                       ],
@@ -32809,6 +32833,11 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "estimated": {
                           "default": false,
                           "type": "boolean"
@@ -32823,6 +32852,7 @@
                         "inputTokens",
                         "outputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "estimated",
                         "steps"
                       ],
@@ -33606,6 +33636,11 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "estimated": {
                           "default": false,
                           "type": "boolean"
@@ -33620,6 +33655,7 @@
                         "inputTokens",
                         "outputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "estimated",
                         "steps"
                       ],
@@ -34382,6 +34418,11 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "estimated": {
                           "default": false,
                           "type": "boolean"
@@ -34396,6 +34437,7 @@
                         "inputTokens",
                         "outputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "estimated",
                         "steps"
                       ],
@@ -36225,6 +36267,11 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "estimated": {
                           "default": false,
                           "type": "boolean"
@@ -36239,6 +36286,7 @@
                         "inputTokens",
                         "outputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "estimated",
                         "steps"
                       ],
@@ -38031,6 +38079,10 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "outputTokens": {
                           "type": "number",
                           "minimum": 0
@@ -38044,6 +38096,7 @@
                       "required": [
                         "inputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "outputTokens",
                         "turns"
                       ],
@@ -40468,6 +40521,11 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "estimated": {
                           "default": false,
                           "type": "boolean"
@@ -40482,6 +40540,7 @@
                         "inputTokens",
                         "outputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "estimated",
                         "steps"
                       ],
@@ -42845,6 +42904,11 @@
                             "type": "number",
                             "minimum": 0
                           },
+                          "cacheWriteTokens": {
+                            "default": 0,
+                            "type": "number",
+                            "minimum": 0
+                          },
                           "estimated": {
                             "default": false,
                             "type": "boolean"
@@ -42859,6 +42923,7 @@
                           "inputTokens",
                           "outputTokens",
                           "cachedInputTokens",
+                          "cacheWriteTokens",
                           "estimated",
                           "steps"
                         ],
@@ -43612,6 +43677,11 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "estimated": {
                           "default": false,
                           "type": "boolean"
@@ -43626,6 +43696,7 @@
                         "inputTokens",
                         "outputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "estimated",
                         "steps"
                       ],
@@ -44378,6 +44449,11 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "cacheWriteTokens": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "estimated": {
                           "default": false,
                           "type": "boolean"
@@ -44392,6 +44468,7 @@
                         "inputTokens",
                         "outputTokens",
                         "cachedInputTokens",
+                        "cacheWriteTokens",
                         "estimated",
                         "steps"
                       ],

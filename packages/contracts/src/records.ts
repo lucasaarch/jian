@@ -134,7 +134,9 @@ export const memoryRecordSchema = z.strictObject({
 /**
  * Counts, not money. `inputTokens` is what was sent and `outputTokens` what came back;
  * `cachedInputTokens` is the part of the input the provider served from its own cache and
- * usually bills differently, so it is kept apart rather than folded into a total. `estimated`
+ * usually bills differently, so it is kept apart rather than folded into a total.
+ * `cacheWriteTokens` is the part written to that cache, which Anthropic bills above fresh input
+ * (1.25×, 2× for the hour tier): a prompt whose start keeps changing shows here. `estimated`
  * marks a run where at least one step reported no usage and the gateway counted the prompt
  * itself — a number to read as an order of magnitude, never as an invoice.
  */
@@ -142,6 +144,7 @@ export const usageSchema = z.strictObject({
   inputTokens: z.number().nonnegative(),
   outputTokens: z.number().nonnegative(),
   cachedInputTokens: z.number().nonnegative().default(0),
+  cacheWriteTokens: z.number().nonnegative().default(0),
   estimated: z.boolean().default(false),
   steps: z.number().int().nonnegative(),
 });
@@ -537,6 +540,7 @@ export const sessionContextSchema = z.strictObject({
   totals: z.strictObject({
     inputTokens: z.number().nonnegative(),
     cachedInputTokens: z.number().nonnegative(),
+    cacheWriteTokens: z.number().nonnegative(),
     outputTokens: z.number().nonnegative(),
     turns: z.number().int().nonnegative(),
   }),

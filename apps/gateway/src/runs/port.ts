@@ -76,6 +76,7 @@ export interface RunExecution {
       inputTokens: number;
       outputTokens: number;
       cachedInputTokens?: number;
+      cacheWriteTokens?: number;
       estimated?: boolean;
       steps: number;
     },

@@ -5,7 +5,12 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../src/context/budget.js';
 import { buildContext } from '../src/context/build.js';
-import { compactPrompt, needsCompaction } from '../src/context/compaction.js';
+import {
+  compactPrompt,
+  needsCompaction,
+  SEGMENT_TOKENS,
+  SUMMARY_TOKENS,
+} from '../src/context/compaction.js';
 import { toolHistoryByRun } from '../src/context/tool-history.js';
 import { insertMessage } from '../src/sessions/repository.js';
 import { mockModel } from './helpers/model.js';
@@ -539,6 +544,46 @@ describe('compaction', () => {
     expect(consumed).toBe(JSON.stringify(messages.slice(0, -2)));
     expect(result?.messages.at(-1)).toEqual(messages.at(-1));
     expect(result?.summary).toBe('Checkpoint with decisions.');
+  });
+
+  it('reads a long transcript in bounded segments, with room to write the record', async () => {
+    const messages = Array.from({ length: 40 }, (_, index) => ({
+      role: 'user' as const,
+      content: `turn-${index}: ${'details '.repeat(4000)}`,
+    }));
+    const count = tokenCounter('test', 'large');
+    const calls: Array<{ read: number; allowed?: number }> = [];
+    await compactPrompt({
+      provider: 'test',
+      modelId: 'large',
+      policy: { inputTokens: 1_000_000, outputTokens: 64_000 },
+      messages,
+      signal: AbortSignal.timeout(20000),
+      onUsage: async () => {},
+      model: mockModel({
+        doGenerate: async (options) => {
+          calls.push({
+            read: count(JSON.stringify(options.prompt)),
+            allowed: options.maxOutputTokens,
+          });
+          return {
+            content: [{ type: 'text', text: 'Checkpoint.' }],
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+              outputTokens: { total: 5, text: 5, reasoning: 0 },
+            },
+            warnings: [],
+          };
+        },
+      }),
+    });
+    // One uncached call over the whole window is what a failure used to cost, every step.
+    expect(calls.length).toBeGreaterThan(1);
+    for (const call of calls) {
+      expect(call.read).toBeLessThanOrEqual(SEGMENT_TOKENS + 1000);
+      expect(call.allowed).toBe(SUMMARY_TOKENS);
+    }
   });
 
   it('leaves a short conversation alone', async () => {

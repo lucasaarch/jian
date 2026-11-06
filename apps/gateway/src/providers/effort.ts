@@ -62,6 +62,28 @@ export function lightEffort(config: ModelConfig): ModelConfig {
 }
 
 /**
+ * The least thinking the run's model takes, for side work that only writes: an approval card,
+ * a guardrail verdict, a compaction summary. A model that thinks by default and cannot be told
+ * not to (Claude Opus 5.5 among them) otherwise spends the small output allowance of that work
+ * on thinking and is cut off before it writes the answer.
+ */
+export function leastReasoningOptions(
+  config: ModelConfig,
+): Record<string, Record<string, JSONValue>> | undefined {
+  if (config.provider === 'anthropic' && takesAdaptiveThinking(config.modelId)) {
+    return { anthropic: { effort: 'low' } };
+  }
+  if (
+    (config.provider === 'openai' || config.provider === 'openai-codex') &&
+    config.reasoningEffort
+  ) {
+    return { openai: { reasoningEffort: 'low' } };
+  }
+
+  return undefined;
+}
+
+/**
  * Translates the stored effort into each provider's own dialect. Returns undefined when there
  * is nothing to say, so a model without reasoning is called exactly as before.
  */
@@ -79,10 +101,17 @@ export function reasoningProviderOptions(
       return { openai: { reasoningEffort: effort } };
     case 'anthropic': {
       if (takesAdaptiveThinking(config.modelId)) {
-        // The level no longer sets a depth on these models; only whether to think at all.
-        return {
-          anthropic: { thinking: effort === 'none' ? { type: 'disabled' } : { type: 'adaptive' } },
-        };
+        // The model picks how long to think, and `effort` is what bounds it. Sending only
+        // `adaptive` left every level at the model's default, so Low and Medium spent as High.
+        // Anthropic has no `minimal`; `low` is its least.
+        return effort === 'none'
+          ? { anthropic: { thinking: { type: 'disabled' } } }
+          : {
+              anthropic: {
+                thinking: { type: 'adaptive' },
+                effort: effort === 'minimal' ? 'low' : effort,
+              },
+            };
       }
 
       const tokens = budget(effort, maxOutputTokens);

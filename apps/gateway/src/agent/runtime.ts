@@ -13,7 +13,6 @@ import {
 } from '@jian/contracts';
 import {
   generateText,
-  type JSONValue,
   type LanguageModel,
   type LanguageModelUsage,
   type ModelMessage,
@@ -28,7 +27,7 @@ import { isChatChannel } from '../channels/kinds.js';
 import { findContactBySession } from '../channels/repository.js';
 import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../context/budget.js';
 import { withTurnNote } from '../context/build.js';
-import { compactPrompt, needsCompaction } from '../context/compaction.js';
+import { compactionThreshold, compactPrompt, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
 import { nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
@@ -37,9 +36,9 @@ import type { McpServerReader } from '../mcp/port.js';
 import type { Media } from '../media/service.js';
 import { anthropicCredential, withClaudeCodeIdentity } from '../providers/claude-subscription.js';
 import {
+  leastReasoningOptions,
   lightEffort,
   reasoningProviderOptions,
-  takesAdaptiveThinking,
 } from '../providers/effort.js';
 import { resolveModel } from '../providers/models.js';
 import type { Providers } from '../providers/service.js';
@@ -120,6 +119,18 @@ import { RunWorktrees, type WorktreeService, worktreeTools } from './worktree-to
  * fires on something that hung, not on work that takes its time.
  */
 const STALLED_AFTER_MS = 5 * 60_000;
+
+/** Failed summaries in a row after which a turn stops asking for one on its own. */
+const MAX_COMPACTION_FAILURES = 2;
+
+/** How much a prompt must grow past a failed summary's size before another is tried. */
+const COMPACTION_RETRY_GROWTH = 1.25;
+
+/**
+ * After a failed summary, the share of the compaction threshold a prompt is cut to. Well below
+ * it, so the cut happens once and the steps after it read their start back from cache.
+ */
+const SHED_TO = 0.6;
 
 /**
  * The share of the model's input window the conversation's loaded skills may take, kept in its
@@ -485,6 +496,8 @@ export class AgentRuntime {
       return entry ? { server: entry.server, tool: entry.tool } : undefined;
     };
     let lastCompactionAttempt = -4;
+    let compactionFailures = 0;
+    let retryCompactionPast = 0;
     let compactionRequested = false;
     // A turn that is only `/compact`: the context is compacted before the first call, and the
     // agent, told what it came to, says so and does nothing else.
@@ -902,7 +915,7 @@ export class AgentRuntime {
       // so a mode changed mid-turn applies from the next one.
       const protection = await this.protection(run, session);
       const judge = this.services.decisions?.judge;
-      const lowEffort = cardOptions(config);
+      const lowEffort = leastReasoningOptions(config);
       // On Auto an action runs unless the guardrail finds it catastrophic; nobody is waited for.
       // Its own model is the run's, asked beside the turn and counted on it.
       const guard =
@@ -1184,10 +1197,15 @@ export class AgentRuntime {
           inputTokens,
           usage.inputTokenDetails?.cacheReadTokens ?? 0,
         );
+        const cacheWriteTokens = Math.min(
+          inputTokens - cachedInputTokens,
+          usage.inputTokenDetails?.cacheWriteTokens ?? 0,
+        );
         await this.services.lifecycle.recordUsage(profileId, runId, owner, {
           inputTokens,
           outputTokens,
           cachedInputTokens,
+          cacheWriteTokens,
           estimated: !reported,
           steps,
         });
@@ -1197,7 +1215,7 @@ export class AgentRuntime {
       describer = { model, subscription, account, config };
 
       if (!session.title && !learning) {
-        const options = cardOptions(config);
+        const options = leastReasoningOptions(config);
         naming = this.nameConversation(run, secrets, {
           model,
           subscription,
@@ -1367,11 +1385,19 @@ export class AgentRuntime {
               tools: activeTools,
             });
           }
+          const limit = policy.inputTokens - policy.outputTokens;
+          // Every attempt sends the older transcript uncached. After a failure the same request
+          // would fail the same way, so it is tried again only once the prompt has grown or no
+          // longer fits at all, and never past the second failure in a row: shedding below
+          // keeps the turn bounded instead.
+          const compactionHeld =
+            compactionFailures >= MAX_COMPACTION_FAILURES ||
+            (compactionFailures > 0 && before < retryCompactionPast && before <= limit);
           if (
             compactionRequested ||
-            (needsCompaction(before, policy.inputTokens - policy.outputTokens) &&
-              (stepNumber - lastCompactionAttempt >= 4 ||
-                before > policy.inputTokens - policy.outputTokens))
+            (!compactionHeld &&
+              needsCompaction(before, limit) &&
+              (stepNumber - lastCompactionAttempt >= 4 || before > limit))
           ) {
             compactionRequested = false;
             lastCompactionAttempt = stepNumber;
@@ -1384,12 +1410,11 @@ export class AgentRuntime {
                 ...config,
                 messages,
                 currentStartIndex,
-                includeCurrent: before > policy.inputTokens - policy.outputTokens,
+                includeCurrent: before > limit,
                 previous: session.summary,
-                providerOptions: reasoningProviderOptions(
-                  config,
-                  Math.min(2048, policy.outputTokens),
-                ),
+                // Writing a record needs no deliberation, and thinking draws on the same
+                // allowance as the summary: at the owner's effort it ran out before the record.
+                providerOptions: leastReasoningOptions(config),
                 policy,
                 signal,
                 dress: subscription ? withClaudeCodeIdentity : undefined,
@@ -1428,9 +1453,12 @@ export class AgentRuntime {
                       : message.content,
                 })) as ModelMessage[];
                 currentStartIndex = messages.findLastIndex((message) => message.role === 'user');
+                compactionFailures = 0;
               }
             } catch (error) {
               signal.throwIfAborted();
+              compactionFailures++;
+              retryCompactionPast = Math.round(before * COMPACTION_RETRY_GROWTH);
               compactionFailure = reason(error, secrets);
               await this.services.lifecycle.checkpoint(profileId, runId, owner, {
                 phase: 'compaction-failed',
@@ -1450,32 +1478,21 @@ export class AgentRuntime {
             }
           }
 
-          let fitted: ReturnType<typeof fitPrompt>;
-          try {
-            fitted = fitPrompt({
-              provider: config.provider,
-              modelId: config.modelId,
-              policy,
-              instructions: codingInstructions,
-              messages,
-              tools: activeTools,
-            });
-          } catch (error) {
-            signal.throwIfAborted();
-            // When compaction cannot shrink the window, drop oldest turns so the current request
-            // can still run. Originals stay stored in the database and the panel.
-            // read_artifact is budgeted in: a shed result is read back with it.
+          // Drops the oldest turns, then the oldest results of this one, until the prompt fits
+          // `within`. Originals stay stored in the database and the panel. read_artifact is
+          // budgeted in: a shed result is read back with it.
+          const shed = async (within: { inputTokens: number; outputTokens: number }) => {
             const reader = guarded.read_artifact;
             const truncated = truncatePrompt({
               provider: config.provider,
               modelId: config.modelId,
-              policy,
+              policy: within,
               instructions: codingInstructions,
               messages,
               tools: reader ? { ...activeTools, read_artifact: reader } : activeTools,
               currentStartIndex,
             });
-            if (!truncated) throw error;
+            if (!truncated) return undefined;
             if (truncated.shedResults && reader && !activeNames.includes('read_artifact')) {
               loadedTools.add('read_artifact');
               activeNames.push('read_artifact');
@@ -1489,7 +1506,47 @@ export class AgentRuntime {
             });
             messages = truncated.messages;
             currentStartIndex = messages.findLastIndex((message) => message.role === 'user');
-            fitted = truncated;
+            return truncated;
+          };
+
+          let fitted: ReturnType<typeof fitPrompt> | undefined;
+          // A summary failed and the prompt is still past the threshold: cut it well below in
+          // one go. Left alone it grew to the whole window, and trimming a sliver there each
+          // step changed the start of the prompt, so no step read anything back from cache.
+          if (
+            compactionFailures > 0 &&
+            needsCompaction(
+              promptTokens({
+                ...config,
+                instructions: codingInstructions,
+                messages,
+                tools: activeTools,
+              }),
+              limit,
+            )
+          ) {
+            fitted = await shed({
+              inputTokens: Math.round(compactionThreshold(limit) * SHED_TO) + policy.outputTokens,
+              outputTokens: policy.outputTokens,
+            });
+          }
+          if (!fitted) {
+            try {
+              fitted = fitPrompt({
+                provider: config.provider,
+                modelId: config.modelId,
+                policy,
+                instructions: codingInstructions,
+                messages,
+                tools: activeTools,
+              });
+            } catch (error) {
+              signal.throwIfAborted();
+              // When compaction cannot shrink the window, drop what it takes for the current
+              // request to run.
+              fitted = await shed(policy);
+              if (!fitted) throw error;
+            }
           }
 
           preparedInputTokens = fitted.tokens;
@@ -2003,27 +2060,6 @@ const cardSchema = z.object({
   confirmLabel: z.string().min(1),
 });
 
-/**
- * The least thinking the run's model takes for three short fields. A model that thinks by
- * default and cannot be told not to (Claude Opus 5.5 among them) otherwise spends a small output
- * budget, and the seconds the card is allowed, before it writes any of them.
- */
-export function cardOptions(
-  config: ModelConfig,
-): Record<string, Record<string, JSONValue>> | undefined {
-  if (config.provider === 'anthropic' && takesAdaptiveThinking(config.modelId)) {
-    return { anthropic: { effort: 'low' } };
-  }
-  if (
-    (config.provider === 'openai' || config.provider === 'openai-codex') &&
-    config.reasoningEffort
-  ) {
-    return { openai: { reasoningEffort: 'low' } };
-  }
-
-  return undefined;
-}
-
 /** The card in the model's own words, or nothing when it cannot write one in time. */
 async function describeAction(
   describer: Describer,
@@ -2041,7 +2077,9 @@ async function describeAction(
         action: { tool: call.toolName, kind: call.kind, input: requestText(input) },
       }),
       output: Output.object({ schema: cardSchema }),
-      ...(cardOptions(describer.config) ? { providerOptions: cardOptions(describer.config) } : {}),
+      ...(leastReasoningOptions(describer.config)
+        ? { providerOptions: leastReasoningOptions(describer.config) }
+        : {}),
       maxRetries: 0,
       // Room for whatever thinking the model still does before the three fields.
       maxOutputTokens: 2000,

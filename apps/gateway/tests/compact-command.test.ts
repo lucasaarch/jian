@@ -42,6 +42,7 @@ it('reads an empty conversation as measured by nothing yet', async () => {
   expect(context.totals).toEqual({
     inputTokens: 0,
     cachedInputTokens: 0,
+    cacheWriteTokens: 0,
     outputTokens: 0,
     turns: 0,
   });

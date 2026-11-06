@@ -143,6 +143,12 @@ export function ContextRing({
                         · {counted(context.totals.cachedInputTokens)} cached
                       </span>
                     )}
+                    {context.totals.cacheWriteTokens > 0 && (
+                      <span className="text-muted">
+                        {' '}
+                        · {counted(context.totals.cacheWriteTokens)} written to cache
+                      </span>
+                    )}
                   </Line>
                   <Line label="Output">{counted(context.totals.outputTokens)}</Line>
                   <Line label="Turns">{context.totals.turns}</Line>
