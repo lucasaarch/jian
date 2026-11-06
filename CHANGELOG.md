@@ -4,6 +4,43 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.5.2 — 2026-11-06
+
+Compaction stops burning your quota when it fails, Apps gets 18 more services and several accounts per app, Atlassian moves to v2 with Bitbucket, and Jian starts sending an anonymous daily report you can turn off.
+
+### Compacting a conversation
+
+* **A failed summary no longer eats your quota:** The summary was cut off at 2,048 tokens because the model spent them thinking first, so compaction failed with "The summary was cut off at its limit". Once a conversation was past its window, it then tried again on every step, each time sending up to the whole conversation without the cache. One long conversation sent 14 million tokens without the cache this way in under half an hour. Summaries now think as little as the model allows and can write up to 8,192 tokens, and a long conversation is summarized in pieces of up to 120K.
+* **It stops retrying:** After a failed summary, your agent tries again only once the conversation has grown by a quarter or no longer fits, and never more than twice in a row. Meanwhile it drops the oldest turns and tool results once, down to 60% of the point where compaction starts, so the steps after that read from the cache again.
+* **Compact now answers right away:** Your agent shows as starting the moment you click, instead of nothing happening until the next refresh. Clicking again while a turn runs compacts once, where each click used to reach your agent as the words "/compact".
+
+### Models
+
+* **Low and Medium mean less thinking on Claude:** On Claude 4.6 and newer, including Opus 5.5, the effort you pick now reaches the model. Before, Low and Medium thought as much as High.
+* **Cache writes in the context ring:** The ring now also shows how many tokens were written to the provider's cache, next to how many were read from it.
+
+### Apps
+
+* **Connected apps come first:** An app moves to the top of the list as soon as you connect it.
+* **Several accounts per app:** Every connected app now has Configure, with its accounts, Sign in and Remove for each, and Connect another account. Each account is named after who signed in, like `linear_kai`, so your agents can tell them apart. An app that can't say who signed in numbers them instead (`linear_2`). Apps you already connected get their new names the next time you open Apps. The service signs in whichever account your browser is logged into, so switch accounts there first or use a private window.
+* **Atlassian adds Bitbucket and Compass:** Atlassian now connects to its v2 server, with Bitbucket and Compass next to Jira and Confluence. Bitbucket shows up only for workspaces linked to an Atlassian organization. An Atlassian you already connected keeps working on v1; remove it and connect again to get the rest.
+* **18 more apps:** Trello, Todoist, Make, Calendly, Cal.com, Dropbox, Miro, Sanity, Mercado Pago, GitLab, AWS, Railway, Hostinger, Expo, Resend, Postman, Buildkite and Mixpanel. Each is the service's own MCP server and connects with one click.
+* **Why Google isn't there:** Google Workspace, Asana, Box, HubSpot, Slack, Figma and Shopify only accept clients registered with them beforehand, so they can't connect with one click. You can still add them under MCP servers with an OAuth client of your own.
+
+### Anonymous usage data
+
+* **What it is:** Once a day your gateway sends a report of counts to Jian's PostHog project in the EU, under an ID drawn at random for your installation. It covers the version and system, how many agents and runs, which models, Jian tools and apps were used, how often compaction ran or failed, and what kind of error runs failed with.
+* **What it never sends:** Messages, names of agents, conversations or servers, addresses, files, credentials, error messages or the IDs of models you host yourself.
+* **Turning it off:** It is on by default. Turn it off under Settings → General → Privacy. Development builds never send it.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.5.2 images, or follow the `latest` tags. There is no migration.
+* **Turning off anonymous usage data for good:** Set `JIAN_TELEMETRY=off` or `DO_NOT_TRACK=1` in the gateway's environment. `compose.yaml` passes both through from `.env`. With either set, Settings shows it as off and can't turn it on.
+* **Renamed app accounts:** If an agent's instructions or a schedule name a connected app's server, such as `linear`, check them after the rename.
+* **API:** `GET /v1/settings` now includes `telemetry`, and `PUT /v1/settings` accepts `telemetry: true | false`. Run usage now includes `cacheWriteTokens`.
+
 ## 1.5.1 — 2026-11-06
 
 Compaction runs on the conversation's own model and says why when it fails, a full window gets freed instead of stopping your agent, and conversations spend far fewer tokens.
