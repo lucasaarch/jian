@@ -15,7 +15,7 @@ Pair a phone with your gateway by scanning a QR code, and get a push when an age
 * **Needs `JIAN_PUBLIC_URL`:** The QR code carries your gateway's address, so pairing needs `JIAN_PUBLIC_URL` set. Without it, the page tells you to set it.
 * **Not on the desktop app's own gateway:** Mobile isn't offered there. It appears when the desktop app is connected to a server gateway.
 * **No rate limit for paired phones:** They are treated like you. Pairing attempts are limited to 10 a minute.
-* **Retries don't repeat a message:** Sending the same message again while an agent is working no longer adds it twice, for example when a phone retries after a lost reply.
+* **Retries don't repeat a message:** A retried message is no longer added twice while an agent is working or waiting for your answer, for example when a phone retries after a lost reply.
 
 ### Push notifications
 
