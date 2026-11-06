@@ -1222,3 +1222,34 @@ export const mediaAssets = pgTable(
     index('media_session').on(table.profileId, table.sessionId),
   ],
 );
+
+/**
+ * Phones paired to this gateway. A device acts with the owner's access, so only the hash of its
+ * token is kept, and a revoked row stays to explain itself rather than being deleted.
+ */
+export const devices = pgTable(
+  'devices',
+  {
+    id: uuid('id').primaryKey(),
+    // What the phone calls itself; the owner can rename it.
+    name: text('name').notNull(),
+    platform: text('platform').$type<'ios' | 'android'>().notNull(),
+    tokenHash: text('token_hash').notNull(),
+    // The Expo push token; one token belongs to one device at a time.
+    pushToken: text('push_token'),
+    previews: boolean('previews').notNull().default(true),
+    // The conversation open on the phone while the app is in the foreground.
+    focusedSession: uuid('focused_session'),
+    createdAt,
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [uniqueIndex('devices_token_hash').on(table.tokenHash)],
+);
+
+/** One-time codes behind a QR code; stored hashed, spent by the first phone to send them. */
+export const devicePairings = pgTable('device_pairings', {
+  codeHash: text('code_hash').primaryKey(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+});

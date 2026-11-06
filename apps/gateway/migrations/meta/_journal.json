@@ -666,6 +666,13 @@
       "when": 1793700000000,
       "tag": "0094_session-worktrees",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1793800000000,
+      "tag": "0095_devices",
+      "breakpoints": true
     }
   ]
 }

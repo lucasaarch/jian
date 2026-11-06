@@ -3,6 +3,7 @@ import { prepareGitAccess } from './agent/worker-workspace.js';
 import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
 import { Decisions } from './decisions/service.js';
+import { Devices } from './devices/service.js';
 import { Errands } from './errands/service.js';
 import type { GitHubIntegrations } from './integrations/github.js';
 import { Learning } from './learning/service.js';
@@ -50,6 +51,7 @@ export type Services = {
   releases: ReleaseNotes;
   repository: RepositoryStars;
   decisions: Decisions;
+  devices: Devices;
   runs: Runs;
   peers: Peers;
   learning: Learning;
@@ -188,6 +190,7 @@ export function buildServices({
     ),
     repository: new RepositoryStars(fetcher ?? createSafeFetch().fetch),
     decisions,
+    devices: new Devices(store, clock),
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),
     learning: new Learning({ store, profiles, sessions, runs, judge: decisions.judge }, clock),

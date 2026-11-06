@@ -2,6 +2,7 @@ export * from './browser.js';
 export * from './channels.js';
 export * from './coordination.js';
 export * from './decisions.js';
+export * from './devices.js';
 export * from './github-items.js';
 export * from './integrations.js';
 export * from './mcp-apps.js';
