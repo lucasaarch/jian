@@ -137,3 +137,27 @@ test('the required check rejects failed detection and any skipped or failed sele
   jobs.changes.result = 'failure';
   assert.notEqual(run(), 0);
 });
+
+test('a commit that already passed selects nothing, even when a full run was asked', () => {
+  const script = new URL('./ci-plan.mjs', import.meta.url).pathname;
+  const run = (env) => {
+    const { GITHUB_OUTPUT: _ignored, ...rest } = process.env;
+    const { stdout } = spawnSync(process.execPath, [script], {
+      encoding: 'utf8',
+      env: { ...rest, CI_FULL: 'true', ...env },
+    });
+    return Object.fromEntries(
+      stdout
+        .trim()
+        .split('\n')
+        .map((line) => line.split('=')),
+    );
+  };
+  const already = run({ CI_PASSED: 'true' });
+  assert.ok(Object.values(already).length > 0);
+  assert.ok(
+    Object.values(already).every((on) => on === 'false'),
+    JSON.stringify(already),
+  );
+  assert.equal(run({ CI_PASSED: '' }).gateway, 'true');
+});

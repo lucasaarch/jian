@@ -35,6 +35,9 @@ const needsAttention = (account: XAccount) =>
 export const xOffered = (integration: XIntegration | undefined) =>
   Boolean(integration?.callbackUrl);
 
+/** What the app gives, on its card and for the Apps search. */
+export const X_DESCRIPTION = 'Post, read and search on X with your own developer app.';
+
 /**
  * X's card among the apps, on either kind of gateway: a desktop's own gets its address from the
  * app.
@@ -60,7 +63,7 @@ export function XCard({ api }: { api: GatewayApi }) {
             {connected.some(needsAttention) && <StatusPill tone="warn">Needs attention</StatusPill>}
           </>
         }
-        description="Post, read and search on X with your own developer app."
+        description={X_DESCRIPTION}
         action={
           <Action
             tone="outline"

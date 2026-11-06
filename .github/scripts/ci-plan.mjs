@@ -89,11 +89,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     CI_HEAD: head,
     CI_PR: pr,
     CI_FULL: full,
+    CI_PASSED: passed,
     GITHUB_OUTPUT: output,
   } = process.env;
   let selected;
   try {
-    if (
+    // This very commit already passed: nothing is selected, a full run included.
+    if (passed === 'true') selected = plan([]);
+    else if (
       full === 'true' ||
       !/^[a-f0-9]{40}$/.test(base ?? '') ||
       /^0+$/.test(base) ||

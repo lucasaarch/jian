@@ -5,16 +5,21 @@ import { useState } from 'react';
 import { type McpEditing, useMcpServers } from '../../components/integrations/mcp-list';
 import type { SectionActions } from '../../components/props';
 import { Action, ConfirmDialog, SettingsGroup, SettingsRow } from '../../kit';
+import { isAppServer } from './mcp-apps';
 import { McpDialog } from './mcp-dialog';
 import { McpServerLine } from './mcp-server-line';
 
 /**
  * The installation's MCP servers, a line each — its name, whether it answers and its tools'
  * count — with Configure, and the way to add another. Every agent reaches each of them; removing one asks for its name first, since its
- * credentials go with it.
+ * credentials go with it. A server that is one of the apps lives on its card in Apps only, so it
+ * is left out here; each line keeps its place in the whole list, which is what is saved.
  */
 export function McpCard({ api, mutate, busy }: SectionActions) {
   const { servers, save, remove } = useMcpServers({ api, mutate });
+  const shown = servers
+    .map((server, index) => ({ server, index }))
+    .filter(({ server }) => !isAppServer(server));
   // What the form edits stays set while it closes, so it fades out as it was.
   const [editing, setEditing] = useState<McpEditing>('new');
   const [formOpen, setFormOpen] = useState(false);
@@ -34,7 +39,7 @@ export function McpCard({ api, mutate, busy }: SectionActions) {
   return (
     <>
       <SettingsGroup title="MCP servers">
-        {servers.map((server, index) => (
+        {shown.map(({ server, index }) => (
           <McpServerLine
             key={server.name}
             api={api}
@@ -43,8 +48,8 @@ export function McpCard({ api, mutate, busy }: SectionActions) {
           />
         ))}
         <SettingsRow
-          title={servers.length ? 'Add a server' : 'No servers yet'}
-          {...(servers.length
+          title={shown.length ? 'Add a server' : 'No servers yet'}
+          {...(shown.length
             ? {}
             : {
                 description:

@@ -19,9 +19,14 @@ Shared by the whole installation.
 - **Capabilities**: the models for channels, compaction, incoming audio, image generation and
   speech. Automatic selects from connected providers; Disabled turns that activity off where
   offered.
-- **Apps**: GitHub and X, a card each, to connect accounts and configure them. An app this
-  gateway cannot offer, as one with no \`JIAN_PUBLIC_URL\`, is not listed.
-- **MCP servers**: the servers the owner adds by hand, with connection tests and sign-in.
+- **Apps**: a card for each app, with a search and a category list. GitHub and X are Jian's
+  own, with accounts to connect and configure; one this gateway cannot offer, as one with no
+  \`JIAN_PUBLIC_URL\`, is not listed. The others, such as Linear, Notion, Atlassian, Stripe,
+  Sentry, Vercel and Supabase, are each service's own MCP server: Connect saves it and opens its
+  sign-in, and Remove deletes it. Its card is all there is of it: it is not listed under MCP
+  servers, and its tools cannot be switched off.
+- **MCP servers**: the MCP servers added by hand, with connection tests, sign-in and switching
+  tools off. A server connected from Apps is not here.
 - **SSH keys**: the keys every agent uses for Git.
 - **Machines**: on a server gateway, the computers every agent can use, and how to install their
   worker. A desktop app connected to that gateway is listed as This computer.
