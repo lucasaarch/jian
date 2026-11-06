@@ -23,9 +23,10 @@ Shared by the whole installation.
   own, with accounts to connect and configure; one this gateway cannot offer, as one with no
   \`JIAN_PUBLIC_URL\`, is not listed. The others, such as Linear, Notion, Atlassian, Stripe,
   Sentry, Vercel and Supabase, are each service's own MCP server: Connect saves it and opens its
-  sign-in, and Remove deletes it. Once connected, it is listed under MCP servers too.
-- **MCP servers**: every MCP server, added by hand or from Apps, with connection tests,
-  sign-in and switching tools off.
+  sign-in, and Remove deletes it. Its card is all there is of it: it is not listed under MCP
+  servers, and its tools cannot be switched off.
+- **MCP servers**: the MCP servers added by hand, with connection tests, sign-in and switching
+  tools off. A server connected from Apps is not here.
 - **SSH keys**: the keys every agent uses for Git.
 - **Machines**: on a server gateway, the computers every agent can use, and how to install their
   worker. A desktop app connected to that gateway is listed as This computer.

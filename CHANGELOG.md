@@ -13,8 +13,8 @@ Apps gets a search, categories and two dozen services you connect in one click, 
 ![The 24 apps you can now connect from Apps in one click](docs/releases/media/apps-1.5.0.png)
 
 * **Connect services in one click:** Linear, Notion, Atlassian (Jira and Confluence), ClickUp, monday.com, Airtable, Zapier, Canva, Webflow, Wix, Stripe, PayPal, Square, Intercom, Attio, Sentry, PostHog, Vercel, Netlify, Cloudflare, Supabase, Neon, Prisma Postgres and Hugging Face now each have a card. Connect adds the service's own MCP server and opens its sign-in, with no address or client ID to paste. Every agent can use it after that.
-* **What a connected card shows:** Whether the service answers, checked again when you come back from the sign-in tab, a Sign in button when it asks for one, and Remove, which asks before deleting it. Switching tools off and the rest still live under MCP servers, where these servers are listed too.
-* **Nothing you added gets replaced:** A server you already added by hand at the same address shows up as that app. If its name is taken, Connect saves the new one under another name.
+* **What a connected card shows:** Whether the service answers, checked again when you come back from the sign-in tab, a Sign in button when it asks for one, and Remove, which asks before deleting it. The card is the whole app: it stays off the MCP servers page, which keeps the servers you add by hand.
+* **Nothing you added gets replaced:** A server you already added by hand at the same address shows up as that app, and moves from MCP servers to its card. If its name is taken, Connect saves the new one under another name.
 * **Search and categories:** A search box looks through each app's name, category and description, and a category list next to it narrows the cards.
 
 ### Remote machines and the desktop browser

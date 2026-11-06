@@ -24,6 +24,8 @@ const server = (name: string, url: string) =>
 
 const docs = server('atlas_docs', 'https://docs.example.test/mcp');
 const tickets = server('harbor_tickets', 'https://tickets.example.test/mcp');
+// Connected from Apps: saved with the rest, never listed here.
+const linear = { ...server('linear', 'https://mcp.linear.app/mcp'), auth: 'oauth' } as McpServer;
 
 const cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -46,7 +48,7 @@ async function render() {
     busy: false,
   };
   const client = agentClient({ profile });
-  client.setQueryData(keys.mcpServers, [docs, tickets]);
+  client.setQueryData(keys.mcpServers, [docs, linear, tickets]);
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
@@ -86,7 +88,21 @@ it('removes a server only once its name is typed, saving the list without it', a
   await view.type(field, 'atlas_docs');
   await act(async () => confirm?.click());
 
-  expect(view.replaceMcpServers).toHaveBeenCalledWith([tickets]);
+  expect(view.replaceMcpServers).toHaveBeenCalledWith([linear, tickets]);
+});
+
+it('leaves an app out of the list, and keeps it when a server beside it changes', async () => {
+  const view = await render();
+  expect(view.button('Configure linear')).toBeUndefined();
+  expect(view.button('Configure harbor_tickets')).toBeDefined();
+
+  await act(async () => view.button('Configure harbor_tickets')?.click());
+  await act(async () => view.button('Remove')?.click());
+  const confirm = view.button('Remove server') as HTMLButtonElement | undefined;
+  await view.type(confirm?.closest('[role="dialog"]')?.querySelector('input'), 'harbor_tickets');
+  await act(async () => confirm?.click());
+
+  expect(view.replaceMcpServers).toHaveBeenCalledWith([docs, linear]);
 });
 
 const dialog = () => document.querySelector('[role="dialog"]');
@@ -105,6 +121,7 @@ it('adds a server to the end of the list the gateway keeps', async () => {
 
   expect(view.replaceMcpServers).toHaveBeenCalledWith([
     docs,
+    linear,
     tickets,
     {
       name: 'lantern_notes',

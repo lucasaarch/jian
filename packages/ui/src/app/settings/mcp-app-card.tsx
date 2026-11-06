@@ -9,11 +9,16 @@ import type { McpServer } from '../../lib/api';
 import { useActions } from '../../lib/workspace';
 import { freeName, type McpApp, serverOf } from './mcp-apps';
 
-/** The app's mark in the text colour, as GitHub's and X's are, or its initial when it has none. */
+/** The app's mark in the text colour, as GitHub's and X's are. */
 function AppIcon({ app }: { app: McpApp }) {
-  if (!app.icon) return <span className="text-[13px] font-semibold">{app.name[0]}</span>;
   return (
-    <svg viewBox="0 0 24 24" width={14} height={14} fill="currentColor" aria-hidden="true">
+    <svg
+      viewBox={app.icon.viewBox ?? '0 0 24 24'}
+      width={14}
+      height={14}
+      fill="currentColor"
+      aria-hidden="true"
+    >
       <path d={app.icon.path} />
     </svg>
   );
@@ -21,7 +26,7 @@ function AppIcon({ app }: { app: McpApp }) {
 
 /**
  * One app of the catalog, as a card. Connect saves the service's own MCP server, which opens its
- * sign-in; everything else about it, such as switching tools off, is on the MCP servers page.
+ * sign-in. The card is all there is of it: the MCP servers page leaves it out.
  */
 export function McpAppCard({ app }: { app: McpApp }) {
   const { api, mutate, busy } = useActions();
