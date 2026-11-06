@@ -10,6 +10,7 @@ import { Learning } from './learning/service.js';
 import { McpServers } from './mcp/service.js';
 import { Media } from './media/service.js';
 import { Memories } from './memories/service.js';
+import { MobilePush } from './notifications/expo.js';
 import { PushNotifications } from './notifications/push.js';
 import { Peers } from './peers/service.js';
 import { Profiles } from './profiles/service.js';
@@ -73,6 +74,7 @@ export type Services = {
   mcp: McpServers;
   remote: Remote;
   push: PushNotifications;
+  mobilePush: MobilePush;
 };
 
 /**
@@ -139,7 +141,26 @@ export function buildServices({
   );
   const lifecycle = new RunLifecycle(store, runs, clock);
   // What the agent says in a chat of the panel reaches the owner's devices as it settles.
-  lifecycle.useNotices(push);
+  const devices = new Devices(store, clock);
+  const mobilePush = new MobilePush(
+    devices,
+    profiles,
+    sessions,
+    fetcher ?? createSafeFetch().fetch,
+    clock,
+  );
+  // One sender failing must never keep the other from telling the owner.
+  lifecycle.useNotices({
+    async runSettled(run) {
+      await Promise.all(
+        [push, mobilePush].map((sender) =>
+          sender.runSettled(run).catch((error: unknown) => {
+            console.error(`jian: run ${run.id} could not notify — ${String(error)}`);
+          }),
+        ),
+      );
+    },
+  });
 
   const remote = new Remote(store, clock, undefined, gatewayVault);
   // Without GitHub connected a created pull request is recorded as one nothing can watch.
@@ -190,7 +211,8 @@ export function buildServices({
     ),
     repository: new RepositoryStars(fetcher ?? createSafeFetch().fetch),
     decisions,
-    devices: new Devices(store, clock),
+    devices,
+    mobilePush,
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),
     learning: new Learning({ store, profiles, sessions, runs, judge: decisions.judge }, clock),

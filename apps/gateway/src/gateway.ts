@@ -48,6 +48,8 @@ const PULL_TICK_MS = 15_000;
 /** How long after start the first telemetry check waits, and how often it runs again, in ms. */
 const TELEMETRY_FIRST_MS = 60_000;
 const TELEMETRY_TICK_MS = 60 * 60_000;
+/** How often Expo is asked for receipts; a ticket is only asked about once 15 minutes old. */
+const RECEIPTS_TICK_MS = 15 * 60_000;
 /**
  * How often a gateway that shares its database with other processes fails the files tasks
  * whose callers gave up, in ms. Until then a task's file text waits in its row.
@@ -246,6 +248,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
   let pullTimer: ReturnType<typeof setInterval> | undefined;
   let sweepTimer: ReturnType<typeof setInterval> | undefined;
   let telemetryTimer: ReturnType<typeof setInterval> | undefined;
+  let receiptsTimer: ReturnType<typeof setInterval> | undefined;
   let stage: StartupStage = 'database';
   let stopping: Promise<void> | undefined;
 
@@ -295,6 +298,10 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
         setTimeout(report, TELEMETRY_FIRST_MS).unref();
         telemetryTimer = setInterval(report, TELEMETRY_TICK_MS);
         telemetryTimer.unref();
+        receiptsTimer = setInterval(() => {
+          void services.mobilePush.checkReceipts().catch(() => {});
+        }, RECEIPTS_TICK_MS);
+        receiptsTimer.unref();
       }
 
       if (!app || !listen) return {};
@@ -309,6 +316,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
         clearInterval(pullTimer);
         clearInterval(sweepTimer);
         clearInterval(telemetryTimer);
+        clearInterval(receiptsTimer);
         // End long-lived event streams before waiting for HTTP shutdown.
         app?.server.closeAllConnections();
         await app?.close();

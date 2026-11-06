@@ -7,13 +7,14 @@ import {
   devicePairInputSchema,
   devicePatchSchema,
   devicePushInputSchema,
+  GATEWAY_SESSION_CHANNEL,
 } from '@jian/contracts';
-import { and, desc, eq, gt, isNotNull, isNull, ne } from 'drizzle-orm';
+import { and, count, desc, eq, gt, isNotNull, isNull, ne } from 'drizzle-orm';
 import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { GATEWAY_SCOPE } from '../security/gateway-vault.js';
 import type { Store } from '../storage/database.js';
-import { devicePairings, devices } from '../storage/schema.js';
+import { devicePairings, devices, runs, sessions } from '../storage/schema.js';
 import { DEVICE_TOKEN_PREFIX, hashSecret, newDeviceToken } from './tokens.js';
 
 /** A pairing code is for one scan right after the QR code appears. */
@@ -199,5 +200,15 @@ export class Devices {
       .update(devices)
       .set({ pushToken: null })
       .where(eq(devices.pushToken, pushToken));
+  }
+
+  /** What an app icon's badge counts: runs of the panel's chats stopped for the owner to answer. */
+  async waitingRuns(): Promise<number> {
+    const [row] = await this.store.db
+      .select({ total: count() })
+      .from(runs)
+      .innerJoin(sessions, eq(sessions.id, runs.sessionId))
+      .where(and(eq(runs.status, 'waiting'), eq(sessions.channel, GATEWAY_SESSION_CHANNEL)));
+    return row?.total ?? 0;
   }
 }
