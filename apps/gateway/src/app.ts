@@ -9,6 +9,7 @@ import type { WhatsAppConnections } from './channels/whatsapp/connections.js';
 import { registerCoordinationRoutes } from './coordination/routes.js';
 import { Coordination } from './coordination/service.js';
 import { registerDecisionRoutes } from './decisions/routes.js';
+import { registerDeviceRoutes } from './devices/routes.js';
 import { registerEventRoutes } from './http/events.js';
 import { registerMetaRoutes } from './http/meta.js';
 import { registerReturnPages } from './http/returned.js';
@@ -49,6 +50,8 @@ export function createApp(
   options: Services & {
     store: Store;
     token: string;
+    /** The address phones reach this gateway at; a pairing QR code cannot be made without it. */
+    publicUrl?: string;
     logger?: boolean;
     codexLogin?: CodexLogin;
     providerModels?: ProviderModels;
@@ -151,6 +154,7 @@ export function createApp(
     if (options.x) registerXRoutes(routes, options.x);
     registerMetaRoutes(routes, options.mode ?? 'server');
     registerSecurityRoutes(routes, options);
+    registerDeviceRoutes(routes, options);
     registerSshRoutes(routes, options);
     registerPushRoutes(routes, options);
     registerRemoteRoutes(routes, options);

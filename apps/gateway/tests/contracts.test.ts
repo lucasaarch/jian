@@ -95,6 +95,7 @@ describe('public API contracts', () => {
         'completeXConnection',
         'health',
         'startPanelSession',
+        'pairDevice',
         'completeMcpLogin',
       ]);
     } finally {

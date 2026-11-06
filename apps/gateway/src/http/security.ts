@@ -3,6 +3,7 @@ import { operations } from '@jian/contracts';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { GatewayError } from '../core/errors.js';
+import type { Devices } from '../devices/service.js';
 import { authorizesPanel } from '../security/panel-session.js';
 
 /**
@@ -25,7 +26,20 @@ export function isOwner(request: FastifyRequest, token: string): boolean {
   return !authorization && authorizesPanel(request, token);
 }
 
-export function configureSecurity(app: FastifyInstance, options: { token: string }) {
+declare module 'fastify' {
+  interface FastifyRequest {
+    /** The paired phone behind this request; unset for the owner. */
+    device?: string;
+  }
+}
+
+/** A device token is a different credential from the host token; only this prefix reaches it. */
+const DEVICE_BEARER = 'Bearer jdev_';
+
+export function configureSecurity(
+  app: FastifyInstance,
+  options: { token: string; devices: Devices },
+) {
   app.addHook('onRequest', async (request, reply) => {
     // Only the static-file plugin sets this flag; API routes still require bearer authentication.
     if (request.routeOptions.config.publicUiAsset && ['GET', 'HEAD'].includes(request.method)) {
@@ -41,6 +55,16 @@ export function configureSecurity(app: FastifyInstance, options: { token: string
     }
 
     if (isOwner(request, options.token)) return;
+
+    const authorization = request.headers.authorization ?? '';
+    if (authorization.startsWith(DEVICE_BEARER)) {
+      // Checked against the database on every request, so a revoked phone is out at once.
+      const device = await options.devices.authenticate(authorization);
+      if (device) {
+        request.device = device;
+        return;
+      }
+    }
 
     return reply.code(401).send({ error: 'Unauthorized' });
   });

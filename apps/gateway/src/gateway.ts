@@ -236,6 +236,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
           ...(mcpLogins ? { mcpLogins } : {}),
           fetcher: outbound.fetch,
           token: options.token,
+          ...(options.publicUrl ? { publicUrl: options.publicUrl } : {}),
           mode: options.mode,
           trustedProxies: options.trustedProxies,
         })
