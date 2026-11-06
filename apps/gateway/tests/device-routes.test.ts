@@ -160,6 +160,15 @@ describe('device routes', () => {
     }
   });
 
+  it('does not rate limit a paired phone, like the owner', async () => {
+    const app = await setup();
+    const phone = await pairPhone(app);
+    for (let i = 0; i < 130; i++) {
+      const response = await app.inject({ url: '/v1/devices/self', headers: phone.headers });
+      expect(response.statusCode).toBe(200);
+    }
+  });
+
   it('limits pairing attempts', async () => {
     const app = await setup();
     const statuses: number[] = [];
