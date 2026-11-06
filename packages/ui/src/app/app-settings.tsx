@@ -11,6 +11,7 @@ import {
   Palette,
   Plug,
   Settings2,
+  Smartphone,
 } from 'lucide-react';
 import { Suspense, useState } from 'react';
 import { Overlay, SettingsLayout, type SettingsPage } from '../kit';
@@ -224,6 +225,13 @@ function gatewayPages({ info, actions }: GatewaySettings): SettingsPage[] {
             icon: <Monitor size={15} />,
             group,
             keywords: ['machine', 'computer', 'worker', 'remote', 'control', 'this computer'],
+          },
+          {
+            id: 'mobile',
+            label: 'Mobile',
+            icon: <Smartphone size={15} />,
+            group,
+            keywords: ['phone', 'iphone', 'android', 'pair', 'qr', 'notifications'],
           },
         ]),
     ...(actions

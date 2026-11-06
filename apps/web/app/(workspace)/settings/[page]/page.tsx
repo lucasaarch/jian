@@ -9,6 +9,7 @@ const PAGES = [
   'mcp-servers',
   'ssh-keys',
   'machines',
+  'mobile',
 ];
 
 /** Drawn by the layout, which reads this address; a page Settings does not have is not here. */

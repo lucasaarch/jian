@@ -14,6 +14,12 @@ export const resourceCalls = (client: Client) => ({
   createSshKey: (body: { name: string }) => result(client.POST('/v1/ssh-keys', { body })),
   deleteSshKey: (keyId: string) =>
     result(client.DELETE('/v1/ssh-keys/{keyId}', { params: { path: { keyId } } })),
+  devices: () => result(client.GET('/v1/devices')),
+  createDevicePairing: () => result(client.POST('/v1/devices/pairings')),
+  updateDevice: (deviceId: string, body: { name?: string; previews?: boolean }) =>
+    result(client.PATCH('/v1/devices/{deviceId}', { params: { path: { deviceId } }, body })),
+  revokeDevice: (deviceId: string) =>
+    result(client.DELETE('/v1/devices/{deviceId}', { params: { path: { deviceId } } })),
   remoteMachines: () => result(client.GET('/v1/remote/machines')),
   createRemoteMachine: (body: { name: string }) =>
     result(client.POST('/v1/remote/machines', { body })),

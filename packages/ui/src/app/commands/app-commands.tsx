@@ -16,6 +16,7 @@ import {
   RefreshCw,
   RotateCcw,
   Settings2,
+  Smartphone,
   Sun,
 } from 'lucide-react';
 import { type ReactNode, useMemo } from 'react';
@@ -75,6 +76,12 @@ const pages: { id: string; title: string; keywords: string[]; icon: ReactNode }[
     title: 'Machines',
     keywords: ['computer', 'remote', 'share', 'worker'],
     icon: <Monitor size={15} />,
+  },
+  {
+    id: 'mobile',
+    title: 'Mobile',
+    keywords: ['phone', 'iphone', 'android', 'pair', 'qr', 'notifications'],
+    icon: <Smartphone size={15} />,
   },
 ];
 

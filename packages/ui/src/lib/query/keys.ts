@@ -11,6 +11,7 @@ export const keys = {
   modelDefaults: ['model-defaults'] as const,
   subscriptionUsage: ['subscription-usage'] as const,
   sshKeys: ['ssh-keys'] as const,
+  devices: ['devices'] as const,
   groups: ['groups'] as const,
   xIntegration: ['integrations', 'x'] as const,
   githubIntegration: ['integrations', 'github'] as const,

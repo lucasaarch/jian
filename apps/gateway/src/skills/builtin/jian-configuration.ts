@@ -37,6 +37,9 @@ Shared by the whole installation.
 - **SSH keys**: the keys every agent uses for Git.
 - **Machines**: on a server gateway, the computers every agent can use, and how to install their
   worker. A desktop app connected to that gateway is listed as This computer.
+- **Mobile**: on a server gateway, pairs a phone with the Jian app by QR code, lists the paired
+  phones with when each was last seen, turns message previews in notifications on or off per
+  phone, and revokes a phone. The gateway needs its public address set to pair one.
 - **Connection**: on a server gateway, how this panel reaches it.
 
 ## Agent settings

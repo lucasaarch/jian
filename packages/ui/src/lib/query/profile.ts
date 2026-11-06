@@ -82,6 +82,7 @@ export const queries = {
       queryFn: () => panelApi().health(),
       staleTime: Number.POSITIVE_INFINITY,
     }),
+  devices: () => queryOptions({ queryKey: keys.devices, queryFn: () => panelApi().devices() }),
   remoteMachines: () =>
     queryOptions({ queryKey: keys.remoteMachines, queryFn: () => panelApi().remoteMachines() }),
   mcpServers: () =>

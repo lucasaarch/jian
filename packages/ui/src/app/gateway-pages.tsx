@@ -4,6 +4,7 @@ import { AppsPage, AppsWaiting } from './settings/apps-page';
 import { CapabilitiesPage, CapabilitiesWaiting } from './settings/capabilities-page';
 import { MachinesPage, MachinesWaiting, type ThisComputer } from './settings/machines-page';
 import { McpServersPage, McpServersWaiting } from './settings/mcp-servers-page';
+import { MobilePage, MobileWaiting } from './settings/mobile-page';
 import { ProvidersPage, ProvidersWaiting } from './settings/providers-page';
 import { SshKeysPage, SshKeysWaiting } from './settings/ssh-keys-page';
 
@@ -13,7 +14,8 @@ export type GatewayPageId =
   | 'apps'
   | 'mcp-servers'
   | 'ssh-keys'
-  | 'machines';
+  | 'machines'
+  | 'mobile';
 
 /** Each page's shape while it is read, so the page lands where its skeleton stood. */
 export function GatewayPageWaiting({ page }: { page: GatewayPageId }) {
@@ -22,6 +24,7 @@ export function GatewayPageWaiting({ page }: { page: GatewayPageId }) {
   if (page === 'apps') return <AppsWaiting />;
   if (page === 'mcp-servers') return <McpServersWaiting />;
   if (page === 'ssh-keys') return <SshKeysWaiting />;
+  if (page === 'mobile') return <MobileWaiting />;
   return <MachinesWaiting />;
 }
 
@@ -42,5 +45,6 @@ export function GatewayPage({
   if (page === 'apps') return <AppsPage />;
   if (page === 'mcp-servers') return <McpServersPage />;
   if (page === 'ssh-keys') return <SshKeysPage />;
+  if (page === 'mobile') return <MobilePage />;
   return <MachinesPage thisComputer={thisComputer} />;
 }
