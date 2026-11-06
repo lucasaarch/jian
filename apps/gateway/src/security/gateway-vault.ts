@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, like, or } from 'drizzle-orm';
 import type { Clock } from '../core/clock.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { gatewaySecrets } from '../storage/schema.js';
@@ -56,6 +56,24 @@ export class GatewayVault {
     };
 
     await (tx ? remove(tx) : this.store.transaction(GATEWAY_SCOPE, remove));
+  }
+
+  /**
+   * Moves `from` and every secret under it (`from:…`) to the same place under `to`. Each is read
+   * and written again, since a ciphertext is bound to the name it was written under.
+   */
+  async move(from: string, to: string, tx: Queryable): Promise<void> {
+    const escaped = from.replace(/[\\%_]/g, (char) => `\\${char}`);
+    const rows = await tx
+      .select({ name: gatewaySecrets.name })
+      .from(gatewaySecrets)
+      .where(or(eq(gatewaySecrets.name, from), like(gatewaySecrets.name, `${escaped}:%`)));
+
+    for (const { name } of rows) {
+      const value = await this.read(name, tx);
+      if (value !== undefined) await this.put(`${to}${name.slice(from.length)}`, value, tx);
+      await this.discard(name, tx);
+    }
   }
 
   /**

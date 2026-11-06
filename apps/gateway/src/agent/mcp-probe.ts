@@ -26,6 +26,10 @@ export async function probeMcpServer(
   vault: SecretReader,
   fetcher?: typeof globalThis.fetch,
   oauth?: McpOAuthProviders,
+  /** Run on the listed tools while the client is still open, as naming the account does. */
+  withTools?: (
+    tools: Awaited<ReturnType<Awaited<ReturnType<typeof connectMcp>>['tools']>>,
+  ) => Promise<void>,
 ): Promise<McpStatus> {
   const { name } = server;
   const checkedAt = new Date().toISOString();
@@ -44,7 +48,9 @@ export async function probeMcpServer(
     });
 
     try {
-      const tools = Object.entries(await client.tools()).map(([toolName, definition]) => ({
+      const listed = await client.tools();
+      await withTools?.(listed);
+      const tools = Object.entries(listed).map(([toolName, definition]) => ({
         name: toolName,
         ...(typeof definition.description === 'string'
           ? { description: definition.description.slice(0, 600) }

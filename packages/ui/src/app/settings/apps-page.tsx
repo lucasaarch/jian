@@ -15,7 +15,7 @@ import { matchesQuery } from '../../lib/search';
 import { useActions } from '../../lib/workspace';
 import { GITHUB_DESCRIPTION, GitHubCard, githubOffered } from './github-card';
 import { McpAppCard } from './mcp-app-card';
-import { CATEGORIES, type Category, MCP_APPS } from './mcp-apps';
+import { CATEGORIES, type Category, MCP_APPS, serversOf } from './mcp-apps';
 import { X_DESCRIPTION, XCard, xOffered } from './x-card';
 
 type App = {
@@ -24,6 +24,8 @@ type App = {
   description: string;
   category: Category;
   offered: boolean;
+  /** With at least one account in: listed ahead of the rest. */
+  connected: boolean;
   card: ReactNode;
 };
 
@@ -50,6 +52,7 @@ export function AppsPage() {
   const { api } = useActions();
   const github = useQuery(queries.githubIntegration());
   const x = useQuery(queries.xIntegration());
+  const servers = useQuery(queries.mcpServers());
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>(ALL);
 
@@ -60,6 +63,7 @@ export function AppsPage() {
       description: GITHUB_DESCRIPTION,
       category: 'development',
       offered: githubOffered(github.data),
+      connected: (github.data?.accounts.length ?? 0) > 0,
       card: <GitHubCard api={api} />,
     },
     {
@@ -68,15 +72,26 @@ export function AppsPage() {
       description: X_DESCRIPTION,
       category: 'social',
       offered: xOffered(x.data),
+      connected: (x.data?.accounts.length ?? 0) > 0,
       card: <XCard api={api} />,
     },
     // A service's own MCP server under a card, which every gateway can connect.
-    ...MCP_APPS.map((app) => ({ ...app, offered: true, card: <McpAppCard app={app} /> })),
+    ...MCP_APPS.map((app) => ({
+      ...app,
+      offered: true,
+      connected: serversOf(app, servers.data ?? []).length > 0,
+      card: <McpAppCard app={app} />,
+    })),
   ];
-  const apps = every.filter((app) => app.offered);
+  // What the owner already uses comes first, the moment it is connected; each group keeps the
+  // catalog's order.
+  const apps = every
+    .filter((app) => app.offered)
+    .sort((a, b) => Number(b.connected) - Number(a.connected));
 
-  // Until GitHub and X have answered, their cards would land in the grid after the rest.
-  if (github.isPending || x.isPending) return <AppsWaiting />;
+  // Until GitHub, X and the saved servers have answered, cards would land in the grid and then
+  // jump to where they belong.
+  if (github.isPending || x.isPending || servers.isPending) return <AppsWaiting />;
 
   const categories: FieldOption[] = [
     { value: ALL, label: 'All categories' },

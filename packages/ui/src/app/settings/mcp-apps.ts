@@ -1,3 +1,4 @@
+import { MCP_APP_ADDRESSES, type McpAppId, mcpAppOf } from '@jian/contracts';
 import {
   type SimpleIcon,
   siAirtable,
@@ -60,7 +61,7 @@ export type Category = keyof typeof CATEGORIES;
  */
 export type McpApp = {
   /** Also the MCP server's name, so it follows that name's rule. */
-  id: string;
+  id: McpAppId;
   name: string;
   description: string;
   category: Category;
@@ -101,13 +102,12 @@ const attioMark: AppMark = {
   path: 'm31.669 19.175l-2.673-4.279l-.016-.026l-.211-.336a2.16 2.16 0 0 0-1.838-1.022l-4.306-.014l-.3.481l-5.146 8.235l-.284.456l2.156 3.444a2.15 2.15 0 0 0 1.843 1.023h6.035a2.19 2.19 0 0 0 1.842-1.02l.213-.34s.008-.01.01-.015l2.677-4.284c.44-.7.44-1.605 0-2.303zm-.816 1.792l-2.677 4.284l-.037.052a.363.363 0 0 1-.579-.054l-2.678-4.284a1.2 1.2 0 0 1-.137-.969c.03-.105.076-.21.135-.306l2.674-4.28l.006-.01a.34.34 0 0 1 .213-.154q.04-.01.071-.014h.03c.062 0 .215.02.31.176l2.674 4.278c.244.39.244.891 0 1.28zM23.758 8.823a2.19 2.19 0 0 0 0-2.303l-2.673-4.278l-.223-.36a2.16 2.16 0 0 0-1.844-1.02h-6.034c-.754 0-1.442.381-1.844 1.022L.333 19.178a2.16 2.16 0 0 0-.002 2.301L3.23 26.12c.4.64 1.088 1.02 1.842 1.02h6.035c.758 0 1.446-.381 1.844-1.022l.22-.35v-.004s.005-.006.005-.008l2.154-3.445l6.384-10.218l2.041-3.268zm-.63-1.151c0 .22-.062.443-.187.64L12.355 25.255a.36.36 0 0 1-.31.17a.36.36 0 0 1-.31-.17l-2.676-4.286a1.22 1.22 0 0 1 0-1.28L19.645 2.752a.36.36 0 0 1 .31-.173c.062 0 .215.018.313.175L22.94 7.03c.125.197.187.42.187.64',
 };
 
-export const MCP_APPS: McpApp[] = [
+const CATALOG: Array<Omit<McpApp, 'url' | 'formerUrls'>> = [
   {
     id: 'linear',
     name: 'Linear',
     description: 'Issues, projects and cycles in your Linear workspace.',
     category: 'projects',
-    url: 'https://mcp.linear.app/mcp',
     icon: siLinear,
   },
   {
@@ -115,8 +115,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Atlassian',
     description: 'Jira, Confluence, Compass and Bitbucket in your Atlassian organization.',
     category: 'projects',
-    url: 'https://mcp.atlassian.com/v2/mcp',
-    formerUrls: ['https://mcp.atlassian.com/v1/mcp'],
     icon: siAtlassian,
   },
   {
@@ -124,7 +122,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Trello',
     description: 'Boards, lists and cards in your Trello workspaces.',
     category: 'projects',
-    url: 'https://mcp.trello.com/v1',
     icon: siTrello,
   },
   {
@@ -132,7 +129,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Todoist',
     description: 'Tasks, projects and due dates in Todoist.',
     category: 'projects',
-    url: 'https://ai.todoist.net/mcp',
     icon: siTodoist,
   },
   {
@@ -140,7 +136,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'ClickUp',
     description: 'Tasks, lists and docs in your ClickUp workspace.',
     category: 'projects',
-    url: 'https://mcp.clickup.com/mcp',
     icon: siClickup,
   },
   {
@@ -148,7 +143,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'monday.com',
     description: 'Boards, items and updates on monday.com.',
     category: 'projects',
-    url: 'https://mcp.monday.com/mcp',
     icon: mondayMark,
   },
   {
@@ -156,7 +150,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Notion',
     description: 'Search, read and write pages and databases in Notion.',
     category: 'productivity',
-    url: 'https://mcp.notion.com/mcp',
     icon: siNotion,
   },
   {
@@ -164,7 +157,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Airtable',
     description: 'Bases, tables and records in Airtable.',
     category: 'productivity',
-    url: 'https://mcp.airtable.com/mcp',
     icon: siAirtable,
   },
   {
@@ -172,7 +164,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Zapier',
     description: 'The actions you set up on Zapier, across the apps it connects.',
     category: 'productivity',
-    url: 'https://mcp.zapier.com/api/mcp/mcp',
     icon: siZapier,
   },
   {
@@ -180,7 +171,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Make',
     description: 'Scenarios in your Make organization, run as tools.',
     category: 'productivity',
-    url: 'https://mcp.make.com',
     icon: siMake,
   },
   {
@@ -188,7 +178,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Calendly',
     description: 'Event types, scheduled meetings and availability in Calendly.',
     category: 'productivity',
-    url: 'https://mcp.calendly.com',
     icon: siCalendly,
   },
   {
@@ -196,7 +185,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Cal.com',
     description: 'Bookings, event types and availability on Cal.com.',
     category: 'productivity',
-    url: 'https://mcp.cal.com/mcp',
     icon: siCaldotcom,
   },
   {
@@ -204,7 +192,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Dropbox',
     description: 'Files and folders in your Dropbox.',
     category: 'productivity',
-    url: 'https://mcp.dropbox.com/mcp',
     icon: siDropbox,
   },
   {
@@ -212,7 +199,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Canva',
     description: 'Find, create and export designs in Canva.',
     category: 'design',
-    url: 'https://mcp.canva.com/mcp',
     icon: canvaMark,
   },
   {
@@ -220,7 +206,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Webflow',
     description: 'Sites, pages and CMS collections on Webflow.',
     category: 'design',
-    url: 'https://mcp.webflow.com/mcp',
     icon: siWebflow,
   },
   {
@@ -228,7 +213,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Wix',
     description: 'Sites, content and business data on Wix.',
     category: 'design',
-    url: 'https://mcp.wix.com/mcp',
     icon: siWix,
   },
   {
@@ -236,7 +220,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Miro',
     description: 'Boards, their items and diagrams in Miro.',
     category: 'design',
-    url: 'https://mcp.miro.com/',
     icon: siMiro,
   },
   {
@@ -244,7 +227,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Sanity',
     description: 'Documents, schemas and datasets in your Sanity projects.',
     category: 'design',
-    url: 'https://mcp.sanity.io',
     icon: siSanity,
   },
   {
@@ -252,7 +234,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Stripe',
     description: 'Customers, payments, invoices and subscriptions on Stripe.',
     category: 'payments',
-    url: 'https://mcp.stripe.com',
     icon: siStripe,
   },
   {
@@ -260,7 +241,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'PayPal',
     description: 'Invoices, orders and transactions on PayPal.',
     category: 'payments',
-    url: 'https://mcp.paypal.com/mcp',
     icon: siPaypal,
   },
   {
@@ -268,7 +248,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Square',
     description: 'Payments, orders, catalog and customers on Square.',
     category: 'payments',
-    url: 'https://mcp.squareup.com/mcp',
     icon: siSquare,
   },
   {
@@ -276,7 +255,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Mercado Pago',
     description: 'Mercado Pago applications and credentials, webhooks, test users and the docs.',
     category: 'payments',
-    url: 'https://mcp.mercadopago.com/mcp',
     icon: siMercadopago,
   },
   {
@@ -284,7 +262,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Intercom',
     description: 'Conversations, contacts and help articles in Intercom.',
     category: 'customers',
-    url: 'https://mcp.intercom.com/mcp',
     icon: siIntercom,
   },
   {
@@ -292,7 +269,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Attio',
     description: 'Companies, people and deals in your Attio CRM.',
     category: 'customers',
-    url: 'https://mcp.attio.com/mcp',
     icon: attioMark,
   },
   {
@@ -300,7 +276,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Sentry',
     description: 'Errors, issues and releases from Sentry.',
     category: 'development',
-    url: 'https://mcp.sentry.dev/mcp',
     icon: siSentry,
   },
   {
@@ -308,7 +283,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'PostHog',
     description: 'Product analytics, feature flags and experiments on PostHog.',
     category: 'development',
-    url: 'https://mcp.posthog.com/mcp',
     icon: siPosthog,
   },
   {
@@ -316,7 +290,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Vercel',
     description: 'Projects, deployments and their logs on Vercel.',
     category: 'development',
-    url: 'https://mcp.vercel.com',
     icon: siVercel,
   },
   {
@@ -324,7 +297,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Netlify',
     description: 'Sites, deploys and their settings on Netlify.',
     category: 'development',
-    url: 'https://mcp.netlify.com/mcp',
     icon: siNetlify,
   },
   {
@@ -332,7 +304,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Cloudflare',
     description: 'Your Cloudflare account through its API: Workers, DNS, storage and more.',
     category: 'development',
-    url: 'https://mcp.cloudflare.com/mcp',
     icon: siCloudflare,
   },
   {
@@ -340,7 +311,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Supabase',
     description: 'Projects, databases, functions and logs on Supabase.',
     category: 'development',
-    url: 'https://mcp.supabase.com/mcp',
     icon: siSupabase,
   },
   {
@@ -348,7 +318,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Neon',
     description: 'Postgres projects, branches and queries on Neon.',
     category: 'development',
-    url: 'https://mcp.neon.tech/mcp',
     icon: siNeon,
   },
   {
@@ -356,7 +325,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Prisma Postgres',
     description: 'Prisma Postgres databases, their schema and backups.',
     category: 'development',
-    url: 'https://mcp.prisma.io/mcp',
     icon: siPrisma,
   },
   {
@@ -364,7 +332,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Hugging Face',
     description: 'Models, datasets, Spaces and papers on Hugging Face.',
     category: 'development',
-    url: 'https://huggingface.co/mcp',
     icon: siHuggingface,
   },
   {
@@ -372,7 +339,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'GitLab',
     description: 'Projects, issues, merge requests and pipelines on GitLab.com.',
     category: 'development',
-    url: 'https://gitlab.com/api/v4/mcp',
     icon: siGitlab,
   },
   {
@@ -380,9 +346,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'AWS',
     description: 'AWS services through their APIs, as your IAM permissions allow, and the docs.',
     category: 'development',
-    // The query has AWS answer a call with no token by asking for sign-in, which is what starts
-    // it here; without it the first call is answered and sign-in never begins.
-    url: 'https://aws-mcp.us-east-1.api.aws/mcp?oauth=initialize',
     icon: awsMark,
   },
   {
@@ -390,7 +353,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Railway',
     description: 'Projects, services, deployments and logs on Railway.',
     category: 'development',
-    url: 'https://mcp.railway.com',
     icon: siRailway,
   },
   {
@@ -398,7 +360,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Hostinger',
     description: 'VPS, domains, DNS, hosting, billing and email marketing at Hostinger.',
     category: 'development',
-    url: 'https://mcp.hostinger.com',
     icon: siHostinger,
   },
   {
@@ -406,7 +367,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Expo',
     description: 'EAS builds and workflows, store crashes and reviews, and the Expo docs.',
     category: 'development',
-    url: 'https://mcp.expo.dev/mcp',
     icon: siExpo,
   },
   {
@@ -414,7 +374,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Resend',
     description: 'Emails, domains, audiences and broadcasts in Resend.',
     category: 'development',
-    url: 'https://mcp.resend.com/mcp',
     icon: siResend,
   },
   {
@@ -422,7 +381,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Postman',
     description: 'Workspaces, collections, environments and APIs in Postman.',
     category: 'development',
-    url: 'https://mcp.postman.com/mcp',
     icon: siPostman,
   },
   {
@@ -430,7 +388,6 @@ export const MCP_APPS: McpApp[] = [
     name: 'Buildkite',
     description: 'Pipelines, builds and job logs on Buildkite.',
     category: 'development',
-    url: 'https://mcp.buildkite.com/mcp',
     icon: siBuildkite,
   },
   {
@@ -438,22 +395,25 @@ export const MCP_APPS: McpApp[] = [
     name: 'Mixpanel',
     description: 'Events, reports and funnels in your Mixpanel projects.',
     category: 'development',
-    url: 'https://mcp.mixpanel.com/mcp',
     icon: siMixpanel,
   },
 ];
 
-/** The same address however it was typed: a trailing slash makes no other server. */
-const same = (a: string | undefined, b: string) =>
-  Boolean(a) && a?.replace(/\/+$/, '') === b.replace(/\/+$/, '');
+/** The cards, each with the addresses its server is known by, which the gateway reads too. */
+export const MCP_APPS: McpApp[] = CATALOG.map((app) => {
+  const [url, ...formerUrls] = MCP_APP_ADDRESSES[app.id];
+  return { ...app, url, ...(formerUrls.length ? { formerUrls } : {}) };
+});
 
 /** Whether an address is this app's, now or before it moved. */
-const isAt = (app: McpApp, url: string | undefined) =>
-  [app.url, ...(app.formerUrls ?? [])].some((known) => same(url, known));
+const isAt = (app: McpApp, url: string | undefined) => mcpAppOf(url) === app.id;
 
-/** The saved server that is this app, by its address: a server the owner added by hand counts. */
-export function serverOf<T extends { url?: string | undefined }>(app: McpApp, servers: T[]) {
-  return servers.find((server) => isAt(app, server.url));
+/**
+ * The saved servers that are this app, by their address, an account each: a server the owner
+ * added by hand counts.
+ */
+export function serversOf<T extends { url?: string | undefined }>(app: McpApp, servers: T[]) {
+  return servers.filter((server) => isAt(app, server.url));
 }
 
 /**

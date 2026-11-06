@@ -4,6 +4,7 @@ export * from './coordination.js';
 export * from './decisions.js';
 export * from './github-items.js';
 export * from './integrations.js';
+export * from './mcp-apps.js';
 export * from './media.js';
 export * from './message-actions.js';
 export * from './openai.js';

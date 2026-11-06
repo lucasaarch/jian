@@ -1,6 +1,7 @@
 import {
   type McpServer,
   type McpStatus,
+  mcpAppOf,
   mcpDraftCheckSchema,
   mcpServerListInputSchema,
 } from '@jian/contracts';
@@ -10,6 +11,7 @@ import {
   mcpValueSecret,
   type SecretReader,
 } from '../agent/mcp-connect.js';
+import { accountServerName, signedInAs } from '../agent/mcp-identity.js';
 import type { McpLogins } from '../agent/mcp-login.js';
 import { probeMcpServer } from '../agent/mcp-probe.js';
 import type { McpOAuthProviders } from '../agent/types.js';
@@ -128,13 +130,63 @@ export class McpServers {
     });
   }
 
-  /** Connects to one server now and reports what it answered, with where to sign in if asked. */
+  /**
+   * Connects to one server now and reports what it answered, with where to sign in if asked.
+   *
+   * An app's server still under the name Connect gave it (\`linear\`, \`linear_2\`) is asked who
+   * it is signed in as and renamed after that account (\`linear_octo\`), the way GitHub's
+   * accounts are told apart; the answer then carries the new name. Agents tell one account of an
+   * app from another by nothing else. A server that cannot say keeps its name.
+   */
   async check(
     name: string,
     fetcher?: typeof globalThis.fetch,
     oauth?: McpOAuthProviders,
   ): ReturnType<typeof probeMcpServer> {
-    return probeMcpServer(await this.server(name), this.vault, fetcher, oauth);
+    const server = await this.server(name);
+    const app = mcpAppOf(server.url);
+    const unnamed = app !== undefined && new RegExp(`^${app}(_\\d+)?$`).test(name);
+    let account: string | undefined;
+    const status = await probeMcpServer(
+      server,
+      this.vault,
+      fetcher,
+      oauth,
+      unnamed
+        ? async (tools) => {
+            account = await signedInAs(tools);
+          }
+        : undefined,
+    );
+    const wanted = app && account ? accountServerName(app, account) : undefined;
+    if (!status.reachable || !wanted || wanted === name) return status;
+
+    const renamed = await this.rename(name, wanted);
+    return { ...status, name: renamed };
+  }
+
+  /**
+   * Gives a server a new name, the first free one from \`to\`, and moves its secrets and sign-in
+   * with it. Returns the name it took.
+   */
+  async rename(from: string, to: string): Promise<string> {
+    return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
+      const servers = await this.list(tx);
+      const taken = new Set(servers.map((server) => server.name).filter((item) => item !== from));
+      let name = to;
+      for (let count = 2; taken.has(name); count++) {
+        name = `${to.slice(0, 30 - String(count).length - 1)}_${count}`;
+      }
+      if (name === from) return from;
+
+      await this.vault.move(mcpSecret(from), mcpSecret(name), tx);
+      await replaceMcpServers(
+        tx,
+        servers.map((server) => (server.name === from ? { ...server, name } : server)),
+        new Date(this.clock()),
+      );
+      return name;
+    });
   }
 
   /**

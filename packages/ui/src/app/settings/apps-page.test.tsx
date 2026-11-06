@@ -64,6 +64,12 @@ beforeEach(() => {
   read.xIntegration.mockReset();
   read.mcpServers.mockReset().mockResolvedValue([]);
   api.replaceMcpServers.mockClear();
+  api.checkMcpServer.mockImplementation(async (name: string) => ({
+    name,
+    reachable: true,
+    tools: [],
+    checkedAt: '2026-11-05T00:00:00.000Z',
+  }));
   vi.spyOn(window, 'open').mockReturnValue(null);
 });
 
@@ -140,7 +146,7 @@ it("counts a server added by hand at an app's address as that app", async () => 
 
   await show();
 
-  await vi.waitFor(() => expect(button('Remove Notion')).toBeDefined());
+  await vi.waitFor(() => expect(button('Configure Notion')).toBeDefined());
   expect(button('Connect Notion')).toBeUndefined();
   await vi.waitFor(() => expect(host.textContent).toContain('Connected'));
 });
@@ -160,8 +166,87 @@ it('keeps a server saved at an address the app has since left as that app', asyn
   await show();
 
   // Connected before Atlassian moved to v2: still its card, not a stranger under MCP servers.
-  await vi.waitFor(() => expect(button('Remove Atlassian')).toBeDefined());
+  await vi.waitFor(() => expect(button('Configure Atlassian')).toBeDefined());
   expect(button('Connect Atlassian')).toBeUndefined();
+});
+
+it('lists the apps already connected ahead of the rest', async () => {
+  read.githubIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  read.xIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  read.mcpServers.mockResolvedValue([
+    { name: 'stripe', transport: 'http', url: 'https://mcp.stripe.com', auth: 'oauth' },
+  ]);
+
+  await show();
+
+  // Stripe is far down the catalog; connected, it leads.
+  await vi.waitFor(() => expect(every()[0]).toBe('Stripe'));
+  expect(button('Configure Stripe')).toBeDefined();
+});
+
+it('connects another account, and shows it under the name its sign-in gave it', async () => {
+  read.githubIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  read.xIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  const octo = {
+    name: 'linear_octo',
+    transport: 'http',
+    url: 'https://mcp.linear.app/mcp',
+    auth: 'oauth',
+  };
+  read.mcpServers.mockResolvedValue([octo]);
+
+  await show();
+  const configure = await vi.waitFor(() => {
+    const found = button('Configure Linear');
+    if (!found) throw new Error('no Configure');
+    return found;
+  });
+  await act(async () => configure.click());
+  const dialog = await vi.waitFor(() => {
+    const found = document.querySelector('[role="dialog"]');
+    if (!found) throw new Error('no dialog');
+    return found;
+  });
+  expect(dialog.querySelector('[aria-label="Remove linear_octo"]')).not.toBeNull();
+  expect(dialog.querySelector('input')).toBeNull();
+
+  // Connected under a name to hold it until the gateway learns who signed in.
+  const connect = [...dialog.querySelectorAll('button')].find((item) =>
+    item.textContent?.includes('Connect another account'),
+  );
+  await act(async () => connect?.click());
+  expect(api.replaceMcpServers).toHaveBeenCalledWith([
+    octo,
+    expect.objectContaining({ name: 'linear', url: 'https://mcp.linear.app/mcp', auth: 'oauth' }),
+  ]);
+});
+
+it('shows an account under the name its sign-in gave it, once the gateway renames it', async () => {
+  read.githubIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  read.xIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  const server = { transport: 'http', url: 'https://mcp.linear.app/mcp', auth: 'oauth' };
+  read.mcpServers
+    .mockResolvedValueOnce([{ ...server, name: 'linear' }])
+    .mockResolvedValue([{ ...server, name: 'linear_kai' }]);
+  // The gateway learned who signed in and answers under the account's name.
+  api.checkMcpServer.mockImplementation(async (name: string) => ({
+    name: name === 'linear' ? 'linear_kai' : name,
+    reachable: true,
+    tools: [],
+    checkedAt: '2026-11-05T00:00:00.000Z',
+  }));
+
+  await show();
+  const configure = await vi.waitFor(() => {
+    const found = button('Configure Linear');
+    if (!found) throw new Error('no Configure');
+    return found;
+  });
+  await act(async () => configure.click());
+
+  await vi.waitFor(() =>
+    expect(document.querySelector('[aria-label="Remove linear_kai"]')).not.toBeNull(),
+  );
 });
 
 it('shows a card only for each app the gateway offers', async () => {
