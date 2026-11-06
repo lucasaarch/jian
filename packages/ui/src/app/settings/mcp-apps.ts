@@ -55,7 +55,7 @@ export type McpApp = {
  * An app's mark, one path drawn in the text colour. Simple Icons has most; one it lacks is drawn
  * here from an openly licensed set, with its own `viewBox` when it is not the 24 unit square.
  */
-export type AppMark = Pick<SimpleIcon, 'path'> & { viewBox?: string };
+type AppMark = Pick<SimpleIcon, 'path'> & { viewBox?: string };
 
 /** Canva, from Boxicons Brands (MIT). */
 const canvaMark: AppMark = {
