@@ -673,6 +673,13 @@
       "when": 1793800000000,
       "tag": "0095_devices",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1793900000000,
+      "tag": "0096_message-request-key",
+      "breakpoints": true
     }
   ]
 }

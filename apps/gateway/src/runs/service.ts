@@ -33,6 +33,8 @@ import {
 import type { SessionReader } from '../sessions/port.js';
 import {
   findMessage,
+  findRunIdByMessageKey,
+  insertKeyedMessage,
   insertMessage,
   parseCavemanMode,
   parsePonytailMode,
@@ -226,6 +228,12 @@ export class Runs {
         return this.sameRequest(duplicate, data.text, data.model);
       }
 
+      // A steered message has no run of its own to carry the key, so the retry is found through
+      // the message. Without this it would be stored and steered again, or, if the run has
+      // ended since, start a new turn.
+      const sentBefore = await findRunIdByMessageKey(tx, sessionId, data.requestKey);
+      if (sentBefore) return this.run(profileId, sentBefore, tx);
+
       const waiting = await findWaitingSessionRun(tx, profileId, sessionId);
 
       // Answering a mid-run question resumes work; it is not a steer and not a bare "continue".
@@ -292,18 +300,28 @@ export class Runs {
       // and is read between its steps, so nothing waits for a turn that already began.
       if (inFlight) {
         await bindMedia(tx, profileId, sessionId, data.mediaIds ?? [], inFlight.id);
-        await insertMessage(tx, {
-          id: randomUUID(),
-          profileId,
-          sessionId,
-          runId: inFlight.id,
-          role: 'user',
-          content: data.text,
-          ...(options.channelMessage ? { channelMessage: options.channelMessage } : {}),
-          ...(author ? { author } : {}),
-          ...purposeOf(options, data.text),
-          createdAt: nowIso(this.clock),
-        });
+        const stored = await insertKeyedMessage(
+          tx,
+          {
+            id: randomUUID(),
+            profileId,
+            sessionId,
+            runId: inFlight.id,
+            role: 'user',
+            content: data.text,
+            ...(options.channelMessage ? { channelMessage: options.channelMessage } : {}),
+            ...(author ? { author } : {}),
+            ...purposeOf(options, data.text),
+            createdAt: nowIso(this.clock),
+          },
+          data.requestKey,
+        );
+
+        // Another send with this key got in between the lookup and the insert.
+        if (!stored) {
+          const existing = await findRunIdByMessageKey(tx, sessionId, data.requestKey);
+          return existing ? this.run(profileId, existing, tx) : inFlight;
+        }
 
         if (modeChange) await setPonytailMode(tx, profileId, sessionId, modeChange);
         if (cavemanChange) await setCavemanMode(tx, profileId, sessionId, cavemanChange);

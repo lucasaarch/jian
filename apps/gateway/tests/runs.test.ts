@@ -234,6 +234,73 @@ it('takes a message sent mid-run as a correction to that run', async () => {
   expect(await services.lifecycle.steer(first.id, 'worker')).toBeNull();
 });
 
+async function running(setupResult: Awaited<ReturnType<typeof setup>>) {
+  const { services, profile, session } = setupResult;
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Start',
+    requestKey: 'start',
+  });
+
+  await services.lifecycle.claim(run.id, profile.id, 'worker');
+
+  return run;
+}
+
+async function userTexts(setupResult: Awaited<ReturnType<typeof setup>>, text: string) {
+  const { services, profile, session } = setupResult;
+  const history = await services.sessions.messages(profile.id, session.id);
+
+  return history.filter((message) => message.role === 'user' && message.content === text);
+}
+
+it('a retried message into a running turn is stored and steered once', async () => {
+  const fixture = await setup();
+  const { services, profile, session } = fixture;
+  const run = await running(fixture);
+  const body = { text: 'Also check the logs', requestKey: 'k2' };
+
+  const first = await services.runs.submit(profile.id, session.id, body);
+  const retry = await services.runs.submit(profile.id, session.id, body);
+
+  expect(first.id).toBe(run.id);
+  expect(retry.id).toBe(run.id);
+  expect(await userTexts(fixture, body.text)).toHaveLength(1);
+  expect(await services.lifecycle.steer(run.id, 'worker')).toBe(body.text);
+  expect(await services.lifecycle.steer(run.id, 'worker')).toBeNull();
+});
+
+it('a retry after the steered turn ended does not start a new turn', async () => {
+  const fixture = await setup();
+  const { services, profile, session } = fixture;
+  const run = await running(fixture);
+  const body = { text: 'Also check the logs', requestKey: 'k3' };
+
+  await services.runs.submit(profile.id, session.id, body);
+  await services.lifecycle.finish(profile.id, run.id, 'worker', 'completed', 'Done');
+
+  const retry = await services.runs.submit(profile.id, session.id, body);
+
+  expect(retry.id).toBe(run.id);
+  expect(await userTexts(fixture, body.text)).toHaveLength(1);
+});
+
+it('two identical steered sends at once store one message', async () => {
+  const fixture = await setup();
+  const { services, profile, session } = fixture;
+  const run = await running(fixture);
+  const body = { text: 'Also check the logs', requestKey: 'k4' };
+
+  const [a, b] = await Promise.all([
+    services.runs.submit(profile.id, session.id, body),
+    services.runs.submit(profile.id, session.id, body),
+  ]);
+
+  expect(a.id).toBe(run.id);
+  expect(b.id).toBe(run.id);
+  expect(await userTexts(fixture, body.text)).toHaveLength(1);
+  expect(await services.lifecycle.steer(run.id, 'worker')).toBe(body.text);
+});
+
 it('keeps every correction when two arrive before the run reads them', async () => {
   const { services, profile, session } = await setup();
 

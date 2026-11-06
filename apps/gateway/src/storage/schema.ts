@@ -515,6 +515,9 @@ export const messages = pgTable(
     authorName: text('author_name'),
     call: jsonb('call').$type<{ profileId: string; sessionId: string; runId: string }>(),
     purpose: text('purpose').$type<'answer' | 'resume' | 'compact'>(),
+    // Set on a message sent into a turn already running, which has no run of its own to carry the
+    // key: a retry of that send finds this row instead of storing and steering it again.
+    requestKey: text('request_key'),
     createdAt,
     // The order they were written in. Two lines of one turn can share a millisecond, and an id
     // is random: without this they could swap places in the conversation.
@@ -524,6 +527,9 @@ export const messages = pgTable(
     index('messages_session').on(table.sessionId, table.createdAt.desc()),
     index('messages_profile').on(table.profileId, table.createdAt.desc()),
     index('messages_search').using('gin', sql`to_tsvector('simple', ${table.content})`),
+    uniqueIndex('messages_request_key')
+      .on(table.sessionId, table.requestKey)
+      .where(sql`${table.requestKey} IS NOT NULL`),
   ],
 );
 

@@ -334,6 +334,47 @@ export async function insertMessage(
   else await insert;
 }
 
+/**
+ * Stores a message a person sent under a request key, once. The unique index on the key is the
+ * guard when two sends race past the lookup; the loser inserts nothing instead of failing, since
+ * a failed statement would abort the whole profile transaction.
+ */
+export async function insertKeyedMessage(
+  db: Queryable,
+  message: Message,
+  requestKey: string,
+): Promise<boolean> {
+  const { author, ...rest } = message;
+  const inserted = await db
+    .insert(messages)
+    .values({
+      ...rest,
+      requestKey,
+      authorId: author?.id ?? null,
+      authorName: author?.name ?? null,
+      createdAt: new Date(message.createdAt),
+    })
+    .onConflictDoNothing()
+    .returning({ id: messages.id });
+
+  return inserted.length > 0;
+}
+
+/** The run a message sent under this request key belongs to, if one was already stored. */
+export async function findRunIdByMessageKey(
+  db: Queryable,
+  sessionId: string,
+  requestKey: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ runId: messages.runId })
+    .from(messages)
+    .where(and(eq(messages.sessionId, sessionId), eq(messages.requestKey, requestKey)))
+    .limit(1);
+
+  return row?.runId ?? null;
+}
+
 /** A message ID never grants access to another profile or conversation. */
 export async function findMessage(
   db: Queryable,
