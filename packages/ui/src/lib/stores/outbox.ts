@@ -15,7 +15,15 @@ export type Outgoing = {
   state: 'sending' | 'failed' | 'sent';
   error?: string;
   runId?: string;
+  /**
+   * A command, not something said: no bubble while it is sent, only the agent starting, since
+   * the conversation never shows it. One that fails is drawn, to be sent again.
+   */
+  quiet?: boolean;
 };
+
+/** Compacts the conversation's context now; the gateway keeps it out of the chat. */
+export const COMPACT_COMMAND = '/compact';
 
 export const useOutbox = create<{ items: Outgoing[] }>(() => ({ items: [] }));
 
@@ -67,6 +75,9 @@ export function sendNow(message: {
         text: message.text,
         mediaIds: message.mediaIds,
         ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+        ...(!message.mediaIds.length && message.text.trim() === COMPACT_COMMAND
+          ? { quiet: true }
+          : {}),
         at: new Date().toISOString(),
         state: 'sending',
       },

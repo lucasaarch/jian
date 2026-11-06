@@ -152,3 +152,69 @@ it('tells the owner why /compact failed instead of saying there was nothing to c
   expect(told[0]).toContain('quota exceeded');
   expect(told[0]).not.toContain('nothing old enough');
 });
+
+it('compacts once on /compact sent while a turn runs, without telling the agent the words', async () => {
+  const { services, profile, session } = await conversation();
+  for (let index = 0; index < 6; index++) {
+    await insertMessage(services.store.db, {
+      id: randomUUID(),
+      profileId: profile.id,
+      sessionId: session.id,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      content: `turn-${index} ${'history '.repeat(300)}`,
+      createdAt: new Date(Date.parse('2026-10-30T09:00:00.000Z') + index * 1000).toISOString(),
+    });
+  }
+  const run = await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: 'Check the deploy', requestKey: 'deploy' },
+    { ownerMessage: true },
+  );
+  let clicked = false;
+  let summariesAfter = 0;
+  const prompts: string[] = [];
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (!options.tools?.length) {
+        if (clicked) summariesAfter++;
+        return answer('The earlier turns, in short.');
+      }
+      if (!clicked) {
+        // Clicked again and again for want of a sign it was heard: each joins the turn at work.
+        for (const key of ['compact-1', 'compact-2', 'compact-3']) {
+          const joined = await services.runs.submit(
+            profile.id,
+            session.id,
+            { text: '/compact', requestKey: key },
+            { ownerMessage: true },
+          );
+          expect(joined.id).toBe(run.id);
+        }
+        clicked = true;
+        return {
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'read',
+              toolName: 'read_memories',
+              input: '{}',
+            },
+          ],
+          finishReason: { unified: 'tool-calls' as const, raw: 'tool-calls' },
+          usage: usageOf(10),
+          warnings: [],
+        };
+      }
+      prompts.push(JSON.stringify(options.prompt));
+      return answer('The deploy is fine.');
+    },
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const finished = await services.runs.run(profile.id, run.id);
+  expect(finished.output).toBe('The deploy is fine.');
+  expect(summariesAfter).toBe(1);
+  expect(prompts.join('')).not.toContain('/compact');
+});

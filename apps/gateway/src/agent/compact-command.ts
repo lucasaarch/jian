@@ -7,6 +7,19 @@ export const COMPACT_COMMAND = '/compact';
 export const isCompactCommand = (input: string) => input.trim() === COMPACT_COMMAND;
 
 /**
+ * What the owner said while a turn ran, with each `/compact` among it taken out. Sent then, the
+ * command joins the turn like any message, but it asks for a compaction, not an answer: read as
+ * words, the agent was told "/compact" once per click and nothing was compacted. Messages joined
+ * the steer a paragraph each, so a paragraph that is only the command is one.
+ */
+export function withoutCompactCommands(steer: string): { said: string; compact: boolean } {
+  const paragraphs = steer.split('\n\n');
+  const said = paragraphs.filter((paragraph) => !isCompactCommand(paragraph));
+
+  return { said: said.join('\n\n'), compact: said.length < paragraphs.length };
+}
+
+/**
  * What the agent reads in place of the command, once the compaction is over: what it came to,
  * for one line to the owner. The command is not a task, so nothing else is asked of it.
  */

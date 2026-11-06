@@ -1015,15 +1015,17 @@ export function History({
             )
           )}
           {!loading &&
-            outgoing.map((item) => (
-              <OutgoingMessage
-                key={item.key}
-                item={item}
-                profileId={profileId}
-                people={people}
-                api={api}
-              />
-            ))}
+            outgoing
+              .filter((item) => !item.quiet || item.state === 'failed')
+              .map((item) => (
+                <OutgoingMessage
+                  key={item.key}
+                  item={item}
+                  profileId={profileId}
+                  people={people}
+                  api={api}
+                />
+              ))}
           {!loading && startingAt && (
             <LiveTurn run={{ status: 'queued', createdAt: startingAt }} agent={agent} steps={[]} />
           )}

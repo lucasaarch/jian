@@ -803,6 +803,45 @@ it('shows the agent starting as soon as a message is sent, before the gateway an
   }
 });
 
+it('shows the agent starting on /compact at once, without the command, unless it failed', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const api = {
+    messages: async () => [],
+    activities: async () => [],
+    timeline: async () => [],
+  };
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  const working = () => element.querySelector('.thought-line[data-working]')?.textContent ?? '';
+  let refuse: (error: Error) => void = () => {};
+
+  try {
+    await act(async () =>
+      root.render(<History api={api} profileId="profile" sessionId="session" />),
+    );
+    await act(async () =>
+      sendNow({
+        sessionId: 'session',
+        text: '/compact',
+        mediaIds: [],
+        deliver: () => new Promise((_, reject) => (refuse = reject)),
+        delivered: () => {},
+      }),
+    );
+    // Heard at the click: nothing else told the owner it went, and they clicked again.
+    expect(working()).toContain('Starting');
+    expect(element.textContent).not.toContain('/compact');
+
+    await act(async () => refuse(new Error('The gateway is unreachable.')));
+    expect(element.textContent).toContain('/compact');
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+    useOutbox.setState({ items: [] });
+  }
+});
+
 it('reads a turn at work again when the event stream falls silent', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.useFakeTimers();

@@ -67,7 +67,7 @@ import {
   withConversationAffinity,
   withOpenAiPromptCache,
 } from './cache.js';
-import { compactNote, isCompactCommand } from './compact-command.js';
+import { compactNote, isCompactCommand, withoutCompactCommands } from './compact-command.js';
 import { splitDiff } from './diff.js';
 import { githubGitTools } from './github-git.js';
 import { localPlace, remotePlace } from './github-git-place.js';
@@ -1284,7 +1284,11 @@ export class AgentRuntime {
           // What the person said after this run began. It arrives as their own turn, at the
           // point the loop reached, so the agent answers what they are asking now rather than
           // finishing an errand they have already moved on from.
-          const steer = await this.services.lifecycle.steer(runId, owner);
+          const { said: steer, compact } = withoutCompactCommands(
+            (await this.services.lifecycle.steer(runId, owner)) ?? '',
+          );
+          // A turn that is itself `/compact` has just compacted: another click asks for nothing.
+          if (compact && !compactCommand) compactionRequested = true;
 
           if (steer) {
             messages.push({ role: 'user', content: steer });

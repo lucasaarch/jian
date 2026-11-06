@@ -18,7 +18,7 @@ import {
 } from '../../lib/query/agent';
 import { keys } from '../../lib/query/keys';
 import { draftKey } from '../../lib/stores/drafts';
-import { sendNow } from '../../lib/stores/outbox';
+import { COMPACT_COMMAND, sendNow } from '../../lib/stores/outbox';
 import { useRefresh } from '../../lib/workspace';
 import { useParams, useRouter, useSearchParams } from '../../platform/navigation';
 import type { SectionActions } from '../props';
@@ -252,10 +252,19 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                                   key={`composer-context-${active.id}`}
                                   profileId={profile.id}
                                   sessionId={active.id}
-                                  compact={async () => {
-                                    await api.send(profile.id, active.id, '/compact');
-                                    answered();
-                                  }}
+                                  // Through the outbox like a message, so the agent shows as
+                                  // starting at once: sent straight, nothing moved until the
+                                  // next read, and a click that seemed lost was made again.
+                                  compact={async () =>
+                                    sendNow({
+                                      sessionId: active.id,
+                                      text: COMPACT_COMMAND,
+                                      mediaIds: [],
+                                      deliver: (key) =>
+                                        api.send(profile.id, active.id, COMPACT_COMMAND, [], key),
+                                      delivered: answered,
+                                    })
+                                  }
                                 />
                                 <SessionProtection
                                   remembers
