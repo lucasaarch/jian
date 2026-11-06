@@ -13792,6 +13792,7 @@ export interface operations {
                         code: string;
                         /** Format: date-time */
                         expiresAt: string;
+                        expiresIn: number;
                     };
                 };
             };

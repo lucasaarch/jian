@@ -9,7 +9,7 @@ import {
   devicePushInputSchema,
   GATEWAY_SESSION_CHANNEL,
 } from '@jian/contracts';
-import { and, count, desc, eq, gt, isNotNull, isNull, ne } from 'drizzle-orm';
+import { and, count, desc, eq, gt, isNotNull, isNull, lte, ne } from 'drizzle-orm';
 import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { GATEWAY_SCOPE } from '../security/gateway-vault.js';
@@ -53,9 +53,17 @@ export class Devices {
       );
     }
     const code = randomBytes(24).toString('base64url');
-    const expiresAt = new Date(this.clock() + PAIRING_TTL_MS);
+    const now = new Date(this.clock());
+    const expiresAt = new Date(now.getTime() + PAIRING_TTL_MS);
+    // Every QR code shown leaves a row; an expired one can never be spent, so it goes here.
+    await this.store.db.delete(devicePairings).where(lte(devicePairings.expiresAt, now));
     await this.store.db.insert(devicePairings).values({ codeHash: hashSecret(code), expiresAt });
-    return { url: publicUrl.replace(/\/+$/, ''), code, expiresAt: expiresAt.toISOString() };
+    return {
+      url: publicUrl.replace(/\/+$/, ''),
+      code,
+      expiresAt: expiresAt.toISOString(),
+      expiresIn: PAIRING_TTL_MS / 1000,
+    };
   }
 
   async pair(input: unknown): Promise<DevicePaired> {

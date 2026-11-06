@@ -21,11 +21,16 @@ export const deviceSchema = z.strictObject({
   lastSeenAt: z.iso.datetime().nullable(),
 });
 
-/** What the QR code encodes: the address phones reach the gateway at, and a single-use code. */
+/**
+ * What the QR code encodes: the address phones reach the gateway at, and a single-use code.
+ * `expiresIn` is whole seconds from this answer; a countdown runs from it, since `expiresAt` is
+ * on the gateway's clock and the browser's may be minutes off.
+ */
 export const devicePairingSchema = z.strictObject({
   url: z.string(),
   code: z.string(),
   expiresAt: z.iso.datetime(),
+  expiresIn: z.number().int().min(0),
 });
 
 export const devicePairInputSchema = z.strictObject({

@@ -1,6 +1,6 @@
 'use client';
 
-import type { Device } from '@jian/contracts';
+import type { Device, DevicePairing } from '@jian/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useRef, useState } from 'react';
@@ -35,6 +35,11 @@ export function MobileWaiting() {
 
 /** How often the list is read while a code is on screen, so the new phone shows within moments. */
 const WATCH_MS = 3000;
+/**
+ * The least time between two codes, in ms. Each one is a row on the gateway, so a code that
+ * arrives already spent must not set off a request per render.
+ */
+const RENEW_MS = 5000;
 
 const failure = (error: unknown) => (error instanceof Error ? error.message : 'It failed.');
 
@@ -144,7 +149,11 @@ export function MobilePage() {
           </Action>
         </SettingsRow>
       </SettingsGroup>
-      <PairPhone open={pairing} onOpenChange={setPairing} known={list} />
+      <PairPhone
+        open={pairing}
+        onOpenChange={setPairing}
+        known={devices.isSuccess ? list : undefined}
+      />
       <ConfirmDialog
         open={asking}
         onOpenChange={setAsking}
@@ -159,7 +168,8 @@ export function MobilePage() {
   );
 }
 
-type Code = { url: string; code: string; expiresAt: string };
+/** A code, and when it arrived on this browser's clock: the gateway's clock may disagree. */
+type Code = DevicePairing & { arrivedAt: number };
 
 /** The address the Jian app reads from the QR code. */
 const link = ({ url, code }: Code) => `jian://pair?url=${encodeURIComponent(url)}&code=${code}`;
@@ -171,17 +181,23 @@ function PairPhone({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  known: Device[];
+  /** The paired phones, or undefined until the list has loaded. */
+  known: Device[] | undefined;
 }) {
   // The phones there were when the code was shown: any other one is the phone being paired.
-  const before = useRef<Set<string>>(new Set());
+  // Unset until the list has loaded, or every phone already paired would look new.
+  const before = useRef<Set<string> | undefined>(undefined);
+  const renewedAt = useRef(Number.NEGATIVE_INFINITY);
   const [code, setCode] = useState<Code>();
   const [problem, setProblem] = useState('');
   const [now, setNow] = useState(() => Date.now());
 
   const renew = async () => {
+    renewedAt.current = Date.now();
     try {
-      setCode(await panelApi().createDevicePairing());
+      const pairing = await panelApi().createDevicePairing();
+      setCode({ ...pairing, arrivedAt: Date.now() });
+      setNow(Date.now());
       setProblem('');
     } catch (error) {
       setCode(undefined);
@@ -189,15 +205,15 @@ function PairPhone({
     }
   };
 
-  // Each opening snapshots the phones and asks for a first code; closing forgets the code.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `known` is read once, at opening.
+  // Each opening asks for a first code; closing forgets the code and the phones seen.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: renewed once per opening.
   useEffect(() => {
     if (!open) {
       setCode(undefined);
       setProblem('');
+      before.current = undefined;
       return;
     }
-    before.current = new Set(known.map((device) => device.id));
     void renew();
   }, [open]);
 
@@ -207,16 +223,30 @@ function PairPhone({
     return () => clearInterval(timer);
   }, [open]);
 
-  const left = code ? Math.max(0, Math.ceil((Date.parse(code.expiresAt) - now) / 1000)) : 0;
+  // Counted on this browser's clock from when the code arrived, never against `expiresAt`.
+  const left = code
+    ? Math.max(0, Math.ceil(code.expiresIn - Math.max(0, now - code.arrivedAt) / 1000))
+    : 0;
   // A code lives five minutes and works once, so a spent one is swapped, never shown stale.
   const expired = code !== undefined && left === 0;
   // biome-ignore lint/correctness/useExhaustiveDependencies: renewed once per expired code.
   useEffect(() => {
-    if (expired) void renew();
-  }, [expired, code?.code]);
+    if (!expired) return;
+    const timer = setTimeout(
+      () => void renew(),
+      Math.max(0, renewedAt.current + RENEW_MS - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [expired, code]);
 
   useEffect(() => {
-    if (open && known.some((device) => !before.current.has(device.id))) onOpenChange(false);
+    if (!open || !known) return;
+    if (!before.current) {
+      before.current = new Set(known.map((device) => device.id));
+      return;
+    }
+    const seen = before.current;
+    if (known.some((device) => !seen.has(device.id))) onOpenChange(false);
   }, [open, known, onOpenChange]);
 
   return (

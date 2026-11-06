@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { hashSecret } from '../src/devices/tokens.js';
+import { devicePairings } from '../src/storage/schema.js';
 import { testServices } from './helpers/services.js';
 
 const URL_ = 'https://jian.example.test/';
@@ -31,6 +32,21 @@ it('pairs a phone once per code, and the code expires', async () => {
   await expect(
     services.devices.pair({ code: late.code, name: 'Late', platform: 'android' }),
   ).rejects.toMatchObject({ statusCode: 401 });
+});
+
+it('counts a code down in seconds and prunes the codes that expired', async () => {
+  let now = Date.parse('2026-11-06T12:00:00Z');
+  const services = await testServices(() => now);
+  const first = await services.devices.createPairing(URL_);
+  expect(first.expiresIn).toBe(300);
+  await services.devices.pair({ code: first.code, name: 'Spent', platform: 'ios' });
+  await services.devices.createPairing(URL_);
+
+  now += 5 * 60 * 1000 + 1;
+  const fresh = await services.devices.createPairing(URL_);
+
+  const left = await services.store.db.select().from(devicePairings);
+  expect(left.map((row) => row.codeHash)).toEqual([hashSecret(fresh.code)]);
 });
 
 it('creates exactly one device when one code is sent twice at once', async () => {

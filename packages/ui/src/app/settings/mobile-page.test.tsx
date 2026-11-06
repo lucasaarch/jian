@@ -33,7 +33,18 @@ const pairing = (code: string, seconds = 300) => ({
   url: 'https://jian.example.test',
   code,
   expiresAt: new Date(NOW.getTime() + seconds * 1000).toISOString(),
+  expiresIn: seconds,
 });
+const fakeTime = () => {
+  vi.useFakeTimers({
+    toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'],
+  });
+  vi.setSystemTime(NOW);
+};
+const wait = (ms: number) =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
 
 let root: Root | undefined;
 let client: QueryClient;
@@ -99,24 +110,19 @@ it('turns previews on for one phone', async () => {
 });
 
 it("shows a QR of the gateway's address and code, and replaces an expired one", async () => {
-  vi.useFakeTimers({
-    toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'],
-  });
-  vi.setSystemTime(NOW);
+  fakeTime();
   api.createDevicePairing
     .mockResolvedValueOnce(pairing('c1', 60))
     .mockResolvedValueOnce(pairing('c2'));
   await show();
   await click('Pair a phone');
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(10);
-  });
+  await wait(10);
   expect(qr()).toBe('jian://pair?url=https%3A%2F%2Fjian.example.test&code=c1');
   expect(document.body.textContent).toContain('Open Jian on your phone and scan this code.');
 
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(61_000);
-  });
+  await wait(61_000);
+  // The renewal is timed from the effect that sees the code expire, which act flushes last.
+  await wait(10);
   expect(api.createDevicePairing).toHaveBeenCalledTimes(2);
   expect(qr()).toContain('code=c2');
 });
@@ -142,4 +148,57 @@ it('closes the pairing once the new phone appears', async () => {
   await act(async () => client.setQueryData(keys.devices, [phone, other]));
 
   await vi.waitFor(() => expect(qr()).toBeUndefined());
+});
+
+it("counts down from when the code arrived, whatever the gateway's clock says", async () => {
+  fakeTime();
+  // This browser is an hour ahead of the gateway, so the code's own expiry is long past here.
+  api.createDevicePairing.mockResolvedValue({
+    ...pairing('c1'),
+    expiresAt: new Date(NOW.getTime() - 60 * 60_000).toISOString(),
+    expiresIn: 300,
+  });
+  await show();
+  await click('Pair a phone');
+  await wait(10_000);
+
+  expect(qr()).toContain('code=c1');
+  expect(document.body.textContent).toContain('Valid for 4:50');
+  expect(api.createDevicePairing).toHaveBeenCalledTimes(1);
+});
+
+it('asks for a new code at most once every 5 seconds', async () => {
+  fakeTime();
+  let made = 0;
+  // A gateway that only ever answers with spent codes.
+  api.createDevicePairing.mockImplementation(async () => pairing(`c${++made}`, 0));
+  await show();
+  await click('Pair a phone');
+  await wait(4_900);
+  expect(api.createDevicePairing).toHaveBeenCalledTimes(1);
+
+  await wait(200);
+  expect(api.createDevicePairing).toHaveBeenCalledTimes(2);
+  await wait(4_800);
+  expect(api.createDevicePairing).toHaveBeenCalledTimes(2);
+  await wait(200);
+  expect(api.createDevicePairing).toHaveBeenCalledTimes(3);
+});
+
+it('stays open when it was opened before the phones had loaded', async () => {
+  let load: (devices: unknown[]) => void = () => {};
+  api.devices.mockReturnValue(
+    new Promise((resolve) => {
+      load = resolve;
+    }),
+  );
+  api.createDevicePairing.mockResolvedValue(pairing('c1'));
+  await show();
+  await click('Pair a phone');
+  await vi.waitFor(() => expect(qr()).toContain('code=c1'));
+
+  await act(async () => load([phone, other]));
+  await vi.waitFor(() => expect(document.body.textContent).toContain('Spare phone'));
+
+  expect(qr()).toContain('code=c1');
 });
