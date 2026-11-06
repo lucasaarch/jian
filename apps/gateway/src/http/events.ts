@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
 import { EVENTS_PAGE, latestEventId, readEvents, readProgress } from '../core/event-feed.js';
+import type { Devices } from '../devices/service.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { Store } from '../storage/database.js';
 
@@ -12,8 +13,13 @@ interface EventOptions {
   profiles: ProfileReader;
   store: Store;
   token: string;
+  devices: Pick<Devices, 'authenticate'>;
   maxStreams?: number;
+  /** How long a quiet stream waits before a heartbeat, in ms; tests shorten it. */
+  heartbeatMs?: number;
 }
+
+const HEARTBEAT_MS = 25_000;
 
 /**
  * What a stream says of an event: that it happened and which conversation it concerns, which is
@@ -96,6 +102,11 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
       }
 
       let closed = false;
+      const heartbeatMs = options.heartbeatMs ?? HEARTBEAT_MS;
+      // A phone was let in once, when the stream opened; a stream outlives any request, so its
+      // token is checked again at least once a heartbeat, and a revoked phone hears no more.
+      let checkedAt = Date.now();
+      let beat = false;
       const wake = new AbortController();
       // When each working run last changed its progress, as this stream last told it.
       const told = new Map<string, string>();
@@ -127,6 +138,17 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
             return pump();
+          }
+
+          if (request.device && (beat || Date.now() - checkedAt >= heartbeatMs)) {
+            beat = false;
+            checkedAt = Date.now();
+            const still = await options.devices.authenticate(request.headers.authorization ?? '');
+            if (still !== request.device) {
+              reply.raw.end();
+
+              return;
+            }
           }
 
           // Subscribe before reading. A commit between the read and the wait is otherwise lost until
@@ -198,7 +220,10 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
           await Promise.race([
             notified,
             new Promise<void>((resolve) => {
-              heartbeat = setTimeout(resolve, 25_000);
+              heartbeat = setTimeout(() => {
+                beat = true;
+                resolve();
+              }, heartbeatMs);
             }),
           ]);
         } finally {

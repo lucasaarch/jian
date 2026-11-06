@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -96,6 +97,60 @@ describe('device routes', () => {
         headers: { authorization: `Bearer ${bearer}` },
       });
       expect(response.statusCode).toBe(401);
+    }
+  });
+
+  it("ends a revoked phone's open event stream by the next heartbeat", async () => {
+    const services = await testServices();
+    const app = createApp({
+      ...services,
+      token,
+      logger: false,
+      publicUrl: 'https://jian.example.test',
+      heartbeatMs: 100,
+    });
+    apps.push(app);
+    const profile = await services.profiles.createProfile({
+      name: 'Atlas',
+      instructions: 'Help.',
+      model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    });
+    const phone = await pairPhone(app);
+    const url = await app.listen({ host: '127.0.0.1', port: 0 });
+    const controller = new AbortController();
+    const limit = setTimeout(() => controller.abort(), 5_000);
+
+    try {
+      const response = await fetch(`${url}/v1/profiles/${profile.id}/events/stream`, {
+        headers: phone.headers,
+        signal: controller.signal,
+      });
+      expect(response.status).toBe(200);
+      assert.ok(response.body, 'SSE response must have a body');
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+      // Three heartbeats: the phone was checked again twice and is still let in.
+      let data = '';
+      while (data.split(': heartbeat').length < 4) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        data += value;
+      }
+      expect(data.split(': heartbeat').length).toBe(4);
+
+      const revoked = await app.inject({
+        method: 'DELETE',
+        url: `/v1/devices/${phone.id}`,
+        headers: owner,
+      });
+      expect(revoked.statusCode).toBe(204);
+      const at = Date.now();
+      for (;;) {
+        if ((await reader.read()).done) break;
+      }
+      expect(Date.now() - at).toBeLessThan(1_000);
+    } finally {
+      clearTimeout(limit);
+      controller.abort();
     }
   });
 

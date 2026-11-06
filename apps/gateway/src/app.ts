@@ -63,6 +63,8 @@ export function createApp(
     /** `local` for the gateway a desktop app runs, which serves no panel notice of its own. */
     mode?: 'server' | 'local';
     maxStreams?: number;
+    /** How long a quiet event stream waits before a heartbeat, in ms; tests shorten it. */
+    heartbeatMs?: number;
     /**
      * Who may set X-Forwarded-For and -Proto. The rate limits key on the address they name, and
      * the panel cookie is marked Secure from the scheme; trusting anyone else would let a client
