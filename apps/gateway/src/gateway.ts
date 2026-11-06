@@ -10,6 +10,7 @@ import { TelegramChannel } from './channels/telegram.js';
 import type { WhatsAppConnections } from './channels/whatsapp/connections.js';
 import { WhatsAppBusinessChannel } from './channels/whatsapp-business.js';
 import { Coordination } from './coordination/service.js';
+import { gatewayRelease } from './core/release.js';
 import { GitHubIntegrations } from './integrations/github.js';
 import { XClient } from './integrations/x/client.js';
 import { XIntegration } from './integrations/x/integration.js';
@@ -32,6 +33,7 @@ import { Skills } from './skills/service.js';
 import { importWorkspaceSshKeys } from './ssh/import.js';
 import type { StartupStage } from './startup.js';
 import type { Store } from './storage/database.js';
+import { Telemetry } from './telemetry/service.js';
 
 /**
  * How often due schedules are looked for, in milliseconds. A schedule set for 08:00 starts within
@@ -43,6 +45,9 @@ const SCHEDULE_TICK_MS = 15_000;
  * minute (`WATCH_EVERY_MS`); a tick this short only keeps that minute from slipping much.
  */
 const PULL_TICK_MS = 15_000;
+/** How long after start the first telemetry check waits, and how often it runs again, in ms. */
+const TELEMETRY_FIRST_MS = 60_000;
+const TELEMETRY_TICK_MS = 60 * 60_000;
 /**
  * How often a gateway that shares its database with other processes fails the files tasks
  * whose callers gave up, in ms. Until then a task's file text waits in its row.
@@ -130,6 +135,14 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
     }),
     store,
   };
+  const telemetry = new Telemetry(store, {
+    env: process.env,
+    fetcher: outbound.fetch,
+    version: gatewayRelease(),
+    mode: options.mode,
+    role: options.role,
+  });
+  services.settings.useTelemetry(telemetry);
   const codexLogin = new CodexLogin(services, gatewayVault);
   services.media.useCodexLogin(codexLogin);
   services.subscriptionUsage.useCodexLogin(codexLogin);
@@ -231,6 +244,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
   let scheduleTimer: ReturnType<typeof setInterval> | undefined;
   let pullTimer: ReturnType<typeof setInterval> | undefined;
   let sweepTimer: ReturnType<typeof setInterval> | undefined;
+  let telemetryTimer: ReturnType<typeof setInterval> | undefined;
   let stage: StartupStage = 'database';
   let stopping: Promise<void> | undefined;
 
@@ -275,6 +289,11 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
             .catch(() => console.error('jian: pull requests could not be looked at; will retry'));
         }, PULL_TICK_MS);
         pullTimer.unref();
+        // Checked hourly, sent at most daily: a computer asleep at any one hour still reports.
+        const report = () => void telemetry.reportIfDue().catch(() => {});
+        setTimeout(report, TELEMETRY_FIRST_MS).unref();
+        telemetryTimer = setInterval(report, TELEMETRY_TICK_MS);
+        telemetryTimer.unref();
       }
 
       if (!app || !listen) return {};
@@ -288,6 +307,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
         clearInterval(scheduleTimer);
         clearInterval(pullTimer);
         clearInterval(sweepTimer);
+        clearInterval(telemetryTimer);
         // End long-lived event streams before waiting for HTTP shutdown.
         app?.server.closeAllConnections();
         await app?.close();

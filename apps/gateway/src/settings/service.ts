@@ -7,17 +7,30 @@ import { eq, inArray } from 'drizzle-orm';
 import { gatewayTimeZone } from '../core/time-zone.js';
 import type { Store } from '../storage/database.js';
 import { gatewaySettings } from '../storage/schema.js';
+import type { Telemetry } from '../telemetry/service.js';
 
 const NEW_CHAT_PROTECTION = 'newChatProtection';
 
 /** Settings of the whole installation: what every profile shares, such as its time zone. */
 export class Settings {
+  private telemetry?: Pick<Telemetry, 'state' | 'set'>;
+
   constructor(
     private readonly store: Store,
     private readonly configuredTimeZone?: string,
   ) {}
 
+  /** Set by the gateway, which knows the host it reports from. */
+  useTelemetry(telemetry: Pick<Telemetry, 'state' | 'set'>) {
+    this.telemetry = telemetry;
+  }
+
   async read(): Promise<GatewaySettings> {
+    const telemetry = this.telemetry ? { telemetry: await this.telemetry.state() } : {};
+    return { ...(await this.zoneAndChat()), ...telemetry };
+  }
+
+  private async zoneAndChat(): Promise<GatewaySettings> {
     const rows = await this.store.db
       .select()
       .from(gatewaySettings)
@@ -43,7 +56,8 @@ export class Settings {
   }
 
   async update(input: unknown) {
-    const { timeZone, newChatProtection } = gatewaySettingsPatchSchema.parse(input);
+    const { timeZone, newChatProtection, telemetry } = gatewaySettingsPatchSchema.parse(input);
+    if (telemetry !== undefined) await this.telemetry?.set(telemetry);
     if (timeZone === null) {
       await this.store.db.delete(gatewaySettings).where(eq(gatewaySettings.key, 'timeZone'));
     } else if (timeZone !== undefined) {

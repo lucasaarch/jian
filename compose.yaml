@@ -40,6 +40,8 @@ services:
       JIAN_MASTER_KEYS: ${JIAN_MASTER_KEYS:?Run make setup first}
       JIAN_ROLE: ${JIAN_ROLE:-all}
       JIAN_TIME_ZONE: ${JIAN_TIME_ZONE:-}
+      JIAN_TELEMETRY: ${JIAN_TELEMETRY:-}
+      DO_NOT_TRACK: ${DO_NOT_TRACK:-}
       JIAN_ALLOW_PRIVATE_ORIGINS: ${JIAN_ALLOW_PRIVATE_ORIGINS:-}
       # Opt in to the bundled record-only listener; override URL for an external proxy.
       JIAN_CAVEMAN_ENABLED: ${JIAN_CAVEMAN_ENABLED:-false}

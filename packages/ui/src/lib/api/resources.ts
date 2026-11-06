@@ -99,6 +99,7 @@ export const resourceCalls = (client: Client) => ({
   updateSettings: (body: {
     timeZone?: string | null;
     newChatProtection?: 'ask' | 'auto' | 'full';
+    telemetry?: boolean;
   }) => result(client.PUT('/v1/settings', { body })),
   runSchedule: (profileId: string, scheduleId: string) =>
     result(

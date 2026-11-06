@@ -22064,6 +22064,11 @@ export interface operations {
                         timeZoneSource: "setting" | "host";
                         /** @enum {string} */
                         newChatProtection?: "ask" | "auto" | "full";
+                        telemetry?: {
+                            enabled: boolean;
+                            /** @enum {string} */
+                            source: "default" | "setting" | "environment";
+                        };
                     };
                 };
             };
@@ -22163,6 +22168,7 @@ export interface operations {
                     timeZone?: string | null;
                     /** @enum {string} */
                     newChatProtection?: "ask" | "auto" | "full";
+                    telemetry?: boolean;
                 };
             };
         };
@@ -22179,6 +22185,11 @@ export interface operations {
                         timeZoneSource: "setting" | "host";
                         /** @enum {string} */
                         newChatProtection?: "ask" | "auto" | "full";
+                        telemetry?: {
+                            enabled: boolean;
+                            /** @enum {string} */
+                            source: "default" | "setting" | "environment";
+                        };
                     };
                 };
             };

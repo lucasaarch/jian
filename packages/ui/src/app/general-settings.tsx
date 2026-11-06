@@ -1,10 +1,13 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import type { GatewaySettings } from '@jian/contracts';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { LogOut, Star } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { GitHubLogo } from '../components/ui';
 import { Action, SettingsGroup, SettingsRow, Toggle } from '../kit';
+import { panelApi } from '../lib/query/client';
+import { keys } from '../lib/query/keys';
 import { queries } from '../lib/query/profile';
 import { ReleaseNotesRow } from './release-notes';
 
@@ -77,6 +80,7 @@ export function GeneralSettings({
           />
         </SettingsGroup>
       )}
+      {gateway && <Telemetry />}
       <SettingsGroup title="About">
         <SettingsRow title="Version" description={`Jian ${host.version}`}>
           {host.checkForUpdates && (
@@ -117,6 +121,43 @@ export function GeneralSettings({
         </SettingsGroup>
       )}
     </>
+  );
+}
+
+/**
+ * The gateway's anonymous daily report, on until the owner turns it off here. Its host can turn it
+ * off for good, which this only says; a gateway from before it existed shows nothing.
+ */
+function Telemetry() {
+  const client = useQueryClient();
+  const telemetry = useQuery({ queryKey: keys.settings, queryFn: () => panelApi().settings() }).data
+    ?.telemetry;
+  if (!telemetry) return null;
+
+  return (
+    <SettingsGroup title="Privacy">
+      {telemetry.source === 'environment' ? (
+        <SettingsRow
+          title="Anonymous usage data"
+          description="Off: this gateway's host turned it off, with DO_NOT_TRACK or JIAN_TELEMETRY=off."
+        />
+      ) : (
+        <Toggle
+          label="Share anonymous usage data"
+          detail="Once a day this gateway sends counts, under a random id: its version and system, how many agents and runs, which models, tools and apps were used, and why runs failed. Never a message, a name, an address, a file or a credential."
+          checked={telemetry.enabled}
+          onCheckedChange={(enabled) => {
+            client.setQueryData<GatewaySettings>(keys.settings, (known) =>
+              known ? { ...known, telemetry: { enabled, source: 'setting' } } : known,
+            );
+            void panelApi()
+              .updateSettings({ telemetry: enabled })
+              .then((settings) => client.setQueryData(keys.settings, settings))
+              .catch(() => void client.invalidateQueries({ queryKey: keys.settings }));
+          }}
+        />
+      )}
+    </SettingsGroup>
   );
 }
 

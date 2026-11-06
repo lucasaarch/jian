@@ -40079,6 +40079,27 @@
                         "auto",
                         "full"
                       ]
+                    },
+                    "telemetry": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "default",
+                            "setting",
+                            "environment"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "source"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -40213,6 +40234,9 @@
                       "auto",
                       "full"
                     ]
+                  },
+                  "telemetry": {
+                    "type": "boolean"
                   }
                 },
                 "additionalProperties": false
@@ -40245,6 +40269,27 @@
                         "auto",
                         "full"
                       ]
+                    },
+                    "telemetry": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "default",
+                            "setting",
+                            "environment"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "source"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [

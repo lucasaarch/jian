@@ -167,12 +167,24 @@ export const gatewaySettingsSchema = z.strictObject({
   timeZoneSource: z.enum(['setting', 'host']),
   /** The protection the last new chat started with, which the next one offers first. */
   newChatProtection: protectionModeSchema.optional(),
+  /**
+   * Whether the gateway sends its anonymous daily report. `environment` when the host turned it
+   * off (`DO_NOT_TRACK`, `JIAN_TELEMETRY=off`), which no setting overrides. Absent on a gateway
+   * from before it existed.
+   */
+  telemetry: z
+    .strictObject({
+      enabled: z.boolean(),
+      source: z.enum(['default', 'setting', 'environment']),
+    })
+    .optional(),
 });
 
 export const gatewaySettingsPatchSchema = z.strictObject({
   // A name sets it; null goes back to the machine's own zone.
   timeZone: timeZoneSchema.nullable().optional(),
   newChatProtection: protectionModeSchema.optional(),
+  telemetry: z.boolean().optional(),
 });
 
 export type ScheduleRun = z.infer<typeof scheduleRunSchema>;
