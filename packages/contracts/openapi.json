@@ -10344,6 +10344,7 @@
                     },
                     "compaction": {
                       "default": null,
+                      "description": "Deprecated and unused: a conversation is compacted by its own model. Accepted so that older clients can still save.",
                       "type": [
                         "object",
                         "null"
@@ -10876,6 +10877,7 @@
                   },
                   "compaction": {
                     "default": null,
+                    "description": "Deprecated and unused: a conversation is compacted by its own model. Accepted so that older clients can still save.",
                     "type": [
                       "object",
                       "null"
@@ -11292,6 +11294,7 @@
                     },
                     "compaction": {
                       "default": null,
+                      "description": "Deprecated and unused: a conversation is compacted by its own model. Accepted so that older clients can still save.",
                       "type": [
                         "object",
                         "null"
@@ -20150,7 +20153,8 @@
                             "type": "string",
                             "enum": [
                               "answer",
-                              "resume"
+                              "resume",
+                              "compact"
                             ]
                           },
                           "createdAt": {
@@ -20464,7 +20468,8 @@
                             "type": "string",
                             "enum": [
                               "answer",
-                              "resume"
+                              "resume",
+                              "compact"
                             ]
                           },
                           "createdAt": {
@@ -35853,7 +35858,8 @@
                         "type": "string",
                         "enum": [
                           "answer",
-                          "resume"
+                          "resume",
+                          "compact"
                         ]
                       },
                       "createdAt": {
@@ -38517,7 +38523,8 @@
                       "type": "string",
                       "enum": [
                         "answer",
-                        "resume"
+                        "resume",
+                        "compact"
                       ]
                     },
                     "createdAt": {

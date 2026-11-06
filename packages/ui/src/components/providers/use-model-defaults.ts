@@ -66,7 +66,7 @@ export function useModelDefaults(api: GatewayApi) {
       roles.map((role) => {
         const saved = catalog.modelDefaults[role.key];
         const fallback =
-          role.key === 'channel' || role.key === 'compaction'
+          role.key === 'channel'
             ? defaultConversation
             : preferredModelSelection(role.key, catalog, configured);
         const selection = saved ?? fallback ?? null;

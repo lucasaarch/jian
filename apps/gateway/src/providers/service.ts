@@ -33,6 +33,9 @@ import {
 import { takesFast } from './speed.js';
 
 /** Where a provider's key lives in the vault. Revoking the provider takes the key with it. */
+/** Most a turn keeps back for the answer and its thinking, in tokens. */
+const MAX_OUTPUT_RESERVE = 64_000;
+
 export const providerSecret = (providerId: string) => `provider:${providerId}`;
 
 /** True when the owner is keeping a stored choice, including one that no longer passes role checks. */
@@ -327,17 +330,21 @@ export class Providers {
         ...(provider.apiKeyEnv ? { apiKeyEnv: provider.apiKeyEnv } : { providerId: provider.id }),
       },
       // Reserve output inside the model's actual window. Session compaction, not a fixed
-      // history share, decides when older turns leave the request.
+      // history share, decides when older turns leave the request. The reserve stops at 64k:
+      // a quarter of a 500k window held 125k back that no answer uses, so the meter read 100%
+      // with a quarter of the window still free.
       policy: {
         inputTokens: model.contextWindow,
         outputTokens: Math.min(
           model.maxOutputTokens,
-          Math.max(1024, Math.floor(model.contextWindow / 4)),
+          Math.max(1024, Math.min(MAX_OUTPUT_RESERVE, Math.floor(model.contextWindow / 4))),
           model.contextWindow - 256,
         ),
-        memoryTokens: Math.min(32_000, Math.max(1500, Math.floor(model.contextWindow * 0.02))),
+        memoryTokens: Math.min(8_000, Math.max(1500, Math.floor(model.contextWindow * 0.02))),
         historyTokens: model.contextWindow,
-        toolResultTokens: Math.min(32_000, Math.max(1500, Math.floor(model.contextWindow * 0.02))),
+        // A result stays in every later step of the turn, so a large window does not earn a
+        // larger one: past this it is stored and paged with read_artifact.
+        toolResultTokens: Math.min(12_000, Math.max(1500, Math.floor(model.contextWindow * 0.02))),
         maxSteps: 500,
       },
     };

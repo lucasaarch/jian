@@ -96,13 +96,6 @@ export const roles = [
     tools: true,
   },
   {
-    key: 'compaction',
-    label: 'Context compaction',
-    hint: 'Summarises older context automatically or when the agent requests it. Uses the conversation model unless another model is selected.',
-    runtime: true,
-    tools: true,
-  },
-  {
     key: 'image',
     label: 'Image generation',
     hint: 'Generates images with an OpenAI API key, Gemini or xAI. Requires a selected model.',

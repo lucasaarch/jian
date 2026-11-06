@@ -5,11 +5,23 @@ import { blocksOf, fitPrompt, promptText, tokenCounter } from './budget.js';
 /**
  * How full a request may get before the older turns are replaced by a record of them. Below
  * this the history is carried as it was written; a prompt that only just fits would otherwise
- * be compacted on every turn for nothing.
+ * be compacted on every turn for nothing. 80% leaves room to summarise before the window is full.
  */
-export const COMPACT_AT = 0.85;
+export const COMPACT_AT = 0.8;
 
-export const needsCompaction = (tokens: number, budget: number) => tokens > budget * COMPACT_AT;
+/**
+ * Past this many tokens a request is compacted whatever the window. Every step sends the whole
+ * prompt again, so a 1M window let one turn carry 700k for dozens of steps; recent work and the
+ * latest request stay whole either way.
+ */
+export const COMPACT_CEILING = 200_000;
+
+/** The size past which the older turns are summarised, for a budget in tokens. */
+export const compactionThreshold = (budget: number) =>
+  Math.min(Math.round(budget * COMPACT_AT), COMPACT_CEILING);
+
+export const needsCompaction = (tokens: number, budget: number) =>
+  tokens > compactionThreshold(budget);
 
 /** Compact the request actually used by the loop, including completed tool calls and results. */
 export async function compactPrompt(input: {
@@ -86,7 +98,9 @@ export async function compactPrompt(input: {
     });
     await input.onUsage(result.usage, fitted.tokens, result.text);
     summary = result.text.trim();
-    if (!summary || result.finishReason === 'length') return undefined;
+    // Thrown, not skipped: the owner is told why, rather than that there was nothing to do.
+    if (!summary) throw new Error('The model returned an empty summary');
+    if (result.finishReason === 'length') throw new Error('The summary was cut off at its limit');
     offset += low;
   }
 
@@ -99,7 +113,9 @@ export async function compactPrompt(input: {
     ...recent,
   ];
   // A summary that does not shrink the request only pays for another pass next step.
-  if (count(promptText(messages)) >= count(promptText(input.messages)) * 0.8) return undefined;
+  if (count(promptText(messages)) >= count(promptText(input.messages)) * 0.8) {
+    throw new Error('The summary would not shrink the conversation by at least a fifth');
+  }
   return { messages, summary };
 }
 

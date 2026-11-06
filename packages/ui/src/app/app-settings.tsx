@@ -192,7 +192,7 @@ function gatewayPages({ info, actions }: GatewaySettings): SettingsPage[] {
       label: 'Capabilities',
       icon: <Cpu size={15} />,
       group,
-      keywords: ['model', 'audio', 'voice', 'speech', 'image', 'channel', 'compaction', 'defaults'],
+      keywords: ['model', 'audio', 'voice', 'speech', 'image', 'channel', 'defaults'],
     },
     {
       id: 'apps',

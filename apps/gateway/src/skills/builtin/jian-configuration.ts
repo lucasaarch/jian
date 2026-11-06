@@ -16,9 +16,9 @@ Shared by the whole installation.
 
 - **General, Appearance, Keymaps**: the app itself.
 - **Providers**: model providers, the Tavily web-search key and Decisions (Jev).
-- **Capabilities**: the models for channels, compaction, incoming audio, image generation and
-  speech. Automatic selects from connected providers; Disabled turns that activity off where
-  offered.
+- **Capabilities**: the models for channels, incoming audio, image generation and speech. A
+  conversation is compacted by its own model. Automatic selects from connected providers;
+  Disabled turns that activity off where offered.
 - **Apps**: a card for each app, with a search and a category list. GitHub and X are Jian's
   own, with accounts to connect and configure; one this gateway cannot offer, as one with no
   \`JIAN_PUBLIC_URL\`, is not listed. The others, such as Linear, Notion, Atlassian, Stripe,

@@ -166,7 +166,7 @@ export class Contexts {
     // Independent reads: whatever the request mentions, what the profile is busy with, whom it
     // talks to on its channels, and the turns since the record of what was compacted away.
     // `buildContext` is what decides how much of each survives.
-    const [matched, activities, conversations, history, project] = await Promise.all([
+    const [matched, activities, conversations, transcript, project] = await Promise.all([
       worker ? [] : searchMemories(this.store.db, run.profileId, words, 100),
       worker ? [] : this.runs.activities(run.profileId),
       worker ? [] : listConversations(this.store.db, run.profileId),
@@ -187,6 +187,14 @@ export class Contexts {
             .then(([row]) => row)
         : null,
     ]);
+
+    // Each look back carries its own brief and stands alone. Its conversation's earlier looks
+    // back taught nothing to this one, and re-sending them cost a quarter of a million tokens a
+    // look.
+    const history =
+      session.channel === LEARNING_SESSION_CHANNEL
+        ? transcript.filter((message) => message.runId === run.id)
+        : transcript;
 
     // One step out from what matched: the memories linked to it, which the request may not
     // mention at all.

@@ -79,10 +79,12 @@ it('compacts on /compact before the agent is asked anything, and lets it only sa
       createdAt: new Date(Date.parse('2026-10-30T09:00:00.000Z') + index * 1000).toISOString(),
     });
   }
-  const run = await services.runs.submit(profile.id, session.id, {
-    text: '/compact',
-    requestKey: 'compact',
-  });
+  const run = await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: '/compact', requestKey: 'compact' },
+    { ownerMessage: true },
+  );
   const asked: { tools: number; prompt: string }[] = [];
   const model = mockModel({
     doGenerate: async (options) => {
@@ -103,7 +105,49 @@ it('compacts on /compact before the agent is asked anything, and lets it only sa
   expect(asked[0]?.prompt).toContain('was compacted from about');
   expect(asked[0]?.prompt).not.toContain('"/compact"');
 
+  // A command, not something said: kept for the record, left out of the chat.
+  const sent = (await services.sessions.messages(profile.id, session.id)).find(
+    (message) => message.runId === run.id && message.role === 'user',
+  );
+  expect(sent?.purpose).toBe('compact');
+
   const context = await services.sessions.context(profile.id, session.id);
   expect(context.compacted).not.toBeNull();
   expect(context.compacted?.afterTokens).toBeLessThan(context.compacted?.beforeTokens ?? 0);
+});
+
+it('tells the owner why /compact failed instead of saying there was nothing to compact', async () => {
+  const { services, profile, session } = await conversation();
+  for (let index = 0; index < 6; index++) {
+    await insertMessage(services.store.db, {
+      id: randomUUID(),
+      profileId: profile.id,
+      sessionId: session.id,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      content: `turn-${index} ${'history '.repeat(300)}`,
+      createdAt: new Date(Date.parse('2026-10-30T09:00:00.000Z') + index * 1000).toISOString(),
+    });
+  }
+  const run = await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: '/compact', requestKey: 'compact-quota' },
+    { ownerMessage: true },
+  );
+  const told: string[] = [];
+  const model = mockModel({
+    doGenerate: async (options) => {
+      const prompt = JSON.stringify(options.prompt);
+      if (!prompt.includes('asked to compact')) throw new Error('HTTP 429: quota exceeded');
+      told.push(prompt);
+      return answer('Compaction failed: the provider quota is spent.');
+    },
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  expect(told).toHaveLength(1);
+  expect(told[0]).toContain('Compaction failed');
+  expect(told[0]).toContain('quota exceeded');
+  expect(told[0]).not.toContain('nothing old enough');
 });

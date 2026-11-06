@@ -14,10 +14,21 @@ about 41,000 of 200,000 tokens (21%)". Each tool result adds to it until the tur
 
 ## What the gateway does on its own
 
-- Near the budget, older turns are summarised by the compaction model, and the summary stays
-  in the conversation. Recent work and the latest request are kept whole.
-- A tool result too large to fit is stored, and you get an artifact id to read it a page at a
-  time with \`read_artifact\`.
+- Past 80% of the budget or 200,000 tokens, whichever comes first, and at the start of a turn
+  already past it, older turns are summarised by this conversation's own model, and the
+  summary stays in the conversation. Recent work and the latest request are kept whole. A
+  failed summary is reported with its cause, such as the provider's quota.
+- Instructions and tool definitions are fixed: a summary cannot shrink them. When they alone
+  overflow the window, as after switching to a model with a smaller one, the tool groups and
+  MCP tools you loaded are let go, and if that is not enough only \`load_tools\`,
+  \`load_mcp_tools\`, \`load_skill\` and \`read_artifact\` stay: load back only what you
+  need.
+- A tool result over 2% of the window, at most 12,000 tokens, is stored, and you get a preview
+  and an artifact id to read it a page at a time with \`read_artifact\`. Every result rides
+  in each later step of the turn, so ask for the part you need: a line range, a search, a
+  filtered command.
+- A skill you load is dropped, least recently used first, once loaded skills pass about 16,000
+  tokens.
 - The tool results of your two latest turns stay whole in the conversation. Older ones are cut
   to their input and the head of their result, marked \`cut\`: \`read_artifact\` with the
   call's id as \`toolCallId\` returns the whole result. Read it back rather than repeating a
@@ -27,8 +38,8 @@ about 41,000 of 200,000 tokens (21%)". Each tool result adds to it until the tur
   you load stay loaded too. At a compaction, what you did not use since the one before is let go,
   and loaded again if you need it.
 
-If even the current request and fixed instructions cannot fit, the gateway reports an explicit
-context error instead of silently dropping conversation turns. What you lose to a successful
+If even the current request and fixed instructions cannot fit after that, the gateway reports
+an explicit context error, naming what the tools and instructions cost. What you lose to a successful
 summary is detail; the original messages remain searchable.
 
 ## When to compact yourself

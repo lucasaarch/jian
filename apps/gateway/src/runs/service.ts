@@ -14,6 +14,7 @@ import {
   TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
 import { resumePrompt } from '../agent/ask-user.js';
+import { isCompactCommand } from '../agent/compact-command.js';
 import { approvalResumePrompt } from '../agent/guard.js';
 import { isChatChannel } from '../channels/kinds.js';
 import { type Clock, nowIso } from '../core/clock.js';
@@ -70,6 +71,17 @@ const cancellable = (run: Run) => active(run) || run.status === 'waiting';
 type RunDeliveries = {
   deliverRun(profileId: string, sessionId: string, runId: string): Promise<void>;
 };
+
+/**
+ * A message the panel shows. `/compact` from the owner is a command, not something said: it is
+ * kept for the agent and the record, and left out of the conversation.
+ */
+const purposeOf = (options: SubmitOptions, text: string): Pick<Message, 'purpose'> =>
+  options.purpose
+    ? { purpose: options.purpose }
+    : options.ownerMessage && isCompactCommand(text)
+      ? { purpose: 'compact' }
+      : {};
 
 export class Runs {
   private deliveries?: RunDeliveries;
@@ -289,7 +301,7 @@ export class Runs {
           content: data.text,
           ...(options.channelMessage ? { channelMessage: options.channelMessage } : {}),
           ...(author ? { author } : {}),
-          ...(options.purpose ? { purpose: options.purpose } : {}),
+          ...purposeOf(options, data.text),
           createdAt: nowIso(this.clock),
         });
 
@@ -401,7 +413,7 @@ export class Runs {
         content: data.text,
         ...(options.channelMessage ? { channelMessage: options.channelMessage } : {}),
         ...(author ? { author } : {}),
-        ...(options.purpose ? { purpose: options.purpose } : {}),
+        ...purposeOf(options, data.text),
         createdAt: nowIso(this.clock),
       };
 
